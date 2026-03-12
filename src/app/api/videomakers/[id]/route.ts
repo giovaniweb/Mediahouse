@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!vm) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  return NextResponse.json(vm)
+  return NextResponse.json({ videomaker: vm })
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {

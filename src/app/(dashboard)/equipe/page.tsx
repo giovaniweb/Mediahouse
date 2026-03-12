@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import { cn } from "@/lib/utils"
@@ -11,6 +12,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function EquipePage() {
   const [showForm, setShowForm] = useState(false)
+  const router = useRouter()
   const { data, mutate } = useSWR("/api/editores", fetcher)
   const editores = data?.editores ?? []
 
@@ -44,7 +46,11 @@ export default function EquipePage() {
               pct >= 100 ? "sobrecarga" : pct >= 75 ? "atencao" : "ok"
 
             return (
-              <div key={editor.id} className="bg-white rounded-xl border shadow-sm p-4">
+              <div
+                key={editor.id}
+                onClick={() => router.push(`/equipe/${editor.id}`)}
+                className="bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
+              >
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
                     <User className="w-5 h-5 text-purple-600" />
@@ -105,7 +111,7 @@ export default function EquipePage() {
                   <div className="border-t pt-3 space-y-1.5">
                     <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-1.5">Demandas ativas</p>
                     {editor.demandas.slice(0, 3).map((d) => (
-                      <Link key={d.id} href={`/demandas/${d.id}`}>
+                      <Link key={d.id} href={`/demandas/${d.id}`} onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-zinc-50">
                           <Film className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           <span className="text-zinc-600 truncate">{d.codigo} · {d.titulo}</span>

@@ -56,7 +56,8 @@ export default function VideomakersPage() {
           }) => {
             const cfg = statusConfig[vm.status] ?? statusConfig.ativo
             return (
-              <div key={vm.id} className="bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow">
+              <Link key={vm.id} href={`/videomakers/${vm.id}`}>
+              <div className="bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-zinc-800">{vm.nome}</h3>
@@ -98,7 +99,7 @@ export default function VideomakersPage() {
                       R$ {vm.valorDiaria?.toLocaleString("pt-BR")}/dia
                     </span>
                     <button
-                      onClick={() => handleDelete(vm.id)}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(vm.id) }}
                       className="p-1 text-zinc-300 hover:text-red-500 rounded"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -106,6 +107,7 @@ export default function VideomakersPage() {
                   </div>
                 </div>
               </div>
+              </Link>
             )
           })}
         </div>

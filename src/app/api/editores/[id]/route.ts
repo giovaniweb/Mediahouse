@@ -4,6 +4,31 @@ import { prisma } from "@/lib/prisma"
 
 type Params = { params: Promise<{ id: string }> }
 
+export async function GET(_req: NextRequest, { params }: Params) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const { id } = await params
+
+  const editor = await prisma.editor.findUnique({
+    where: { id },
+    include: {
+      demandas: {
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true, codigo: true, titulo: true, statusVisivel: true,
+          prioridade: true, createdAt: true,
+        },
+      },
+    },
+  })
+
+  if (!editor) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+
+  return NextResponse.json({ editor })
+}
+
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
