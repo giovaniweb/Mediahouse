@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     ],
   })
 
-  return NextResponse.json(demandas)
+  return NextResponse.json({ demandas })
 }
 
 export async function POST(req: NextRequest) {

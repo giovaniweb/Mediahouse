@@ -76,29 +76,23 @@ export async function GET() {
   ])
 
   const cargaEditores = editores.map((editor) => ({
-    editor: {
-      id: editor.id,
-      nome: editor.nome,
-      cargaLimite: editor.cargaLimite,
-    },
-    demandasAtivas: editor.demandas.length,
-    cargaTotal: calcularCargaTotal(editor.demandas),
-    status: avaliarSobrecarga(
-      calcularCargaTotal(editor.demandas),
-      editor.cargaLimite
-    ),
+    id: editor.id,
+    nome: editor.nome,
+    cargaAtual: editor.demandas.length,
+    cargaLimite: editor.cargaLimite,
+    status: avaliarSobrecarga(calcularCargaTotal(editor.demandas), editor.cargaLimite),
   }))
 
   return NextResponse.json({
     metricas: {
-      novasHoje,
-      urgentesAtivas,
+      demandasAtivas: emEdicao + aguardandoAprovacao + paraPostar + novasHoje,
+      urgentesHoje: urgentesAtivas,
+      concluidasMes: 0, // calculado futuramente com histórico
+      prazoCritico: atrasadas,
       emEdicao,
       aguardandoAprovacao,
       paraPostar,
-      atrasadas,
-      captacoesSemana,
-      expiracoesSemana,
+      editoresAtivos: editores.length,
     },
     alertasAtivos,
     cargaEditores,

@@ -23,14 +23,15 @@ const TIPO_LABEL: Record<string, string> = {
   social: "Social Media",
 }
 
-export function Header({ title }: { title?: string }) {
+export function Header({ title, actions }: { title?: string; actions?: React.ReactNode }) {
   const { data: session } = useSession()
   const user = session?.user
 
   return (
-    <header className="h-14 border-b border-zinc-100 bg-white flex items-center justify-between px-6">
-      <div>
+    <header className="h-14 border-b border-zinc-100 bg-white flex items-center justify-between px-6 shrink-0">
+      <div className="flex items-center gap-4">
         {title && <h1 className="text-sm font-semibold text-zinc-800">{title}</h1>}
+        {actions && <div>{actions}</div>}
       </div>
 
       <div className="flex items-center gap-3">
@@ -54,14 +55,12 @@ export function Header({ title }: { title?: string }) {
               <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="w-full flex items-center gap-2 text-red-600 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair
-              </button>
+            <DropdownMenuItem
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex items-center gap-2 text-red-600 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

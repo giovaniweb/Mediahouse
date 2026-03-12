@@ -62,7 +62,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
       linkPostagem: body.linkPostagem,
       linkCliente: body.linkCliente,
       localGravacao: body.localGravacao,
-      observacoes: body.observacoes,
       motivoImpedimento: body.motivoImpedimento,
     },
   })

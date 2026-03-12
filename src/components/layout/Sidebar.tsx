@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Film,
+  Camera,
   Users,
-  Calendar,
   Bell,
   BarChart2,
   Settings,
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: Film },
-  { href: "/videomakers", label: "Videomakers", icon: Users },
+  { href: "/videomakers", label: "Videomakers", icon: Camera },
   { href: "/equipe", label: "Equipe", icon: Users },
   { href: "/urgencias", label: "Urgências", icon: Zap },
   { href: "/alertas", label: "Alertas IA", icon: Bell },
