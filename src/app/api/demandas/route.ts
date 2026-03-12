@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
   const departamento = searchParams.get("departamento")
   const prioridade = searchParams.get("prioridade")
   const statusVisivel = searchParams.get("statusVisivel")
+  const statusInterno = searchParams.get("statusInterno")
   const editorId = searchParams.get("editorId")
   const videomakerId = searchParams.get("videomakerId")
 
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
   if (departamento) where.departamento = departamento
   if (prioridade) where.prioridade = prioridade
   if (statusVisivel) where.statusVisivel = statusVisivel
+  if (statusInterno) where.statusInterno = statusInterno
   if (editorId) where.editorId = editorId
   if (videomakerId) where.videomakerId = videomakerId
 

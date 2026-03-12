@@ -15,7 +15,7 @@ export default function UrgenciasPage() {
     refreshInterval: 10000,
   })
   const { data: aprovadas } = useSWR("/api/demandas?statusInterno=urgencia_aprovada", fetcher)
-  const { data: reprovadas } = useSWR("/api/demandas?statusInterno=urgencia_reprovada", fetcher)
+  const { data: reprovadas } = useSWR("/api/demandas?statusInterno=encerrado&prioridade=urgente", fetcher)
 
   const pendentes = data?.demandas ?? []
   const listaAprovadas = aprovadas?.demandas ?? []
@@ -36,7 +36,7 @@ export default function UrgenciasPage() {
     await fetch(`/api/demandas/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ statusInterno: "urgencia_reprovada", observacao: motivo }),
+      body: JSON.stringify({ statusInterno: "encerrado", observacao: motivo }),
     })
     mutate()
   }
@@ -71,7 +71,7 @@ export default function UrgenciasPage() {
               departamento: string
               tipoVideo: string
               motivoUrgencia: string | null
-              criadoEm: string
+              createdAt: string
               solicitante?: { nome: string } | null
             }) => (
               <div key={d.id} className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -97,7 +97,7 @@ export default function UrgenciasPage() {
                       </p>
                     )}
                     <p className="text-[10px] text-zinc-400 mt-1">
-                      Solicitado {format(new Date(d.criadoEm), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      Solicitado {format(new Date(d.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                     </p>
                   </div>
 
