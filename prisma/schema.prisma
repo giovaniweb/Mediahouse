@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum TipoUsuario {
+  admin
+  gestor
+  operacao
+  solicitante
+  editor
+  videomaker
+  social
+}
+
+enum StatusUsuario {
+  ativo
+  inativo
+}
+
+enum StatusVideomaker {
+  ativo
+  inativo
+  preferencial
+}
+
+enum Prioridade {
+  normal
+  alta
+  urgente
+}
+
+enum Departamento {
+  growth
+  eventos
+  institucional
+  rh
+  audiovisual
+  outros
+}
+
+enum StatusVisivel {
+  entrada
+  producao
+  edicao
+  aprovacao
+  para_postar
+  finalizado
+}
+
+enum StatusInterno {
+  pedido_criado
+  aguardando_triagem
+  urgencia_pendente_aprovacao
+  urgencia_aprovada
+  planejamento
+  videomaker_notificado
+  videomaker_aceitou
+  videomaker_recusou
+  captacao_agendada
+  captacao_realizada
+  brutos_enviados
+  editor_atribuido
+  fila_edicao
+  editando
+  edicao_finalizada
+  revisao_pendente
+  aprovado
+  ajuste_solicitado
+  impedimento
+  postagem_pendente
+  postado
+  entregue_cliente
+  contagem_15_dias_iniciada
+  lembrete_15_dias_enviado
+  expirado
+  encerrado
+}
+
+enum OrigemHistorico {
+  manual
+  automacao
+  ia
+  whatsapp
+}
+
+enum TipoArquivo {
+  bruto
+  final
+  nota_fiscal
+  referencia
+  postagem
+  cliente
+}
+
+enum DirecaoWhatsapp {
+  entrada
+  saida
+}
+
+enum StatusAlerta {
+  ativo
+  resolvido
+  ignorado
+}
+
+enum SeveridadeAlerta {
+  info
+  aviso
+  critico
+}
+
+// ─────────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────────
+
+model Usuario {
+  id        String        @id @default(cuid())
+  nome      String
+  email     String        @unique
+  telefone  String?
+  tipo      TipoUsuario   @default(solicitante)
+  status    StatusUsuario @default(ativo)
+  senhaHash String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  demandasCriadas Demanda[]         @relation("Solicitante")
+  demandasGeridas Demanda[]         @relation("Gestor")
+  historicos      HistoricoStatus[]
+  comentarios     Comentario[]
+  sessions        Session[]
+
+  @@map("usuarios")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         Usuario  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Videomaker {
+  id             String           @id @default(cuid())
+  nome           String
+  cidade         String
+  estado         String
+  telefone       String
+  email          String?
+  cpfCnpj        String?
+  valorDiaria    Float?
+  dadosBancarios String?
+  status         StatusVideomaker @default(ativo)
+  avaliacao      Float?           @default(5.0)
+  observacoes    String?
+  areasAtuacao   String[]
+  portfolio      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  demandas Demanda[]
+
+  @@map("videomakers")
+}
+
+model Editor {
+  id            String        @id @default(cuid())
+  nome          String
+  telefone      String?
+  email         String?
+  especialidade String[]
+  cargaLimite   Int           @default(5)
+  status        StatusUsuario @default(ativo)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  demandas Demanda[]
+
+  @@map("editores")
+}
+
+model Demanda {
+  id             String        @id @default(cuid())
+  codigo         String        @unique
+  titulo         String
+  descricao      String
+  departamento   Departamento
+  tipoVideo      String
+  cidade         String
+  prioridade     Prioridade    @default(normal)
+  motivoUrgencia String?
+  statusVisivel  StatusVisivel @default(entrada)
+  statusInterno  StatusInterno @default(pedido_criado)
+  pesoDemanda    Float         @default(1)
+  riscoAtraso    Boolean       @default(false)
+
+  // Dados extras por departamento
+  campanha          String?
+  objetivo          String?
+  plataforma        String?
+  dataEvento        DateTime?
+  localEvento       String?
+  cobertura         Boolean?
+  publico           String?
+  mensagemPrincipal String?
+
+  // Links operacionais
+  linkBrutos      String?
+  linkFinal       String?
+  linkPostagem    String?
+  linkCliente     String?
+  localGravacao   String?
+  referencia      String?
+
+  // Impedimento
+  motivoImpedimento String?
+
+  // Relações de usuários (FKs)
+  solicitanteId String
+  gestorId      String?
+  videomakerId  String?
+  editorId      String?
+  socialId      String?
+
+  // Datas
+  dataLimite         DateTime?
+  dataCaptacao       DateTime?
+  dataPostagem       DateTime?
+  dataEntregaCliente DateTime?
+  dataExpiracao      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relações
+  solicitante        Usuario            @relation("Solicitante", fields: [solicitanteId], references: [id])
+  gestor             Usuario?           @relation("Gestor", fields: [gestorId], references: [id])
+  videomaker         Videomaker?        @relation(fields: [videomakerId], references: [id])
+  editor             Editor?            @relation(fields: [editorId], references: [id])
+  arquivos           Arquivo[]
+  historicos         HistoricoStatus[]
+  comentarios        Comentario[]
+  alertas            AlertaIA[]
+  mensagensWhatsapp  MensagemWhatsapp[]
+  logsAutomacao      LogAutomacao[]
+
+  @@map("demandas")
+}
+
+model Arquivo {
+  id          String      @id @default(cuid())
+  demandaId   String
+  tipoArquivo TipoArquivo
+  nomeArquivo String
+  url         String
+  tamanho     Int?
+  origem      String?
+  createdAt   DateTime    @default(now())
+
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("arquivos")
+}
+
+model HistoricoStatus {
+  id             String          @id @default(cuid())
+  demandaId      String
+  statusAnterior String?
+  statusNovo     String
+  usuarioId      String?
+  origem         OrigemHistorico @default(manual)
+  observacao     String?
+  createdAt      DateTime        @default(now())
+
+  demanda Demanda  @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@map("historico_status")
+}
+
+model Comentario {
+  id         String   @id @default(cuid())
+  demandaId  String
+  usuarioId  String
+  comentario String
+  origem     String   @default("manual")
+  createdAt  DateTime @default(now())
+
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("comentarios")
+}
+
+model AlertaIA {
+  id           String           @id @default(cuid())
+  demandaId    String?
+  tipoAlerta   String
+  mensagem     String
+  severidade   SeveridadeAlerta @default(aviso)
+  status       StatusAlerta     @default(ativo)
+  acaoSugerida String?
+  createdAt    DateTime         @default(now())
+  resolvedAt   DateTime?
+
+  demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("alertas_ia")
+}
+
+model MensagemWhatsapp {
+  id           String          @id @default(cuid())
+  demandaId    String?
+  telefone     String
+  tipoMensagem String
+  conteudo     String
+  direcao      DirecaoWhatsapp @default(saida)
+  status       String          @default("enviado")
+  createdAt    DateTime        @default(now())
+
+  demanda Demanda? @relation(fields: [demandaId], references: [id])
+
+  @@map("mensagens_whatsapp")
+}
+
+model LogAutomacao {
+  id         String   @id @default(cuid())
+  demandaId  String?
+  automacao  String
+  inputJson  Json?
+  outputJson Json?
+  status     String   @default("sucesso")
+  createdAt  DateTime @default(now())
+
+  demanda Demanda? @relation(fields: [demandaId], references: [id])
+
+  @@map("logs_automacao")
+}
