@@ -14,7 +14,7 @@ export async function GET() {
     orderBy: [{ severidade: "desc" }, { createdAt: "desc" }],
   })
 
-  return NextResponse.json(alertas)
+  return NextResponse.json({ alertas })
 }
 
 export async function POST(req: NextRequest) {

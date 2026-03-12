@@ -83,7 +83,7 @@ function AlertSection({
     mensagem: string
     severidade: "critico" | "aviso" | "info"
     acaoSugerida: string | null
-    criadoEm: string
+    createdAt: string
     demanda?: { id: string; codigo: string; titulo: string } | null
   }>
   onResolver: (id: string) => void
@@ -113,7 +113,7 @@ function AlertSection({
                   <p className="text-xs text-zinc-500 mt-0.5">→ {a.acaoSugerida}</p>
                 )}
                 <p className="text-[10px] text-zinc-400 mt-1">
-                  {format(new Date(a.criadoEm), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                  {format(new Date(a.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                 </p>
               </div>
               <div className="flex flex-col gap-1.5 shrink-0">
