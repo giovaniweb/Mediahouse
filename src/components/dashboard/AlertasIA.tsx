@@ -34,7 +34,7 @@ export function AlertasIA({ alertas, isLoading }: AlertasIAProps) {
     await fetch(`/api/alertas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, acao: "resolver" }),
+      body: JSON.stringify({ id, action: "resolver" }),
     })
   }
 
