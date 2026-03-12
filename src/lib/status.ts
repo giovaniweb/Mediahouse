@@ -2,8 +2,9 @@ import type { StatusInterno, StatusVisivel } from "@prisma/client"
 
 // Mapeamento: StatusInterno → StatusVisivel (coluna kanban)
 export const STATUS_PARA_COLUNA: Record<StatusInterno, StatusVisivel> = {
-  pedido_criado:               "entrada",
-  aguardando_triagem:          "entrada",
+  pedido_criado:                   "entrada",
+  aguardando_aprovacao_interna:    "entrada",
+  aguardando_triagem:              "entrada",
   urgencia_pendente_aprovacao: "entrada",
   urgencia_aprovada:           "producao",
   planejamento:                "producao",

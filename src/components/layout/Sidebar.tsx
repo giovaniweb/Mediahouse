@@ -11,12 +11,14 @@ import {
   BarChart2,
   Settings,
   Zap,
+  ClipboardCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: Film },
+  { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
   { href: "/videomakers", label: "Videomakers", icon: Camera },
   { href: "/equipe", label: "Equipe", icon: Users },
   { href: "/urgencias", label: "Urgências", icon: Zap },

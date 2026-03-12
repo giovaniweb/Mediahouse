@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   const statusInterno = data.prioridade === "urgente"
     ? "urgencia_pendente_aprovacao"
-    : "pedido_criado"
+    : "aguardando_aprovacao_interna"
 
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(data.tipoVideo, data.prioridade as Prioridade)
@@ -140,18 +140,18 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // Criar alerta se urgente
-  if (data.prioridade === "urgente") {
-    await prisma.alertaIA.create({
-      data: {
-        demandaId: demanda.id,
-        tipoAlerta: "urgencia_pendente",
-        mensagem: `Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`,
-        severidade: "critico",
-        acaoSugerida: "Aprovar ou rejeitar urgência",
-      },
-    })
-  }
+  // Criar alerta para gestor
+  await prisma.alertaIA.create({
+    data: {
+      demandaId: demanda.id,
+      tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
+      mensagem: data.prioridade === "urgente"
+        ? `🚨 Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`
+        : `📋 Nova demanda: "${data.titulo}" aguarda aprovação interna.`,
+      severidade: data.prioridade === "urgente" ? "critico" : "aviso",
+      acaoSugerida: "Aprovar ou recusar demanda",
+    },
+  })
 
   return NextResponse.json(demanda, { status: 201 })
 }

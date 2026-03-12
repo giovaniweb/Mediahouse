@@ -30,6 +30,7 @@ enum StatusVideomaker {
   ativo
   inativo
   preferencial
+  pendente
 }
 
 enum Prioridade {
@@ -58,6 +59,7 @@ enum StatusVisivel {
 
 enum StatusInterno {
   pedido_criado
+  aguardando_aprovacao_interna
   aguardando_triagem
   urgencia_pendente_aprovacao
   urgencia_aprovada
@@ -130,6 +132,7 @@ model Usuario {
   tipo      TipoUsuario   @default(solicitante)
   status    StatusUsuario @default(ativo)
   senhaHash String
+  avatarUrl String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -155,11 +158,17 @@ model Session {
 model Videomaker {
   id             String           @id @default(cuid())
   nome           String
-  cidade         String
-  estado         String
-  telefone       String
+  cidade         String?
+  estado         String?
+  telefone       String?
   email          String?
   cpfCnpj        String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  representante  String?
+  endereco       String?
+  chavePix       String?
+  redesSociais   String[]
   valorDiaria    Float?
   dadosBancarios String?
   status         StatusVideomaker @default(ativo)
@@ -252,6 +261,7 @@ model Demanda {
   historicos         HistoricoStatus[]
   comentarios        Comentario[]
   alertas            AlertaIA[]
+  aprovacoesVideo    AprovacaoVideo[]
   mensagensWhatsapp  MensagemWhatsapp[]
   logsAutomacao      LogAutomacao[]
 
@@ -306,10 +316,12 @@ model Comentario {
 model AlertaIA {
   id           String           @id @default(cuid())
   demandaId    String?
+  usuarioId    String?
   tipoAlerta   String
   mensagem     String
   severidade   SeveridadeAlerta @default(aviso)
   status       StatusAlerta     @default(ativo)
+  lida         Boolean          @default(false)
   acaoSugerida String?
   createdAt    DateTime         @default(now())
   resolvedAt   DateTime?
@@ -317,6 +329,36 @@ model AlertaIA {
   demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
   @@map("alertas_ia")
+}
+
+model AprovacaoVideo {
+  id           String   @id @default(cuid())
+  demandaId    String
+  token        String   @unique @default(cuid())
+  nomeVideo    String?
+  urlVideo     String
+  status       String   @default("pendente")
+  aprovadoPor  String?
+  comentario   String?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("aprovacoes_video")
+}
+
+model ConfigWhatsapp {
+  id          String   @id @default(cuid())
+  instanceUrl String
+  apiKey      String
+  instanceId  String
+  ativo       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("config_whatsapp")
 }
 
 model MensagemWhatsapp {
