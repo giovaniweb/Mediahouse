@@ -36,9 +36,9 @@ export default function EquipePage() {
             especialidade: string[]
             cargaLimite: number
             status: string
-            demandasAtivas: Array<{ id: string; codigo: string; titulo: string; prioridade: string }>
+            demandas: Array<{ id: string; codigo: string; titulo: string; prioridade: string }>
           }) => {
-            const carga = editor.demandasAtivas?.length ?? 0
+            const carga = editor.demandas?.length ?? 0
             const pct = Math.min((carga / editor.cargaLimite) * 100, 100)
             const cargaStatus =
               pct >= 100 ? "sobrecarga" : pct >= 75 ? "atencao" : "ok"
@@ -101,10 +101,10 @@ export default function EquipePage() {
                 </div>
 
                 {/* Demandas ativas */}
-                {editor.demandasAtivas?.length > 0 && (
+                {editor.demandas?.length > 0 && (
                   <div className="border-t pt-3 space-y-1.5">
                     <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-1.5">Demandas ativas</p>
-                    {editor.demandasAtivas.slice(0, 3).map((d) => (
+                    {editor.demandas.slice(0, 3).map((d) => (
                       <Link key={d.id} href={`/demandas/${d.id}`}>
                         <div className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-zinc-50">
                           <Film className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
