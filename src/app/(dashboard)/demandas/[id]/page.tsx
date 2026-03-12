@@ -137,12 +137,12 @@ export default function DemandaDetailPage() {
               {demanda.comentarios?.length === 0 && (
                 <p className="p-4 text-sm text-zinc-400 text-center">Nenhum comentário ainda</p>
               )}
-              {demanda.comentarios?.map((c: { id: string; texto: string; criadoEm: string; usuario?: { nome: string } }) => (
+              {demanda.comentarios?.map((c: { id: string; texto: string; createdAt: string; usuario?: { nome: string } }) => (
                 <div key={c.id} className="p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-zinc-800">{c.usuario?.nome ?? "Sistema"}</span>
                     <span className="text-xs text-zinc-400">
-                      {format(new Date(c.criadoEm), "dd/MM HH:mm", { locale: ptBR })}
+                      {format(new Date(c.createdAt), "dd/MM HH:mm", { locale: ptBR })}
                     </span>
                   </div>
                   <p className="text-sm text-zinc-600">{c.texto}</p>
@@ -199,7 +199,7 @@ export default function DemandaDetailPage() {
           <div className="bg-white rounded-xl border p-4 shadow-sm">
             <h2 className="font-semibold text-zinc-700 mb-3">Datas</h2>
             <div className="space-y-2 text-sm">
-              <DateRow label="Criado em" value={demanda.criadoEm} />
+              <DateRow label="Criado em" value={demanda.createdAt} />
               {demanda.dataLimite && <DateRow label="Prazo" value={demanda.dataLimite} highlight />}
               {demanda.dataCaptacao && <DateRow label="Captação" value={demanda.dataCaptacao} />}
             </div>
@@ -211,7 +211,7 @@ export default function DemandaDetailPage() {
               <h2 className="font-semibold text-zinc-700">Histórico</h2>
             </div>
             <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
-              {demanda.historico?.map((h: { id: string; statusNovo: string; criadoEm: string; origem: string }) => (
+              {demanda.historicos?.map((h: { id: string; statusNovo: string; createdAt: string; origem: string }) => (
                 <div key={h.id} className="flex items-start gap-2">
                   <div className="w-2 h-2 rounded-full bg-zinc-300 mt-1.5 shrink-0" />
                   <div>
@@ -219,7 +219,7 @@ export default function DemandaDetailPage() {
                       {statusLabels[h.statusNovo] ?? h.statusNovo}
                     </p>
                     <p className="text-[10px] text-zinc-400">
-                      {format(new Date(h.criadoEm), "dd/MM HH:mm", { locale: ptBR })} · {h.origem}
+                      {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })} · {h.origem}
                     </p>
                   </div>
                 </div>

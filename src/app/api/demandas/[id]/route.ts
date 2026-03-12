@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  return NextResponse.json(demanda)
+  return NextResponse.json({ demanda })
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
