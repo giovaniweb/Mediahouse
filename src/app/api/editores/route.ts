@@ -16,7 +16,7 @@ export async function GET() {
     orderBy: { nome: "asc" },
   })
 
-  return NextResponse.json(editores)
+  return NextResponse.json({ editores })
 }
 
 export async function POST(req: NextRequest) {

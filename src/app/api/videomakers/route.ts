@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     orderBy: [{ status: "asc" }, { nome: "asc" }],
   })
 
-  return NextResponse.json(videomakers)
+  return NextResponse.json({ videomakers })
 }
 
 export async function POST(req: NextRequest) {
