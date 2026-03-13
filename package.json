@@ -11,6 +11,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@auth/prisma-adapter": "^2.11.1",
     "@base-ui/react": "^1.2.0",
     "@hello-pangea/dnd": "^18.0.1",

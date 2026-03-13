@@ -141,6 +141,7 @@ model Usuario {
   historicos      HistoricoStatus[]
   comentarios     Comentario[]
   sessions        Session[]
+  eventos         Evento[]
 
   @@map("usuarios")
 }
@@ -180,6 +181,8 @@ model Videomaker {
   updatedAt      DateTime         @updatedAt
 
   demandas Demanda[]
+  eventos  Evento[]
+  custos   CustoVideomaker[]
 
   @@map("videomakers")
 }
@@ -264,6 +267,8 @@ model Demanda {
   aprovacoesVideo    AprovacaoVideo[]
   mensagensWhatsapp  MensagemWhatsapp[]
   logsAutomacao      LogAutomacao[]
+  eventos            Evento[]
+  custos             CustoVideomaker[]
 
   @@map("demandas")
 }
@@ -388,4 +393,122 @@ model LogAutomacao {
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
   @@map("logs_automacao")
+}
+
+// ─────────────────────────────────────────────
+// AGENDA
+// ─────────────────────────────────────────────
+
+enum TipoEvento {
+  captacao
+  edicao
+  reuniao
+  freelance
+  pessoal
+  empresa
+  prazo
+  outro
+}
+
+enum ContextoEvento {
+  contourline  // prioridade máxima — empresa principal
+  freelance    // serviços externos
+  pessoal      // agenda particular do admin
+  sistema      // gerado automaticamente por demanda
+}
+
+enum StatusEvento {
+  agendado
+  confirmado
+  em_andamento
+  concluido
+  cancelado
+}
+
+model Evento {
+  id           String         @id @default(cuid())
+  titulo       String
+  descricao    String?
+  inicio       DateTime
+  fim          DateTime
+  diaTodo      Boolean        @default(false)
+  tipo         TipoEvento     @default(outro)
+  contexto     ContextoEvento @default(sistema)
+  status       StatusEvento   @default(agendado)
+  cor          String?        // hex, ex: #ef4444
+  local        String?
+  privado      Boolean        @default(false)
+
+  // Relações opcionais
+  demandaId    String?
+  usuarioId    String?        // admin/gestor
+  videomakerId String?        // agenda do videomaker
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  demanda    Demanda?    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario    Usuario?    @relation(fields: [usuarioId], references: [id])
+  videomaker Videomaker? @relation(fields: [videomakerId], references: [id])
+
+  @@map("eventos")
+}
+
+// ─────────────────────────────────────────────
+// CUSTOS
+// ─────────────────────────────────────────────
+
+enum TipoCusto {
+  diaria
+  mensalidade
+  projeto
+  bonus
+  despesa
+  equipamento
+}
+
+model CustoVideomaker {
+  id             String     @id @default(cuid())
+  videomakerId   String
+  demandaId      String?
+  tipo           TipoCusto  @default(diaria)
+  valor          Float
+  descricao      String?
+  dataReferencia DateTime
+  pago           Boolean    @default(false)
+  dataPagamento  DateTime?
+  comprovante    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  videomaker Videomaker @relation(fields: [videomakerId], references: [id])
+  demanda    Demanda?   @relation(fields: [demandaId], references: [id])
+
+  @@map("custos_videomaker")
+}
+
+// ─────────────────────────────────────────────
+// RELATÓRIOS IA
+// ─────────────────────────────────────────────
+
+enum TipoRelatorio {
+  produtividade_time
+  analise_custos
+  otimizacao_contratacao
+  performance_videomaker
+  semanal
+  mensal
+  realtime
+}
+
+model RelatorioIA {
+  id         String        @id @default(cuid())
+  tipo       TipoRelatorio
+  periodo    String        // ex: "2025-W01", "2025-03", "realtime"
+  conteudo   Json          // resposta estruturada da IA
+  tokens     Int?          // tokens consumidos
+  modelo     String        @default("claude-haiku-4-5")
+  createdAt  DateTime      @default(now())
+
+  @@map("relatorios_ia")
 }

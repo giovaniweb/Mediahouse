@@ -10,8 +10,9 @@ import {
   Bell,
   BarChart2,
   Settings,
-  Zap,
+  CalendarDays,
   ClipboardCheck,
+  DollarSign,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -21,9 +22,10 @@ const navItems = [
   { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
   { href: "/videomakers", label: "Videomakers", icon: Camera },
   { href: "/equipe", label: "Equipe", icon: Users },
-  { href: "/urgencias", label: "Urgências", icon: Zap },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/alertas", label: "Alertas IA", icon: Bell },
   { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
+  { href: "/custos", label: "Custos", icon: DollarSign },
   { href: "/configuracoes", label: "Config.", icon: Settings },
 ]
 
