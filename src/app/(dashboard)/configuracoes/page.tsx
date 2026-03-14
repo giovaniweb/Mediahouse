@@ -839,7 +839,6 @@ function TabWhatsappQR() {
   const [conectado, setConectado] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [QRCodeComp, setQRCodeComp] = useState<React.ComponentType<{ value: string; size?: number; bgColor?: string; fgColor?: string }> | null>(null)
 
   // Verifica se a config do WhatsApp existe antes de tentar
   const { data: wppConfig } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string } | null }>(
@@ -853,10 +852,6 @@ function TabWhatsappQR() {
     setConectado(false)
     setLoading(true)
     try {
-      // Carregar QRCode dinamicamente
-      const { QRCodeSVG } = await import("qrcode.react")
-      setQRCodeComp(() => QRCodeSVG)
-
       const res = await fetch("/api/configuracoes/whatsapp/qr")
       const data = await res.json()
 
@@ -945,13 +940,14 @@ function TabWhatsappQR() {
       {qrCode && !conectado && (
         <div className="space-y-4">
           <div className="bg-white p-4 rounded-xl w-fit shadow-lg">
-            {QRCodeComp ? (
-              <QRCodeComp value={qrCode} size={220} bgColor="#ffffff" fgColor="#18181b" />
-            ) : (
-              <div className="w-52 h-52 flex items-center justify-center text-zinc-400 text-xs bg-zinc-100 rounded">
-                Renderizando...
-              </div>
-            )}
+            {/* Evolution API retorna o QR como imagem base64 — exibir diretamente */}
+            <img
+              src={qrCode}
+              alt="QR Code WhatsApp"
+              width={220}
+              height={220}
+              className="rounded"
+            />
           </div>
           <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
             <li>Abra o WhatsApp no seu celular</li>
