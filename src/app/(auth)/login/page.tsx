@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -98,6 +99,15 @@ export default function LoginPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Entrando..." : "Entrar"}
           </Button>
+
+          <div className="text-center">
+            <Link
+              href="/esqueci-senha"
+              className="text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
+            >
+              Esqueci minha senha
+            </Link>
+          </div>
         </form>
       </div>
     </div>

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
-// PATCH /api/usuarios/[id] — atualiza status/tipo (admin)
+// PATCH /api/usuarios/[id] — atualiza status/tipo/senha (admin)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
 
-  // Usuário pode atualizar o próprio perfil; admin pode atualizar qualquer um
   const isOwn = session.user.id === id
   const isAdmin = session.user.tipo === "admin"
 
@@ -18,13 +18,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const body = await req.json()
-  const { status, tipo, nome, telefone } = body
+  const { status, tipo, nome, telefone, novaSenha } = body
 
   const data: Record<string, unknown> = {}
   if (nome) data.nome = nome
   if (telefone !== undefined) data.telefone = telefone
   if (isAdmin && status) data.status = status
   if (isAdmin && tipo) data.tipo = tipo
+
+  // Admin pode forçar reset de senha
+  if (isAdmin && novaSenha && typeof novaSenha === "string" && novaSenha.length >= 6) {
+    data.senha = await bcrypt.hash(novaSenha, 12)
+  }
 
   const usuario = await prisma.usuario.update({
     where: { id },

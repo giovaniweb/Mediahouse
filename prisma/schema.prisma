@@ -157,32 +157,36 @@ model Session {
 }
 
 model Videomaker {
-  id             String           @id @default(cuid())
-  nome           String
-  cidade         String?
-  estado         String?
-  telefone       String?
-  email          String?
-  cpfCnpj        String?
-  razaoSocial    String?
-  nomeFantasia   String?
-  representante  String?
-  endereco       String?
-  chavePix       String?
-  redesSociais   String[]
-  valorDiaria    Float?
-  dadosBancarios String?
-  status         StatusVideomaker @default(ativo)
-  avaliacao      Float?           @default(5.0)
-  observacoes    String?
-  areasAtuacao   String[]
-  portfolio      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  nome             String
+  cidade           String?
+  estado           String?
+  telefone         String?
+  email            String?
+  cpfCnpj          String?
+  razaoSocial      String?
+  nomeFantasia     String?
+  representante    String?
+  endereco         String?
+  chavePix         String?
+  redesSociais     String[]
+  valorDiaria      Float?
+  dadosBancarios   String?
+  status           StatusVideomaker @default(ativo)
+  avaliacao        Float?           @default(5.0)
+  observacoes      String?
+  areasAtuacao     String[]
+  habilidades      String[]         // tags: "Edição", "3D", "Drone" etc.
+  portfolio        String?
+  emListaNegra     Boolean          @default(false)
+  listaNegraMotivo String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
-  demandas Demanda[]
-  eventos  Evento[]
-  custos   CustoVideomaker[]
+  demandas   Demanda[]
+  eventos    Evento[]
+  custos     CustoVideomaker[]
+  avaliacoes AvaliacaoVideomaker[]
 
   @@map("videomakers")
 }
@@ -193,6 +197,7 @@ model Editor {
   telefone      String?
   email         String?
   especialidade String[]
+  habilidades   String[]      // tags abertas de habilidades
   cargaLimite   Int           @default(5)
   status        StatusUsuario @default(ativo)
   createdAt     DateTime      @default(now())
@@ -467,19 +472,30 @@ enum TipoCusto {
   equipamento
 }
 
+enum StatusPagamento {
+  pendente_nf          // aguardando videomaker enviar nota fiscal
+  nf_enviada           // NF recebida, aguardando aprovação interna
+  aguardando_pagamento // aprovado → e-mail enviado ao financeiro
+  pago                 // confirmado pago
+  contestado           // em disputa
+}
+
 model CustoVideomaker {
-  id             String     @id @default(cuid())
-  videomakerId   String
-  demandaId      String?
-  tipo           TipoCusto  @default(diaria)
-  valor          Float
-  descricao      String?
-  dataReferencia DateTime
-  pago           Boolean    @default(false)
-  dataPagamento  DateTime?
-  comprovante    String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id                String          @id @default(cuid())
+  videomakerId      String
+  demandaId         String?
+  tipo              TipoCusto       @default(diaria)
+  valor             Float
+  descricao         String?
+  dataReferencia    DateTime
+  pago              Boolean         @default(false)
+  dataPagamento     DateTime?
+  comprovante       String?
+  notaFiscalUrl     String?         // URL da NF enviada pelo videomaker
+  statusPagamento   StatusPagamento @default(pendente_nf)
+  emailFinanceiroAt DateTime?       // quando o e-mail foi enviado ao financeiro
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
   demanda    Demanda?   @relation(fields: [demandaId], references: [id])
@@ -511,4 +527,73 @@ model RelatorioIA {
   createdAt  DateTime      @default(now())
 
   @@map("relatorios_ia")
+}
+
+// ─────────────────────────────────────────────
+// E-MAIL / FINANCEIRO
+// ─────────────────────────────────────────────
+
+model ConfigEmail {
+  id               String   @id @default(cuid())
+  apiKey           String   @default("") // Resend API Key
+  senderEmail      String   @default("onboarding@resend.dev")
+  senderNome       String   @default("VideoOps")
+  emailsFinanceiro String[] // destinatários financeiro
+  ativo            Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("config_email")
+}
+
+// ─────────────────────────────────────────────
+// AVALIAÇÕES DE VIDEOMAKER
+// ─────────────────────────────────────────────
+
+model AvaliacaoVideomaker {
+  id           String     @id @default(cuid())
+  videomakerId String
+  nota         Int        // 1-5
+  comentario   String?
+  avaliadorId  String?    // null se via QR (avaliação pública)
+  demandaId    String?
+  origem       String     @default("interno") // "interno" | "qr_publico"
+  createdAt    DateTime   @default(now())
+
+  videomaker Videomaker @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+
+  @@map("avaliacoes_videomaker")
+}
+
+// ─────────────────────────────────────────────
+// PARÂMETROS DINÂMICOS (configurações editáveis)
+// ─────────────────────────────────────────────
+
+model ConfigParametro {
+  id        String   @id @default(cuid())
+  grupo     String   // "departamentos" | "tipos_video" | "habilidades" | "areas_atuacao"
+  valor     String   // valor interno (ex: "growth")
+  label     String   // label de exibição (ex: "Growth")
+  ordem     Int      @default(0)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([grupo, valor])
+  @@map("config_parametros")
+}
+
+// ─────────────────────────────────────────────
+// RESET DE SENHA
+// ─────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("password_reset_tokens")
 }

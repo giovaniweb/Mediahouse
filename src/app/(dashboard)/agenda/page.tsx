@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header"
 import {
   ChevronLeft, ChevronRight, Plus, X, Building2, Briefcase,
   User, Film, Calendar, Clock, MapPin, AlertTriangle, Sparkles,
+  Download, ExternalLink, ChevronDown,
 } from "lucide-react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
@@ -56,6 +57,55 @@ const COR_DEFAULTS: Record<string, string> = {
   freelance: "#22c55e",
   pessoal: "#a855f7",
   sistema: "#71717a",
+}
+
+function ExportButton() {
+  const [open, setOpen] = useState(false)
+  const hoje = new Date()
+
+  function buildGoogleLink(titulo: string, inicio: Date, fim: Date) {
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
+    return `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent(titulo)}&dates=${fmt(inicio)}/${fmt(fim)}`
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs px-3 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+      >
+        <Download className="w-3.5 h-3.5" />
+        Exportar
+        <ChevronDown className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl py-1 z-50">
+          <a
+            href="/api/agenda/exportar.ics"
+            download="videoops-agenda.ics"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors"
+            onClick={() => setOpen(false)}
+          >
+            <Download className="h-4 w-4 text-zinc-500" />
+            Download .ics (todos)
+          </a>
+          <p className="px-4 py-1 text-[10px] text-zinc-600 border-t border-zinc-800 mt-1 pt-2">
+            Funciona no Google, iPhone e Outlook
+          </p>
+          <a
+            href={buildGoogleLink("Evento VideoOps", hoje, new Date(hoje.getTime() + 3600000))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors"
+            onClick={() => setOpen(false)}
+          >
+            <ExternalLink className="h-4 w-4 text-zinc-500" />
+            Adicionar ao Google Calendar
+          </a>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function AgendaPage() {
@@ -148,9 +198,12 @@ export default function AgendaPage() {
       <Header
         title="Agenda"
         actions={
-          <button onClick={() => abrirForm()} className="flex items-center gap-1.5 bg-zinc-900 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-zinc-700">
+          <div className="flex items-center gap-2">
+            <ExportButton />
+            <button onClick={() => abrirForm()} className="flex items-center gap-1.5 bg-zinc-900 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-zinc-700">
             <Plus className="w-3.5 h-3.5" /> Novo Evento
           </button>
+          </div>
         }
       />
       <main className="flex-1 p-4 flex gap-4 overflow-hidden">

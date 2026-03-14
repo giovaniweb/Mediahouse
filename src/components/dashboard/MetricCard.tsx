@@ -1,12 +1,13 @@
 import { cn } from "@/lib/utils"
 import { ReactNode } from "react"
+import Link from "next/link"
 
 const colors = {
-  blue: "bg-blue-50 text-blue-600 border-blue-100",
-  red: "bg-red-50 text-red-600 border-red-100",
-  green: "bg-green-50 text-green-600 border-green-100",
-  yellow: "bg-yellow-50 text-yellow-600 border-yellow-100",
-  purple: "bg-purple-50 text-purple-600 border-purple-100",
+  blue: { icon: "bg-blue-500/10 text-blue-400 border border-blue-800", value: "text-white", border: "border-blue-900/30" },
+  red: { icon: "bg-red-500/10 text-red-400 border border-red-800", value: "text-red-300", border: "border-red-900/30" },
+  green: { icon: "bg-green-500/10 text-green-400 border border-green-800", value: "text-green-300", border: "border-green-900/30" },
+  yellow: { icon: "bg-yellow-500/10 text-yellow-400 border border-yellow-800", value: "text-yellow-300", border: "border-yellow-900/30" },
+  purple: { icon: "bg-purple-500/10 text-purple-400 border border-purple-800", value: "text-purple-300", border: "border-purple-900/30" },
 }
 
 interface MetricCardProps {
@@ -15,16 +16,35 @@ interface MetricCardProps {
   icon: ReactNode
   color: keyof typeof colors
   small?: boolean
+  href?: string
+  sublabel?: string
 }
 
-export function MetricCard({ label, value, icon, color, small }: MetricCardProps) {
+function CardContent({ label, value, icon, color, small, sublabel }: MetricCardProps) {
+  const cfg = colors[color]
   return (
-    <div className={cn("rounded-xl border p-4 bg-white shadow-sm", small && "p-3")}>
+    <div className={cn(
+      "rounded-xl border bg-zinc-900 shadow-sm transition-all",
+      small ? "p-3" : "p-4",
+      "border-zinc-800 hover:border-zinc-700"
+    )}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">{label}</span>
-        <div className={cn("p-1.5 rounded-lg border", colors[color])}>{icon}</div>
+        <div className={cn("p-1.5 rounded-lg", cfg.icon)}>{icon}</div>
       </div>
-      <p className={cn("font-bold text-zinc-900", small ? "text-2xl" : "text-3xl")}>{value}</p>
+      <p className={cn("font-bold", cfg.value, small ? "text-2xl" : "text-3xl")}>{value}</p>
+      {sublabel && <p className="text-xs text-zinc-600 mt-1">{sublabel}</p>}
     </div>
   )
+}
+
+export function MetricCard(props: MetricCardProps) {
+  if (props.href) {
+    return (
+      <Link href={props.href} className="block group">
+        <CardContent {...props} />
+      </Link>
+    )
+  }
+  return <CardContent {...props} />
 }

@@ -12,17 +12,30 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user
       const { pathname } = request.nextUrl
 
-      // Permite chamadas de auth
-      if (pathname.startsWith("/api/auth")) return true
+      // Rotas públicas — não precisam de autenticação
+      const publicPaths = [
+        "/login",
+        "/esqueci-senha",
+        "/redefinir-senha",
+        "/avaliar",       // avaliação pública de videomaker via QR
+        "/api/auth",
+        "/api/publico",
+      ]
+      const isPublic = publicPaths.some(
+        (p) => pathname === p || pathname.startsWith(p + "/")
+      )
 
-      // Redireciona usuário logado que acessa /login
-      if (isLoggedIn && pathname === "/login") {
-        return Response.redirect(new URL("/dashboard", request.nextUrl))
+      if (isPublic) {
+        // Usuário já logado tentando acessar /login → manda pro dashboard
+        if (isLoggedIn && pathname === "/login") {
+          return Response.redirect(new URL("/dashboard", request.nextUrl))
+        }
+        return true
       }
 
-      // Bloqueia não-logados em rotas protegidas
-      if (!isLoggedIn && pathname !== "/login") {
-        return false // próximo.js redireciona para signIn page
+      // Bloqueia não-logados em todas as outras rotas
+      if (!isLoggedIn) {
+        return false // next-auth redireciona para signIn page
       }
 
       return true
