@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Film, Zap, CheckCircle2, Users, MessageCircle, BarChart2, ArrowRight, Star } from "lucide-react"
+import { Film, Zap, CheckCircle2, Users, MessageCircle, BarChart2, ArrowRight } from "lucide-react"
 
 export const metadata = { title: "Sobre Nós — VideoOps" }
 
@@ -12,11 +12,6 @@ const SERVICOS = [
   { icon: CheckCircle2, titulo: "Aprovação Facilitada", desc: "Sistema de aprovação de vídeos com link compartilhável — revise e aprove direto do celular." },
 ]
 
-const DEPOIMENTOS = [
-  { nome: "Ana Costa", cargo: "Gerente de Marketing", empresa: "TechBrasil", texto: "A equipe do VideoOps transformou nossa comunicação. Entregam com qualidade e prazo impecáveis.", estrelas: 5 },
-  { nome: "Rafael Mendes", cargo: "CEO", empresa: "StartupXYZ", texto: "Finalmente encontrei uma produtora que entende a urgência de conteúdo para redes sociais. Recomendo muito!", estrelas: 5 },
-  { nome: "Camila Santos", cargo: "Diretora de RH", empresa: "Grupo Omega", texto: "Vídeos institucionais de altíssima qualidade. O processo de aprovação via link é muito conveniente.", estrelas: 5 },
-]
 
 export default function SobrePage() {
   return (
@@ -75,23 +70,6 @@ export default function SobrePage() {
         </div>
       </section>
 
-      {/* Números */}
-      <section className="border-y border-zinc-800 bg-zinc-900/50">
-        <div className="max-w-6xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-          {[
-            { numero: "500+", label: "Projetos entregues" },
-            { numero: "150+", label: "Clientes ativos" },
-            { numero: "80+", label: "Videomakers parceiros" },
-            { numero: "98%", label: "Satisfação dos clientes" },
-          ].map((s) => (
-            <div key={s.label}>
-              <p className="text-3xl font-bold text-white">{s.numero}</p>
-              <p className="text-sm text-zinc-400 mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Serviços */}
       <section className="max-w-6xl mx-auto px-6 py-20">
         <div className="text-center mb-12">
@@ -137,29 +115,6 @@ export default function SobrePage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Depoimentos */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-3">O que nossos clientes dizem</h2>
-        </div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {DEPOIMENTOS.map((d) => (
-            <div key={d.nome} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-              <div className="flex items-center gap-1 mb-3">
-                {Array.from({ length: d.estrelas }).map((_, i) => (
-                  <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                ))}
-              </div>
-              <p className="text-sm text-zinc-300 leading-relaxed mb-4">&ldquo;{d.texto}&rdquo;</p>
-              <div>
-                <p className="font-semibold text-white text-sm">{d.nome}</p>
-                <p className="text-xs text-zinc-400">{d.cargo} · {d.empresa}</p>
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 

@@ -27,13 +27,13 @@ export default function EquipePage() {
   return (
     <>
       <Header
-        title="Equipe (Editores)"
+        title="Videomakers Int"
         actions={
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg"
           >
-            <Plus className="w-4 h-4" /> Adicionar Editor
+            <Plus className="w-4 h-4" /> Adicionar Videomaker Int
           </button>
         }
       />
@@ -145,8 +145,8 @@ export default function EquipePage() {
 
         {editores.length === 0 && (
           <div className="text-center py-16 text-zinc-500">
-            <p className="text-lg font-medium mb-1">Nenhum editor cadastrado</p>
-            <p className="text-sm">Clique em "Adicionar Editor" para começar.</p>
+            <p className="text-lg font-medium mb-1">Nenhum Videomaker Int cadastrado</p>
+            <p className="text-sm">Clique em "Adicionar Videomaker Int" para começar.</p>
           </div>
         )}
       </main>
@@ -198,7 +198,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
-          <h2 className="font-semibold text-white">Adicionar Editor</h2>
+          <h2 className="font-semibold text-white">Adicionar Videomaker Int</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl">&times;</button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3 overflow-y-auto flex-1">

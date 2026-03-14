@@ -26,7 +26,16 @@ export async function GET() {
     orderBy: { nome: "asc" },
   })
 
-  return NextResponse.json({ usuarios })
+  const videomakers = await prisma.videomaker.findMany({
+    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true },
+    orderBy: { nome: "asc" },
+  })
+  const editores = await prisma.editor.findMany({
+    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true },
+    orderBy: { nome: "asc" },
+  })
+
+  return NextResponse.json({ usuarios, videomakers, editores })
 }
 
 // POST /api/usuarios — cria novo usuário (admin)

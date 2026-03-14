@@ -38,12 +38,50 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ demanda })
 }
 
+const STATUS_VISIVEL_TO_INTERNO: Record<string, string> = {
+  entrada: "aguardando_triagem",
+  producao: "planejamento",
+  edicao: "fila_edicao",
+  aprovacao: "revisao_pendente",
+  para_postar: "aprovado",
+  finalizado: "encerrado",
+}
+
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
   const body = await req.json()
+
+  if (body.statusVisivel) {
+    const novoStatusInterno = STATUS_VISIVEL_TO_INTERNO[body.statusVisivel]
+    const demandaAtual = await prisma.demanda.findUnique({ where: { id }, select: { statusInterno: true } })
+
+    const [demanda] = await prisma.$transaction([
+      prisma.demanda.update({
+        where: { id },
+        data: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          statusVisivel: body.statusVisivel as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          statusInterno: novoStatusInterno as any,
+        },
+      }),
+      prisma.historicoStatus.create({
+        data: {
+          demandaId: id,
+          statusAnterior: demandaAtual?.statusInterno ?? null,
+          statusNovo: novoStatusInterno,
+          origem: "manual",
+          usuarioId: session.user.id,
+          observacao: `Movido via Kanban para coluna "${body.statusVisivel}"`,
+        },
+      }),
+    ])
+
+    return NextResponse.json(demanda)
+  }
 
   const demanda = await prisma.demanda.update({
     where: { id },

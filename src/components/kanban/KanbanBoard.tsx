@@ -12,7 +12,7 @@ export const COLUNAS = [
   { id: "edicao", label: "Edição", color: "border-t-purple-500" },
   { id: "aprovacao", label: "Aprovação", color: "border-t-yellow-500" },
   { id: "para_postar", label: "Para Postar", color: "border-t-green-500" },
-  { id: "concluido", label: "Concluído", color: "border-t-zinc-300" },
+  { id: "finalizado", label: "Concluído", color: "border-t-zinc-300" },
 ] as const
 
 type StatusVisivel = (typeof COLUNAS)[number]["id"]

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, use, useEffect } from "react"
 import { Star, Send, CheckCircle2, AlertCircle, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -8,17 +8,58 @@ interface Params {
   videomakerId: string
 }
 
+interface ChecklistAnswers {
+  atendeuDemandas: "sim" | "nao" | ""
+  foiPontual: "sim" | "nao" | ""
+  contratariaNovamente: "sim" | "nao" | ""
+}
+
+const checklistQuestions: { key: keyof ChecklistAnswers; label: string }[] = [
+  { key: "atendeuDemandas", label: "Atendeu as demandas conforme o combinado?" },
+  { key: "foiPontual", label: "Foi pontual e atencioso?" },
+  { key: "contratariaNovamente", label: "Você o contrataria novamente?" },
+]
+
 export default function AvaliarVideomakerPage({ params }: { params: Promise<Params> }) {
   const { videomakerId } = use(params)
+
+  const [videomakerNome, setVideomakerNome] = useState<string | null>(null)
+  const [videomakerLocal, setVideomakerLocal] = useState<string | null>(null)
+  const [loadingInfo, setLoadingInfo] = useState(true)
 
   const [nota, setNota] = useState(0)
   const [hovered, setHovered] = useState(0)
   const [comentario, setComentario] = useState("")
+  const [checklist, setChecklist] = useState<ChecklistAnswers>({
+    atendeuDemandas: "",
+    foiPontual: "",
+    contratariaNovamente: "",
+  })
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<"ok" | "erro" | null>(null)
   const [errorMsg, setErrorMsg] = useState("")
 
   const starLabels = ["", "Ruim", "Regular", "Bom", "Muito bom", "Excelente"]
+
+  useEffect(() => {
+    fetch(`/api/publico/videomaker-info/${videomakerId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.videomaker) {
+          setVideomakerNome(data.videomaker.nome)
+          const local = [data.videomaker.cidade, data.videomaker.estado]
+            .filter(Boolean)
+            .join(", ")
+          setVideomakerLocal(local || null)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingInfo(false))
+  }, [videomakerId])
+
+  function setChecklistAnswer(key: keyof ChecklistAnswers, value: "sim" | "nao") {
+    setChecklist((prev) => ({ ...prev, [key]: value }))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -29,7 +70,7 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
       const res = await fetch("/api/publico/avaliar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videomakerId, nota, comentario }),
+        body: JSON.stringify({ videomakerId, nota, comentario, checklist }),
       })
 
       const data = await res.json()
@@ -84,6 +125,18 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
             <span className="text-xl font-bold tracking-tight">VideoOps</span>
           </div>
           <h1 className="text-2xl font-bold text-white">Avalie o Profissional</h1>
+          {loadingInfo ? (
+            <div className="mt-3 h-6 flex items-center justify-center">
+              <div className="h-4 w-32 bg-zinc-800 rounded animate-pulse" />
+            </div>
+          ) : videomakerNome ? (
+            <div className="mt-3">
+              <p className="text-lg font-semibold text-purple-400">{videomakerNome}</p>
+              {videomakerLocal && (
+                <p className="text-xs text-zinc-500 mt-0.5">{videomakerLocal}</p>
+              )}
+            </div>
+          ) : null}
           <p className="text-zinc-400 text-sm mt-2">
             Sua avaliação nos ajuda a garantir qualidade nos nossos projetos
           </p>
@@ -91,6 +144,44 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Checklist */}
+            <div className="space-y-4">
+              <p className="text-sm text-zinc-400 font-medium uppercase tracking-wider">
+                Perguntas rápidas
+              </p>
+              {checklistQuestions.map(({ key, label }) => (
+                <div key={key}>
+                  <p className="text-sm text-zinc-300 mb-2">{label}</p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setChecklistAnswer(key, "sim")}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-sm font-medium border transition-all",
+                        checklist[key] === "sim"
+                          ? "bg-green-600 border-green-700 text-white"
+                          : "border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
+                      )}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChecklistAnswer(key, "nao")}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-sm font-medium border transition-all",
+                        checklist[key] === "nao"
+                          ? "bg-red-600 border-red-700 text-white"
+                          : "border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
+                      )}
+                    >
+                      Não
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {/* Stars */}
             <div className="text-center">
               <p className="text-sm text-zinc-400 mb-4 font-medium uppercase tracking-wider">

@@ -13,6 +13,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   DollarSign,
+  UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -29,8 +30,8 @@ const sections = [
   {
     label: "Equipe",
     items: [
-      { href: "/videomakers", label: "Videomakers", icon: Camera },
-      { href: "/equipe", label: "Editores", icon: Users },
+      { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
+      { href: "/equipe", label: "Videomakers Int", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
     ],
   },
@@ -44,6 +45,7 @@ const sections = [
   {
     label: "Sistema",
     items: [
+      { href: "/usuarios", label: "Usuários", icon: UserCog },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
     ],
   },
