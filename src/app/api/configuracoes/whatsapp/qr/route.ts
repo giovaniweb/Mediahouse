@@ -29,7 +29,12 @@ export async function GET() {
       return NextResponse.json({ conectado: true, estado: "open" })
     }
 
-    const qrcode = data?.qrcode?.base64 ?? data?.base64 ?? data?.qrcode ?? null
+    let qrcode = data?.qrcode?.base64 ?? data?.base64 ?? data?.qrcode ?? null
+
+    // Garantir que o base64 tem o prefixo correto para uso em <img src>
+    if (qrcode && typeof qrcode === "string" && !qrcode.startsWith("data:")) {
+      qrcode = `data:image/png;base64,${qrcode}`
+    }
 
     return NextResponse.json({ conectado: false, qrcode, estado: data?.instance?.state ?? "qr" })
   } catch (err) {
