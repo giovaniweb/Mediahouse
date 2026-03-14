@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff } from "lucide-react"
+import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -835,62 +835,162 @@ function TabParametros() {
 // ─── WhatsApp QR ──────────────────────────────────────────────────────────────
 
 function TabWhatsappQR() {
-  const [qrData, setQrData] = useState<{ qrcode?: string; conectado?: boolean; estado?: string } | null>(null)
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [conectado, setConectado] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [QRCode, setQRCode] = useState<React.ComponentType<{ value: string; size?: number; bgColor?: string; fgColor?: string }> | null>(null)
+  const [QRCodeComp, setQRCodeComp] = useState<React.ComponentType<{ value: string; size?: number; bgColor?: string; fgColor?: string }> | null>(null)
+
+  // Verifica se a config do WhatsApp existe antes de tentar
+  const { data: wppConfig } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string } | null }>(
+    "/api/configuracoes/whatsapp", fetcher
+  )
+  const temConfig = !!(wppConfig?.config?.instanceUrl && wppConfig?.config?.apiKey && wppConfig?.config?.instanceId)
 
   async function buscarQR() {
+    setErro(null)
+    setQrCode(null)
+    setConectado(false)
     setLoading(true)
     try {
+      // Carregar QRCode dinamicamente
       const { QRCodeSVG } = await import("qrcode.react")
-      setQRCode(() => QRCodeSVG)
+      setQRCodeComp(() => QRCodeSVG)
+
       const res = await fetch("/api/configuracoes/whatsapp/qr")
       const data = await res.json()
-      setQrData(data)
-      if (data.conectado) toast.success("WhatsApp conectado!")
-    } catch { toast.error("Erro ao buscar QR") }
-    finally { setLoading(false) }
+
+      if (data.error) {
+        setErro(data.error)
+        return
+      }
+
+      if (data.conectado) {
+        setConectado(true)
+        toast.success("WhatsApp já está conectado!")
+        return
+      }
+
+      if (data.qrcode) {
+        setQrCode(data.qrcode)
+      } else {
+        setErro("QR code não retornado pela Evolution API. Verifique se a instância está ativa.")
+      }
+    } catch (e) {
+      setErro(`Erro de conexão: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="space-y-5 max-w-sm">
+    <div className="space-y-5 max-w-md">
+      {/* Header */}
       <div className="bg-green-500/10 border border-green-800 rounded-xl p-4 flex items-start gap-3">
         <QrCode className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
         <div className="text-sm text-green-300">
-          <p className="font-semibold">Conectar via QR Code</p>
-          <p className="text-xs mt-1 text-green-400">Escaneie o QR Code com o WhatsApp para conectar a instância da Evolution API.</p>
+          <p className="font-semibold">Conectar WhatsApp via QR Code</p>
+          <p className="text-xs mt-1 text-green-400/80">
+            Escaneie com o WhatsApp no celular → Aparelhos Conectados → Conectar Aparelho
+          </p>
         </div>
       </div>
 
-      {!qrData && (
-        <button onClick={buscarQR} disabled={loading}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg disabled:opacity-50">
-          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
-          {loading ? "Buscando..." : "Gerar QR Code"}
-        </button>
-      )}
-
-      {qrData?.conectado && (
-        <div className="flex items-center gap-2 text-green-400 font-medium">
-          <CheckCircle2 className="h-5 w-5" />
-          WhatsApp conectado com sucesso!
+      {/* Aviso: sem config */}
+      {wppConfig !== undefined && !temConfig && (
+        <div className="bg-amber-500/10 border border-amber-800 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-300">
+            <p className="font-semibold">Configure a Evolution API primeiro</p>
+            <p className="text-xs mt-1 text-amber-400/80">
+              Preencha a URL da Instância, API Key e Instance ID acima e clique em <strong>Salvar</strong> antes de gerar o QR.
+            </p>
+          </div>
         </div>
       )}
 
-      {qrData?.qrcode && !qrData.conectado && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 rounded-xl w-fit">
-            {QRCode ? (
-              <QRCode value={qrData.qrcode} size={200} bgColor="#ffffff" fgColor="#18181b" />
-            ) : (
-              <div className="w-48 h-48 flex items-center justify-center text-zinc-400 text-xs">Renderizando...</div>
+      {/* Erro */}
+      {erro && (
+        <div className="bg-red-500/10 border border-red-800 rounded-xl p-4 flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-red-300">
+            <p className="font-semibold">Erro ao gerar QR Code</p>
+            <p className="text-xs mt-1 text-red-400/80">{erro}</p>
+            {erro.includes("não configurado") && (
+              <p className="text-xs mt-2 text-amber-400">
+                ↑ Preencha a URL, API Key e Instance ID no formulário acima e clique em Salvar.
+              </p>
+            )}
+            {erro.includes("Evolution API retornou") && (
+              <p className="text-xs mt-2 text-amber-400">
+                Verifique se a Evolution API está rodando e se a Instance ID está correta.
+              </p>
             )}
           </div>
-          <p className="text-xs text-zinc-400">Abra o WhatsApp → Aparelhos Conectados → Conectar Aparelho → Escaneie este QR</p>
-          <button onClick={buscarQR} disabled={loading} className="flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-sm px-3 py-2 rounded-lg hover:bg-zinc-800">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /> Atualizar QR
-          </button>
         </div>
+      )}
+
+      {/* Conectado */}
+      {conectado && (
+        <div className="flex items-center gap-3 bg-green-500/10 border border-green-800 rounded-xl p-4">
+          <CheckCircle2 className="w-6 h-6 text-green-400" />
+          <div>
+            <p className="text-sm font-semibold text-green-300">WhatsApp conectado!</p>
+            <p className="text-xs text-green-400/80 mt-0.5">Notificações automáticas estão ativas.</p>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code */}
+      {qrCode && !conectado && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl w-fit shadow-lg">
+            {QRCodeComp ? (
+              <QRCodeComp value={qrCode} size={220} bgColor="#ffffff" fgColor="#18181b" />
+            ) : (
+              <div className="w-52 h-52 flex items-center justify-center text-zinc-400 text-xs bg-zinc-100 rounded">
+                Renderizando...
+              </div>
+            )}
+          </div>
+          <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
+            <li>Abra o WhatsApp no seu celular</li>
+            <li>Toque em <strong className="text-zinc-300">⋮ Menu</strong> → <strong className="text-zinc-300">Aparelhos Conectados</strong></li>
+            <li>Toque em <strong className="text-zinc-300">Conectar Aparelho</strong></li>
+            <li>Escaneie este QR Code</li>
+          </ol>
+          <div className="flex gap-2">
+            <button
+              onClick={buscarQR}
+              disabled={loading}
+              className="flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-sm px-4 py-2 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              {loading ? "Atualizando..." : "Atualizar QR"}
+            </button>
+            <button
+              onClick={buscarQR}
+              disabled={loading}
+              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Já escaneei — Verificar
+            </button>
+          </div>
+          <p className="text-[11px] text-zinc-600">QR expira em ~60 segundos. Se expirar, clique em Atualizar QR.</p>
+        </div>
+      )}
+
+      {/* Botão gerar (quando não tem QR e não está conectado) */}
+      {!qrCode && !conectado && (
+        <button
+          onClick={buscarQR}
+          disabled={loading || (wppConfig !== undefined && !temConfig)}
+          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+        >
+          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+          {loading ? "Gerando QR Code..." : "Gerar QR Code"}
+        </button>
       )}
     </div>
   )
