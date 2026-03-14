@@ -177,6 +177,7 @@ model Videomaker {
   observacoes      String?
   areasAtuacao     String[]
   habilidades      String[]         // tags: "Edição", "3D", "Drone" etc.
+  equipamentos     String[]         // câmeras, lentes, drones, iluminação etc.
   portfolio        String?
   emListaNegra     Boolean          @default(false)
   listaNegraMotivo String?
@@ -195,15 +196,19 @@ model Editor {
   id            String        @id @default(cuid())
   nome          String
   telefone      String?
+  whatsapp      String?       // número WhatsApp (pode ser igual ao telefone)
   email         String?
+  avatarUrl     String?       // foto de perfil
   especialidade String[]
   habilidades   String[]      // tags abertas de habilidades
   cargaLimite   Int           @default(5)
   status        StatusUsuario @default(ativo)
+  avaliacao     Float?        @default(5.0)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  demandas Demanda[]
+  demandas   Demanda[]
+  avaliacoes AvaliacaoEditor[]
 
   @@map("editores")
 }
@@ -563,6 +568,28 @@ model AvaliacaoVideomaker {
   videomaker Videomaker @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
 
   @@map("avaliacoes_videomaker")
+}
+
+// ─────────────────────────────────────────────
+// AVALIAÇÕES DE EDITOR (Videomaker Int)
+// ─────────────────────────────────────────────
+
+model AvaliacaoEditor {
+  id          String   @id @default(cuid())
+  editorId    String
+  nota        Int      // 1-5
+  comentario  String?
+  atendeuDemandas  Boolean?   // checklist: atendeu as demandas?
+  foiAtencioso     Boolean?   // foi atencioso?
+  contratariaNovamente Boolean? // contrataria novamente?
+  avaliadorId String?          // null se via QR público
+  demandaId   String?
+  origem      String   @default("interno") // "interno" | "qr_publico"
+  createdAt   DateTime @default(now())
+
+  editor Editor @relation(fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@map("avaliacoes_editor")
 }
 
 // ─────────────────────────────────────────────

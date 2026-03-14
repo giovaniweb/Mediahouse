@@ -3,7 +3,7 @@
 import { useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { Users, Camera, Film, Shield, UserCheck, User, Search, CheckCircle2, XCircle, Plus } from "lucide-react"
+import { Users, Camera, Film, Shield, UserCheck, User, Search, CheckCircle2, XCircle, Plus, Pencil, X, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -55,9 +55,21 @@ interface Editor {
   createdAt: string
 }
 
+const TIPOS_OPTS = ["admin", "gestor", "operacao", "solicitante", "social"]
+
+interface EditForm {
+  nome: string
+  email: string
+  telefone: string
+  tipo: string
+}
+
 export default function UsuariosPage() {
   const [tab, setTab] = useState<Tab>("sistema")
   const [search, setSearch] = useState("")
+  const [editando, setEditando] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditForm>({ nome: "", email: "", telefone: "", tipo: "" })
+  const [salvando, setSalvando] = useState(false)
   const { data, mutate } = useSWR<{ usuarios: Usuario[]; videomakers: Videomaker[]; editores: Editor[] }>("/api/usuarios", fetcher)
 
   const usuarios = data?.usuarios ?? []
@@ -66,6 +78,30 @@ export default function UsuariosPage() {
 
   const filtrar = <T extends { nome: string }>(arr: T[]) =>
     search ? arr.filter((u) => u.nome.toLowerCase().includes(search.toLowerCase())) : arr
+
+  function abrirEdicao(u: Usuario) {
+    setEditando(u.id)
+    setEditForm({ nome: u.nome, email: u.email, telefone: u.telefone ?? "", tipo: u.tipo })
+  }
+
+  async function salvarEdicao(id: string) {
+    setSalvando(true)
+    try {
+      const res = await fetch(`/api/usuarios/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("Usuário atualizado!")
+      setEditando(null)
+      mutate()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar")
+    } finally {
+      setSalvando(false)
+    }
+  }
 
   async function toggleStatusUsuario(id: string, status: string) {
     const novoStatus = status === "ativo" ? "inativo" : "ativo"
@@ -149,34 +185,91 @@ export default function UsuariosPage() {
             </div>
             <div className="grid gap-3">
               {filtrar(usuarios).map((u) => (
-                <div key={u.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 hover:border-zinc-700 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-                    <User className="w-5 h-5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-zinc-100 text-sm">{u.nome}</p>
-                      <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", TIPO_COLOR[u.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>
-                        {TIPO_LABEL[u.tipo] ?? u.tipo}
-                      </span>
+                <div key={u.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition-colors">
+                  {editando === u.id ? (
+                    /* ── Formulário de edição inline ── */
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-zinc-200">Editando {u.nome}</p>
+                        <button onClick={() => setEditando(null)} className="text-zinc-500 hover:text-zinc-300">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-0.5">Nome</label>
+                          <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                            value={editForm.nome} onChange={e => setEditForm(f => ({ ...f, nome: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-0.5">Tipo</label>
+                          <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                            value={editForm.tipo} onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}>
+                            {TIPOS_OPTS.map(t => <option key={t} value={t}>{TIPO_LABEL[t] ?? t}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-0.5">E-mail</label>
+                          <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                            value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-0.5">WhatsApp</label>
+                          <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                            placeholder="+55 11 99999-9999"
+                            value={editForm.telefone} onChange={e => setEditForm(f => ({ ...f, telefone: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => salvarEdicao(u.id)} disabled={salvando}
+                          className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50">
+                          <Save className="w-3.5 h-3.5" /> {salvando ? "Salvando..." : "Salvar"}
+                        </button>
+                        <button onClick={() => setEditando(null)}
+                          className="flex items-center gap-1.5 border border-zinc-700 text-zinc-400 text-xs px-3 py-1.5 rounded-lg hover:bg-zinc-800">
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs text-zinc-500 truncate mt-0.5">{u.email}</p>
-                    {u.telefone && <p className="text-xs text-zinc-600">{u.telefone}</p>}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => toggleStatusUsuario(u.id, u.status)}
-                      className={cn(
-                        "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors",
-                        u.status === "ativo"
-                          ? "bg-green-500/10 border-green-800 text-green-400 hover:bg-green-500/20"
-                          : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:bg-zinc-700"
-                      )}
-                    >
-                      {u.status === "ativo" ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                      {u.status === "ativo" ? "Ativo" : "Inativo"}
-                    </button>
-                  </div>
+                  ) : (
+                    /* ── Card normal ── */
+                    <div className="p-4 flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
+                        <User className="w-5 h-5 text-zinc-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-zinc-100 text-sm">{u.nome}</p>
+                          <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", TIPO_COLOR[u.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>
+                            {TIPO_LABEL[u.tipo] ?? u.tipo}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 truncate mt-0.5">{u.email}</p>
+                        {u.telefone && <p className="text-xs text-zinc-600">{u.telefone}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => abrirEdicao(u)}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                          title="Editar usuário"
+                        >
+                          <Pencil className="w-3 h-3" /> Editar
+                        </button>
+                        <button
+                          onClick={() => toggleStatusUsuario(u.id, u.status)}
+                          className={cn(
+                            "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors",
+                            u.status === "ativo"
+                              ? "bg-green-500/10 border-green-800 text-green-400 hover:bg-green-500/20"
+                              : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:bg-zinc-700"
+                          )}
+                        >
+                          {u.status === "ativo" ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                          {u.status === "ativo" ? "Ativo" : "Inativo"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {filtrar(usuarios).length === 0 && (

@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   DollarSign,
   UserCog,
+  Home,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -68,6 +69,15 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {/* Link Página Inicial */}
+        <Link
+          href="/sobre"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
+        >
+          <Home className="w-4 h-4 flex-shrink-0" />
+          Página Inicial
+        </Link>
+
         {sections.map((section) => (
           <div key={section.label}>
             <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">

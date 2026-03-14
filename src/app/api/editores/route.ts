@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  const { searchParams } = req.nextUrl
+  const status = searchParams.get("status")
+
+  const where = status ? { status: status as "ativo" | "inativo" } : {}
+
   const editores = await prisma.editor.findMany({
+    where,
     include: {
       demandas: {
         where: { statusVisivel: { notIn: ["finalizado"] } },
@@ -16,7 +22,13 @@ export async function GET() {
     orderBy: { nome: "asc" },
   })
 
-  return NextResponse.json({ editores })
+  // Adicionar _count de demandas ativas para facilitar no frontend
+  const editoresComCarga = editores.map(e => ({
+    ...e,
+    _count: { demandas: e.demandas.length },
+  }))
+
+  return NextResponse.json({ editores: editoresComCarga })
 }
 
 export async function POST(req: NextRequest) {

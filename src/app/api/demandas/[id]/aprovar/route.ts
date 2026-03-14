@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { Resend } from "resend"
 
-// POST /api/demandas/[id]/aprovar — aprova ou recusa uma demanda pendente de aprovação interna
+// POST /api/demandas/[id]/aprovar
+// acao: "aprovar" | "recusar" | "reverter" (reverter demanda encerrada por recusa)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -14,25 +16,61 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const body = await req.json()
-  const { acao, motivo } = body // acao: "aprovar" | "recusar"
+  const { acao, motivo } = body // acao: "aprovar" | "recusar" | "reverter"
 
-  if (!["aprovar", "recusar"].includes(acao)) {
-    return NextResponse.json({ error: "Ação inválida. Use 'aprovar' ou 'recusar'" }, { status: 400 })
+  if (!["aprovar", "recusar", "reverter"].includes(acao)) {
+    return NextResponse.json({ error: "Ação inválida. Use 'aprovar', 'recusar' ou 'reverter'" }, { status: 400 })
   }
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
-    include: { solicitante: { select: { nome: true, telefone: true } } },
+    include: {
+      solicitante: { select: { id: true, nome: true, email: true, telefone: true } },
+    },
   })
 
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
+  // ── Reverter demanda recusada ──────────────────────────────────────────────
+  if (acao === "reverter") {
+    if (demanda.statusInterno !== "encerrado") {
+      return NextResponse.json({ error: "Só é possível reverter demandas encerradas por recusa" }, { status: 400 })
+    }
+
+    await prisma.demanda.update({
+      where: { id },
+      data: { statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" },
+    })
+
+    await prisma.historicoStatus.create({
+      data: {
+        demandaId: id,
+        statusAnterior: "encerrado",
+        statusNovo: "aguardando_aprovacao_interna",
+        usuarioId: session.user.id,
+        origem: "manual",
+        observacao: `Recusa revertida por ${session.user.name ?? "gestor"}. Demanda reaberta para análise.`,
+      },
+    })
+
+    // Notificar solicitante
+    await notificarSolicitante({
+      tipo: "reaberta",
+      demanda,
+      solicitante: demanda.solicitante,
+    })
+
+    return NextResponse.json({ ok: true, statusInterno: "aguardando_aprovacao_interna" })
+  }
+
+  // ── Aprovar / Recusar ──────────────────────────────────────────────────────
   if (demanda.statusInterno !== "aguardando_aprovacao_interna") {
     return NextResponse.json({ error: "Demanda não está aguardando aprovação interna" }, { status: 400 })
   }
 
   const novoStatus = acao === "aprovar" ? "aguardando_triagem" : "encerrado"
-  const novoStatusVisivel = acao === "aprovar" ? "entrada" : demanda.statusVisivel
+  const novoStatusVisivel: "entrada" | "producao" | "edicao" | "aprovacao" | "para_postar" | "finalizado" =
+    acao === "aprovar" ? "entrada" : demanda.statusVisivel
 
   await prisma.demanda.update({
     where: { id },
@@ -56,22 +94,92 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   })
 
-  // Notifica solicitante via WhatsApp se tiver telefone
-  if (demanda.solicitante?.telefone) {
-    if (acao === "aprovar") {
-      await sendWhatsappMessage(
-        demanda.solicitante.telefone,
-        templates.demandaAprovada(demanda.codigo, demanda.titulo),
-        id
-      )
-    } else {
-      await sendWhatsappMessage(
-        demanda.solicitante.telefone,
-        `❌ *VideoOps — Demanda Recusada*\n\nSua demanda *${demanda.codigo}* — ${demanda.titulo} foi recusada.\n\nMotivo: ${motivo ?? "Não especificado"}\n\nPara mais informações, entre em contato com a equipe.`,
-        id
-      )
-    }
-  }
+  // Notificar solicitante via WhatsApp e e-mail
+  await notificarSolicitante({
+    tipo: acao === "aprovar" ? "aprovada" : "recusada",
+    demanda,
+    solicitante: demanda.solicitante,
+    motivo,
+  })
 
   return NextResponse.json({ ok: true, statusInterno: novoStatus })
+}
+
+// ── Helper de notificação ──────────────────────────────────────────────────
+
+async function notificarSolicitante({
+  tipo,
+  demanda,
+  solicitante,
+  motivo,
+}: {
+  tipo: "aprovada" | "recusada" | "reaberta"
+  demanda: { id: string; codigo: string; titulo: string }
+  solicitante: { id: string; nome: string; email: string; telefone: string | null } | null
+  motivo?: string
+}) {
+  if (!solicitante) return
+
+  const assuntos: Record<string, string> = {
+    aprovada: `✅ Sua demanda ${demanda.codigo} foi aprovada`,
+    recusada: `❌ Sua demanda ${demanda.codigo} foi recusada`,
+    reaberta: `🔄 Sua demanda ${demanda.codigo} foi reaberta para análise`,
+  }
+
+  const mensagensWpp: Record<string, string> = {
+    aprovada: templates.demandaAprovada(demanda.codigo, demanda.titulo),
+    recusada: `❌ *VideoOps — Demanda Recusada*\n\nSua demanda *${demanda.codigo}* — ${demanda.titulo} foi recusada.\n\nMotivo: ${motivo ?? "Não especificado"}\n\nSe necessário, solicite revisão à equipe.`,
+    reaberta: `🔄 *VideoOps*\n\nSua demanda *${demanda.codigo}* foi reaberta para análise. Em breve você receberá uma nova resposta.`,
+  }
+
+  const htmlsEmail: Record<string, string> = {
+    aprovada: `
+      <h2 style="color:#16a34a">✅ Demanda Aprovada!</h2>
+      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>aprovada</strong> e já está na fila de produção.</p>
+      <p>Acompanhe o progresso no sistema VideoOps.</p>
+    `,
+    recusada: `
+      <h2 style="color:#dc2626">❌ Demanda Recusada</h2>
+      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Infelizmente sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>recusada</strong>.</p>
+      ${motivo ? `<p><strong>Motivo:</strong> ${motivo}</p>` : ""}
+      <p>Caso queira recorrer, entre em contato com a equipe de operações.</p>
+    `,
+    reaberta: `
+      <h2 style="color:#2563eb">🔄 Demanda Reaberta</h2>
+      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi reaberta para nova análise.</p>
+      <p>Em breve você receberá uma nova resposta.</p>
+    `,
+  }
+
+  // WhatsApp (silencia erro — pode não estar configurado)
+  if (solicitante.telefone) {
+    await sendWhatsappMessage(
+      solicitante.telefone,
+      mensagensWpp[tipo],
+      demanda.id
+    ).catch(() => {})
+  }
+
+  // E-mail via Resend
+  try {
+    const config = await prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
+    const apiKey = config?.apiKey || process.env.RESEND_API_KEY
+    if (apiKey && solicitante.email) {
+      const resend = new Resend(apiKey)
+      const from = config?.senderEmail
+        ? `${config.senderNome ?? "VideoOps"} <${config.senderEmail}>`
+        : "VideoOps <onboarding@resend.dev>"
+      await resend.emails.send({
+        from,
+        to: [solicitante.email],
+        subject: assuntos[tipo],
+        html: htmlsEmail[tipo],
+      })
+    }
+  } catch {
+    // silencia erro de email — notificação via WhatsApp já foi tentada
+  }
 }

@@ -4,11 +4,12 @@ import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { ArrowLeft, Film, Save, X, Edit2 } from "lucide-react"
+import { ArrowLeft, Film, Save, X, Edit2, QrCode, Download, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { QRCodeSVG } from "qrcode.react"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -116,7 +117,7 @@ export default function EditorDetalhePage() {
 
       <main className="flex-1 p-6 max-w-3xl space-y-6">
         {/* Perfil */}
-        <div className="bg-white rounded-xl border shadow-sm p-6">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
           <div className="flex items-start justify-between mb-5">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-xl font-bold text-purple-600">
@@ -218,9 +219,54 @@ export default function EditorDetalhePage() {
           </div>
         </div>
 
+        {/* QR Code de Avaliação */}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="font-semibold text-zinc-100 mb-4 flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-purple-400" />
+            QR de Avaliação
+          </h3>
+          <div className="flex flex-col sm:flex-row items-start gap-6">
+            <div className="bg-white p-3 rounded-xl shadow-sm flex-shrink-0">
+              <QRCodeSVG
+                value={typeof window !== "undefined" ? `${window.location.origin}/avaliar-editor/${id}` : `/avaliar-editor/${id}`}
+                size={140}
+                bgColor="#ffffff"
+                fgColor="#09090b"
+                level="M"
+              />
+            </div>
+            <div className="space-y-3 flex-1">
+              <div>
+                <p className="text-sm font-medium text-zinc-200">{editor.nome}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">Videomaker Int · VideoOps</p>
+              </div>
+              {editor.avaliacao && (
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map((s) => (
+                    <Star key={s} className={`w-4 h-4 ${s <= Math.round(editor.avaliacao) ? "text-amber-400 fill-amber-400" : "text-zinc-600"}`} />
+                  ))}
+                  <span className="text-sm text-zinc-300 ml-1 font-medium">{editor.avaliacao?.toFixed(1)}</span>
+                </div>
+              )}
+              <p className="text-xs text-zinc-400">
+                Compartilhe este QR code para receber avaliações anônimas sobre este profissional.
+              </p>
+              <a
+                href={`/avaliar-editor/${id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 hover:underline"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Abrir link de avaliação
+              </a>
+            </div>
+          </div>
+        </div>
+
         {/* Histórico de demandas */}
-        <div className="bg-white rounded-xl border shadow-sm p-6">
-          <h3 className="font-semibold text-zinc-800 mb-4 flex items-center gap-2">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="font-semibold text-zinc-100 mb-4 flex items-center gap-2">
             <Film className="w-4 h-4 text-zinc-400" />
             Demandas ({editor.demandas?.length ?? 0})
           </h3>

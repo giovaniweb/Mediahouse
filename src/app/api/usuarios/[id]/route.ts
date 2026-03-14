@@ -18,17 +18,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const body = await req.json()
-  const { status, tipo, nome, telefone, novaSenha } = body
+  const { status, tipo, nome, email, telefone, novaSenha } = body
 
   const data: Record<string, unknown> = {}
   if (nome) data.nome = nome
   if (telefone !== undefined) data.telefone = telefone
+  if (email && isAdmin) data.email = email
   if (isAdmin && status) data.status = status
   if (isAdmin && tipo) data.tipo = tipo
 
   // Admin pode forçar reset de senha
   if (isAdmin && novaSenha && typeof novaSenha === "string" && novaSenha.length >= 6) {
-    data.senha = await bcrypt.hash(novaSenha, 12)
+    data.senhaHash = await bcrypt.hash(novaSenha, 12)
   }
 
   const usuario = await prisma.usuario.update({

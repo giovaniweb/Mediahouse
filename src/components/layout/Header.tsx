@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { signOut, useSession } from "next-auth/react"
-import { LogOut, User, Settings } from "lucide-react"
+import { LogOut, User, Settings, Home } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,15 +33,25 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
 
   return (
     <>
-      <header className="h-14 border-b border-zinc-100 bg-white flex items-center justify-between px-6 shrink-0">
+      <header className="h-14 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-4">
-          {title && <h1 className="text-sm font-semibold text-zinc-800">{title}</h1>}
+          {title && <h1 className="text-sm font-semibold text-zinc-100">{title}</h1>}
           {actions && <div>{actions}</div>}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Link Home */}
+          <Link
+            href="/sobre"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1.5 rounded-lg hover:bg-zinc-800"
+            title="Página Inicial"
+          >
+            <Home className="w-4 h-4" />
+            <span className="hidden sm:inline">Início</span>
+          </Link>
+
           {user?.tipo && (
-            <Badge variant="outline" className="text-xs capitalize">
+            <Badge variant="outline" className="text-xs capitalize border-zinc-700 text-zinc-300">
               {TIPO_LABEL[user.tipo] ?? user.tipo}
             </Badge>
           )}

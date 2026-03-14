@@ -44,7 +44,7 @@ const DEPT_LABEL: Record<string, string> = {
   rh: "RH", audiovisual: "Audiovisual", outros: "Outros",
 }
 
-type Aba = "demandas" | "urgencias" | "pagamentos" | "videos"
+type Aba = "demandas" | "urgencias" | "pagamentos" | "videos" | "recusadas"
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -64,13 +64,34 @@ export default function AprovacoesPage() {
     "/api/custos-videomaker?statusPagamento=nf_enviada", fetcher, { refreshInterval: 15000 })
   const { data: dataVideos, mutate: mutateVideos } = useSWR<{ aprovacoes: AprovacaoVideo[] }>(
     "/api/aprovacao-video?status=pendente", fetcher, { refreshInterval: 15000 })
+  const { data: dataRecusadas, mutate: mutateRecusadas } = useSWR<{ demandas: Demanda[] }>(
+    "/api/demandas?statusInterno=encerrado", fetcher, { refreshInterval: 30000 })
 
   const urgentes = dataUrgentes?.demandas ?? []
   const normais = dataNormais?.demandas ?? []
   const custos = dataCustos?.custos ?? []
   const videos = dataVideos?.aprovacoes ?? []
+  const recusadas = dataRecusadas?.demandas ?? []
 
-  function mutateAll() { mutateU(); mutateN(); mutateCustos(); mutateVideos() }
+  function mutateAll() { mutateU(); mutateN(); mutateCustos(); mutateVideos(); mutateRecusadas() }
+
+  // ─── Reverter recusa ──────────────────────────────────────────────────────
+
+  async function reverterRecusa(id: string) {
+    setLoading(id)
+    try {
+      const res = await fetch(`/api/demandas/${id}/aprovar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "reverter" }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("Demanda reaberta para análise!")
+      mutateAll()
+    } catch (err) {
+      toast.error(String(err))
+    } finally { setLoading(null) }
+  }
 
   // ─── Ações demandas ───────────────────────────────────────────────────────
 
@@ -95,18 +116,17 @@ export default function AprovacoesPage() {
 
   // ─── Ações pagamento ──────────────────────────────────────────────────────
 
-  async function agirPagamento(custoId: string, demandaId: string | undefined, acao: "aprovar_pagamento" | "contestar") {
-    if (!demandaId) { toast.error("Demanda não encontrada"); return }
+  async function agirPagamento(custoId: string, acao: "aprovar_pagamento" | "contestar") {
     setLoading(custoId)
     try {
-      const res = await fetch(`/api/demandas/${demandaId}/pagamento`, {
+      const res = await fetch(`/api/custos-videomaker/${custoId}/aprovar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao, custoId }),
+        body: JSON.stringify({ acao }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success(acao === "aprovar_pagamento" ? "Pagamento aprovado! E-mail enviado ao financeiro." : "Custo contestado")
+      toast.success(data.mensagem ?? (acao === "aprovar_pagamento" ? "Pagamento aprovado!" : "Custo contestado"))
       mutateCustos()
     } catch (err) {
       toast.error(String(err))
@@ -135,6 +155,7 @@ export default function AprovacoesPage() {
     { id: "urgencias", label: "Urgências", count: urgentes.length, icon: <Zap className="h-4 w-4" />, cor: "red" },
     { id: "pagamentos", label: "Pagamentos", count: custos.length, icon: <DollarSign className="h-4 w-4" />, cor: "green" },
     { id: "videos", label: "Vídeos", count: videos.length, icon: <Video className="h-4 w-4" />, cor: "purple" },
+    { id: "recusadas", label: "Recusadas", count: recusadas.length, icon: <XCircle className="h-4 w-4" />, cor: "red" },
   ]
 
   return (
@@ -209,14 +230,60 @@ export default function AprovacoesPage() {
           <PagamentoList
             custos={custos}
             loading={loading}
-            onAprovar={(c) => agirPagamento(c.id, c.demanda?.id, "aprovar_pagamento")}
-            onContestar={(c) => agirPagamento(c.id, c.demanda?.id, "contestar")}
+            onAprovar={(c) => agirPagamento(c.id, "aprovar_pagamento")}
+            onContestar={(c) => agirPagamento(c.id, "contestar")}
           />
         )}
 
         {/* ─── ABA: VÍDEOS ───────────────────────────────────────────────── */}
         {aba === "videos" && (
           <VideoList aprovacoes={videos} />
+        )}
+
+        {/* ─── ABA: RECUSADAS ─────────────────────────────────────────────── */}
+        {aba === "recusadas" && (
+          <div className="space-y-3 max-w-3xl">
+            {recusadas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <CheckCircle2 className="w-12 h-12 text-green-400 mb-3" />
+                <p className="font-medium text-zinc-400">Nenhuma demanda recusada</p>
+                <p className="text-sm text-zinc-500 mt-1">Todas as demandas foram aprovadas ✅</p>
+              </div>
+            ) : recusadas.map((d) => (
+              <div key={d.id} className="bg-zinc-900 border border-red-900/40 rounded-2xl p-5 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono text-zinc-500">{d.codigo}</span>
+                      <span className="text-xs bg-red-500/10 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">Recusada</span>
+                      <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full capitalize">{d.departamento}</span>
+                    </div>
+                    <h3 className="font-semibold text-zinc-100">{d.titulo}</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
+                      <User className="w-3 h-3" /> {d.solicitante.nome}
+                    </p>
+                  </div>
+                  <span className="text-xs text-zinc-500">
+                    {format(new Date(d.createdAt), "dd/MM HH:mm", { locale: ptBR })}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-400 line-clamp-2">{d.descricao}</p>
+                <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+                  <button
+                    onClick={() => reverterRecusa(d.id)}
+                    disabled={loading === d.id}
+                    className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-4 rounded-xl disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading === d.id ? "animate-spin" : ""}`} />
+                    Reverter Recusa
+                  </button>
+                  <Link href={`/demandas/${d.id}`} className="text-xs text-blue-400 hover:underline ml-auto">
+                    Ver detalhes →
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </main>
 
