@@ -40,7 +40,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
       body: JSON.stringify({
         number: numero,
         textMessage: { text: mensagem },
-        options: { delay: 1200, presence: "composing" },
+        options: { delay: 1200, presence: "composing", ephemeralExpiration: 7776000 },
       }),
       signal: AbortSignal.timeout(10000),
     })
