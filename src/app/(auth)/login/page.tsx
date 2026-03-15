@@ -2,14 +2,13 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { loginAction } from "./actions"
 
 const schema = z.object({
   email: z.string().email("Email inválido"),
@@ -19,7 +18,6 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export default function LoginPage() {
-  const router = useRouter()
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -33,20 +31,14 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
-    const result = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    })
+    // Server Action: login e redirect acontecem no servidor — sem problema de cookie no browser
+    const result = await loginAction(data.email, data.password)
 
     if (result?.error) {
-      setError("Email ou senha incorretos.")
+      setError(result.error)
       setLoading(false)
-      return
     }
-
-    router.push("/dashboard")
-    router.refresh()
+    // Se não há erro, o server action redireciona para /dashboard automaticamente
   }
 
   return (

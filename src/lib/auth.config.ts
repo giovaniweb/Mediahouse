@@ -1,4 +1,14 @@
 import type { NextAuthConfig } from "next-auth"
+import { SignJWT, jwtVerify } from "jose"
+import type { JWT } from "next-auth/jwt"
+
+// Gera uma chave de 32 bytes a partir do secret (compatível com HS256)
+function getSecretKey(secret: string | Uint8Array) {
+  if (typeof secret === "string") {
+    return new TextEncoder().encode(secret.slice(0, 32).padEnd(32, "0"))
+  }
+  return secret
+}
 
 // Edge-safe config: sem bcrypt, sem Prisma, sem Node.js APIs
 export const authConfig: NextAuthConfig = {
@@ -6,7 +16,28 @@ export const authConfig: NextAuthConfig = {
     signIn: "/login",
   },
   session: { strategy: "jwt" },
-  trustHost: true, // necessário para Vercel e proxies (evita "Failed to fetch" no signIn)
+  trustHost: true,
+  // JWT compacto (HS256) — muito menor que o JWE padrão do NextAuth v5
+  jwt: {
+    async encode({ token, secret }) {
+      const key = getSecretKey(Array.isArray(secret) ? secret[0] : secret)
+      return new SignJWT(token as unknown as Record<string, unknown>)
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("30d")
+        .sign(key)
+    },
+    async decode({ token, secret }) {
+      if (!token) return null
+      try {
+        const key = getSecretKey(Array.isArray(secret) ? secret[0] : secret)
+        const { payload } = await jwtVerify(token, key)
+        return payload as unknown as JWT
+      } catch {
+        return null
+      }
+    },
+  },
   providers: [], // providers com bcrypt/prisma ficam em auth.ts (Node.js only)
   callbacks: {
     authorized({ auth, request }) {
@@ -46,6 +77,9 @@ export const authConfig: NextAuthConfig = {
         token.tipo = (user as { tipo: string }).tipo
         token.id = user.id
       }
+      // Remove image/picture do token — avatares base64 tornam o JWT enorme (>200KB)
+      delete token.picture
+      token.image = undefined
       return token
     },
     async session({ session, token }) {
