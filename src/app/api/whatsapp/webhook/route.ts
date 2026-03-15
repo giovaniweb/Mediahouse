@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
-import { executarAgenteComTools, MODELO_RAPIDO } from "@/lib/claude"
+import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 
 export const maxDuration = 60
@@ -297,8 +297,9 @@ Se ocorrer erro em alguma tool, avise o usuário pelo enviar_whatsapp.`
         await executarAgenteComTools(
           promptSecretaria,
           executarFerramenta,
-          MODELO_RAPIDO,
-          5
+          MODELO_WHATSAPP,
+          5,
+          TOOLS_WHATSAPP
         )
         return NextResponse.json({ ok: true, processado: "secretaria_ia" })
       } catch (e) {

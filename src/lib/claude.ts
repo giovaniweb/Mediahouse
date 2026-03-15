@@ -10,8 +10,9 @@ export const claude = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-export const MODELO_RAPIDO  = "claude-haiku-4-5"   // análises rápidas, realtime, WhatsApp
-export const MODELO_POTENTE = "claude-opus-4-6"    // agentes, relatórios completos, chat
+export const MODELO_RAPIDO   = "claude-haiku-4-5"    // análises rápidas, batch
+export const MODELO_WHATSAPP = "claude-sonnet-4-5"  // secretária WhatsApp — melhor custo/benefício para tool-use
+export const MODELO_POTENTE  = "claude-opus-4-6"    // agentes, relatórios completos, chat
 
 export const SYSTEM_VIDEOOPS = `Você é o assistente de inteligência artificial do NuFlow — plataforma de gestão de produção audiovisual.
 Quando se identificar em mensagens WhatsApp, use sempre o nome *NuFlow*.
@@ -203,31 +204,32 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
   },
   {
     name: "criar_evento_agenda",
-    description: "Cria um evento na agenda de um videomaker. Use quando alguém pedir para agendar uma captação, reunião ou compromisso via WhatsApp.",
+    description: "Cria um evento na agenda. Para videomaker passe videomaker_id, para gestor/admin passe usuario_id. Use quando alguém pedir para agendar, marcar ou bloquear data/horário.",
     input_schema: {
       type: "object" as const,
       properties: {
-        videomaker_id: { type: "string", description: "ID do videomaker" },
+        videomaker_id: { type: "string", description: "ID do videomaker (se o evento é para um videomaker)" },
+        usuario_id: { type: "string", description: "ID do usuário/gestor (se o evento é para um admin ou gestor)" },
         titulo: { type: "string", description: "Título do evento" },
         descricao: { type: "string", description: "Descrição opcional" },
-        inicio: { type: "string", description: "Data/hora de início ISO (ex: 2025-01-15T09:00:00)" },
+        inicio: { type: "string", description: "Data/hora de início ISO (ex: 2026-03-16T15:00:00)" },
         fim: { type: "string", description: "Data/hora de fim ISO (opcional, padrão +2h)" },
         local: { type: "string", description: "Local do evento" },
-        tipo: { type: "string", description: "Tipo: captacao, reuniao, outro" },
+        tipo: { type: "string", enum: ["captacao", "reuniao", "outro"], description: "Tipo do evento" },
         dia_todo: { type: "boolean", description: "Se é evento de dia todo" },
         demanda_id: { type: "string", description: "ID da demanda relacionada, se houver" },
       },
-      required: ["videomaker_id", "titulo", "inicio"],
+      required: ["titulo", "inicio"],
     },
   },
   {
     name: "enviar_whatsapp",
-    description: "Envia mensagem WhatsApp para um número. Use para notificar videomakers sobre prazos, cobrar projetos parados, motivar produtividade ou confirmar agendamentos.",
+    description: "Envia mensagem WhatsApp. Use como ÚLTIMA tool para responder ao usuário após executar as ações solicitadas.",
     input_schema: {
       type: "object" as const,
       properties: {
-        telefone: { type: "string", description: "Número de telefone (apenas dígitos)" },
-        mensagem: { type: "string", description: "Texto da mensagem (suporta *negrito* e _itálico_)" },
+        telefone: { type: "string", description: "JID do WhatsApp (ex: 553192271043@s.whatsapp.net) ou número com DDI (ex: 5531992271043)" },
+        mensagem: { type: "string", description: "Texto da mensagem (use *negrito* e _itálico_ para formatação WhatsApp)" },
         demanda_id: { type: "string", description: "ID da demanda relacionada, se aplicável" },
       },
       required: ["telefone", "mensagem"],
@@ -271,6 +273,22 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
   },
 ]
 
+// ─── Subset de tools para WhatsApp (menos tools = modelo mais focado) ─────────
+
+const TOOLS_WHATSAPP_NAMES = [
+  "buscar_demanda_por_codigo",
+  "criar_demanda_rascunho",
+  "buscar_agenda_videomaker",
+  "criar_evento_agenda",
+  "enviar_whatsapp",
+  "buscar_metricas",
+  "listar_gestores",
+]
+
+export const TOOLS_WHATSAPP: Anthropic.Tool[] = TOOLS_VIDEOOPS.filter(t =>
+  TOOLS_WHATSAPP_NAMES.includes(t.name)
+)
+
 // ─── Executor de ferramentas (chamado pelo agente) ────────────────────────────
 
 // Esta função é importada pelo chat route e pelos agentes
@@ -282,7 +300,8 @@ export async function executarAgenteComTools(
   prompt: string,
   executor: ToolExecutor,
   modelo: string = MODELO_POTENTE,
-  maxIteracoes = 8
+  maxIteracoes = 8,
+  tools: Anthropic.Tool[] = TOOLS_VIDEOOPS
 ): Promise<{ resposta: string; tokens: number; ferramentasUsadas: string[] }> {
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: prompt }
@@ -295,10 +314,11 @@ export async function executarAgenteComTools(
   for (let i = 0; i < maxIteracoes; i++) {
     const response = await claude.messages.create({
       model: modelo,
-      max_tokens: 4096,
+      max_tokens: 2048,
+      temperature: modelo === MODELO_POTENTE ? undefined : 0.2,
       ...(modelo === MODELO_POTENTE ? { thinking: { type: "adaptive" } } : {}),
       system: SYSTEM_VIDEOOPS,
-      tools: TOOLS_VIDEOOPS,
+      tools,
       messages,
     })
 
