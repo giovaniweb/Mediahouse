@@ -144,8 +144,16 @@ export default function AprovacoesPage() {
         body: JSON.stringify({ demandaId: d.id }),
       })
       const json = await res.json()
-      if (json.sugestao) setSugestaoIA(s => ({ ...s, [d.id]: json.sugestao }))
-    } finally { setAnalisandoIA(null) }
+      if (!res.ok) throw new Error(json.error ?? "Erro na análise IA")
+      if (json.sugestao) {
+        setSugestaoIA(s => ({ ...s, [d.id]: json.sugestao }))
+        toast.success("Análise IA concluída!")
+      }
+    } catch (err) {
+      toast.error(`IA: ${String(err)}`)
+    } finally {
+      setAnalisandoIA(null)
+    }
   }
 
   // ─── Tabs config ─────────────────────────────────────────────────────────
