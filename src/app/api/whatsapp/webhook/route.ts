@@ -13,9 +13,8 @@ export async function POST(req: NextRequest) {
     const event = body.event
     const data = body.data
 
-    // DEBUG: log completo para diagnosticar formato do evento
-    console.log("[WH] event:", event, "| keys:", Object.keys(body))
-    if (data) console.log("[WH] data keys:", Object.keys(data), "| fromMe:", data.key?.fromMe, "| remoteJid:", data.key?.remoteJid, "| conv:", data.message?.conversation, "| msgKeys:", data.message ? Object.keys(data.message) : "no message")
+    // DEBUG: dump raw body para diagnosticar formato
+    console.log("[WH-RAW]", JSON.stringify(body).slice(0, 800))
 
     if (event?.toLowerCase().replace(/_/g, ".") !== "messages.upsert") return NextResponse.json({ ok: true })
 
