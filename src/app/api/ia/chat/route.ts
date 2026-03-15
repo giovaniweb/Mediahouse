@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
-import { claude, MODELO_POTENTE, SYSTEM_VIDEOOPS, TOOLS_VIDEOOPS } from "@/lib/claude"
+import { claude, MODELO_RAPIDO, SYSTEM_VIDEOOPS, TOOLS_VIDEOOPS } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import Anthropic from "@anthropic-ai/sdk"
 
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
           // ── Streaming call ───────────────────────────────────────────────
           const streamCall = claude.messages.stream({
-            model: MODELO_POTENTE,
+            model: MODELO_RAPIDO,
             max_tokens: 4096,
             system: SYSTEM_VIDEOOPS,
             tools: TOOLS_VIDEOOPS,
