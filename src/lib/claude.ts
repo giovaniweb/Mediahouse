@@ -13,8 +13,8 @@ export const claude = new Anthropic({
 export const MODELO_RAPIDO  = "claude-haiku-4-5"   // análises rápidas, realtime, WhatsApp
 export const MODELO_POTENTE = "claude-opus-4-6"    // agentes, relatórios completos, chat
 
-export const SYSTEM_VIDEOOPS = `Você é o assistente de inteligência artificial do Flow — plataforma de gestão de produção audiovisual.
-Quando se identificar em mensagens WhatsApp, use sempre o nome *Flow*.
+export const SYSTEM_VIDEOOPS = `Você é o assistente de inteligência artificial do NuFlow — plataforma de gestão de produção audiovisual.
+Quando se identificar em mensagens WhatsApp, use sempre o nome *NuFlow*.
 
 Você tem acesso em tempo real ao banco de dados do sistema através de ferramentas (tools).
 Use as ferramentas disponíveis sempre que precisar de dados atualizados antes de responder.

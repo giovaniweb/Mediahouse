@@ -147,8 +147,8 @@ export async function POST(req: NextRequest) {
 
     if (textoUpper === "AJUDA" || textoUpper === "MENU" || textoUpper === "?") {
       const menu = identidade.tipo === "videomaker"
-        ? `🤖 *Flow — Assistente IA*\n\nOlá ${identidade.nome}! Veja o que posso fazer:\n\n*STATUS* — Ver suas demandas ativas\n*AGENDA* — Ver sua agenda completa\n*AGENDA HOJE* — Compromissos de hoje\n*AGENDA AMANHÃ* — Amanhã\n*SIM / NÃO* — Confirmar/recusar captação\n\n💬 Ou me envie uma mensagem livre como:\n• "nova demanda: gravar vídeo institucional"\n• "qual minha agenda de sexta?"\n• "status da VID-0023"`
-        : `🤖 *Flow — Assistente IA*\n\nOlá! Como posso ajudar?\n\n💬 Me envie uma mensagem livre, como:\n• "nova demanda: precisamos de vídeo para evento"\n• "qual o status da VID-0023?"\n• "agenda do João para semana que vem"`
+        ? `🤖 *NuFlow — Assistente IA*\n\nOlá ${identidade.nome}! Veja o que posso fazer:\n\n*STATUS* — Ver suas demandas ativas\n*AGENDA* — Ver sua agenda completa\n*AGENDA HOJE* — Compromissos de hoje\n*AGENDA AMANHÃ* — Amanhã\n*SIM / NÃO* — Confirmar/recusar captação\n\n💬 Ou me envie uma mensagem livre como:\n• "nova demanda: gravar vídeo institucional"\n• "qual minha agenda de sexta?"\n• "status da VID-0023"`
+        : `🤖 *NuFlow — Assistente IA*\n\nOlá! Como posso ajudar?\n\n💬 Me envie uma mensagem livre, como:\n• "nova demanda: precisamos de vídeo para evento"\n• "qual o status da VID-0023?"\n• "agenda do João para semana que vem"`
 
       await sendWhatsappMessage(telefone, menu)
       return NextResponse.json({ ok: true })
@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
         ? `Usuário sistema: ${identidade.nome} (${identidade.perfil}, tel: ${telefone})`
         : `Pessoa externa: ${identidade.nome} (tel: ${telefone})`
 
-      const promptSecretaria = `Você é a Secretária IA do Flow respondendo via WhatsApp.
+      const promptSecretaria = `Você é a Secretária IA do NuFlow respondendo via WhatsApp.
 
 IDENTIDADE DE QUEM MENSAGEM: ${contextoIdentidade}
 MENSAGEM RECEBIDA: "${textoOriginal}"
@@ -224,6 +224,6 @@ Se não conseguir identificar a intenção, envie uma mensagem amigável pedindo
 
 // GET — health check
 export async function GET() {
-  return NextResponse.json({ ok: true, webhook: "Flow WhatsApp Secretária IA ativa" })
+  return NextResponse.json({ ok: true, webhook: "NuFlow WhatsApp Secretária IA ativa" })
 }
 

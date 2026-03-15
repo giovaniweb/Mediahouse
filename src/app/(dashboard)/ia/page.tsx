@@ -127,7 +127,7 @@ export default function IAPage() {
     {
       id: "boas-vindas",
       role: "assistant",
-      conteudo: "Olá! Sou o assistente IA do VideoOps.\n\nTenho acesso em tempo real a demandas, custos, agenda e equipe. Como posso ajudar agora?",
+      conteudo: "Olá! Sou o assistente IA do NuFlow.\n\nTenho acesso em tempo real a demandas, custos, agenda e equipe. Como posso ajudar agora?",
     },
   ])
   const [input, setInput] = useState("")

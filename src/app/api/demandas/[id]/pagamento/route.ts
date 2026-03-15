@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (demanda.videomaker?.telefone) {
       await sendWhatsappMessage(
         demanda.videomaker.telefone,
-        `🎬 *Flow*\n\nOlá, *${demanda.videomaker.nome}*! Recebemos sua nota fiscal com sucesso. ✅\n\nNosso time irá analisá-la e o pagamento será efetuado em até *15 dias úteis* via PIX.\n\nObrigado pelo ótimo trabalho! 🙏`,
+        `🎬 *NuFlow*\n\nOlá, *${demanda.videomaker.nome}*! Recebemos sua nota fiscal com sucesso. ✅\n\nNosso time irá analisá-la e o pagamento será efetuado em até *15 dias úteis* via PIX.\n\nObrigado pelo ótimo trabalho! 🙏`,
         id
       ).catch(() => {})
     }
