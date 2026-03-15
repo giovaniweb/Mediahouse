@@ -611,6 +611,38 @@ model ConfigParametro {
 }
 
 // ─────────────────────────────────────────────
+// IA — CHAT E EXECUÇÃO DE AGENTES
+// ─────────────────────────────────────────────
+
+model ChatIAMensagem {
+  id        String   @id @default(cuid())
+  sessionId String   // identificador da sessão de chat (gerado no frontend)
+  role      String   // "user" | "assistant"
+  conteudo  String   @db.Text
+  tokens    Int?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@map("chat_ia_mensagens")
+}
+
+model AgenteExecucao {
+  id             String    @id @default(cuid())
+  agente         String    // "triagem" | "monitor" | "gerar_alertas" | "custos" | "whatsapp"
+  status         String    @default("executando") // "executando" | "concluido" | "erro"
+  resultado      Json?
+  tokens         Int?
+  alertasGerados Int       @default(0)
+  ferramentas    String[]  // ferramentas usadas
+  erro           String?
+  criadoPor      String?   // userId que acionou
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@map("agente_execucoes")
+}
+
+// ─────────────────────────────────────────────
 // RESET DE SENHA
 // ─────────────────────────────────────────────
 

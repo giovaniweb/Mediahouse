@@ -15,6 +15,7 @@ import {
   DollarSign,
   UserCog,
   Home,
+  BrainCircuit,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -39,6 +40,7 @@ const sections = [
   {
     label: "Analytics",
     items: [
+      { href: "/ia", label: "Central IA", icon: BrainCircuit },
       { href: "/alertas", label: "Alertas IA", icon: Bell },
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
     ],
