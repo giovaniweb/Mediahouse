@@ -82,7 +82,7 @@ function ExportButton() {
         <div className="absolute right-0 top-full mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl py-1 z-50">
           <a
             href="/api/agenda/exportar.ics"
-            download="videoops-agenda.ics"
+            download="nuflow-agenda.ics"
             className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors"
             onClick={() => setOpen(false)}
           >
@@ -93,7 +93,7 @@ function ExportButton() {
             Funciona no Google, iPhone e Outlook
           </p>
           <a
-            href={buildGoogleLink("Evento VideoOps", hoje, new Date(hoje.getTime() + 3600000))}
+            href={buildGoogleLink("Evento NuFlow", hoje, new Date(hoje.getTime() + 3600000))}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors"

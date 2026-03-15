@@ -1,5 +1,5 @@
 /**
- * Serviço de e-mail — VideoOps
+ * Serviço de e-mail — NuFlow
  * Usa Resend (resend.com) — simples, confiável, ideal para SaaS.
  */
 
@@ -19,7 +19,7 @@ async function createClient() {
       resend: new Resend(envKey),
       from: config?.senderNome
         ? `"${config.senderNome}" <${config.senderEmail || "onboarding@resend.dev"}>`
-        : `"VideoOps" <onboarding@resend.dev>`,
+        : `"NuFlow" <onboarding@resend.dev>`,
       emailsFinanceiro: config?.emailsFinanceiro ?? [],
     }
   }
@@ -29,7 +29,7 @@ async function createClient() {
   if (!config || !config.ativo || !config.apiKey) return null
   return {
     resend: new Resend(config.apiKey),
-    from: `"${config.senderNome || "VideoOps"}" <${config.senderEmail || "onboarding@resend.dev"}>`,
+    from: `"${config.senderNome || "NuFlow"}" <${config.senderEmail || "onboarding@resend.dev"}>`,
     emailsFinanceiro: config.emailsFinanceiro,
   }
 }
@@ -44,7 +44,7 @@ function templateFinanceiro(dados: {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px">
 <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
-  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 VideoOps</div></div>
+  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
   <div style="padding:32px">
     <h2 style="margin:0 0 4px;color:#18181b">Solicitação de Pagamento</h2>
     <p style="color:#71717a;font-size:14px">Uma nota fiscal foi recebida e aguarda pagamento.</p>
@@ -65,7 +65,7 @@ function templateNFRecebida(nomeVideomaker: string, diasPrazo = 15) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
-  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 VideoOps</div></div>
+  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
   <div style="padding:32px">
     <h2 style="color:#18181b">Obrigado, ${nomeVideomaker}! 🙏</h2>
     <p style="color:#52525b;font-size:15px;line-height:1.6">Recebemos sua nota fiscal. Ela está em análise.</p>
@@ -81,7 +81,7 @@ function templateResetSenha(nome: string, linkReset: string) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
-  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 VideoOps</div></div>
+  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
   <div style="padding:32px">
     <h2 style="color:#18181b">Redefinição de Senha</h2>
     <p style="color:#52525b;font-size:15px;line-height:1.6">Olá, <strong>${nome}</strong>! Clique abaixo para criar uma nova senha. Válido por <strong>1 hora</strong>.</p>
@@ -111,7 +111,7 @@ export async function sendEmailFinanceiro(dados: PagamentoEmailData): Promise<{ 
     const { error } = await client.resend.emails.send({
       from: client.from,
       to: client.emailsFinanceiro,
-      subject: `[VideoOps] Pagamento Pendente — ${dados.nomeVideomaker}`,
+      subject: `[NuFlow] Pagamento Pendente — ${dados.nomeVideomaker}`,
       html: templateFinanceiro({ ...dados, linkConfirmacao }),
     })
     if (error) return { ok: false, error: error.message }
@@ -128,7 +128,7 @@ export async function sendEmailVideomakerNFRecebida(
     const { error } = await client.resend.emails.send({
       from: client.from,
       to: [email],
-      subject: "[VideoOps] Nota Fiscal Recebida — Obrigado!",
+      subject: "[NuFlow] Nota Fiscal Recebida — Obrigado!",
       html: templateNFRecebida(nomeVideomaker, diasPrazo),
     })
     if (error) return { ok: false, error: error.message }
@@ -147,7 +147,7 @@ export async function sendEmailResetSenha(
     const { error } = await client.resend.emails.send({
       from: client.from,
       to: [destinatario],
-      subject: "[VideoOps] Redefinição de Senha",
+      subject: "[NuFlow] Redefinição de Senha",
       html: templateResetSenha(nome, linkReset),
     })
     if (error) return { ok: false, error: error.message }
@@ -162,8 +162,8 @@ export async function sendEmailTeste(destinatario: string): Promise<{ ok: boolea
     const { error } = await client.resend.emails.send({
       from: client.from,
       to: [destinatario],
-      subject: "[VideoOps] Teste de E-mail ✅",
-      html: `<div style="font-family:sans-serif;padding:32px"><h2>🎉 E-mail funcionando!</h2><p>Resend configurado corretamente no VideoOps.</p></div>`,
+      subject: "[NuFlow] Teste de E-mail ✅",
+      html: `<div style="font-family:sans-serif;padding:32px"><h2>🎉 E-mail funcionando!</h2><p>Resend configurado corretamente no NuFlow.</p></div>`,
     })
     if (error) return { ok: false, error: error.message }
     return { ok: true }

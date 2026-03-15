@@ -102,7 +102,7 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-1.5 text-xs text-zinc-400">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            Videomaker Int — VideoOps
+            Videomaker Int — NuFlow
           </div>
 
           {/* Avatar */}

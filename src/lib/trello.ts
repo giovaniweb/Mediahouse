@@ -1,6 +1,6 @@
 /**
  * Trello integration service
- * Sincroniza StatusVisível do VideoOps com listas do Trello
+ * Sincroniza StatusVisível do NuFlow com listas do Trello
  */
 
 const STATUS_TO_LIST: Record<string, string> = {
@@ -84,7 +84,7 @@ export async function syncDemandaTrello(
     return { action: "moved", cardId: cardExistente.id }
   } else {
     // Cria novo cartão
-    const desc = `${demanda.descricao}\n\n---\nVideoOps ID: ${demanda.id}`
+    const desc = `${demanda.descricao}\n\n---\nNuFlow ID: ${demanda.id}`
     const card = await createCard(cfg, lista.id, `[${demanda.codigo}] ${demanda.titulo}`, desc)
     return { action: "created", cardId: card.id }
   }

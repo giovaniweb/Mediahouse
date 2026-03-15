@@ -173,7 +173,7 @@ export default function AprovarVideoPage() {
             <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
               <Film className="w-4 h-4 text-zinc-900" />
             </div>
-            <span className="font-bold">VideoOps</span>
+            <span className="font-bold">NuFlow</span>
           </div>
           <div className="text-right">
             <p className="text-xs text-zinc-400">{aprovacao.demanda.codigo}</p>
@@ -319,7 +319,7 @@ export default function AprovarVideoPage() {
       {/* Footer */}
       <footer className="border-t border-zinc-800 py-6 mt-8">
         <div className="max-w-4xl mx-auto px-6 text-center text-xs text-zinc-500">
-          <p>VideoOps — Plataforma de Produção Audiovisual</p>
+          <p>NuFlow — Plataforma de Produção Audiovisual</p>
         </div>
       </footer>
     </div>

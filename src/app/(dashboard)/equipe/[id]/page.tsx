@@ -238,7 +238,7 @@ export default function EditorDetalhePage() {
             <div className="space-y-3 flex-1">
               <div>
                 <p className="text-sm font-medium text-zinc-200">{editor.nome}</p>
-                <p className="text-xs text-zinc-400 mt-0.5">Videomaker Int · VideoOps</p>
+                <p className="text-xs text-zinc-400 mt-0.5">Videomaker Int · NuFlow</p>
               </div>
               {editor.avaliacao && (
                 <div className="flex items-center gap-1">

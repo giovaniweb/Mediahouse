@@ -316,8 +316,8 @@ export function UserProfileModal({ onClose }: Props) {
 
               <p className="text-xs text-zinc-500 text-center">
                 Para excluir sua conta, entre em contato com{" "}
-                <a href="mailto:admin@videoops.com.br" className="text-blue-400 hover:underline">
-                  admin@videoops.com.br
+                <a href="mailto:admin@nuflow.com.br" className="text-blue-400 hover:underline">
+                  admin@nuflow.com.br
                 </a>
               </p>
             </div>

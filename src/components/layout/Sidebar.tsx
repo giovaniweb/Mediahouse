@@ -65,7 +65,7 @@ export function Sidebar() {
           <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center shrink-0">
             <Film className="w-4 h-4 text-zinc-900" />
           </div>
-          <span className="text-white font-semibold tracking-tight">VideoOps</span>
+          <span className="text-white font-semibold tracking-tight">NuFlow</span>
         </div>
       </div>
 

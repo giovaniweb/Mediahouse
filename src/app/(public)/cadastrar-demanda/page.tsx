@@ -87,7 +87,7 @@ export default function CadastrarDemandaPage() {
             <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
               <Film className="w-4 h-4 text-zinc-900" />
             </div>
-            <span className="font-bold text-white">VideoOps</span>
+            <span className="font-bold text-white">NuFlow</span>
           </Link>
           <Link href="/sobre" className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar

@@ -245,7 +245,7 @@ RETORNE JSON com esta estrutura:
 
     } else {
       // semanal, mensal, realtime — relatório geral
-      const prompt = `Gere um relatório completo de ${tipo} (${periodoLabel}) para o sistema VideoOps de produção audiovisual.
+      const prompt = `Gere um relatório completo de ${tipo} (${periodoLabel}) para o sistema NuFlow de produção audiovisual.
 
 DADOS CONSOLIDADOS:
 - Demandas criadas: ${demandas.length}

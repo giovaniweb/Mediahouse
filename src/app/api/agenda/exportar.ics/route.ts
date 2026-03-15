@@ -31,7 +31,7 @@ export async function GET() {
   })
 
   const now = formatDate(new Date())
-  const prodId = "-//VideoOps//VideoOps Agenda//PT"
+  const prodId = "-//NuFlow//NuFlow Agenda//PT"
 
   const veventos = eventos.map((ev) => {
     const dtStart = ev.diaTodo
@@ -43,7 +43,7 @@ export async function GET() {
 
     const lines = [
       "BEGIN:VEVENT",
-      `UID:${ev.id}@videoops`,
+      `UID:${ev.id}@nuflow`,
       `DTSTAMP:${now}`,
       ev.diaTodo ? `DTSTART;VALUE=DATE:${dtStart}` : `DTSTART:${dtStart}`,
       ev.diaTodo ? `DTEND;VALUE=DATE:${dtEnd}` : `DTEND:${dtEnd}`,
@@ -63,7 +63,7 @@ export async function GET() {
     `PRODID:${prodId}`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:VideoOps Agenda",
+    "X-WR-CALNAME:NuFlow Agenda",
     "X-WR-TIMEZONE:America/Sao_Paulo",
     ...veventos,
     "END:VCALENDAR",
@@ -72,7 +72,7 @@ export async function GET() {
   return new NextResponse(ical, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="videoops-agenda.ics"',
+      "Content-Disposition": 'attachment; filename="nuflow-agenda.ics"',
       "Cache-Control": "no-cache",
     },
   })

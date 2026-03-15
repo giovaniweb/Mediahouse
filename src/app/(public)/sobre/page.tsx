@@ -46,7 +46,7 @@ export default function SobrePage() {
             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
               <Film className="w-4 h-4 text-zinc-900" />
             </div>
-            <span className="font-bold text-lg tracking-tight">VideoOps</span>
+            <span className="font-bold text-lg tracking-tight">NuFlow</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-zinc-400">
             <Link href="#como-funciona" className="hover:text-white transition-colors hidden md:block">Como funciona</Link>
@@ -163,12 +163,12 @@ export default function SobrePage() {
                 <h3 className="text-xl font-bold text-white">Tem que amar o que faz</h3>
               </div>
               <p className="text-zinc-400 leading-relaxed mb-6">
-                Não basta ter a câmera. O parceiro VideoOps é apaixonado por contar histórias, entende a urgência de cada projeto e trata cada entrega como se fosse a última chance de impressionar.
+                Não basta ter a câmera. O parceiro NuFlow é apaixonado por contar histórias, entende a urgência de cada projeto e trata cada entrega como se fosse a última chance de impressionar.
               </p>
 
               {/* As 5 chaves */}
               <div>
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">As 5 chaves do parceiro VideoOps</p>
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">As 5 chaves do parceiro NuFlow</p>
                 <div className="space-y-3">
                   {CINCO_CHAVES.map(({ icon: Icon, titulo, desc }) => (
                     <div key={titulo} className="flex items-start gap-3">
@@ -263,7 +263,7 @@ export default function SobrePage() {
             <div className="w-6 h-6 bg-white rounded-md flex items-center justify-center">
               <Film className="w-3 h-3 text-zinc-900" />
             </div>
-            <span>VideoOps — Operação Audiovisual In-House © {new Date().getFullYear()}</span>
+            <span>NuFlow — Operação Audiovisual In-House © {new Date().getFullYear()}</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="#como-funciona" className="hover:text-white transition-colors">Como funciona</Link>

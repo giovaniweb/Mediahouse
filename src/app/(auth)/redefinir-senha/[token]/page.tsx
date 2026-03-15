@@ -95,7 +95,7 @@ export default function RedefinirSenhaPage({ params }: { params: Promise<Params>
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 text-white mb-2">
             <Film className="h-6 w-6" />
-            <span className="text-xl font-bold tracking-tight">VideoOps</span>
+            <span className="text-xl font-bold tracking-tight">NuFlow</span>
           </div>
         </div>
 

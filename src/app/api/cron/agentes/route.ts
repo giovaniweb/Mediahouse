@@ -38,7 +38,7 @@ async function rodarAgenteAlertas() {
     data: { agente: "gerar-alertas-cron", status: "executando" },
   })
 
-  const prompt = `Você é o sistema de monitoramento automático do VideoOps. Execute uma varredura rápida e objetiva:
+  const prompt = `Você é o sistema de monitoramento automático do NuFlow. Execute uma varredura rápida e objetiva:
 
 1. Use buscar_metricas para ver o estado geral
 2. Use buscar_demandas com em_atraso=true — para cada uma, crie alerta crítico se não existir
@@ -102,7 +102,7 @@ async function rodarAgenteVistoria() {
     data: { agente: "vistoria-cron", status: "executando" },
   })
 
-  const prompt = `Vistoria semanal automática do VideoOps:
+  const prompt = `Vistoria semanal automática do NuFlow:
 
 1. buscar_metricas — saúde geral
 2. buscar_demandas — visão geral do pipeline

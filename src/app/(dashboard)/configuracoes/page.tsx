@@ -348,7 +348,7 @@ function TabWhatsapp() {
             className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
             value={form.instanceId}
             onChange={e => setForm(f => ({ ...f, instanceId: e.target.value }))}
-            placeholder="videoops-instance"
+            placeholder="nuflow-instance"
           />
         </div>
       </div>
@@ -430,7 +430,7 @@ function TabTrello() {
         <Trello className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-700">
           <p className="font-semibold">Trello Integration</p>
-          <p className="text-xs mt-1">Sincronize automaticamente as demandas com seu quadro do Trello. As mudanças de status no VideoOps atualizam os cartões do Trello em tempo real.</p>
+          <p className="text-xs mt-1">Sincronize automaticamente as demandas com seu quadro do Trello. As mudanças de status no NuFlow atualizam os cartões do Trello em tempo real.</p>
         </div>
       </div>
 
@@ -523,7 +523,7 @@ function TabEmail() {
   const [form, setForm] = useState({
     apiKey: "",
     senderEmail: cfg?.senderEmail || "",
-    senderNome: cfg?.senderNome || "VideoOps",
+    senderNome: cfg?.senderNome || "NuFlow",
     emailsFinanceiro: (cfg?.emailsFinanceiro || []).join(", "),
   })
   const [loading, setLoading] = useState(false)
@@ -621,7 +621,7 @@ function TabEmail() {
               <label className="text-xs text-zinc-400 block mb-1">Nome</label>
               <input className={inp} value={form.senderNome}
                 onChange={e => setForm(f => ({ ...f, senderNome: e.target.value }))}
-                placeholder="VideoOps" />
+                placeholder="NuFlow" />
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">E-mail</label>

@@ -122,7 +122,7 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 text-white mb-3">
             <Film className="h-6 w-6" />
-            <span className="text-xl font-bold tracking-tight">VideoOps</span>
+            <span className="text-xl font-bold tracking-tight">NuFlow</span>
           </div>
           <h1 className="text-2xl font-bold text-white">Avalie o Profissional</h1>
           {loadingInfo ? (
@@ -264,7 +264,7 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
         </div>
 
         <p className="text-center text-xs text-zinc-600 mt-6">
-          Sistema de Gestão Audiovisual — VideoOps
+          Sistema de Gestão Audiovisual — NuFlow
         </p>
       </div>
     </div>

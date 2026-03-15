@@ -47,7 +47,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-6">
             <div className="w-8 h-8 bg-zinc-900 rounded-lg" />
-            <span className="text-xl font-semibold tracking-tight">VideoOps</span>
+            <span className="text-xl font-semibold tracking-tight">NuFlow</span>
           </div>
           <h1 className="text-2xl font-semibold text-zinc-900">Entrar</h1>
           <p className="text-sm text-zinc-500 mt-1">Operação audiovisual centralizada</p>
