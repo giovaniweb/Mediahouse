@@ -49,9 +49,16 @@ export const authConfig: NextAuthConfig = {
         "/login",
         "/esqueci-senha",
         "/redefinir-senha",
-        "/avaliar",       // avaliação pública de videomaker via QR
+        "/avaliar",           // avaliação pública de videomaker via QR
+        "/avaliar-editor",    // avaliação pública de editor
+        "/cadastrar-demanda", // formulário público de demanda
+        "/cadastrar-videomaker", // cadastro público de videomaker
+        "/sobre",             // página pública sobre
+        "/aprovar",           // aprovação de vídeo pelo cliente
         "/api/auth",
         "/api/publico",
+        "/api/whatsapp",      // webhook e envios — acesso externo (Evolution API)
+        "/api/cron",          // cron jobs — acesso externo (Vercel)
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")
