@@ -6,6 +6,7 @@ export const authConfig: NextAuthConfig = {
     signIn: "/login",
   },
   session: { strategy: "jwt" },
+  trustHost: true, // necessário para Vercel e proxies (evita "Failed to fetch" no signIn)
   providers: [], // providers com bcrypt/prisma ficam em auth.ts (Node.js only)
   callbacks: {
     authorized({ auth, request }) {
