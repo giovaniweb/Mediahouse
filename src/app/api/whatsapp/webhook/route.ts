@@ -154,6 +154,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // ── Saudações curtas → responde com menu ─────────────────────────────────
+    const saudacoes = ["oi", "olá", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oi!", "olá!", "oii", "oiii"]
+    if (saudacoes.includes(textoUpper.toLowerCase()) || textoOriginal.length <= 5) {
+      const saudacao = identidade.tipo === "videomaker"
+        ? `Olá ${identidade.nome}! 👋\n\nDigite *AJUDA* para ver o que posso fazer por você, ou me envie uma mensagem mais detalhada.`
+        : `Olá! 👋 Sou o assistente NuFlow.\n\nDigite *AJUDA* para ver os comandos disponíveis, ou me envie uma mensagem descrevendo o que precisa.`
+      await sendWhatsappMessage(telefone, saudacao)
+      return NextResponse.json({ ok: true })
+    }
+
     // ── Secretária IA com tool-use para mensagens complexas ───────────────────
     if (textoOriginal.length > 5) {
       const contextoIdentidade = identidade.tipo === "videomaker"
