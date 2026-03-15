@@ -398,8 +398,12 @@ async function buscarAgendaVideomaker(input: Record<string, unknown>): Promise<s
  * Cria evento na agenda de um videomaker (secretária virtual)
  */
 async function criarEventoAgenda(input: Record<string, unknown>): Promise<string> {
-  const videomakerId = input.videomaker_id as string
-  if (!videomakerId) return JSON.stringify({ erro: "videomaker_id é obrigatório" })
+  const videomakerId = (input.videomaker_id as string) || undefined
+  const usuarioId = (input.usuario_id as string) || undefined
+
+  if (!videomakerId && !usuarioId) {
+    return JSON.stringify({ erro: "Informe videomaker_id (para videomaker) ou usuario_id (para gestor/admin)" })
+  }
 
   const inicio = new Date(input.inicio as string)
   const fim = input.fim
@@ -418,14 +422,20 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
       status: "agendado",
       local: (input.local as string) ?? undefined,
       videomakerId,
+      usuarioId,
       demandaId: (input.demanda_id as string) ?? undefined,
     },
   })
 
-  const vm = await prisma.videomaker.findUnique({
-    where: { id: videomakerId },
-    select: { nome: true, telefone: true },
-  })
+  // Nome do dono do evento
+  let nomeResponsavel = "Usuário"
+  if (videomakerId) {
+    const vm = await prisma.videomaker.findUnique({ where: { id: videomakerId }, select: { nome: true } })
+    nomeResponsavel = vm?.nome ?? "Videomaker"
+  } else if (usuarioId) {
+    const us = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { nome: true } })
+    nomeResponsavel = us?.nome ?? "Gestor"
+  }
 
   return JSON.stringify({
     criado: true,
@@ -433,8 +443,8 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
     titulo: evento.titulo,
     inicio: evento.inicio.toLocaleString("pt-BR"),
     fim: evento.fim.toLocaleString("pt-BR"),
-    videomaker: vm?.nome,
-    mensagem: `Evento "${evento.titulo}" criado para ${vm?.nome} em ${evento.inicio.toLocaleDateString("pt-BR")}`,
+    responsavel: nomeResponsavel,
+    mensagem: `Evento "${evento.titulo}" criado para ${nomeResponsavel} em ${evento.inicio.toLocaleDateString("pt-BR")}`,
   })
 }
 

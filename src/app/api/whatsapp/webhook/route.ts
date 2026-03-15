@@ -227,46 +227,50 @@ export async function POST(req: NextRequest) {
 
     // ── Secretária IA com tool-use para mensagens complexas ───────────────────
     if (textoOriginal.length > 5) {
+      const idProprioVideomaker = videomaker?.id ?? null
+      const idProprioUsuario = usuario?.id ?? null
+
       const contextoIdentidade = identidade.tipo === "videomaker"
-        ? `Videomaker: ${identidade.nome} (id: ${identidade.id}, tel: ${telefone})`
+        ? `Videomaker: ${identidade.nome} (videomaker_id: ${identidade.id}, tel: ${telefone})`
         : identidade.tipo === "usuario"
-        ? `Usuário sistema: ${identidade.nome} (${identidade.perfil}, tel: ${telefone})`
+        ? `Usuário sistema: ${identidade.nome} (usuario_id: ${idProprioUsuario}, perfil: ${identidade.perfil}, tel: ${telefone})`
         : `Pessoa externa: ${identidade.nome} (tel: ${telefone})`
 
       const promptSecretaria = `Você é a Secretária IA do NuFlow respondendo via WhatsApp.
 
-IDENTIDADE DE QUEM MENSAGEM: ${contextoIdentidade}
-MENSAGEM RECEBIDA: "${textoOriginal}"
+IDENTIDADE: ${contextoIdentidade}
+MENSAGEM: "${textoOriginal}"
+DATA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
 
-Analise a mensagem e tome a ação correta:
+Analise e execute:
 
-1. **Consulta de status de demanda** (menciona código como VID-XXXX ou pergunta sobre projeto):
-   → Use buscar_demanda_por_codigo para encontrar e responder com o status atual
+1. **Status de demanda** (código VID-XXXX):
+   → buscar_demanda_por_codigo
 
-2. **Nova demanda** (menciona criar, gravar, fazer vídeo, projeto novo):
-   → Use criar_demanda_rascunho para registrar
-   → Confirme para o usuário com o código gerado
+2. **Nova demanda** (criar, gravar, fazer vídeo):
+   → criar_demanda_rascunho
 
-3. **Consulta de agenda** (menciona agenda, horário, semana, compromisso):
-   → Use buscar_agenda_videomaker para mostrar a agenda
-   → Formate de forma clara e amigável
+3. **Ver agenda**:
+   → buscar_agenda_videomaker (se videomaker) ou informe que verá os eventos
 
-4. **Criar evento na agenda** (pede para agendar, marcar, bloquear data):
-   → Use criar_evento_agenda para criar
-   → Confirme o agendamento
+4. **Criar evento na agenda** (agendar, marcar data, bloquear horário):
+   → criar_evento_agenda
+   → Se for VIDEOMAKER: use videomaker_id="${idProprioVideomaker}"
+   → Se for GESTOR/ADMIN: use usuario_id="${idProprioUsuario}"
+   → Parse a data/hora da mensagem (ex: "amanhã às 15h" → calcule a data ISO correta)
+   → Confirme com data e hora formatados
 
-5. **Pergunta sobre o sistema / dúvida** → Responda diretamente sem usar tools
+5. **Dúvida geral** → Responda diretamente
 
-6. **Pedido de relatório / métricas** (apenas para usuários gestores):
-   → Use buscar_metricas e responda com resumo
+6. **Métricas/relatório** (apenas gestores):
+   → buscar_metricas
 
-DEPOIS de usar as tools necessárias, use enviar_whatsapp com:
+SEMPRE ao final use enviar_whatsapp:
 - telefone: "${replyJid}"
-- Uma resposta concisa, amigável e bem formatada (use *negrito* para destaques)
-- Máximo 10 linhas
-- Termine com uma oferta de ajuda adicional
+- Resposta curta e clara (máximo 8 linhas)
+- Use *negrito* para destaques
 
-Se não conseguir identificar a intenção, envie uma mensagem amigável pedindo mais detalhes.`
+Se ocorrer erro em alguma tool, avise o usuário pelo enviar_whatsapp.`
 
       try {
         await executarAgenteComTools(
