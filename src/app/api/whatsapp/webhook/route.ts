@@ -13,7 +13,11 @@ export async function POST(req: NextRequest) {
     const event = body.event
     const data = body.data
 
-    if (event !== "messages.upsert") return NextResponse.json({ ok: true })
+    // DEBUG: log completo para diagnosticar formato do evento
+    console.log("[WH] event:", event, "| keys:", Object.keys(body))
+    if (data) console.log("[WH] data keys:", Object.keys(data), "| fromMe:", data.key?.fromMe, "| remoteJid:", data.key?.remoteJid, "| conv:", data.message?.conversation, "| msgKeys:", data.message ? Object.keys(data.message) : "no message")
+
+    if (event?.toLowerCase().replace(/_/g, ".") !== "messages.upsert") return NextResponse.json({ ok: true })
 
     const message = data?.message
     if (!message) return NextResponse.json({ ok: true })
