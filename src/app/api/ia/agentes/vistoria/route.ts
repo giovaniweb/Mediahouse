@@ -20,7 +20,7 @@ export async function POST() {
   })
 
   try {
-    const prompt = `Você é o Agente de Vistoria do VideoOps — um consultor de gestão e produtividade audiovisual. Faça uma auditoria COMPLETA e PROFUNDA do sistema.
+    const prompt = `Você é o Agente de Vistoria do Flow — um consultor de gestão e produtividade audiovisual. Faça uma auditoria COMPLETA e PROFUNDA do sistema.
 
 ## COLETA DE DADOS (execute todas estas buscas)
 
@@ -70,7 +70,7 @@ Para cada problema crítico encontrado, use criar_alerta para registrar no siste
 Após a análise completa, use listar_gestores para obter os telefones dos gestores.
 Para cada gestor COM telefone, envie via enviar_whatsapp uma mensagem assim:
 
-"🔍 *VideoOps — Vistoria do Sistema*
+"🔍 *Flow — Vistoria do Sistema*
 
 Realizei uma auditoria completa. Aqui está o resumo:
 

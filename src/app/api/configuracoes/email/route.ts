@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       data: {
         apiKey: apiKey ?? "",
         senderEmail: senderEmail ?? "onboarding@resend.dev",
-        senderNome: senderNome ?? "VideoOps",
+        senderNome: senderNome ?? "Flow",
         emailsFinanceiro: emailsFinanceiro ?? [],
         ativo: !!apiKey,
       },

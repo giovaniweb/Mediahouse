@@ -20,7 +20,7 @@ export async function POST() {
   })
 
   try {
-    const prompt = `Você é o Agente de Prazos e Produtividade do VideoOps. Sua missão é garantir que os projetos avancem no tempo certo.
+    const prompt = `Você é o Agente de Prazos e Produtividade do Flow. Sua missão é garantir que os projetos avancem no tempo certo.
 
 Execute as seguintes verificações OBRIGATÓRIAS em ordem:
 
@@ -29,7 +29,7 @@ Use buscar_demandas com em_atraso=false e depois filtre mentalmente, ou use busc
 Sua tarefa: verificar quem tem dataLimite nas próximas 24 horas.
 Para cada demanda encontrada:
 - Se o videomaker tiver telefone, use enviar_whatsapp para avisá-lo:
-  "⏰ *VideoOps — Lembrete de Prazo*\n\n📋 *{codigo}* — {titulo}\n\nSeu prazo vence em menos de 24 horas! Certifique-se de que está no caminho certo. 🎬\n\nQualquer problema, entre em contato."
+  "⏰ *Flow — Lembrete de Prazo*\n\n📋 *{codigo}* — {titulo}\n\nSeu prazo vence em menos de 24 horas! Certifique-se de que está no caminho certo. 🎬\n\nQualquer problema, entre em contato."
 - Crie um alerta no sistema com criar_alerta (severidade: aviso)
 
 ## 2. DEMANDAS ATRASADAS (prazo já venceu)
@@ -40,20 +40,20 @@ Para cada demanda atrasada com videomaker cadastrado:
 - Se 3-5 dias: mensagem mais firme com pedido de posicionamento
 - Se 6+ dias: mensagem urgente e crie alerta CRÍTICO
 - Exemplos de mensagem:
-  1-2 dias: "⚠️ *VideoOps — Prazo Vencido*\n\n📋 *{codigo}* — {titulo}\n\nO prazo desta demanda venceu ontem. Qual é o status atual? Por favor, atualize o sistema. 🙏"
-  3-5 dias: "🔴 *VideoOps — Demanda Atrasada*\n\n📋 *{codigo}* — {titulo}\n\nEsta demanda está {N} dias atrasada. Precisamos de um posicionamento urgente. Entre em contato com o gestor imediatamente."
-  6+ dias: "🚨 *VideoOps — URGENTE*\n\n📋 *{codigo}* — {titulo}\n\nDemanda com {N} dias de atraso! Por favor, entre em contato AGORA para resolver esta situação."
+  1-2 dias: "⚠️ *Flow — Prazo Vencido*\n\n📋 *{codigo}* — {titulo}\n\nO prazo desta demanda venceu ontem. Qual é o status atual? Por favor, atualize o sistema. 🙏"
+  3-5 dias: "🔴 *Flow — Demanda Atrasada*\n\n📋 *{codigo}* — {titulo}\n\nEsta demanda está {N} dias atrasada. Precisamos de um posicionamento urgente. Entre em contato com o gestor imediatamente."
+  6+ dias: "🚨 *Flow — URGENTE*\n\n📋 *{codigo}* — {titulo}\n\nDemanda com {N} dias de atraso! Por favor, entre em contato AGORA para resolver esta situação."
 
 ## 3. PROJETOS PARADOS (sem atualização há 3+ dias)
 Use buscar_demandas com paradas_ha_dias=3.
 Para videomakers com projetos parados:
 - Mensagem motivacional e de suporte:
-  "💪 *VideoOps — Projeto em Andamento*\n\n📋 *{codigo}* — {titulo}\n\nPercebemos que este projeto não teve atualizações nos últimos {N} dias. Está tudo bem? Precisa de algum suporte? Atualize o status no sistema quando puder."
+  "💪 *Flow — Projeto em Andamento*\n\n📋 *{codigo}* — {titulo}\n\nPercebemos que este projeto não teve atualizações nos últimos {N} dias. Está tudo bem? Precisa de algum suporte? Atualize o status no sistema quando puder."
 - Crie alerta de aviso se parado há 5+ dias
 
 ## 4. NOTIFICAÇÃO AOS GESTORES
 Após todas as verificações, use listar_gestores e envie um resumo para cada gestor com telefone:
-"📊 *VideoOps — Resumo de Prazos*\n\n{resumo com: X vencendo hoje, Y atrasadas, Z paradas}"
+"📊 *Flow — Resumo de Prazos*\n\n{resumo com: X vencendo hoje, Y atrasadas, Z paradas}"
 
 ## 5. RELATÓRIO FINAL
 Retorne um resumo estruturado com:

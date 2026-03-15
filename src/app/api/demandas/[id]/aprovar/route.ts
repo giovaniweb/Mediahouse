@@ -128,8 +128,8 @@ async function notificarSolicitante({
 
   const mensagensWpp: Record<string, string> = {
     aprovada: templates.demandaAprovada(demanda.codigo, demanda.titulo),
-    recusada: `❌ *VideoOps — Demanda Recusada*\n\nSua demanda *${demanda.codigo}* — ${demanda.titulo} foi recusada.\n\nMotivo: ${motivo ?? "Não especificado"}\n\nSe necessário, solicite revisão à equipe.`,
-    reaberta: `🔄 *VideoOps*\n\nSua demanda *${demanda.codigo}* foi reaberta para análise. Em breve você receberá uma nova resposta.`,
+    recusada: `❌ *Flow — Demanda Recusada*\n\nSua demanda *${demanda.codigo}* — ${demanda.titulo} foi recusada.\n\nMotivo: ${motivo ?? "Não especificado"}\n\nSe necessário, solicite revisão à equipe.`,
+    reaberta: `🔄 *Flow*\n\nSua demanda *${demanda.codigo}* foi reaberta para análise. Em breve você receberá uma nova resposta.`,
   }
 
   const htmlsEmail: Record<string, string> = {
@@ -137,7 +137,7 @@ async function notificarSolicitante({
       <h2 style="color:#16a34a">✅ Demanda Aprovada!</h2>
       <p>Olá, <strong>${solicitante.nome}</strong>!</p>
       <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>aprovada</strong> e já está na fila de produção.</p>
-      <p>Acompanhe o progresso no sistema VideoOps.</p>
+      <p>Acompanhe o progresso no sistema Flow.</p>
     `,
     recusada: `
       <h2 style="color:#dc2626">❌ Demanda Recusada</h2>
@@ -170,8 +170,8 @@ async function notificarSolicitante({
     if (apiKey && solicitante.email) {
       const resend = new Resend(apiKey)
       const from = config?.senderEmail
-        ? `${config.senderNome ?? "VideoOps"} <${config.senderEmail}>`
-        : "VideoOps <onboarding@resend.dev>"
+        ? `${config.senderNome ?? "Flow"} <${config.senderEmail}>`
+        : "Flow <onboarding@resend.dev>"
       await resend.emails.send({
         from,
         to: [solicitante.email],

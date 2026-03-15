@@ -18,8 +18,9 @@ import {
   MessageSquare,
   Loader2,
   CalendarCheck,
-  Search,
   ShieldCheck,
+  MessageCircle,
+  X,
 } from "lucide-react"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ export default function IAPage() {
     {
       id: "boas-vindas",
       role: "assistant",
-      conteudo: "Olá! Sou o assistente IA do VideoOps — powered by Claude Opus 4.6.\n\nTenho acesso em tempo real a demandas, custos, agenda e equipe. Posso:\n\n• Analisar o pipeline e identificar gargalos\n• Comparar custos e encontrar oportunidades de economia\n• Monitorar prazos e produtividade da equipe\n• Gerar insights e recomendações acionáveis\n• Responder qualquer pergunta sobre o sistema\n\nUse os *Agentes Autônomos* ao lado para ações automáticas: notificar videomakers sobre prazos, fazer auditoria completa ou cobrar projetos parados.\n\nComo posso ajudar agora?",
+      conteudo: "Olá! Sou o assistente IA do VideoOps.\n\nTenho acesso em tempo real a demandas, custos, agenda e equipe. Como posso ajudar agora?",
     },
   ])
   const [input, setInput] = useState("")
@@ -348,6 +349,7 @@ export default function IAPage() {
                 <div ref={messagesEndRef} />
               </div>
 
+
               {/* Sugestões rápidas */}
               {mensagens.length === 1 && (
                 <div className="px-4 pb-3">
@@ -491,6 +493,29 @@ export default function IAPage() {
 
 function MensagemBolha({ msg }: { msg: Mensagem }) {
   const isUser = msg.role === "user"
+  const [wppAberto, setWppAberto] = useState(false)
+  const [wppTelefone, setWppTelefone] = useState("")
+  const [wppEnviando, setWppEnviando] = useState(false)
+  const [wppStatus, setWppStatus] = useState<"" | "ok" | "erro">("")
+
+  async function enviarWhatsApp() {
+    if (!wppTelefone.trim()) return
+    setWppEnviando(true)
+    setWppStatus("")
+    try {
+      const res = await fetch("/api/whatsapp/enviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: wppTelefone.trim(), mensagem: msg.conteudo }),
+      })
+      setWppStatus(res.ok ? "ok" : "erro")
+      if (res.ok) setTimeout(() => { setWppAberto(false); setWppStatus(""); setWppTelefone("") }, 1500)
+    } catch {
+      setWppStatus("erro")
+    } finally {
+      setWppEnviando(false)
+    }
+  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} gap-3`}>
@@ -531,6 +556,53 @@ function MensagemBolha({ msg }: { msg: Mensagem }) {
             msg.conteudo || <span className="text-zinc-500 text-xs italic">Aguardando resposta...</span>
           )}
         </div>
+
+        {/* Botão WhatsApp — só para mensagens do assistente com conteúdo */}
+        {!isUser && !msg.loading && msg.conteudo && (
+          <div>
+            {!wppAberto ? (
+              <button
+                onClick={() => setWppAberto(true)}
+                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-green-400 transition-colors"
+                title="Enviar esta mensagem via WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Enviar por WhatsApp
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2">
+                <MessageCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                <input
+                  type="tel"
+                  placeholder="Telefone (ex: 11999999999)"
+                  value={wppTelefone}
+                  onChange={e => setWppTelefone(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && enviarWhatsApp()}
+                  className="flex-1 bg-transparent text-xs text-white placeholder-zinc-500 outline-none min-w-0"
+                  autoFocus
+                />
+                {wppStatus === "ok" && <span className="text-xs text-green-400 shrink-0">Enviado!</span>}
+                {wppStatus === "erro" && <span className="text-xs text-red-400 shrink-0">Erro</span>}
+                <button
+                  onClick={enviarWhatsApp}
+                  disabled={wppEnviando || !wppTelefone.trim()}
+                  className="p-1 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                >
+                  {wppEnviando
+                    ? <Loader2 className="w-3 h-3 text-white animate-spin" />
+                    : <Send className="w-3 h-3 text-white" />
+                  }
+                </button>
+                <button
+                  onClick={() => { setWppAberto(false); setWppStatus(""); setWppTelefone("") }}
+                  className="p-1 text-zinc-500 hover:text-white transition-colors shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

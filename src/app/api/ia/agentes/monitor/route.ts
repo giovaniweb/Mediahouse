@@ -17,7 +17,7 @@ export async function POST() {
   })
 
   try {
-    const prompt = `Você é o Agente Monitor de Fluxo do VideoOps. Faça uma análise completa do pipeline de produção e identifique todos os gargalos, riscos e oportunidades de melhoria.
+    const prompt = `Você é o Agente Monitor de Fluxo do Flow. Faça uma análise completa do pipeline de produção e identifique todos os gargalos, riscos e oportunidades de melhoria.
 
 ANÁLISES OBRIGATÓRIAS:
 

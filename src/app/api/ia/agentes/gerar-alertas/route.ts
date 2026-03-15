@@ -18,7 +18,7 @@ export async function POST() {
   })
 
   try {
-    const prompt = `Você é o Agente de Vigilância do VideoOps. Sua missão é analisar o estado atual do sistema e gerar alertas para TODOS os problemas que encontrar.
+    const prompt = `Você é o Agente de Vigilância do Flow. Sua missão é analisar o estado atual do sistema e gerar alertas para TODOS os problemas que encontrar.
 
 EXECUTE as seguintes análises usando as ferramentas disponíveis:
 

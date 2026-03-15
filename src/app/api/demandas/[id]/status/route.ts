@@ -21,64 +21,64 @@ function mensagemKanban(
 
   const mapa: Mapa = {
     videomaker_notificado: {
-      videomaker: `🎬 *VideoOps — Você foi escalado!*\n\n${base}\n\nVocê foi designado para esta captação.\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
+      videomaker: `🎬 *Flow — Você foi escalado!*\n\n${base}\n\nVocê foi designado para esta captação.\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
       solicitante: null,
       gestor: null,
     },
     videomaker_aceitou: {
       videomaker: null,
-      solicitante: `✅ *VideoOps — Videomaker Confirmado*\n\n${base}\n\nO profissional confirmou a captação. Em breve mais detalhes.`,
-      gestor: `✅ *VideoOps — Captação Confirmada*\n\n${base}\n\nVideomaker aceitou a demanda.`,
+      solicitante: `✅ *Flow — Videomaker Confirmado*\n\n${base}\n\nO profissional confirmou a captação. Em breve mais detalhes.`,
+      gestor: `✅ *Flow — Captação Confirmada*\n\n${base}\n\nVideomaker aceitou a demanda.`,
     },
     videomaker_recusou: {
       videomaker: null,
       solicitante: null,
-      gestor: `⚠️ *VideoOps — Recusa de Captação*\n\n${base}\n\nVideomaker recusou. Necessário escalar outro profissional.`,
+      gestor: `⚠️ *Flow — Recusa de Captação*\n\n${base}\n\nVideomaker recusou. Necessário escalar outro profissional.`,
     },
     captacao_agendada: {
-      videomaker: `📅 *VideoOps — Captação Agendada*\n\n${base}\n\n${extra ?? "Data de captação definida. Verifique sua agenda."}\n\nQualquer dúvida, entre em contato.`,
-      solicitante: `📅 *VideoOps — Captação Agendada*\n\n${base}\n\n${extra ?? "A captação foi agendada com sucesso."}`,
+      videomaker: `📅 *Flow — Captação Agendada*\n\n${base}\n\n${extra ?? "Data de captação definida. Verifique sua agenda."}\n\nQualquer dúvida, entre em contato.`,
+      solicitante: `📅 *Flow — Captação Agendada*\n\n${base}\n\n${extra ?? "A captação foi agendada com sucesso."}`,
       gestor: null,
     },
     brutos_enviados: {
       videomaker: null,
       solicitante: null,
-      gestor: `📤 *VideoOps — Brutos Recebidos*\n\n${base}\n\nArquivos brutos enviados para edição.`,
+      gestor: `📤 *Flow — Brutos Recebidos*\n\n${base}\n\nArquivos brutos enviados para edição.`,
     },
     editando: {
       videomaker: null,
-      solicitante: `✂️ *VideoOps — Em Edição*\n\n${base}\n\nSua demanda entrou em edição. Avisaremos quando finalizar.`,
+      solicitante: `✂️ *Flow — Em Edição*\n\n${base}\n\nSua demanda entrou em edição. Avisaremos quando finalizar.`,
       gestor: null,
     },
     edicao_finalizada: {
       videomaker: null,
-      solicitante: `🎥 *VideoOps — Edição Finalizada!*\n\n${base}\n\nSeu vídeo foi editado. Aguarde o link de aprovação.`,
-      gestor: `🎥 *VideoOps — Edição Pronta*\n\n${base}\n\nAguardando aprovação do cliente.`,
+      solicitante: `🎥 *Flow — Edição Finalizada!*\n\n${base}\n\nSeu vídeo foi editado. Aguarde o link de aprovação.`,
+      gestor: `🎥 *Flow — Edição Pronta*\n\n${base}\n\nAguardando aprovação do cliente.`,
     },
     aguardando_aprovacao_cliente: {
       videomaker: null,
-      solicitante: `👀 *VideoOps — Vídeo Pronto para Aprovação*\n\n${base}\n\n${extra ? `🔗 ${extra}` : "Acesse o sistema para visualizar e aprovar seu vídeo."}\n\n_Você pode solicitar ajustes caso necessário._`,
+      solicitante: `👀 *Flow — Vídeo Pronto para Aprovação*\n\n${base}\n\n${extra ? `🔗 ${extra}` : "Acesse o sistema para visualizar e aprovar seu vídeo."}\n\n_Você pode solicitar ajustes caso necessário._`,
       gestor: null,
     },
     aprovado_cliente: {
-      videomaker: `🏆 *VideoOps — Cliente Aprovou!*\n\n${base}\n\nExcelente trabalho! O cliente aprovou. ✨`,
+      videomaker: `🏆 *Flow — Cliente Aprovou!*\n\n${base}\n\nExcelente trabalho! O cliente aprovou. ✨`,
       solicitante: null,
-      gestor: `✅ *VideoOps — Aprovado pelo Cliente*\n\n${base}`,
+      gestor: `✅ *Flow — Aprovado pelo Cliente*\n\n${base}`,
     },
     reprovado_cliente: {
-      videomaker: `🔄 *VideoOps — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes. Verifique o feedback no sistema.`,
+      videomaker: `🔄 *Flow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes. Verifique o feedback no sistema.`,
       solicitante: null,
-      gestor: `🔄 *VideoOps — Reprovado*\n\n${base}\n\nAjustes solicitados. Editor foi notificado.`,
+      gestor: `🔄 *Flow — Reprovado*\n\n${base}\n\nAjustes solicitados. Editor foi notificado.`,
     },
     postado: {
-      videomaker: `🎉 *VideoOps — Concluído!*\n\n${base}\n\nVídeo publicado com sucesso. Obrigado pelo excelente trabalho! 🎬⭐`,
-      solicitante: `🎉 *VideoOps — Publicado!*\n\n${base}\n\nSeu vídeo foi publicado com sucesso!`,
+      videomaker: `🎉 *Flow — Concluído!*\n\n${base}\n\nVídeo publicado com sucesso. Obrigado pelo excelente trabalho! 🎬⭐`,
+      solicitante: `🎉 *Flow — Publicado!*\n\n${base}\n\nSeu vídeo foi publicado com sucesso!`,
       gestor: null,
     },
     impedimento: {
       videomaker: null,
       solicitante: null,
-      gestor: `🚫 *VideoOps — Impedimento*\n\n${base}\n\n${extra ? `Motivo: ${extra}` : "Ação necessária."}`,
+      gestor: `🚫 *Flow — Impedimento*\n\n${base}\n\n${extra ? `Motivo: ${extra}` : "Ação necessária."}`,
     },
   }
 

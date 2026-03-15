@@ -62,20 +62,20 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
 // Templates de mensagens
 export const templates = {
   novaDemandaUrgente: (codigo: string, titulo: string, solicitante: string) =>
-    `🚨 *URGÊNCIA — VideoOps*\n\nNova demanda urgente recebida!\n\n📋 *${codigo}* — ${titulo}\n👤 Solicitante: ${solicitante}\n\nAcesse o sistema para aprovar ou recusar.`,
+    `🚨 *URGÊNCIA — Flow*\n\nNova demanda urgente recebida!\n\n📋 *${codigo}* — ${titulo}\n👤 Solicitante: ${solicitante}\n\nAcesse o sistema para aprovar ou recusar.`,
 
   demandaAprovada: (codigo: string, titulo: string) =>
-    `✅ *VideoOps — Demanda Aprovada*\n\nSua demanda foi aprovada!\n\n📋 *${codigo}* — ${titulo}\n\nEm breve nossa equipe entrará em contato. 🎬`,
+    `✅ *Flow — Demanda Aprovada*\n\nSua demanda foi aprovada!\n\n📋 *${codigo}* — ${titulo}\n\nEm breve nossa equipe entrará em contato. 🎬`,
 
   videomakertNotificado: (codigo: string, titulo: string, data: string) =>
-    `🎬 *VideoOps — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
+    `🎬 *Flow — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
 
   edicaoFinalizada: (codigo: string, titulo: string) =>
-    `✂️ *VideoOps — Edição Concluída*\n\nA edição da sua demanda foi finalizada!\n\n📋 *${codigo}* — ${titulo}\n\nAguardando sua aprovação. Acesse o link enviado. 👆`,
+    `✂️ *Flow — Edição Concluída*\n\nA edição da sua demanda foi finalizada!\n\n📋 *${codigo}* — ${titulo}\n\nAguardando sua aprovação. Acesse o link enviado. 👆`,
 
   linkAprovacaoVideo: (codigo: string, titulo: string, link: string) =>
-    `🎥 *VideoOps — Aprovação de Vídeo*\n\nSeu vídeo está pronto para revisão!\n\n📋 *${codigo}* — ${titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link._`,
+    `🎥 *Flow — Aprovação de Vídeo*\n\nSeu vídeo está pronto para revisão!\n\n📋 *${codigo}* — ${titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link._`,
 
   captacaoLembrete: (codigo: string, titulo: string, data: string, local: string) =>
-    `⏰ *VideoOps — Lembrete de Captação*\n\nAmanhã você tem uma captação agendada!\n\n📋 *${codigo}* — ${titulo}\n📅 ${data}\n📍 ${local}\n\nQualquer dúvida, entre em contato.`,
+    `⏰ *Flow — Lembrete de Captação*\n\nAmanhã você tem uma captação agendada!\n\n📋 *${codigo}* — ${titulo}\n📅 ${data}\n📍 ${local}\n\nQualquer dúvida, entre em contato.`,
 }
