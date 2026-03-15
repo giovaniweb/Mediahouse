@@ -16,8 +16,12 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
   }
 
   // Normaliza número: remove +, espaços, etc.
-  const numero = telefone.replace(/\D/g, "")
+  let numero = telefone.replace(/\D/g, "")
   if (!numero) return null
+  // Adiciona DDI 55 (Brasil) se estiver faltando (10 ou 11 dígitos = sem DDI)
+  if (numero.length === 10 || numero.length === 11) {
+    numero = "55" + numero
+  }
 
   try {
     const res = await fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {

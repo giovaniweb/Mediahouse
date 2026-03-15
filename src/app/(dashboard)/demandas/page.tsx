@@ -21,28 +21,42 @@ export default function DemandasPage() {
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
   const demandas = data?.demandas ?? []
 
+  // Mapeamento coluna → statusInterno representativo (dispara notificações WhatsApp)
+  const COLUNA_PARA_STATUS: Record<string, string> = {
+    entrada: "aguardando_triagem",
+    producao: "planejamento",
+    edicao: "editando",
+    aprovacao: "revisao_pendente",
+    para_postar: "postagem_pendente",
+    finalizado: "entregue_cliente",
+  }
+
   const handleMove = useCallback(
-    async (demandaId: string, novoStatus: string) => {
+    async (demandaId: string, novoStatusVisivel: string) => {
+      const statusInterno = COLUNA_PARA_STATUS[novoStatusVisivel]
+      if (!statusInterno) return
+
       // Optimistic update
       mutate(
         (prev: { demandas: Array<{ id: string; statusVisivel: string }> }) => ({
           ...prev,
           demandas: prev.demandas.map((d: { id: string; statusVisivel: string }) =>
-            d.id === demandaId ? { ...d, statusVisivel: novoStatus } : d
+            d.id === demandaId ? { ...d, statusVisivel: novoStatusVisivel } : d
           ),
         }),
         false
       )
 
-      await fetch(`/api/demandas/${demandaId}`, {
-        method: "PUT",
+      // Chama o endpoint de status — dispara WhatsApp para videomaker, solicitante e gestores
+      await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusVisivel: novoStatus }),
+        body: JSON.stringify({ statusInterno, origem: "kanban" }),
       })
 
       mutate()
     },
-    [mutate]
+    [mutate] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (
