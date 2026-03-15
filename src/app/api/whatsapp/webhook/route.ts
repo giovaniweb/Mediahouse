@@ -86,6 +86,14 @@ export async function POST(req: NextRequest) {
 
     if (!telefone || !textoOriginal) return NextResponse.json({ ok: true })
 
+    // Busca histórico recente ANTES de salvar a mensagem atual
+    const historicoRecente = await prisma.mensagemWhatsapp.findMany({
+      where: { telefone: { contains: telefone.slice(-8) } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { conteudo: true, direcao: true, createdAt: true },
+    })
+
     // Salva mensagem recebida
     await prisma.mensagemWhatsapp.create({
       data: { telefone, tipoMensagem: "text", conteudo: textoOriginal, direcao: "entrada", status: "recebido" },
@@ -236,29 +244,41 @@ export async function POST(req: NextRequest) {
         ? `Usuário sistema: ${identidade.nome} (usuario_id: ${idProprioUsuario}, perfil: ${identidade.perfil}, tel: ${telefone})`
         : `Pessoa externa: ${identidade.nome} (tel: ${telefone})`
 
+      // Formata histórico da conversa (do mais antigo para o mais recente)
+      const historicoFormatado = historicoRecente.length > 0
+        ? "\n\nHISTÓRICO RECENTE DA CONVERSA (mais antigo → mais recente):\n" +
+          historicoRecente
+            .reverse()
+            .map(m => `${m.direcao === "entrada" ? "👤 Usuário" : "🤖 NuFlow"}: ${m.conteudo}`)
+            .join("\n")
+        : ""
+
       const promptSecretaria = `Você é a Secretária IA do NuFlow respondendo via WhatsApp.
 
 IDENTIDADE: ${contextoIdentidade}
-MENSAGEM: "${textoOriginal}"
-DATA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+DATA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${historicoFormatado}
+
+NOVA MENSAGEM DO USUÁRIO: "${textoOriginal}"
+
+IMPORTANTE: Use o histórico acima para entender o contexto. Se o usuário está respondendo a uma pergunta anterior, use essa resposta para continuar o fluxo.
 
 Analise e execute:
 
 1. **Status de demanda** (código VID-XXXX):
    → buscar_demanda_por_codigo
 
-2. **Nova demanda** (criar, gravar, fazer vídeo):
-   → criar_demanda_rascunho
+2. **Nova demanda** (criar, gravar, fazer vídeo) — colete dados UM POR VEZ:
+   → criar_demanda_rascunho quando tiver título/descrição suficiente
+   → Se faltam dados, pergunte apenas UMA coisa por vez
 
 3. **Ver agenda**:
-   → buscar_agenda_videomaker (se videomaker) ou informe que verá os eventos
+   → buscar_agenda_videomaker (se videomaker)
 
 4. **Criar evento na agenda** (agendar, marcar data, bloquear horário):
    → criar_evento_agenda
    → Se for VIDEOMAKER: use videomaker_id="${idProprioVideomaker}"
    → Se for GESTOR/ADMIN: use usuario_id="${idProprioUsuario}"
    → Parse a data/hora da mensagem (ex: "amanhã às 15h" → calcule a data ISO correta)
-   → Confirme com data e hora formatados
 
 5. **Dúvida geral** → Responda diretamente
 
@@ -267,8 +287,9 @@ Analise e execute:
 
 SEMPRE ao final use enviar_whatsapp:
 - telefone: "${replyJid}"
-- Resposta curta e clara (máximo 8 linhas)
+- Resposta curta e direta (máximo 6 linhas)
 - Use *negrito* para destaques
+- UMA pergunta por vez se precisar de mais info
 
 Se ocorrer erro em alguma tool, avise o usuário pelo enviar_whatsapp.`
 
