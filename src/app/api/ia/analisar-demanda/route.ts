@@ -55,11 +55,13 @@ Analise esta demanda que aguarda aprovação e responda em JSON com este formato
     const json = extrairJSON(texto) as Record<string, unknown> | null
 
     return NextResponse.json({
-      sugestao: (json?.sugestao as string) ?? texto.slice(0, 200),
+      sugestao: (json?.sugestao as string) ?? texto.slice(0, 300),
       analise: json,
       tokens,
     })
   } catch (e) {
-    return NextResponse.json({ error: "Erro ao analisar com IA" }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error("[analisar-demanda] Erro Claude:", msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

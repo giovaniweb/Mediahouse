@@ -9,7 +9,7 @@ import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
-  ChevronDown, AlertTriangle, Sparkles, UserCheck, Clapperboard, Film,
+  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -48,27 +48,6 @@ const STATUS_LABELS: Record<string, string> = {
   expirado: "Expirado",
 }
 
-const STATUS_PROXIMOS: Record<string, string[]> = {
-  aguardando_triagem: ["planejamento", "urgencia_pendente_aprovacao", "encerrado"],
-  aguardando_aprovacao_interna: ["planejamento", "encerrado"],
-  planejamento: ["videomaker_notificado", "encerrado"],
-  videomaker_notificado: ["videomaker_aceitou", "videomaker_recusou", "captacao_agendada"],
-  videomaker_aceitou: ["captacao_agendada"],
-  captacao_agendada: ["captacao_realizada"],
-  captacao_realizada: ["brutos_enviados"],
-  brutos_enviados: ["fila_edicao", "editor_atribuido"],
-  editor_atribuido: ["fila_edicao"],
-  fila_edicao: ["editando"],
-  editando: ["edicao_finalizada"],
-  edicao_finalizada: ["revisao_pendente", "aguardando_aprovacao_cliente"],
-  revisao_pendente: ["aprovado_cliente", "reprovado_cliente"],
-  aguardando_aprovacao_cliente: ["aprovado_cliente", "reprovado_cliente"],
-  aprovado_cliente: ["postagem_pendente", "entregue_cliente"],
-  reprovado_cliente: ["editando"],
-  postagem_pendente: ["postado"],
-  postado: ["entregue_cliente", "encerrado"],
-}
-
 interface Videomaker { id: string; nome: string; cidade?: string; status: string }
 interface Editor { id: string; nome: string; especialidade?: string; status: string }
 
@@ -86,9 +65,6 @@ export default function DemandaDetailPage() {
   const [urlVideoInput, setUrlVideoInput] = useState("")
   const [gerandoLink, setGerandoLink] = useState(false)
   const [copiado, setCopiado] = useState(false)
-  const [mudandoStatus, setMudandoStatus] = useState(false)
-  const [showStatusMenu, setShowStatusMenu] = useState(false)
-
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -171,26 +147,6 @@ export default function DemandaDetailPage() {
     }
   }
 
-  // ── Mudar status ──────────────────────────────────────────────────────────
-  async function mudarStatus(novoStatus: string) {
-    setMudandoStatus(true)
-    setShowStatusMenu(false)
-    try {
-      const res = await fetch(`/api/demandas/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusInterno: novoStatus }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao mudar status")
-      toast.success(`Status → ${STATUS_LABELS[novoStatus] ?? novoStatus}`)
-      mutate()
-    } catch (e) {
-      toast.error(String(e))
-    } finally {
-      setMudandoStatus(false)
-    }
-  }
-
   // ── Atribuição rápida (sem entrar em edit mode) ───────────────────────────
   async function atribuirRapido(campo: "videomakerId" | "editorId", valor: string) {
     try {
@@ -257,8 +213,6 @@ export default function DemandaDetailPage() {
       </>
     )
   }
-
-  const proximosStatus = STATUS_PROXIMOS[demanda.statusInterno] ?? []
 
   return (
     <>
@@ -419,27 +373,6 @@ export default function DemandaDetailPage() {
             </div>
           </div>
 
-          {/* ── Avançar status ───────────────────────────────────────────── */}
-          {proximosStatus.length > 0 && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm">
-              <h2 className="font-semibold text-zinc-700 mb-3 flex items-center gap-2">
-                <ChevronDown className="w-4 h-4 text-purple-600" /> Avançar Status
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {proximosStatus.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => mudarStatus(s)}
-                    disabled={mudandoStatus}
-                    className="flex items-center gap-1.5 text-sm border border-zinc-200 hover:border-purple-400 hover:bg-purple-50 text-zinc-700 hover:text-purple-700 px-3 py-2 rounded-lg transition-all disabled:opacity-50"
-                  >
-                    {STATUS_LABELS[s] ?? s}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-zinc-400 mt-2">Status atual: <span className="font-medium text-zinc-600">{STATUS_LABELS[demanda.statusInterno] ?? demanda.statusInterno}</span></p>
-            </div>
-          )}
 
           {/* ── Links ────────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl border p-5 shadow-sm">
