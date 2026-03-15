@@ -22,8 +22,15 @@ export async function POST(req: NextRequest) {
     if (!message) return NextResponse.json({ ok: true })
     if (data.key?.fromMe) return NextResponse.json({ ok: true })
 
-    const telefone = data.key?.remoteJid?.replace("@s.whatsapp.net", "") ?? ""
-    const textoOriginal = (message.conversation ?? message.extendedTextMessage?.text ?? "").trim()
+    // Suporta @s.whatsapp.net e @lid (novo formato WhatsApp)
+    const remoteJid = data.key?.remoteJid ?? ""
+    const telefone = remoteJid.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").split(":")[0]
+    const textoOriginal = (
+      message.conversation ??
+      message.extendedTextMessage?.text ??
+      message.imageMessage?.caption ??
+      ""
+    ).trim()
     const textoUpper = textoOriginal.toUpperCase()
 
     if (!telefone || !textoOriginal) return NextResponse.json({ ok: true })
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
               data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_aceitou", origem: "whatsapp", observacao: "Confirmado via WhatsApp" },
             }),
           ])
-          await sendWhatsappMessage(telefone, `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`, demanda.id)
+          await sendWhatsappMessage(remoteJid, `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`, demanda.id)
           return NextResponse.json({ ok: true })
         }
       }
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
               data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_recusou", origem: "whatsapp", observacao: "Recusado via WhatsApp" },
             }),
           ])
-          await sendWhatsappMessage(telefone, `Entendido. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`, demanda.id)
+          await sendWhatsappMessage(remoteJid, `Entendido. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`, demanda.id)
           return NextResponse.json({ ok: true })
         }
       }
@@ -100,9 +107,9 @@ export async function POST(req: NextRequest) {
         })
         if (demandas.length > 0) {
           const lista = demandas.map(d => `• *${d.codigo}* — ${d.titulo}\n  ↳ ${d.statusInterno}`).join("\n")
-          await sendWhatsappMessage(telefone, `📋 *Suas demandas ativas:*\n\n${lista}\n\nDigite o *código* de uma demanda para mais detalhes.`)
+          await sendWhatsappMessage(remoteJid, `📋 *Suas demandas ativas:*\n\n${lista}\n\nDigite o *código* de uma demanda para mais detalhes.`)
         } else {
-          await sendWhatsappMessage(telefone, `Olá ${videomaker.nome}! Você não tem demandas ativas no momento. ✅`)
+          await sendWhatsappMessage(remoteJid, `Olá ${videomaker.nome}! Você não tem demandas ativas no momento. ✅`)
         }
         return NextResponse.json({ ok: true })
       }
@@ -133,7 +140,7 @@ export async function POST(req: NextRequest) {
         ])
 
         if (eventos.length === 0 && captacoes.length === 0) {
-          await sendWhatsappMessage(telefone, `📅 *Agenda de ${videomaker.nome}*\n\nNenhum compromisso agendado para os próximos ${diasFuturos} dias. ✅`)
+          await sendWhatsappMessage(remoteJid, `📅 *Agenda de ${videomaker.nome}*\n\nNenhum compromisso agendado para os próximos ${diasFuturos} dias. ✅`)
         } else {
           const linhasEventos = eventos.map(e =>
             `📌 *${e.titulo}*\n   ${e.inicio.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${e.local ? `\n   📍 ${e.local}` : ""}`
@@ -142,7 +149,7 @@ export async function POST(req: NextRequest) {
             `🎬 *${c.codigo}* — ${c.titulo}\n   ${c.dataCaptacao?.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) ?? "Horário a definir"}${c.cidade ? `\n   📍 ${c.cidade}` : ""}`
           )
           const tudo = [...linhasCaptacoes, ...linhasEventos].join("\n\n")
-          await sendWhatsappMessage(telefone, `📅 *Agenda de ${videomaker.nome}*\n\n${tudo}\n\nPrecisa de algo mais? 😊`)
+          await sendWhatsappMessage(remoteJid, `📅 *Agenda de ${videomaker.nome}*\n\n${tudo}\n\nPrecisa de algo mais? 😊`)
         }
         return NextResponse.json({ ok: true })
       }
@@ -153,7 +160,7 @@ export async function POST(req: NextRequest) {
         ? `🤖 *NuFlow — Assistente IA*\n\nOlá ${identidade.nome}! Veja o que posso fazer:\n\n*STATUS* — Ver suas demandas ativas\n*AGENDA* — Ver sua agenda completa\n*AGENDA HOJE* — Compromissos de hoje\n*AGENDA AMANHÃ* — Amanhã\n*SIM / NÃO* — Confirmar/recusar captação\n\n💬 Ou me envie uma mensagem livre como:\n• "nova demanda: gravar vídeo institucional"\n• "qual minha agenda de sexta?"\n• "status da VID-0023"`
         : `🤖 *NuFlow — Assistente IA*\n\nOlá! Como posso ajudar?\n\n💬 Me envie uma mensagem livre, como:\n• "nova demanda: precisamos de vídeo para evento"\n• "qual o status da VID-0023?"\n• "agenda do João para semana que vem"`
 
-      await sendWhatsappMessage(telefone, menu)
+      await sendWhatsappMessage(remoteJid, menu)
       return NextResponse.json({ ok: true })
     }
 
@@ -163,7 +170,7 @@ export async function POST(req: NextRequest) {
       const saudacao = identidade.tipo === "videomaker"
         ? `Olá ${identidade.nome}! 👋\n\nDigite *AJUDA* para ver o que posso fazer por você, ou me envie uma mensagem mais detalhada.`
         : `Olá! 👋 Sou o assistente NuFlow.\n\nDigite *AJUDA* para ver os comandos disponíveis, ou me envie uma mensagem descrevendo o que precisa.`
-      await sendWhatsappMessage(telefone, saudacao)
+      await sendWhatsappMessage(remoteJid, saudacao)
       return NextResponse.json({ ok: true })
     }
 
@@ -203,7 +210,7 @@ Analise a mensagem e tome a ação correta:
    → Use buscar_metricas e responda com resumo
 
 DEPOIS de usar as tools necessárias, use enviar_whatsapp com:
-- telefone: "${telefone}"
+- telefone: "${remoteJid}"
 - Uma resposta concisa, amigável e bem formatada (use *negrito* para destaques)
 - Máximo 10 linhas
 - Termine com uma oferta de ajuda adicional

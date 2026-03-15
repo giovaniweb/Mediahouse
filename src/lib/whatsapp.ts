@@ -15,13 +15,20 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
     return null
   }
 
-  // Normaliza número: remove +, espaços, etc.
-  let numero = telefone.replace(/\D/g, "")
-  if (!numero) return null
-  // Adiciona DDI 55 (Brasil) se estiver faltando (10 ou 11 dígitos = sem DDI)
-  if (numero.length === 10 || numero.length === 11) {
-    numero = "55" + numero
+  // Se já é um JID completo (ex: 123@lid ou 123@s.whatsapp.net), usa direto
+  // Caso contrário, normaliza o número de telefone
+  let numero: string
+  if (telefone.includes("@")) {
+    numero = telefone
+  } else {
+    numero = telefone.replace(/\D/g, "")
+    if (!numero) return null
+    if (numero.length === 10 || numero.length === 11) {
+      numero = "55" + numero
+    }
   }
+
+  if (!numero) return null
 
   try {
     const res = await fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {
