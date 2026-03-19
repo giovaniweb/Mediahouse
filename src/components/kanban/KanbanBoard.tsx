@@ -35,9 +35,10 @@ interface Demanda {
 interface KanbanBoardProps {
   demandas: Demanda[]
   onMove: (demandaId: string, novoStatus: StatusVisivel) => void
+  onDelete?: (demandaId: string) => void
 }
 
-export function KanbanBoard({ demandas, onMove }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return
     const destinoCol = result.destination.droppableId as StatusVisivel
@@ -100,7 +101,7 @@ export function KanbanBoard({ demandas, onMove }: KanbanBoardProps) {
                             {...provided.dragHandleProps}
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
-                            <DemandaCard demanda={demanda} />
+                            <DemandaCard demanda={demanda} onDelete={onDelete} />
                           </div>
                         )}
                       </Draggable>

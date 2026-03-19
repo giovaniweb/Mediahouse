@@ -469,7 +469,17 @@ export default function DemandaDetailPage() {
           {/* Solicitante */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <h2 className="font-semibold text-zinc-300 mb-3">Solicitante</h2>
-            {demanda.solicitante ? (
+            {demanda.nomeSolicitante ? (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 font-bold text-sm">
+                  {demanda.nomeSolicitante.charAt(0)}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">{demanda.nomeSolicitante}</p>
+                  <p className="text-xs text-zinc-500">Solicitante externo (WhatsApp)</p>
+                </div>
+              </div>
+            ) : demanda.solicitante ? (
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-sm">
                   {demanda.solicitante.nome.charAt(0)}

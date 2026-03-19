@@ -2,7 +2,7 @@
 
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AlertTriangle, Calendar, User, Video } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Video } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -38,9 +38,10 @@ interface DemandaCardProps {
     solicitante?: { nome: string } | null
   }
   dragHandleProps?: Record<string, unknown>
+  onDelete?: (id: string) => void
 }
 
-export function DemandaCard({ demanda, dragHandleProps }: DemandaCardProps) {
+export function DemandaCard({ demanda, dragHandleProps, onDelete }: DemandaCardProps) {
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
 
@@ -52,7 +53,7 @@ export function DemandaCard({ demanda, dragHandleProps }: DemandaCardProps) {
     <Link href={`/demandas/${demanda.id}`}>
       <div
         className={cn(
-          "bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
+          "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
           demanda.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
           demanda.prioridade === "alta" && "border-l-[3px] border-l-orange-500"
         )}
@@ -60,9 +61,20 @@ export function DemandaCard({ demanda, dragHandleProps }: DemandaCardProps) {
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <span className="text-[11px] font-mono text-zinc-500">{demanda.codigo}</span>
-          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", prio.class)}>
-            {prio.label}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", prio.class)}>
+              {prio.label}
+            </span>
+            {onDelete && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(demanda.id) }}
+                className="p-0.5 rounded hover:bg-red-500/20 text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                title="Excluir demanda"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <p className="text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2">

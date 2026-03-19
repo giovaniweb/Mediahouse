@@ -436,7 +436,7 @@ async function processarMensagem(body: unknown) {
 
   // ── Identifica quem está falando ────────────────────────────────────────
   const tel8 = telefone.slice(-8)
-  const [videomaker, editor, usuario] = await Promise.all([
+  const [videomaker, editor, usuario, contatoExistente] = await Promise.all([
     prisma.videomaker.findFirst({
       where: { telefone: { contains: tel8 } },
       select: { id: true, nome: true, telefone: true, cidade: true },
@@ -454,19 +454,72 @@ async function processarMensagem(body: unknown) {
       where: { telefone: { contains: tel8 } },
       select: { id: true, nome: true, tipo: true, telefone: true },
     }),
+    prisma.contatoWhatsApp.findFirst({
+      where: { telefone: { contains: tel8 } },
+    }),
   ])
 
-  // Prioridade: editor (videomaker interno) > videomaker (externo) > usuario > desconhecido
+  // Auto-registra contato se é usuário/videomaker/editor conhecido mas sem ContatoWhatsApp
+  if (!contatoExistente && (videomaker || editor || usuario)) {
+    const ref = editor ?? videomaker ?? usuario
+    const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
+    await prisma.contatoWhatsApp.upsert({
+      where: { telefone: telNorm },
+      create: {
+        telefone: telNorm,
+        nome: ref!.nome,
+        tipo: editor ? "editor" : videomaker ? "videomaker" : "usuario",
+        referenciaId: ref!.id,
+      },
+      update: {},
+    }).catch(() => null)
+  }
+
+  // Prioridade: editor (videomaker interno) > videomaker (externo) > usuario > contato externo > desconhecido
   const identidade = editor
     ? { tipo: "editor" as const, id: editor.id, nome: editor.nome }
     : videomaker
     ? { tipo: "videomaker" as const, id: videomaker.id, nome: videomaker.nome }
     : usuario
     ? { tipo: "usuario" as const, id: usuario.id, nome: usuario.nome, perfil: usuario.tipo }
-    : { tipo: "desconhecido" as const, nome: pushName || "Usuário" }
+    : contatoExistente
+    ? { tipo: "externo" as const, nome: contatoExistente.nome }
+    : { tipo: "desconhecido" as const, nome: pushName || "" }
 
   // Primeiro nome para saudação informal
-  const primeiroNome = identidade.nome.split(" ")[0]
+  const primeiroNome = identidade.nome ? identidade.nome.split(" ")[0] : ""
+
+  // ── Primeiro contato: pedir nome ────────────────────────────────────────
+  if (identidade.tipo === "desconhecido" && !contatoExistente) {
+    // Verifica se já perguntamos o nome (olha histórico recente)
+    const jaPerguntouNome = historicoRecente.some(m =>
+      m.direcao === "saida" && m.conteudo.includes("como posso te chamar")
+    )
+
+    if (!jaPerguntouNome) {
+      // Primeira mensagem de contato desconhecido — pedir nome
+      const msg = `Hey! Aqui é a *NuFlow* 🤖\n\nAinda não nos conhecemos! Como posso te chamar?`
+      await sendWhatsappMessage(replyJid, msg)
+      return
+    }
+
+    // Se já perguntamos e a resposta parece um nome (texto curto sem comando)
+    const pareceNome = textoOriginal.length <= 50 && !textoOriginal.includes("/") && !/^(status|agenda|ajuda|menu|sim|não|nao|\?)$/i.test(textoOriginal)
+    if (jaPerguntouNome && pareceNome) {
+      // Salva o contato com o nome informado
+      const nomeContato = textoOriginal.trim()
+      const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
+      await prisma.contatoWhatsApp.upsert({
+        where: { telefone: telNorm },
+        create: { telefone: telNorm, nome: nomeContato, tipo: "externo" },
+        update: { nome: nomeContato },
+      }).catch(() => null)
+
+      const msg = `Prazer, *${nomeContato.split(" ")[0]}*! 😊\n\nComo posso te ajudar? Pode me pedir um vídeo, conteúdo, cobertura, ou qualquer coisa!`
+      await sendWhatsappMessage(replyJid, msg)
+      return
+    }
+  }
 
   // ── Comandos estruturados (resposta rápida sem IA) ──────────────────────
 
@@ -610,7 +663,22 @@ async function processarMensagem(body: unknown) {
     ? `Videomaker Externo: ${identidade.nome} (videomaker_id: ${identidade.id}, tel: ${telefone}) — TEM AGENDA PRÓPRIA`
     : identidade.tipo === "usuario"
     ? `Usuário sistema: ${identidade.nome} (usuario_id: ${idProprioUsuario}, perfil: ${identidade.perfil}, tel: ${telefone})`
-    : `Pessoa externa: ${identidade.nome} (tel: ${telefone}) — NÃO tem agenda`
+    : identidade.tipo === "externo"
+    ? `Pessoa externa conhecida: ${identidade.nome} (tel: ${telefone}) — NÃO tem agenda`
+    : `Pessoa externa: ${identidade.nome || pushName || "desconhecido"} (tel: ${telefone}) — NÃO tem agenda`
+
+  // Regras de permissão por tipo
+  const permissaoRole = identidade.tipo === "videomaker" || identidade.tipo === "editor"
+    ? `\n\nPERMISSÕES DO USUÁRIO (${identidade.tipo.toUpperCase()}):
+- PODE: consultar suas demandas, sua agenda, confirmar/recusar captação, enviar arquivos
+- NÃO PODE: pedir relatórios, ver métricas, criar demandas para outros, acessar banco de ideias
+- Se pedir relatório ou métricas, responda: "Essa função é exclusiva para gestores. 📊"`
+    : identidade.tipo === "usuario" && identidade.perfil !== "admin" && identidade.perfil !== "gestor"
+    ? `\n\nPERMISSÕES DO USUÁRIO (${identidade.perfil?.toUpperCase() ?? "OPERADOR"}):
+- PODE: consultar demandas, criar demandas
+- NÃO PODE: pedir relatórios, ver métricas gerais
+- Se pedir relatório ou métricas, responda: "Essa função é exclusiva para gestores. 📊"`
+    : ""
 
   // Histórico da conversa (mais antigo → mais recente)
   const historicoOrdenado = [...historicoRecente].reverse()
@@ -640,7 +708,7 @@ async function processarMensagem(body: unknown) {
 - Data/hora: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
 - IDs: videomaker_id="${idProprioVideomaker ?? "N/A"}", editor_id="${idProprioEditor ?? "N/A"}", usuario_id="${idProprioUsuario ?? "N/A"}"
 - JID para resposta: "${replyJid}"
-- Telefone (para telefone_solicitante): "${telefone}"${contextoMidia}
+- Telefone (para telefone_solicitante): "${telefone}"${permissaoRole}${contextoMidia}
 ${historicoFormatado}
 
 MENSAGEM ATUAL: "${textoOriginal}"

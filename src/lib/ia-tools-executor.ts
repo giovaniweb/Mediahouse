@@ -666,23 +666,36 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
   const count = await prisma.demanda.count()
   const codigo = `VID-${String(count + 1).padStart(4, "0")}`
 
+  // Normaliza telefone do solicitante
+  const telSolicitante = input.telefone_solicitante
+    ? (input.telefone_solicitante as string).replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/\D/g, "")
+    : undefined
+
+  // Tenta vincular a um usuário pelo telefone
   let solicitanteId: string | undefined
-  if (input.telefone_solicitante) {
+  let isExternalRequester = false
+  if (telSolicitante) {
     const u = await prisma.usuario.findFirst({
-      where: { telefone: { contains: (input.telefone_solicitante as string).slice(-8) } },
+      where: { telefone: { contains: telSolicitante.slice(-8) } },
     })
     solicitanteId = u?.id
   }
   if (!solicitanteId) {
+    // Solicitante externo — vincula ao admin/gestor como responsável
+    isExternalRequester = true
     const admin = await prisma.usuario.findFirst({ where: { tipo: { in: ["admin", "gestor"] } } })
     solicitanteId = admin?.id
   }
   if (!solicitanteId) return JSON.stringify({ erro: "Nenhum gestor encontrado para vincular" })
 
-  // Normaliza telefone do solicitante
-  const telSolicitante = input.telefone_solicitante
-    ? (input.telefone_solicitante as string).replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/\D/g, "")
-    : undefined
+  // Resolve nome do solicitante real (de ContatoWhatsApp ou input)
+  let nomeSolicitante = (input.nome_solicitante as string) || null
+  if (!nomeSolicitante && telSolicitante) {
+    const contato = await prisma.contatoWhatsApp.findFirst({
+      where: { telefone: { contains: telSolicitante.slice(-8) } },
+    })
+    nomeSolicitante = contato?.nome ?? null
+  }
 
   const demanda = await prisma.demanda.create({
     data: {
@@ -697,8 +710,26 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
       statusVisivel: "entrada",
       solicitanteId,
       telefoneSolicitante: telSolicitante || undefined,
+      nomeSolicitante: nomeSolicitante || undefined,
     },
   })
+
+  // Notifica gestores sobre a nova demanda
+  if (isExternalRequester && nomeSolicitante) {
+    const gestores = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true, nome: true },
+    })
+    for (const g of gestores) {
+      if (g.telefone) {
+        await sendWhatsappMessage(
+          g.telefone,
+          `📋 *Nova demanda via WhatsApp!*\n\n*${codigo}* — ${demanda.titulo}\n👤 Solicitante: ${nomeSolicitante} (${telSolicitante})\n\nAcesse o sistema para aprovar.`,
+          demanda.id
+        ).catch(() => null)
+      }
+    }
+  }
 
   return JSON.stringify({
     criado: true,
@@ -706,6 +737,8 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
     codigo: demanda.codigo,
     titulo: demanda.titulo,
     status: demanda.statusInterno,
+    solicitante_externo: isExternalRequester,
+    nome_solicitante: nomeSolicitante,
     mensagem: `Demanda *${codigo}* criada e aguardando aprovação interna.`,
   })
 }

@@ -110,6 +110,26 @@ export default function DemandasPage() {
     [mutate, data] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const handleDelete = useCallback(
+    async (demandaId: string) => {
+      if (!confirm("Tem certeza que deseja excluir esta demanda?")) return
+
+      try {
+        const res = await fetch(`/api/demandas/${demandaId}`, { method: "DELETE" })
+        if (!res.ok) {
+          const erro = await res.json().catch(() => ({ error: "Erro desconhecido" }))
+          showToast(erro.error || "Erro ao excluir", "erro")
+          return
+        }
+        showToast("Demanda excluída", "ok")
+        mutate()
+      } catch {
+        showToast("Erro de conexão ao excluir", "erro")
+      }
+    },
+    [mutate] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   return (
     <>
       <Header
@@ -183,7 +203,7 @@ export default function DemandasPage() {
 
       {/* Kanban */}
       <div className="flex-1 p-4 overflow-auto">
-        <KanbanBoard demandas={demandas} onMove={handleMove} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} />
       </div>
     </>
   )

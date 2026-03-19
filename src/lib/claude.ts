@@ -251,6 +251,7 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
         prioridade: { type: "string", enum: ["normal", "alta", "urgente"] },
         cidade: { type: "string", description: "Cidade da captação" },
         telefone_solicitante: { type: "string", description: "Telefone de quem pediu (OBRIGATÓRIO se veio via WhatsApp)" },
+        nome_solicitante: { type: "string", description: "Nome de quem está pedindo a demanda (OBRIGATÓRIO)" },
       },
       required: ["titulo"],
     },
@@ -392,10 +393,15 @@ CRIAÇÃO DE DEMANDAS (IMPORTANTÍSSIMO):
 8. QUALQUER PESSOA pode solicitar uma demanda via WhatsApp — NÃO precisa ser cadastrada no sistema.
 9. Quando alguém pedir vídeo, conteúdo, cobertura, anúncio, etc. → estruture e CRIE a demanda.
 10. A demanda cai automaticamente em APROVAÇÃO para o gestor analisar.
-11. SEMPRE passe telefone_solicitante ao criar. Se a pessoa é desconhecida, tudo bem — o telefone vincula.
+11. SEMPRE passe telefone_solicitante E nome_solicitante ao criar. O nome é OBRIGATÓRIO para rastrear quem pediu.
 12. Se a descrição é clara (tipo de vídeo, equipamento, objetivo), crie direto.
 13. Se faltam dados essenciais, pergunte UMA coisa de cada vez.
 14. Se receber áudio transcrito, trate como mensagem normal.
+
+PERMISSÕES POR TIPO DE USUÁRIO:
+- Se o CONTEXTO indicar PERMISSÕES DO USUÁRIO, RESPEITE rigorosamente.
+- Videomakers e editores SÓ podem: ver suas demandas, sua agenda, confirmar/recusar captação.
+- Apenas gestores/admin podem: ver relatórios, métricas, banco de ideias.
 
 REGRAS DE AGENDA:
 15. Somente videomakers internos (editor) e videomakers externos têm agenda.
