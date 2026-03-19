@@ -112,17 +112,30 @@ export async function GET(
   }
 
   // Ideas KPIs
-  const [ideiasTotal, ideiasPendentes, ideiasRealizadas, ideiasRecentes] = await Promise.all([
-    prisma.ideiaVideo.count({ where: { produtoId: id } }),
-    prisma.ideiaVideo.count({ where: { produtoId: id, status: { in: ["nova", "em_analise", "aprovada"] } } }),
-    prisma.ideiaVideo.count({ where: { produtoId: id, status: "realizada" } }),
-    prisma.ideiaVideo.findMany({
-      where: { produtoId: id },
-      orderBy: { scoreIA: "desc" },
-      take: 5,
-      select: { id: true, titulo: true, status: true, scoreIA: true, origem: true, createdAt: true, linkReferencia: true },
-    }),
-  ])
+  let ideiasTotal = 0
+  let ideiasPendentes = 0
+  let ideiasRealizadas = 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let ideiasRecentes: any[] = []
+  try {
+    const results = await Promise.all([
+      prisma.ideiaVideo.count({ where: { produtoId: id } }),
+      prisma.ideiaVideo.count({ where: { produtoId: id, status: { in: ["nova", "em_analise", "aprovada"] } } }),
+      prisma.ideiaVideo.count({ where: { produtoId: id, status: "realizada" } }),
+      prisma.ideiaVideo.findMany({
+        where: { produtoId: id },
+        orderBy: { scoreIA: "desc" },
+        take: 5,
+        select: { id: true, titulo: true, status: true, scoreIA: true, origem: true, createdAt: true, linkReferencia: true },
+      }),
+    ])
+    ideiasTotal = results[0]
+    ideiasPendentes = results[1]
+    ideiasRealizadas = results[2]
+    ideiasRecentes = results[3]
+  } catch {
+    // ideiaVideo table may not exist yet
+  }
 
   return NextResponse.json({
     produto: {
