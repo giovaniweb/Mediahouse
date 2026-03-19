@@ -58,6 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       tipo: "reaberta",
       demanda,
       solicitante: demanda.solicitante,
+      telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
     })
 
     return NextResponse.json({ ok: true, statusInterno: "aguardando_aprovacao_interna" })
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     tipo: acao === "aprovar" ? "aprovada" : "recusada",
     demanda,
     solicitante: demanda.solicitante,
+    telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
     motivo,
   })
 
@@ -111,14 +113,15 @@ async function notificarSolicitante({
   tipo,
   demanda,
   solicitante,
+  telefoneSolicitanteWhatsapp,
   motivo,
 }: {
   tipo: "aprovada" | "recusada" | "reaberta"
   demanda: { id: string; codigo: string; titulo: string }
   solicitante: { id: string; nome: string; email: string; telefone: string | null } | null
+  telefoneSolicitanteWhatsapp?: string | null
   motivo?: string
 }) {
-  if (!solicitante) return
 
   const assuntos: Record<string, string> = {
     aprovada: `✅ Sua demanda ${demanda.codigo} foi aprovada`,
@@ -135,27 +138,27 @@ async function notificarSolicitante({
   const htmlsEmail: Record<string, string> = {
     aprovada: `
       <h2 style="color:#16a34a">✅ Demanda Aprovada!</h2>
-      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
       <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>aprovada</strong> e já está na fila de produção.</p>
       <p>Acompanhe o progresso no sistema NuFlow.</p>
     `,
     recusada: `
       <h2 style="color:#dc2626">❌ Demanda Recusada</h2>
-      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
       <p>Infelizmente sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>recusada</strong>.</p>
       ${motivo ? `<p><strong>Motivo:</strong> ${motivo}</p>` : ""}
       <p>Caso queira recorrer, entre em contato com a equipe de operações.</p>
     `,
     reaberta: `
       <h2 style="color:#2563eb">🔄 Demanda Reaberta</h2>
-      <p>Olá, <strong>${solicitante.nome}</strong>!</p>
+      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
       <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi reaberta para nova análise.</p>
       <p>Em breve você receberá uma nova resposta.</p>
     `,
   }
 
-  // WhatsApp (silencia erro — pode não estar configurado)
-  if (solicitante.telefone) {
+  // WhatsApp para o solicitante cadastrado no sistema
+  if (solicitante?.telefone) {
     await sendWhatsappMessage(
       solicitante.telefone,
       mensagensWpp[tipo],
@@ -163,11 +166,26 @@ async function notificarSolicitante({
     ).catch(() => {})
   }
 
+  // WhatsApp para quem solicitou via WhatsApp (telefoneSolicitante da demanda)
+  // Envia TAMBÉM se o telefone for diferente do solicitante do sistema
+  if (telefoneSolicitanteWhatsapp) {
+    const telSolicitanteSistema = solicitante?.telefone?.replace(/\D/g, "") ?? ""
+    const telWhatsapp = telefoneSolicitanteWhatsapp.replace(/\D/g, "")
+    // Compara últimos 8 dígitos para evitar duplicata
+    if (telSolicitanteSistema.slice(-8) !== telWhatsapp.slice(-8)) {
+      await sendWhatsappMessage(
+        telefoneSolicitanteWhatsapp,
+        mensagensWpp[tipo],
+        demanda.id
+      ).catch(() => {})
+    }
+  }
+
   // E-mail via Resend
   try {
     const config = await prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
     const apiKey = config?.apiKey || process.env.RESEND_API_KEY
-    if (apiKey && solicitante.email) {
+    if (apiKey && solicitante?.email) {
       const resend = new Resend(apiKey)
       const from = config?.senderEmail
         ? `${config.senderNome ?? "NuFlow"} <${config.senderEmail}>`

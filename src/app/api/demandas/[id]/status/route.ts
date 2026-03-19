@@ -22,7 +22,7 @@ function mensagemKanban(
   const mapa: Mapa = {
     videomaker_notificado: {
       videomaker: `🎬 *NuFlow — Você foi escalado!*\n\n${base}\n\nVocê foi designado para esta captação.\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
-      solicitante: null,
+      solicitante: `📋 *NuFlow — Em andamento!*\n\n${base}\n\nUm profissional foi designado para sua demanda. Te avisamos quando confirmar! 🎬`,
       gestor: null,
     },
     videomaker_aceitou: {
@@ -32,7 +32,7 @@ function mensagemKanban(
     },
     videomaker_recusou: {
       videomaker: null,
-      solicitante: null,
+      solicitante: `⏳ *NuFlow — Reagendando*\n\n${base}\n\nEstamos escalando outro profissional. Avisamos em breve!`,
       gestor: `⚠️ *NuFlow — Recusa de Captação*\n\n${base}\n\nVideomaker recusou. Necessário escalar outro profissional.`,
     },
     captacao_agendada: {
@@ -62,7 +62,7 @@ function mensagemKanban(
     },
     aprovado_cliente: {
       videomaker: `🏆 *NuFlow — Cliente Aprovou!*\n\n${base}\n\nExcelente trabalho! O cliente aprovou. ✨`,
-      solicitante: null,
+      solicitante: `🎉 *NuFlow — Vídeo Aprovado!*\n\n${base}\n\nSeu vídeo foi aprovado e está sendo preparado para publicação! 🎬`,
       gestor: `✅ *NuFlow — Aprovado pelo Cliente*\n\n${base}`,
     },
     reprovado_cliente: {
@@ -91,7 +91,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const body = await req.json()
-  const { statusInterno, observacao, origem = "manual" } = body
+  const { statusInterno, observacao } = body
+  // Sanitiza origem para valores válidos do enum OrigemHistorico
+  const ORIGENS_VALIDAS = ["manual", "automacao", "ia", "whatsapp", "kanban"]
+  const origemRaw = (body.origem as string) || "manual"
+  const origem = (ORIGENS_VALIDAS.includes(origemRaw) ? origemRaw : "manual") as import("@prisma/client").OrigemHistorico
 
   if (!statusInterno) {
     return NextResponse.json({ error: "statusInterno obrigatório" }, { status: 400 })
@@ -104,6 +108,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       solicitante: { select: { nome: true, telefone: true } },
     },
   })
+  // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
   if (!demandaAtual) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   // Validações de regras de negócio
@@ -118,44 +123,54 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const novoStatusVisivel = STATUS_PARA_COLUNA[statusInterno as StatusInterno]
+  if (!novoStatusVisivel) {
+    return NextResponse.json({ error: `Status "${statusInterno}" inválido` }, { status: 400 })
+  }
 
-  const [demanda] = await prisma.$transaction([
-    prisma.demanda.update({
-      where: { id },
-      data: {
-        statusInterno: statusInterno as StatusInterno,
-        statusVisivel: novoStatusVisivel,
-        ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
-        ...(body.linkFinal && { linkFinal: body.linkFinal }),
-        ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),
-        ...(observacao && statusInterno === "impedimento" && { motivoImpedimento: observacao }),
-      },
-    }),
-    prisma.historicoStatus.create({
-      data: {
-        demandaId: id,
-        statusAnterior: demandaAtual.statusInterno,
-        statusNovo: statusInterno,
-        usuarioId: session.user.id,
-        origem,
-        observacao,
-      },
-    }),
-  ])
+  try {
+    const [demanda] = await prisma.$transaction([
+      prisma.demanda.update({
+        where: { id },
+        data: {
+          statusInterno: statusInterno as StatusInterno,
+          statusVisivel: novoStatusVisivel,
+          ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
+          ...(body.linkFinal && { linkFinal: body.linkFinal }),
+          ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),
+          ...(observacao && statusInterno === "impedimento" && { motivoImpedimento: observacao }),
+        },
+      }),
+      prisma.historicoStatus.create({
+        data: {
+          demandaId: id,
+          statusAnterior: demandaAtual.statusInterno,
+          statusNovo: statusInterno,
+          usuarioId: session.user.id,
+          origem,
+          observacao,
+        },
+      }),
+    ])
 
-  // ── Notificações WhatsApp assíncronas (não bloqueia resposta) ─────────────
-  void notificarMudancaKanban(
-    statusInterno,
-    demandaAtual.codigo,
-    demandaAtual.titulo,
-    demandaAtual.videomaker?.telefone ?? null,
-    demandaAtual.solicitante?.telefone ?? null,
-    id,
-    observacao ?? demandaAtual.motivoImpedimento,
-    body.linkFinal ?? demandaAtual.linkFinal
-  )
+    // ── Notificações WhatsApp assíncronas (não bloqueia resposta) ─────────────
+    void notificarMudancaKanban(
+      statusInterno,
+      demandaAtual.codigo,
+      demandaAtual.titulo,
+      demandaAtual.videomaker?.telefone ?? null,
+      demandaAtual.solicitante?.telefone ?? null,
+      demandaAtual.telefoneSolicitante ?? null,
+      id,
+      observacao ?? demandaAtual.motivoImpedimento,
+      body.linkFinal ?? demandaAtual.linkFinal
+    )
 
-  return NextResponse.json(demanda)
+    return NextResponse.json(demanda)
+  } catch (e) {
+    console.error("[Status PATCH] Erro na transação:", e)
+    const msg = e instanceof Error ? e.message : "Erro ao atualizar status"
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
 
 async function notificarMudancaKanban(
@@ -163,7 +178,8 @@ async function notificarMudancaKanban(
   codigo: string,
   titulo: string,
   telefoneVideomaker: string | null,
-  telefoneSolicitante: string | null,
+  telefoneSolicitanteSistema: string | null,
+  telefoneSolicitanteWhatsapp: string | null,
   demandaId: string,
   observacao?: string | null,
   linkFinal?: string | null
@@ -177,18 +193,52 @@ async function notificarMudancaKanban(
 
     const envios: Promise<unknown>[] = []
 
+    // Notificar videomaker
     if (telefoneVideomaker) {
       const msg = mensagemKanban(statusNovo, codigo, titulo, "videomaker", extra)
       if (msg) envios.push(sendWhatsappMessage(telefoneVideomaker, msg, demandaId))
     }
-    if (telefoneSolicitante) {
+
+    // Notificar solicitante do sistema (usuario cadastrado)
+    if (telefoneSolicitanteSistema) {
       const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
-      if (msg) envios.push(sendWhatsappMessage(telefoneSolicitante, msg, demandaId))
+      if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteSistema, msg, demandaId))
     }
+
+    // Notificar quem solicitou via WhatsApp (se for telefone diferente do solicitante do sistema)
+    if (telefoneSolicitanteWhatsapp) {
+      const telSistema = (telefoneSolicitanteSistema ?? "").replace(/\D/g, "")
+      const telWhatsapp = telefoneSolicitanteWhatsapp.replace(/\D/g, "")
+      // Compara últimos 8 dígitos para evitar mandar duas vezes para a mesma pessoa
+      if (telSistema.slice(-8) !== telWhatsapp.slice(-8)) {
+        const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
+        if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteWhatsapp, msg, demandaId))
+      }
+    }
+
+    // Notificar gestores
     for (const g of gestores) {
       if (g.telefone) {
         const msg = mensagemKanban(statusNovo, codigo, titulo, "gestor", extra)
         if (msg) envios.push(sendWhatsappMessage(g.telefone, msg, demandaId))
+      }
+    }
+
+    // Notificar Social Media quando pronto para postar
+    if (statusNovo === "postagem_pendente") {
+      const socialUsers = await prisma.usuario.findMany({
+        where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo" },
+        select: { telefone: true },
+      })
+      const baseSocial = `📋 *${codigo}* — ${titulo}`
+      for (const u of socialUsers) {
+        if (u.telefone) {
+          envios.push(sendWhatsappMessage(
+            u.telefone,
+            `📱 *NuFlow — Pronto para Postar!*\n\n${baseSocial}\n\nVídeo aprovado e disponível para postagem. 🚀`,
+            demandaId
+          ))
+        }
       }
     }
 

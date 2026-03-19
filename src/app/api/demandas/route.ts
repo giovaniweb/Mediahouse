@@ -28,6 +28,19 @@ const criarDemandaSchema = z.object({
   referencia: z.string().optional(),
   localGravacao: z.string().optional(),
   linkBrutos: z.string().optional(),
+  // Videomaker + Editor (opcionais na criação)
+  videomakerId: z.string().optional(),
+  editorId: z.string().optional(),
+  // Cliente final (cobertura/entrega)
+  clienteFinalNome: z.string().optional(),
+  clienteFinalTelefone: z.string().optional(),
+  clienteFinalEmail: z.string().optional(),
+  // Produto vinculado
+  produtoId: z.string().optional(),
+  // Telefone solicitante
+  telefoneSolicitante: z.string().optional(),
+  // Classificação B2C/B2B
+  classificacao: z.enum(["b2c", "b2b"]).optional(),
 })
 
 function gerarCodigo(): string {
@@ -55,6 +68,18 @@ export async function GET(req: NextRequest) {
   if (statusInterno) where.statusInterno = statusInterno
   if (editorId) where.editorId = editorId
   if (videomakerId) where.videomakerId = videomakerId
+
+  const produtoId = searchParams.get("produtoId")
+  if (produtoId) where.produtos = { some: { produtoId } }
+
+  const search = searchParams.get("search")
+  if (search) {
+    where.OR = [
+      { titulo: { contains: search, mode: "insensitive" } },
+      { codigo: { contains: search, mode: "insensitive" } },
+      { descricao: { contains: search, mode: "insensitive" } },
+    ]
+  }
 
   const demandas = await prisma.demanda.findMany({
     where,
@@ -126,8 +151,55 @@ export async function POST(req: NextRequest) {
       mensagemPrincipal: data.mensagemPrincipal,
       referencia: data.referencia,
       localGravacao: data.localGravacao,
+      // Novos campos
+      videomakerId: data.videomakerId || undefined,
+      editorId: data.editorId || undefined,
+      telefoneSolicitante: data.telefoneSolicitante || undefined,
+      classificacao: data.classificacao || undefined,
     },
   })
+
+  // Vincular produto se fornecido
+  if (data.produtoId) {
+    await prisma.demandaProduto.create({
+      data: { demandaId: demanda.id, produtoId: data.produtoId },
+    }).catch(e => console.error("[Demanda] Erro ao vincular produto:", e))
+  }
+
+  // Auto-populate checklist a partir de templates
+  try {
+    const templates = await prisma.checklistTemplate.findMany({
+      where: {
+        ativo: true,
+        OR: [
+          { tipoVideo: data.tipoVideo },
+          { tipoVideo: null },
+        ],
+      },
+      include: { itens: { orderBy: { ordem: "asc" } } },
+    })
+
+    // Priorizar templates específicos do tipoVideo; se não houver, usar o "Geral"
+    const templatesFiltrados = templates.filter(t => t.tipoVideo === data.tipoVideo)
+    const templatesParaAplicar = templatesFiltrados.length > 0
+      ? templatesFiltrados
+      : templates.filter(t => t.tipoVideo === null && t.papel === "geral")
+
+    const checklistData = templatesParaAplicar.flatMap(t =>
+      t.itens.map(item => ({
+        demandaId: demanda.id,
+        texto: item.texto,
+        ordem: item.ordem,
+        grupo: t.papel ?? "geral",
+      }))
+    )
+
+    if (checklistData.length > 0) {
+      await prisma.checklistItem.createMany({ data: checklistData })
+    }
+  } catch (e) {
+    console.error("[Demanda] Erro ao criar checklist automático:", e)
+  }
 
   // Registrar histórico inicial
   await prisma.historicoStatus.create({

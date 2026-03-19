@@ -26,6 +26,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!editor) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
+  const userTipo = (session.user as { tipo?: string }).tipo
+  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+
+  if (!isPrivileged) {
+    const { salario, ...editorSemSalario } = editor
+    return NextResponse.json({ editor: editorSemSalario })
+  }
+
   return NextResponse.json({ editor })
 }
 
@@ -36,15 +44,36 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const { id } = await params
   const body = await req.json()
 
+  const userTipo = (session.user as { tipo?: string }).tipo
+  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+
   const editor = await prisma.editor.update({
     where: { id },
     data: {
       nome: body.nome,
       telefone: body.telefone,
+      whatsapp: body.whatsapp,
       email: body.email,
+      avatarUrl: body.avatarUrl,
       especialidade: body.especialidade,
+      habilidades: body.habilidades,
       cargaLimite: body.cargaLimite,
       status: body.status,
+      cidade: body.cidade,
+      estado: body.estado,
+      cpfCnpj: body.cpfCnpj,
+      razaoSocial: body.razaoSocial,
+      nomeFantasia: body.nomeFantasia,
+      representante: body.representante,
+      endereco: body.endereco,
+      chavePix: body.chavePix,
+      redesSociais: body.redesSociais,
+      dadosBancarios: body.dadosBancarios,
+      observacoes: body.observacoes,
+      areasAtuacao: body.areasAtuacao,
+      equipamentos: body.equipamentos,
+      portfolio: body.portfolio,
+      ...(isPrivileged && body.salario !== undefined ? { salario: body.salario } : {}),
     },
   })
 

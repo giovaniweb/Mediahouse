@@ -92,6 +92,7 @@ enum OrigemHistorico {
   automacao
   ia
   whatsapp
+  kanban
 }
 
 enum TipoArquivo {
@@ -120,6 +121,24 @@ enum SeveridadeAlerta {
   critico
 }
 
+enum StatusIdeia {
+  nova
+  em_analise
+  aprovada
+  em_producao
+  realizada
+  descartada
+}
+
+enum OrigemIdeia {
+  whatsapp
+  manual
+  instagram
+  tiktok
+  youtube
+  outro
+}
+
 // ─────────────────────────────────────────────
 // MODELS
 // ─────────────────────────────────────────────
@@ -142,6 +161,9 @@ model Usuario {
   comentarios     Comentario[]
   sessions        Session[]
   eventos         Evento[]
+  permissoes      PermissaoUsuario?
+  videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
+  ideias          IdeiaVideo[]
 
   @@map("usuarios")
 }
@@ -184,10 +206,15 @@ model Videomaker {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  demandas   Demanda[]
-  eventos    Evento[]
-  custos     CustoVideomaker[]
-  avaliacoes AvaliacaoVideomaker[]
+  usuarioId  String?    @unique  // link para Usuario (portal login)
+  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
+
+  demandas       Demanda[]
+  eventos        Evento[]
+  custos         CustoVideomaker[]
+  avaliacoes     AvaliacaoVideomaker[]
+  convites       ConviteVideomaker[]
+  notasFiscais   NotaFiscalUpload[]
 
   @@map("videomakers")
 }
@@ -203,12 +230,30 @@ model Editor {
   habilidades   String[]      // tags abertas de habilidades
   cargaLimite   Int           @default(5)
   status        StatusUsuario @default(ativo)
-  avaliacao     Float?        @default(5.0)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  avaliacao        Float?        @default(5.0)
+  cidade           String?
+  estado           String?
+  cpfCnpj          String?
+  razaoSocial      String?
+  nomeFantasia     String?
+  representante    String?
+  endereco         String?
+  chavePix         String?
+  redesSociais     String[]
+  salario          Float?           // ONLY visible to admin/gestor
+  dadosBancarios   String?
+  observacoes      String?
+  areasAtuacao     String[]
+  equipamentos     String[]
+  portfolio        String?
+  emListaNegra     Boolean          @default(false)
+  listaNegraMotivo String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   demandas   Demanda[]
   avaliacoes AvaliacaoEditor[]
+  eventos    Evento[]
 
   @@map("editores")
 }
@@ -227,6 +272,8 @@ model Demanda {
   statusInterno  StatusInterno @default(pedido_criado)
   pesoDemanda    Float         @default(1)
   riscoAtraso    Boolean       @default(false)
+
+  classificacao     String?    // "b2c" | "b2b" — classification of the video
 
   // Dados extras por departamento
   campanha          String?
@@ -248,6 +295,20 @@ model Demanda {
 
   // Impedimento
   motivoImpedimento String?
+
+  // Telefone do solicitante (capturado via WhatsApp para follow-up)
+  telefoneSolicitante String?
+
+  // Cliente final (cobertura/entrega de equipamento)
+  clienteFinalNome     String?
+  clienteFinalTelefone String?
+  clienteFinalEmail    String?
+
+  // Nota fiscal
+  notaFiscalUrl  String?
+  notaFiscalNome String?
+
+  trelloCardId      String?  @unique  // Trello card ID to prevent re-import
 
   // Relações de usuários (FKs)
   solicitanteId String
@@ -279,8 +340,55 @@ model Demanda {
   logsAutomacao      LogAutomacao[]
   eventos            Evento[]
   custos             CustoVideomaker[]
+  produtos           DemandaProduto[]
+  checklistItens     ChecklistItem[]
+  convites           ConviteVideomaker[]
+  notasFiscais       NotaFiscalUpload[]
+  ideia              IdeiaVideo?
 
   @@map("demandas")
+}
+
+// ── Checklist System (estilo Trello) ──────────────────────────────────────────
+
+model ChecklistTemplate {
+  id        String                  @id @default(cuid())
+  nome      String                  // "Entrega Equipamento - VM Externo"
+  tipoVideo String?                 // match automático ao criar demanda
+  papel     String?                 // "videomaker_externo" | "editor" | "social" | "geral"
+  ativo     Boolean                 @default(true)
+  itens     ChecklistTemplateItem[]
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  @@map("checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id         String            @id @default(cuid())
+  templateId String
+  texto      String
+  ordem      Int               @default(0)
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_template_itens")
+}
+
+model ChecklistItem {
+  id           String    @id @default(cuid())
+  demandaId    String
+  texto        String
+  concluido    Boolean   @default(false)
+  concluidoEm  DateTime?
+  concluidoPor String?
+  ordem        Int       @default(0)
+  grupo        String?   // "videomaker_externo", "editor", "social", "geral"
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_itens")
 }
 
 model Arquivo {
@@ -380,8 +488,10 @@ model MensagemWhatsapp {
   id           String          @id @default(cuid())
   demandaId    String?
   telefone     String
-  tipoMensagem String
+  tipoMensagem String          // "text" | "image" | "video" | "audio" | "document"
   conteudo     String
+  mediaUrl     String?         // URL do arquivo no Supabase Storage (se mídia)
+  mediaType    String?         // MIME type (ex: "image/jpeg", "audio/ogg")
   direcao      DirecaoWhatsapp @default(saida)
   status       String          @default("enviado")
   createdAt    DateTime        @default(now())
@@ -452,7 +562,8 @@ model Evento {
   // Relações opcionais
   demandaId    String?
   usuarioId    String?        // admin/gestor
-  videomakerId String?        // agenda do videomaker
+  videomakerId String?        // agenda do videomaker externo
+  editorId     String?        // agenda do videomaker interno (editor)
 
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -460,6 +571,7 @@ model Evento {
   demanda    Demanda?    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
   usuario    Usuario?    @relation(fields: [usuarioId], references: [id])
   videomaker Videomaker? @relation(fields: [videomakerId], references: [id])
+  editor     Editor?     @relation(fields: [editorId], references: [id])
 
   @@map("eventos")
 }
@@ -520,6 +632,7 @@ enum TipoRelatorio {
   semanal
   mensal
   realtime
+  banco_ideias
 }
 
 model RelatorioIA {
@@ -655,4 +768,203 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@map("password_reset_tokens")
+}
+
+// ─────────────────────────────────────────────
+// PRODUTOS & CONTEÚDO
+// ─────────────────────────────────────────────
+
+model Fabricante {
+  id        String    @id @default(cuid())
+  nome      String    @unique
+  ativo     Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  produtos  Produto[]
+
+  @@map("fabricantes")
+}
+
+model Produto {
+  id              String      @id @default(cuid())
+  nome            String
+  descricao       String?
+  categoria       String?     // legacy — use fabricanteId
+  fabricanteId    String?
+  peso            Float       @default(1.0)    // 1-10 priority weight
+  ativo           Boolean     @default(true)
+  alertaDias      Int         @default(30)     // alert if no content in X days
+  ultimoConteudo  DateTime?                  // denormalized: last content date
+  totalConteudos  Int       @default(0)      // denormalized: total content count
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  fabricante      Fabricante?      @relation(fields: [fabricanteId], references: [id])
+  demandas        DemandaProduto[]
+  ideias          IdeiaVideo[]
+
+  @@map("produtos")
+}
+
+model DemandaProduto {
+  id         String   @id @default(cuid())
+  demandaId  String
+  produtoId  String
+  createdAt  DateTime @default(now())
+
+  demanda    Demanda  @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  produto    Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@unique([demandaId, produtoId])
+  @@map("demanda_produto")
+}
+
+// ─────────────────────────────────────────────
+// BANCO DE IDEIAS
+// ─────────────────────────────────────────────
+
+model IdeiaVideo {
+  id              String       @id @default(cuid())
+  titulo          String
+  descricao       String?      @db.Text
+  linkReferencia  String?
+  mediaUrl        String?
+  mediaType       String?
+  origem          OrigemIdeia  @default(manual)
+  plataforma      String?      // auto-detected: instagram, tiktok, youtube
+  status          StatusIdeia  @default(nova)
+  classificacao   String?      // b2c, b2b
+
+  // IA Analysis
+  scoreIA            Float?    // 0-100
+  analiseIA          String?   @db.Text
+  sugestaoTipo       String?
+  sugestaoPrioridade String?
+  analisadoEm        DateTime?
+
+  // Quem enviou
+  enviadoPor     String?
+  telefoneOrigem String?
+  usuarioId      String?
+
+  // Produto
+  produtoId String?
+
+  // Conversão em demanda
+  demandaId    String?   @unique
+  convertidoEm DateTime?
+
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+  produto Produto? @relation(fields: [produtoId], references: [id])
+  demanda Demanda? @relation(fields: [demandaId], references: [id])
+
+  @@map("ideias_video")
+}
+
+// ─────────────────────────────────────────────
+// TRELLO
+// ─────────────────────────────────────────────
+
+model ConfigTrello {
+  id          String   @id @default(cuid())
+  apiKey      String
+  token       String
+  boardId     String
+  ativo       Boolean  @default(true)
+  listMapping Json?    // { "trello_list_id": "entrada", ... }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("config_trello")
+}
+
+// ─────────────────────────────────────────────
+// PERMISSÕES CONFIGURÁVEIS POR USUÁRIO
+// ─────────────────────────────────────────────
+
+model PermissaoUsuario {
+  id        String   @id @default(cuid())
+  usuarioId String   @unique
+
+  // Páginas visíveis (checklist)
+  verDashboard    Boolean @default(true)
+  verDemandas     Boolean @default(true)
+  verAprovacoes   Boolean @default(false)
+  verAgenda       Boolean @default(false)
+  verProdutos     Boolean @default(false)
+  verVideomakers  Boolean @default(false)
+  verEquipe       Boolean @default(false)
+  verCustos       Boolean @default(false)
+  verIA           Boolean @default(false)
+  verAlertas      Boolean @default(false)
+  verRelatorios   Boolean @default(false)
+  verUsuarios     Boolean @default(false)
+  verConfiguracoes Boolean @default(false)
+  verIdeias        Boolean @default(false)
+
+  // Ações em demandas
+  criarDemanda    Boolean @default(false)
+  editarDemanda   Boolean @default(false)
+  excluirDemanda  Boolean @default(false)
+  moverKanban     Boolean @default(false)
+
+  // Visão de demandas
+  verTodasDemandas Boolean @default(false) // false = só as próprias
+  verKanban        Boolean @default(true)  // false = visualização em cards
+
+  // Admin
+  gerenciarUsuarios Boolean @default(false)
+  gerenciarConfig   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("permissoes_usuario")
+}
+
+// ─────────────────────────────────────────────
+// CONVITE DE VIDEOMAKER (atribuição a demanda)
+// ─────────────────────────────────────────────
+
+model ConviteVideomaker {
+  id           String    @id @default(cuid())
+  demandaId    String
+  videomakerId String
+  token        String    @unique @default(cuid())
+  status       String    @default("pendente") // pendente | aceito | recusado | expirado
+  respondidoEm DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  demanda    Demanda    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  videomaker Videomaker @relation(fields: [videomakerId], references: [id])
+
+  @@map("convites_videomaker")
+}
+
+// ─────────────────────────────────────────────
+// NOTA FISCAL UPLOAD (link público)
+// ─────────────────────────────────────────────
+
+model NotaFiscalUpload {
+  id           String   @id @default(cuid())
+  demandaId    String
+  videomakerId String
+  token        String   @unique @default(cuid())
+  url          String?        // Supabase Storage URL após upload
+  nomeArquivo  String?
+  status       String   @default("pendente") // pendente | enviada | aprovada | rejeitada
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  demanda    Demanda    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  videomaker Videomaker @relation(fields: [videomakerId], references: [id])
+
+  @@map("notas_fiscais")
 }

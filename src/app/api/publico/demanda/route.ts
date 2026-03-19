@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
+import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -12,11 +13,15 @@ const schema = z.object({
   titulo: z.string().min(3, "Título obrigatório"),
   descricao: z.string().min(10, "Descrição obrigatória"),
   tipoVideo: z.string().min(1),
-  cidade: z.string().min(2),
+  cidade: z.string().optional().default("N/A"),
   dataLimite: z.string().optional(),
   dataEvento: z.string().optional(),
   localEvento: z.string().optional(),
   referencia: z.string().optional(),
+  // Cobertura — cliente final
+  clienteFinalNome: z.string().optional(),
+  clienteFinalTelefone: z.string().optional(),
+  clienteFinalEmail: z.string().optional(),
 })
 
 function gerarCodigo(): string {
@@ -39,7 +44,6 @@ export async function POST(req: NextRequest) {
   let solicitante = await prisma.usuario.findUnique({ where: { email: data.email } })
 
   if (!solicitante) {
-    // Cria conta básica de solicitante externo (sem senha real, precisará resetar)
     const { randomBytes } = await import("crypto")
     const bcrypt = (await import("bcryptjs")).default
     const tempSenha = randomBytes(16).toString("hex")
@@ -54,27 +58,43 @@ export async function POST(req: NextRequest) {
         senhaHash,
       },
     })
+  } else if (!solicitante.telefone && data.telefone) {
+    // Atualiza telefone se ainda não tinha
+    await prisma.usuario.update({
+      where: { id: solicitante.id },
+      data: { telefone: data.telefone },
+    })
   }
 
+  const isCobertura = data.tipoVideo === "cobertura_evento"
+  const departamento = isCobertura ? "eventos" : "outros"
   const peso = calcularPeso(data.tipoVideo, "normal")
+
+  // Normaliza telefone do solicitante para WhatsApp
+  const telSolicitante = data.telefone.replace(/\D/g, "")
 
   const demanda = await prisma.demanda.create({
     data: {
       codigo: gerarCodigo(),
       titulo: data.titulo,
       descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : ""),
-      departamento: "outros",
+      departamento,
       tipoVideo: data.tipoVideo,
-      cidade: data.cidade,
+      cidade: data.cidade || "N/A",
       prioridade: "normal",
       statusInterno: "aguardando_aprovacao_interna",
       statusVisivel: "entrada",
       pesoDemanda: peso,
       solicitanteId: solicitante.id,
+      telefoneSolicitante: telSolicitante,
       dataLimite: data.dataLimite ? new Date(data.dataLimite) : undefined,
       dataEvento: data.dataEvento ? new Date(data.dataEvento) : undefined,
       localEvento: data.localEvento,
       referencia: data.referencia,
+      // Cliente final (cobertura)
+      clienteFinalNome: data.clienteFinalNome,
+      clienteFinalTelefone: data.clienteFinalTelefone,
+      clienteFinalEmail: data.clienteFinalEmail,
     },
   })
 
@@ -84,7 +104,7 @@ export async function POST(req: NextRequest) {
       statusNovo: "aguardando_aprovacao_interna",
       usuarioId: solicitante.id,
       origem: "manual",
-      observacao: "Demanda criada via formulário externo",
+      observacao: `Demanda criada via formulário externo por ${data.nomeCliente}`,
     },
   })
 
@@ -97,6 +117,31 @@ export async function POST(req: NextRequest) {
       acaoSugerida: "Aprovar ou recusar demanda externa",
     },
   })
+
+  // Notifica o solicitante via WhatsApp
+  if (telSolicitante.length >= 10) {
+    const primeiroNome = data.nomeCliente.split(" ")[0]
+    await sendWhatsappMessage(
+      telSolicitante,
+      `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`,
+      demanda.id
+    ).catch(() => null)
+  }
+
+  // Notifica gestores via WhatsApp
+  const gestores = await prisma.usuario.findMany({
+    where: { tipo: { in: ["admin", "gestor"] }, status: "ativo" },
+    select: { telefone: true, nome: true },
+  })
+  for (const g of gestores) {
+    if (g.telefone) {
+      sendWhatsappMessage(
+        g.telefone,
+        `📥 *Nova solicitação externa*\n\n📋 *${demanda.codigo}* — ${data.titulo}\n👤 De: ${data.nomeCliente} (${data.telefone})\n${isCobertura ? `📸 Cobertura em ${data.cidade}` : `🎬 Vídeo: ${data.tipoVideo}`}\n\nAguarda aprovação no sistema.`,
+        demanda.id
+      ).catch(() => null)
+    }
+  }
 
   return NextResponse.json({ ok: true, codigo: demanda.codigo }, { status: 201 })
 }

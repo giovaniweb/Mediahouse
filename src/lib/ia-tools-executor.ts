@@ -41,6 +41,16 @@ export async function executarFerramenta(
         return await buscarDemandaPorCodigo(input)
       case "listar_gestores":
         return await listarGestores()
+      case "estruturar_demanda":
+        return await estruturarDemanda(input)
+      case "solicitar_dados_demanda":
+        return await solicitarDadosDemanda(input)
+      case "vincular_arquivo_demanda":
+        return await vincularArquivoDemanda(input)
+      case "salvar_ideia_video":
+        return await salvarIdeiaVideo(input)
+      case "buscar_ideias":
+        return await buscarIdeias(input)
       default:
         return JSON.stringify({ erro: `Ferramenta '${nome}' não encontrada` })
     }
@@ -342,7 +352,8 @@ async function buscarHistoricoDemanda(input: Record<string, unknown>): Promise<s
 // ─── Novas ferramentas ────────────────────────────────────────────────────────
 
 /**
- * Busca agenda (eventos + captações) de um videomaker por período
+ * Busca agenda de um videomaker (externo) ou editor (videomaker interno).
+ * Aceita videomaker_id, editor_id, nome ou telefone.
  */
 async function buscarAgendaVideomaker(input: Record<string, unknown>): Promise<string> {
   const hoje = new Date()
@@ -350,22 +361,85 @@ async function buscarAgendaVideomaker(input: Record<string, unknown>): Promise<s
   const inicio = input.inicio ? new Date(input.inicio as string) : hoje
   const fim = new Date(inicio.getTime() + diasFuturos * 86400000)
 
+  // Tenta encontrar editor (videomaker interno) primeiro
+  if (input.editor_id) {
+    const editor = await prisma.editor.findUnique({
+      where: { id: input.editor_id as string },
+      select: { id: true, nome: true, telefone: true },
+    })
+    if (editor) {
+      const eventos = await prisma.evento.findMany({
+        where: { editorId: editor.id, inicio: { gte: inicio, lte: fim }, status: { not: "cancelado" } },
+        orderBy: { inicio: "asc" },
+        select: {
+          id: true, titulo: true, descricao: true, inicio: true,
+          fim: true, diaTodo: true, tipo: true, status: true, local: true,
+          demanda: { select: { codigo: true, titulo: true } },
+        },
+      })
+      return JSON.stringify({
+        pessoa: editor.nome,
+        tipo_pessoa: "editor (videomaker interno)",
+        editor_id: editor.id,
+        telefone: editor.telefone,
+        periodo: `${inicio.toLocaleDateString("pt-BR")} — ${fim.toLocaleDateString("pt-BR")}`,
+        eventos,
+        totalOcupacoes: eventos.length,
+      })
+    }
+  }
+
+  // Busca videomaker externo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vmWhere: any = {}
   if (input.videomaker_id) vmWhere.id = input.videomaker_id
   else if (input.nome) vmWhere.nome = { contains: input.nome as string, mode: "insensitive" }
   else if (input.telefone) vmWhere.telefone = { contains: (input.telefone as string).slice(-8) }
 
+  // Se não encontrou por videomaker, tenta editor por nome/telefone
+  if (!input.videomaker_id && (input.nome || input.telefone)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const edWhere: any = {}
+    if (input.nome) edWhere.nome = { contains: input.nome as string, mode: "insensitive" }
+    else if (input.telefone) {
+      edWhere.OR = [
+        { telefone: { contains: (input.telefone as string).slice(-8) } },
+        { whatsapp: { contains: (input.telefone as string).slice(-8) } },
+      ]
+    }
+    const editor = await prisma.editor.findFirst({ where: edWhere, select: { id: true, nome: true, telefone: true } })
+    if (editor) {
+      const eventos = await prisma.evento.findMany({
+        where: { editorId: editor.id, inicio: { gte: inicio, lte: fim }, status: { not: "cancelado" } },
+        orderBy: { inicio: "asc" },
+        select: {
+          id: true, titulo: true, descricao: true, inicio: true,
+          fim: true, diaTodo: true, tipo: true, status: true, local: true,
+          demanda: { select: { codigo: true, titulo: true } },
+        },
+      })
+      return JSON.stringify({
+        pessoa: editor.nome,
+        tipo_pessoa: "editor (videomaker interno)",
+        editor_id: editor.id,
+        telefone: editor.telefone,
+        periodo: `${inicio.toLocaleDateString("pt-BR")} — ${fim.toLocaleDateString("pt-BR")}`,
+        eventos,
+        totalOcupacoes: eventos.length,
+      })
+    }
+  }
+
   const videomaker = await prisma.videomaker.findFirst({
     where: vmWhere,
     select: { id: true, nome: true, telefone: true },
   })
 
-  if (!videomaker) return JSON.stringify({ erro: "Videomaker não encontrado", input })
+  if (!videomaker) return JSON.stringify({ erro: "Nenhum videomaker ou editor encontrado", input })
 
   const [eventos, captacoes] = await Promise.all([
     prisma.evento.findMany({
-      where: { videomakerId: videomaker.id, inicio: { gte: inicio, lte: fim } },
+      where: { videomakerId: videomaker.id, inicio: { gte: inicio, lte: fim }, status: { not: "cancelado" } },
       orderBy: { inicio: "asc" },
       select: {
         id: true, titulo: true, descricao: true, inicio: true,
@@ -384,7 +458,8 @@ async function buscarAgendaVideomaker(input: Record<string, unknown>): Promise<s
   ])
 
   return JSON.stringify({
-    videomaker: videomaker.nome,
+    pessoa: videomaker.nome,
+    tipo_pessoa: "videomaker externo",
     videomaker_id: videomaker.id,
     telefone: videomaker.telefone,
     periodo: `${inicio.toLocaleDateString("pt-BR")} — ${fim.toLocaleDateString("pt-BR")}`,
@@ -395,14 +470,108 @@ async function buscarAgendaVideomaker(input: Record<string, unknown>): Promise<s
 }
 
 /**
- * Cria evento na agenda de um videomaker (secretária virtual)
+ * Verifica conflitos de agenda para um período
+ */
+async function verificarConflitos(
+  inicio: Date,
+  fim: Date,
+  opts: { videomakerId?: string; editorId?: string; usuarioId?: string }
+): Promise<{ conflito: boolean; eventoConflitante?: { titulo: string; inicio: Date; fim: Date; local?: string | null }; sugestoes: string[] }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {
+    status: { not: "cancelado" },
+    OR: [
+      // Novo evento começa durante evento existente
+      { inicio: { lte: inicio }, fim: { gt: inicio } },
+      // Novo evento termina durante evento existente
+      { inicio: { lt: fim }, fim: { gte: fim } },
+      // Evento existente está completamente dentro do novo
+      { inicio: { gte: inicio }, fim: { lte: fim } },
+    ],
+  }
+
+  if (opts.editorId) where.editorId = opts.editorId
+  else if (opts.videomakerId) where.videomakerId = opts.videomakerId
+  else if (opts.usuarioId) where.usuarioId = opts.usuarioId
+
+  const conflitantes = await prisma.evento.findMany({
+    where,
+    orderBy: { inicio: "asc" },
+    take: 3,
+    select: { titulo: true, inicio: true, fim: true, local: true },
+  })
+
+  if (conflitantes.length === 0) {
+    return { conflito: false, sugestoes: [] }
+  }
+
+  // Gera sugestões de horários livres no mesmo dia
+  const duracao = fim.getTime() - inicio.getTime()
+  const diaInicio = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate(), 8, 0) // 8h
+  const diaFim = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate(), 20, 0) // 20h
+
+  // Busca todos os eventos do dia para encontrar gaps
+  const ownerWhere = opts.editorId
+    ? { editorId: opts.editorId }
+    : opts.videomakerId
+    ? { videomakerId: opts.videomakerId }
+    : { usuarioId: opts.usuarioId }
+
+  const eventosDoDia = await prisma.evento.findMany({
+    where: {
+      ...ownerWhere,
+      status: { not: "cancelado" },
+      inicio: { gte: diaInicio, lt: new Date(diaInicio.getTime() + 86400000) },
+    },
+    orderBy: { inicio: "asc" },
+    select: { inicio: true, fim: true },
+  })
+
+  const sugestoes: string[] = []
+
+  // Encontra slots livres
+  let cursor = diaInicio.getTime()
+  for (const ev of eventosDoDia) {
+    const evInicio = ev.inicio.getTime()
+    const evFim = ev.fim.getTime()
+    if (evInicio - cursor >= duracao) {
+      const sugInicio = new Date(cursor)
+      sugestoes.push(sugInicio.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }))
+    }
+    cursor = Math.max(cursor, evFim)
+  }
+  // Depois do último evento
+  if (diaFim.getTime() - cursor >= duracao) {
+    const sugInicio = new Date(cursor)
+    sugestoes.push(sugInicio.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }))
+  }
+
+  // Se não encontrou no mesmo dia, sugere o dia seguinte
+  if (sugestoes.length === 0) {
+    const amanha = new Date(inicio.getTime() + 86400000)
+    amanha.setHours(inicio.getHours(), inicio.getMinutes(), 0, 0)
+    sugestoes.push(`Amanhã ${amanha.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" })}`)
+  }
+
+  return {
+    conflito: true,
+    eventoConflitante: conflitantes[0],
+    sugestoes: sugestoes.slice(0, 3),
+  }
+}
+
+/**
+ * Cria evento com verificação de conflitos.
+ * Se conflito encontrado, retorna sugestões ao invés de criar.
  */
 async function criarEventoAgenda(input: Record<string, unknown>): Promise<string> {
   const videomakerId = (input.videomaker_id as string) || undefined
+  const editorId = (input.editor_id as string) || undefined
   const usuarioId = (input.usuario_id as string) || undefined
+  const forcar = (input.forcar as boolean) ?? false
 
-  if (!videomakerId && !usuarioId) {
-    return JSON.stringify({ erro: "Informe videomaker_id (para videomaker) ou usuario_id (para gestor/admin)" })
+  if (!videomakerId && !editorId && !usuarioId) {
+    return JSON.stringify({ erro: "Informe editor_id (videomaker interno), videomaker_id (externo) ou usuario_id (gestor)" })
   }
 
   const inicio = new Date(input.inicio as string)
@@ -410,6 +579,27 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
     ? new Date(input.fim as string)
     : new Date(inicio.getTime() + 2 * 3600000)
 
+  // ── Verifica conflitos (a menos que forcar=true) ──────────────────────
+  if (!forcar) {
+    const check = await verificarConflitos(inicio, fim, { videomakerId, editorId, usuarioId })
+    if (check.conflito && check.eventoConflitante) {
+      const ev = check.eventoConflitante
+      return JSON.stringify({
+        conflito: true,
+        criado: false,
+        evento_conflitante: {
+          titulo: ev.titulo,
+          inicio: ev.inicio.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+          fim: ev.fim.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+          local: ev.local,
+        },
+        sugestoes_horarios: check.sugestoes,
+        instrucao: `⚠️ CONFLITO: Já existe "${ev.titulo}" nesse horário. Sugestões de horários livres: ${check.sugestoes.join(", ")}. Informe ao usuário e pergunte qual horário prefere. Se insistir no horário original, chame criar_evento_agenda novamente com forcar=true.`,
+      })
+    }
+  }
+
+  // ── Cria o evento ─────────────────────────────────────────────────────
   const evento = await prisma.evento.create({
     data: {
       titulo: input.titulo as string,
@@ -422,14 +612,18 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
       status: "agendado",
       local: (input.local as string) ?? undefined,
       videomakerId,
+      editorId,
       usuarioId,
       demandaId: (input.demanda_id as string) ?? undefined,
     },
   })
 
-  // Nome do dono do evento
+  // Nome do dono
   let nomeResponsavel = "Usuário"
-  if (videomakerId) {
+  if (editorId) {
+    const ed = await prisma.editor.findUnique({ where: { id: editorId }, select: { nome: true } })
+    nomeResponsavel = ed?.nome ?? "Editor"
+  } else if (videomakerId) {
     const vm = await prisma.videomaker.findUnique({ where: { id: videomakerId }, select: { nome: true } })
     nomeResponsavel = vm?.nome ?? "Videomaker"
   } else if (usuarioId) {
@@ -439,12 +633,13 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
 
   return JSON.stringify({
     criado: true,
+    conflito: false,
     evento_id: evento.id,
     titulo: evento.titulo,
-    inicio: evento.inicio.toLocaleString("pt-BR"),
-    fim: evento.fim.toLocaleString("pt-BR"),
+    inicio: evento.inicio.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+    fim: evento.fim.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
     responsavel: nomeResponsavel,
-    mensagem: `Evento "${evento.titulo}" criado para ${nomeResponsavel} em ${evento.inicio.toLocaleDateString("pt-BR")}`,
+    mensagem: `Evento "${evento.titulo}" agendado para ${nomeResponsavel} em ${evento.inicio.toLocaleDateString("pt-BR")}`,
   })
 }
 
@@ -484,6 +679,11 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
   }
   if (!solicitanteId) return JSON.stringify({ erro: "Nenhum gestor encontrado para vincular" })
 
+  // Normaliza telefone do solicitante
+  const telSolicitante = input.telefone_solicitante
+    ? (input.telefone_solicitante as string).replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/\D/g, "")
+    : undefined
+
   const demanda = await prisma.demanda.create({
     data: {
       codigo,
@@ -496,6 +696,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
       statusInterno: "aguardando_aprovacao_interna",
       statusVisivel: "entrada",
       solicitanteId,
+      telefoneSolicitante: telSolicitante || undefined,
     },
   })
 
@@ -542,4 +743,241 @@ async function listarGestores(): Promise<string> {
     select: { id: true, nome: true, telefone: true, email: true, tipo: true },
   })
   return JSON.stringify({ total: gestores.length, gestores })
+}
+
+// ─── Ferramentas Fase WhatsApp Avançado ──────────────────────────────────────
+
+/**
+ * Estrutura uma descrição vaga/informal em campos organizados de demanda.
+ * Usa IA para interpretar e retorna os dados estruturados (sem criar a demanda).
+ */
+async function estruturarDemanda(input: Record<string, unknown>): Promise<string> {
+  const texto = input.texto_original as string
+  if (!texto) return JSON.stringify({ erro: "texto_original é obrigatório" })
+
+  // Usa heurísticas para extrair dados sem chamar IA (evita loop recursivo)
+  const textoLower = texto.toLowerCase()
+
+  // Detecta tipo de vídeo
+  let tipoVideo = "institucional"
+  if (textoLower.includes("evento") || textoLower.includes("cobertura") || textoLower.includes("aftermovie")) tipoVideo = "cobertura_evento"
+  else if (textoLower.includes("social") || textoLower.includes("instagram") || textoLower.includes("tiktok") || textoLower.includes("reels")) tipoVideo = "social_media"
+  else if (textoLower.includes("treinamento") || textoLower.includes("curso")) tipoVideo = "treinamento"
+  else if (textoLower.includes("ads") || textoLower.includes("meta") || textoLower.includes("anúncio")) tipoVideo = "video_meta_ads"
+  else if (textoLower.includes("vsl") || textoLower.includes("vendas")) tipoVideo = "vsl"
+
+  // Detecta departamento
+  let departamento = "outros"
+  if (textoLower.includes("growth") || textoLower.includes("marketing")) departamento = "growth"
+  else if (textoLower.includes("evento")) departamento = "eventos"
+  else if (textoLower.includes("institucional") || textoLower.includes("empresa")) departamento = "institucional"
+  else if (textoLower.includes("rh") || textoLower.includes("recurso")) departamento = "rh"
+
+  // Detecta prioridade
+  let prioridade = "normal"
+  if (textoLower.includes("urgente") || textoLower.includes("urgência") || textoLower.includes("pra ontem")) prioridade = "urgente"
+  else if (textoLower.includes("importante") || textoLower.includes("prioridade")) prioridade = "alta"
+
+  // Detecta cidade (padrões simples)
+  let cidade = "A definir"
+  const cidadeMatch = texto.match(/(?:em|na|no)\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)?)/u)
+  if (cidadeMatch) cidade = cidadeMatch[1]
+
+  // Gera título curto a partir do texto
+  const titulo = texto.length > 60 ? texto.slice(0, 57) + "..." : texto
+
+  const estruturada = {
+    titulo,
+    descricao: texto,
+    tipo_video: tipoVideo,
+    departamento,
+    prioridade,
+    cidade,
+    nome_solicitante: (input.nome_solicitante as string) || "Desconhecido",
+    telefone_solicitante: (input.telefone_solicitante as string) || undefined,
+    resumo_para_confirmacao: `📋 *Demanda Estruturada:*\n\n📌 *Título:* ${titulo}\n🎬 *Tipo:* ${tipoVideo}\n🏢 *Depto:* ${departamento}\n⚡ *Prioridade:* ${prioridade}\n📍 *Cidade:* ${cidade}\n\n📝 *Descrição:* ${texto}`,
+  }
+
+  return JSON.stringify({
+    estruturada: true,
+    ...estruturada,
+    instrucao: "Apresente o resumo_para_confirmacao ao solicitante via enviar_whatsapp e pergunte se deseja confirmar. Se SIM, use criar_demanda_rascunho com os dados acima.",
+  })
+}
+
+/**
+ * Envia mensagem ao solicitante original de uma demanda pedindo dados faltantes
+ */
+async function solicitarDadosDemanda(input: Record<string, unknown>): Promise<string> {
+  // Busca a demanda
+  let demanda
+  if (input.demanda_id) {
+    demanda = await prisma.demanda.findUnique({
+      where: { id: input.demanda_id as string },
+      select: { id: true, codigo: true, titulo: true, telefoneSolicitante: true, solicitante: { select: { nome: true, telefone: true } } },
+    })
+  } else if (input.codigo_demanda) {
+    demanda = await prisma.demanda.findFirst({
+      where: { codigo: { equals: input.codigo_demanda as string, mode: "insensitive" } },
+      select: { id: true, codigo: true, titulo: true, telefoneSolicitante: true, solicitante: { select: { nome: true, telefone: true } } },
+    })
+  }
+
+  if (!demanda) return JSON.stringify({ erro: "Demanda não encontrada" })
+
+  // Determina o telefone do solicitante
+  const telefone = demanda.telefoneSolicitante || demanda.solicitante?.telefone
+  if (!telefone) {
+    return JSON.stringify({
+      erro: "Solicitante não tem telefone cadastrado. Não é possível enviar mensagem.",
+      demanda_codigo: demanda.codigo,
+    })
+  }
+
+  const mensagem = input.mensagem as string
+  const msgCompleta = `📋 *NuFlow — ${demanda.codigo}*\n\n${mensagem}\n\n_Responda esta mensagem com as informações solicitadas._`
+
+  const resultado = await sendWhatsappMessage(telefone, msgCompleta, demanda.id)
+
+  return JSON.stringify({
+    enviado: !!resultado,
+    telefone,
+    demanda_codigo: demanda.codigo,
+    dados_faltantes: (input.dados_faltantes as string) || "dados gerais",
+    mensagem: `Mensagem enviada para o solicitante de ${demanda.codigo}`,
+  })
+}
+
+/**
+ * Vincula arquivo recebido via WhatsApp a uma demanda
+ */
+async function vincularArquivoDemanda(input: Record<string, unknown>): Promise<string> {
+  // Busca demanda
+  let demandaId = input.demanda_id as string | undefined
+  if (!demandaId && input.codigo_demanda) {
+    const d = await prisma.demanda.findFirst({
+      where: { codigo: { equals: input.codigo_demanda as string, mode: "insensitive" } },
+      select: { id: true },
+    })
+    demandaId = d?.id
+  }
+
+  if (!demandaId) return JSON.stringify({ erro: "Demanda não encontrada" })
+
+  const arquivo = await prisma.arquivo.create({
+    data: {
+      demandaId,
+      tipoArquivo: ((input.tipo as string) || "referencia") as import("@prisma/client").TipoArquivo,
+      nomeArquivo: input.nome_arquivo as string,
+      url: input.url_arquivo as string,
+      origem: "whatsapp",
+    },
+  })
+
+  return JSON.stringify({
+    vinculado: true,
+    arquivo_id: arquivo.id,
+    demanda_id: demandaId,
+    nome: arquivo.nomeArquivo,
+    mensagem: `Arquivo "${arquivo.nomeArquivo}" vinculado à demanda.`,
+  })
+}
+
+// ─── Banco de Ideias ─────────────────────────────────────────────────────────
+
+/**
+ * Salva uma ideia de vídeo no Banco de Ideias (via WhatsApp ou IA)
+ */
+async function salvarIdeiaVideo(input: Record<string, unknown>): Promise<string> {
+  const titulo = input.titulo as string
+  const telefone = input.telefone_origem as string
+  if (!titulo) return JSON.stringify({ erro: "titulo é obrigatório" })
+
+  // Auto-detect platform from link
+  const link = input.link_referencia as string | undefined
+  let plataforma: string | null = null
+  let origem: "whatsapp" | "instagram" | "tiktok" | "youtube" | "outro" = "whatsapp"
+
+  if (link) {
+    if (/instagram\.com/i.test(link)) { plataforma = "instagram"; origem = "instagram" }
+    else if (/tiktok\.com/i.test(link)) { plataforma = "tiktok"; origem = "tiktok" }
+    else if (/youtu(be\.com|\.be)/i.test(link)) { plataforma = "youtube"; origem = "youtube" }
+  }
+
+  // Try to match product by name
+  let produtoId: string | null = null
+  if (input.produto_nome) {
+    const produto = await prisma.produto.findFirst({
+      where: { nome: { contains: input.produto_nome as string, mode: "insensitive" }, ativo: true },
+      select: { id: true, nome: true },
+    })
+    produtoId = produto?.id || null
+  }
+
+  const ideia = await prisma.ideiaVideo.create({
+    data: {
+      titulo,
+      descricao: (input.descricao as string) || null,
+      linkReferencia: link || null,
+      mediaUrl: (input.media_url as string) || null,
+      origem,
+      plataforma,
+      classificacao: (input.classificacao as string) || null,
+      enviadoPor: (input.nome_origem as string) || null,
+      telefoneOrigem: telefone ? telefone.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/\D/g, "") : null,
+      produtoId,
+      tags: [],
+    },
+  })
+
+  const totalIdeias = await prisma.ideiaVideo.count()
+
+  return JSON.stringify({
+    salvo: true,
+    ideia_id: ideia.id,
+    titulo: ideia.titulo,
+    produto: produtoId ? "vinculado" : "sem produto",
+    total_ideias: totalIdeias,
+    mensagem: `💡 Ideia "${titulo}" salva no Banco de Ideias! Total: ${totalIdeias} ideias.`,
+  })
+}
+
+/**
+ * Busca ideias de vídeo no Banco de Ideias
+ */
+async function buscarIdeias(input: Record<string, unknown>): Promise<string> {
+  const limite = (input.limite as number) || 10
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {}
+  if (input.status) where.status = input.status
+  if (input.produto_nome) {
+    where.produto = { nome: { contains: input.produto_nome as string, mode: "insensitive" } }
+  }
+
+  const ideias = await prisma.ideiaVideo.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: limite,
+    include: {
+      produto: { select: { nome: true } },
+    },
+  })
+
+  const total = await prisma.ideiaVideo.count({ where })
+
+  return JSON.stringify({
+    total,
+    ideias: ideias.map(i => ({
+      id: i.id,
+      titulo: i.titulo,
+      status: i.status,
+      origem: i.origem,
+      scoreIA: i.scoreIA,
+      produto: i.produto?.nome || null,
+      classificacao: i.classificacao,
+      criadoEm: i.createdAt.toLocaleDateString("pt-BR"),
+      link: i.linkReferencia?.slice(0, 50) || null,
+    })),
+  })
 }

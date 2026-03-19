@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // ─── Coletar dados base ────────────────────────────────────────────────
     const dataInicio = periodo === "semanal" ? ha7dias : tipo === "realtime" ? ha7dias : ha30dias
 
-    const [demandas, custos, videomakers, alertas] = await Promise.all([
+    const [demandas, custos, videomakers, alertas, ideiasStats] = await Promise.all([
       prisma.demanda.findMany({
         where: { createdAt: { gte: dataInicio } },
         select: {
@@ -64,6 +64,17 @@ export async function POST(req: NextRequest) {
         select: { tipoAlerta: true, mensagem: true, severidade: true, createdAt: true },
         take: 20,
       }),
+      Promise.all([
+        prisma.ideiaVideo.count(),
+        prisma.ideiaVideo.count({ where: { status: "nova" } }),
+        prisma.ideiaVideo.count({ where: { status: "realizada" } }),
+        prisma.ideiaVideo.count({ where: { createdAt: { gte: dataInicio } } }),
+        prisma.ideiaVideo.groupBy({ by: ["origem"], _count: true }),
+      ]).then(([total, novas, realizadas, periodo, porOrigem]) => ({
+        total, novas, realizadas, periodo,
+        taxaConversao: total > 0 ? Math.round((realizadas / total) * 100) : 0,
+        porOrigem: porOrigem.map(o => ({ origem: o.origem, count: o._count })),
+      })),
     ])
 
     const historicosSemana = await prisma.historicoStatus.findMany({
@@ -126,6 +137,7 @@ DADOS DO PERÍODO (${periodoLabel}):
 - Alertas ativos: ${alertas.length}
 - Mudanças de status no período: ${historicosSemana.length}
 - Top videomakers: ${JSON.stringify(vmAtividade.slice(0, 5))}
+- Banco de Ideias: ${ideiasStats.total} ideias, ${ideiasStats.novas} novas, ${ideiasStats.realizadas} realizadas (taxa: ${ideiasStats.taxaConversao}%)
 
 RETORNE JSON com esta estrutura exata:
 {
@@ -243,6 +255,43 @@ RETORNE JSON com esta estrutura:
       tokens = t
       conteudo = extrairJSON(texto) ?? { resumo: texto }
 
+    } else if (tipo === "banco_ideias") {
+      const ideiasRecentes = await prisma.ideiaVideo.findMany({
+        where: { createdAt: { gte: dataInicio } },
+        include: { produto: { select: { nome: true } } },
+        orderBy: { scoreIA: "desc" },
+        take: 20,
+      })
+
+      const prompt = `Analise o Banco de Ideias de vídeo e gere um relatório estratégico sobre captura e conversão de ideias.
+
+DADOS DO BANCO DE IDEIAS (${periodoLabel}):
+- Total de ideias: ${ideiasStats.total}
+- Novas (sem análise): ${ideiasStats.novas}
+- Realizadas (convertidas em demanda): ${ideiasStats.realizadas}
+- Taxa de conversão: ${ideiasStats.taxaConversao}%
+- Ideias no período: ${ideiasStats.periodo}
+- Por origem: ${JSON.stringify(ideiasStats.porOrigem)}
+- Ideias recentes: ${JSON.stringify(ideiasRecentes.map(i => ({
+  titulo: i.titulo, score: i.scoreIA, status: i.status, origem: i.origem, produto: i.produto?.nome, classificacao: i.classificacao
+})))}
+
+RETORNE JSON com esta estrutura:
+{
+  "resumo_ideias": "string (2-3 parágrafos sobre o estado do banco de ideias)",
+  "score_inovacao": number (0-100),
+  "top_ideias": [{"titulo": "string", "score": number, "por_que": "string"}],
+  "origens_mais_eficazes": [{"origem": "string", "avaliacao": "string"}],
+  "taxa_conversao_analise": "string (análise da taxa de conversão)",
+  "sugestoes_captura": ["string (como capturar mais ideias)"],
+  "gaps_conteudo": ["string (produtos ou temas sem ideias)"],
+  "recomendacoes": [{"acao": "string", "prioridade": "alta|media|baixa", "impacto": "string"}]
+}`
+
+      const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
+      tokens = t
+      conteudo = extrairJSON(texto) ?? { resumo: texto }
+
     } else {
       // semanal, mensal, realtime — relatório geral
       const prompt = `Gere um relatório completo de ${tipo} (${periodoLabel}) para o sistema NuFlow de produção audiovisual.
@@ -259,6 +308,8 @@ DADOS CONSOLIDADOS:
 - Por tipo de vídeo: ${JSON.stringify(porTipo)}
 - Top videomakers: ${JSON.stringify(vmAtividade.slice(0, 3))}
 - Alertas recentes: ${JSON.stringify(alertas.slice(0, 5).map(a => a.mensagem))}
+- Banco de Ideias: ${ideiasStats.total} total, ${ideiasStats.novas} novas, ${ideiasStats.realizadas} realizadas, taxa conversão ${ideiasStats.taxaConversao}%, ${ideiasStats.periodo} no período
+- Ideias por origem: ${JSON.stringify(ideiasStats.porOrigem)}
 
 RETORNE JSON com esta estrutura:
 {

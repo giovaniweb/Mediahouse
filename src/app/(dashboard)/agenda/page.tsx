@@ -28,10 +28,10 @@ interface Evento {
 }
 
 const CONTEXTO_CONFIG: Record<string, { label: string; cor: string; icon: React.ElementType; textCor: string }> = {
-  contourline: { label: "Contourline", cor: "bg-blue-500", textCor: "text-blue-700", icon: Building2 },
-  freelance:   { label: "Freelance",   cor: "bg-green-500", textCor: "text-green-700", icon: Briefcase },
-  pessoal:     { label: "Pessoal",     cor: "bg-purple-500", textCor: "text-purple-700", icon: User },
-  sistema:     { label: "Sistema",     cor: "bg-zinc-400", textCor: "text-zinc-600", icon: Film },
+  contourline: { label: "Contourline", cor: "bg-blue-500", textCor: "text-blue-400", icon: Building2 },
+  freelance:   { label: "Freelance",   cor: "bg-green-500", textCor: "text-green-400", icon: Briefcase },
+  pessoal:     { label: "Pessoal",     cor: "bg-purple-500", textCor: "text-purple-400", icon: User },
+  sistema:     { label: "Sistema",     cor: "bg-zinc-400", textCor: "text-zinc-400", icon: Film },
 }
 
 const TIPO_OPTS = [
@@ -212,22 +212,22 @@ export default function AgendaPage() {
           {/* Controles */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <button onClick={() => setMesAtual(m => subMonths(m, 1))} className="p-1.5 hover:bg-zinc-100 rounded-lg">
+              <button onClick={() => setMesAtual(m => subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <h2 className="text-sm font-semibold text-zinc-800 capitalize min-w-36 text-center">
+              <h2 className="text-sm font-semibold text-zinc-200 capitalize min-w-36 text-center">
                 {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
               </h2>
-              <button onClick={() => setMesAtual(m => addMonths(m, 1))} className="p-1.5 hover:bg-zinc-100 rounded-lg">
+              <button onClick={() => setMesAtual(m => addMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronRight className="w-4 h-4" />
               </button>
-              <button onClick={() => setMesAtual(new Date())} className="text-xs text-zinc-500 hover:text-zinc-800 ml-2 border border-zinc-200 px-2 py-1 rounded-lg">Hoje</button>
+              <button onClick={() => setMesAtual(new Date())} className="text-xs text-zinc-400 hover:text-zinc-200 ml-2 border border-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-800">Hoje</button>
             </div>
 
             {/* Filtros de contexto */}
             <div className="flex items-center gap-1.5">
               <button onClick={() => setFiltroCtx("todas")} className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
-                filtroCtx === "todas" ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 text-zinc-500 hover:border-zinc-400")}>
+                filtroCtx === "todas" ? "bg-zinc-700 text-white border-zinc-600" : "border-zinc-700 text-zinc-400 hover:border-zinc-500")}>
                 Todos
               </button>
               {Object.entries(CONTEXTO_CONFIG).map(([key, cfg]) => {
@@ -235,7 +235,7 @@ export default function AgendaPage() {
                 return (
                   <button key={key} onClick={() => setFiltroCtx(key)}
                     className={cn("flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors",
-                      filtroCtx === key ? `${cfg.cor} text-white border-transparent` : "border-zinc-200 text-zinc-500 hover:border-zinc-400")}>
+                      filtroCtx === key ? `${cfg.cor} text-white border-transparent` : "border-zinc-700 text-zinc-400 hover:border-zinc-500")}>
                     <Icon className="w-3 h-3" />{cfg.label}
                   </button>
                 )
@@ -245,7 +245,7 @@ export default function AgendaPage() {
 
           {/* Alertas de conflito */}
           {conflitos.length > 0 && (
-            <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 mb-3 text-xs text-orange-700">
+            <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2 mb-3 text-xs text-orange-400">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               <span>
                 Conflito detectado em: {conflitos.map(d => format(parseISO(d), "dd/MM", { locale: ptBR })).join(", ")} —
@@ -255,11 +255,11 @@ export default function AgendaPage() {
           )}
 
           {/* Grid */}
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden flex-1">
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1">
             {/* Cabeçalho dias da semana */}
-            <div className="grid grid-cols-7 border-b border-zinc-100">
+            <div className="grid grid-cols-7 border-b border-zinc-800">
               {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
-                <div key={d} className="text-center text-xs font-semibold text-zinc-400 py-2">{d}</div>
+                <div key={d} className="text-center text-xs font-semibold text-zinc-500 py-2">{d}</div>
               ))}
             </div>
 
@@ -276,18 +276,18 @@ export default function AgendaPage() {
                     key={i}
                     onClick={() => setDiaSelec(dia)}
                     className={cn(
-                      "min-h-[80px] p-1.5 border-b border-r border-zinc-100 cursor-pointer transition-colors",
-                      !isMes && "bg-zinc-50/50",
-                      isSelec && "bg-blue-50 ring-1 ring-inset ring-blue-200",
-                      isToday(dia) && !isSelec && "bg-amber-50/50",
-                      "hover:bg-zinc-50"
+                      "min-h-[80px] p-1.5 border-b border-r border-zinc-800/50 cursor-pointer transition-colors",
+                      !isMes && "bg-zinc-900/30",
+                      isSelec && "bg-blue-500/10 ring-1 ring-inset ring-blue-500/30",
+                      isToday(dia) && !isSelec && "bg-amber-500/5",
+                      "hover:bg-zinc-800/50"
                     )}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className={cn("text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
-                        isToday(dia) ? "bg-zinc-900 text-white" :
-                        isSelec ? "text-blue-700 font-bold" :
-                        !isMes ? "text-zinc-300" : "text-zinc-700"
+                        isToday(dia) ? "bg-blue-500 text-white" :
+                        isSelec ? "text-blue-400 font-bold" :
+                        !isMes ? "text-zinc-600" : "text-zinc-300"
                       )}>
                         {format(dia, "d")}
                       </span>
@@ -332,21 +332,21 @@ export default function AgendaPage() {
         {/* COLUNA DIREITA — Eventos do dia selecionado */}
         <div className="w-72 shrink-0 flex flex-col gap-3">
           {diaSelec && (
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-zinc-800 text-sm">
+                <h3 className="font-semibold text-zinc-200 text-sm">
                   {format(diaSelec, "EEEE, d 'de' MMMM", { locale: ptBR })}
                 </h3>
-                <button onClick={() => abrirForm(diaSelec)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800">
+                <button onClick={() => abrirForm(diaSelec)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200">
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               {eventosDoSelecionado.length === 0 ? (
                 <div className="text-center py-6">
-                  <Calendar className="w-8 h-8 text-zinc-200 mx-auto mb-2" />
-                  <p className="text-xs text-zinc-400">Nenhum evento</p>
-                  <button onClick={() => abrirForm(diaSelec)} className="text-xs text-blue-500 hover:underline mt-1">
+                  <Calendar className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-500">Nenhum evento</p>
+                  <button onClick={() => abrirForm(diaSelec)} className="text-xs text-blue-400 hover:underline mt-1">
                     + Adicionar
                   </button>
                 </div>
@@ -359,7 +359,7 @@ export default function AgendaPage() {
                       <div key={e.id}
                         onClick={() => setEventoSelec(e)}
                         style={{ borderLeftColor: e.cor ?? "#71717a" }}
-                        className="border-l-4 pl-3 py-2 cursor-pointer hover:bg-zinc-50 rounded-r-lg transition-colors">
+                        className="border-l-4 pl-3 py-2 cursor-pointer hover:bg-zinc-800/50 rounded-r-lg transition-colors">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <Icon className="w-3 h-3 text-zinc-400" />
                           <span className={cn("text-[10px] font-semibold uppercase tracking-wide", cfg?.textCor ?? "text-zinc-500")}>
@@ -367,7 +367,7 @@ export default function AgendaPage() {
                           </span>
                           {e.privado && <span className="text-[10px] text-zinc-400">• privado</span>}
                         </div>
-                        <p className="text-xs font-medium text-zinc-800">{e.titulo}</p>
+                        <p className="text-xs font-medium text-zinc-200">{e.titulo}</p>
                         {!e.diaTodo && (
                           <p className="text-[10px] text-zinc-400">
                             {format(parseISO(e.inicio), "HH:mm")} – {format(parseISO(e.fim), "HH:mm")}
@@ -384,18 +384,18 @@ export default function AgendaPage() {
 
           {/* Próximos conflitos */}
           {isAdmin && conflitos.length > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 text-orange-500" />
-                <h3 className="text-sm font-semibold text-orange-700">Conflitos de Agenda</h3>
+                <AlertTriangle className="w-4 h-4 text-orange-400" />
+                <h3 className="text-sm font-semibold text-orange-400">Conflitos de Agenda</h3>
               </div>
               {conflitos.slice(0, 3).map(d => (
-                <div key={d} className="text-xs text-orange-600 py-1 border-b border-orange-100 last:border-0">
+                <div key={d} className="text-xs text-orange-300 py-1 border-b border-orange-500/10 last:border-0">
                   <span className="font-medium">{format(parseISO(d), "dd/MM", { locale: ptBR })}</span>
                   {" — "} Contourline + Freelance sobrepostos
                 </div>
               ))}
-              <p className="text-[10px] text-orange-500 mt-2">Contourline tem prioridade absoluta.</p>
+              <p className="text-[10px] text-orange-400/70 mt-2">Contourline tem prioridade absoluta.</p>
             </div>
           )}
         </div>
@@ -404,7 +404,7 @@ export default function AgendaPage() {
       {/* Modal detalhe evento */}
       {eventoSelec && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
             {(() => {
               const cfg = CONTEXTO_CONFIG[eventoSelec.contexto]
               const Icon = cfg?.icon ?? Film
@@ -416,14 +416,14 @@ export default function AgendaPage() {
                         <div style={{ backgroundColor: eventoSelec.cor ?? "#71717a" }} className="w-3 h-3 rounded-full" />
                         <span className={cn("text-xs font-semibold uppercase", cfg?.textCor ?? "text-zinc-500")}>{cfg?.label}</span>
                       </div>
-                      <h3 className="font-bold text-zinc-800">{eventoSelec.titulo}</h3>
+                      <h3 className="font-bold text-zinc-200">{eventoSelec.titulo}</h3>
                     </div>
-                    <button onClick={() => setEventoSelec(null)} className="text-zinc-400 hover:text-zinc-700">
+                    <button onClick={() => setEventoSelec(null)} className="text-zinc-500 hover:text-zinc-300">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <div className="space-y-2 text-sm text-zinc-600 mb-4">
+                  <div className="space-y-2 text-sm text-zinc-400 mb-4">
                     <div className="flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
                       {eventoSelec.diaTodo
@@ -438,8 +438,8 @@ export default function AgendaPage() {
                       <p className="text-xs text-zinc-500 leading-relaxed">{eventoSelec.descricao}</p>
                     )}
                     {eventoSelec.demanda && (
-                      <div className="bg-zinc-50 rounded-lg px-3 py-2 text-xs">
-                        <span className="text-zinc-400">Demanda: </span>
+                      <div className="bg-zinc-800 rounded-lg px-3 py-2 text-xs">
+                        <span className="text-zinc-500">Demanda: </span>
                         <span className="font-medium">{eventoSelec.demanda.codigo}</span>
                         {" — "}{eventoSelec.demanda.titulo}
                       </div>
@@ -448,7 +448,7 @@ export default function AgendaPage() {
 
                   {isAdmin && (
                     <button onClick={() => deletarEvento(eventoSelec.id)}
-                      className="w-full border border-red-200 text-red-600 text-sm py-2 rounded-xl hover:bg-red-50">
+                      className="w-full border border-red-500/30 text-red-400 text-sm py-2 rounded-xl hover:bg-red-500/10">
                       Excluir evento
                     </button>
                   )}
@@ -462,30 +462,30 @@ export default function AgendaPage() {
       {/* Modal criar evento */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-zinc-800">Novo Evento</h3>
-              <button onClick={() => setShowForm(false)}><X className="w-4 h-4 text-zinc-400" /></button>
+              <h3 className="font-semibold text-zinc-200">Novo Evento</h3>
+              <button onClick={() => setShowForm(false)}><X className="w-4 h-4 text-zinc-500" /></button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium text-zinc-500 block mb-1">Título *</label>
-                <input className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                <label className="text-xs font-medium text-zinc-400 block mb-1">Título *</label>
+                <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-600"
                   value={form.titulo} onChange={e => setF("titulo", e.target.value)} placeholder="Nome do evento" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 block mb-1">Tipo</label>
-                  <select className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm"
+                  <label className="text-xs font-medium text-zinc-400 block mb-1">Tipo</label>
+                  <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
                     value={form.tipo} onChange={e => setF("tipo", e.target.value)}>
                     {TIPO_OPTS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 block mb-1">Contexto</label>
-                  <select className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm"
+                  <label className="text-xs font-medium text-zinc-400 block mb-1">Contexto</label>
+                  <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
                     value={form.contexto} onChange={e => setF("contexto", e.target.value)}>
                     {CONTEXTO_OPTS
                       .filter(c => isAdmin || c.value !== "pessoal")
@@ -495,13 +495,13 @@ export default function AgendaPage() {
               </div>
 
               {form.contexto === "pessoal" && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-xs text-purple-700 flex items-start gap-2">
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl px-3 py-2 text-xs text-purple-400 flex items-start gap-2">
                   <User className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   Evento privado — visível apenas para você como administrador.
                 </div>
               )}
               {form.contexto === "freelance" && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 flex items-start gap-2">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-amber-400 flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   Lembre-se: Contourline tem prioridade. Verifique conflitos.
                 </div>
@@ -509,43 +509,43 @@ export default function AgendaPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 block mb-1">Início *</label>
-                  <input type="datetime-local" className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm"
+                  <label className="text-xs font-medium text-zinc-400 block mb-1">Início *</label>
+                  <input type="datetime-local" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
                     value={form.inicio} onChange={e => setF("inicio", e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 block mb-1">Fim *</label>
-                  <input type="datetime-local" className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm"
+                  <label className="text-xs font-medium text-zinc-400 block mb-1">Fim *</label>
+                  <input type="datetime-local" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
                     value={form.fim} onChange={e => setF("fim", e.target.value)} />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-500 block mb-1">Local</label>
-                <input className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm"
+                <label className="text-xs font-medium text-zinc-400 block mb-1">Local</label>
+                <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500"
                   value={form.local} onChange={e => setF("local", e.target.value)} placeholder="Endereço ou local virtual" />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-500 block mb-1">Descrição</label>
-                <textarea className="w-full border border-zinc-200 rounded-xl px-3 py-2 text-sm resize-none"
+                <label className="text-xs font-medium text-zinc-400 block mb-1">Descrição</label>
+                <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 resize-none"
                   rows={2} value={form.descricao} onChange={e => setF("descricao", e.target.value)} />
               </div>
 
               {isAdmin && (
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.privado} onChange={e => setF("privado", e.target.checked)}
-                    className="w-4 h-4 rounded" />
-                  <span className="text-xs text-zinc-500">Evento privado (visível apenas para mim)</span>
+                    className="w-4 h-4 rounded bg-zinc-800 border-zinc-700" />
+                  <span className="text-xs text-zinc-400">Evento privado (visível apenas para mim)</span>
                 </label>
               )}
 
               <div className="flex gap-2 mt-2">
                 <button onClick={criarEvento} disabled={!form.titulo || !form.inicio || !form.fim}
-                  className="flex-1 bg-zinc-900 text-white text-sm py-2.5 rounded-xl hover:bg-zinc-700 disabled:opacity-50">
+                  className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-xl hover:bg-blue-500 disabled:opacity-50">
                   Criar Evento
                 </button>
-                <button onClick={() => setShowForm(false)} className="flex-1 border border-zinc-200 text-sm py-2.5 rounded-xl hover:bg-zinc-50">
+                <button onClick={() => setShowForm(false)} className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800">
                   Cancelar
                 </button>
               </div>

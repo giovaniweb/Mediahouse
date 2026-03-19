@@ -56,7 +56,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   if (body.statusVisivel) {
     const novoStatusInterno = STATUS_VISIVEL_TO_INTERNO[body.statusVisivel]
-    const demandaAtual = await prisma.demanda.findUnique({ where: { id }, select: { statusInterno: true } })
+    const demandaAtual = await prisma.demanda.findUnique({
+      where: { id },
+      select: { statusInterno: true, videomakerId: true, codigo: true, titulo: true },
+    })
 
     const [demanda] = await prisma.$transaction([
       prisma.demanda.update({
@@ -80,6 +83,75 @@ export async function PUT(req: NextRequest, { params }: Params) {
       }),
     ])
 
+    // Quando finalizar → auto-criar custo se videomaker externo
+    if (body.statusVisivel === "finalizado" && demandaAtual?.videomakerId) {
+      try {
+        const jaExiste = await prisma.custoVideomaker.findFirst({
+          where: { demandaId: id, videomakerId: demandaAtual.videomakerId },
+        })
+        if (!jaExiste) {
+          const demandaFull = await prisma.demanda.findUnique({
+            where: { id },
+            select: { codigo: true, tipoVideo: true, videomaker: { select: { valorDiaria: true } } },
+          })
+          const baseCost = 250 // R$250 por video
+          const isCobertura = demandaFull?.tipoVideo?.toLowerCase().includes("cobertura")
+          const diaria = demandaFull?.videomaker?.valorDiaria ?? 0
+          const valor = isCobertura ? baseCost + diaria : baseCost
+
+          await prisma.custoVideomaker.create({
+            data: {
+              videomakerId: demandaAtual.videomakerId,
+              demandaId: id,
+              tipo: "diaria",
+              valor,
+              descricao: `Video ${demandaFull?.codigo} - ${demandaFull?.tipoVideo}${isCobertura ? ` (R$250 + diaria R$${diaria})` : ""}`,
+              dataReferencia: new Date(),
+              statusPagamento: "pendente_nf",
+            },
+          })
+        }
+      } catch (e) {
+        console.error("Erro ao auto-criar custo:", e)
+      }
+    }
+
+    // Quando mover para edição (brutos enviados) → criar link de NF e notificar videomaker
+    if (body.statusVisivel === "edicao" && demandaAtual?.videomakerId) {
+      try {
+        const nf = await prisma.notaFiscalUpload.create({
+          data: {
+            demandaId: id,
+            videomakerId: demandaAtual.videomakerId,
+          },
+        })
+
+        // Enviar link de NF via WhatsApp
+        const vm = await prisma.videomaker.findUnique({
+          where: { id: demandaAtual.videomakerId },
+          select: { nome: true, telefone: true },
+        })
+        if (vm?.telefone) {
+          const configWpp = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+          if (configWpp) {
+            const baseUrl = process.env.NEXTAUTH_URL || "https://videoops.vercel.app"
+            const link = `${baseUrl}/nf-upload/${nf.token}`
+            const phone = vm.telefone.replace(/\D/g, "")
+            await fetch(`${configWpp.instanceUrl}/message/sendText/${configWpp.instanceId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", apikey: configWpp.apiKey },
+              body: JSON.stringify({
+                number: phone,
+                text: `Ola ${vm.nome}! Os brutos da demanda *${demandaAtual.codigo} - ${demandaAtual.titulo}* foram recebidos.\n\nPor favor, envie sua nota fiscal pelo link abaixo:\n${link}`,
+              }),
+            })
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao criar NF upload:", e)
+      }
+    }
+
     return NextResponse.json(demanda)
   }
 
@@ -101,6 +173,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       linkCliente: body.linkCliente,
       localGravacao: body.localGravacao,
       motivoImpedimento: body.motivoImpedimento,
+      classificacao: body.classificacao,
     },
   })
 

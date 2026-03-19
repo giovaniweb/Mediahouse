@@ -190,34 +190,37 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
   },
   {
     name: "buscar_agenda_videomaker",
-    description: "Busca a agenda completa de um videomaker: eventos criados + captações agendadas. Use para secretária pessoal, verificar disponibilidade ou preparar resumo diário.",
+    description: "Busca a agenda de um videomaker (externo) ou editor (videomaker interno). Mostra eventos + captações agendadas. Funciona com videomaker_id OU editor_id.",
     input_schema: {
       type: "object" as const,
       properties: {
-        videomaker_id: { type: "string", description: "ID do videomaker (preferencial)" },
-        nome: { type: "string", description: "Nome do videomaker para buscar" },
-        telefone: { type: "string", description: "Telefone do videomaker" },
-        inicio: { type: "string", description: "Data de início no formato ISO (padrão: hoje)" },
-        dias_futuros: { type: "number", description: "Quantos dias à frente mostrar (padrão 7)" },
+        videomaker_id: { type: "string", description: "ID do videomaker externo" },
+        editor_id: { type: "string", description: "ID do editor (videomaker interno)" },
+        nome: { type: "string", description: "Nome para buscar" },
+        telefone: { type: "string", description: "Telefone para buscar" },
+        inicio: { type: "string", description: "Data de início ISO (padrão: hoje)" },
+        dias_futuros: { type: "number", description: "Quantos dias à frente (padrão 7)" },
       },
     },
   },
   {
     name: "criar_evento_agenda",
-    description: "Cria um evento na agenda. Para videomaker passe videomaker_id, para gestor/admin passe usuario_id. Use quando alguém pedir para agendar, marcar ou bloquear data/horário.",
+    description: "Cria evento na agenda com VERIFICAÇÃO DE CONFLITOS. Se houver conflito, NÃO cria e retorna o evento conflitante + sugestões de horários livres. Passe editor_id para videomaker interno, videomaker_id para externo.",
     input_schema: {
       type: "object" as const,
       properties: {
-        videomaker_id: { type: "string", description: "ID do videomaker (se o evento é para um videomaker)" },
-        usuario_id: { type: "string", description: "ID do usuário/gestor (se o evento é para um admin ou gestor)" },
+        videomaker_id: { type: "string", description: "ID do videomaker externo" },
+        editor_id: { type: "string", description: "ID do editor (videomaker interno)" },
+        usuario_id: { type: "string", description: "ID do gestor/admin" },
         titulo: { type: "string", description: "Título do evento" },
         descricao: { type: "string", description: "Descrição opcional" },
         inicio: { type: "string", description: "Data/hora de início ISO (ex: 2026-03-16T15:00:00)" },
-        fim: { type: "string", description: "Data/hora de fim ISO (opcional, padrão +2h)" },
+        fim: { type: "string", description: "Data/hora de fim ISO (padrão +2h)" },
         local: { type: "string", description: "Local do evento" },
         tipo: { type: "string", enum: ["captacao", "reuniao", "outro"], description: "Tipo do evento" },
         dia_todo: { type: "boolean", description: "Se é evento de dia todo" },
-        demanda_id: { type: "string", description: "ID da demanda relacionada, se houver" },
+        demanda_id: { type: "string", description: "ID da demanda relacionada" },
+        forcar: { type: "boolean", description: "Se true, cria mesmo com conflito (use só se o usuário confirmar)" },
       },
       required: ["titulo", "inicio"],
     },
@@ -237,7 +240,7 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
   },
   {
     name: "criar_demanda_rascunho",
-    description: "Cria rascunho de demanda recebida via WhatsApp ou linguagem natural. A demanda fica em aguardando_aprovacao_interna.",
+    description: "Cria rascunho de demanda recebida via WhatsApp ou linguagem natural. A demanda fica em aguardando_aprovacao_interna. SEMPRE passe telefone_solicitante quando souber o telefone de quem pediu.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -247,9 +250,51 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
         tipo_video: { type: "string", description: "Tipo de vídeo (ex: institucional, social_media, treinamento)" },
         prioridade: { type: "string", enum: ["normal", "alta", "urgente"] },
         cidade: { type: "string", description: "Cidade da captação" },
-        telefone_solicitante: { type: "string", description: "Telefone de quem pediu, para vincular ao usuário" },
+        telefone_solicitante: { type: "string", description: "Telefone de quem pediu (OBRIGATÓRIO se veio via WhatsApp)" },
       },
       required: ["titulo"],
+    },
+  },
+  {
+    name: "estruturar_demanda",
+    description: "Recebe uma descrição solta/vaga e estrutura em campos organizados para demanda. Use quando o texto é informal ou de áudio transcrito. Retorna a demanda estruturada para apresentar ao solicitante antes de criar.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        texto_original: { type: "string", description: "Texto bruto do solicitante (pode ser informal ou transcrição de áudio)" },
+        nome_solicitante: { type: "string", description: "Nome de quem está pedindo" },
+        telefone_solicitante: { type: "string", description: "Telefone de quem está pedindo" },
+      },
+      required: ["texto_original"],
+    },
+  },
+  {
+    name: "solicitar_dados_demanda",
+    description: "Envia mensagem WhatsApp ao solicitante ORIGINAL de uma demanda para pedir dados faltantes. Usa o telefoneSolicitante salvo na demanda.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        demanda_id: { type: "string", description: "ID da demanda" },
+        codigo_demanda: { type: "string", description: "Código da demanda (ex: VID-0023) — alternativa ao demanda_id" },
+        mensagem: { type: "string", description: "Mensagem pedindo os dados faltantes" },
+        dados_faltantes: { type: "string", description: "Descrição dos dados que faltam (ex: 'local da gravação e horário')" },
+      },
+      required: ["mensagem"],
+    },
+  },
+  {
+    name: "vincular_arquivo_demanda",
+    description: "Vincula um arquivo (imagem, vídeo, documento) recebido via WhatsApp a uma demanda existente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        demanda_id: { type: "string", description: "ID da demanda" },
+        codigo_demanda: { type: "string", description: "Código da demanda (alternativa ao demanda_id)" },
+        url_arquivo: { type: "string", description: "URL do arquivo no storage" },
+        nome_arquivo: { type: "string", description: "Nome do arquivo" },
+        tipo: { type: "string", enum: ["referencia", "bruto", "cliente"], description: "Tipo do arquivo" },
+      },
+      required: ["url_arquivo", "nome_arquivo"],
     },
   },
   {
@@ -271,6 +316,36 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "salvar_ideia_video",
+    description: "Salva uma ideia de vídeo no Banco de Ideias. Use quando o usuário confirmar que um link, mídia ou descrição é uma ideia de vídeo.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        titulo: { type: "string", description: "Título curto da ideia" },
+        descricao: { type: "string", description: "Descrição ou contexto da ideia" },
+        link_referencia: { type: "string", description: "URL de referência (Instagram, TikTok, YouTube)" },
+        media_url: { type: "string", description: "URL do arquivo no storage (se mídia)" },
+        produto_nome: { type: "string", description: "Nome do produto sugerido (se mencionado)" },
+        classificacao: { type: "string", enum: ["b2c", "b2b"], description: "Classificação B2C ou B2B" },
+        telefone_origem: { type: "string", description: "Telefone de quem enviou a ideia" },
+        nome_origem: { type: "string", description: "Nome de quem enviou" },
+      },
+      required: ["titulo", "telefone_origem"],
+    },
+  },
+  {
+    name: "buscar_ideias",
+    description: "Busca ideias de vídeo no Banco de Ideias. Use para consultar ideias por status, produto, score IA, etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["nova", "em_analise", "aprovada", "em_producao", "realizada", "descartada"], description: "Filtrar por status" },
+        produto_nome: { type: "string", description: "Filtrar por nome do produto (busca parcial)" },
+        limite: { type: "number", description: "Número máximo de resultados (padrão 10)" },
+      },
+    },
+  },
 ]
 
 // ─── Subset de tools para WhatsApp (menos tools = modelo mais focado) ─────────
@@ -278,11 +353,16 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
 const TOOLS_WHATSAPP_NAMES = [
   "buscar_demanda_por_codigo",
   "criar_demanda_rascunho",
+  "estruturar_demanda",
+  "solicitar_dados_demanda",
+  "vincular_arquivo_demanda",
   "buscar_agenda_videomaker",
   "criar_evento_agenda",
   "enviar_whatsapp",
   "buscar_metricas",
   "listar_gestores",
+  "salvar_ideia_video",
+  "buscar_ideias",
 ]
 
 export const TOOLS_WHATSAPP: Anthropic.Tool[] = TOOLS_VIDEOOPS.filter(t =>
@@ -296,16 +376,54 @@ export type ToolExecutor = (name: string, input: Record<string, unknown>) => Pro
 
 // ─── Agente com tool-use (loop completo, sem streaming) ───────────────────────
 
+// System prompt dedicado para WhatsApp — sem confirmação prévia, respostas curtas
+export const SYSTEM_WHATSAPP = `Você é a Secretária IA NuFlow respondendo via WhatsApp.
+
+REGRAS CRÍTICAS:
+1. Execute ações DIRETAMENTE sem pedir confirmação. Crie eventos, demandas e envie mensagens imediatamente.
+2. Respostas CURTAS — máximo 5 linhas. Vá direto ao ponto.
+3. Colete dados UMA COISA DE CADA VEZ quando necessário.
+4. Use o HISTÓRICO DA CONVERSA para entender o contexto. Se o usuário respondeu algo, é continuação da conversa anterior.
+5. Nunca diga "Posso fazer X?" — simplesmente FAÇA X.
+6. Use *negrito* para destaques no WhatsApp.
+7. Tom INFORMAL e amigável. Trate a pessoa pelo primeiro nome.
+
+CRIAÇÃO DE DEMANDAS (IMPORTANTÍSSIMO):
+8. QUALQUER PESSOA pode solicitar uma demanda via WhatsApp — NÃO precisa ser cadastrada no sistema.
+9. Quando alguém pedir vídeo, conteúdo, cobertura, anúncio, etc. → estruture e CRIE a demanda.
+10. A demanda cai automaticamente em APROVAÇÃO para o gestor analisar.
+11. SEMPRE passe telefone_solicitante ao criar. Se a pessoa é desconhecida, tudo bem — o telefone vincula.
+12. Se a descrição é clara (tipo de vídeo, equipamento, objetivo), crie direto.
+13. Se faltam dados essenciais, pergunte UMA coisa de cada vez.
+14. Se receber áudio transcrito, trate como mensagem normal.
+
+REGRAS DE AGENDA:
+15. Somente videomakers internos (editor) e videomakers externos têm agenda.
+16. Cada pessoa tem sua própria agenda individual. Use o editor_id ou videomaker_id correto.
+17. A ferramenta criar_evento_agenda verifica conflitos automaticamente.
+18. Se houver CONFLITO, repasse as sugestões de horários livres ao usuário.
+
+BANCO DE IDEIAS DE VÍDEO:
+19. Se o usuário enviar um link de Instagram, TikTok, YouTube, X/Twitter ou mídia (imagem/vídeo) SEM contexto de demanda, pergunte: "💡 Isso é uma *ideia de vídeo*? Posso salvar no Banco de Ideias!"
+20. Se confirmar (sim, é sim, salva, etc.), use salvar_ideia_video para salvar. Crie um título descritivo baseado no contexto.
+21. Se enviar link COM pedido de demanda ("faz um vídeo assim", "preciso de algo parecido"), trate como demanda normal.
+22. Ao salvar ideia, tente identificar para qual produto é e pergunte se não souber.
+23. Se pedirem para listar ideias ou ver o banco de ideias, use buscar_ideias.
+
+Responda sempre em português brasileiro.`
+
 export async function executarAgenteComTools(
   prompt: string,
   executor: ToolExecutor,
   modelo: string = MODELO_POTENTE,
   maxIteracoes = 8,
-  tools: Anthropic.Tool[] = TOOLS_VIDEOOPS
+  tools: Anthropic.Tool[] = TOOLS_VIDEOOPS,
+  systemPrompt?: string
 ): Promise<{ resposta: string; tokens: number; ferramentasUsadas: string[] }> {
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: prompt }
   ]
+  const system = systemPrompt ?? SYSTEM_VIDEOOPS
 
   let tokens = 0
   const ferramentasUsadas: string[] = []
@@ -317,7 +435,7 @@ export async function executarAgenteComTools(
       max_tokens: 2048,
       temperature: modelo === MODELO_POTENTE ? undefined : 0.2,
       ...(modelo === MODELO_POTENTE ? { thinking: { type: "adaptive" } } : {}),
-      system: SYSTEM_VIDEOOPS,
+      system,
       tools,
       messages,
     })

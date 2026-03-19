@@ -7,6 +7,7 @@ import { Users, Camera, Film, Shield, UserCheck, User, Search, CheckCircle2, XCi
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
+import { PermissoesModal } from "@/components/PermissoesModal"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -70,6 +71,7 @@ export default function UsuariosPage() {
   const [editando, setEditando] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>({ nome: "", email: "", telefone: "", tipo: "" })
   const [salvando, setSalvando] = useState(false)
+  const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string } | null>(null)
   const { data, mutate } = useSWR<{ usuarios: Usuario[]; videomakers: Videomaker[]; editores: Editor[] }>("/api/usuarios", fetcher)
 
   const usuarios = data?.usuarios ?? []
@@ -249,6 +251,13 @@ export default function UsuariosPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
+                          onClick={() => setPermUser({ id: u.id, nome: u.nome, tipo: u.tipo })}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-purple-800 text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors"
+                          title="Gerenciar permissoes"
+                        >
+                          <Shield className="w-3 h-3" /> Permissoes
+                        </button>
+                        <button
                           onClick={() => abrirEdicao(u)}
                           className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                           title="Editar usuário"
@@ -380,6 +389,17 @@ export default function UsuariosPage() {
           </div>
         )}
       </main>
+
+      {/* Modal de Permissoes */}
+      {permUser && (
+        <PermissoesModal
+          usuarioId={permUser.id}
+          usuarioNome={permUser.nome}
+          usuarioTipo={permUser.tipo}
+          open={!!permUser}
+          onClose={() => setPermUser(null)}
+        />
+      )}
     </>
   )
 }

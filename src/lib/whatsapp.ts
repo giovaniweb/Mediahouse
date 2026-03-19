@@ -15,20 +15,24 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
     return null
   }
 
-  // Se já é um JID completo (ex: 123@lid ou 123@s.whatsapp.net), usa direto
-  // Caso contrário, normaliza o número de telefone
-  let numero: string
-  if (telefone.includes("@")) {
-    numero = telefone
-  } else {
-    numero = telefone.replace(/\D/g, "")
-    if (!numero) return null
-    if (numero.length === 10 || numero.length === 11) {
-      numero = "55" + numero
-    }
-  }
+  // IMPORTANTE: SEMPRE enviar apenas o número puro (sem @s.whatsapp.net / @lid).
+  // A Evolution API normaliza internamente — números brasileiros têm quirk do 9º dígito:
+  // ex: 5531992271043 → JID real 553192271043@s.whatsapp.net (sem o 9 extra).
+  // Se enviarmos o JID direto, a API retorna "exists: false".
+  let numero = telefone
+    .replace(/@s\.whatsapp\.net$/, "")
+    .replace(/@lid$/, "")
+    .replace(/:.*/g, "")        // remove sufixos tipo :123
+    .replace(/\D/g, "")         // só dígitos
 
   if (!numero) return null
+
+  // Garante DDI 55 para números brasileiros
+  if (numero.length === 10 || numero.length === 11) {
+    numero = "55" + numero
+  }
+
+  console.log(`[WhatsApp] Enviando para: ${numero} (original: ${telefone})`)
 
   try {
     const res = await fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {
@@ -40,12 +44,18 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
       body: JSON.stringify({
         number: numero,
         textMessage: { text: mensagem },
-        options: { delay: 1200, presence: "composing", ephemeralExpiration: 7776000 },
+        options: { delay: 1200, presence: "composing" },
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     })
 
     const json = await res.json()
+
+    if (!res.ok) {
+      console.error(`[WhatsApp] Evolution API erro ${res.status}:`, JSON.stringify(json))
+    } else {
+      console.log(`[WhatsApp] Mensagem enviada para ${numero} — key: ${json?.key?.id ?? "?"}`)
+    }
 
     // Loga no banco
     await prisma.mensagemWhatsapp.create({
@@ -57,7 +67,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         status: res.ok ? "enviado" : "falhou",
         ...(demandaId && { demandaId }),
       },
-    })
+    }).catch(e => console.error("[WhatsApp] Erro ao salvar msg:", e))
 
     return json
   } catch (e) {

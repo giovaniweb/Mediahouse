@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ok: true, avaliacao })
 }
 
-// GET /api/editores/[id]/avaliar — info pública para a página de avaliação
+// GET /api/editores/[id]/avaliar — listar avaliações + info pública
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: editorId } = await params
 
@@ -66,5 +66,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!editor) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
 
-  return NextResponse.json({ editor })
+  const avaliacoes = await prisma.avaliacaoEditor.findMany({
+    where: { editorId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  })
+
+  const media = avaliacoes.length
+    ? avaliacoes.reduce((s, a) => s + a.nota, 0) / avaliacoes.length
+    : 0
+
+  return NextResponse.json({ editor, avaliacoes, media: Math.round(media * 10) / 10, total: avaliacoes.length })
 }

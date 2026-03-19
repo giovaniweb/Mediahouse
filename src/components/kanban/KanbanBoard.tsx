@@ -1,18 +1,19 @@
 "use client"
 
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
+import { DragDropContext, Draggable, DropResult } from "@hello-pangea/dnd"
+import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { cn } from "@/lib/utils"
 import { Plus } from "lucide-react"
 import Link from "next/link"
 
 export const COLUNAS = [
-  { id: "entrada", label: "Entrada", color: "border-t-zinc-400" },
-  { id: "producao", label: "Produção", color: "border-t-blue-500" },
-  { id: "edicao", label: "Edição", color: "border-t-purple-500" },
-  { id: "aprovacao", label: "Aprovação", color: "border-t-yellow-500" },
-  { id: "para_postar", label: "Para Postar", color: "border-t-green-500" },
-  { id: "finalizado", label: "Concluído", color: "border-t-zinc-300" },
+  { id: "entrada", label: "Entrada", color: "border-t-zinc-500", dot: "bg-zinc-400" },
+  { id: "producao", label: "Produção", color: "border-t-blue-500", dot: "bg-blue-500" },
+  { id: "edicao", label: "Edição", color: "border-t-purple-500", dot: "bg-purple-500" },
+  { id: "aprovacao", label: "Aprovação", color: "border-t-amber-500", dot: "bg-amber-500" },
+  { id: "para_postar", label: "Para Postar", color: "border-t-cyan-500", dot: "bg-cyan-500" },
+  { id: "finalizado", label: "Concluído", color: "border-t-emerald-500", dot: "bg-emerald-500" },
 ] as const
 
 type StatusVisivel = (typeof COLUNAS)[number]["id"]
@@ -57,21 +58,22 @@ export function KanbanBoard({ demandas, onMove }: KanbanBoardProps) {
             <div
               key={col.id}
               className={cn(
-                "flex-shrink-0 w-64 bg-zinc-50 rounded-xl border border-t-4 flex flex-col",
+                "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
                 col.color
               )}
             >
               {/* Header da coluna */}
-              <div className="flex items-center justify-between px-3 py-2.5">
+              <div className="flex items-center justify-between px-3 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-zinc-700">{col.label}</span>
-                  <span className="text-xs bg-zinc-200 text-zinc-600 rounded-full px-1.5 py-0.5 font-medium">
+                  <div className={cn("w-2 h-2 rounded-full", col.dot)} />
+                  <span className="font-semibold text-sm text-zinc-200">{col.label}</span>
+                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
                     {items.length}
                   </span>
                 </div>
                 {col.id === "entrada" && (
                   <Link href="/demandas/nova">
-                    <button className="p-1 rounded hover:bg-zinc-200 text-zinc-500">
+                    <button className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
                       <Plus className="w-4 h-4" />
                     </button>
                   </Link>
@@ -79,14 +81,14 @@ export function KanbanBoard({ demandas, onMove }: KanbanBoardProps) {
               </div>
 
               {/* Cards */}
-              <Droppable droppableId={col.id}>
+              <StrictModeDroppable droppableId={col.id}>
                 {(provided, snapshot) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={cn(
                       "flex-1 px-2 pb-2 space-y-2 min-h-24 rounded-b-xl transition-colors",
-                      snapshot.isDraggingOver && "bg-zinc-100"
+                      snapshot.isDraggingOver && "bg-zinc-800/50"
                     )}
                   >
                     {items.map((demanda, index) => (
@@ -106,7 +108,7 @@ export function KanbanBoard({ demandas, onMove }: KanbanBoardProps) {
                     {provided.placeholder}
                   </div>
                 )}
-              </Droppable>
+              </StrictModeDroppable>
             </div>
           )
         })}

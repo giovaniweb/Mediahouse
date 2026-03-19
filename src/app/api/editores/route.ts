@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   })
 
   // Adicionar _count de demandas ativas para facilitar no frontend
-  const editoresComCarga = editores.map(e => ({
+  // Excluir salario da listagem (só visível no detalhe individual)
+  const editoresComCarga = editores.map(({ salario, ...e }) => ({
     ...e,
     _count: { demandas: e.demandas.length },
   }))
@@ -37,14 +38,35 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
+  const userTipo = (session.user as { tipo?: string }).tipo
+  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+
   const editor = await prisma.editor.create({
     data: {
       nome: body.nome,
       telefone: body.telefone,
+      whatsapp: body.whatsapp,
       email: body.email,
+      avatarUrl: body.avatarUrl,
       especialidade: body.especialidade ?? [],
+      habilidades: body.habilidades ?? [],
       cargaLimite: body.cargaLimite ?? 5,
       status: body.status ?? "ativo",
+      cidade: body.cidade,
+      estado: body.estado,
+      cpfCnpj: body.cpfCnpj,
+      razaoSocial: body.razaoSocial,
+      nomeFantasia: body.nomeFantasia,
+      representante: body.representante,
+      endereco: body.endereco,
+      chavePix: body.chavePix,
+      redesSociais: body.redesSociais ?? [],
+      dadosBancarios: body.dadosBancarios,
+      observacoes: body.observacoes,
+      areasAtuacao: body.areasAtuacao ?? [],
+      equipamentos: body.equipamentos ?? [],
+      portfolio: body.portfolio,
+      ...(isPrivileged && body.salario != null ? { salario: body.salario } : {}),
     },
   })
 

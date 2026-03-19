@@ -8,6 +8,7 @@ declare module "next-auth" {
       email?: string | null
       image?: string | null
       tipo: string
+      permissoes?: Record<string, boolean>
     }
   }
 }

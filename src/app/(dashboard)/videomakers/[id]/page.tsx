@@ -14,6 +14,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { TagInput } from "@/components/ui/TagInput"
 import { toast } from "sonner"
+import { VideomakerPerformance } from "@/components/VideomakerPerformance"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -211,6 +212,9 @@ export default function VideomakerDetalhePage() {
       />
 
       <main className="flex-1 p-6 max-w-4xl space-y-6">
+        {/* Performance */}
+        <VideomakerPerformance videomakerId={vm.id} />
+
         {/* Lista Negra Banner */}
         {vm.emListaNegra && (
           <div className="bg-red-900/20 border border-red-800 rounded-xl p-4 flex items-start gap-3">

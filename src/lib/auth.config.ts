@@ -59,6 +59,13 @@ export const authConfig: NextAuthConfig = {
         "/api/publico",
         "/api/whatsapp",      // webhook e envios — acesso externo (Evolution API)
         "/api/cron",          // cron jobs — acesso externo (Vercel)
+        "/api/fabricantes",   // lista fabricantes (usado no form público)
+        "/convite",           // convite público de videomaker
+        "/nf-upload",         // upload público de nota fiscal
+        "/api/convites",      // API de convites (aceitar/recusar)
+        "/api/nf-upload",     // API de upload de NF
+        "/api/me",            // dados do usuário logado
+        "/api/permissoes",    // permissões do usuário
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")
