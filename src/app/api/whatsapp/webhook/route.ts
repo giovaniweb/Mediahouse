@@ -644,6 +644,25 @@ async function processarMensagem(body: unknown) {
     return
   }
 
+  // ── Detecta e ignora respostas automáticas de outros sistemas/bots ────
+  const autoReplyPatterns = [
+    /agradecemos sua mensagem/i,
+    /não estamos disponíveis/i,
+    /entraremos em contato/i,
+    /seja muito bem[- ]?vindo/i,
+    /aqui é a equipe d[aeo]/i,
+    /assessor[ae] d[aeo]/i,
+    /me chamo .+, assessor/i,
+    /resposta automática/i,
+    /mensagem automática/i,
+    /atendimento automático/i,
+    /horário de atendimento/i,
+  ]
+  if (autoReplyPatterns.some(pattern => pattern.test(textoOriginal))) {
+    console.log(`[WH] Ignorando resposta automática de ${telefone}: "${textoOriginal.slice(0, 60)}..."`)
+    return
+  }
+
   // ── Saudações → resposta informal ──────────────────────────────────────
   const saudacoes = ["oi", "olá", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oi!", "olá!", "oii", "oiii", "eae", "eai", "fala", "salve"]
   if (saudacoes.includes(textoOriginal.toLowerCase())) {
@@ -718,14 +737,15 @@ INSTRUÇÕES:
 - Se houver histórico, a mensagem atual é continuação.
 - Para demandas: buscar_demanda_por_codigo se mencionar VID-XXXX.
 
-REGRA CRÍTICA — CRIAÇÃO DE DEMANDAS:
+REGRA CRÍTICA — CRIAÇÃO DE DEMANDAS (SIGA À RISCA):
 - QUALQUER pessoa pode solicitar uma demanda via WhatsApp — não precisa ser cadastrada.
-- Quando alguém pedir um vídeo, conteúdo, cobertura, etc., use estruturar_demanda para organizar.
-- Apresente o resumo estruturado e peça confirmação.
-- Se confirmar, crie com criar_demanda_rascunho. A demanda cairá automaticamente em APROVAÇÃO.
+- Quando alguém pedir vídeo, conteúdo, cobertura, anúncio, etc. → CRIE A DEMANDA IMEDIATAMENTE.
+- NÃO peça confirmação. NÃO apresente resumo. NÃO faça perguntas desnecessárias.
+- Use estruturar_demanda para organizar, depois criar_demanda_rascunho para criar, depois enviar_whatsapp para confirmar.
+- Execute as 3 ferramentas EM SEQUÊNCIA sem parar.
+- A demanda cai automaticamente em APROVAÇÃO para o gestor — é só rascunho.
 - SEMPRE passe telefone_solicitante="${telefone}" e nome_solicitante="${primeiroNome}" ao criar.
-- Se a descrição for clara e completa, pode criar direto sem pedir confirmação.
-- Se faltam dados essenciais (o quê? quando? onde?), pergunte UMA coisa por vez.
+- Se faltam dados essenciais (o quê?), pergunte UMA coisa APENAS. Prazo e local são OPCIONAIS — crie sem eles.
 - Se recebeu arquivo (📎 acima), pergunte se quer vincular a alguma demanda.
 
 REGRAS DE AGENDA:
@@ -741,7 +761,7 @@ REGRAS DE AGENDA:
       promptSecretaria,
       executarFerramenta,
       MODELO_WHATSAPP,
-      5,
+      8,
       TOOLS_WHATSAPP,
       SYSTEM_WHATSAPP
     )
