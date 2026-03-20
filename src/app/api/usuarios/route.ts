@@ -50,17 +50,31 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { nome, email, senha, tipo, telefone } = body
 
-  if (!nome || !email || !senha || !tipo) {
-    return NextResponse.json({ error: "Campos obrigatórios: nome, email, senha, tipo" }, { status: 400 })
+  // email é opcional — usuário pode logar pelo telefone
+  if (!nome || !senha || !tipo) {
+    return NextResponse.json({ error: "Campos obrigatórios: nome, senha, tipo" }, { status: 400 })
   }
 
-  const existe = await prisma.usuario.findUnique({ where: { email } })
-  if (existe) return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 })
+  // Verificar unicidade de email (se fornecido)
+  const emailFinal = email?.trim() || null
+  if (emailFinal) {
+    const existe = await prisma.usuario.findUnique({ where: { email: emailFinal } })
+    if (existe) return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 })
+  }
+
+  // Verificar unicidade por telefone (se não tem email)
+  if (!emailFinal && telefone) {
+    const cleanDigits = telefone.replace(/\D/g, "")
+    const existePorTel = await prisma.usuario.findFirst({
+      where: { telefone: { contains: cleanDigits } },
+    })
+    if (existePorTel) return NextResponse.json({ error: "Telefone já cadastrado" }, { status: 409 })
+  }
 
   const senhaHash = await bcrypt.hash(senha, 12)
 
   const usuario = await prisma.usuario.create({
-    data: { nome, email, senhaHash, tipo, telefone },
+    data: { nome, email: emailFinal, senhaHash, tipo, telefone },
     select: { id: true, nome: true, email: true, tipo: true, status: true },
   })
 

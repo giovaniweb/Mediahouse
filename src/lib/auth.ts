@@ -49,9 +49,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           })
         } else {
-          // Buscar por email
+          // Buscar por email (email pode ser null no banco, findUnique ignora null)
+          const emailInput = input.toLowerCase().trim()
           usuario = await prisma.usuario.findUnique({
-            where: { email: input.toLowerCase().trim() },
+            where: { email: emailInput },
           })
         }
 

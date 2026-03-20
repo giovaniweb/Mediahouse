@@ -21,6 +21,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // Usuário sem email não pode redefinir senha por este método
+    if (!usuario.email) {
+      return NextResponse.json({ ok: false, error: "Usuário sem e-mail cadastrado. Entre em contato com o administrador." }, { status: 400 })
+    }
+
     // Invalida tokens anteriores
     await prisma.passwordResetToken.deleteMany({ where: { email: usuario.email } })
 

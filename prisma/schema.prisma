@@ -146,7 +146,7 @@ enum OrigemIdeia {
 model Usuario {
   id        String        @id @default(cuid())
   nome      String
-  email     String        @unique
+  email     String?       @unique
   telefone  String?
   tipo      TipoUsuario   @default(solicitante)
   status    StatusUsuario @default(ativo)

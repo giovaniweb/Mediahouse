@@ -16,19 +16,6 @@ export function gerarSenhaPadrao(telefone: string | null | undefined): string {
   return `nuflow${last4}`
 }
 
-/**
- * Gera um email único baseado no nome (quando o profissional não tem email)
- */
-function gerarEmailFallback(nome: string): string {
-  const slug = nome
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-  return `${slug}@nuflow.local`
-}
-
 interface CriarUsuarioParams {
   nome: string
   email?: string | null
@@ -39,24 +26,34 @@ interface CriarUsuarioParams {
 }
 
 /**
- * Cria um Usuario automaticamente para um videomaker/editor
- * Retorna o usuario criado, ou null se já existir
+ * Cria um Usuario automaticamente para um videomaker/editor.
+ * Email é opcional — o login pode ser feito apenas pelo telefone.
  */
 export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
   const { nome, email, telefone, tipo, referenciaId } = params
 
-  // Determinar email para o login
-  const emailLogin = email || gerarEmailFallback(nome)
+  // Email real se fornecido, senão null (login será feito pelo telefone)
+  const emailLogin = email?.trim() || null
 
-  // Verificar se já existe
-  const existe = await prisma.usuario.findUnique({ where: { email: emailLogin } })
+  // Verificar se já existe por email (se tiver) ou por telefone
+  let existe = null
+  if (emailLogin) {
+    existe = await prisma.usuario.findUnique({ where: { email: emailLogin } })
+  } else if (telefone) {
+    const cleanDigits = telefone.replace(/\D/g, "")
+    existe = await prisma.usuario.findFirst({
+      where: {
+        telefone: { contains: cleanDigits },
+      },
+    })
+  }
   if (existe) return { usuario: existe, jáExistia: true, senha: null }
 
   // Gerar senha
   const senhaTexto = gerarSenhaPadrao(telefone)
   const senhaHash = await bcrypt.hash(senhaTexto, 12)
 
-  // Criar usuario
+  // Criar usuario (email pode ser null — login será pelo telefone)
   const usuario = await prisma.usuario.create({
     data: {
       nome,
@@ -117,21 +114,28 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
 }
 
 /**
- * Envia credenciais de acesso via WhatsApp
+ * Envia credenciais de acesso via WhatsApp.
+ * Mostra telefone como login se não houver email real.
  */
 export async function notificarCredenciaisWhatsapp(
   telefone: string,
   nome: string,
-  emailLogin: string,
+  emailLogin: string | null,
   senha: string,
 ) {
+  const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
+
+  // Se tiver email real, mostrar email. Senão, mostrar telefone como login.
+  const loginLine = emailLogin && !emailLogin.endsWith("@nuflow.local")
+    ? `📧 *Login:* ${emailLogin}\n`
+    : `📱 *Login:* seu número de telefone (${telefone})\n`
+
   const mensagem =
     `Olá, ${nome}! 👋\n\n` +
     `Seu acesso ao *NuFlow* foi criado:\n\n` +
-    `🔗 *Link:* ${process.env.NEXTAUTH_URL || "https://nuflow.app"}/login\n` +
-    `📧 *Login:* ${emailLogin}\n` +
+    `🔗 *Link:* ${baseUrl}/login\n` +
+    loginLine +
     `🔑 *Senha:* ${senha}\n\n` +
-    `Você também pode entrar usando seu número de telefone.\n\n` +
     `Recomendamos alterar sua senha no primeiro acesso. 🔒`
 
   try {

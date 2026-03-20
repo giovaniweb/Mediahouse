@@ -118,7 +118,7 @@ async function notificarSolicitante({
 }: {
   tipo: "aprovada" | "recusada" | "reaberta"
   demanda: { id: string; codigo: string; titulo: string }
-  solicitante: { id: string; nome: string; email: string; telefone: string | null } | null
+  solicitante: { id: string; nome: string; email: string | null; telefone: string | null } | null
   telefoneSolicitanteWhatsapp?: string | null
   motivo?: string
 }) {

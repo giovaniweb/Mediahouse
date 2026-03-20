@@ -46,6 +46,7 @@ export const authConfig: NextAuthConfig = {
 
       // Rotas públicas — não precisam de autenticação
       const publicPaths = [
+        "/",              // root → redireciona para /sobre (landing page)
         "/login",
         "/esqueci-senha",
         "/redefinir-senha",
