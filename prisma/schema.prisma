@@ -163,6 +163,7 @@ model Usuario {
   eventos         Evento[]
   permissoes      PermissaoUsuario?
   videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
+  editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
   ideias          IdeiaVideo[]
 
   @@map("usuarios")
@@ -250,6 +251,9 @@ model Editor {
   listaNegraMotivo String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+
+  usuarioId  String?    @unique  // link para Usuario (portal login)
+  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
 
   demandas   Demanda[]
   avaliacoes AvaliacaoEditor[]
@@ -512,6 +516,20 @@ model ContatoWhatsApp {
   updatedAt DateTime @updatedAt
 
   @@map("contatos_whatsapp")
+}
+
+// Cache de resolução @lid → JID real (evita atribuição errada de mensagens)
+model MapaLidWhatsApp {
+  id        String   @id @default(cuid())
+  lidJid    String   @unique              // ex: "123456789@lid"
+  realJid   String                        // ex: "5531991900114@s.whatsapp.net"
+  telefone  String                        // ex: "5531991900114"
+  pushName  String?                       // nome de exibição no WhatsApp
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([telefone])
+  @@map("mapa_lid_whatsapp")
 }
 
 model LogAutomacao {

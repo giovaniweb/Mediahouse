@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (session.user.tipo !== "admin") {
-    return NextResponse.json({ error: "Somente admin pode criar usuários" }, { status: 403 })
+  if (!["admin", "gestor"].includes(session.user.tipo)) {
+    return NextResponse.json({ error: "Sem permissão para criar usuários" }, { status: 403 })
   }
 
   const body = await req.json()

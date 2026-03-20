@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -42,6 +43,30 @@ export async function POST(req: NextRequest) {
       portfolio: body.portfolio,
     },
   })
+
+  // Auto-criar conta de acesso (Usuario) para o videomaker
+  try {
+    const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
+      nome: body.nome,
+      email: body.email,
+      telefone: body.telefone,
+      tipo: "videomaker",
+      referenciaId: videomaker.id,
+    })
+
+    // Notificar via WhatsApp com credenciais
+    if (!jáExistia && senha && body.telefone) {
+      await notificarCredenciaisWhatsapp(
+        body.telefone,
+        body.nome,
+        usuario.email,
+        senha,
+      )
+    }
+  } catch (e) {
+    console.error("[Videomaker] Erro ao criar conta de acesso:", e)
+    // Não falhar a criação do videomaker por erro na conta
+  }
 
   return NextResponse.json(videomaker, { status: 201 })
 }

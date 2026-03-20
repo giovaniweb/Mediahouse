@@ -43,9 +43,7 @@ export default function SobrePage() {
       <nav className="border-b border-zinc-800 sticky top-0 z-50 bg-zinc-950/90 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <Film className="w-4 h-4 text-zinc-900" />
-            </div>
+            <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
             <span className="font-bold text-lg tracking-tight">NuFlow</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-zinc-400">
@@ -260,9 +258,7 @@ export default function SobrePage() {
       <footer className="border-t border-zinc-800 py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-zinc-500">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-white rounded-md flex items-center justify-center">
-              <Film className="w-3 h-3 text-zinc-900" />
-            </div>
+            <img src="/logo.png" alt="NuFlow" className="w-6 h-6 rounded-md" />
             <span>NuFlow — Operação Audiovisual In-House © {new Date().getFullYear()}</span>
           </div>
           <div className="flex items-center gap-4">

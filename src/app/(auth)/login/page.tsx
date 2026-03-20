@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { loginAction } from "./actions"
 
 const schema = z.object({
-  email: z.string().email("Email inválido"),
+  login: z.string().min(1, "Email ou telefone obrigatório"),
   password: z.string().min(1, "Senha obrigatória"),
 })
 
@@ -32,7 +32,7 @@ export default function LoginPage() {
     setError("")
 
     // Server Action: login e redirect acontecem no servidor — sem problema de cookie no browser
-    const result = await loginAction(data.email, data.password)
+    const result = await loginAction(data.login, data.password)
 
     if (result?.error) {
       setError(result.error)
@@ -46,7 +46,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-zinc-900 rounded-lg" />
+            <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
             <span className="text-xl font-semibold tracking-tight">NuFlow</span>
           </div>
           <h1 className="text-2xl font-semibold text-zinc-900">Entrar</h1>
@@ -55,16 +55,16 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="login">Email ou Telefone</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="seu@email.com"
+              id="login"
+              type="text"
+              placeholder="seu@email.com ou (31) 99999-9999"
               autoComplete="email"
-              {...register("email")}
+              {...register("login")}
             />
-            {errors.email && (
-              <p className="text-xs text-red-500">{errors.email.message}</p>
+            {errors.login && (
+              <p className="text-xs text-red-500">{errors.login.message}</p>
             )}
           </div>
 

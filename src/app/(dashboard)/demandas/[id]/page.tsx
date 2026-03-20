@@ -9,7 +9,7 @@ import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
-  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2,
+  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -77,6 +77,8 @@ export default function DemandaDetailPage() {
   const [linkBrutos, setLinkBrutos] = useState("")
   const [linkFinal, setLinkFinal] = useState("")
   const [localGravacao, setLocalGravacao] = useState("")
+  const [classificacao, setClassificacao] = useState("")
+  const [produtoId, setProdutoId] = useState("")
 
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
@@ -84,8 +86,10 @@ export default function DemandaDetailPage() {
 
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=100", fetcher)
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=100", fetcher)
+  const { data: dataProdutos } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos", fetcher)
   const videomakers = dataVMs?.videomakers ?? []
   const editores = dataEds?.editores ?? []
+  const produtos = dataProdutos?.produtos ?? []
 
   // ── Sincroniza campos ao carregar demanda ─────────────────────────────────
   useEffect(() => {
@@ -100,6 +104,8 @@ export default function DemandaDetailPage() {
       setLinkBrutos(demanda.linkBrutos ?? "")
       setLinkFinal(demanda.linkFinal ?? "")
       setLocalGravacao(demanda.localGravacao ?? "")
+      setClassificacao(demanda.classificacao ?? "")
+      setProdutoId(demanda.produtos?.[0]?.produtoId ?? "")
     }
   }, [demanda, editMode])
 
@@ -119,6 +125,8 @@ export default function DemandaDetailPage() {
           linkBrutos: linkBrutos || null,
           linkFinal: linkFinal || null,
           localGravacao: localGravacao || null,
+          classificacao: classificacao || null,
+          produtoId: produtoId || null,
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao salvar")
@@ -157,6 +165,8 @@ export default function DemandaDetailPage() {
       setLinkBrutos(demanda.linkBrutos ?? "")
       setLinkFinal(demanda.linkFinal ?? "")
       setLocalGravacao(demanda.localGravacao ?? "")
+      setClassificacao(demanda.classificacao ?? "")
+      setProdutoId(demanda.produtos?.[0]?.produtoId ?? "")
     }
   }
 
@@ -320,6 +330,85 @@ export default function DemandaDetailPage() {
                     className="flex-1 bg-transparent border-b border-zinc-600 focus:outline-none focus:border-purple-500 text-sm px-1 text-zinc-200" />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* ── Produto & Classificação ─────────────────────────────────── */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+            <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+              <Package className="w-4 h-4 text-purple-400" /> Produto & Classificação
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Produto */}
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Produto vinculado</label>
+                <select
+                  value={editMode ? produtoId : (demanda.produtos?.[0]?.produtoId ?? "")}
+                  onChange={e => {
+                    if (editMode) {
+                      setProdutoId(e.target.value)
+                    } else {
+                      // atribuição rápida de produto
+                      fetch(`/api/demandas/${id}/produto`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ produtoId: e.target.value || null }),
+                      }).then(r => {
+                        if (r.ok) { toast.success("Produto vinculado!"); mutate() }
+                        else toast.error("Erro ao vincular produto")
+                      })
+                    }
+                  }}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                >
+                  <option value="">— Sem produto —</option>
+                  {produtos.map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+                {!editMode && demanda.produtos?.[0] && (
+                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> {demanda.produtos[0].produto?.nome}
+                  </p>
+                )}
+              </div>
+
+              {/* Classificação B2B/B2C */}
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Classificação</label>
+                <select
+                  value={editMode ? classificacao : (demanda.classificacao ?? "")}
+                  onChange={e => {
+                    if (editMode) {
+                      setClassificacao(e.target.value)
+                    } else {
+                      fetch(`/api/demandas/${id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ classificacao: e.target.value || null }),
+                      }).then(r => {
+                        if (r.ok) { toast.success("Classificação atualizada!"); mutate() }
+                        else toast.error("Erro ao atualizar classificação")
+                      })
+                    }
+                  }}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                >
+                  <option value="">— Não definido —</option>
+                  <option value="b2c">B2C (Consumidor Final)</option>
+                  <option value="b2b">B2B (Empresarial)</option>
+                </select>
+                {!editMode && demanda.classificacao && (
+                  <p className="text-xs mt-1 flex items-center gap-1">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                      demanda.classificacao === "b2c" ? "bg-blue-500/20 text-blue-400" : "bg-orange-500/20 text-orange-400"
+                    )}>
+                      {demanda.classificacao}
+                    </span>
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 

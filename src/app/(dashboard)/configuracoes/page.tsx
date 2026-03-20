@@ -12,10 +12,10 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros"
 
-const TIPO_OPTS = ["admin", "gestor", "operacao", "solicitante", "editor", "social"]
+const TIPO_OPTS = ["gestor", "operacao"]
 const TIPO_LABEL: Record<string, string> = {
   admin: "Admin", gestor: "Gestor", operacao: "Operação",
-  solicitante: "Solicitante", editor: "Editor", videomaker: "Videomaker", social: "Social Media",
+  videomaker: "Videomaker", editor: "Editor",
 }
 
 // ─── Usuários ────────────────────────────────────────────────────────────────
@@ -109,12 +109,15 @@ function ModalResetSenha({ usuario, onClose, onSave }: {
   )
 }
 
+type UsuarioSubTab = "sistema" | "vm_ext" | "vm_int"
+
 function TabUsuarios() {
   const { data, mutate } = useSWR<{ usuarios: Array<{
     id: string; nome: string; email: string; telefone?: string;
     tipo: string; status: string; createdAt: string
   }> }>("/api/usuarios", fetcher)
 
+  const [subTab, setSubTab] = useState<UsuarioSubTab>("sistema")
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
   const [loading, setLoading] = useState(false)
@@ -148,7 +151,18 @@ function TabUsuarios() {
     mutate()
   }
 
-  const usuarios = data?.usuarios ?? []
+  const allUsuarios = data?.usuarios ?? []
+  const sistema = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social"].includes(u.tipo))
+  const vmExt = allUsuarios.filter(u => u.tipo === "videomaker")
+  const vmInt = allUsuarios.filter(u => u.tipo === "editor")
+
+  const filteredUsers = subTab === "sistema" ? sistema : subTab === "vm_ext" ? vmExt : vmInt
+
+  const subTabs: { id: UsuarioSubTab; label: string; count: number }[] = [
+    { id: "sistema", label: "Usuários do Sistema", count: sistema.length },
+    { id: "vm_ext", label: "Videomakers Ext", count: vmExt.length },
+    { id: "vm_int", label: "Videomakers Int", count: vmInt.length },
+  ]
 
   return (
     <div className="space-y-4">
@@ -160,17 +174,39 @@ function TabUsuarios() {
         />
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-400">{usuarios.length} usuário(s) cadastrado(s)</p>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-1.5 bg-white text-zinc-900 text-xs px-3 py-2 rounded-lg hover:bg-zinc-100 font-medium"
-        >
-          <Plus className="w-3.5 h-3.5" /> Novo Usuário
-        </button>
+      {/* Sub-abas */}
+      <div className="flex gap-0 border-b border-zinc-800">
+        {subTabs.map(st => (
+          <button
+            key={st.id}
+            onClick={() => setSubTab(st.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 text-xs font-medium border-b-2 transition-all -mb-px",
+              subTab === st.id ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            {st.label}
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded-full",
+              subTab === st.id ? "bg-white text-zinc-900" : "bg-zinc-800 text-zinc-500"
+            )}>{st.count}</span>
+          </button>
+        ))}
       </div>
 
-      {showForm && (
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-zinc-400">{filteredUsers.length} usuário(s) cadastrado(s)</p>
+        {subTab === "sistema" && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="flex items-center gap-1.5 bg-white text-zinc-900 text-xs px-3 py-2 rounded-lg hover:bg-zinc-100 font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" /> Novo Usuário
+          </button>
+        )}
+      </div>
+
+      {showForm && subTab === "sistema" && (
         <div className="border border-zinc-700 rounded-xl p-4 bg-zinc-800 space-y-3">
           <p className="text-sm font-semibold text-zinc-200">Novo Usuário</p>
           <div className="grid grid-cols-2 gap-3">
@@ -206,24 +242,39 @@ function TabUsuarios() {
         </div>
       )}
 
+      {/* Info sobre contas automáticas */}
+      {(subTab === "vm_ext" || subTab === "vm_int") && (
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-3 text-xs text-zinc-400">
+          As contas de {subTab === "vm_ext" ? "videomakers externos" : "videomakers internos"} são criadas automaticamente ao cadastrar o profissional.
+          Senha padrão: <code className="text-zinc-300 bg-zinc-800 px-1 rounded">nuflow</code> + 4 últimos dígitos do telefone.
+          Login pode ser feito com e-mail ou telefone.
+        </div>
+      )}
+
       <div className="border border-zinc-800 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-zinc-800/50 border-b border-zinc-800">
             <tr>
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">NOME</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">E-MAIL</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">E-MAIL / LOGIN</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">TIPO</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">STATUS</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-zinc-500">AÇÕES</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {usuarios.map((u) => (
+            {filteredUsers.map((u) => (
               <tr key={u.id} className="hover:bg-zinc-800/30">
                 <td className="px-4 py-3 font-medium text-zinc-200">{u.nome}</td>
                 <td className="px-4 py-3 text-zinc-400 text-xs">{u.email}</td>
                 <td className="px-4 py-3">
-                  <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full capitalize border border-zinc-700">
+                  <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize border",
+                    u.tipo === "admin" ? "bg-purple-500/10 text-purple-400 border-purple-800" :
+                    u.tipo === "gestor" ? "bg-blue-500/10 text-blue-400 border-blue-800" :
+                    u.tipo === "videomaker" ? "bg-emerald-500/10 text-emerald-400 border-emerald-800" :
+                    u.tipo === "editor" ? "bg-amber-500/10 text-amber-400 border-amber-800" :
+                    "bg-zinc-800 text-zinc-300 border-zinc-700"
+                  )}>
                     {TIPO_LABEL[u.tipo] ?? u.tipo}
                   </span>
                 </td>
@@ -254,6 +305,9 @@ function TabUsuarios() {
                 </td>
               </tr>
             ))}
+            {filteredUsers.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-600">Nenhum usuário encontrado</td></tr>
+            )}
           </tbody>
         </table>
       </div>

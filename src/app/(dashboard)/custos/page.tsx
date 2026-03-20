@@ -14,6 +14,7 @@ import {
   ChevronDown,
   TrendingUp,
 } from "lucide-react"
+import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -148,7 +149,7 @@ export default function CustosPage() {
               <DollarSign className="w-4 h-4 text-zinc-400" />
               <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Total Gasto</span>
             </div>
-            <div className="text-2xl font-bold text-white">{fmt(resumo?.totalGasto ?? 0)}</div>
+            <div className="text-2xl font-bold text-white"><MoneyDisplay value={resumo?.totalGasto ?? 0} size="lg" /></div>
             <div className="text-xs text-zinc-500 mt-1">{custos.length} registros</div>
           </div>
           <div className="bg-green-950/30 border border-green-800/30 rounded-xl p-4">
@@ -156,7 +157,7 @@ export default function CustosPage() {
               <CheckCircle2 className="w-4 h-4 text-green-400" />
               <span className="text-xs text-green-400 font-medium uppercase tracking-wide">Pago</span>
             </div>
-            <div className="text-2xl font-bold text-green-400">{fmt(resumo?.totalPago ?? 0)}</div>
+            <div className="text-2xl font-bold text-green-400"><MoneyDisplay value={resumo?.totalPago ?? 0} size="lg" className="text-green-400" /></div>
             <div className="text-xs text-zinc-500 mt-1">
               {custos.filter((c) => c.pago).length} pagamentos realizados
             </div>
@@ -166,7 +167,7 @@ export default function CustosPage() {
               <Clock className="w-4 h-4 text-amber-400" />
               <span className="text-xs text-amber-400 font-medium uppercase tracking-wide">Pendente</span>
             </div>
-            <div className="text-2xl font-bold text-amber-400">{fmt(resumo?.totalPendente ?? 0)}</div>
+            <div className="text-2xl font-bold text-amber-400"><MoneyDisplay value={resumo?.totalPendente ?? 0} size="lg" className="text-amber-400" /></div>
             <div className="text-xs text-zinc-500 mt-1">
               {custos.filter((c) => !c.pago).length} pagamentos pendentes
             </div>

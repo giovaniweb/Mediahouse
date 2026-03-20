@@ -14,10 +14,14 @@ export const maxDuration = 60
  * @lid é um identificador de privacidade do Meta/WhatsApp (multi-device).
  * A Evolution API NÃO consegue enviar para @lid — precisamos do @s.whatsapp.net.
  *
- * Estratégias (em ordem):
- * 1. Nosso banco (mensagemWhatsapp) — mensagem saída para este contato
- * 2. Evolution API findMessages — mensagem enviada para este @lid
- * 3. Banco por pushName — busca o telefone pelo nome do contato
+ * Estratégias (em ordem de confiabilidade):
+ * 1. Cache local (MapaLidWhatsApp) — resoluções anteriores
+ * 2. Participant do payload (Evolution API v2)
+ * 3. Nosso banco (mensagemWhatsapp) — mensagem saída para este contato
+ * 4. Evolution API findContacts/findMessages
+ * 5. Evolution API fetchProfile
+ *
+ * REMOVIDA: busca por pushName (causava atribuição a pessoa errada)
  */
 async function resolveReplyJid(
   remoteJid: string,
@@ -32,17 +36,33 @@ async function resolveReplyJid(
     return { replyJid: remoteJid, telefone }
   }
 
-  // ── Estratégia 0: participant do payload (Evolution API v2) ──────────────
+  // ── Estratégia 0: Cache local (MapaLidWhatsApp) ──────────────────────────
+  try {
+    const cached = await prisma.mapaLidWhatsApp.findUnique({
+      where: { lidJid: remoteJid },
+    })
+    if (cached) {
+      console.log(`[WH-LID] Resolvido via cache → ${cached.realJid}`)
+      return { replyJid: cached.realJid, telefone: cached.telefone }
+    }
+  } catch (e) {
+    console.warn("[WH-LID] Falha ao buscar cache:", e)
+  }
+
+  // ── Estratégia 1: participant do payload (Evolution API v2) ──────────────
   if (participant) {
     const pClean = participant.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").split(":")[0].replace(/\D/g, "")
     if (pClean.length >= 10 && !pClean.includes("@")) {
       const jid = pClean.startsWith("55") ? `${pClean}@s.whatsapp.net` : `55${pClean}@s.whatsapp.net`
+      const telefone = pClean.startsWith("55") ? pClean : `55${pClean}`
       console.log(`[WH-LID] Resolvido via participant → ${jid}`)
-      return { replyJid: jid, telefone: pClean }
+      // Salva no cache
+      await salvarCacheLid(remoteJid, jid, telefone, pushName)
+      return { replyJid: jid, telefone }
     }
   }
 
-  // ── Estratégia 1: nosso banco tem alguma mensagem saída para este contato ──
+  // ── Estratégia 2: nosso banco tem alguma mensagem saída para este contato ──
   try {
     const msgSaida = await prisma.mensagemWhatsapp.findFirst({
       where: {
@@ -60,6 +80,7 @@ async function resolveReplyJid(
       if (clean.length >= 10 && !clean.includes("@")) {
         const jid = clean.startsWith("55") ? `${clean}@s.whatsapp.net` : `55${clean}@s.whatsapp.net`
         console.log(`[WH-LID] Resolvido via banco (saida) → ${jid}`)
+        await salvarCacheLid(remoteJid, jid, clean, pushName)
         return { replyJid: jid, telefone: clean.replace(/^55/, "") }
       }
     }
@@ -67,11 +88,10 @@ async function resolveReplyJid(
     console.warn("[WH-LID] Falha na busca do banco:", e)
   }
 
-  // ── Estratégia 2: Evolution API findContacts ──────────────────────────────
+  // ── Estratégia 3: Evolution API findContacts ──────────────────────────────
   try {
     const config = await getWhatsappConfig()
     if (config) {
-      // Tenta findContacts primeiro (mais direto)
       const contactRes = await fetch(`${config.instanceUrl}/chat/findContacts/${config.instanceId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: config.apiKey },
@@ -86,14 +106,15 @@ async function resolveReplyJid(
         if (contactId.endsWith("@s.whatsapp.net")) {
           const tel = contactId.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via findContacts → ${contactId}`)
+          await salvarCacheLid(remoteJid, contactId, tel, pushName)
           return { replyJid: contactId, telefone: tel }
         }
-        // Se o contato tem um pushName e número no objeto
-        const cNumber = contact?.number ?? contact?.pushName ?? ""
+        const cNumber = contact?.number ?? ""
         if (cNumber && /^\d{10,}$/.test(cNumber.replace(/\D/g, ""))) {
           const numClean = cNumber.replace(/\D/g, "")
           const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
           console.log(`[WH-LID] Resolvido via findContacts number → ${jid}`)
+          await salvarCacheLid(remoteJid, jid, numClean, pushName)
           return { replyJid: jid, telefone: numClean }
         }
       }
@@ -138,6 +159,7 @@ async function resolveReplyJid(
           const realJid = sentMsg.key.remoteJid
           const telefone = realJid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via Evolution findMessages → ${realJid}`)
+          await salvarCacheLid(remoteJid, realJid, telefone, pushName)
           return { replyJid: realJid, telefone }
         }
       }
@@ -146,43 +168,10 @@ async function resolveReplyJid(
     console.warn("[WH-LID] Falha no findContacts/findMessages:", e)
   }
 
-  // ── Estratégia 3: busca pelo pushName no banco ─────────────────────────────
-  if (pushName) {
-    try {
-      const firstName = pushName.split(" ")[0]
-      const [vm, user, ed] = await Promise.all([
-        prisma.videomaker.findFirst({
-          where: { nome: { contains: firstName, mode: "insensitive" } },
-          select: { nome: true, telefone: true },
-        }),
-        prisma.usuario.findFirst({
-          where: { nome: { contains: firstName, mode: "insensitive" } },
-          select: { nome: true, telefone: true },
-        }),
-        prisma.editor.findFirst({
-          where: { nome: { contains: firstName, mode: "insensitive" } },
-          select: { nome: true, telefone: true },
-        }),
-      ])
-      const found = vm ?? user ?? ed
-      if (found?.telefone) {
-        const tel = found.telefone.replace(/\D/g, "")
-        if (tel.length >= 10) {
-          const jid = tel.startsWith("55") ? `${tel}@s.whatsapp.net` : `55${tel}@s.whatsapp.net`
-          console.log(`[WH-LID] Resolvido via pushName "${pushName}" (${found.nome}) → ${jid}`)
-          return { replyJid: jid, telefone: tel.replace(/^55/, "") }
-        }
-      }
-    } catch (e) {
-      console.warn("[WH-LID] Falha na busca por pushName:", e)
-    }
-  }
-
-  // ── Estratégia 4: Evolution API whatsappNumbers — tenta resolver o LID diretamente ──
+  // ── Estratégia 4: Evolution API fetchProfile ──────────────────────────────
   try {
     const config = await getWhatsappConfig()
     if (config) {
-      // Tenta verificar se a Evolution consegue resolver o @lid via profilePicture ou fetch
       const profileRes = await fetch(`${config.instanceUrl}/chat/fetchProfile/${config.instanceId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: config.apiKey },
@@ -196,14 +185,15 @@ async function resolveReplyJid(
         if (wuid && wuid.endsWith("@s.whatsapp.net")) {
           const tel = wuid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via fetchProfile → ${wuid}`)
+          await salvarCacheLid(remoteJid, wuid, tel, pushName)
           return { replyJid: wuid, telefone: tel }
         }
-        // Alguns retornam o número direto
         const num = profile?.number ?? profile?.numberExists ?? ""
         if (num && /^\d{10,}$/.test(String(num).replace(/\D/g, ""))) {
           const numClean = String(num).replace(/\D/g, "")
           const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
           console.log(`[WH-LID] Resolvido via fetchProfile number → ${jid}`)
+          await salvarCacheLid(remoteJid, jid, numClean, pushName)
           return { replyJid: jid, telefone: numClean }
         }
       }
@@ -212,10 +202,56 @@ async function resolveReplyJid(
     console.warn("[WH-LID] Falha no fetchProfile:", e)
   }
 
-  // Se nada funcionou, usa o @lid como replyJid — sendWhatsappMessage vai tentar enviar
-  // pelo lidNumber diretamente (a Evolution pode resolver internamente)
-  console.warn(`[WH-LID] @lid ${remoteJid} não resolvido — tentando enviar direto pelo lidNumber: ${lidNumber}`)
-  return { replyJid: lidNumber, telefone: lidNumber }
+  // ══════════════════════════════════════════════════════════════════════════
+  // NOTA: A busca por pushName (primeiro nome) foi REMOVIDA por segurança.
+  // Ela causava atribuição de mensagens à pessoa errada quando dois contatos
+  // compartilhavam o mesmo primeiro nome.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Se nada funcionou, loga como WARNING CRÍTICO e tenta enviar pelo lidNumber
+  console.error(`[WH-LID] ⚠️ CRÍTICO: @lid ${remoteJid} NÃO resolvido para "${pushName}" — usando lidNumber: ${lidNumber}`)
+
+  // Notifica admin sobre @lid não resolvido
+  await notificarAdminLidNaoResolvido(remoteJid, pushName ?? "desconhecido", lidNumber)
+
+  return fallback
+}
+
+/**
+ * Salva mapeamento @lid → JID real no cache
+ */
+async function salvarCacheLid(lidJid: string, realJid: string, telefone: string, pushName?: string) {
+  try {
+    await prisma.mapaLidWhatsApp.upsert({
+      where: { lidJid },
+      create: { lidJid, realJid, telefone, pushName },
+      update: { realJid, telefone, pushName, updatedAt: new Date() },
+    })
+  } catch (e) {
+    console.warn("[WH-LID] Falha ao salvar cache:", e)
+  }
+}
+
+/**
+ * Notifica admin quando um @lid não pode ser resolvido
+ */
+async function notificarAdminLidNaoResolvido(lidJid: string, pushName: string, lidNumber: string) {
+  try {
+    const admins = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true },
+    })
+    for (const admin of admins) {
+      if (admin.telefone) {
+        await sendWhatsappMessage(
+          admin.telefone,
+          `⚠️ *NuFlow — Alerta*\n\nRecebemos uma mensagem de *${pushName}* mas não conseguimos identificar o número real (JID: ${lidJid}).\n\nPeça à pessoa para enviar o número dela por mensagem ou adicione o contato manualmente.`
+        ).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.warn("[WH-LID] Falha ao notificar admin:", e)
+  }
 }
 
 // ─── Handler principal ────────────────────────────────────────────────────────
@@ -268,6 +304,37 @@ function detectarMidia(message: Record<string, unknown>): MediaInfo | null {
     }
   }
   return null
+}
+
+// ─── Notifica admin sobre QUALQUER nova demanda ─────────────────────────────
+
+async function notificarAdminNovaDemanda(
+  codigo: string,
+  titulo: string,
+  nomeSolicitante: string,
+  telefone: string,
+  identidadeTipo: string
+) {
+  try {
+    const admins = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true, nome: true },
+    })
+    const origem = identidadeTipo === "desconhecido" || identidadeTipo === "externo"
+      ? "📌 Solicitante EXTERNO"
+      : `📌 ${identidadeTipo}`
+
+    for (const admin of admins) {
+      if (admin.telefone) {
+        await sendWhatsappMessage(
+          admin.telefone,
+          `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeSolicitante} (${telefone})\n${origem}\n\nAcesse o sistema para aprovar.`
+        ).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.warn("[WH] Falha ao notificar admins:", e)
+  }
 }
 
 // ─── Processamento real ─────────────────────────────────────────────────────
@@ -436,6 +503,8 @@ async function processarMensagem(body: unknown) {
 
   // ── Identifica quem está falando ────────────────────────────────────────
   const tel8 = telefone.slice(-8)
+  const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
+
   const [videomaker, editor, usuario, contatoExistente] = await Promise.all([
     prisma.videomaker.findFirst({
       where: { telefone: { contains: tel8 } },
@@ -462,7 +531,6 @@ async function processarMensagem(body: unknown) {
   // Auto-registra contato se é usuário/videomaker/editor conhecido mas sem ContatoWhatsApp
   if (!contatoExistente && (videomaker || editor || usuario)) {
     const ref = editor ?? videomaker ?? usuario
-    const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
     await prisma.contatoWhatsApp.upsert({
       where: { telefone: telNorm },
       create: {
@@ -487,7 +555,7 @@ async function processarMensagem(body: unknown) {
     : { tipo: "desconhecido" as const, nome: pushName || "" }
 
   // Primeiro nome para saudação informal
-  const primeiroNome = identidade.nome ? identidade.nome.split(" ")[0] : ""
+  const primeiroNome = identidade.nome ? identidade.nome.split(" ")[0] : (pushName?.split(" ")[0] || "")
 
   // ── Primeiro contato: pedir nome ────────────────────────────────────────
   if (identidade.tipo === "desconhecido" && !contatoExistente) {
@@ -500,6 +568,9 @@ async function processarMensagem(body: unknown) {
       // Primeira mensagem de contato desconhecido — pedir nome
       const msg = `Hey! Aqui é a *NuFlow* 🤖\n\nAinda não nos conhecemos! Como posso te chamar?`
       await sendWhatsappMessage(replyJid, msg)
+
+      // Notifica admin sobre novo contato
+      await notificarAdminNovoContato(pushName || "Desconhecido", telefone, textoOriginal)
       return
     }
 
@@ -508,7 +579,6 @@ async function processarMensagem(body: unknown) {
     if (jaPerguntouNome && pareceNome) {
       // Salva o contato com o nome informado
       const nomeContato = textoOriginal.trim()
-      const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
       await prisma.contatoWhatsApp.upsert({
         where: { telefone: telNorm },
         create: { telefone: telNorm, nome: nomeContato, tipo: "externo" },
@@ -537,6 +607,9 @@ async function processarMensagem(body: unknown) {
           }),
         ])
         await sendWhatsappMessage(replyJid, `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`, demanda.id)
+
+        // Notifica admin
+        await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker ACEITOU captação")
         return
       }
     }
@@ -556,13 +629,15 @@ async function processarMensagem(body: unknown) {
           }),
         ])
         await sendWhatsappMessage(replyJid, `Entendido. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`, demanda.id)
+
+        // Notifica admin
+        await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker RECUSOU captação — precisa escalar outro")
         return
       }
     }
   }
 
   if (textoUpper === "STATUS" || textoUpper === "MINHAS DEMANDAS") {
-    // Funciona para videomakers externos e editores (internos)
     const vmId = videomaker?.id
     const edId = editor?.id
     if (vmId || edId) {
@@ -584,7 +659,6 @@ async function processarMensagem(body: unknown) {
   }
 
   if (textoUpper === "AGENDA" || textoUpper === "MINHA AGENDA" || textoUpper === "AGENDA HOJE" || textoUpper === "AGENDA AMANHÃ") {
-    // Funciona para videomakers externos E editores (internos)
     const temAgenda = videomaker || editor
     if (temAgenda) {
       const hoje = new Date()
@@ -594,7 +668,6 @@ async function processarMensagem(body: unknown) {
         : new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
       const fimPeriodo = new Date(inicio.getTime() + diasFuturos * 86400000)
 
-      // Busca eventos por videomakerId OU editorId
       const eventoWhere = editor
         ? { editorId: editor.id, inicio: { gte: inicio, lte: fimPeriodo } }
         : { videomakerId: videomaker!.id, inicio: { gte: inicio, lte: fimPeriodo } }
@@ -605,7 +678,6 @@ async function processarMensagem(body: unknown) {
           orderBy: { inicio: "asc" }, take: 10,
           select: { titulo: true, inicio: true, fim: true, local: true, tipo: true },
         }),
-        // Captações agendadas (demandas)
         videomaker ? prisma.demanda.findMany({
           where: {
             videomakerId: videomaker.id,
@@ -771,6 +843,50 @@ REGRAS DE AGENDA:
       replyJid,
       `Hey ${primeiroNome}! Tive um probleminha técnico. Pode mandar de novo? 🙏`
     )
+  }
+}
+
+/**
+ * Notifica admin sobre novo contato tentando falar
+ */
+async function notificarAdminNovoContato(nome: string, telefone: string, mensagem: string) {
+  try {
+    const admins = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true },
+    })
+    for (const admin of admins) {
+      if (admin.telefone) {
+        await sendWhatsappMessage(
+          admin.telefone,
+          `👤 *Novo contato via WhatsApp!*\n\n📱 ${telefone}\n👤 ${nome}\n💬 "${mensagem.slice(0, 100)}"\n\nO sistema está coletando o nome da pessoa.`
+        ).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.warn("[WH] Falha ao notificar novo contato:", e)
+  }
+}
+
+/**
+ * Notifica admin sobre movimentação em demanda
+ */
+async function notificarAdminMovimentacao(codigo: string, titulo: string, nome: string, acao: string) {
+  try {
+    const admins = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true },
+    })
+    for (const admin of admins) {
+      if (admin.telefone) {
+        await sendWhatsappMessage(
+          admin.telefone,
+          `🔔 *NuFlow — Movimentação*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nome}\n📌 ${acao}`
+        ).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.warn("[WH] Falha ao notificar movimentação:", e)
   }
 }
 

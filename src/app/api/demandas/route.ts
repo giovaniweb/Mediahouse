@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { sendWhatsappMessage } from "@/lib/whatsapp"
 import type { Prioridade, Departamento } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
@@ -225,5 +226,43 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // NOVO: Notifica gestores/admins via WhatsApp sobre nova demanda
+  void notificarGestoresNovaDemanda(
+    demanda.codigo,
+    data.titulo,
+    session.user.name ?? "Usuário",
+    data.prioridade as string
+  )
+
   return NextResponse.json(demanda, { status: 201 })
+}
+
+/**
+ * Notifica gestores/admins via WhatsApp sobre nova demanda criada no portal
+ */
+async function notificarGestoresNovaDemanda(
+  codigo: string,
+  titulo: string,
+  nomeSolicitante: string,
+  prioridade: string
+) {
+  try {
+    const gestores = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true },
+    })
+
+    const emoji = prioridade === "urgente" ? "🚨" : prioridade === "alta" ? "⚡" : "📋"
+    const prioLabel = prioridade === "urgente" ? "URGENTE" : prioridade === "alta" ? "Alta" : "Normal"
+
+    const msg = `${emoji} *Nova Demanda no Sistema!*\n\n📋 *${codigo}* — ${titulo}\n👤 Solicitante: ${nomeSolicitante}\n⚡ Prioridade: ${prioLabel}\n\nAcesse o sistema para aprovar.`
+
+    for (const g of gestores) {
+      if (g.telefone) {
+        await sendWhatsappMessage(g.telefone, msg).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.error("[Demanda] Falha ao notificar gestores:", e)
+  }
 }

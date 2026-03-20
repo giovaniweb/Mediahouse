@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   // Enviar notificação WhatsApp ao videomaker
   const vm = convite.videomaker
   if (vm.telefone) {
-    const baseUrl = process.env.NEXTAUTH_URL || "https://videoops.vercel.app"
+    const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
     const link = `${baseUrl}/convite/${convite.token}`
 
     try {

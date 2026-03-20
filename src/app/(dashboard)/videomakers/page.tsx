@@ -3,10 +3,11 @@
 import { useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter } from "lucide-react"
+import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, FileText, Receipt, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
+import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -38,13 +39,27 @@ interface Videomaker {
 export default function VideomakersPage() {
   const [showForm, setShowForm] = useState(false)
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
+  const [busca, setBusca] = useState("")
   const { data, mutate } = useSWR("/api/videomakers", fetcher)
   const videomakers: Videomaker[] = data?.videomakers ?? []
 
   const lista = videomakers.filter((vm) => {
-    if (filtro === "lista_negra") return vm.emListaNegra
-    if (filtro === "todos") return !vm.emListaNegra
-    return vm.status === filtro && !vm.emListaNegra
+    // Status filter
+    if (filtro === "lista_negra" && !vm.emListaNegra) return false
+    if (filtro !== "lista_negra" && vm.emListaNegra) return false
+    if (filtro !== "todos" && filtro !== "lista_negra" && vm.status !== filtro) return false
+    // Search filter
+    if (busca.trim()) {
+      const q = busca.toLowerCase()
+      return (
+        vm.nome?.toLowerCase().includes(q) ||
+        vm.cidade?.toLowerCase().includes(q) ||
+        vm.estado?.toLowerCase().includes(q) ||
+        vm.email?.toLowerCase().includes(q) ||
+        vm.telefone?.includes(q)
+      )
+    }
+    return true
   })
 
   const negra = videomakers.filter(v => v.emListaNegra).length
@@ -93,6 +108,52 @@ export default function VideomakersPage() {
               {f === "todos" ? "Todos" : f === "lista_negra" ? `Lista Negra (${negra})` : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Video className="w-4 h-4 text-purple-400" />
+              <span className="text-xs text-zinc-500">Total Ativos</span>
+            </div>
+            <p className="text-2xl font-bold text-zinc-100">{videomakers.filter(v => v.status === "ativo" && !v.emListaNegra).length}</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Star className="w-4 h-4 text-yellow-400" />
+              <span className="text-xs text-zinc-500">Preferenciais</span>
+            </div>
+            <p className="text-2xl font-bold text-zinc-100">{videomakers.filter(v => v.status === "preferencial").length}</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="w-4 h-4 text-blue-400" />
+              <span className="text-xs text-zinc-500">Cidades</span>
+            </div>
+            <p className="text-2xl font-bold text-zinc-100">{new Set(videomakers.filter(v => v.cidade).map(v => v.cidade)).size}</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span className="text-xs text-zinc-500">Lista Negra</span>
+            </div>
+            <p className="text-2xl font-bold text-zinc-100">{negra}</p>
+          </div>
+        </div>
+
+        {/* Busca */}
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, cidade, estado..."
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-zinc-700"
+          />
+          {busca && (
+            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">&#x2715;</button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -158,9 +219,7 @@ export default function VideomakersPage() {
                         <span>{vm.telefone || "—"}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-zinc-300 text-xs">
-                          R$ {vm.valorDiaria?.toLocaleString("pt-BR")}/dia
-                        </span>
+                        <MoneyDisplay value={vm.valorDiaria} suffix="/dia" className="font-semibold text-zinc-300 text-xs" />
                         <button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(vm.id, vm.nome) }}
                           className="p-1 text-zinc-600 hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100"

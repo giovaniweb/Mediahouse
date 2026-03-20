@@ -30,6 +30,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
         where: { status: "ativo" },
         orderBy: { createdAt: "desc" },
       },
+      produtos: {
+        include: { produto: { select: { id: true, nome: true } } },
+      },
     },
   })
 
@@ -134,7 +137,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         if (vm?.telefone) {
           const configWpp = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
           if (configWpp) {
-            const baseUrl = process.env.NEXTAUTH_URL || "https://videoops.vercel.app"
+            const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
             const link = `${baseUrl}/nf-upload/${nf.token}`
             const phone = vm.telefone.replace(/\D/g, "")
             await fetch(`${configWpp.instanceUrl}/message/sendText/${configWpp.instanceId}`, {

@@ -7,13 +7,14 @@ import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Film, MapPin, Phone, Mail, Star, Edit2, Save, X,
-  AlertTriangle, QrCode, Copy, ExternalLink, DollarSign, Share2, Lock,
+  AlertTriangle, QrCode, Copy, ExternalLink, DollarSign, Share2, Lock, Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { TagInput } from "@/components/ui/TagInput"
+import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 import { VideomakerPerformance } from "@/components/VideomakerPerformance"
 
@@ -199,6 +200,12 @@ export default function EditorDetalhePage() {
             </button>
             {!editing ? (
               <>
+                <Link
+                  href={`/demandas/nova?editorId=${id}&editorNome=${encodeURIComponent(editor.nome)}`}
+                  className="flex items-center gap-1.5 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg px-3 py-2"
+                >
+                  <Plus className="w-4 h-4" /> Nova Demanda
+                </Link>
                 <button
                   onClick={loadQR}
                   className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-3 py-2"
@@ -361,10 +368,8 @@ export default function EditorDetalhePage() {
                     <input type="number" value={form.salario as string} onChange={(e) => setForm({ ...form, salario: e.target.value })} className={`${inp} flex-1`} placeholder="Salario" />
                   </div>
                 ) : (
-                  <span className="font-semibold text-zinc-200">
-                    Salario: {editor.salario != null
-                      ? `R$ ${Number(editor.salario).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : "—"}
+                  <span className="font-semibold text-zinc-200 flex items-center gap-1">
+                    Salario: <MoneyDisplay value={editor.salario} className="text-zinc-200" />
                   </span>
                 )}
               </div>

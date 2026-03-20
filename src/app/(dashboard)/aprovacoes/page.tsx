@@ -13,6 +13,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import Link from "next/link"
 import { toast } from "sonner"
+import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -463,7 +464,7 @@ function PagamentoList({ custos, loading, onAprovar, onContestar }: {
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-white">
-                R$ {c.valor.toFixed(2).replace(".", ",")}
+                <MoneyDisplay value={c.valor} size="lg" />
               </div>
               <div className="text-xs text-zinc-500 capitalize">{c.tipo}</div>
             </div>

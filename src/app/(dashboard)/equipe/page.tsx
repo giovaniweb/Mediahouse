@@ -4,7 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { Header } from "@/components/layout/Header"
-import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter } from "lucide-react"
+import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Activity, CheckCircle, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
@@ -46,12 +46,24 @@ interface Editor {
 export default function EquipePage() {
   const [showForm, setShowForm] = useState(false)
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
+  const [busca, setBusca] = useState("")
   const { data, mutate } = useSWR("/api/editores", fetcher)
   const editores: Editor[] = data?.editores ?? []
 
   const lista = editores.filter((ed) => {
-    if (filtro === "todos") return true
-    return ed.status === filtro
+    if (filtro !== "todos" && ed.status !== filtro) return false
+    if (busca.trim()) {
+      const q = busca.toLowerCase()
+      return (
+        ed.nome?.toLowerCase().includes(q) ||
+        ed.cidade?.toLowerCase().includes(q) ||
+        ed.estado?.toLowerCase().includes(q) ||
+        ed.email?.toLowerCase().includes(q) ||
+        ed.telefone?.includes(q) ||
+        ed.especialidade?.some(s => s.toLowerCase().includes(q))
+      )
+    }
+    return true
   })
 
   async function handleDelete(id: string, nome: string) {
@@ -96,6 +108,60 @@ export default function EquipePage() {
               {f === "todos" ? "Todos" : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
+        </div>
+
+        {/* KPIs */}
+        {(() => {
+          const ativos = editores.filter(e => e.status === "ativo")
+          const totalCarga = ativos.reduce((s, e) => s + (e.demandas?.length ?? 0), 0)
+          const totalLimite = ativos.reduce((s, e) => s + (e.cargaLimite ?? 5), 0)
+          const sobrecarregados = ativos.filter(e => (e.demandas?.length ?? 0) >= (e.cargaLimite ?? 5)).length
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs text-zinc-500">Editores Ativos</span>
+                </div>
+                <p className="text-2xl font-bold text-zinc-100">{ativos.length}</p>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Film className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs text-zinc-500">Demandas em Curso</span>
+                </div>
+                <p className="text-2xl font-bold text-zinc-100">{totalCarga}</p>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <span className="text-xs text-zinc-500">Capacidade Total</span>
+                </div>
+                <p className="text-2xl font-bold text-zinc-100">{totalCarga}/{totalLimite}</p>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <span className="text-xs text-zinc-500">Sobrecarregados</span>
+                </div>
+                <p className="text-2xl font-bold text-zinc-100">{sobrecarregados}</p>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Busca */}
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, cidade, especialidade..."
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-zinc-700"
+          />
+          {busca && (
+            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">{"\u2715"}</button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

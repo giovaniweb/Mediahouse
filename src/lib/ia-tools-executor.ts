@@ -714,17 +714,18 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
     },
   })
 
-  // Notifica gestores sobre a nova demanda
-  if (isExternalRequester && nomeSolicitante) {
+  // SEMPRE notifica gestores sobre nova demanda (independente se é externo ou interno)
+  {
     const gestores = await prisma.usuario.findMany({
       where: { tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] }, status: "ativo", telefone: { not: null } },
       select: { telefone: true, nome: true },
     })
+    const origemLabel = isExternalRequester ? "📌 Solicitante EXTERNO" : "📌 Solicitante do sistema"
     for (const g of gestores) {
       if (g.telefone) {
         await sendWhatsappMessage(
           g.telefone,
-          `📋 *Nova demanda via WhatsApp!*\n\n*${codigo}* — ${demanda.titulo}\n👤 Solicitante: ${nomeSolicitante} (${telSolicitante})\n\nAcesse o sistema para aprovar.`,
+          `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${demanda.titulo}\n👤 ${nomeSolicitante || "Desconhecido"} (${telSolicitante || "sem tel"})\n${origemLabel}\n\nAcesse o sistema para aprovar.`,
           demanda.id
         ).catch(() => null)
       }

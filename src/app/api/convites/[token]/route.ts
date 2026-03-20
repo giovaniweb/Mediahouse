@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 // GET /api/convites/[token] — buscar dados do convite (página pública)
 export async function GET(
@@ -68,14 +69,14 @@ export async function POST(
 
   const novoStatus = acao === "aceitar" ? "aceito" : "recusado"
 
-  // Atualizar convite
+  // Atualizar convite (CORRIGIDO: atualiza status tanto para aceitar quanto recusar)
   await prisma.conviteVideomaker.update({
     where: { token },
     data: { status: novoStatus, respondidoEm: new Date() },
   })
 
-  // Se aceitou, atribuir videomaker à demanda e avançar status
   if (acao === "aceitar") {
+    // Atribuir videomaker à demanda e avançar status
     await prisma.demanda.update({
       where: { id: convite.demandaId },
       data: {
@@ -84,7 +85,6 @@ export async function POST(
       },
     })
 
-    // Criar histórico
     await prisma.historicoStatus.create({
       data: {
         demandaId: convite.demandaId,
@@ -94,8 +94,13 @@ export async function POST(
         observacao: `Videomaker ${convite.videomaker.nome} aceitou o convite`,
       },
     })
+
+    // NOVO: Notifica admin/gestor via WhatsApp
+    void notificarGestores(
+      `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`
+    )
   } else {
-    // Recusou → marcar no histórico
+    // Recusou → registrar no histórico
     await prisma.historicoStatus.create({
       data: {
         demandaId: convite.demandaId,
@@ -105,7 +110,31 @@ export async function POST(
         observacao: `Videomaker ${convite.videomaker.nome} recusou o convite`,
       },
     })
+
+    // NOVO: Notifica admin/gestor via WhatsApp
+    void notificarGestores(
+      `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`
+    )
   }
 
   return NextResponse.json({ status: novoStatus })
+}
+
+/**
+ * Envia notificação WhatsApp para todos os gestores/admins ativos
+ */
+async function notificarGestores(mensagem: string) {
+  try {
+    const gestores = await prisma.usuario.findMany({
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      select: { telefone: true },
+    })
+    for (const g of gestores) {
+      if (g.telefone) {
+        await sendWhatsappMessage(g.telefone, mensagem).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.error("[Convite] Falha ao notificar gestores:", e)
+  }
 }

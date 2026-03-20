@@ -83,9 +83,7 @@ export function Sidebar() {
       {/* Logo + WhatsApp Status */}
       <div className="px-4 py-5 border-b border-zinc-800 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center shrink-0">
-            <Film className="w-4 h-4 text-zinc-900" />
-          </div>
+          <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-md shrink-0" />
           <span className="text-white font-semibold tracking-tight">NuFlow</span>
         </div>
         <WhatsAppStatus />
