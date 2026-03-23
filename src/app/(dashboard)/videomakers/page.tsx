@@ -3,7 +3,7 @@
 import { useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, FileText, Receipt, Clock } from "lucide-react"
+import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, CheckCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
@@ -26,7 +26,7 @@ const HABILIDADES_SUGESTOES = [
   "Roteiro", "Narração",
 ]
 
-type FiltroStatus = "todos" | "ativo" | "preferencial" | "inativo" | "lista_negra"
+type FiltroStatus = "todos" | "pendente" | "ativo" | "preferencial" | "inativo" | "lista_negra"
 
 interface Videomaker {
   id: string; nome: string; cidade: string; estado: string
@@ -63,6 +63,7 @@ export default function VideomakersPage() {
   })
 
   const negra = videomakers.filter(v => v.emListaNegra).length
+  const pendentes = videomakers.filter(v => v.status === "pendente" && !v.emListaNegra).length
 
   async function handleDelete(id: string, nome: string) {
     if (!confirm(`Remover "${nome}"? Esta ação é irreversível.`)) return
@@ -72,6 +73,18 @@ export default function VideomakersPage() {
       mutate()
     } else {
       toast.error("Erro ao remover")
+    }
+  }
+
+  async function handleAprovar(id: string, nome: string) {
+    if (!confirm(`Aprovar "${nome}"? Isso criará uma conta de acesso e enviará as credenciais via WhatsApp.`)) return
+    const res = await fetch(`/api/videomakers/${id}/aprovar`, { method: "POST" })
+    const json = await res.json()
+    if (res.ok) {
+      toast.success(json.mensagem || "Videomaker aprovado!")
+      mutate()
+    } else {
+      toast.error(json.error || "Erro ao aprovar")
     }
   }
 
@@ -92,7 +105,7 @@ export default function VideomakersPage() {
         {/* Filtros */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Filter className="h-4 w-4 text-zinc-500" />
-          {(["todos", "ativo", "preferencial", "inativo", "lista_negra"] as FiltroStatus[]).map((f) => (
+          {(["todos", "pendente", "ativo", "preferencial", "inativo", "lista_negra"] as FiltroStatus[]).map((f) => (
             <button
               key={f}
               onClick={() => setFiltro(f)}
@@ -101,11 +114,16 @@ export default function VideomakersPage() {
                 filtro === f
                   ? f === "lista_negra"
                     ? "bg-red-600 border-red-700 text-white"
-                    : "bg-zinc-700 border-zinc-600 text-white"
+                    : f === "pendente"
+                      ? "bg-yellow-600 border-yellow-700 text-white"
+                      : "bg-zinc-700 border-zinc-600 text-white"
                   : "border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
               )}
             >
-              {f === "todos" ? "Todos" : f === "lista_negra" ? `Lista Negra (${negra})` : f.charAt(0).toUpperCase() + f.slice(1)}
+              {f === "todos" ? "Todos"
+                : f === "lista_negra" ? `Lista Negra (${negra})`
+                : f === "pendente" ? `Pendentes${pendentes > 0 ? ` (${pendentes})` : ""}`
+                : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
@@ -133,12 +151,15 @@ export default function VideomakersPage() {
             </div>
             <p className="text-2xl font-bold text-zinc-100">{new Set(videomakers.filter(v => v.cidade).map(v => v.cidade)).size}</p>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className={cn(
+            "bg-zinc-900 border rounded-xl p-4",
+            pendentes > 0 ? "border-yellow-700/50 bg-yellow-900/10" : "border-zinc-800"
+          )}>
             <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-red-400" />
-              <span className="text-xs text-zinc-500">Lista Negra</span>
+              <AlertTriangle className={cn("w-4 h-4", pendentes > 0 ? "text-yellow-400" : "text-zinc-600")} />
+              <span className="text-xs text-zinc-500">Pendentes</span>
             </div>
-            <p className="text-2xl font-bold text-zinc-100">{negra}</p>
+            <p className={cn("text-2xl font-bold", pendentes > 0 ? "text-yellow-300" : "text-zinc-100")}>{pendentes}</p>
           </div>
         </div>
 
@@ -213,7 +234,18 @@ export default function VideomakersPage() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-sm">
+                    {/* Botão Aprovar para pendentes */}
+                    {vm.status === "pendente" && (
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAprovar(vm.id, vm.nome) }}
+                        className="w-full flex items-center justify-center gap-1.5 mt-2 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium transition-colors"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Aprovar & Criar Acesso
+                      </button>
+                    )}
+
+                    <div className="flex items-center justify-between text-sm mt-2">
                       <div className="flex items-center gap-1 text-zinc-500 text-xs">
                         <Phone className="w-3 h-3" />
                         <span>{vm.telefone || "—"}</span>

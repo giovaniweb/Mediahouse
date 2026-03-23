@@ -6,7 +6,7 @@ import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Film, MapPin, Phone, Mail, Star, Edit2, Save, X,
-  AlertTriangle, QrCode, Copy, ExternalLink, DollarSign, Share2, Plus,
+  AlertTriangle, QrCode, Copy, ExternalLink, DollarSign, Share2, Plus, CheckCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -131,6 +131,18 @@ export default function VideomakerDetalhePage() {
     } finally { setEnviandoAvaliacao(false) }
   }
 
+  async function handleAprovar() {
+    if (!confirm(`Aprovar "${vm.nome}"? Isso criará uma conta de acesso e enviará as credenciais via WhatsApp.`)) return
+    const res = await fetch(`/api/videomakers/${id}/aprovar`, { method: "POST" })
+    const json = await res.json()
+    if (res.ok) {
+      toast.success(json.mensagem || "Videomaker aprovado!")
+      mutate()
+    } else {
+      toast.error(json.error || "Erro ao aprovar")
+    }
+  }
+
   async function aplicarListaNegra() {
     setLoadingNegra(true)
     try {
@@ -219,6 +231,28 @@ export default function VideomakerDetalhePage() {
       />
 
       <main className="flex-1 p-6 max-w-4xl space-y-6">
+        {/* Banner Pendente */}
+        {vm.status === "pendente" && (
+          <div className="bg-yellow-900/20 border border-yellow-700 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-yellow-300 font-semibold text-sm">Cadastro Pendente de Aprovação</p>
+                <p className="text-yellow-400/70 text-xs mt-0.5">
+                  Este videomaker se cadastrou pelo formulário público e aguarda revisão. Ao aprovar, uma conta de acesso será criada e as credenciais enviadas via WhatsApp.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleAprovar}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-sm font-medium shrink-0 transition-colors"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Aprovar & Criar Acesso
+            </button>
+          </div>
+        )}
+
         {/* Performance */}
         <VideomakerPerformance videomakerId={vm.id} />
 
