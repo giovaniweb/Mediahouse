@@ -276,7 +276,11 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
       const res = await fetch("/api/videomakers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, valorDiaria: Number(form.valorDiaria) }),
+        body: JSON.stringify({
+        ...form,
+        email: form.email.trim() || undefined,   // não enviar string vazia
+        valorDiaria: form.valorDiaria ? Number(form.valorDiaria) : undefined,
+      }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Videomaker cadastrado!")

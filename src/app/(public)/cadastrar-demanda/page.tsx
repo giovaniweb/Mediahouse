@@ -86,11 +86,13 @@ export default function CadastrarDemandaPage() {
     : ["Seus Dados", "Tipo", "Detalhes", "Resumo"]
 
   const canAdvance = () => {
-    if (step === 0) return !!nomeCliente && !!email && !!telefone
+    if (step === 0) {
+      return !!nomeCliente.trim() && email.includes("@") && telefone.replace(/\D/g, "").length >= 10
+    }
     if (step === 1) return !!tipo
     if (step === 2) {
-      if (tipo === "video") return !!titulo && !!descricao && !!tipoVideo
-      if (tipo === "cobertura") return !!titulo && !!descricao && !!cidade && !!localEvento && !!dataEvento
+      if (tipo === "video") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!tipoVideo
+      if (tipo === "cobertura") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!cidade.trim() && !!localEvento.trim() && !!dataEvento
     }
     return true
   }
@@ -116,7 +118,10 @@ export default function CadastrarDemandaPage() {
 
   // ── Submit ────────────────────────────────────────────────────────
   async function onSubmit() {
-    if (!validar()) return
+    if (!validar()) {
+      setErro("Verifique os campos obrigatórios antes de enviar.")
+      return
+    }
     setLoading(true)
     setErro(null)
     try {
