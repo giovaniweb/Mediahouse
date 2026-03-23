@@ -1,10 +1,11 @@
 "use client"
 
+import { useRef, useState, useCallback } from "react"
 import { DragDropContext, Draggable, DropResult } from "@hello-pangea/dnd"
 import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { cn } from "@/lib/utils"
-import { Plus } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 
 export const COLUNAS = [
@@ -39,6 +40,38 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const isDraggingScroll = useRef(false)
+  const startX = useRef(0)
+  const scrollLeft = useRef(0)
+  const [dragging, setDragging] = useState(false)
+
+  const scrollBy = useCallback((amount: number) => {
+    scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
+  }, [])
+
+  const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Only drag on the background, not on cards/buttons
+    if ((e.target as HTMLElement).closest("[data-card], button, a, input, select")) return
+    isDraggingScroll.current = true
+    setDragging(true)
+    startX.current = e.pageX - (scrollRef.current?.offsetLeft ?? 0)
+    scrollLeft.current = scrollRef.current?.scrollLeft ?? 0
+  }, [])
+
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingScroll.current || !scrollRef.current) return
+    e.preventDefault()
+    const x = e.pageX - scrollRef.current.offsetLeft
+    const walk = (x - startX.current) * 1.2
+    scrollRef.current.scrollLeft = scrollLeft.current - walk
+  }, [])
+
+  const onMouseUp = useCallback(() => {
+    isDraggingScroll.current = false
+    setDragging(false)
+  }, [])
+
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return
     const destinoCol = result.destination.droppableId as StatusVisivel
@@ -51,8 +84,32 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
     demandas.filter((d) => d.statusVisivel === colId)
 
   return (
+    <div className="relative h-full flex flex-col">
+      {/* Botões de navegação */}
+      <button
+        onClick={() => scrollBy(-320)}
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        aria-label="Rolar para esquerda"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+      <button
+        onClick={() => scrollBy(320)}
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        aria-label="Rolar para direita"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
+
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-4 h-full">
+      <div
+        ref={scrollRef}
+        className={cn("kanban-scroll flex gap-3 overflow-x-auto pb-2 h-full px-10 select-none", dragging && "is-dragging")}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
         {COLUNAS.map((col) => {
           const items = byCol(col.id)
           return (
@@ -99,6 +156,7 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
+                            data-card
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
                             <DemandaCard demanda={demanda} onDelete={onDelete} />
@@ -115,5 +173,6 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
         })}
       </div>
     </DragDropContext>
+    </div>
   )
 }
