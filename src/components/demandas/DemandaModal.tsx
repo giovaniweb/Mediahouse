@@ -142,7 +142,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
               {/* Descrição */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                <p className="text-sm text-zinc-400 leading-relaxed">{demanda.descricao}</p>
+                <p className="text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao}</p>
               </div>
 
               {/* Impedimento */}

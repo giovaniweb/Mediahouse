@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -9,12 +9,13 @@ import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
-  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package,
+  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
+import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -79,6 +80,11 @@ export default function DemandaDetailPage() {
   const [localGravacao, setLocalGravacao] = useState("")
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
+  // ── Upload de vídeo ───────────────────────────────────────────────────────
+  const [uploadingBrutos, setUploadingBrutos] = useState(false)
+  const [uploadingFinal, setUploadingFinal] = useState(false)
+  const fileRefBrutos = useRef<HTMLInputElement>(null)
+  const fileRefFinal = useRef<HTMLInputElement>(null)
 
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
@@ -167,6 +173,34 @@ export default function DemandaDetailPage() {
       setLocalGravacao(demanda.localGravacao ?? "")
       setClassificacao(demanda.classificacao ?? "")
       setProdutoId(demanda.produtos?.[0]?.produtoId ?? "")
+    }
+  }
+
+  // ── Upload de vídeo ───────────────────────────────────────────────────────
+  async function uploadVideo(file: File, tipo: "brutos" | "final") {
+    const setUploading = tipo === "brutos" ? setUploadingBrutos : setUploadingFinal
+    const setLink = tipo === "brutos" ? setLinkBrutos : setLinkFinal
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      form.append("tipo", tipo)
+      const res = await fetch(`/api/demandas/${id}/upload-video`, { method: "POST", body: form })
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erro no upload")
+      const { url } = await res.json()
+      setLink(url)
+      // Auto-salva o link
+      await fetch(`/api/demandas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tipo === "brutos" ? { linkBrutos: url } : { linkFinal: url }),
+      })
+      toast.success(`${tipo === "brutos" ? "Brutos" : "Vídeo final"} enviado com sucesso!`)
+      mutate()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -298,7 +332,7 @@ export default function DemandaDetailPage() {
                 className="w-full text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none text-zinc-200"
               />
             ) : (
-              <p className="text-sm text-zinc-400 leading-relaxed">{demanda.descricao}</p>
+              <p className="text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao}</p>
             )}
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -451,10 +485,18 @@ export default function DemandaDetailPage() {
                   )}
                 </select>
                 {demanda.videomaker && !editMode && (
-                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {demanda.videomaker.nome}
-                    {demanda.videomaker.cidade ? ` · ${demanda.videomaker.cidade}` : ""}
-                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    <p className="text-xs text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> {demanda.videomaker.nome}
+                      {demanda.videomaker.cidade ? ` · ${demanda.videomaker.cidade}` : ""}
+                    </p>
+                    {demanda.videomaker.telefone && (
+                      <QuickWhatsapp
+                        telefone={demanda.videomaker.telefone}
+                        nome={demanda.videomaker.nome}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -491,10 +533,18 @@ export default function DemandaDetailPage() {
                   )}
                 </select>
                 {demanda.editor && !editMode && (
-                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {demanda.editor.nome}
-                    {demanda.editor.especialidade ? ` · ${demanda.editor.especialidade}` : ""}
-                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    <p className="text-xs text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> {demanda.editor.nome}
+                      {demanda.editor.especialidade ? ` · ${demanda.editor.especialidade}` : ""}
+                    </p>
+                    {(demanda.editor.whatsapp || demanda.editor.telefone) && (
+                      <QuickWhatsapp
+                        telefone={demanda.editor.whatsapp ?? demanda.editor.telefone}
+                        nome={demanda.editor.nome}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -507,18 +557,60 @@ export default function DemandaDetailPage() {
               <Link2 className="w-4 h-4 text-purple-400" /> Links da Produção
             </h2>
             <div className="space-y-3">
-              <LinkField
-                label="📁 Brutos (material bruto filmado)"
-                value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
-                editMode={editMode}
-                onChange={setLinkBrutos}
-              />
-              <LinkField
-                label="🎬 Arquivo Final (vídeo editado)"
-                value={editMode ? linkFinal : (demanda.linkFinal ?? "")}
-                editMode={editMode}
-                onChange={setLinkFinal}
-              />
+              {/* Brutos */}
+              <div>
+                <LinkField
+                  label="📁 Brutos (material bruto filmado)"
+                  value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
+                  editMode={editMode}
+                  onChange={setLinkBrutos}
+                />
+                <div className="mt-1.5 flex items-center gap-2">
+                  <input
+                    ref={fileRefBrutos}
+                    type="file"
+                    accept="video/*,.zip"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f, "brutos"); e.target.value = "" }}
+                  />
+                  <button
+                    onClick={() => fileRefBrutos.current?.click()}
+                    disabled={uploadingBrutos}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50"
+                  >
+                    {uploadingBrutos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {uploadingBrutos ? "Enviando..." : "Upload arquivo"}
+                  </button>
+                  <span className="text-xs text-zinc-600">mp4, mov, avi, webm, mkv ou zip · máx 500MB</span>
+                </div>
+              </div>
+              {/* Final */}
+              <div>
+                <LinkField
+                  label="🎬 Arquivo Final (vídeo editado)"
+                  value={editMode ? linkFinal : (demanda.linkFinal ?? "")}
+                  editMode={editMode}
+                  onChange={setLinkFinal}
+                />
+                <div className="mt-1.5 flex items-center gap-2">
+                  <input
+                    ref={fileRefFinal}
+                    type="file"
+                    accept="video/*,.zip"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f, "final"); e.target.value = "" }}
+                  />
+                  <button
+                    onClick={() => fileRefFinal.current?.click()}
+                    disabled={uploadingFinal}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50"
+                  >
+                    {uploadingFinal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {uploadingFinal ? "Enviando..." : "Upload arquivo"}
+                  </button>
+                  <span className="text-xs text-zinc-600">mp4, mov, avi, webm, mkv ou zip · máx 500MB</span>
+                </div>
+              </div>
               {demanda.referencia && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-500 w-36 shrink-0">📌 Referência</span>
@@ -606,16 +698,11 @@ export default function DemandaDetailPage() {
             {/* Telefone de quem solicitou via WhatsApp */}
             {demanda.telefoneSolicitante && (
               <div className="mt-3 pt-3 border-t border-zinc-800">
-                <p className="text-xs text-zinc-500 mb-1">📱 WhatsApp do solicitante</p>
-                <a
-                  href={`https://wa.me/${demanda.telefoneSolicitante.replace(/\D/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium text-green-400 hover:text-green-300 flex items-center gap-1"
-                >
-                  {demanda.telefoneSolicitante.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, "+$1 ($2) $3-$4")}
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.75.75 0 00.913.913l4.458-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.034l-.438-.332-2.844.954.954-2.844-.332-.438A9.935 9.935 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-                </a>
+                <QuickWhatsapp
+                  telefone={demanda.telefoneSolicitante}
+                  nome={demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "Solicitante"}
+                  label="📱 WhatsApp do solicitante"
+                />
               </div>
             )}
           </div>
