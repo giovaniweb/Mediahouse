@@ -204,6 +204,7 @@ model Videomaker {
   portfolio        String?
   emListaNegra     Boolean          @default(false)
   listaNegraMotivo String?
+  podeEditar       Boolean          @default(false)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -249,6 +250,7 @@ model Editor {
   portfolio        String?
   emListaNegra     Boolean          @default(false)
   listaNegraMotivo String?
+  fazCaptacao      Boolean          @default(false)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -313,6 +315,7 @@ model Demanda {
   notaFiscalUrl  String?
   notaFiscalNome String?
 
+  posicaoKanban     Int?               // posição dentro da coluna (para reordenação)
   trelloCardId      String?  @unique  // Trello card ID to prevent re-import
 
   // Relações de usuários (FKs)

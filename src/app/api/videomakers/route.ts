@@ -9,9 +9,13 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
+  const usuarioId = searchParams.get("usuarioId")
 
   const videomakers = await prisma.videomaker.findMany({
-    where: status ? { status: status as "ativo" | "inativo" | "preferencial" } : undefined,
+    where: {
+      ...(status ? { status: status as "ativo" | "inativo" | "preferencial" } : {}),
+      ...(usuarioId ? { usuarioId } : {}),
+    },
     include: {
       _count: { select: { demandas: true } },
     },
@@ -41,8 +45,15 @@ export async function POST(req: NextRequest) {
       observacoes: body.observacoes,
       areasAtuacao: body.areasAtuacao ?? [],
       portfolio: body.portfolio,
+      podeEditar: body.podeEditar ?? false,
+      ...(body.usuarioId ? { usuarioId: body.usuarioId } : {}),
     },
   })
+
+  // Se usuarioId já foi fornecido, o usuário já existe — apenas vincula o Videomaker ao usuário
+  if (body.usuarioId) {
+    return NextResponse.json(videomaker, { status: 201 })
+  }
 
   // Auto-criar conta de acesso (Usuario) para o videomaker
   try {

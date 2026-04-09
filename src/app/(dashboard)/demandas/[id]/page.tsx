@@ -49,8 +49,8 @@ const STATUS_LABELS: Record<string, string> = {
   expirado: "Expirado",
 }
 
-interface Videomaker { id: string; nome: string; cidade?: string; status: string }
-interface Editor { id: string; nome: string; especialidade?: string; status: string }
+interface Videomaker { id: string; nome: string; cidade?: string; status: string; podeEditar?: boolean }
+interface Editor { id: string; nome: string; especialidade?: string; status: string; fazCaptacao?: boolean }
 
 export default function DemandaDetailPage() {
   const { id } = useParams()
@@ -435,9 +435,20 @@ export default function DemandaDetailPage() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
                 >
                   <option value="">— Sem videomaker —</option>
-                  {videomakers.map(v => (
-                    <option key={v.id} value={v.id}>{v.nome}{v.cidade ? ` (${v.cidade})` : ""}</option>
-                  ))}
+                  {videomakers.filter(v => !v.podeEditar).length > 0 && (
+                    <optgroup label="Apenas captação">
+                      {videomakers.filter(v => !v.podeEditar).map(v => (
+                        <option key={v.id} value={v.id}>{v.nome}{v.cidade ? ` (${v.cidade})` : ""}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {videomakers.filter(v => v.podeEditar).length > 0 && (
+                    <optgroup label="Captação + Edição">
+                      {videomakers.filter(v => v.podeEditar).map(v => (
+                        <option key={v.id} value={v.id}>{v.nome}{v.cidade ? ` (${v.cidade})` : ""} ✂️</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 {demanda.videomaker && !editMode && (
                   <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
@@ -464,9 +475,20 @@ export default function DemandaDetailPage() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
                 >
                   <option value="">— Sem editor —</option>
-                  {editores.map(e => (
-                    <option key={e.id} value={e.id}>{e.nome}{e.especialidade ? ` · ${e.especialidade}` : ""}</option>
-                  ))}
+                  {editores.filter(e => !e.fazCaptacao).length > 0 && (
+                    <optgroup label="Apenas edição">
+                      {editores.filter(e => !e.fazCaptacao).map(e => (
+                        <option key={e.id} value={e.id}>{e.nome}{e.especialidade ? ` · ${e.especialidade}` : ""}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {editores.filter(e => e.fazCaptacao).length > 0 && (
+                    <optgroup label="Edição + Captação">
+                      {editores.filter(e => e.fazCaptacao).map(e => (
+                        <option key={e.id} value={e.id}>{e.nome}{e.especialidade ? ` · ${e.especialidade}` : ""} 📷</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 {demanda.editor && !editMode && (
                   <p className="text-xs text-green-400 mt-1 flex items-center gap-1">

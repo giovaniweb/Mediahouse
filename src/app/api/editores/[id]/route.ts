@@ -73,6 +73,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       areasAtuacao: body.areasAtuacao,
       equipamentos: body.equipamentos,
       portfolio: body.portfolio,
+      fazCaptacao: body.fazCaptacao,
       ...(isPrivileged && body.salario !== undefined ? { salario: body.salario } : {}),
     },
   })

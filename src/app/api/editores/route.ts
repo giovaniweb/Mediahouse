@@ -9,8 +9,12 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
+  const usuarioId = searchParams.get("usuarioId")
 
-  const where = status ? { status: status as "ativo" | "inativo" } : {}
+  const where = {
+    ...(status ? { status: status as "ativo" | "inativo" } : {}),
+    ...(usuarioId ? { usuarioId } : {}),
+  }
 
   const editores = await prisma.editor.findMany({
     where,
@@ -67,9 +71,16 @@ export async function POST(req: NextRequest) {
       areasAtuacao: body.areasAtuacao ?? [],
       equipamentos: body.equipamentos ?? [],
       portfolio: body.portfolio,
+      fazCaptacao: body.fazCaptacao ?? false,
+      ...(body.usuarioId ? { usuarioId: body.usuarioId } : {}),
       ...(isPrivileged && body.salario != null ? { salario: body.salario } : {}),
     },
   })
+
+  // Se usuarioId já foi fornecido, o usuário já existe — apenas vincula o Editor ao usuário
+  if (body.usuarioId) {
+    return NextResponse.json(editor, { status: 201 })
+  }
 
   // Auto-criar conta de acesso (Usuario) para o editor (videomaker interno)
   const telefone = body.whatsapp || body.telefone

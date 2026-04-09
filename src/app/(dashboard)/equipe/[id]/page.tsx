@@ -146,6 +146,21 @@ export default function EditorDetalhePage() {
     } finally { setEnviandoAvaliacao(false) }
   }
 
+  async function handleToggleFazCaptacao() {
+    try {
+      const res = await fetch(`/api/editores/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fazCaptacao: !editor.fazCaptacao }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success(editor.fazCaptacao ? "Captação desabilitada" : "Editor pode fazer captação agora")
+      mutate()
+    } catch (err) {
+      toast.error(String(err))
+    }
+  }
+
   async function aplicarListaNegra() {
     setLoadingNegra(true)
     try {
@@ -557,6 +572,23 @@ export default function EditorDetalhePage() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Faz Captacao */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Faz Captação</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Permite atribuir este editor como videomaker em demandas</p>
+            </div>
+            <button
+              onClick={handleToggleFazCaptacao}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editor.fazCaptacao ? "bg-purple-600" : "bg-zinc-700"}`}
+              title={editor.fazCaptacao ? "Clique para desabilitar captação" : "Clique para habilitar captação"}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${editor.fazCaptacao ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
         </div>
 
         {/* Avaliacao */}

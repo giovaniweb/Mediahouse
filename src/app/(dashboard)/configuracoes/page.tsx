@@ -10,7 +10,7 @@ import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros"
+type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil"
 
 const TIPO_OPTS = ["gestor", "operacao"]
 const TIPO_LABEL: Record<string, string> = {
@@ -122,6 +122,9 @@ function TabUsuarios() {
   const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
   const [loading, setLoading] = useState(false)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
+  const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
+  const [promoverTipo, setPromoverTipo] = useState("operacao")
+  const [loadingPromover, setLoadingPromover] = useState(false)
 
   async function criarUsuario() {
     setLoading(true)
@@ -139,6 +142,24 @@ function TabUsuarios() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar usuário")
     } finally { setLoading(false) }
+  }
+
+  async function promoverUsuario() {
+    if (!promoverTarget) return
+    setLoadingPromover(true)
+    try {
+      const res = await fetch(`/api/usuarios/${promoverTarget.id}/promover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: promoverTipo }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success(`${promoverTarget.nome} promovido para ${TIPO_LABEL[promoverTipo] ?? promoverTipo}!`)
+      setPromoverTarget(null)
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao promover")
+    } finally { setLoadingPromover(false) }
   }
 
   async function toggleStatus(id: string, status: string) {
@@ -172,6 +193,42 @@ function TabUsuarios() {
           onClose={() => setResetTarget(null)}
           onSave={() => mutate()}
         />
+      )}
+
+      {/* Modal Promover */}
+      {promoverTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl mx-4">
+            <h3 className="font-semibold text-white mb-1">Promover Usuário</h3>
+            <p className="text-sm text-zinc-400 mb-4">{promoverTarget.nome} será promovido de solicitante.</p>
+            <label className="text-xs text-zinc-500 mb-1 block">Novo tipo</label>
+            <select
+              value={promoverTipo}
+              onChange={e => setPromoverTipo(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 mb-4 outline-none"
+            >
+              <option value="operacao">Operação</option>
+              <option value="gestor">Gestor</option>
+              <option value="social">Social Media</option>
+              <option value="admin">Admin</option>
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={promoverUsuario}
+                disabled={loadingPromover}
+                className="flex-1 bg-white text-zinc-900 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50"
+              >
+                {loadingPromover ? "Salvando..." : "Confirmar"}
+              </button>
+              <button
+                onClick={() => setPromoverTarget(null)}
+                className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Sub-abas */}
@@ -287,6 +344,15 @@ function TabUsuarios() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
+                    {u.tipo === "solicitante" && (
+                      <button
+                        onClick={() => setPromoverTarget({ id: u.id, nome: u.nome })}
+                        className="text-zinc-500 hover:text-purple-400 transition-colors"
+                        title="Promover usuário"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => setResetTarget({ id: u.id, nome: u.nome, email: u.email })}
                       className="text-zinc-500 hover:text-amber-400 transition-colors"
@@ -1542,6 +1608,180 @@ function TabWhatsappQR() {
   )
 }
 
+// ─── Tab Meu Perfil ────────────────────────────────────────────────────────────
+
+function TabMeuPerfil() {
+  const { data: session } = useSession()
+  const userId = session?.user?.id ?? ""
+
+  const { data: dataEditor, mutate: mutateEditor } = useSWR<{ editores: Array<{ id: string; nome: string; fazCaptacao: boolean }> }>(
+    userId ? `/api/editores?usuarioId=${userId}` : null,
+    fetcher
+  )
+  const { data: dataVm, mutate: mutateVm } = useSWR<{ videomakers: Array<{ id: string; nome: string; podeEditar: boolean }> }>(
+    userId ? `/api/videomakers?usuarioId=${userId}` : null,
+    fetcher
+  )
+
+  const editorPerfil = dataEditor?.editores?.[0] ?? null
+  const vmPerfil = dataVm?.videomakers?.[0] ?? null
+
+  const [formEditor, setFormEditor] = useState({ nome: session?.user?.name ?? "", especialidade: "", whatsapp: "", fazCaptacao: false })
+  const [formVm, setFormVm] = useState({ nome: session?.user?.name ?? "", podeEditar: true })
+  const [loadingE, setLoadingE] = useState(false)
+  const [loadingV, setLoadingV] = useState(false)
+
+  async function criarPerfilEditor() {
+    setLoadingE(true)
+    try {
+      const res = await fetch("/api/editores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formEditor, usuarioId: userId }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("Perfil de editor criado!")
+      mutateEditor()
+    } catch (e) {
+      toast.error(String(e))
+    } finally { setLoadingE(false) }
+  }
+
+  async function criarPerfilVideomaker() {
+    setLoadingV(true)
+    try {
+      const res = await fetch("/api/videomakers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formVm, usuarioId: userId }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("Perfil de videomaker criado!")
+      mutateVm()
+    } catch (e) {
+      toast.error(String(e))
+    } finally { setLoadingV(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-zinc-100 mb-1">Meu Perfil Profissional</h3>
+        <p className="text-sm text-zinc-500">Crie um perfil profissional para ser atribuído como editor ou videomaker em demandas.</p>
+      </div>
+
+      {/* Perfil de Editor */}
+      <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-zinc-200 flex items-center gap-2">
+            <span className="text-lg">✂️</span> Editor / Pós-produção
+          </h4>
+          {editorPerfil && (
+            <span className="text-xs bg-green-500/10 text-green-400 border border-green-700 px-2 py-1 rounded-full">
+              Ativo — {editorPerfil.nome}
+            </span>
+          )}
+        </div>
+        {editorPerfil ? (
+          <p className="text-sm text-zinc-400">
+            Você já tem um perfil de editor vinculado. Acesse{" "}
+            <a href={`/equipe/${editorPerfil.id}`} className="text-purple-400 underline">seu perfil</a>{" "}
+            para editar as informações.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Nome de exibição</label>
+              <input
+                value={formEditor.nome}
+                onChange={e => setFormEditor({ ...formEditor, nome: e.target.value })}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                placeholder="Seu nome"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Especialidade</label>
+              <input
+                value={formEditor.especialidade}
+                onChange={e => setFormEditor({ ...formEditor, especialidade: e.target.value })}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                placeholder="Ex: Motion, Colorização, Edição"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFormEditor({ ...formEditor, fazCaptacao: !formEditor.fazCaptacao })}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${formEditor.fazCaptacao ? "bg-purple-600" : "bg-zinc-600"}`}
+              >
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${formEditor.fazCaptacao ? "translate-x-5" : "translate-x-1"}`} />
+              </button>
+              <span className="text-xs text-zinc-400">Pode fazer captação também</span>
+            </div>
+            <button
+              onClick={criarPerfilEditor}
+              disabled={loadingE || !formEditor.nome}
+              className="flex items-center gap-2 bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 disabled:opacity-50"
+            >
+              {loadingE ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Criar Perfil de Editor
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Perfil de Videomaker */}
+      <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-zinc-200 flex items-center gap-2">
+            <span className="text-lg">🎬</span> Videomaker Externo
+          </h4>
+          {vmPerfil && (
+            <span className="text-xs bg-green-500/10 text-green-400 border border-green-700 px-2 py-1 rounded-full">
+              Ativo — {vmPerfil.nome}
+            </span>
+          )}
+        </div>
+        {vmPerfil ? (
+          <p className="text-sm text-zinc-400">
+            Você já tem um perfil de videomaker vinculado. Acesse{" "}
+            <a href={`/videomakers/${vmPerfil.id}`} className="text-purple-400 underline">seu perfil</a>{" "}
+            para editar as informações.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Nome de exibição</label>
+              <input
+                value={formVm.nome}
+                onChange={e => setFormVm({ ...formVm, nome: e.target.value })}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                placeholder="Seu nome"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFormVm({ ...formVm, podeEditar: !formVm.podeEditar })}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${formVm.podeEditar ? "bg-purple-600" : "bg-zinc-600"}`}
+              >
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${formVm.podeEditar ? "translate-x-5" : "translate-x-1"}`} />
+              </button>
+              <span className="text-xs text-zinc-400">Pode editar também</span>
+            </div>
+            <button
+              onClick={criarPerfilVideomaker}
+              disabled={loadingV || !formVm.nome}
+              className="flex items-center gap-2 bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 disabled:opacity-50"
+            >
+              {loadingV ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Criar Perfil de Videomaker
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 export default function ConfiguracoesPage() {
@@ -1550,6 +1790,7 @@ export default function ConfiguracoesPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "usuarios", label: "Usuários", icon: Users },
+    { id: "meu_perfil", label: "Meu Perfil", icon: Settings },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
@@ -1599,6 +1840,7 @@ export default function ConfiguracoesPage() {
           {/* Content */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             {tab === "usuarios" && <TabUsuarios />}
+            {tab === "meu_perfil" && <TabMeuPerfil />}
             {tab === "whatsapp" && (
               <div className="space-y-8">
                 <TabWhatsapp />

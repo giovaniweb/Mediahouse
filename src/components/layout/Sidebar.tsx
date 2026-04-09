@@ -19,6 +19,7 @@ import {
   Package,
   LogOut,
   Lightbulb,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -43,6 +44,7 @@ const sections = [
     items: [
       { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
       { href: "/equipe", label: "Videomakers Int", icon: Users },
+      { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
       { href: "/custos", label: "Custos", icon: DollarSign },
     ],
   },

@@ -67,7 +67,7 @@ function mensagemKanban(
     },
     reprovado_cliente: {
       videomaker: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes. Verifique o feedback no sistema.`,
-      solicitante: null,
+      solicitante: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nRecebemos seu feedback e estamos fazendo os ajustes necessários. Te avisamos quando o novo vídeo estiver pronto!`,
       gestor: `🔄 *NuFlow — Reprovado*\n\n${base}\n\nAjustes solicitados. Editor foi notificado.`,
     },
     postado: {
@@ -77,7 +77,7 @@ function mensagemKanban(
     },
     impedimento: {
       videomaker: null,
-      solicitante: null,
+      solicitante: `⚠️ *NuFlow — Impedimento na sua demanda*\n\n${base}\n\nExiste um impedimento na sua solicitação e precisamos entrar em contato. Aguarde, nossa equipe te avisará em breve.`,
       gestor: `🚫 *NuFlow — Impedimento*\n\n${base}\n\n${extra ? `Motivo: ${extra}` : "Ação necessária."}`,
     },
   }

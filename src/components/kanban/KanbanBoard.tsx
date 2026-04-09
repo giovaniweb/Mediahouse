@@ -4,6 +4,7 @@ import { useRef, useState, useCallback } from "react"
 import { DragDropContext, Draggable, DropResult } from "@hello-pangea/dnd"
 import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { cn } from "@/lib/utils"
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
@@ -29,6 +30,7 @@ interface Demanda {
   statusVisivel: StatusVisivel
   statusInterno: string
   dataLimite?: string | null
+  posicaoKanban?: number | null
   editor?: { nome: string } | null
   solicitante?: { nome: string } | null
 }
@@ -45,6 +47,8 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
   const startX = useRef(0)
   const scrollLeft = useRef(0)
   const [dragging, setDragging] = useState(false)
+  const [modalDemandaId, setModalDemandaId] = useState<string | null>(null)
+  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
 
   const scrollBy = useCallback((amount: number) => {
     scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
@@ -76,14 +80,59 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
     if (!result.destination) return
     const destinoCol = result.destination.droppableId as StatusVisivel
     const origemCol = result.source.droppableId as StatusVisivel
-    if (destinoCol === origemCol) return
+
+    // Intra-column reorder
+    if (destinoCol === origemCol) {
+      const colItems = byCol(origemCol)
+      const reordered = Array.from(colItems)
+      const [moved] = reordered.splice(result.source.index, 1)
+      reordered.splice(result.destination.index, 0, moved)
+
+      // Update local order optimistically
+      setLocalOrder(prev => ({ ...prev, [origemCol]: reordered.map(d => d.id) }))
+
+      // Persist positions to API
+      reordered.forEach((d, idx) => {
+        fetch(`/api/demandas/${d.id}/posicao`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ posicaoKanban: idx }),
+        }).catch(console.error)
+      })
+      return
+    }
+
+    // Move to different column — reset local order for destination
+    setLocalOrder(prev => {
+      const next = { ...prev }
+      delete next[destinoCol]
+      return next
+    })
     onMove(result.draggableId, destinoCol)
   }
 
-  const byCol = (colId: StatusVisivel) =>
-    demandas.filter((d) => d.statusVisivel === colId)
+  const byCol = (colId: StatusVisivel) => {
+    const items = demandas.filter((d) => d.statusVisivel === colId)
+    const order = localOrder[colId]
+    if (!order) {
+      // Sort by posicaoKanban if available, urgentes first
+      return items.sort((a, b) => {
+        if (a.prioridade === "urgente" && b.prioridade !== "urgente") return -1
+        if (b.prioridade === "urgente" && a.prioridade !== "urgente") return 1
+        const posA = a.posicaoKanban ?? 9999
+        const posB = b.posicaoKanban ?? 9999
+        return posA - posB
+      })
+    }
+    // Apply local order
+    const mapped = new Map(items.map(d => [d.id, d]))
+    const ordered = order.map(id => mapped.get(id)).filter(Boolean) as Demanda[]
+    const rest = items.filter(d => !order.includes(d.id))
+    return [...ordered, ...rest]
+  }
 
   return (
+    <>
     <div className="relative h-full flex flex-col">
       {/* Botões de navegação */}
       <button
@@ -159,7 +208,7 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
                             data-card
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
-                            <DemandaCard demanda={demanda} onDelete={onDelete} />
+                            <DemandaCard demanda={demanda} onDelete={onDelete} onOpen={setModalDemandaId} />
                           </div>
                         )}
                       </Draggable>
@@ -174,5 +223,8 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
       </div>
     </DragDropContext>
     </div>
+
+    <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />
+    </>
   )
 }

@@ -3,8 +3,8 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { AlertTriangle, Calendar, Trash2, User, Video } from "lucide-react"
-import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
 const prioridadeConfig = {
   urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -39,9 +39,11 @@ interface DemandaCardProps {
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
+  onOpen?: (id: string) => void
 }
 
-export function DemandaCard({ demanda, dragHandleProps, onDelete }: DemandaCardProps) {
+export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: DemandaCardProps) {
+  const router = useRouter()
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
 
@@ -49,8 +51,13 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete }: DemandaCardP
   const isNearDeadline = demanda.dataLimite && !isOverdue &&
     new Date(demanda.dataLimite) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
 
+  const handleClick = () => {
+    if (onOpen) onOpen(demanda.id)
+    else router.push(`/demandas/${demanda.id}`)
+  }
+
   return (
-    <Link href={`/demandas/${demanda.id}`}>
+    <div onClick={handleClick}>
       <div
         className={cn(
           "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
@@ -109,6 +116,6 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete }: DemandaCardP
           )}
         </div>
       </div>
-    </Link>
+    </div>
   )
 }
