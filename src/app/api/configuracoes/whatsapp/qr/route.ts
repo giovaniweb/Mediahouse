@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 // GET /api/configuracoes/whatsapp/qr — busca QR code da Evolution API
+// Se a instância não existir (404), cria automaticamente antes de conectar
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -12,14 +13,42 @@ export async function GET() {
     return NextResponse.json({ error: "WhatsApp não configurado" }, { status: 400 })
   }
 
+  const base = config.instanceUrl.replace(/\/$/, "")
+  const headers = { apikey: config.apiKey, "Content-Type": "application/json" }
+
   try {
-    // Tentar conectar e obter QR
-    const res = await fetch(`${config.instanceUrl}/instance/connect/${config.instanceId}`, {
-      headers: { apikey: config.apiKey },
-    })
+    // 1ª tentativa: conectar direto
+    let res = await fetch(`${base}/instance/connect/${config.instanceId}`, { headers })
+
+    // Se 404 → instância não existe, criar primeiro
+    if (res.status === 404) {
+      const createRes = await fetch(`${base}/instance/create`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          instanceName: config.instanceId,
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS",
+        }),
+      })
+
+      if (!createRes.ok) {
+        const err = await createRes.text().catch(() => createRes.status.toString())
+        return NextResponse.json(
+          { error: `Não foi possível criar a instância (${createRes.status}): ${err}` },
+          { status: 502 }
+        )
+      }
+
+      // 2ª tentativa após criar
+      res = await fetch(`${base}/instance/connect/${config.instanceId}`, { headers })
+    }
 
     if (!res.ok) {
-      return NextResponse.json({ error: `Evolution API retornou ${res.status}` }, { status: 502 })
+      return NextResponse.json(
+        { error: `Evolution API retornou ${res.status}` },
+        { status: 502 }
+      )
     }
 
     const data = await res.json()
