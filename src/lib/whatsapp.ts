@@ -95,4 +95,21 @@ export const templates = {
 
   captacaoLembrete: (codigo: string, titulo: string, data: string, local: string) =>
     `⏰ *NuFlow — Lembrete de Captação*\n\nAmanhã você tem uma captação agendada!\n\n📋 *${codigo}* — ${titulo}\n📅 ${data}\n📍 ${local}\n\nQualquer dúvida, entre em contato.`,
+
+  // ── Templates TDAH ──────────────────────────────────────────────────────
+
+  lembreteEvento: (titulo: string, minutosRestantes: number, local?: string | null) =>
+    `⏰ *NuFlow — Lembrete de Evento*\n\n*${titulo}* começa em ${minutosRestantes} minuto(s).${local ? `\n📍 Local: ${local}` : ""}\n\nBoa captação! 🎬`,
+
+  cobrancaAntecipada: (nomeVm: string, descricao: string, valor: string, dataVencimento: string) =>
+    `💰 *NuFlow — Lembrete de Pagamento*\n\nOlá, ${nomeVm}!\n\nVocê tem um pagamento vencendo em breve:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n📅 Vencimento: ${dataVencimento}\n\nQualquer dúvida, entre em contato. 🤝`,
+
+  cobrancaVencida: (nomeVm: string, descricao: string, valor: string, diasAtraso: number) =>
+    `⚠️ *NuFlow — Pagamento Vencido*\n\nOlá, ${nomeVm}!\n\nIdentificamos um pagamento em aberto:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n⏰ Vencido há ${diasAtraso} dia(s)\n\nPor favor, regularize assim que possível. Para dúvidas, fale conosco.`,
+
+  cobrancaEscalada: (nomeVm: string, descricao: string, valor: string, diasAtraso: number) =>
+    `🚨 *NuFlow — Pagamento Atrasado*\n\nOlá, ${nomeVm}.\n\nAviso importante sobre pagamento em atraso:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n🔴 ${diasAtraso} dias em atraso\n\nSolicito contato imediato para regularização. Obrigado.`,
+
+  briefingDiario: (nome: string, dataFormatada: string, eventos: number, demandas: number, cobrancas: number) =>
+    `☀️ *Bom dia, ${nome}!*\n\n*${dataFormatada}*\n\n📋 *Resumo do dia:*\n• ${eventos} evento(s) agendado(s) hoje\n• ${demandas} demanda(s) com prazo hoje/amanhã\n• ${cobrancas} pagamento(s) em atraso\n\nAcesse o NuFlow para detalhes. 💪\nnuflow.space`,
 }

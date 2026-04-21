@@ -456,6 +456,7 @@ model AlertaIA {
   acaoSugerida String?
   createdAt    DateTime         @default(now())
   resolvedAt   DateTime?
+  snoozeAte    DateTime?        // TDAH: silenciar temporariamente
 
   demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
@@ -599,6 +600,9 @@ model Evento {
   videomakerId String?        // agenda do videomaker externo
   editorId     String?        // agenda do videomaker interno (editor)
 
+  lembreteMinutos Int            @default(60)    // TDAH: minutos antes do evento para enviar WA
+  lembreteEnviado Boolean        @default(false) // TDAH: lembrete já enviado?
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -645,6 +649,9 @@ model CustoVideomaker {
   notaFiscalUrl     String?         // URL da NF enviada pelo videomaker
   statusPagamento   StatusPagamento @default(pendente_nf)
   emailFinanceiroAt DateTime?       // quando o e-mail foi enviado ao financeiro
+  dataVencimento    DateTime?       // TDAH: prazo para cobrança automática
+  ultimaCobrancaEm  DateTime?       // TDAH: última vez que enviou cobrança WA
+  qtdCobranças      Int             @default(0) // TDAH: quantas cobranças já foram enviadas
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 

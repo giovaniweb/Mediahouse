@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
+import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 
 // GET /api/cron/agentes — automação periódica de agentes IA
 // Protegido por CRON_SECRET. Configurado no vercel.json com 3 schedules:
@@ -24,6 +25,12 @@ export async function GET(req: NextRequest) {
       return await rodarAgentePrazos()
     } else if (agente === "vistoria") {
       return await rodarAgenteVistoria()
+    } else if (agente === "cobranca") {
+      return await rodarAgenteCobranca()
+    } else if (agente === "lembretes") {
+      return await rodarAgenteLembretes()
+    } else if (agente === "briefing") {
+      return await rodarAgenteBriefing()
     } else {
       return await rodarAgenteAlertas()
     }
@@ -34,6 +41,12 @@ export async function GET(req: NextRequest) {
 }
 
 async function rodarAgenteAlertas() {
+  // TDAH: limpar snoozes expirados antes de rodar
+  await prisma.alertaIA.updateMany({
+    where: { status: "ativo", snoozeAte: { lt: new Date(), not: null } },
+    data: { snoozeAte: null },
+  })
+
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "gerar-alertas-cron", status: "executando" },
   })
@@ -142,4 +155,174 @@ Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomak
   })
 
   return NextResponse.json({ ok: true, agente: "vistoria", tokens })
+}
+
+// ── TDAH: Cobrança Automática com Escalada ────────────────────────────────
+async function rodarAgenteCobranca() {
+  const agora = new Date()
+  const inicioDia = new Date(agora)
+  inicioDia.setHours(0, 0, 0, 0)
+
+  const custos = await prisma.custoVideomaker.findMany({
+    where: { pago: false, dataVencimento: { not: null } },
+    include: { videomaker: { select: { nome: true, telefone: true } } },
+  })
+
+  let enviados = 0
+
+  for (const custo of custos) {
+    if (!custo.dataVencimento) continue
+    const vm = custo.videomaker
+    const telefone = vm.telefone
+    if (!telefone) continue
+
+    const diffMs = agora.getTime() - custo.dataVencimento.getTime()
+    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    // Evitar duplo envio no mesmo dia
+    if (custo.ultimaCobrancaEm) {
+      const ultimaCobranca = new Date(custo.ultimaCobrancaEm)
+      ultimaCobranca.setHours(0, 0, 0, 0)
+      if (ultimaCobranca.getTime() === inicioDia.getTime()) continue
+    }
+
+    const valor = custo.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
+    const descricao = custo.descricao ?? `Custo ${custo.tipo}`
+    let mensagem: string | null = null
+
+    if (diffDias <= -3 && diffDias >= -4) {
+      // 3-4 dias antes: aviso antecipado
+      const dataFmt = custo.dataVencimento.toLocaleDateString("pt-BR")
+      mensagem = templates.cobrancaAntecipada(vm.nome, descricao, valor, dataFmt)
+    } else if (diffDias === 0) {
+      // No dia do vencimento
+      mensagem = templates.cobrancaVencida(vm.nome, descricao, valor, 0)
+    } else if (diffDias === 3) {
+      // 3 dias de atraso
+      mensagem = templates.cobrancaVencida(vm.nome, descricao, valor, 3)
+    } else if (diffDias === 7) {
+      // 7 dias: escalada (tom mais firme)
+      mensagem = templates.cobrancaEscalada(vm.nome, descricao, valor, 7)
+    }
+
+    if (mensagem) {
+      await sendWhatsappMessage(telefone, mensagem, undefined)
+      await prisma.custoVideomaker.update({
+        where: { id: custo.id },
+        data: {
+          ultimaCobrancaEm: agora,
+          qtdCobranças: { increment: 1 },
+        },
+      })
+      enviados++
+    }
+  }
+
+  return NextResponse.json({ ok: true, agente: "cobranca", enviados })
+}
+
+// ── TDAH: Lembretes de Eventos via WhatsApp ───────────────────────────────
+async function rodarAgenteLembretes() {
+  const agora = new Date()
+  const em2h = new Date(agora.getTime() + 2 * 60 * 60 * 1000)
+
+  const eventos = await prisma.evento.findMany({
+    where: {
+      lembreteEnviado: false,
+      inicio: { gte: agora, lte: em2h },
+      status: { in: ["agendado", "confirmado"] },
+    },
+    include: {
+      videomaker: { select: { nome: true, telefone: true } },
+    },
+  })
+
+  let enviados = 0
+
+  for (const evento of eventos) {
+    const minutosParaInicio = Math.round((evento.inicio.getTime() - agora.getTime()) / 60000)
+    const lembrete = evento.lembreteMinutos ?? 60
+
+    // Janela de ±15 minutos ao redor do momento ideal
+    if (Math.abs(minutosParaInicio - lembrete) > 15) continue
+
+    const vm = evento.videomaker
+    const telefone = vm?.telefone
+    if (!telefone) {
+      // Marca como enviado mesmo sem telefone para não repetir
+      await prisma.evento.update({ where: { id: evento.id }, data: { lembreteEnviado: true } })
+      continue
+    }
+
+    const mensagem = templates.lembreteEvento(evento.titulo, minutosParaInicio, evento.local ?? null)
+    await sendWhatsappMessage(telefone, mensagem, evento.demandaId ?? undefined)
+    await prisma.evento.update({ where: { id: evento.id }, data: { lembreteEnviado: true } })
+    enviados++
+  }
+
+  return NextResponse.json({ ok: true, agente: "lembretes", enviados })
+}
+
+// ── TDAH: Morning Briefing para Gestores ─────────────────────────────────
+async function rodarAgenteBriefing() {
+  const agora = new Date()
+  const inicioDia = new Date(agora)
+  inicioDia.setHours(0, 0, 0, 0)
+  const fimDia = new Date(agora)
+  fimDia.setHours(23, 59, 59, 999)
+  const fimAmanha = new Date(agora)
+  fimAmanha.setDate(fimAmanha.getDate() + 1)
+  fimAmanha.setHours(23, 59, 59, 999)
+
+  // Buscar gestores com telefone
+  const gestores = await prisma.usuario.findMany({
+    where: {
+      tipo: { in: ["admin", "gestor"] },
+      status: "ativo",
+      telefone: { not: null },
+    },
+    select: { id: true, nome: true, telefone: true },
+  })
+
+  if (gestores.length === 0) return NextResponse.json({ ok: true, agente: "briefing", enviados: 0 })
+
+  // Buscar dados em paralelo
+  const [qtdEventos, qtdDemandas, qtdCobrancias] = await Promise.all([
+    prisma.evento.count({
+      where: {
+        inicio: { gte: inicioDia, lte: fimDia },
+        status: { in: ["agendado", "confirmado", "em_andamento"] },
+      },
+    }),
+    prisma.demanda.count({
+      where: {
+        dataLimite: { gte: inicioDia, lte: fimAmanha },
+        statusVisivel: { notIn: ["finalizado"] },
+      },
+    }),
+    prisma.custoVideomaker.count({
+      where: { pago: false, dataVencimento: { not: null, lte: fimDia } },
+    }),
+  ])
+
+  const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+  const diaSemana = diasSemana[agora.getDay()]
+  const dataFormatada = `${diaSemana}, ${agora.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}`
+
+  let enviados = 0
+  for (const gestor of gestores) {
+    const telefone = gestor.telefone
+    if (!telefone) continue
+    const mensagem = templates.briefingDiario(
+      gestor.nome.split(" ")[0],
+      dataFormatada,
+      qtdEventos,
+      qtdDemandas,
+      qtdCobrancias
+    )
+    await sendWhatsappMessage(telefone, mensagem, undefined)
+    enviados++
+  }
+
+  return NextResponse.json({ ok: true, agente: "briefing", enviados })
 }

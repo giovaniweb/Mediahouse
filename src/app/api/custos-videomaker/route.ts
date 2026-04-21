@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const body = await req.json()
-  const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, pago, dataPagamento, comprovante } = body
+  const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
 
   if (!videomakerId || !valor || !dataReferencia) {
     return NextResponse.json({ error: "videomakerId, valor e dataReferencia são obrigatórios" }, { status: 400 })
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       valor: parseFloat(valor),
       descricao,
       dataReferencia: new Date(dataReferencia),
+      dataVencimento: dataVencimento ? new Date(dataVencimento) : null,
       pago: pago ?? false,
       dataPagamento: dataPagamento ? new Date(dataPagamento) : null,
       comprovante,

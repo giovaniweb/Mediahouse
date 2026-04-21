@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
     titulo, descricao, inicio, fim, diaTodo, tipo, contexto,
-    privado, cor, local, demandaId, videomakerId,
+    privado, cor, local, demandaId, videomakerId, lembreteMinutos,
   } = body
 
   if (!titulo || !inicio || !fim) {
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
       demandaId: demandaId ?? null,
       usuarioId: session.user.id,
       videomakerId: videomakerId ?? null,
+      lembreteMinutos: lembreteMinutos != null ? Number(lembreteMinutos) : 60,
     },
   })
 

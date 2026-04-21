@@ -163,6 +163,7 @@ export default function AgendaPage() {
     titulo: "", descricao: "", inicio: diaSelec ? format(diaSelec, "yyyy-MM-dd") + "T09:00" : "",
     fim: diaSelec ? format(diaSelec, "yyyy-MM-dd") + "T10:00" : "",
     tipo: "reuniao", contexto: "contourline", privado: false, local: "",
+    lembreteMinutos: 60,
   })
 
   function setF(f: string, v: unknown) { setForm(prev => ({ ...prev, [f]: v })) }
@@ -174,6 +175,7 @@ export default function AgendaPage() {
       inicio: format(d, "yyyy-MM-dd") + "T09:00",
       fim: format(d, "yyyy-MM-dd") + "T10:00",
       tipo: "reuniao", contexto: "contourline", privado: false, local: "",
+      lembreteMinutos: 60,
     })
     setShowForm(true)
   }
@@ -530,6 +532,20 @@ export default function AgendaPage() {
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Descrição</label>
                 <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 resize-none"
                   rows={2} value={form.descricao} onChange={e => setF("descricao", e.target.value)} />
+              </div>
+
+              {/* TDAH: Lembrete via WhatsApp */}
+              <div>
+                <label className="text-xs font-medium text-zinc-400 block mb-1">⏰ Lembrete WhatsApp</label>
+                <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
+                  value={form.lembreteMinutos} onChange={e => setF("lembreteMinutos", Number(e.target.value))}>
+                  <option value={0}>Sem lembrete</option>
+                  <option value={15}>15 minutos antes</option>
+                  <option value={30}>30 minutos antes</option>
+                  <option value={60}>1 hora antes</option>
+                  <option value={120}>2 horas antes</option>
+                  <option value={1440}>1 dia antes</option>
+                </select>
               </div>
 
               {isAdmin && (

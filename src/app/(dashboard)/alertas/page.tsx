@@ -2,11 +2,12 @@
 
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { AlertTriangle, Bell, CheckCircle, X } from "lucide-react"
+import { AlertTriangle, Bell, CheckCircle, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { useState, useRef, useEffect } from "react"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -14,6 +15,50 @@ const severidadeConfig = {
   critico: { icon: AlertTriangle, class: "bg-red-50 border-red-200", iconClass: "text-red-600", badge: "bg-red-100 text-red-700" },
   aviso: { icon: Bell, class: "bg-yellow-50 border-yellow-200", iconClass: "text-yellow-600", badge: "bg-yellow-100 text-yellow-700" },
   info: { icon: Bell, class: "bg-blue-50 border-blue-200", iconClass: "text-blue-600", badge: "bg-blue-100 text-blue-700" },
+}
+
+const SNOOZE_OPTIONS = [
+  { label: "15 minutos", minutos: 15 },
+  { label: "1 hora", minutos: 60 },
+  { label: "3 horas", minutos: 180 },
+  { label: "Amanhã", minutos: 1440 },
+]
+
+function SnoozeDropdown({ id, onSnooze }: { id: string; onSnooze: (id: string, minutos: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handle)
+    return () => document.removeEventListener("mousedown", handle)
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-medium bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
+      >
+        Snooze <ChevronDown className="w-2.5 h-2.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-hidden">
+          {SNOOZE_OPTIONS.map(opt => (
+            <button
+              key={opt.minutos}
+              onClick={() => { onSnooze(id, opt.minutos); setOpen(false) }}
+              className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function AlertasPage() {
@@ -38,6 +83,15 @@ export default function AlertasPage() {
     mutate()
   }
 
+  async function snooze(id: string, minutos: number) {
+    await fetch("/api/alertas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, acao: "snooze", minutos }),
+    })
+    mutate()
+  }
+
   const criticos = alertas.filter((a: { severidade: string }) => a.severidade === "critico")
   const avisos = alertas.filter((a: { severidade: string }) => a.severidade === "aviso")
   const infos = alertas.filter((a: { severidade: string }) => a.severidade === "info")
@@ -55,13 +109,13 @@ export default function AlertasPage() {
         )}
 
         {criticos.length > 0 && (
-          <AlertSection title="Críticos" count={criticos.length} alertas={criticos} onResolver={resolver} onIgnorar={ignorar} />
+          <AlertSection title="Críticos" count={criticos.length} alertas={criticos} onResolver={resolver} onIgnorar={ignorar} onSnooze={snooze} />
         )}
         {avisos.length > 0 && (
-          <AlertSection title="Avisos" count={avisos.length} alertas={avisos} onResolver={resolver} onIgnorar={ignorar} />
+          <AlertSection title="Avisos" count={avisos.length} alertas={avisos} onResolver={resolver} onIgnorar={ignorar} onSnooze={snooze} />
         )}
         {infos.length > 0 && (
-          <AlertSection title="Informativos" count={infos.length} alertas={infos} onResolver={resolver} onIgnorar={ignorar} />
+          <AlertSection title="Informativos" count={infos.length} alertas={infos} onResolver={resolver} onIgnorar={ignorar} onSnooze={snooze} />
         )}
       </main>
     </>
@@ -74,6 +128,7 @@ function AlertSection({
   alertas,
   onResolver,
   onIgnorar,
+  onSnooze,
 }: {
   title: string
   count: number
@@ -88,6 +143,7 @@ function AlertSection({
   }>
   onResolver: (id: string) => void
   onIgnorar: (id: string) => void
+  onSnooze: (id: string, minutos: number) => void
 }) {
   return (
     <section>
@@ -123,6 +179,7 @@ function AlertSection({
                 >
                   Resolver
                 </button>
+                <SnoozeDropdown id={a.id} onSnooze={onSnooze} />
                 <button
                   onClick={() => onIgnorar(a.id)}
                   className="px-2 py-1 text-[10px] font-medium bg-zinc-100 text-zinc-500 rounded hover:bg-zinc-200"

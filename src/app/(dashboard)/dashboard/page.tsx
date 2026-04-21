@@ -4,6 +4,7 @@ import useSWR from "swr"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { AlertasIA } from "@/components/dashboard/AlertasIA"
 import { CargaEquipe } from "@/components/dashboard/CargaEquipe"
+import { HojeEmFoco } from "@/components/dashboard/HojeEmFoco"
 import { Header } from "@/components/layout/Header"
 import { Activity, AlertTriangle, CheckCircle, Clock, Film, Users, TrendingUp, TrendingDown, Minus, BarChart3, Lightbulb } from "lucide-react"
 
@@ -55,6 +56,8 @@ export default function DashboardPage() {
     <>
       <Header title="Dashboard" />
       <main className="flex-1 p-6 space-y-6">
+        {/* TDAH: Painel Hoje em Foco */}
+        <HojeEmFoco />
         {/* Métricas principais */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <MetricCard label="Demandas Ativas" value={isLoading ? "—" : m?.demandasAtivas ?? 0}
