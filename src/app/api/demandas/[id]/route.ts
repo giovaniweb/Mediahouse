@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -156,6 +157,34 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     return NextResponse.json(demanda)
+  }
+
+  // Detectar mudança de videomakerId para notificação WhatsApp
+  let videomakeridAnterior: string | null | undefined
+  if (body.videomakerId !== undefined) {
+    const demandaAntes = await prisma.demanda.findUnique({
+      where: { id },
+      select: { videomakerId: true, codigo: true, titulo: true, dataCaptacao: true },
+    })
+    videomakeridAnterior = demandaAntes?.videomakerId
+
+    // Se mudou o videomaker, notificar o NOVO videomaker via WhatsApp
+    if (body.videomakerId && body.videomakerId !== videomakeridAnterior) {
+      const novoVm = await prisma.videomaker.findUnique({
+        where: { id: body.videomakerId },
+        select: { nome: true, telefone: true },
+      })
+      if (novoVm?.telefone && demandaAntes) {
+        const dataFmt = body.dataCaptacao || demandaAntes.dataCaptacao
+          ? new Date(body.dataCaptacao ?? demandaAntes!.dataCaptacao!).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+          : "A confirmar"
+        void sendWhatsappMessage(
+          novoVm.telefone,
+          templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt),
+          id
+        ).catch(() => null)
+      }
+    }
   }
 
   const demanda = await prisma.demanda.update({

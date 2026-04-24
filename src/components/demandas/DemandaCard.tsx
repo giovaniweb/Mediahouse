@@ -33,6 +33,7 @@ interface DemandaCardProps {
     tipoVideo: string
     prioridade: "urgente" | "alta" | "normal" | "baixa"
     statusInterno: string
+    statusVisivel?: string
     dataLimite?: string | null
     editor?: { nome: string } | null
     solicitante?: { nome: string } | null
@@ -61,8 +62,13 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
       <div
         className={cn(
           "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
+          // Prioridade (só aplica se não houver status especial)
           demanda.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
-          demanda.prioridade === "alta" && "border-l-[3px] border-l-orange-500"
+          demanda.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
+          // TDAH: status visuais sobrepõem prioridade
+          demanda.statusInterno === "aprovado_cliente" && "border-l-[3px] border-l-green-400 bg-green-950/10",
+          (demanda.statusInterno === "reprovado_cliente" || demanda.statusInterno === "ajuste_solicitado") && "border-l-[3px] border-l-red-500 bg-red-950/20",
+          demanda.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
         )}
         {...dragHandleProps}
       >
@@ -99,13 +105,15 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
 
         <div className="flex items-center justify-between text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700/30">
           <div className="flex items-center gap-1">
-            {demanda.editor ? (
+            {demanda.statusVisivel === "finalizado" ? (
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 font-medium">✅ Concluído</span>
+            ) : demanda.editor ? (
               <><User className="w-3 h-3" /><span className="text-zinc-400">{demanda.editor.nome.split(" ")[0]}</span></>
             ) : (
               <><Video className="w-3 h-3 text-zinc-600" /><span className="text-zinc-600">sem editor</span></>
             )}
           </div>
-          {demanda.dataLimite && (
+          {demanda.dataLimite && demanda.statusVisivel !== "finalizado" && (
             <div className={cn("flex items-center gap-1",
               isOverdue && "text-red-400 font-semibold",
               isNearDeadline && "text-amber-400"

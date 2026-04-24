@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
+  ThumbsUp, ThumbsDown, CheckCircle2,
 } from "lucide-react"
 import useSWR from "swr"
 import { format } from "date-fns"
@@ -83,8 +84,37 @@ function SidebarSection({ title, icon, children }: { title: string; icon: React.
 }
 
 export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
-  const { data } = useSWR(demandaId ? `/api/demandas/${demandaId}` : null, fetcher)
+  const { data, mutate } = useSWR(demandaId ? `/api/demandas/${demandaId}` : null, fetcher)
   const demanda = data?.demanda
+
+  const [aprovandoAcao, setAprovandoAcao] = useState<"aprovar" | "reprovar" | null>(null)
+  const [motivoReprova, setMotivoReprova] = useState("")
+  const [salvandoAprovacao, setSalvandoAprovacao] = useState(false)
+
+  async function executarAprovacao(acao: "aprovar" | "reprovar") {
+    if (!demandaId) return
+    if (acao === "reprovar" && !motivoReprova.trim()) {
+      setAprovandoAcao("reprovar")
+      return
+    }
+    setSalvandoAprovacao(true)
+    try {
+      const statusInterno = acao === "aprovar" ? "aprovado_cliente" : "reprovado_cliente"
+      await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statusInterno,
+          observacao: acao === "reprovar" ? motivoReprova : undefined,
+        }),
+      })
+      setAprovandoAcao(null)
+      setMotivoReprova("")
+      mutate()
+    } finally {
+      setSalvandoAprovacao(false)
+    }
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
@@ -360,6 +390,70 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     </div>
                   </div>
                 </SidebarSection>
+
+                {/* TDAH: Aprovação — botões visíveis quando na coluna de aprovação */}
+                {demanda.statusVisivel === "aprovacao" && (
+                  <SidebarSection title="Aprovação" icon={<CheckCircle2 className="w-3 h-3" />}>
+                    {demanda.statusInterno === "aprovado_cliente" ? (
+                      <div className="flex items-center gap-2 bg-green-950/40 border border-green-700/40 rounded-lg px-3 py-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                        <span className="text-sm text-green-400 font-medium">Aprovado pelo cliente</span>
+                      </div>
+                    ) : demanda.statusInterno === "reprovado_cliente" ? (
+                      <div className="flex items-center gap-2 bg-red-950/40 border border-red-700/40 rounded-lg px-3 py-2">
+                        <ThumbsDown className="w-4 h-4 text-red-400 shrink-0" />
+                        <span className="text-sm text-red-400 font-medium">Reprovado — ajustes solicitados</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-zinc-500">Aguardando aprovação do cliente.</p>
+                        {aprovandoAcao === "reprovar" ? (
+                          <div className="space-y-2">
+                            <textarea
+                              rows={3}
+                              placeholder="Descreva o motivo da reprovação..."
+                              value={motivoReprova}
+                              onChange={e => setMotivoReprova(e.target.value)}
+                              className="w-full bg-zinc-800 border border-red-700/50 text-zinc-200 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:border-red-500"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => executarAprovacao("reprovar")}
+                                disabled={salvandoAprovacao || !motivoReprova.trim()}
+                                className="flex-1 bg-red-700 hover:bg-red-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
+                              >
+                                {salvandoAprovacao ? "Salvando..." : "Confirmar Reprovação"}
+                              </button>
+                              <button
+                                onClick={() => { setAprovandoAcao(null); setMotivoReprova("") }}
+                                className="px-3 text-zinc-400 hover:text-white text-xs border border-zinc-700 rounded-lg"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => executarAprovacao("aprovar")}
+                              disabled={salvandoAprovacao}
+                              className="flex-1 flex items-center justify-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" /> Aprovar
+                            </button>
+                            <button
+                              onClick={() => setAprovandoAcao("reprovar")}
+                              disabled={salvandoAprovacao}
+                              className="flex-1 flex items-center justify-center gap-1.5 bg-red-800/60 hover:bg-red-700 border border-red-700/50 text-red-300 hover:text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" /> Reprovar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </SidebarSection>
+                )}
 
                 {/* Produto */}
                 {demanda.produtos?.length > 0 && (

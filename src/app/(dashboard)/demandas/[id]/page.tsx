@@ -67,6 +67,7 @@ export default function DemandaDetailPage() {
   const [urlVideoInput, setUrlVideoInput] = useState("")
   const [gerandoLink, setGerandoLink] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -85,6 +86,7 @@ export default function DemandaDetailPage() {
   const [uploadingFinal, setUploadingFinal] = useState(false)
   const fileRefBrutos = useRef<HTMLInputElement>(null)
   const fileRefFinal = useRef<HTMLInputElement>(null)
+  const fileRefAprovacao = useRef<HTMLInputElement>(null)
 
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
@@ -201,6 +203,44 @@ export default function DemandaDetailPage() {
       toast.error(String(e))
     } finally {
       setUploading(false)
+    }
+  }
+
+  // ── Upload final + Aprovação em 1 clique ─────────────────────────────────
+  async function uploadEEnviarParaAprovacao(file: File) {
+    setEnviandoAprovacao(true)
+    try {
+      // 1. Upload para Supabase
+      const form = new FormData()
+      form.append("file", file)
+      form.append("tipo", "final")
+      const resUpload = await fetch(`/api/demandas/${id}/upload-video`, { method: "POST", body: form })
+      if (!resUpload.ok) throw new Error((await resUpload.json()).error ?? "Erro no upload")
+      const { url } = await resUpload.json()
+      setLinkFinal(url)
+
+      // 2. Gerar link de aprovação + enviar WhatsApp automaticamente
+      const resAprovacao = await fetch("/api/aprovacao-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demandaId: id, urlVideo: url, expiresInDays: 7 }),
+      })
+      if (!resAprovacao.ok) throw new Error((await resAprovacao.json()).error ?? "Erro ao gerar link de aprovação")
+      const { link } = await resAprovacao.json()
+
+      // 3. Mover status para aguardando_aprovacao_cliente
+      await fetch(`/api/demandas/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: "aguardando_aprovacao_cliente", extra: link }),
+      })
+
+      toast.success("✅ Enviado! Link de aprovação enviado por WhatsApp para o solicitante.")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setEnviandoAprovacao(false)
     }
   }
 
@@ -592,7 +632,34 @@ export default function DemandaDetailPage() {
                   editMode={editMode}
                   onChange={setLinkFinal}
                 />
-                <div className="mt-1.5 flex items-center gap-2">
+                <div className="mt-2 space-y-2">
+                  {/* Botão principal: 1 clique faz tudo */}
+                  <input
+                    ref={fileRefAprovacao}
+                    type="file"
+                    accept="video/*,.zip"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadEEnviarParaAprovacao(f); e.target.value = "" }}
+                  />
+                  <button
+                    onClick={() => fileRefAprovacao.current?.click()}
+                    disabled={enviandoAprovacao}
+                    className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 w-full justify-center"
+                  >
+                    {enviandoAprovacao ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {enviandoAprovacao ? "Enviando para aprovação..." : "🚀 Enviar para Aprovação"}
+                  </button>
+                  <p className="text-[11px] text-zinc-600 text-center">Upload → gera link → WhatsApp automático ao solicitante</p>
+                  {/* Alternativa: URL externa */}
+                  <div className="border-t border-zinc-800 pt-2">
+                    <button
+                      onClick={() => setShowLinkModal(true)}
+                      className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors w-full justify-center"
+                    >
+                      <Link2 className="w-3 h-3" /> Usar URL externa (YouTube/Drive)
+                    </button>
+                  </div>
+                  {/* Upload simples de arquivo (sem gerar aprovação) */}
                   <input
                     ref={fileRefFinal}
                     type="file"
@@ -600,15 +667,6 @@ export default function DemandaDetailPage() {
                     className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f, "final"); e.target.value = "" }}
                   />
-                  <button
-                    onClick={() => fileRefFinal.current?.click()}
-                    disabled={uploadingFinal}
-                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50"
-                  >
-                    {uploadingFinal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                    {uploadingFinal ? "Enviando..." : "Upload arquivo"}
-                  </button>
-                  <span className="text-xs text-zinc-600">mp4, mov, avi, webm, mkv ou zip · máx 500MB</span>
                 </div>
               </div>
               {demanda.referencia && (
