@@ -12,20 +12,8 @@
       "schedule": "0 12 * * 1,3,5"
     },
     {
-      "path": "/api/cron/agentes?agente=vistoria",
-      "schedule": "0 12 * * 1"
-    },
-    {
-      "path": "/api/cron/agentes?agente=cobranca",
-      "schedule": "0 12 * * *"
-    },
-    {
       "path": "/api/cron/agentes?agente=lembretes",
       "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/agentes?agente=briefing",
-      "schedule": "0 11 * * *"
     }
   ]
 }

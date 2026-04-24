@@ -29,6 +29,27 @@ const EXT_MAPA: Record<string, string> = {
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
+// PATCH: recebe { url, tipo } após upload direto do browser ao Supabase
+// (usado pelo fluxo presigned URL que bypassa o limite de 4.5MB do Vercel)
+export async function PATCH(req: NextRequest, { params }: Params) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const { id } = await params
+  const body = await req.json()
+  const url = body.url as string
+  const tipo = body.tipo as string
+
+  if (!url || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
+    return NextResponse.json({ error: "url e tipo obrigatórios" }, { status: 400 })
+  }
+
+  const campo = tipo === "final" ? "linkFinal" : "linkBrutos"
+  await prisma.demanda.update({ where: { id }, data: { [campo]: url } })
+
+  return NextResponse.json({ ok: true, url, campo })
+}
+
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })

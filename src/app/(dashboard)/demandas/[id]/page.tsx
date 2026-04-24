@@ -178,29 +178,53 @@ export default function DemandaDetailPage() {
     }
   }
 
+  // ── Upload via URL presigned (bypass limite 4.5MB do Vercel) ────────────
+  async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
+    const contentType = file.type || "video/mp4"
+
+    // 1. Busca URL presigned do servidor
+    const urlRes = await fetch(
+      `/api/demandas/${id}/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
+    )
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL de upload" }))
+      throw new Error(err.error ?? "Erro ao gerar URL de upload")
+    }
+    const { uploadUrl, publicUrl } = await urlRes.json() as { uploadUrl: string; publicUrl: string }
+
+    // 2. Upload direto do browser para o Supabase (sem passar pelo servidor)
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+    })
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text().catch(() => "")
+      throw new Error(`Falha no upload: ${errText || uploadRes.statusText}`)
+    }
+
+    // 3. Salva a URL na demanda
+    await fetch(`/api/demandas/${id}/upload-video`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: publicUrl, tipo }),
+    })
+
+    return publicUrl
+  }
+
   // ── Upload de vídeo ───────────────────────────────────────────────────────
   async function uploadVideo(file: File, tipo: "brutos" | "final") {
     const setUploading = tipo === "brutos" ? setUploadingBrutos : setUploadingFinal
     const setLink = tipo === "brutos" ? setLinkBrutos : setLinkFinal
     setUploading(true)
     try {
-      const form = new FormData()
-      form.append("file", file)
-      form.append("tipo", tipo)
-      const res = await fetch(`/api/demandas/${id}/upload-video`, { method: "POST", body: form })
-      if (!res.ok) throw new Error((await res.json()).error ?? "Erro no upload")
-      const { url } = await res.json()
+      const url = await uploadPresigned(file, tipo)
       setLink(url)
-      // Auto-salva o link
-      await fetch(`/api/demandas/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tipo === "brutos" ? { linkBrutos: url } : { linkFinal: url }),
-      })
       toast.success(`${tipo === "brutos" ? "Brutos" : "Vídeo final"} enviado com sucesso!`)
       mutate()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setUploading(false)
     }
@@ -210,13 +234,8 @@ export default function DemandaDetailPage() {
   async function uploadEEnviarParaAprovacao(file: File) {
     setEnviandoAprovacao(true)
     try {
-      // 1. Upload para Supabase
-      const form = new FormData()
-      form.append("file", file)
-      form.append("tipo", "final")
-      const resUpload = await fetch(`/api/demandas/${id}/upload-video`, { method: "POST", body: form })
-      if (!resUpload.ok) throw new Error((await resUpload.json()).error ?? "Erro no upload")
-      const { url } = await resUpload.json()
+      // 1. Upload direto ao Supabase via URL presigned
+      const url = await uploadPresigned(file, "final")
       setLinkFinal(url)
 
       // 2. Gerar link de aprovação + enviar WhatsApp automaticamente
@@ -226,7 +245,6 @@ export default function DemandaDetailPage() {
         body: JSON.stringify({ demandaId: id, urlVideo: url, expiresInDays: 7 }),
       })
       if (!resAprovacao.ok) throw new Error((await resAprovacao.json()).error ?? "Erro ao gerar link de aprovação")
-      const { link } = await resAprovacao.json()
 
       // 3. Mover status para revisao_pendente (coluna "Aprovação") — status válido no schema
       await fetch(`/api/demandas/${id}/status`, {

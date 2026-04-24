@@ -6,9 +6,9 @@ import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 
 // GET /api/cron/agentes — automação periódica de agentes IA
 // Protegido por CRON_SECRET. Configurado no vercel.json com 3 schedules:
-// - alertas: cada 2h
-// - prazos: todo dia 8h
-// - vistoria: segunda 9h
+// - alertas: diário 12h UTC (tb roda cobranca + briefing + vistoria toda segunda)
+// - prazos: seg/qua/sex 12h UTC
+// - lembretes: a cada 30 min
 export async function GET(req: NextRequest) {
   // Verifica segredo do cron
   const cronSecret = process.env.CRON_SECRET
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 async function rodarAgenteAlertas() {
-  // TDAH: limpar snoozes expirados antes de rodar
+  // Limpar snoozes expirados antes de rodar
   await prisma.alertaIA.updateMany({
     where: { status: "ativo", snoozeAte: { lt: new Date(), not: null } },
     data: { snoozeAte: null },
@@ -74,6 +74,16 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
       finishedAt: new Date(),
     },
   })
+
+  // Rodar cobrança e briefing dentro do mesmo cron (economiza slots do Vercel)
+  void rodarAgenteCobranca().catch(e => console.error("[alertas] cobrança inline:", e))
+  void rodarAgenteBriefing().catch(e => console.error("[alertas] briefing inline:", e))
+
+  // Segunda-feira: rodar vistoria semanal também
+  const diaSemana = new Date().getDay() // 0=dom, 1=seg
+  if (diaSemana === 1) {
+    void rodarAgenteVistoria().catch(e => console.error("[alertas] vistoria inline:", e))
+  }
 
   return NextResponse.json({ ok: true, agente: "alertas", tokens })
 }
