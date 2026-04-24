@@ -75,14 +75,25 @@ function mensagemKanban(
       videomaker: `🏆 *NuFlow — Cliente Aprovou!*\n\n${base}\n\nExcelente trabalho! O cliente aprovou. ✨`,
       solicitante: `🎉 *NuFlow — Vídeo Aprovado!*\n\n${base}\n\nSeu vídeo foi aprovado e está sendo preparado para publicação! 🎬`,
       gestor: `✅ *NuFlow — Aprovado pelo Cliente*\n\n${base}`,
-      // TDAH: editor também recebe a boa notícia
       editor: `🏆 *NuFlow — Cliente Aprovou!*\n\n${base}\n\nSeu trabalho foi aprovado. Parabéns! ✨`,
+    },
+    // Status válidos no schema — usados pelo botão Aprovar/Reprovar no modal admin
+    aprovado: {
+      videomaker: `🏆 *NuFlow — Aprovado!*\n\n${base}\n\nExcelente trabalho! O vídeo foi aprovado. ✨`,
+      solicitante: `🎉 *NuFlow — Vídeo Aprovado!*\n\n${base}\n\nSeu vídeo foi aprovado e está sendo preparado para publicação! 🎬`,
+      gestor: `✅ *NuFlow — Aprovado*\n\n${base}`,
+      editor: `🏆 *NuFlow — Aprovado!*\n\n${base}\n\nSeu trabalho foi aprovado. Parabéns! ✨`,
+    },
+    ajuste_solicitado: {
+      videomaker: null,
+      solicitante: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nRecebemos seu feedback e estamos fazendo os ajustes. Te avisamos quando o novo vídeo estiver pronto!`,
+      gestor: `🔄 *NuFlow — Ajuste Solicitado*\n\n${base}\n\nAjustes necessários. Editor foi notificado.`,
+      editor: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes${extra ? `:\n\n_"${extra}"_` : "."}\n\nAcesse o sistema para ver o feedback completo.`,
     },
     reprovado_cliente: {
       videomaker: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes. Verifique o feedback no sistema.`,
       solicitante: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nRecebemos seu feedback e estamos fazendo os ajustes necessários. Te avisamos quando o novo vídeo estiver pronto!`,
       gestor: `🔄 *NuFlow — Reprovado*\n\n${base}\n\nAjustes solicitados. Editor foi notificado.`,
-      // TDAH: editor recebe o feedback do cliente
       editor: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes${extra ? `:\n\n_"${extra}"_` : "."}\n\nAcesse o sistema para ver o feedback completo.`,
     },
     postado: {

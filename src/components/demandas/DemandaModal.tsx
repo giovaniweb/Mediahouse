@@ -99,7 +99,8 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
     setSalvandoAprovacao(true)
     try {
-      const statusInterno = acao === "aprovar" ? "aprovado_cliente" : "reprovado_cliente"
+      // "aprovado" e "ajuste_solicitado" são os StatusInterno válidos no schema
+      const statusInterno = acao === "aprovar" ? "aprovado" : "ajuste_solicitado"
       await fetch(`/api/demandas/${demandaId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -394,15 +395,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 {/* TDAH: Aprovação — botões visíveis quando na coluna de aprovação */}
                 {demanda.statusVisivel === "aprovacao" && (
                   <SidebarSection title="Aprovação" icon={<CheckCircle2 className="w-3 h-3" />}>
-                    {demanda.statusInterno === "aprovado_cliente" ? (
+                    {demanda.statusInterno === "aprovado" ? (
                       <div className="flex items-center gap-2 bg-green-950/40 border border-green-700/40 rounded-lg px-3 py-2">
                         <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                        <span className="text-sm text-green-400 font-medium">Aprovado pelo cliente</span>
+                        <span className="text-sm text-green-400 font-medium">Aprovado ✅</span>
                       </div>
-                    ) : demanda.statusInterno === "reprovado_cliente" ? (
+                    ) : demanda.statusInterno === "ajuste_solicitado" ? (
                       <div className="flex items-center gap-2 bg-red-950/40 border border-red-700/40 rounded-lg px-3 py-2">
                         <ThumbsDown className="w-4 h-4 text-red-400 shrink-0" />
-                        <span className="text-sm text-red-400 font-medium">Reprovado — ajustes solicitados</span>
+                        <span className="text-sm text-red-400 font-medium">Ajuste solicitado — em revisão</span>
                       </div>
                     ) : (
                       <div className="space-y-2">

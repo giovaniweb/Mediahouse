@@ -228,11 +228,11 @@ export default function DemandaDetailPage() {
       if (!resAprovacao.ok) throw new Error((await resAprovacao.json()).error ?? "Erro ao gerar link de aprovação")
       const { link } = await resAprovacao.json()
 
-      // 3. Mover status para aguardando_aprovacao_cliente
+      // 3. Mover status para revisao_pendente (coluna "Aprovação") — status válido no schema
       await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusInterno: "aguardando_aprovacao_cliente", extra: link }),
+        body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
       })
 
       toast.success("✅ Enviado! Link de aprovação enviado por WhatsApp para o solicitante.")

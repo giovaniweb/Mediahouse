@@ -65,9 +65,9 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
           // Prioridade (só aplica se não houver status especial)
           demanda.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
           demanda.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
-          // TDAH: status visuais sobrepõem prioridade
-          demanda.statusInterno === "aprovado_cliente" && "border-l-[3px] border-l-green-400 bg-green-950/10",
-          (demanda.statusInterno === "reprovado_cliente" || demanda.statusInterno === "ajuste_solicitado") && "border-l-[3px] border-l-red-500 bg-red-950/20",
+          // Status visuais sobrepõem prioridade — usa valores reais do StatusInterno
+          demanda.statusInterno === "aprovado" && "border-l-[3px] border-l-green-400 bg-green-950/10",
+          demanda.statusInterno === "ajuste_solicitado" && "border-l-[3px] border-l-red-500 bg-red-950/20",
           demanda.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
         )}
         {...dragHandleProps}
