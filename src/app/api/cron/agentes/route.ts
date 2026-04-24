@@ -75,15 +75,10 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
     },
   })
 
-  // Rodar cobrança e briefing dentro do mesmo cron (economiza slots do Vercel)
+  // Rodar cobrança, briefing e lembretes no mesmo cron (economiza slots do Vercel)
   void rodarAgenteCobranca().catch(e => console.error("[alertas] cobrança inline:", e))
   void rodarAgenteBriefing().catch(e => console.error("[alertas] briefing inline:", e))
-
-  // Segunda-feira: rodar vistoria semanal também
-  const diaSemana = new Date().getDay() // 0=dom, 1=seg
-  if (diaSemana === 1) {
-    void rodarAgenteVistoria().catch(e => console.error("[alertas] vistoria inline:", e))
-  }
+  void rodarAgenteLembretes().catch(e => console.error("[alertas] lembretes inline:", e))
 
   return NextResponse.json({ ok: true, agente: "alertas", tokens })
 }
