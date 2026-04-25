@@ -79,8 +79,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Arquivo muito grande. Máximo 500MB." }, { status: 400 })
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: "Storage não configurado" }, { status: 500 })

@@ -66,6 +66,9 @@ export default function DemandaDetailPage() {
   const [linkGerado, setLinkGerado] = useState("")
   const [urlVideoInput, setUrlVideoInput] = useState("")
   const [gerandoLink, setGerandoLink] = useState(false)
+  const [linkModalTab, setLinkModalTab] = useState<"upload" | "url">("upload")
+  const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
+  const fileRefLinkModal = useRef<HTMLInputElement>(null)
   const [copiado, setCopiado] = useState(false)
   const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
   // ── Campos editáveis ──────────────────────────────────────────────────────
@@ -296,19 +299,36 @@ export default function DemandaDetailPage() {
     }
   }
 
-  // ── Gerar link de aprovação ───────────────────────────────────────────────
+  // ── Gerar link de aprovação (por URL ou por upload de arquivo) ───────────
   async function gerarLinkAprovacao() {
-    if (!urlVideoInput.trim()) return
+    if (linkModalTab === "upload" && !linkModalFile) return
+    if (linkModalTab === "url" && !urlVideoInput.trim()) return
     setGerandoLink(true)
     try {
+      let videoUrl = urlVideoInput.trim()
+
+      // Se for upload, faz o presigned upload primeiro
+      if (linkModalTab === "upload" && linkModalFile) {
+        videoUrl = await uploadPresigned(linkModalFile, "final")
+        setLinkFinal(videoUrl)
+      }
+
       const res = await fetch("/api/aprovacao-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId: id, urlVideo: urlVideoInput, expiresInDays: 7 }),
+        body: JSON.stringify({ demandaId: id, urlVideo: videoUrl, expiresInDays: 7 }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       setLinkGerado(json.link)
+
+      // Mover status para "Aguardando Revisão" (coluna Aprovação)
+      await fetch(`/api/demandas/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
+      })
+
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao gerar link")
@@ -671,7 +691,7 @@ export default function DemandaDetailPage() {
                   {/* Alternativa: URL externa */}
                   <div className="border-t border-zinc-800 pt-2">
                     <button
-                      onClick={() => setShowLinkModal(true)}
+                      onClick={() => { setLinkModalTab("url"); setShowLinkModal(true) }}
                       className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors w-full justify-center"
                     >
                       <Link2 className="w-3 h-3" /> Usar URL externa (YouTube/Drive)
@@ -823,10 +843,10 @@ export default function DemandaDetailPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-zinc-300">Aprovação de Vídeo</h2>
               <button
-                onClick={() => setShowLinkModal(true)}
+                onClick={() => { setLinkModalTab("upload"); setShowLinkModal(true) }}
                 className="flex items-center gap-1 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 px-2.5 py-1.5 rounded-lg hover:bg-zinc-700"
               >
-                <Link2 className="w-3.5 h-3.5" /> Gerar Link
+                <Upload className="w-3.5 h-3.5" /> Enviar Vídeo
               </button>
             </div>
             {demanda.linkCliente ? (
@@ -876,34 +896,110 @@ export default function DemandaDetailPage() {
         </div>
       </main>
 
-      {/* Modal gerar link */}
+      {/* Modal gerar link de aprovação (upload ou URL) */}
       {showLinkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-semibold text-zinc-200 mb-1">Gerar Link de Aprovação</h3>
-            <p className="text-sm text-zinc-500 mb-4">Cole o link do vídeo final (YouTube, Vimeo, Drive, MP4).</p>
-            <input
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-zinc-600 text-zinc-200 placeholder:text-zinc-500"
-              placeholder="https://drive.google.com/... ou YouTube/Vimeo"
-              value={urlVideoInput}
-              onChange={e => setUrlVideoInput(e.target.value)}
-            />
+            <h3 className="font-semibold text-zinc-200 mb-1">Enviar para Aprovação</h3>
+            <p className="text-xs text-zinc-500 mb-4">Envie o vídeo final e gere o link de aprovação para o cliente.</p>
+
+            {/* Abas */}
+            <div className="flex gap-1 bg-zinc-800 rounded-xl p-1 mb-4">
+              <button
+                onClick={() => setLinkModalTab("upload")}
+                className={cn("flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium", linkModalTab === "upload" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+              >
+                📁 Fazer Upload
+              </button>
+              <button
+                onClick={() => setLinkModalTab("url")}
+                className={cn("flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium", linkModalTab === "url" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200")}
+              >
+                🔗 URL Externa
+              </button>
+            </div>
+
             {linkGerado ? (
+              /* Link gerado com sucesso */
               <div className="space-y-3">
-                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-2">
-                  <span className="text-xs text-green-400 truncate flex-1">{linkGerado}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(linkGerado); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}>
-                    {copiado ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-zinc-500" />}
+                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
+                  <p className="text-xs text-green-400 font-medium mb-1">✅ Link gerado! WhatsApp enviado ao solicitante.</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-green-300 truncate flex-1">{linkGerado}</span>
+                    <button onClick={() => { navigator.clipboard.writeText(linkGerado); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}>
+                      {copiado ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-zinc-500" />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowLinkModal(false); setLinkGerado(""); setUrlVideoInput(""); setLinkModalFile(null) }}
+                  className="w-full border border-zinc-700 text-zinc-300 text-sm py-2 rounded-xl hover:bg-zinc-800"
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : linkModalTab === "upload" ? (
+              /* Aba Upload */
+              <div className="space-y-3">
+                <input
+                  ref={fileRefLinkModal}
+                  type="file"
+                  accept="video/*,.zip"
+                  className="hidden"
+                  onChange={e => setLinkModalFile(e.target.files?.[0] ?? null)}
+                />
+                {linkModalFile ? (
+                  <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2">
+                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-xs text-zinc-200 truncate flex-1">{linkModalFile.name}</span>
+                    <button onClick={() => setLinkModalFile(null)} className="text-zinc-500 hover:text-red-400">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileRefLinkModal.current?.click()}
+                    className="w-full flex flex-col items-center gap-2 border-2 border-dashed border-zinc-700 rounded-xl py-6 hover:border-purple-500/50 hover:bg-purple-500/5 transition-colors"
+                  >
+                    <Upload className="w-5 h-5 text-zinc-500" />
+                    <span className="text-xs text-zinc-400">Clique para escolher arquivo</span>
+                    <span className="text-[11px] text-zinc-600">mp4, mov, avi, webm · máx 500MB</span>
+                  </button>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={gerarLinkAprovacao}
+                    disabled={gerandoLink || !linkModalFile}
+                    className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white text-sm py-2 rounded-xl hover:bg-purple-500 disabled:opacity-50 font-medium"
+                  >
+                    {gerandoLink ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</> : <><Send className="w-3.5 h-3.5" /> Enviar para Aprovação</>}
+                  </button>
+                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null) }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                    Cancelar
                   </button>
                 </div>
-                <button onClick={() => { setShowLinkModal(false); setLinkGerado(""); setUrlVideoInput("") }} className="w-full border border-zinc-700 text-zinc-300 text-sm py-2 rounded-xl hover:bg-zinc-800">Fechar</button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <button onClick={gerarLinkAprovacao} disabled={gerandoLink || !urlVideoInput} className="flex-1 bg-blue-600 text-white text-sm py-2 rounded-xl hover:bg-blue-500 disabled:opacity-50">
-                  {gerandoLink ? "Gerando..." : "Gerar Link"}
-                </button>
-                <button onClick={() => setShowLinkModal(false)} className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-xl hover:bg-zinc-800">Cancelar</button>
+              /* Aba URL */
+              <div className="space-y-3">
+                <input
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600 text-zinc-200 placeholder:text-zinc-500"
+                  placeholder="https://drive.google.com/... ou YouTube/Vimeo"
+                  value={urlVideoInput}
+                  onChange={e => setUrlVideoInput(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={gerarLinkAprovacao}
+                    disabled={gerandoLink || !urlVideoInput.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white text-sm py-2 rounded-xl hover:bg-blue-500 disabled:opacity-50 font-medium"
+                  >
+                    {gerandoLink ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</> : <><Link2 className="w-3.5 h-3.5" /> Gerar Link</>}
+                  </button>
+                  <button onClick={() => { setShowLinkModal(false); setUrlVideoInput("") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                    Cancelar
+                  </button>
+                </div>
               </div>
             )}
           </div>

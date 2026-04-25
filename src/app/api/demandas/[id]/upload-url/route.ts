@@ -36,8 +36,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-  const supabaseUrl = process.env.SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: "Storage não configurado" }, { status: 500 })
