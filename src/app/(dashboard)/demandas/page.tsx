@@ -4,8 +4,8 @@ import { useState, useCallback } from "react"
 import useSWR from "swr"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
+import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { Plus, Search, SlidersHorizontal, XCircle } from "lucide-react"
-import Link from "next/link"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -20,6 +20,7 @@ export default function DemandasPage() {
   const [filtroEditor, setFiltroEditor] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
+  const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
 
   // Dados para filtros
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
@@ -135,11 +136,12 @@ export default function DemandasPage() {
       <Header
         title="Demandas"
         actions={
-          <Link href="/demandas/nova">
-            <button className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
-              <Plus className="w-4 h-4" /> Nova Demanda
-            </button>
-          </Link>
+          <button
+            onClick={() => setShowNovaDemandaModal(true)}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Nova Demanda
+          </button>
         }
       />
 
@@ -205,6 +207,12 @@ export default function DemandasPage() {
       <div className="flex-1 p-4 overflow-auto">
         <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} />
       </div>
+
+      {/* Modal Nova Demanda */}
+      <NovaDemandaModal
+        open={showNovaDemandaModal}
+        onClose={() => setShowNovaDemandaModal(false)}
+      />
     </>
   )
 }

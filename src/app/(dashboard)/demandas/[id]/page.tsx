@@ -707,15 +707,15 @@ export default function DemandaDetailPage() {
                   />
                 </div>
               </div>
-              {demanda.referencia && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500 w-36 shrink-0">📌 Referência</span>
-                  <a href={demanda.referencia} target="_blank" rel="noopener noreferrer"
+              {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500 w-36 shrink-0">{i === 0 ? "📌 Referência" : ""}</span>
+                  <a href={url} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-blue-400 hover:underline flex items-center gap-1 truncate">
-                    <ExternalLink className="w-3.5 h-3.5 shrink-0" /> {demanda.referencia}
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" /> {url}
                   </a>
                 </div>
-              )}
+              ))}
             </div>
           </div>
 

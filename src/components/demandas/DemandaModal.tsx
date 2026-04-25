@@ -264,13 +264,13 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                           <span>🎬 Vídeo Final</span>
                         </a>
                       )}
-                      {demanda.referencia && (
-                        <a href={demanda.referencia} target="_blank" rel="noreferrer"
+                      {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number, arr: string[]) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer"
                           className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
                           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span>📌 Referência</span>
+                          <span>📌 Referência{arr.length > 1 ? ` ${i + 1}` : ""}</span>
                         </a>
-                      )}
+                      ))}
                       {demanda.linkPostagem && (
                         <a href={demanda.linkPostagem} target="_blank" rel="noreferrer"
                           className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
