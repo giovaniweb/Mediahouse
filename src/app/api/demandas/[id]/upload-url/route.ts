@@ -50,6 +50,15 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const supabase = createClient(supabaseUrl, supabaseKey)
 
+  // Garantir que o bucket existe (cria automaticamente se não existir)
+  const { data: bucketData } = await supabase.storage.getBucket(bucket)
+  if (!bucketData) {
+    await supabase.storage.createBucket(bucket, {
+      public: true,
+      fileSizeLimit: 500 * 1024 * 1024, // 500MB para vídeos
+    })
+  }
+
   // Usa o SDK oficial — trata auth e headers corretamente
   const { data, error } = await supabase.storage
     .from(bucket)
