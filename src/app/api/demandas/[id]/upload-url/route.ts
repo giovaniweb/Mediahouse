@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { createClient } from "@supabase/supabase-js"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -18,8 +19,8 @@ const EXT_MAPA: Record<string, string> = {
 }
 
 // GET /api/demandas/[id]/upload-url?tipo=final&contentType=video%2Fmp4
-// Retorna uma URL presigned do Supabase para upload direto do browser
-// (bypass Vercel 4.5MB serverless body limit)
+// Gera URL presigned do Supabase para upload direto do browser
+// (bypassa o limite de 4.5MB do Vercel em funções serverless)
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -33,42 +34,43 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `tipo deve ser: ${TIPOS_VALIDOS.join(", ")}` }, { status: 400 })
   }
 
-  const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
-  if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Storage não configurado" }, { status: 500 })
+    return NextResponse.json({ error: "Storage não configurado (env vars ausentes)" }, { status: 500 })
   }
+
+  const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
+  if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
   const ext = EXT_MAPA[contentType] ?? "mp4"
   const objectPath = `videos/${id}/${tipo}/${Date.now()}.${ext}`
   const bucket = "uploads"
 
-  // Solicita URL presigned para upload direto ao Supabase
-  const signRes = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/upload/${bucket}/${objectPath}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${supabaseKey}`,
-        "Content-Type": "application/json",
-      },
-      body: "{}",
-    }
-  )
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
-  if (!signRes.ok) {
-    const errText = await signRes.text().catch(() => "")
-    console.error("[upload-url] Supabase error:", errText)
-    return NextResponse.json({ error: "Erro ao gerar URL de upload" }, { status: 500 })
+  // Usa o SDK oficial — trata auth e headers corretamente
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUploadUrl(objectPath)
+
+  if (error || !data?.signedUrl) {
+    const msg = error?.message ?? "Resposta inválida do Supabase"
+    console.error("[upload-url] Supabase SDK error:", msg)
+    return NextResponse.json(
+      { error: `Erro ao gerar URL de upload: ${msg}` },
+      { status: 500 }
+    )
   }
 
-  const { signedURL } = await signRes.json() as { signedURL: string }
-  const uploadUrl = `${supabaseUrl}${signedURL}`
-  const publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${objectPath}`
+  // signedUrl já inclui a URL base do Supabase
+  const uploadUrl = data.signedUrl
+  const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(objectPath)
 
-  return NextResponse.json({ uploadUrl, publicUrl, contentType })
+  return NextResponse.json({
+    uploadUrl,
+    publicUrl: pubData.publicUrl,
+    contentType,
+  })
 }
