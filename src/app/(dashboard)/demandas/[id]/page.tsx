@@ -68,9 +68,9 @@ export default function DemandaDetailPage() {
   const [gerandoLink, setGerandoLink] = useState(false)
   const [linkModalTab, setLinkModalTab] = useState<"upload" | "url">("upload")
   const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
+  const [linkModalTipo, setLinkModalTipo] = useState<"final" | "brutos">("final")
   const fileRefLinkModal = useRef<HTMLInputElement>(null)
   const [copiado, setCopiado] = useState(false)
-  const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -84,12 +84,7 @@ export default function DemandaDetailPage() {
   const [localGravacao, setLocalGravacao] = useState("")
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
-  // ── Upload de vídeo ───────────────────────────────────────────────────────
-  const [uploadingBrutos, setUploadingBrutos] = useState(false)
-  const [uploadingFinal, setUploadingFinal] = useState(false)
-  const fileRefBrutos = useRef<HTMLInputElement>(null)
-  const fileRefFinal = useRef<HTMLInputElement>(null)
-  const fileRefAprovacao = useRef<HTMLInputElement>(null)
+  // fileRefLinkModal já declarado acima — único ref de upload necessário
 
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
@@ -216,54 +211,6 @@ export default function DemandaDetailPage() {
     return publicUrl
   }
 
-  // ── Upload de vídeo ───────────────────────────────────────────────────────
-  async function uploadVideo(file: File, tipo: "brutos" | "final") {
-    const setUploading = tipo === "brutos" ? setUploadingBrutos : setUploadingFinal
-    const setLink = tipo === "brutos" ? setLinkBrutos : setLinkFinal
-    setUploading(true)
-    try {
-      const url = await uploadPresigned(file, tipo)
-      setLink(url)
-      toast.success(`${tipo === "brutos" ? "Brutos" : "Vídeo final"} enviado com sucesso!`)
-      mutate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  // ── Upload final + Aprovação em 1 clique ─────────────────────────────────
-  async function uploadEEnviarParaAprovacao(file: File) {
-    setEnviandoAprovacao(true)
-    try {
-      // 1. Upload direto ao Supabase via URL presigned
-      const url = await uploadPresigned(file, "final")
-      setLinkFinal(url)
-
-      // 2. Gerar link de aprovação + enviar WhatsApp automaticamente
-      const resAprovacao = await fetch("/api/aprovacao-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId: id, urlVideo: url, expiresInDays: 7 }),
-      })
-      if (!resAprovacao.ok) throw new Error((await resAprovacao.json()).error ?? "Erro ao gerar link de aprovação")
-
-      // 3. Mover status para revisao_pendente (coluna "Aprovação") — status válido no schema
-      await fetch(`/api/demandas/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
-      })
-
-      toast.success("✅ Enviado! Link de aprovação enviado por WhatsApp para o solicitante.")
-      mutate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setEnviandoAprovacao(false)
-    }
-  }
 
   // ── Atribuição rápida (sem entrar em edit mode) ───────────────────────────
   async function atribuirRapido(campo: "videomakerId" | "editorId", valor: string) {
@@ -299,7 +246,16 @@ export default function DemandaDetailPage() {
     }
   }
 
-  // ── Gerar link de aprovação (por URL ou por upload de arquivo) ───────────
+  // ── Enviar vídeo (upload + aprovação para final | apenas upload para brutos) ─
+  function abrirModalUpload(tipo: "final" | "brutos") {
+    setLinkModalTipo(tipo)
+    setLinkModalTab("upload")
+    setLinkModalFile(null)
+    setLinkGerado("")
+    setUrlVideoInput("")
+    setShowLinkModal(true)
+  }
+
   async function gerarLinkAprovacao() {
     if (linkModalTab === "upload" && !linkModalFile) return
     if (linkModalTab === "url" && !urlVideoInput.trim()) return
@@ -307,12 +263,32 @@ export default function DemandaDetailPage() {
     try {
       let videoUrl = urlVideoInput.trim()
 
-      // Se for upload, faz o presigned upload primeiro
       if (linkModalTab === "upload" && linkModalFile) {
-        videoUrl = await uploadPresigned(linkModalFile, "final")
-        setLinkFinal(videoUrl)
+        videoUrl = await uploadPresigned(linkModalFile, linkModalTipo)
+        if (linkModalTipo === "final") setLinkFinal(videoUrl)
+        else setLinkBrutos(videoUrl)
+      } else {
+        // URL externa: salva diretamente no DB
+        await fetch(`/api/demandas/${id}/upload-video`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: videoUrl, tipo: linkModalTipo }),
+        })
+        if (linkModalTipo === "final") setLinkFinal(videoUrl)
+        else setLinkBrutos(videoUrl)
       }
 
+      // Brutos: apenas salvar, sem gerar link de aprovação
+      if (linkModalTipo === "brutos") {
+        toast.success("✅ Brutos enviados com sucesso!")
+        setShowLinkModal(false)
+        setLinkModalFile(null)
+        setUrlVideoInput("")
+        mutate()
+        return
+      }
+
+      // Final: gerar link de aprovação + mover status
       const res = await fetch("/api/aprovacao-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -322,7 +298,6 @@ export default function DemandaDetailPage() {
       if (!res.ok) throw new Error(json.error)
       setLinkGerado(json.link)
 
-      // Mover status para "Aguardando Revisão" (coluna Aprovação)
       await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -643,24 +618,16 @@ export default function DemandaDetailPage() {
                   editMode={editMode}
                   onChange={setLinkBrutos}
                 />
-                <div className="mt-1.5 flex items-center gap-2">
-                  <input
-                    ref={fileRefBrutos}
-                    type="file"
-                    accept="video/*,.zip"
-                    className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f, "brutos"); e.target.value = "" }}
-                  />
-                  <button
-                    onClick={() => fileRefBrutos.current?.click()}
-                    disabled={uploadingBrutos}
-                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50"
-                  >
-                    {uploadingBrutos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                    {uploadingBrutos ? "Enviando..." : "Upload arquivo"}
-                  </button>
-                  <span className="text-xs text-zinc-600">mp4, mov, avi, webm, mkv ou zip · máx 500MB</span>
-                </div>
+                {!editMode && (
+                  <div className="mt-1.5">
+                    <button
+                      onClick={() => abrirModalUpload("brutos")}
+                      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload Brutos
+                    </button>
+                  </div>
+                )}
               </div>
               {/* Final */}
               <div>
@@ -670,42 +637,17 @@ export default function DemandaDetailPage() {
                   editMode={editMode}
                   onChange={setLinkFinal}
                 />
-                <div className="mt-2 space-y-2">
-                  {/* Botão principal: 1 clique faz tudo */}
-                  <input
-                    ref={fileRefAprovacao}
-                    type="file"
-                    accept="video/*,.zip"
-                    className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadEEnviarParaAprovacao(f); e.target.value = "" }}
-                  />
-                  <button
-                    onClick={() => fileRefAprovacao.current?.click()}
-                    disabled={enviandoAprovacao}
-                    className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 w-full justify-center"
-                  >
-                    {enviandoAprovacao ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {enviandoAprovacao ? "Enviando para aprovação..." : "🚀 Enviar para Aprovação"}
-                  </button>
-                  <p className="text-[11px] text-zinc-600 text-center">Upload → gera link → WhatsApp automático ao solicitante</p>
-                  {/* Alternativa: URL externa */}
-                  <div className="border-t border-zinc-800 pt-2">
+                {!editMode && (
+                  <div className="mt-2">
                     <button
-                      onClick={() => { setLinkModalTab("url"); setShowLinkModal(true) }}
-                      className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors w-full justify-center"
+                      onClick={() => abrirModalUpload("final")}
+                      className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors w-full justify-center"
                     >
-                      <Link2 className="w-3 h-3" /> Usar URL externa (YouTube/Drive)
+                      <Send className="w-4 h-4" /> 🚀 Enviar para Aprovação
                     </button>
+                    <p className="text-[11px] text-zinc-600 text-center mt-1">Upload → gera link → WhatsApp automático ao solicitante</p>
                   </div>
-                  {/* Upload simples de arquivo (sem gerar aprovação) */}
-                  <input
-                    ref={fileRefFinal}
-                    type="file"
-                    accept="video/*,.zip"
-                    className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f, "final"); e.target.value = "" }}
-                  />
-                </div>
+                )}
               </div>
               {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number) => (
                 <div key={i} className="flex items-center gap-2">
@@ -840,15 +782,7 @@ export default function DemandaDetailPage() {
 
           {/* Aprovação de vídeo */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-zinc-300">Aprovação de Vídeo</h2>
-              <button
-                onClick={() => { setLinkModalTab("upload"); setShowLinkModal(true) }}
-                className="flex items-center gap-1 text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 px-2.5 py-1.5 rounded-lg hover:bg-zinc-700"
-              >
-                <Upload className="w-3.5 h-3.5" /> Enviar Vídeo
-              </button>
-            </div>
+            <h2 className="font-semibold text-zinc-300 mb-3">Aprovação de Vídeo</h2>
             {demanda.linkCliente ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
@@ -900,8 +834,14 @@ export default function DemandaDetailPage() {
       {showLinkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-semibold text-zinc-200 mb-1">Enviar para Aprovação</h3>
-            <p className="text-xs text-zinc-500 mb-4">Envie o vídeo final e gere o link de aprovação para o cliente.</p>
+            <h3 className="font-semibold text-zinc-200 mb-1">
+              {linkModalTipo === "brutos" ? "📁 Upload de Brutos" : "🚀 Enviar para Aprovação"}
+            </h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              {linkModalTipo === "brutos"
+                ? "Faça upload do material bruto filmado ou informe o link."
+                : "Envie o vídeo final e gere o link de aprovação para o cliente."}
+            </p>
 
             {/* Abas */}
             <div className="flex gap-1 bg-zinc-800 rounded-xl p-1 mb-4">
@@ -932,7 +872,7 @@ export default function DemandaDetailPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setShowLinkModal(false); setLinkGerado(""); setUrlVideoInput(""); setLinkModalFile(null) }}
+                  onClick={() => { setShowLinkModal(false); setLinkGerado(""); setUrlVideoInput(""); setLinkModalFile(null); setLinkModalTipo("final") }}
                   className="w-full border border-zinc-700 text-zinc-300 text-sm py-2 rounded-xl hover:bg-zinc-800"
                 >
                   Fechar
@@ -972,9 +912,14 @@ export default function DemandaDetailPage() {
                     disabled={gerandoLink || !linkModalFile}
                     className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white text-sm py-2 rounded-xl hover:bg-purple-500 disabled:opacity-50 font-medium"
                   >
-                    {gerandoLink ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</> : <><Send className="w-3.5 h-3.5" /> Enviar para Aprovação</>}
+                    {gerandoLink
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      : linkModalTipo === "brutos"
+                        ? <><Upload className="w-3.5 h-3.5" /> Enviar Brutos</>
+                        : <><Send className="w-3.5 h-3.5" /> Enviar para Aprovação</>
+                    }
                   </button>
-                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null) }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
                     Cancelar
                   </button>
                 </div>
@@ -994,7 +939,12 @@ export default function DemandaDetailPage() {
                     disabled={gerandoLink || !urlVideoInput.trim()}
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white text-sm py-2 rounded-xl hover:bg-blue-500 disabled:opacity-50 font-medium"
                   >
-                    {gerandoLink ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</> : <><Link2 className="w-3.5 h-3.5" /> Gerar Link</>}
+                    {gerandoLink
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      : linkModalTipo === "brutos"
+                        ? <><Upload className="w-3.5 h-3.5" /> Salvar URL Brutos</>
+                        : <><Link2 className="w-3.5 h-3.5" /> Gerar Link</>
+                    }
                   </button>
                   <button onClick={() => { setShowLinkModal(false); setUrlVideoInput("") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
                     Cancelar
