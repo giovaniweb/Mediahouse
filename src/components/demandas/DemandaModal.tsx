@@ -191,6 +191,13 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
+  // Força download via Supabase ?download=true (Content-Disposition: attachment no servidor)
+  // O atributo download do <a> só funciona para same-origin — para cross-origin precisamos disso
+  function makeDownloadUrl(url: string): string {
+    const sep = url.includes("?") ? "&" : "?"
+    return `${url}${sep}download=true`
+  }
+
   function getThumbUrl(url: string): string | null {
     if (url.includes("youtu.be/")) {
       const id = url.split("youtu.be/")[1]?.split("?")[0]
@@ -469,8 +476,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                               {/* Download — só para mp4 direto */}
                               {canDownload && (
                                 <a
-                                  href={demanda.linkFinal}
-                                  download
+                                  href={makeDownloadUrl(demanda.linkFinal)}
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={e => e.stopPropagation()}
@@ -494,8 +500,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                           {/* Botão de download abaixo do card — sempre visível para mp4 */}
                           {canDownload && (
                             <a
-                              href={demanda.linkFinal}
-                              download
+                              href={makeDownloadUrl(demanda.linkFinal)}
                               target="_blank"
                               rel="noreferrer"
                               className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors py-1"
