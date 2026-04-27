@@ -191,6 +191,22 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
+  function getThumbUrl(url: string): string | null {
+    if (url.includes("youtu.be/")) {
+      const id = url.split("youtu.be/")[1]?.split("?")[0]
+      return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null
+    }
+    if (url.includes("youtube.com/watch")) {
+      const id = new URLSearchParams(url.split("?")[1] ?? "").get("v")
+      return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null
+    }
+    if (url.includes("drive.google.com")) {
+      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+      return match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400` : null
+    }
+    return null // for direct mp4 we use <video> element
+  }
+
   function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "external"; embedUrl: string } {
     if (url.includes("youtu.be/")) {
       const id = url.split("youtu.be/")[1]?.split("?")[0]
@@ -405,24 +421,58 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                       </button>
                     )}
 
-                    {/* Vídeo Final */}
-                    {demanda.linkFinal && (
-                      <div className="flex items-center gap-2">
-                        <a href={demanda.linkFinal} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline flex-1 min-w-0">
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">🎬 Vídeo Final</span>
-                        </a>
-                        <button onClick={() => setPlayerUrl(demanda.linkFinal)}
-                          title="Ver vídeo" className="text-zinc-500 hover:text-purple-400 transition-colors shrink-0">
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => deleteLink("final")} disabled={!!deletingLink}
-                          title="Remover link" className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 disabled:opacity-40">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
+                    {/* Vídeo Final — thumbnail card */}
+                    {demanda.linkFinal && (() => {
+                      const thumbUrl = getThumbUrl(demanda.linkFinal)
+                      const isDirect = !thumbUrl
+                      return (
+                        <div
+                          className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
+                          onClick={() => setPlayerUrl(demanda.linkFinal)}
+                        >
+                          {/* Background: img for YouTube/Drive, video element for direct mp4 */}
+                          {thumbUrl ? (
+                            <img
+                              src={thumbUrl}
+                              alt="thumbnail"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <video
+                              src={demanda.linkFinal}
+                              preload="metadata"
+                              muted
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+
+                          {/* Dark overlay */}
+                          <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
+
+                          {/* Centered play button */}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover/thumb:bg-white/30 group-hover/thumb:scale-110 transition-all duration-200">
+                              <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                            </div>
+                          </div>
+
+                          {/* Label bottom-left */}
+                          <div className="absolute bottom-2 left-2 text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">
+                            🎬 Vídeo Final
+                          </div>
+
+                          {/* Delete top-right — appears on hover */}
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteLink("final") }}
+                            disabled={!!deletingLink}
+                            title="Remover link"
+                            className="absolute top-2 right-2 w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 opacity-0 group-hover/thumb:opacity-100 transition-all disabled:opacity-30"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )
+                    })()}
 
                     {/* Referências */}
                     {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number, arr: string[]) => (
