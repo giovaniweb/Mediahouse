@@ -30,18 +30,19 @@ const EXT_MAPA: Record<string, string> = {
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
 // PATCH: recebe { url, tipo } após upload direto do browser ao Supabase
-// (usado pelo fluxo presigned URL que bypassa o limite de 4.5MB do Vercel)
+// url pode ser null para limpar o campo (exclusão do link)
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
   const body = await req.json()
-  const url = body.url as string
+  // url pode ser null para excluir — apenas undefined é inválido
+  const url: string | null = body.url ?? null
   const tipo = body.tipo as string
 
-  if (!url || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
-    return NextResponse.json({ error: "url e tipo obrigatórios" }, { status: 400 })
+  if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
+    return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
   }
 
   const campo = tipo === "final" ? "linkFinal" : "linkBrutos"
