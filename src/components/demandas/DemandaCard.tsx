@@ -2,7 +2,7 @@
 
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AlertTriangle, Calendar, Trash2, User, Video } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Video, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 
@@ -78,6 +78,13 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
             <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", prio.class)}>
               {prio.label}
             </span>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/demandas/${demanda.id}`) }}
+              className="p-0.5 rounded hover:bg-zinc-600/40 text-zinc-600 hover:text-zinc-300 transition-colors opacity-0 group-hover:opacity-100"
+              title="Editar demanda"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
             {onDelete && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(demanda.id) }}
