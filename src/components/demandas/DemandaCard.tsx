@@ -79,7 +79,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
               {prio.label}
             </span>
             <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/demandas/${demanda.id}`) }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/demandas/${demanda.id}?edit=true`) }}
               className="p-0.5 rounded hover:bg-zinc-600/40 text-zinc-600 hover:text-zinc-300 transition-colors opacity-0 group-hover:opacity-100"
               title="Editar demanda"
             >

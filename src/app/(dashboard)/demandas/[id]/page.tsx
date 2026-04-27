@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
@@ -56,9 +56,15 @@ interface Editor { id: string; nome: string; especialidade?: string; status: str
 export default function DemandaDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // ── Estado geral ──────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false)
+
+  // Auto-entrar em edit mode se ?edit=true (vindo do lápis do kanban)
+  useEffect(() => {
+    if (searchParams.get("edit") === "true") setEditMode(true)
+  }, [searchParams])
   const [saving, setSaving] = useState(false)
   const [comentario, setComentario] = useState("")
   const [sendingComment, setSendingComment] = useState(false)
@@ -421,8 +427,9 @@ export default function DemandaDetailPage() {
               <textarea
                 value={descricao}
                 onChange={e => setDescricao(e.target.value)}
-                rows={3}
-                className="w-full text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none text-zinc-200"
+                rows={12}
+                placeholder="Descreva a demanda com detalhes..."
+                className="w-full text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/40 resize-y text-zinc-200 placeholder:text-zinc-600 leading-relaxed min-h-[140px]"
               />
             ) : (
               <p className="text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao}</p>
