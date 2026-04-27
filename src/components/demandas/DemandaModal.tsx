@@ -1,16 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
-  ThumbsUp, ThumbsDown, CheckCircle2,
+  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2,
 } from "lucide-react"
 import useSWR from "swr"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -90,6 +91,10 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const [aprovandoAcao, setAprovandoAcao] = useState<"aprovar" | "reprovar" | null>(null)
   const [motivoReprova, setMotivoReprova] = useState("")
   const [salvandoAprovacao, setSalvandoAprovacao] = useState(false)
+  const [uploadingBrutos, setUploadingBrutos] = useState(false)
+  const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
+  const fileRefBrutos = useRef<HTMLInputElement>(null)
+  const fileRefAprovacao = useRef<HTMLInputElement>(null)
 
   async function executarAprovacao(acao: "aprovar" | "reprovar") {
     if (!demandaId) return
@@ -114,6 +119,68 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
       mutate()
     } finally {
       setSalvandoAprovacao(false)
+    }
+  }
+
+  // ── Upload via URL presigned (bypass limite Vercel) ──────────────────────
+  async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
+    const contentType = file.type || "video/mp4"
+    const urlRes = await fetch(
+      `/api/demandas/${demandaId}/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
+    )
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" }))
+      throw new Error(err.error ?? "Erro ao gerar URL de upload")
+    }
+    const { uploadUrl, publicUrl } = await urlRes.json() as { uploadUrl: string; publicUrl: string }
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+    })
+    if (!uploadRes.ok) throw new Error(`Falha no upload: ${uploadRes.statusText}`)
+    await fetch(`/api/demandas/${demandaId}/upload-video`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: publicUrl, tipo }),
+    })
+    return publicUrl
+  }
+
+  async function handleUploadBrutos(file: File) {
+    setUploadingBrutos(true)
+    try {
+      await uploadPresigned(file, "brutos")
+      toast.success("✅ Brutos enviados com sucesso!")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUploadingBrutos(false)
+    }
+  }
+
+  async function handleEnviarParaAprovacao(file: File) {
+    setEnviandoAprovacao(true)
+    try {
+      const url = await uploadPresigned(file, "final")
+      const res = await fetch("/api/aprovacao-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demandaId, urlVideo: url, expiresInDays: 7 }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao gerar link de aprovação")
+      await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
+      })
+      toast.success("✅ Enviado! Link de aprovação enviado ao solicitante.")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setEnviandoAprovacao(false)
     }
   }
 
@@ -281,6 +348,45 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Upload */}
+                <div>
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
+                    <Upload className="w-3 h-3" /> Upload
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      ref={fileRefBrutos}
+                      type="file"
+                      accept="video/*,.zip"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadBrutos(f); e.target.value = "" }}
+                    />
+                    <button
+                      onClick={() => fileRefBrutos.current?.click()}
+                      disabled={uploadingBrutos || enviandoAprovacao}
+                      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50 flex-1"
+                    >
+                      {uploadingBrutos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {uploadingBrutos ? "Enviando..." : "Upload Brutos"}
+                    </button>
+                    <input
+                      ref={fileRefAprovacao}
+                      type="file"
+                      accept="video/*,.zip"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleEnviarParaAprovacao(f); e.target.value = "" }}
+                    />
+                    <button
+                      onClick={() => fileRefAprovacao.current?.click()}
+                      disabled={uploadingBrutos || enviandoAprovacao}
+                      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 flex-1"
+                    >
+                      {enviandoAprovacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      {enviandoAprovacao ? "Enviando..." : "Enviar Aprovação"}
+                    </button>
+                  </div>
+                </div>
 
                 {/* Comentários */}
                 <div>
