@@ -50,15 +50,15 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  // Garantir que o bucket existe — tenta criar sempre, ignora se já existe
+  // Garantir que o bucket existe — tenta criar sem fileSizeLimit (usa o limite do plano Supabase)
+  // fileSizeLimit: 500MB causava erro "object exceeded maximum allowed size" no plano Free
   const { error: createBucketError } = await supabase.storage.createBucket(bucket, {
     public: true,
-    fileSizeLimit: 500 * 1024 * 1024, // 500MB para vídeos
   })
   if (createBucketError && !createBucketError.message.toLowerCase().includes("already exist")) {
     console.error("[upload-url] Falha ao criar bucket:", createBucketError.message)
     return NextResponse.json(
-      { error: `Bucket '${bucket}' não existe e não pôde ser criado: ${createBucketError.message}` },
+      { error: `Bucket '${bucket}' não pôde ser criado: ${createBucketError.message}` },
       { status: 500 }
     )
   }
