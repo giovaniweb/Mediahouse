@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
-  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2,
+  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2,
 } from "lucide-react"
 import useSWR from "swr"
 import { format } from "date-fns"
@@ -91,10 +91,16 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const [aprovandoAcao, setAprovandoAcao] = useState<"aprovar" | "reprovar" | null>(null)
   const [motivoReprova, setMotivoReprova] = useState("")
   const [salvandoAprovacao, setSalvandoAprovacao] = useState(false)
-  const [uploadingBrutos, setUploadingBrutos] = useState(false)
   const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
-  const fileRefBrutos = useRef<HTMLInputElement>(null)
   const fileRefAprovacao = useRef<HTMLInputElement>(null)
+  // Brutos URL
+  const [brutosUrlInput, setBrutosUrlInput] = useState("")
+  const [showBrutosInput, setShowBrutosInput] = useState(false)
+  const [savingBrutosUrl, setSavingBrutosUrl] = useState(false)
+  // Excluir link
+  const [deletingLink, setDeletingLink] = useState<"brutos" | "final" | null>(null)
+  // Player de vídeo
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null)
 
   async function executarAprovacao(acao: "aprovar" | "reprovar") {
     if (!demandaId) return
@@ -147,17 +153,62 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     return publicUrl
   }
 
-  async function handleUploadBrutos(file: File) {
-    setUploadingBrutos(true)
+  async function saveBrutosUrl() {
+    if (!brutosUrlInput.trim()) return
+    setSavingBrutosUrl(true)
     try {
-      await uploadPresigned(file, "brutos")
-      toast.success("✅ Brutos enviados com sucesso!")
+      await fetch(`/api/demandas/${demandaId}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: brutosUrlInput.trim(), tipo: "brutos" }),
+      })
+      setBrutosUrlInput("")
+      setShowBrutosInput(false)
+      toast.success("✅ URL dos brutos salva!")
       mutate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+    } catch {
+      toast.error("Erro ao salvar URL")
     } finally {
-      setUploadingBrutos(false)
+      setSavingBrutosUrl(false)
     }
+  }
+
+  async function deleteLink(tipo: "brutos" | "final") {
+    if (!confirm(`Remover o link de ${tipo === "brutos" ? "brutos" : "vídeo final"}?`)) return
+    setDeletingLink(tipo)
+    try {
+      await fetch(`/api/demandas/${demandaId}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: null, tipo }),
+      })
+      toast.success("Link removido!")
+      mutate()
+    } catch {
+      toast.error("Erro ao remover link")
+    } finally {
+      setDeletingLink(null)
+    }
+  }
+
+  function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "external"; embedUrl: string } {
+    if (url.includes("youtu.be/")) {
+      const id = url.split("youtu.be/")[1]?.split("?")[0]
+      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
+    }
+    if (url.includes("youtube.com/watch")) {
+      const id = new URLSearchParams(url.split("?")[1] ?? "").get("v") ?? ""
+      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
+    }
+    if (url.includes("drive.google.com")) {
+      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+      if (match) return { type: "drive", embedUrl: `https://drive.google.com/file/d/${match[1]}/preview` }
+      return { type: "external", embedUrl: url }
+    }
+    if (/\.(mp4|mov|webm|avi)(\?|$)/i.test(url) || url.includes("supabase")) {
+      return { type: "video", embedUrl: url }
+    }
+    return { type: "external", embedUrl: url }
   }
 
   async function handleEnviarParaAprovacao(file: File) {
@@ -311,81 +362,107 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 )}
 
                 {/* Links */}
-                {(demanda.linkBrutos || demanda.linkFinal || demanda.referencia || demanda.linkPostagem) && (
-                  <div>
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
-                      <Link2 className="w-3 h-3" /> Links
-                    </p>
-                    <div className="space-y-2">
-                      {demanda.linkBrutos && (
+                <div>
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
+                    <Link2 className="w-3 h-3" /> Links
+                  </p>
+                  <div className="space-y-2">
+                    {/* Brutos — apenas URL (Drive) */}
+                    {demanda.linkBrutos ? (
+                      <div className="flex items-center gap-2">
                         <a href={demanda.linkBrutos} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline transition-colors">
+                          className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline flex-1 min-w-0">
                           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span>📁 Brutos</span>
+                          <span className="truncate">📁 Brutos</span>
                         </a>
-                      )}
-                      {demanda.linkFinal && (
-                        <a href={demanda.linkFinal} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline transition-colors">
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span>🎬 Vídeo Final</span>
-                        </a>
-                      )}
-                      {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number, arr: string[]) => (
-                        <a key={i} href={url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span>📌 Referência{arr.length > 1 ? ` ${i + 1}` : ""}</span>
-                        </a>
-                      ))}
-                      {demanda.linkPostagem && (
-                        <a href={demanda.linkPostagem} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span>🔗 Postagem</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
+                        <button onClick={() => deleteLink("brutos")} disabled={!!deletingLink}
+                          title="Remover link" className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 disabled:opacity-40">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : showBrutosInput ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={brutosUrlInput}
+                          onChange={e => setBrutosUrlInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && saveBrutosUrl()}
+                          placeholder="https://drive.google.com/..."
+                          className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-500 text-zinc-200 placeholder:text-zinc-600"
+                        />
+                        <button onClick={saveBrutosUrl} disabled={savingBrutosUrl || !brutosUrlInput.trim()}
+                          className="text-xs bg-zinc-700 text-zinc-300 px-2.5 py-1.5 rounded-lg hover:bg-zinc-600 disabled:opacity-50">
+                          {savingBrutosUrl ? "..." : "Salvar"}
+                        </button>
+                        <button onClick={() => { setShowBrutosInput(false); setBrutosUrlInput("") }}
+                          className="text-zinc-500 hover:text-zinc-300">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setShowBrutosInput(true)}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-1 transition-colors">
+                        + URL dos Brutos (Drive)
+                      </button>
+                    )}
 
-                {/* Upload */}
+                    {/* Vídeo Final */}
+                    {demanda.linkFinal && (
+                      <div className="flex items-center gap-2">
+                        <a href={demanda.linkFinal} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline flex-1 min-w-0">
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">🎬 Vídeo Final</span>
+                        </a>
+                        <button onClick={() => setPlayerUrl(demanda.linkFinal)}
+                          title="Ver vídeo" className="text-zinc-500 hover:text-purple-400 transition-colors shrink-0">
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => deleteLink("final")} disabled={!!deletingLink}
+                          title="Remover link" className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 disabled:opacity-40">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Referências */}
+                    {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number, arr: string[]) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        <span>📌 Referência{arr.length > 1 ? ` ${i + 1}` : ""}</span>
+                      </a>
+                    ))}
+                    {demanda.linkPostagem && (
+                      <a href={demanda.linkPostagem} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        <span>🔗 Postagem</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Upload — apenas vídeo final (brutos = Drive URL acima) */}
                 <div>
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
                     <Upload className="w-3 h-3" /> Upload
                   </p>
-                  <div className="flex gap-2">
-                    <input
-                      ref={fileRefBrutos}
-                      type="file"
-                      accept="video/*,.zip"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadBrutos(f); e.target.value = "" }}
-                    />
-                    <button
-                      onClick={() => fileRefBrutos.current?.click()}
-                      disabled={uploadingBrutos || enviandoAprovacao}
-                      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-50 flex-1"
-                    >
-                      {uploadingBrutos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                      {uploadingBrutos ? "Enviando..." : "Upload Brutos"}
-                    </button>
-                    <input
-                      ref={fileRefAprovacao}
-                      type="file"
-                      accept="video/*,.zip"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleEnviarParaAprovacao(f); e.target.value = "" }}
-                    />
-                    <button
-                      onClick={() => fileRefAprovacao.current?.click()}
-                      disabled={uploadingBrutos || enviandoAprovacao}
-                      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 flex-1"
-                    >
-                      {enviandoAprovacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      {enviandoAprovacao ? "Enviando..." : "Enviar Aprovação"}
-                    </button>
-                  </div>
+                  <input
+                    ref={fileRefAprovacao}
+                    type="file"
+                    accept="video/*,.zip"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleEnviarParaAprovacao(f); e.target.value = "" }}
+                  />
+                  <button
+                    onClick={() => fileRefAprovacao.current?.click()}
+                    disabled={enviandoAprovacao}
+                    className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 w-full"
+                  >
+                    {enviandoAprovacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {enviandoAprovacao ? "Enviando..." : "🚀 Enviar Vídeo para Aprovação"}
+                  </button>
+                  <p className="text-[10px] text-zinc-600 text-center mt-1">Upload → gera link → WhatsApp ao solicitante</p>
                 </div>
 
                 {/* Comentários */}
@@ -622,6 +699,38 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
           )}
         </div>
       </div>
+
+      {/* ── Player de vídeo (z-[60] acima do modal z-50) ────────────── */}
+      {playerUrl && (() => {
+        const { type, embedUrl } = getEmbedUrl(playerUrl)
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setPlayerUrl(null)}
+          >
+            <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => setPlayerUrl(null)}
+                className="absolute -top-9 right-0 text-white/70 hover:text-white flex items-center gap-1.5 text-sm transition-colors"
+              >
+                <X className="w-4 h-4" /> Fechar
+              </button>
+              {type === "video" ? (
+                <video src={embedUrl} controls autoPlay className="w-full rounded-xl bg-black max-h-[80vh]" />
+              ) : type === "youtube" || type === "drive" ? (
+                <iframe src={embedUrl} className="w-full aspect-video rounded-xl border-0" allowFullScreen />
+              ) : (
+                <div className="text-center text-white p-12 bg-zinc-900 rounded-xl">
+                  <p className="mb-4 text-zinc-400">Não é possível reproduzir inline.</p>
+                  <a href={playerUrl} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
+                    Abrir em nova aba →
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

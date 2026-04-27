@@ -9,7 +9,7 @@ import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
-  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2,
+  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -70,6 +70,7 @@ export default function DemandaDetailPage() {
   const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
   const [linkModalTipo, setLinkModalTipo] = useState<"final" | "brutos">("final")
   const fileRefLinkModal = useRef<HTMLInputElement>(null)
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null)
   const [copiado, setCopiado] = useState(false)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
@@ -310,6 +311,45 @@ export default function DemandaDetailPage() {
     } finally {
       setGerandoLink(false)
     }
+  }
+
+  // ── Excluir link de vídeo ────────────────────────────────────────────────
+  async function deleteVideoLink(tipo: "brutos" | "final") {
+    if (!confirm(`Remover o link de ${tipo === "brutos" ? "brutos" : "vídeo final"}?`)) return
+    try {
+      await fetch(`/api/demandas/${id}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: null, tipo }),
+      })
+      if (tipo === "brutos") setLinkBrutos("")
+      else setLinkFinal("")
+      toast.success("Link removido!")
+      mutate()
+    } catch {
+      toast.error("Erro ao remover link")
+    }
+  }
+
+  // ── Helper para player de vídeo ──────────────────────────────────────────
+  function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "external"; embedUrl: string } {
+    if (url.includes("youtu.be/")) {
+      const id = url.split("youtu.be/")[1]?.split("?")[0]
+      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
+    }
+    if (url.includes("youtube.com/watch")) {
+      const id = new URLSearchParams(url.split("?")[1] ?? "").get("v") ?? ""
+      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
+    }
+    if (url.includes("drive.google.com")) {
+      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+      if (match) return { type: "drive", embedUrl: `https://drive.google.com/file/d/${match[1]}/preview` }
+      return { type: "external", embedUrl: url }
+    }
+    if (/\.(mp4|mov|webm|avi)(\?|$)/i.test(url) || url.includes("supabase")) {
+      return { type: "video", embedUrl: url }
+    }
+    return { type: "external", embedUrl: url }
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -610,21 +650,21 @@ export default function DemandaDetailPage() {
               <Link2 className="w-4 h-4 text-purple-400" /> Links da Produção
             </h2>
             <div className="space-y-3">
-              {/* Brutos */}
+              {/* Brutos — apenas URL (Drive), sem upload de arquivo */}
               <div>
                 <LinkField
-                  label="📁 Brutos (material bruto filmado)"
+                  label="📁 Brutos (URL do Google Drive)"
                   value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
                   editMode={editMode}
                   onChange={setLinkBrutos}
                 />
-                {!editMode && (
-                  <div className="mt-1.5">
+                {!editMode && demanda.linkBrutos && (
+                  <div className="mt-1.5 flex items-center gap-2">
                     <button
-                      onClick={() => abrirModalUpload("brutos")}
-                      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+                      onClick={() => deleteVideoLink("brutos")}
+                      className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors"
                     >
-                      <Upload className="w-3.5 h-3.5" /> Upload Brutos
+                      <Trash2 className="w-3 h-3" /> Remover
                     </button>
                   </div>
                 )}
@@ -638,14 +678,30 @@ export default function DemandaDetailPage() {
                   onChange={setLinkFinal}
                 />
                 {!editMode && (
-                  <div className="mt-2">
+                  <div className="mt-2 space-y-2">
+                    {demanda.linkFinal && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPlayerUrl(demanda.linkFinal)}
+                          className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
+                        >
+                          <Play className="w-3 h-3" /> Ver vídeo
+                        </button>
+                        <button
+                          onClick={() => deleteVideoLink("final")}
+                          className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" /> Remover
+                        </button>
+                      </div>
+                    )}
                     <button
                       onClick={() => abrirModalUpload("final")}
                       className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors w-full justify-center"
                     >
                       <Send className="w-4 h-4" /> 🚀 Enviar para Aprovação
                     </button>
-                    <p className="text-[11px] text-zinc-600 text-center mt-1">Upload → gera link → WhatsApp automático ao solicitante</p>
+                    <p className="text-[11px] text-zinc-600 text-center">Upload → gera link → WhatsApp automático ao solicitante</p>
                   </div>
                 )}
               </div>
@@ -955,6 +1011,38 @@ export default function DemandaDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Player de vídeo ─────────────────────────────────────────────── */}
+      {playerUrl && (() => {
+        const { type, embedUrl } = getEmbedUrl(playerUrl)
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setPlayerUrl(null)}
+          >
+            <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => setPlayerUrl(null)}
+                className="absolute -top-9 right-0 text-white/70 hover:text-white flex items-center gap-1.5 text-sm transition-colors"
+              >
+                <X className="w-4 h-4" /> Fechar
+              </button>
+              {type === "video" ? (
+                <video src={embedUrl} controls autoPlay className="w-full rounded-xl bg-black max-h-[80vh]" />
+              ) : type === "youtube" || type === "drive" ? (
+                <iframe src={embedUrl} className="w-full aspect-video rounded-xl border-0" allowFullScreen />
+              ) : (
+                <div className="text-center text-white p-12 bg-zinc-900 rounded-xl">
+                  <p className="mb-4 text-zinc-400">Não é possível reproduzir inline.</p>
+                  <a href={playerUrl} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
+                    Abrir em nova aba →
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }
