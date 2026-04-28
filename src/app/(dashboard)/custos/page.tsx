@@ -14,6 +14,9 @@ import {
   ChevronDown,
   TrendingUp,
   AlertCircle,
+  BarChart2,
+  Clapperboard,
+  CalendarDays,
 } from "lucide-react"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 
@@ -46,6 +49,31 @@ interface RespostaCustos {
   porVideomaker: { id: string; nome: string; total: number; count: number }[]
 }
 
+interface MesProducao {
+  mes: string
+  label: string
+  demandas: number
+  valor: number
+}
+
+interface PessoaProducao {
+  id: string
+  nome: string
+  demandas: number
+  valor: number
+  percentual: number
+}
+
+interface RespostaProducao {
+  valorPorDemanda: number
+  totalDemandas: number
+  valorTotal: number
+  mesAtual: MesProducao
+  porMes: MesProducao[]
+  porEditor: PessoaProducao[]
+  porVideomaker: PessoaProducao[]
+}
+
 const TIPOS_CUSTO = [
   { value: "diaria", label: "Diária" },
   { value: "mensalidade", label: "Mensalidade" },
@@ -68,6 +96,7 @@ const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 })
 
 export default function CustosPage() {
+  const [aba, setAba] = useState<"custos" | "producao">("custos")
   const [filtroVm, setFiltroVm] = useState("")
   const [filtroPago, setFiltroPago] = useState<"" | "true" | "false">("")
   const [modal, setModal] = useState(false)
@@ -86,6 +115,11 @@ export default function CustosPage() {
 
   const { data: videomakersList } = useSWR<{ videomakers: Videomaker[] }>(
     "/api/videomakers?status=ativo",
+    fetcher
+  )
+
+  const { data: producaoData, isLoading: loadingProducao } = useSWR<RespostaProducao>(
+    aba === "producao" ? "/api/producao" : null,
     fetcher
   )
 
@@ -163,7 +197,192 @@ export default function CustosPage() {
   return (
     <>
       <Header title="Gestão de Custos" />
+
+      {/* ── Tab switcher ──────────────────────────────────────────────── */}
+      <div className="px-6 pt-4 pb-0 border-b border-zinc-800">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setAba("custos")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+              aba === "custos"
+                ? "border-purple-500 text-white bg-zinc-800/50"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            Custos
+          </button>
+          <button
+            onClick={() => setAba("producao")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+              aba === "producao"
+                ? "border-emerald-500 text-white bg-zinc-800/50"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+            Produção
+          </button>
+        </div>
+      </div>
+
       <main className="flex-1 p-6 space-y-6">
+
+        {/* ── ABA: PRODUÇÃO ──────────────────────────────────────────── */}
+        {aba === "producao" && (
+          <div className="space-y-6">
+            {loadingProducao ? (
+              <div className="text-center py-16 text-zinc-500">Carregando métricas...</div>
+            ) : producaoData ? (
+              <>
+                {/* Cards resumo */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BarChart2 className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs text-emerald-400 font-medium uppercase tracking-wide">Produção Acumulada</span>
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-400">
+                      {fmt(producaoData.valorTotal)}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      {producaoData.totalDemandas} demandas finalizadas · {fmt(producaoData.valorPorDemanda)}/demanda
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarDays className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Este Mês</span>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-400">
+                      {fmt(producaoData.mesAtual.valor)}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      {producaoData.mesAtual.demandas} demanda{producaoData.mesAtual.demandas !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
+                    </div>
+                  </div>
+
+                  <div className="bg-purple-950/30 border border-purple-800/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Film className="w-4 h-4 text-purple-400" />
+                      <span className="text-xs text-purple-400 font-medium uppercase tracking-wide">Demandas Finalizadas</span>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-400">
+                      {producaoData.totalDemandas}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      últimos 12 meses
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabela por mês */}
+                <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CalendarDays className="w-4 h-4 text-zinc-400" />
+                    <h3 className="text-sm font-semibold text-white">Produção por Mês</h3>
+                  </div>
+                  {producaoData.porMes.length === 0 ? (
+                    <p className="text-sm text-zinc-600 text-center py-6">Nenhuma demanda finalizada no período</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(() => {
+                        const maxDemandas = Math.max(...producaoData.porMes.map(m => m.demandas), 1)
+                        return producaoData.porMes.map(m => (
+                          <div key={m.mes}>
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className={`font-medium w-24 capitalize ${m.demandas > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
+                                {m.label}
+                              </span>
+                              <div className="flex items-center gap-4 text-zinc-500">
+                                <span className={m.demandas > 0 ? "text-zinc-300" : "text-zinc-700"}>
+                                  {m.demandas} demanda{m.demandas !== 1 ? "s" : ""}
+                                </span>
+                                <span className={`font-semibold w-28 text-right ${m.demandas > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
+                                  {fmt(m.valor)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="h-1.5 bg-zinc-700/60 rounded-full">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                style={{ width: `${(m.demandas / maxDemandas) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Por videomaker interno (Editor) */}
+                {producaoData.porEditor.length > 0 && (
+                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Clapperboard className="w-4 h-4 text-zinc-400" />
+                      <h3 className="text-sm font-semibold text-white">Por Videomaker Interno (Editor)</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {producaoData.porEditor.map(e => (
+                        <div key={e.id}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-zinc-200 font-medium">{e.nome}</span>
+                            <div className="flex items-center gap-4 text-zinc-500">
+                              <span className="text-zinc-300">{e.demandas} demanda{e.demandas !== 1 ? "s" : ""}</span>
+                              <span className="font-semibold text-emerald-400 w-28 text-right">{fmt(e.valor)}</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-zinc-700/60 rounded-full">
+                            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${e.percentual}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Por videomaker externo */}
+                {producaoData.porVideomaker.length > 0 && (
+                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users className="w-4 h-4 text-zinc-400" />
+                      <h3 className="text-sm font-semibold text-white">Por Videomaker Externo</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {producaoData.porVideomaker.map(v => (
+                        <div key={v.id}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-zinc-200 font-medium">{v.nome}</span>
+                            <div className="flex items-center gap-4 text-zinc-500">
+                              <span className="text-zinc-300">{v.demandas} demanda{v.demandas !== 1 ? "s" : ""}</span>
+                              <span className="font-semibold text-emerald-400 w-28 text-right">{fmt(v.valor)}</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-zinc-700/60 rounded-full">
+                            <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${v.percentual}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {producaoData.totalDemandas === 0 && (
+                  <div className="text-center py-16 text-zinc-500">
+                    <Film className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p className="text-sm">Nenhuma demanda finalizada nos últimos 12 meses</p>
+                    <p className="text-xs mt-1 text-zinc-600">Os dados aparecerão conforme as demandas forem concluídas</p>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {/* ── ABA: CUSTOS (conteúdo original) ───────────────────────── */}
+        {aba === "custos" && <>
 
         {/* ── Resumo ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -404,6 +623,8 @@ export default function CustosPage() {
             </tbody>
           </table>
         </div>
+        </>}
+
       </main>
 
       {/* ── Modal Novo Custo ───────────────────────────────────────────────── */}
