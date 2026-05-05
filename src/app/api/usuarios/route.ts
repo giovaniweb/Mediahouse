@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 // GET /api/usuarios — lista todos os usuários (admin/gestor)
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
@@ -12,7 +12,21 @@ export async function GET() {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
+  const { searchParams } = new URL(req.url)
+  const busca = searchParams.get("busca")?.trim()
+
+  const where = busca
+    ? {
+        OR: [
+          { nome: { contains: busca, mode: "insensitive" as const } },
+          { email: { contains: busca, mode: "insensitive" as const } },
+          { telefone: { contains: busca } },
+        ],
+      }
+    : undefined
+
   const usuarios = await prisma.usuario.findMany({
+    where,
     select: {
       id: true,
       nome: true,
@@ -25,6 +39,11 @@ export async function GET() {
     },
     orderBy: { nome: "asc" },
   })
+
+  // Quando é busca rápida (merge modal), retorna apenas usuários
+  if (busca) {
+    return NextResponse.json({ usuarios, videomakers: [], editores: [] })
+  }
 
   const videomakers = await prisma.videomaker.findMany({
     select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true },
@@ -62,13 +81,25 @@ export async function POST(req: NextRequest) {
     if (existe) return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 })
   }
 
-  // Verificar unicidade por telefone (se não tem email)
-  if (!emailFinal && telefone) {
-    const cleanDigits = telefone.replace(/\D/g, "")
+  // Verificar unicidade de telefone — SEMPRE (independente de ter email ou não)
+  // Retorna o usuário existente para o frontend poder oferecer mesclagem
+  const telDigits = telefone?.replace(/\D/g, "") ?? ""
+  if (telDigits.length >= 8) {
     const existePorTel = await prisma.usuario.findFirst({
-      where: { telefone: { contains: cleanDigits } },
+      where: { telefone: { contains: telDigits.slice(-9) } },
+      select: { id: true, nome: true, email: true, telefone: true },
     })
-    if (existePorTel) return NextResponse.json({ error: "Telefone já cadastrado" }, { status: 409 })
+    if (existePorTel) {
+      return NextResponse.json(
+        { error: "Telefone já cadastrado", usuario: existePorTel },
+        { status: 409 }
+      )
+    }
+  }
+
+  // Também verificar se não tem email E sem telefone — pelo menos um deve ser fornecido para login
+  if (!emailFinal && !telDigits) {
+    return NextResponse.json({ error: "Informe ao menos e-mail ou telefone" }, { status: 400 })
   }
 
   const senhaHash = await bcrypt.hash(senha, 12)

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { Users, Camera, Film, Shield, UserCheck, User, Search, CheckCircle2, XCircle, Plus, Pencil, X, Save } from "lucide-react"
+import { Users, Camera, Film, Shield, UserCheck, User, Search, CheckCircle2, XCircle, Plus, Pencil, X, Save, GitMerge, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -65,6 +65,15 @@ interface EditForm {
   tipo: string
 }
 
+interface MesclarModal {
+  principal: Usuario
+  secundarioBusca: string
+  secundario: Usuario | null
+  buscando: boolean
+  mesclando: boolean
+  qtdDemandas: number | null
+}
+
 export default function UsuariosPage() {
   const [tab, setTab] = useState<Tab>("sistema")
   const [search, setSearch] = useState("")
@@ -72,6 +81,7 @@ export default function UsuariosPage() {
   const [editForm, setEditForm] = useState<EditForm>({ nome: "", email: "", telefone: "", tipo: "" })
   const [salvando, setSalvando] = useState(false)
   const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string } | null>(null)
+  const [mesclarModal, setMesclarModal] = useState<MesclarModal | null>(null)
   const { data, mutate } = useSWR<{ usuarios: Usuario[]; videomakers: Videomaker[]; editores: Editor[] }>("/api/usuarios", fetcher)
 
   const usuarios = data?.usuarios ?? []
@@ -117,6 +127,49 @@ export default function UsuariosPage() {
       mutate()
     } catch {
       toast.error("Erro ao atualizar status")
+    }
+  }
+
+  function abrirMesclar(u: Usuario) {
+    setMesclarModal({ principal: u, secundarioBusca: "", secundario: null, buscando: false, mesclando: false, qtdDemandas: null })
+  }
+
+  async function buscarSecundario() {
+    if (!mesclarModal || !mesclarModal.secundarioBusca.trim()) return
+    setMesclarModal(m => m ? { ...m, buscando: true, secundario: null, qtdDemandas: null } : null)
+    try {
+      const q = encodeURIComponent(mesclarModal.secundarioBusca.trim())
+      const res = await fetch(`/api/usuarios?busca=${q}`)
+      const json = await res.json()
+      const lista: Usuario[] = json.usuarios ?? []
+      const encontrado = lista.find(u => u.id !== mesclarModal.principal.id) ?? null
+      const qtd = encontrado
+        ? await fetch(`/api/demandas?solicitanteId=${encontrado.id}&limit=0`).then(r => r.json()).then(j => j.total ?? 0).catch(() => 0)
+        : null
+      setMesclarModal(m => m ? { ...m, buscando: false, secundario: encontrado, qtdDemandas: qtd } : null)
+    } catch {
+      setMesclarModal(m => m ? { ...m, buscando: false } : null)
+      toast.error("Erro ao buscar usuário")
+    }
+  }
+
+  async function confirmarMesclar() {
+    if (!mesclarModal?.secundario) return
+    setMesclarModal(m => m ? { ...m, mesclando: true } : null)
+    try {
+      const res = await fetch(`/api/usuarios/${mesclarModal.principal.id}/mesclar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secundarioId: mesclarModal.secundario.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      toast.success(json.mensagem || "Cadastros mesclados!")
+      setMesclarModal(null)
+      mutate()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao mesclar")
+      setMesclarModal(m => m ? { ...m, mesclando: false } : null)
     }
   }
 
@@ -235,7 +288,7 @@ export default function UsuariosPage() {
                     </div>
                   ) : (
                     /* ── Card normal ── */
-                    <div className="p-4 flex items-center gap-4">
+                    <div className="group p-4 flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
                         <User className="w-5 h-5 text-zinc-400" />
                       </div>
@@ -263,6 +316,13 @@ export default function UsuariosPage() {
                           title="Editar usuário"
                         >
                           <Pencil className="w-3 h-3" /> Editar
+                        </button>
+                        <button
+                          onClick={() => abrirMesclar(u)}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Mesclar com cadastro duplicado"
+                        >
+                          <GitMerge className="w-3 h-3" /> Mesclar
                         </button>
                         <button
                           onClick={() => toggleStatusUsuario(u.id, u.status)}
@@ -399,6 +459,109 @@ export default function UsuariosPage() {
           open={!!permUser}
           onClose={() => setPermUser(null)}
         />
+      )}
+
+      {/* Modal de Mesclagem */}
+      {mesclarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => !mesclarModal.mesclando && setMesclarModal(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <GitMerge className="w-4 h-4 text-blue-400" />
+                <h2 className="font-semibold text-zinc-100 text-sm">Mesclar Cadastros Duplicados</h2>
+              </div>
+              <button onClick={() => setMesclarModal(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Principal */}
+              <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+                <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1">✅ Manter (principal)</p>
+                <p className="font-semibold text-zinc-100 text-sm">{mesclarModal.principal.nome}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {mesclarModal.principal.email || <span className="text-zinc-600 italic">sem e-mail</span>}
+                  {mesclarModal.principal.telefone && <span className="ml-2 text-zinc-500">{mesclarModal.principal.telefone}</span>}
+                </p>
+              </div>
+
+              {/* Busca do secundário */}
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1.5">🔍 Buscar cadastro duplicado para remover:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nome ou e-mail do duplicado..."
+                    value={mesclarModal.secundarioBusca}
+                    onChange={e => setMesclarModal(m => m ? { ...m, secundarioBusca: e.target.value, secundario: null } : null)}
+                    onKeyDown={e => e.key === "Enter" && buscarSecundario()}
+                    className="flex-1 border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={buscarSecundario}
+                    disabled={mesclarModal.buscando || !mesclarModal.secundarioBusca.trim()}
+                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {mesclarModal.buscando ? "..." : "Buscar"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Resultado da busca */}
+              {mesclarModal.secundario && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 space-y-1">
+                  <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">⚠️ Remover (duplicado)</p>
+                  <p className="font-semibold text-zinc-100 text-sm">{mesclarModal.secundario.nome}</p>
+                  <p className="text-xs text-zinc-400">
+                    {mesclarModal.secundario.email || <span className="text-zinc-600 italic">sem e-mail</span>}
+                    {mesclarModal.secundario.telefone && <span className="ml-2 text-zinc-500">{mesclarModal.secundario.telefone}</span>}
+                  </p>
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded border inline-block mt-1", TIPO_COLOR[mesclarModal.secundario.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>
+                    {TIPO_LABEL[mesclarModal.secundario.tipo] ?? mesclarModal.secundario.tipo}
+                  </span>
+                </div>
+              )}
+
+              {mesclarModal.buscando === false && mesclarModal.secundarioBusca && mesclarModal.secundario === null && (
+                <p className="text-xs text-zinc-500 italic">Nenhum usuário encontrado com esse termo.</p>
+              )}
+
+              {/* O que será feito */}
+              {mesclarModal.secundario && (
+                <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-zinc-300 mb-2">O que será feito:</p>
+                  {!mesclarModal.principal.email && mesclarModal.secundario.email && (
+                    <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> E-mail <strong className="text-zinc-200">{mesclarModal.secundario.email}</strong> copiado para o principal</p>
+                  )}
+                  {!mesclarModal.principal.telefone && mesclarModal.secundario.telefone && (
+                    <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> Telefone copiado para o principal</p>
+                  )}
+                  {(mesclarModal.qtdDemandas ?? 0) > 0 && (
+                    <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> <strong className="text-zinc-200">{mesclarModal.qtdDemandas}</strong> demanda(s) migrada(s) para o principal</p>
+                  )}
+                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado marcado como <strong>inativo</strong></p>
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={confirmarMesclar}
+                  disabled={!mesclarModal.secundario || mesclarModal.mesclando}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-40 transition-colors"
+                >
+                  <GitMerge className="w-4 h-4" /> {mesclarModal.mesclando ? "Mesclando..." : "Confirmar Mesclagem"}
+                </button>
+                <button
+                  onClick={() => setMesclarModal(null)}
+                  className="px-4 py-2 border border-zinc-700 text-zinc-400 text-sm rounded-lg hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

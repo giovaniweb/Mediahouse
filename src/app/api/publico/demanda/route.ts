@@ -41,7 +41,21 @@ export async function POST(req: NextRequest) {
   const data = parsed.data
 
   // Busca ou cria usuário solicitante externo
-  let solicitante = await prisma.usuario.findUnique({ where: { email: data.email } })
+  // Prioridade: telefone (evita duplicatas), depois email
+  const telDigits = data.telefone.replace(/\D/g, "")
+  let solicitante = null
+
+  // 1. Buscar por telefone primeiro (previne duplicatas)
+  if (telDigits.length >= 8) {
+    solicitante = await prisma.usuario.findFirst({
+      where: { telefone: { contains: telDigits.slice(-9) } },
+    })
+  }
+
+  // 2. Se não achou por telefone, buscar por email
+  if (!solicitante) {
+    solicitante = await prisma.usuario.findUnique({ where: { email: data.email } })
+  }
 
   if (!solicitante) {
     const { randomBytes } = await import("crypto")
@@ -58,12 +72,14 @@ export async function POST(req: NextRequest) {
         senhaHash,
       },
     })
-  } else if (!solicitante.telefone && data.telefone) {
-    // Atualiza telefone se ainda não tinha
-    await prisma.usuario.update({
-      where: { id: solicitante.id },
-      data: { telefone: data.telefone },
-    })
+  } else {
+    // Atualiza dados faltantes no cadastro existente
+    const updates: Record<string, string> = {}
+    if (!solicitante.telefone && data.telefone) updates.telefone = data.telefone
+    if (!solicitante.email && data.email) updates.email = data.email
+    if (Object.keys(updates).length > 0) {
+      await prisma.usuario.update({ where: { id: solicitante.id }, data: updates })
+    }
   }
 
   const isCobertura = data.tipoVideo === "cobertura_evento"

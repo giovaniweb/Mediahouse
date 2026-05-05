@@ -126,6 +126,8 @@ function TabUsuarios() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
   const [loading, setLoading] = useState(false)
+  const [conflito, setConflito] = useState<{ id: string; nome: string; email: string | null; telefone: string | null } | null>(null)
+  const [adicionandoEmail, setAdicionandoEmail] = useState(false)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
   const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
   const [promoverTipo, setPromoverTipo] = useState("operacao")
@@ -133,20 +135,48 @@ function TabUsuarios() {
 
   async function criarUsuario() {
     setLoading(true)
+    setConflito(null)
     try {
       const res = await fetch("/api/usuarios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      const json = await res.json()
+      if (res.status === 409 && json.usuario) {
+        // Conflito de telefone — oferecer mesclagem
+        setConflito(json.usuario)
+        return
+      }
+      if (!res.ok) throw new Error(json.error)
       toast.success("Usuário criado!")
       setShowForm(false)
+      setConflito(null)
       setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
       mutate()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar usuário")
     } finally { setLoading(false) }
+  }
+
+  async function adicionarEmailAoCadastroExistente() {
+    if (!conflito || !form.email) return
+    setAdicionandoEmail(true)
+    try {
+      const res = await fetch(`/api/usuarios/${conflito.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("E-mail adicionado ao cadastro existente!")
+      setShowForm(false)
+      setConflito(null)
+      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
+      mutate()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao adicionar e-mail")
+    } finally { setAdicionandoEmail(false) }
   }
 
   async function promoverUsuario() {
@@ -295,11 +325,42 @@ function TabUsuarios() {
               <input className="w-full border border-zinc-700 bg-zinc-900 rounded-lg px-3 py-2 text-sm mt-1 text-zinc-200" value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} placeholder="+55 11 99999-9999" />
             </div>
           </div>
+          {/* Banner de conflito de telefone */}
+          {conflito && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Telefone já cadastrado para <span className="text-white">&ldquo;{conflito.nome}&rdquo;</span>
+                {conflito.email && <span className="text-amber-300/70">({conflito.email})</span>}
+              </p>
+              {form.email && !conflito.email && (
+                <p className="text-xs text-zinc-300">Deseja adicionar o e-mail <strong>{form.email}</strong> a esse cadastro existente?</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                {form.email && !conflito.email && (
+                  <button
+                    onClick={adicionarEmailAoCadastroExistente}
+                    disabled={adicionandoEmail}
+                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {adicionandoEmail ? "Salvando..." : "✅ Sim, adicionar e-mail"}
+                  </button>
+                )}
+                <button
+                  onClick={() => setConflito(null)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-700"
+                >
+                  ❌ Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button onClick={criarUsuario} disabled={loading} className="bg-white text-zinc-900 text-xs px-4 py-2 rounded-lg hover:bg-zinc-100 font-semibold disabled:opacity-50">
               {loading ? "Criando..." : "Criar"}
             </button>
-            <button onClick={() => setShowForm(false)} className="text-xs px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800">Cancelar</button>
+            <button onClick={() => { setShowForm(false); setConflito(null) }} className="text-xs px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800">Cancelar</button>
           </div>
         </div>
       )}
