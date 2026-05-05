@@ -87,6 +87,9 @@ export const templates = {
   videomakertNotificado: (codigo: string, titulo: string, data: string) =>
     `🎬 *NuFlow — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
 
+  coberturaConfirmacao: (nome: string, codigo: string, titulo: string, data: string, local: string, cidade: string) =>
+    `🎥 *NuFlow — Solicitação de Cobertura*\n\nOlá, ${nome}! Temos uma cobertura e gostaríamos de confirmar sua disponibilidade.\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n📍 Local: ${local}${cidade ? `, ${cidade}` : ""}\n\n💰 *Pagamento:* realizado em até *15 dias* após o envio da nota fiscal.\n🧾 A nota fiscal deverá ser enviada assim que os brutos forem entregues.\n\nVocê topa? Responda *SIM* para confirmar ou *NÃO* para recusar.\nSe tiver dúvidas sobre o evento, pode perguntar aqui mesmo! 😊`,
+
   edicaoFinalizada: (codigo: string, titulo: string) =>
     `✂️ *NuFlow — Edição Concluída*\n\nA edição da sua demanda foi finalizada!\n\n📋 *${codigo}* — ${titulo}\n\nAguardando sua aprovação. Acesse o link enviado. 👆`,
 

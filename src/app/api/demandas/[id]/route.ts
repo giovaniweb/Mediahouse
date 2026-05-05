@@ -161,10 +161,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   // Detectar mudança de videomakerId para notificação WhatsApp
   let videomakeridAnterior: string | null | undefined
+  let autoStatusVideomakerNotificado = false
   if (body.videomakerId !== undefined) {
     const demandaAntes = await prisma.demanda.findUnique({
       where: { id },
-      select: { videomakerId: true, codigo: true, titulo: true, dataCaptacao: true },
+      select: {
+        videomakerId: true, codigo: true, titulo: true,
+        dataCaptacao: true, tipoVideo: true, localGravacao: true, cidade: true,
+        statusInterno: true,
+      },
     })
     videomakeridAnterior = demandaAntes?.videomakerId
 
@@ -178,36 +183,71 @@ export async function PUT(req: NextRequest, { params }: Params) {
         const dataFmt = body.dataCaptacao || demandaAntes.dataCaptacao
           ? new Date(body.dataCaptacao ?? demandaAntes!.dataCaptacao!).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
           : "A confirmar"
-        void sendWhatsappMessage(
-          novoVm.telefone,
-          templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt),
-          id
-        ).catch(() => null)
+
+        const isCobertura = demandaAntes.tipoVideo?.toLowerCase().includes("cobertura")
+
+        if (isCobertura) {
+          // Template rico para cobertura — inclui local, cidade e condições de pagamento
+          const local = demandaAntes.localGravacao || "A confirmar"
+          const cidade = demandaAntes.cidade || ""
+          void sendWhatsappMessage(
+            novoVm.telefone,
+            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade),
+            id
+          ).catch(() => null)
+          // Auto-mudar status para "videomaker_notificado" (aguardando confirmação)
+          autoStatusVideomakerNotificado = true
+        } else {
+          // Demandas normais: template padrão
+          void sendWhatsappMessage(
+            novoVm.telefone,
+            templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt),
+            id
+          ).catch(() => null)
+        }
       }
     }
   }
 
-  const demanda = await prisma.demanda.update({
-    where: { id },
-    data: {
-      titulo: body.titulo,
-      descricao: body.descricao,
-      cidade: body.cidade,
-      dataLimite: body.dataLimite ? new Date(body.dataLimite) : undefined,
-      dataCaptacao: body.dataCaptacao ? new Date(body.dataCaptacao) : undefined,
-      videomakerId: body.videomakerId,
-      editorId: body.editorId,
-      socialId: body.socialId,
-      gestorId: body.gestorId,
-      linkBrutos: body.linkBrutos,
-      linkFinal: body.linkFinal,
-      linkPostagem: body.linkPostagem,
-      linkCliente: body.linkCliente,
-      localGravacao: body.localGravacao,
-      motivoImpedimento: body.motivoImpedimento,
-      classificacao: body.classificacao,
-    },
-  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: Record<string, any> = {
+    titulo: body.titulo,
+    descricao: body.descricao,
+    cidade: body.cidade,
+    dataLimite: body.dataLimite ? new Date(body.dataLimite) : undefined,
+    dataCaptacao: body.dataCaptacao ? new Date(body.dataCaptacao) : undefined,
+    videomakerId: body.videomakerId,
+    editorId: body.editorId,
+    socialId: body.socialId,
+    gestorId: body.gestorId,
+    linkBrutos: body.linkBrutos,
+    linkFinal: body.linkFinal,
+    linkPostagem: body.linkPostagem,
+    linkCliente: body.linkCliente,
+    localGravacao: body.localGravacao,
+    motivoImpedimento: body.motivoImpedimento,
+    classificacao: body.classificacao,
+  }
+
+  // Cobertura com novo videomaker → mudar status para aguardando confirmação
+  if (autoStatusVideomakerNotificado) {
+    updateData.statusInterno = "videomaker_notificado"
+  }
+
+  const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
+
+  // Registrar histórico se mudou para videomaker_notificado
+  if (autoStatusVideomakerNotificado) {
+    await prisma.historicoStatus.create({
+      data: {
+        demandaId: id,
+        statusNovo: "videomaker_notificado",
+        usuarioId: session.user.id,
+        origem: "manual",
+        observacao: "Videomaker notificado via WhatsApp — aguardando confirmação de cobertura",
+      },
+    }).catch(() => null)
+  }
 
   return NextResponse.json(demanda)
 }

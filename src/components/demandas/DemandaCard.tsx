@@ -35,6 +35,7 @@ interface DemandaCardProps {
     statusInterno: string
     statusVisivel?: string
     dataLimite?: string | null
+    videomakerId?: string | null
     editor?: { nome: string } | null
     solicitante?: { nome: string } | null
   }
@@ -53,6 +54,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   const isNearDeadline = demanda.dataLimite && !isOverdue &&
     new Date(demanda.dataLimite) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
 
+  const isCobertura = demanda.tipoVideo?.toLowerCase().includes("cobertura")
+  const aguardandoVM = isCobertura && demanda.statusInterno === "videomaker_notificado"
+  const semVM = isCobertura && !demanda.videomakerId && ["entrada", "producao"].includes(demanda.statusVisivel ?? "")
+
   const handleClick = () => {
     if (onOpen) onOpen(demanda.id)
     else router.push(`/demandas/${demanda.id}`)
@@ -70,6 +75,8 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           demanda.statusInterno === "aprovado" && "border-l-[3px] border-l-green-400 bg-green-950/10",
           demanda.statusInterno === "ajuste_solicitado" && "border-l-[3px] border-l-red-500 bg-red-950/20",
           demanda.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
+          // Cobertura aguardando confirmação de VM
+          aguardandoVM && "border-l-[3px] border-l-amber-400 bg-amber-950/10",
         )}
         {...dragHandleProps}
       >
@@ -118,6 +125,16 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           <span className="text-[10px] bg-zinc-700/50 text-zinc-400 px-1.5 py-0.5 rounded">
             {demanda.tipoVideo}
           </span>
+          {aguardandoVM && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30">
+              ⏳ Aguardando VM
+            </span>
+          )}
+          {semVM && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-orange-500/15 text-orange-400 border-orange-500/30">
+              📷 Sem VM
+            </span>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700/30">

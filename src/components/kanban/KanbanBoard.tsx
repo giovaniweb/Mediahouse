@@ -31,6 +31,7 @@ interface Demanda {
   statusInterno: string
   dataLimite?: string | null
   posicaoKanban?: number | null
+  videomakerId?: string | null
   editor?: { nome: string } | null
   solicitante?: { nome: string } | null
 }

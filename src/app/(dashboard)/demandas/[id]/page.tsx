@@ -320,6 +320,56 @@ export default function DemandaDetailPage() {
   }
 
   // ── Excluir link de vídeo ────────────────────────────────────────────────
+  // ── Confirmação de videomaker para cobertura ────────────────────────────
+  const [confirmandoVM, setConfirmandoVM] = useState(false)
+  async function confirmarVideomaker(aceite: boolean) {
+    setConfirmandoVM(true)
+    try {
+      const novoStatus = aceite ? "videomaker_aceitou" : "videomaker_recusou"
+      await fetch(`/api/demandas/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: novoStatus, origem: "manual" }),
+      })
+      if (!aceite) {
+        // Liberar vaga do videomaker
+        await fetch(`/api/demandas/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videomakerId: null }),
+        })
+        toast.success("Videomaker recusou. Demanda aguardando novo videomaker.")
+      } else {
+        toast.success("Confirmado! Videomaker aceito.")
+      }
+      mutate()
+    } catch {
+      toast.error("Erro ao atualizar confirmação")
+    } finally { setConfirmandoVM(false) }
+  }
+
+  // ── Quick Brutos (sem editMode) ──────────────────────────────────────────
+  const [quickBrutosInput, setQuickBrutosInput] = useState("")
+  const [showQuickBrutos, setShowQuickBrutos] = useState(false)
+  const [savingBrutos, setSavingBrutos] = useState(false)
+  async function salvarQuickBrutos() {
+    if (!quickBrutosInput.trim()) return
+    setSavingBrutos(true)
+    try {
+      await fetch(`/api/demandas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ linkBrutos: quickBrutosInput.trim() }),
+      })
+      toast.success("Link de brutos salvo!")
+      setShowQuickBrutos(false)
+      setQuickBrutosInput("")
+      mutate()
+    } catch {
+      toast.error("Erro ao salvar link")
+    } finally { setSavingBrutos(false) }
+  }
+
   async function deleteVideoLink(tipo: "brutos" | "final") {
     if (!confirm(`Remover o link de ${tipo === "brutos" ? "brutos" : "vídeo final"}?`)) return
     try {
@@ -651,6 +701,33 @@ export default function DemandaDetailPage() {
           </div>
 
 
+          {/* ── Banner de confirmação de cobertura ──────────────────────── */}
+          {demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                <span className="text-lg">⏳</span>
+                Aguardando confirmação de <strong>{demanda.videomaker.nome}</strong> via WhatsApp
+              </p>
+              <p className="text-xs text-zinc-400">A mensagem foi enviada com local, data e condições de pagamento. Confirme aqui quando o videomaker responder.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => confirmarVideomaker(true)}
+                  disabled={confirmandoVM}
+                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Confirmou (SIM)
+                </button>
+                <button
+                  onClick={() => confirmarVideomaker(false)}
+                  disabled={confirmandoVM}
+                  className="flex items-center gap-1.5 bg-red-600/80 hover:bg-red-600 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  <X className="w-4 h-4" /> Recusou (NÃO)
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Links ────────────────────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
@@ -673,6 +750,38 @@ export default function DemandaDetailPage() {
                     >
                       <Trash2 className="w-3 h-3" /> Remover
                     </button>
+                  </div>
+                )}
+                {/* Quick Brutos — botão rápido sem entrar em editMode */}
+                {!editMode && !demanda.linkBrutos && (
+                  <div className="mt-1.5">
+                    {!showQuickBrutos ? (
+                      <button
+                        onClick={() => setShowQuickBrutos(true)}
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
+                      >
+                        <Upload className="w-3 h-3" /> Adicionar link de brutos
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="url"
+                          value={quickBrutosInput}
+                          onChange={e => setQuickBrutosInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
+                          placeholder="https://drive.google.com/..."
+                          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                          autoFocus
+                        />
+                        <button onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()}
+                          className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded-lg disabled:opacity-50">
+                          {savingBrutos ? "..." : "Salvar"}
+                        </button>
+                        <button onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }}
+                          className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

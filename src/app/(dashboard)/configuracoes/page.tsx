@@ -1693,7 +1693,7 @@ function TabMeuPerfil() {
   const vmPerfil = dataVm?.videomakers?.[0] ?? null
 
   const [formEditor, setFormEditor] = useState({ nome: session?.user?.name ?? "", especialidade: "", whatsapp: "", fazCaptacao: false })
-  const [formVm, setFormVm] = useState({ nome: session?.user?.name ?? "", podeEditar: true })
+  const [formVm, setFormVm] = useState({ nome: session?.user?.name ?? "", cidade: "", estado: "", telefone: "", email: session?.user?.email ?? "", podeEditar: true })
   const [loadingE, setLoadingE] = useState(false)
   const [loadingV, setLoadingV] = useState(false)
 
@@ -1815,14 +1815,44 @@ function TabMeuPerfil() {
           </p>
         ) : (
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Nome de exibição</label>
-              <input
-                value={formVm.nome}
-                onChange={e => setFormVm({ ...formVm, nome: e.target.value })}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
-                placeholder="Seu nome"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Nome de exibição *</label>
+                <input
+                  value={formVm.nome}
+                  onChange={e => setFormVm({ ...formVm, nome: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                  placeholder="Seu nome"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">WhatsApp / Telefone</label>
+                <input
+                  value={formVm.telefone}
+                  onChange={e => setFormVm({ ...formVm, telefone: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                  placeholder="+55 31 99999-9999"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Cidade</label>
+                <input
+                  value={formVm.cidade}
+                  onChange={e => setFormVm({ ...formVm, cidade: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                  placeholder="Ex: Sete Lagoas"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Estado</label>
+                <input
+                  value={formVm.estado}
+                  onChange={e => setFormVm({ ...formVm, estado: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500/50"
+                  placeholder="Ex: MG"
+                  maxLength={2}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -1831,7 +1861,7 @@ function TabMeuPerfil() {
               >
                 <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${formVm.podeEditar ? "translate-x-5" : "translate-x-1"}`} />
               </button>
-              <span className="text-xs text-zinc-400">Pode editar também</span>
+              <span className="text-xs text-zinc-400">Pode fazer edição também</span>
             </div>
             <button
               onClick={criarPerfilVideomaker}
