@@ -12,10 +12,15 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil"
 
-const TIPO_OPTS = ["gestor", "operacao"]
+const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
 const TIPO_LABEL: Record<string, string> = {
-  admin: "Admin", gestor: "Gestor", operacao: "Operação",
-  videomaker: "Videomaker", editor: "Editor",
+  admin: "Admin",
+  gestor: "Gestor",
+  operacao: "Operação",
+  social: "Social Media",
+  solicitante: "Solicitante",
+  editor: "Editor",
+  videomaker: "Videomaker",
 }
 
 // ─── Usuários ────────────────────────────────────────────────────────────────

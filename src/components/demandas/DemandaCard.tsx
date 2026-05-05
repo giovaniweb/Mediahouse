@@ -2,7 +2,7 @@
 
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AlertTriangle, Calendar, Trash2, User, Video, Pencil } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Video, Pencil, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 
@@ -40,10 +40,11 @@ interface DemandaCardProps {
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
+  onDuplicate?: (id: string) => void
   onOpen?: (id: string) => void
 }
 
-export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: DemandaCardProps) {
+export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, onOpen }: DemandaCardProps) {
   const router = useRouter()
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
@@ -85,6 +86,15 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onOpen }: Dema
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
+            {onDuplicate && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDuplicate(demanda.id) }}
+                className="p-0.5 rounded hover:bg-blue-500/20 text-zinc-600 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+                title="Duplicar demanda"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
             {onDelete && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(demanda.id) }}

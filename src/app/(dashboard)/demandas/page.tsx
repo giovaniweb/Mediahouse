@@ -131,6 +131,24 @@ export default function DemandasPage() {
     [mutate] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const handleDuplicate = useCallback(
+    async (demandaId: string) => {
+      try {
+        const res = await fetch(`/api/demandas/${demandaId}/duplicate`, { method: "POST" })
+        if (!res.ok) {
+          const erro = await res.json().catch(() => ({ error: "Erro ao duplicar" }))
+          showToast(erro.error || "Erro ao duplicar", "erro")
+          return
+        }
+        showToast("Demanda duplicada! ✅", "ok")
+        mutate()
+      } catch {
+        showToast("Erro de conexão ao duplicar", "erro")
+      }
+    },
+    [mutate] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   return (
     <>
       <Header
@@ -205,7 +223,7 @@ export default function DemandasPage() {
 
       {/* Kanban */}
       <div className="flex-1 p-4 overflow-auto">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} />
       </div>
 
       {/* Modal Nova Demanda */}

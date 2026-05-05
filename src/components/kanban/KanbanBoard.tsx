@@ -39,9 +39,10 @@ interface KanbanBoardProps {
   demandas: Demanda[]
   onMove: (demandaId: string, novoStatus: StatusVisivel) => void
   onDelete?: (demandaId: string) => void
+  onDuplicate?: (demandaId: string) => void
 }
 
-export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate }: KanbanBoardProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -208,7 +209,7 @@ export function KanbanBoard({ demandas, onMove, onDelete }: KanbanBoardProps) {
                             data-card
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
-                            <DemandaCard demanda={demanda} onDelete={onDelete} onOpen={setModalDemandaId} />
+                            <DemandaCard demanda={demanda} onDelete={onDelete} onDuplicate={onDuplicate} onOpen={setModalDemandaId} />
                           </div>
                         )}
                       </Draggable>
