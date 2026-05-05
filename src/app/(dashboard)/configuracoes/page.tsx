@@ -1700,16 +1700,23 @@ function TabMeuPerfil() {
   async function criarPerfilEditor() {
     setLoadingE(true)
     try {
+      // especialidade deve ser String[] — converter a string do input para array
+      const especialidadeArr = formEditor.especialidade
+        ? formEditor.especialidade.split(",").map(s => s.trim()).filter(Boolean)
+        : []
       const res = await fetch("/api/editores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formEditor, usuarioId: userId }),
+        body: JSON.stringify({ ...formEditor, especialidade: especialidadeArr, usuarioId: userId }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Erro interno ao criar perfil de editor" }))
+        throw new Error(errBody.error || "Erro ao criar perfil")
+      }
       toast.success("Perfil de editor criado!")
       mutateEditor()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally { setLoadingE(false) }
   }
 
@@ -1721,11 +1728,14 @@ function TabMeuPerfil() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formVm, usuarioId: userId }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Erro interno ao criar perfil de videomaker" }))
+        throw new Error(errBody.error || "Erro ao criar perfil")
+      }
       toast.success("Perfil de videomaker criado!")
       mutateVm()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally { setLoadingV(false) }
   }
 
