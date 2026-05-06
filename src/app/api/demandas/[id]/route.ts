@@ -168,7 +168,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const demandaAntes = await prisma.demanda.findUnique({
       where: { id },
       select: {
-        videomakerId: true, codigo: true, titulo: true,
+        videomakerId: true, codigo: true, titulo: true, descricao: true,
         dataCaptacao: true, tipoVideo: true, localGravacao: true, cidade: true,
         statusInterno: true,
       },
@@ -189,12 +189,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
         const isCobertura = demandaAntes.tipoVideo?.toLowerCase().includes("cobertura")
 
         if (isCobertura) {
-          // Template rico para cobertura — inclui local, cidade e condições de pagamento
-          const local = demandaAntes.localGravacao || "A confirmar"
-          const cidade = demandaAntes.cidade || ""
+          // Template rico para cobertura — inclui local, cidade, descrição e condições de pagamento
+          const local = body.localGravacao || demandaAntes.localGravacao || "A confirmar"
+          const cidade = body.cidade || demandaAntes.cidade || ""
+          const descricao = body.descricao || demandaAntes.descricao || null
           void sendWhatsappMessage(
             novoVm.telefone,
-            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade),
+            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao),
             id
           ).catch(() => null)
           // Auto-mudar status para "videomaker_notificado" (aguardando confirmação)

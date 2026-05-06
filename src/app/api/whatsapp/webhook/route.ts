@@ -593,7 +593,7 @@ async function processarMensagem(body: unknown) {
 
   // ── Comandos estruturados (resposta rápida sem IA) ──────────────────────
 
-  if (textoUpper === "SIM" || textoUpper === "CONFIRMAR") {
+  if (textoUpper === "SIM" || textoUpper === "CONFIRMAR" || textoUpper === "SIM!" || textoUpper === "TOPO" || textoUpper === "TOPEI" || /^(SIM|CONFIRMAR|TOPO|TOPEI)[.!,\s]*$/.test(textoUpper)) {
     if (videomaker) {
       const demanda = await prisma.demanda.findFirst({
         where: { videomakerId: videomaker.id, statusInterno: "videomaker_notificado" },

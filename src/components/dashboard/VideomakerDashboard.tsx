@@ -7,7 +7,8 @@ import { ptBR } from "date-fns/locale"
 import {
   Film, Calendar, FileText, FolderOpen, X, ExternalLink,
   Pencil, Check, Clock, AlertTriangle, CheckCircle2, Building2,
-  CreditCard, MapPin, Mail, Phone,
+  CreditCard, MapPin, Mail, Phone, ChevronDown, ChevronUp,
+  ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -110,6 +111,8 @@ function FolderInlineEdit({ demandaId, campo, valor, label, onSaved }: FolderInl
 
 export function VideomakerDashboard() {
   const [welcomeDismissed, setWelcomeDismissed] = useState(true)
+  const [showAllNFDados, setShowAllNFDados] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const { data: vmData, mutate: mutateVm } = useSWR("/api/me/videomaker", fetcher)
   const { data: empresaData } = useSWR("/api/config/empresa", fetcher)
 
@@ -141,6 +144,22 @@ export function VideomakerDashboard() {
   // Separar demandas: ativas vs coberturas (para pastas)
   const demandasAtivas = demandas.filter(d => d.statusVisivel !== "finalizado")
   const coberturas = demandas.filter(d => d.tipoVideo?.toLowerCase().includes("cobertura"))
+  // Demandas aguardando confirmação de cobertura
+  const aguardandoConfirmacao = demandas.filter(d => d.statusInterno === "videomaker_notificado")
+
+  async function confirmarDemanda(demandaId: string, aceitar: boolean) {
+    setConfirmingId(demandaId)
+    await fetch(`/api/demandas/${demandaId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        statusInterno: aceitar ? "videomaker_aceitou" : "videomaker_recusou",
+        observacao: aceitar ? "Confirmado pelo videomaker no painel" : "Recusado pelo videomaker no painel",
+      }),
+    }).catch(() => null)
+    setConfirmingId(null)
+    mutateVm()
+  }
 
   return (
     <main className="flex-1 p-6 space-y-6">
@@ -165,6 +184,56 @@ export function VideomakerDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Banner de confirmação de cobertura pendente */}
+      {aguardandoConfirmacao.length > 0 && (
+        <section className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+            ⏳ Confirmação Pendente ({aguardandoConfirmacao.length})
+          </h2>
+          {aguardandoConfirmacao.map((d) => (
+            <div key={d.id} className="bg-zinc-900/70 border border-amber-500/20 rounded-lg p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-mono text-zinc-500">{d.codigo}</span>
+                    <span className="text-sm font-semibold text-zinc-100 truncate">{d.titulo}</span>
+                  </div>
+                  {d.dataCaptacao && (
+                    <p className="text-xs text-zinc-400 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {format(new Date(d.dataCaptacao), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    </p>
+                  )}
+                </div>
+                <Link href={`/demandas/${d.id}`}
+                  className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-1 rounded">
+                  <ExternalLink className="w-3 h-3" />
+                  Ver demanda
+                </Link>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={confirmingId === d.id}
+                  onClick={() => confirmarDemanda(d.id, true)}
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  ✅ Confirmei, topo!
+                </button>
+                <button
+                  disabled={confirmingId === d.id}
+                  onClick={() => confirmarDemanda(d.id, false)}
+                  className="flex items-center gap-1.5 bg-red-600/80 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                  ❌ Não posso
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_20rem] gap-6">
@@ -278,10 +347,21 @@ export function VideomakerDashboard() {
         <div className="space-y-6">
           {/* Dados para Nota Fiscal */}
           <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2 mb-3">
-              <Building2 className="w-4 h-4 text-emerald-400" />
-              Dados para Nota Fiscal
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-emerald-400" />
+                Dados para Nota Fiscal
+              </h2>
+              {empresa && (
+                <button
+                  onClick={() => setShowAllNFDados(v => !v)}
+                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  {showAllNFDados ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  {showAllNFDados ? "Menos" : "Ver todos"}
+                </button>
+              )}
+            </div>
             {!empresa ? (
               <p className="text-xs text-zinc-500">Dados não cadastrados. Contate a equipe.</p>
             ) : (
@@ -302,39 +382,45 @@ export function VideomakerDashboard() {
                     <span className="text-zinc-200 font-mono">{empresa.cnpj}</span>
                   </div>
                 )}
-                {(empresa.endereco || empresa.cidade) && (
-                  <div className="flex items-start gap-1.5">
-                    <MapPin className="w-3 h-3 text-zinc-500 mt-0.5" />
-                    <div>
-                      {empresa.endereco && <p className="text-zinc-300">{empresa.endereco}</p>}
-                      {empresa.bairro && <p className="text-zinc-400">{empresa.bairro}</p>}
-                      {empresa.cidade && (
-                        <p className="text-zinc-400">{empresa.cidade}{empresa.estado ? ` — ${empresa.estado}` : ""}{empresa.cep ? `, CEP ${empresa.cep}` : ""}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {empresa.email && (
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="w-3 h-3 text-zinc-500" />
-                    <span className="text-zinc-300">{empresa.email}</span>
-                  </div>
-                )}
-                {empresa.telefone && (
-                  <div className="flex items-center gap-1.5">
-                    <Phone className="w-3 h-3 text-zinc-500" />
-                    <span className="text-zinc-300">{empresa.telefone}</span>
-                  </div>
-                )}
                 {empresa.pixKey && (
-                  <div className="mt-2 p-2 bg-emerald-950/30 border border-emerald-500/20 rounded-lg">
+                  <div className="p-2 bg-emerald-950/30 border border-emerald-500/20 rounded-lg">
                     <p className="text-zinc-400 mb-0.5">Chave PIX ({empresa.pixTipo ?? ""})</p>
                     <p className="text-emerald-400 font-medium font-mono text-[11px] break-all">{empresa.pixKey}</p>
                   </div>
                 )}
                 {empresa.observacoesNF && (
-                  <div className="mt-2 p-2 bg-amber-950/20 border border-amber-500/20 rounded-lg text-amber-300/80 text-[11px] leading-relaxed">
+                  <div className="p-2 bg-amber-950/20 border border-amber-500/20 rounded-lg text-amber-300/80 text-[11px] leading-relaxed">
                     📌 {empresa.observacoesNF}
+                  </div>
+                )}
+
+                {/* Campos expandidos */}
+                {showAllNFDados && (
+                  <div className="space-y-2 pt-1 border-t border-zinc-800 mt-2">
+                    {(empresa.endereco || empresa.cidade) && (
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="w-3 h-3 text-zinc-500 mt-0.5" />
+                        <div>
+                          {empresa.endereco && <p className="text-zinc-300">{empresa.endereco}</p>}
+                          {empresa.bairro && <p className="text-zinc-400">{empresa.bairro}</p>}
+                          {empresa.cidade && (
+                            <p className="text-zinc-400">{empresa.cidade}{empresa.estado ? ` — ${empresa.estado}` : ""}{empresa.cep ? `, CEP ${empresa.cep}` : ""}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {empresa.email && (
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="w-3 h-3 text-zinc-500" />
+                        <span className="text-zinc-300">{empresa.email}</span>
+                      </div>
+                    )}
+                    {empresa.telefone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="w-3 h-3 text-zinc-500" />
+                        <span className="text-zinc-300">{empresa.telefone}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
