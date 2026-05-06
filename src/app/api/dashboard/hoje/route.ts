@@ -17,12 +17,24 @@ export async function GET() {
   const fimAmanha = new Date(amanha)
   fimAmanha.setHours(23, 59, 59, 999)
 
+  // Para videomakers externos: filtrar por videomakerId deles
+  let videomakerId: string | undefined
+  if (session.user.tipo === "videomaker") {
+    const vmRecord = await prisma.videomaker.findFirst({
+      where: { usuarioId: session.user.id },
+      select: { id: true },
+    })
+    if (vmRecord) videomakerId = vmRecord.id
+  }
+
   const [eventosHoje, demandasCriticas, custosVencendo, alertasCriticos] = await Promise.all([
     // Eventos de hoje ordenados por horário
     prisma.evento.findMany({
       where: {
         inicio: { gte: inicioDia, lte: fimDia },
         status: { in: ["agendado", "confirmado", "em_andamento"] },
+        // Filtrar por videomaker se for videomaker externo
+        ...(videomakerId ? { videomakerId } : {}),
       },
       include: {
         videomaker: { select: { nome: true } },
@@ -37,6 +49,8 @@ export async function GET() {
       where: {
         dataLimite: { gte: inicioDia, lte: fimAmanha },
         statusVisivel: { notIn: ["finalizado"] },
+        // Filtrar por videomaker se for videomaker externo
+        ...(videomakerId ? { videomakerId } : {}),
       },
       select: {
         id: true,
@@ -50,32 +64,36 @@ export async function GET() {
       take: 5,
     }),
 
-    // Cobranças vencidas ou vencendo hoje
-    prisma.custoVideomaker.findMany({
-      where: {
-        pago: false,
-        dataVencimento: { not: null, lte: fimDia },
-      },
-      include: {
-        videomaker: { select: { nome: true } },
-      },
-      orderBy: { dataVencimento: "asc" },
-      take: 5,
-    }),
+    // Cobranças vencidas ou vencendo hoje (apenas equipe interna vê)
+    videomakerId
+      ? Promise.resolve([])
+      : prisma.custoVideomaker.findMany({
+          where: {
+            pago: false,
+            dataVencimento: { not: null, lte: fimDia },
+          },
+          include: {
+            videomaker: { select: { nome: true } },
+          },
+          orderBy: { dataVencimento: "asc" },
+          take: 5,
+        }),
 
-    // Alertas críticos ativos (respeitando snooze)
-    prisma.alertaIA.findMany({
-      where: {
-        status: "ativo",
-        severidade: "critico",
-        OR: [{ snoozeAte: null }, { snoozeAte: { lt: agora } }],
-      },
-      include: {
-        demanda: { select: { id: true, codigo: true, titulo: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
+    // Alertas críticos ativos (apenas equipe interna vê)
+    videomakerId
+      ? Promise.resolve([])
+      : prisma.alertaIA.findMany({
+          where: {
+            status: "ativo",
+            severidade: "critico",
+            OR: [{ snoozeAte: null }, { snoozeAte: { lt: agora } }],
+          },
+          include: {
+            demanda: { select: { id: true, codigo: true, titulo: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        }),
   ])
 
   return NextResponse.json({

@@ -6,7 +6,7 @@ import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { cn } from "@/lib/utils"
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
 
 export const COLUNAS = [
@@ -41,9 +41,13 @@ interface KanbanBoardProps {
   onMove: (demandaId: string, novoStatus: StatusVisivel) => void
   onDelete?: (demandaId: string) => void
   onDuplicate?: (demandaId: string) => void
+  userTipo?: string
 }
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate }: KanbanBoardProps) {
+// Colunas que videomakers externos NÃO podem mover cards para lá
+const COLUNAS_BLOQUEADAS_VM: StatusVisivel[] = ["para_postar", "finalizado"]
+
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, userTipo }: KanbanBoardProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -82,6 +86,11 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate }: KanbanB
     if (!result.destination) return
     const destinoCol = result.destination.droppableId as StatusVisivel
     const origemCol = result.source.droppableId as StatusVisivel
+
+    // Restrição para videomakers externos: só podem mover até "aprovacao"
+    if (userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(destinoCol)) {
+      return // silently block — the lock icon communicates the restriction
+    }
 
     // Intra-column reorder
     if (destinoCol === origemCol) {
@@ -163,12 +172,14 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate }: KanbanB
       >
         {COLUNAS.map((col) => {
           const items = byCol(col.id)
+          const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
           return (
             <div
               key={col.id}
               className={cn(
                 "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
-                col.color
+                col.color,
+                isBloqueada && "opacity-70"
               )}
             >
               {/* Header da coluna */}
@@ -179,8 +190,11 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate }: KanbanB
                   <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
                     {items.length}
                   </span>
+                  {isBloqueada && (
+                    <Lock className="w-3 h-3 text-zinc-600" aria-label="Gerenciado pela equipe interna" />
+                  )}
                 </div>
-                {col.id === "entrada" && (
+                {col.id === "entrada" && !isBloqueada && (
                   <Link href="/demandas/nova">
                     <button className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
                       <Plus className="w-4 h-4" />

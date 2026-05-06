@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
       return await rodarAgenteLembretes()
     } else if (agente === "briefing") {
       return await rodarAgenteBriefing()
+    } else if (agente === "limpeza") {
+      return await rodarAgenteLimpeza()
     } else {
       return await rodarAgenteAlertas()
     }
@@ -330,4 +332,62 @@ async function rodarAgenteBriefing() {
   }
 
   return NextResponse.json({ ok: true, agente: "briefing", enviados })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AGENTE LIMPEZA — 20 dias pós-finalização: avisa Luana + Giovani sobre brutos
+// ─────────────────────────────────────────────────────────────────────────────
+async function rodarAgenteLimpeza() {
+  const agora = new Date()
+  const limite20dias = new Date(agora.getTime() - 20 * 24 * 60 * 60 * 1000)
+  const limite5diasDepoisAviso = new Date(agora.getTime() - 5 * 24 * 60 * 60 * 1000)
+
+  // Telefones fixos dos responsáveis (Luana e Giovani)
+  const TELEFONES_LIMPEZA = ["5531957224989", "5531992271043"]
+
+  // 1. Demandas finalizadas há 20+ dias, com pasta brutos, sem aviso enviado
+  const paraAvisar = await prisma.demanda.findMany({
+    where: {
+      statusVisivel: "finalizado",
+      linkFolderBrutos: { not: null },
+      limpezaNotificadaEm: null,
+      finalizadaEm: { lte: limite20dias },
+    },
+    select: { id: true, codigo: true, titulo: true, linkFolderBrutos: true },
+  })
+
+  let avisados = 0
+  for (const d of paraAvisar) {
+    const msg = `⚠️ *NuFlow — Aviso de Limpeza de Brutos*\n\nA demanda *${d.codigo} — ${d.titulo}* foi finalizada há 20 dias.\n\n📂 A pasta *[Material Bruto]* será removida do sistema em *5 dias*.\nLink atual: ${d.linkFolderBrutos}\n\nSe precisar manter os arquivos, faça backup antes!`
+    for (const tel of TELEFONES_LIMPEZA) {
+      await sendWhatsappMessage(tel, msg, d.id).catch(() => null)
+    }
+    await prisma.demanda.update({ where: { id: d.id }, data: { limpezaNotificadaEm: agora } })
+    avisados++
+  }
+
+  // 2. Demandas avisadas há 5+ dias → remover referência de brutos
+  const paraLimpar = await prisma.demanda.findMany({
+    where: {
+      statusVisivel: "finalizado",
+      limpezaNotificadaEm: { lte: limite5diasDepoisAviso },
+      limpezaExecutadaEm: null,
+    },
+    select: { id: true, codigo: true, titulo: true },
+  })
+
+  let limpos = 0
+  for (const d of paraLimpar) {
+    await prisma.demanda.update({
+      where: { id: d.id },
+      data: { linkFolderBrutos: null, limpezaExecutadaEm: agora },
+    })
+    const msg = `🗑️ *NuFlow — Brutos Removidos*\n\nO link da pasta *[Material Bruto]* da demanda *${d.codigo} — ${d.titulo}* foi removido do sistema conforme aviso enviado há 5 dias.`
+    for (const tel of TELEFONES_LIMPEZA) {
+      await sendWhatsappMessage(tel, msg, d.id).catch(() => null)
+    }
+    limpos++
+  }
+
+  return NextResponse.json({ ok: true, agente: "limpeza", avisados, limpos })
 }

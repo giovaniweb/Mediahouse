@@ -60,7 +60,16 @@ export async function GET(req: NextRequest) {
   const statusVisivel = searchParams.get("statusVisivel")
   const statusInterno = searchParams.get("statusInterno")
   const editorId = searchParams.get("editorId")
-  const videomakerId = searchParams.get("videomakerId")
+  let videomakerId = searchParams.get("videomakerId") ?? undefined
+
+  // Auto-filtro: videomakers externos só veem suas próprias demandas
+  if (session.user.tipo === "videomaker") {
+    const vmRecord = await prisma.videomaker.findFirst({
+      where: { usuarioId: session.user.id },
+      select: { id: true },
+    })
+    if (vmRecord) videomakerId = vmRecord.id
+  }
 
   const where: Record<string, unknown> = {}
   if (departamento) where.departamento = departamento

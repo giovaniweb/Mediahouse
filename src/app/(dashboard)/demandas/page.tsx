@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import useSWR from "swr"
+import { useSession } from "next-auth/react"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
@@ -14,6 +15,7 @@ interface Editor { id: string; nome: string }
 interface Produto { id: string; nome: string }
 
 export default function DemandasPage() {
+  const { data: session } = useSession()
   const [search, setSearch] = useState("")
   const [filtroDepto, setFiltroDepto] = useState("")
   const [filtroVM, setFiltroVM] = useState("")
@@ -223,7 +225,7 @@ export default function DemandasPage() {
 
       {/* Kanban */}
       <div className="flex-1 p-4 overflow-auto">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} userTipo={session?.user?.tipo} />
       </div>
 
       {/* Modal Nova Demanda */}

@@ -318,6 +318,15 @@ model Demanda {
   posicaoKanban     Int?               // posição dentro da coluna (para reordenação)
   trelloCardId      String?  @unique  // Trello card ID to prevent re-import
 
+  // Pastas Google Drive (cobertura)
+  linkFolderBrutos     String?    // pasta [Material Bruto] no Drive
+  linkFolderFinal      String?    // pasta [Material Pronto] no Drive
+
+  // Controle de limpeza pós-finalização
+  finalizadaEm         DateTime?  // setado automaticamente quando statusVisivel = "finalizado"
+  limpezaNotificadaEm  DateTime?  // quando foi enviado aviso de 20 dias
+  limpezaExecutadaEm   DateTime?  // quando foi removida a referência de brutos
+
   // Relações de usuários (FKs)
   solicitanteId String
   gestorId      String?
@@ -1008,4 +1017,29 @@ model NotaFiscalUpload {
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
 
   @@map("notas_fiscais")
+}
+
+// ─────────────────────────────────────────────
+// DADOS DA EMPRESA (para NF de videomakers)
+// ─────────────────────────────────────────────
+
+model ConfigEmpresa {
+  id            String   @id @default(cuid())
+  cnpj          String?
+  razaoSocial   String?
+  nomeFantasia  String?
+  endereco      String?
+  bairro        String?
+  cidade        String?
+  estado        String?
+  cep           String?
+  email         String?
+  telefone      String?
+  pixKey        String?   // CNPJ, email, celular ou chave aleatória
+  pixTipo       String?   // "cnpj" | "email" | "telefone" | "aleatoria"
+  observacoesNF String?   // instrução para videomakers ao emitir NF
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("config_empresa")
 }

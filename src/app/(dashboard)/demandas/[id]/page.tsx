@@ -9,7 +9,7 @@ import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
-  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play,
+  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -352,6 +352,29 @@ export default function DemandaDetailPage() {
   const [quickBrutosInput, setQuickBrutosInput] = useState("")
   const [showQuickBrutos, setShowQuickBrutos] = useState(false)
   const [savingBrutos, setSavingBrutos] = useState(false)
+
+  // ── Pastas de Cobertura ──────────────────────────────────────────────────
+  const [editingFolder, setEditingFolder] = useState<"brutos" | "final" | null>(null)
+  const [folderBrutosInput, setFolderBrutosInput] = useState("")
+  const [folderFinalInput, setFolderFinalInput] = useState("")
+  const [savingFolder, setSavingFolder] = useState(false)
+  async function salvarFolder(campo: "linkFolderBrutos" | "linkFolderFinal") {
+    const value = campo === "linkFolderBrutos" ? folderBrutosInput : folderFinalInput
+    if (!value.trim()) return
+    setSavingFolder(true)
+    try {
+      await fetch(`/api/demandas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [campo]: value.trim() }),
+      })
+      toast.success("Link da pasta salvo!")
+      setEditingFolder(null)
+      mutate()
+    } catch {
+      toast.error("Erro ao salvar link da pasta")
+    } finally { setSavingFolder(false) }
+  }
   async function salvarQuickBrutos() {
     if (!quickBrutosInput.trim()) return
     setSavingBrutos(true)
@@ -832,6 +855,92 @@ export default function DemandaDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* ── Pastas de Cobertura ──────────────────────────────────────── */}
+          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+              <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-amber-400" /> Pastas de Cobertura
+              </h2>
+              <div className="space-y-3">
+                {/* Material Bruto */}
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">📁 Material Bruto (Google Drive)</p>
+                  {demanda.linkFolderBrutos && editingFolder !== "brutos" ? (
+                    <div className="flex items-center gap-2">
+                      <a href={demanda.linkFolderBrutos} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 truncate">
+                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" /> Abrir pasta
+                      </a>
+                      <button onClick={() => { setFolderBrutosInput(demanda.linkFolderBrutos ?? ""); setEditingFolder("brutos") }}
+                        className="p-0.5 text-zinc-600 hover:text-zinc-300">
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : editingFolder === "brutos" ? (
+                    <div className="flex items-center gap-2">
+                      <input value={folderBrutosInput} onChange={e => setFolderBrutosInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") salvarFolder("linkFolderBrutos"); if (e.key === "Escape") setEditingFolder(null) }}
+                        placeholder="https://drive.google.com/..."
+                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500"
+                        autoFocus
+                      />
+                      <button onClick={() => salvarFolder("linkFolderBrutos")} disabled={savingFolder || !folderBrutosInput.trim()}
+                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1.5 rounded disabled:opacity-50">
+                        {savingFolder ? "..." : "Salvar"}
+                      </button>
+                      <button onClick={() => setEditingFolder(null)} className="text-zinc-500 hover:text-zinc-300">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setFolderBrutosInput(""); setEditingFolder("brutos") }}
+                      className="text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                      + Adicionar link da pasta
+                    </button>
+                  )}
+                </div>
+
+                {/* Material Pronto */}
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">📁 Material Pronto (Google Drive)</p>
+                  {demanda.linkFolderFinal && editingFolder !== "final" ? (
+                    <div className="flex items-center gap-2">
+                      <a href={demanda.linkFolderFinal} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 truncate">
+                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" /> Abrir pasta
+                      </a>
+                      <button onClick={() => { setFolderFinalInput(demanda.linkFolderFinal ?? ""); setEditingFolder("final") }}
+                        className="p-0.5 text-zinc-600 hover:text-zinc-300">
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : editingFolder === "final" ? (
+                    <div className="flex items-center gap-2">
+                      <input value={folderFinalInput} onChange={e => setFolderFinalInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") salvarFolder("linkFolderFinal"); if (e.key === "Escape") setEditingFolder(null) }}
+                        placeholder="https://drive.google.com/..."
+                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500"
+                        autoFocus
+                      />
+                      <button onClick={() => salvarFolder("linkFolderFinal")} disabled={savingFolder || !folderFinalInput.trim()}
+                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1.5 rounded disabled:opacity-50">
+                        {savingFolder ? "..." : "Salvar"}
+                      </button>
+                      <button onClick={() => setEditingFolder(null)} className="text-zinc-500 hover:text-zinc-300">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setFolderFinalInput(""); setEditingFolder("final") }}
+                      className="text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                      + Adicionar link da pasta
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Checklist ─────────────────────────────────────────────────── */}
           <ChecklistSection demandaId={id as string} />

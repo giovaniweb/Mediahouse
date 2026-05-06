@@ -73,6 +73,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
           statusVisivel: body.statusVisivel as any,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           statusInterno: novoStatusInterno as any,
+          // Marcar data de finalização automaticamente
+          ...(body.statusVisivel === "finalizado" ? { finalizadaEm: new Date() } : {}),
         },
       }),
       prisma.historicoStatus.create({
@@ -227,6 +229,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
     localGravacao: body.localGravacao,
     motivoImpedimento: body.motivoImpedimento,
     classificacao: body.classificacao,
+    linkFolderBrutos: body.linkFolderBrutos,
+    linkFolderFinal: body.linkFolderFinal,
   }
 
   // Cobertura com novo videomaker → mudar status para aguardando confirmação

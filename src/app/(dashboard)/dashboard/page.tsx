@@ -1,10 +1,12 @@
 "use client"
 
 import useSWR from "swr"
+import { useSession } from "next-auth/react"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { AlertasIA } from "@/components/dashboard/AlertasIA"
 import { CargaEquipe } from "@/components/dashboard/CargaEquipe"
 import { HojeEmFoco } from "@/components/dashboard/HojeEmFoco"
+import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { Header } from "@/components/layout/Header"
 import { Activity, AlertTriangle, CheckCircle, Clock, Film, Users, TrendingUp, TrendingDown, Minus, BarChart3, Lightbulb } from "lucide-react"
 
@@ -38,7 +40,8 @@ function TrendBadge({ delta }: { delta: number }) {
   return <span className="flex items-center gap-0.5 text-xs text-red-400"><TrendingDown className="h-3 w-3" /> {delta} vs sem. anterior</span>
 }
 
-export default function DashboardPage() {
+// Dashboard interno (equipe, admin, gestor, etc.)
+function InternalDashboard() {
   const { data, isLoading } = useSWR("/api/dashboard/metrics", fetcher, {
     refreshInterval: 30000,
   })
@@ -203,4 +206,20 @@ export default function DashboardPage() {
       </main>
     </>
   )
+}
+
+export default function DashboardPage() {
+  const { data: session } = useSession()
+
+  // Videomakers externos têm dashboard próprio
+  if (session?.user?.tipo === "videomaker") {
+    return (
+      <>
+        <Header title="Meu Painel" />
+        <VideomakerDashboard />
+      </>
+    )
+  }
+
+  return <InternalDashboard />
 }

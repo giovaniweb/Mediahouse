@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2 } from "lucide-react"
+import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2 } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -10,7 +10,7 @@ import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil"
+type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa"
 
 const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
 const TIPO_LABEL: Record<string, string> = {
@@ -1890,6 +1890,151 @@ function TabMeuPerfil() {
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
+// ─── Tab Dados da Empresa ──────────────────────────────────────────────────────
+function TabEmpresa() {
+  const { data, mutate } = useSWR("/api/config/empresa", fetcher)
+  const empresa = data?.empresa
+
+  const [form, setForm] = useState({
+    razaoSocial: "", nomeFantasia: "", cnpj: "",
+    endereco: "", bairro: "", cidade: "", estado: "", cep: "",
+    email: "", telefone: "",
+    pixKey: "", pixTipo: "cnpj",
+    observacoesNF: "",
+  })
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Preencher form quando carregar dados existentes
+  if (empresa && !loaded) {
+    setForm({
+      razaoSocial: empresa.razaoSocial ?? "",
+      nomeFantasia: empresa.nomeFantasia ?? "",
+      cnpj: empresa.cnpj ?? "",
+      endereco: empresa.endereco ?? "",
+      bairro: empresa.bairro ?? "",
+      cidade: empresa.cidade ?? "",
+      estado: empresa.estado ?? "",
+      cep: empresa.cep ?? "",
+      email: empresa.email ?? "",
+      telefone: empresa.telefone ?? "",
+      pixKey: empresa.pixKey ?? "",
+      pixTipo: empresa.pixTipo ?? "cnpj",
+      observacoesNF: empresa.observacoesNF ?? "",
+    })
+    setLoaded(true)
+  }
+
+  const salvar = async () => {
+    setSaving(true)
+    try {
+      await fetch("/api/config/empresa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      toast.success("Dados da empresa salvos!")
+      mutate()
+    } catch {
+      toast.error("Erro ao salvar")
+    } finally { setSaving(false) }
+  }
+
+  const F = (label: string, key: keyof typeof form, placeholder?: string, half?: boolean) => (
+    <div className={half ? "col-span-1" : "col-span-2"}>
+      <label className="block text-xs text-zinc-500 mb-1">{label}</label>
+      <input
+        value={form[key]}
+        onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+        placeholder={placeholder ?? label}
+        className={inp}
+      />
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-zinc-200 flex items-center gap-2 mb-1">
+          <Building2 className="w-4 h-4 text-emerald-400" /> Dados da Empresa
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Estas informações aparecem para os videomakers externos na seção "Dados para Nota Fiscal" e
+          são usados como referência para emissão de notas fiscais.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {F("Razão Social", "razaoSocial", "Ex: CONTOURLINE EQUIPAMENTOS LTDA")}
+        {F("Nome Fantasia", "nomeFantasia", "Ex: Contourline")}
+        {F("CNPJ", "cnpj", "XX.XXX.XXX/0001-XX", true)}
+        {F("E-mail", "email", "financeiro@empresa.com", true)}
+        {F("Endereço", "endereco", "Rua, número, complemento")}
+        {F("Bairro", "bairro", "Bairro", true)}
+        {F("Cidade", "cidade", "Cidade", true)}
+        {F("Estado (sigla)", "estado", "MG", true)}
+        {F("CEP", "cep", "30000-000", true)}
+        {F("Telefone", "telefone", "(31) 9999-9999", true)}
+      </div>
+
+      <div className="border-t border-zinc-800 pt-4">
+        <h4 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+          💰 Chave PIX
+        </h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1">Tipo da Chave</label>
+            <select
+              value={form.pixTipo}
+              onChange={e => setForm(prev => ({ ...prev, pixTipo: e.target.value }))}
+              className={inp}
+            >
+              <option value="cnpj">CNPJ</option>
+              <option value="email">E-mail</option>
+              <option value="telefone">Celular</option>
+              <option value="aleatoria">Chave Aleatória</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1">Chave PIX</label>
+            <input
+              value={form.pixKey}
+              onChange={e => setForm(prev => ({ ...prev, pixKey: e.target.value }))}
+              placeholder={form.pixTipo === "cnpj" ? "XX.XXX.XXX/0001-XX" : form.pixTipo === "email" ? "pix@empresa.com" : "Chave PIX"}
+              className={inp}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-zinc-800 pt-4">
+        <h4 className="text-sm font-semibold text-zinc-300 mb-3">📌 Observações para NF</h4>
+        <p className="text-xs text-zinc-500 mb-2">
+          Instruções exibidas para os videomakers ao emitir nota fiscal (ex: tipo de serviço, código de atividade).
+        </p>
+        <textarea
+          value={form.observacoesNF}
+          onChange={e => setForm(prev => ({ ...prev, observacoesNF: e.target.value }))}
+          placeholder="Ex: Emitir NF como Serviços de Produção Audiovisual (código 12.01). Enviar após entrega dos brutos."
+          rows={3}
+          className={inp + " resize-none"}
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={salvar}
+          disabled={saving}
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg disabled:opacity-50 transition-colors"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          Salvar Dados da Empresa
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ConfiguracoesPage() {
   const { data: session } = useSession()
   const [tab, setTab] = useState<Tab>("usuarios")
@@ -1897,6 +2042,7 @@ export default function ConfiguracoesPage() {
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "usuarios", label: "Usuários", icon: Users },
     { id: "meu_perfil", label: "Meu Perfil", icon: Settings },
+    { id: "empresa", label: "Dados da Empresa", icon: Building2 },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
@@ -1962,6 +2108,7 @@ export default function ConfiguracoesPage() {
             {tab === "email" && <TabEmail />}
             {tab === "parametros" && <TabParametros />}
             {tab === "trello" && <TabTrello />}
+            {tab === "empresa" && <TabEmpresa />}
           </div>
         </div>
       </main>
