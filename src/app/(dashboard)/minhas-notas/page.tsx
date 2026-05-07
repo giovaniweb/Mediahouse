@@ -7,6 +7,7 @@ import { ptBR } from "date-fns/locale"
 import { FileText, ExternalLink, CheckCircle2, Clock, Upload, Loader2 } from "lucide-react"
 import { Header } from "@/components/layout/Header"
 import { cn } from "@/lib/utils"
+import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -59,7 +60,9 @@ interface Demanda {
   createdAt: string
 }
 
-function AnexarNFButton({ demandaId, nf }: { demandaId: string; nf?: NotaFiscal }) {
+function AnexarNFButton({
+  demandaId, nf, onOpenModal,
+}: { demandaId: string; nf?: NotaFiscal; onOpenModal: (token: string) => void }) {
   const [loading, setLoading] = useState(false)
 
   // Se já tem NF com token, mostrar diretamente
@@ -71,15 +74,13 @@ function AnexarNFButton({ demandaId, nf }: { demandaId: string; nf?: NotaFiscal 
           {st.label}
         </span>
         {nf.status === "pendente" && (
-          <a
-            href={`/nf-upload/${nf.token}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => onOpenModal(nf.token)}
             className="flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
             <Upload className="w-3.5 h-3.5" />
             Anexar NF
-          </a>
+          </button>
         )}
         {nf.url && nf.status !== "pendente" && (
           <a
@@ -96,7 +97,7 @@ function AnexarNFButton({ demandaId, nf }: { demandaId: string; nf?: NotaFiscal 
     )
   }
 
-  // Sem NF ainda — botão que gera o token e abre a página de upload
+  // Sem NF ainda — busca ou cria o token e abre o modal
   const handleAnexar = async () => {
     setLoading(true)
     try {
@@ -106,9 +107,7 @@ function AnexarNFButton({ demandaId, nf }: { demandaId: string; nf?: NotaFiscal 
         body: JSON.stringify({ demandaId }),
       })
       const data = await res.json()
-      if (data.token) {
-        window.open(`/nf-upload/${data.token}`, "_blank")
-      }
+      if (data.token) onOpenModal(data.token)
     } catch {
       // silently ignore
     } finally {
@@ -129,7 +128,8 @@ function AnexarNFButton({ demandaId, nf }: { demandaId: string; nf?: NotaFiscal 
 }
 
 export default function MinhasNotasPage() {
-  const { data } = useSWR("/api/me/videomaker", fetcher)
+  const [nfModalToken, setNfModalToken] = useState<string | null>(null)
+  const { data, mutate } = useSWR("/api/me/videomaker", fetcher)
   const notasFiscais: NotaFiscal[] = data?.videomaker?.notasFiscais ?? []
   const demandas: Demanda[] = data?.videomaker?.demandas ?? []
 
@@ -150,6 +150,13 @@ export default function MinhasNotasPage() {
 
   return (
     <>
+      {nfModalToken && (
+        <NFUploadModal
+          token={nfModalToken}
+          onClose={() => setNfModalToken(null)}
+          onSuccess={() => { setNfModalToken(null); mutate() }}
+        />
+      )}
       <Header title="Minhas Notas Fiscais" />
       <main className="flex-1 p-6 max-w-4xl mx-auto space-y-6">
 
@@ -218,7 +225,7 @@ export default function MinhasNotasPage() {
                       )}
                     </div>
 
-                    <AnexarNFButton demandaId={d.id} nf={nf} />
+                    <AnexarNFButton demandaId={d.id} nf={nf} onOpenModal={setNfModalToken} />
                   </div>
                 )
               })}

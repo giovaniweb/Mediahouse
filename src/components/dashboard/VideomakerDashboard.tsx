@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -114,6 +115,7 @@ export function VideomakerDashboard() {
   const [showAllNFDados, setShowAllNFDados] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [brutosId, setBrutosId] = useState<string | null>(null)
+  const [nfModalToken, setNfModalToken] = useState<string | null>(null)
   const [nfToast, setNfToast] = useState<{ token: string; codigo: string } | null>(null)
   const { data: vmData, mutate: mutateVm } = useSWR("/api/me/videomaker", fetcher)
   const { data: empresaData } = useSWR("/api/config/empresa", fetcher)
@@ -165,7 +167,10 @@ export function VideomakerDashboard() {
         body: JSON.stringify({ demandaId }),
       })
       const data = await res.json()
-      if (data.token) setNfToast({ token: data.token, codigo })
+      if (data.token) {
+        setNfModalToken(data.token)
+        setNfToast({ token: data.token, codigo })
+      }
       mutateVm()
     } catch {
       // silently ignore
@@ -213,8 +218,17 @@ export function VideomakerDashboard() {
         </div>
       )}
 
-      {/* Toast de NF gerada */}
-      {nfToast && (
+      {/* Modal NF upload */}
+      {nfModalToken && (
+        <NFUploadModal
+          token={nfModalToken}
+          onClose={() => { setNfModalToken(null); setNfToast(null) }}
+          onSuccess={() => { setNfModalToken(null); setNfToast(null); mutateVm() }}
+        />
+      )}
+
+      {/* Toast de NF gerada (só aparece se modal não estiver aberto) */}
+      {nfToast && !nfModalToken && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-900 border border-emerald-500/40 rounded-xl p-4 shadow-2xl max-w-sm animate-in fade-in slide-in-from-top-2">
           <button onClick={() => setNfToast(null)} className="absolute top-2 right-2 text-zinc-400 hover:text-white">
             <X className="w-4 h-4" />
@@ -224,15 +238,13 @@ export function VideomakerDashboard() {
             Brutos de <span className="font-mono text-zinc-100">{nfToast.codigo}</span> marcados como entregues.
             A equipe foi notificada. Agora envie sua NF:
           </p>
-          <a
-            href={`/nf-upload/${nfToast.token}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => setNfModalToken(nfToast.token)}
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors w-full justify-center"
           >
             <Upload className="w-3.5 h-3.5" />
             Enviar Nota Fiscal agora
-          </a>
+          </button>
         </div>
       )}
 
@@ -541,10 +553,12 @@ export function VideomakerDashboard() {
                           {st.label}
                         </span>
                         {nf.status === "pendente" && (
-                          <a href={`/nf-upload/${nf.token}`} target="_blank" rel="noopener noreferrer"
-                            className="text-[10px] text-purple-400 hover:text-purple-300 underline">
+                          <button
+                            onClick={() => setNfModalToken(nf.token)}
+                            className="text-[10px] text-purple-400 hover:text-purple-300 underline"
+                          >
                             Enviar
-                          </a>
+                          </button>
                         )}
                       </div>
                     </div>
