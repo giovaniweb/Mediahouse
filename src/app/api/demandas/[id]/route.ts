@@ -122,6 +122,25 @@ export async function PUT(req: NextRequest, { params }: Params) {
       }
     }
 
+    // Quando finalizar → atualizar ultimoConteudo nos produtos vinculados a esta demanda
+    if (body.statusVisivel === "finalizado") {
+      try {
+        const agora = new Date()
+        const produtosVinculados = await prisma.demandaProduto.findMany({
+          where: { demandaId: id },
+          select: { produtoId: true },
+        })
+        if (produtosVinculados.length > 0) {
+          await prisma.produto.updateMany({
+            where: { id: { in: produtosVinculados.map((p) => p.produtoId) } },
+            data: { ultimoConteudo: agora },
+          })
+        }
+      } catch (e) {
+        console.error("Erro ao atualizar ultimoConteudo dos produtos:", e)
+      }
+    }
+
     // Quando mover para edição (brutos enviados) → criar link de NF e notificar videomaker
     if (body.statusVisivel === "edicao" && demandaAtual?.videomakerId) {
       try {

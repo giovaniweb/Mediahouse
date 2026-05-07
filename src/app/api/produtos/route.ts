@@ -9,19 +9,44 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const includeInactive = searchParams.get("all") === "true"
 
-  const produtos = await prisma.produto.findMany({
-    where: includeInactive ? {} : { ativo: true },
-    include: {
-      fabricante: { select: { id: true, nome: true } },
-      _count: { select: { demandas: true } },
-    },
-    orderBy: { peso: "desc" },
-  })
+  const [produtos, ultimasFinalizacoes] = await Promise.all([
+    prisma.produto.findMany({
+      where: includeInactive ? {} : { ativo: true },
+      include: {
+        fabricante: { select: { id: true, nome: true } },
+        _count: { select: { demandas: true } },
+      },
+      orderBy: { peso: "desc" },
+    }),
+    // Última demanda FINALIZADA por produto — data real de "conteúdo produzido"
+    prisma.demandaProduto.findMany({
+      where: {
+        demanda: {
+          statusVisivel: "finalizado",
+          finalizadaEm: { not: null },
+        },
+      },
+      select: {
+        produtoId: true,
+        demanda: { select: { finalizadaEm: true } },
+      },
+      orderBy: { demanda: { finalizadaEm: "desc" } },
+    }),
+  ])
+
+  // Mapa produtoId → data mais recente de finalização real
+  const ultimaFinalizacaoMap = new Map<string, Date>()
+  for (const r of ultimasFinalizacoes) {
+    if (!ultimaFinalizacaoMap.has(r.produtoId) && r.demanda?.finalizadaEm) {
+      ultimaFinalizacaoMap.set(r.produtoId, r.demanda.finalizadaEm)
+    }
+  }
 
   const now = new Date()
 
   const produtosComputados = produtos.map((p) => {
-    const refDate = p.ultimoConteudo ?? p.createdAt
+    // Prioridade: última finalização real > ultimoConteudo (campo manual) > data de criação
+    const refDate = ultimaFinalizacaoMap.get(p.id) ?? p.ultimoConteudo ?? p.createdAt
     const diasSemConteudo = Math.floor(
       (now.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
     )
@@ -33,6 +58,7 @@ export async function GET(req: NextRequest) {
       diasSemConteudo,
       emAlerta,
       score,
+      ultimaFinalizacaoReal: ultimaFinalizacaoMap.get(p.id)?.toISOString() ?? null,
     }
   })
 
