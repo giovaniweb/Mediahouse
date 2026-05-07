@@ -141,8 +141,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!demandaAtual) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   // Validações de regras de negócio
-  if (statusInterno === "brutos_enviados" && !demandaAtual.linkBrutos && !body.linkBrutos) {
-    return NextResponse.json({ error: "Link dos brutos obrigatório para avançar." }, { status: 400 })
+  // Aceita linkBrutos OU linkFolderBrutos (videomakers externos usam pasta do Drive)
+  const temBrutos = demandaAtual.linkBrutos || body.linkBrutos || demandaAtual.linkFolderBrutos
+  if (statusInterno === "brutos_enviados" && !temBrutos) {
+    return NextResponse.json({ error: "Link dos brutos obrigatório para avançar. Adicione o link da pasta ou do arquivo antes de marcar como entregue." }, { status: 400 })
   }
   if (statusInterno === "edicao_finalizada" && !demandaAtual.linkFinal && !body.linkFinal) {
     return NextResponse.json({ error: "Link do vídeo final obrigatório." }, { status: 400 })
@@ -180,6 +182,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
       }),
     ])
+
+    // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
+    if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {
+      void (async () => {
+        try {
+          const nfExistente = await prisma.notaFiscalUpload.findFirst({
+            where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+          })
+          const nf = nfExistente ?? await prisma.notaFiscalUpload.create({
+            data: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+          })
+          // Enviar link da NF para o videomaker via WhatsApp
+          if (demandaAtual.videomaker?.telefone) {
+            const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
+            const nfLink = `${baseUrl}/nf-upload/${nf.token}`
+            const msg =
+              `🧾 *NuFlow — Brutos Recebidos!*\n\n` +
+              `📋 *${demandaAtual.codigo}* — ${demandaAtual.titulo}\n\n` +
+              `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
+              `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +
+              `_O pagamento é processado em até 15 dias após o recebimento da NF._`
+            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id)
+          }
+        } catch (e) {
+          console.error("[Status] Erro ao criar NF/enviar WA:", e)
+        }
+      })()
+    }
 
     // ── Notificações WhatsApp assíncronas (não bloqueia resposta) ─────────────
     void notificarMudancaKanban(

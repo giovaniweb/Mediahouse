@@ -8,7 +8,7 @@ import {
   Film, Calendar, FileText, FolderOpen, X, ExternalLink,
   Pencil, Check, Clock, AlertTriangle, CheckCircle2, Building2,
   CreditCard, MapPin, Mail, Phone, ChevronDown, ChevronUp,
-  ThumbsUp, ThumbsDown,
+  ThumbsUp, ThumbsDown, Upload, Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -113,6 +113,8 @@ export function VideomakerDashboard() {
   const [welcomeDismissed, setWelcomeDismissed] = useState(true)
   const [showAllNFDados, setShowAllNFDados] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [brutosId, setBrutosId] = useState<string | null>(null)
+  const [nfToast, setNfToast] = useState<{ token: string; codigo: string } | null>(null)
   const { data: vmData, mutate: mutateVm } = useSWR("/api/me/videomaker", fetcher)
   const { data: empresaData } = useSWR("/api/config/empresa", fetcher)
 
@@ -134,7 +136,7 @@ export function VideomakerDashboard() {
     dataLimite?: string | null; dataCaptacao?: string | null;
     linkBrutos?: string | null; linkFinal?: string | null;
     linkFolderBrutos?: string | null; linkFolderFinal?: string | null;
-    finalizadaEm?: string | null; createdAt: string;
+    finalizadaEm?: string | null; createdAt: string; updatedAt?: string;
   }> = vm?.demandas ?? []
   const notasFiscais: Array<{
     id: string; status: string; nomeArquivo?: string | null; token: string; createdAt: string;
@@ -146,6 +148,31 @@ export function VideomakerDashboard() {
   const coberturas = demandas.filter(d => d.tipoVideo?.toLowerCase().includes("cobertura"))
   // Demandas aguardando confirmação de cobertura
   const aguardandoConfirmacao = demandas.filter(d => d.statusInterno === "videomaker_notificado")
+
+  async function marcarBrutosEntregues(demandaId: string, codigo: string) {
+    setBrutosId(demandaId)
+    try {
+      // 1. Marca status como brutos_enviados
+      await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: "brutos_enviados", origem: "manual" }),
+      })
+      // 2. Garante token NF e mostra link
+      const res = await fetch("/api/me/nf-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demandaId }),
+      })
+      const data = await res.json()
+      if (data.token) setNfToast({ token: data.token, codigo })
+      mutateVm()
+    } catch {
+      // silently ignore
+    } finally {
+      setBrutosId(null)
+    }
+  }
 
   async function confirmarDemanda(demandaId: string, aceitar: boolean) {
     setConfirmingId(demandaId)
@@ -183,6 +210,29 @@ export function VideomakerDashboard() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast de NF gerada */}
+      {nfToast && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-900 border border-emerald-500/40 rounded-xl p-4 shadow-2xl max-w-sm animate-in fade-in slide-in-from-top-2">
+          <button onClick={() => setNfToast(null)} className="absolute top-2 right-2 text-zinc-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+          <p className="text-sm font-semibold text-emerald-300 mb-1">🧾 Nota fiscal disponível!</p>
+          <p className="text-xs text-zinc-300 mb-3">
+            Brutos de <span className="font-mono text-zinc-100">{nfToast.codigo}</span> marcados como entregues.
+            A equipe foi notificada. Agora envie sua NF:
+          </p>
+          <a
+            href={`/nf-upload/${nfToast.token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors w-full justify-center"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Enviar Nota Fiscal agora
+          </a>
         </div>
       )}
 
@@ -265,41 +315,72 @@ export function VideomakerDashboard() {
                   const st = STATUS_LABELS[d.statusVisivel] ?? STATUS_LABELS.entrada
                   const isOverdue = d.dataLimite && new Date(d.dataLimite) < new Date()
                   const isUrgent = d.prioridade === "urgente"
+                  // Brutos entregues: mostrar botão se ainda não foram marcados
+                  const brutosJaEntregues = [
+                    "brutos_enviados","editando","edicao_finalizada",
+                    "aguardando_aprovacao_cliente","aprovado_cliente","aprovado",
+                    "ajuste_solicitado","reprovado_cliente","postagem_pendente",
+                    "postado","entregue_cliente","encerrado",
+                  ].includes(d.statusInterno)
+                  const temBrutos = d.linkBrutos || d.linkFolderBrutos
+                  const podeMarcaBrutos = temBrutos && !brutosJaEntregues
                   return (
-                    <Link key={d.id} href={`/demandas/${d.id}`}>
-                      <div className={cn(
-                        "group bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-zinc-700 transition-all cursor-pointer",
-                        isUrgent && "border-l-[3px] border-l-red-500",
-                        d.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
-                      )}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">{d.codigo}</span>
-                            <p className="text-sm font-medium text-zinc-200 truncate">{d.titulo}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", st.color)}>
-                              {st.label}
-                            </span>
-                            {d.dataLimite && (
-                              <span className={cn("flex items-center gap-0.5 text-[10px]",
-                                isOverdue ? "text-red-400" : "text-zinc-500"
-                              )}>
-                                {isOverdue && <AlertTriangle className="w-2.5 h-2.5" />}
-                                {!isOverdue && <Clock className="w-2.5 h-2.5" />}
-                                {format(new Date(d.dataLimite), "dd/MM", { locale: ptBR })}
-                              </span>
-                            )}
-                          </div>
+                    <div key={d.id} className={cn(
+                      "bg-zinc-900 border border-zinc-800 rounded-lg p-3 transition-all",
+                      isUrgent && "border-l-[3px] border-l-red-500",
+                      d.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
+                    )}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">{d.codigo}</span>
+                          <Link href={`/demandas/${d.id}`}
+                            className="text-sm font-medium text-zinc-200 hover:text-white truncate">
+                            {d.titulo}
+                          </Link>
                         </div>
-                        {d.dataCaptacao && (
-                          <p className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1">
-                            <Calendar className="w-2.5 h-2.5" />
-                            Captação: {format(new Date(d.dataCaptacao), "dd 'de' MMMM", { locale: ptBR })}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", st.color)}>
+                            {st.label}
+                          </span>
+                          {d.dataLimite && (
+                            <span className={cn("flex items-center gap-0.5 text-[10px]",
+                              isOverdue ? "text-red-400" : "text-zinc-500"
+                            )}>
+                              {isOverdue && <AlertTriangle className="w-2.5 h-2.5" />}
+                              {!isOverdue && <Clock className="w-2.5 h-2.5" />}
+                              {format(new Date(d.dataLimite), "dd/MM", { locale: ptBR })}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </Link>
+                      {d.dataCaptacao && (
+                        <p className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5" />
+                          Captação: {format(new Date(d.dataCaptacao), "dd 'de' MMMM", { locale: ptBR })}
+                        </p>
+                      )}
+                      {/* Botão Brutos Entregues */}
+                      {podeMarcaBrutos && (
+                        <div className="mt-2 pt-2 border-t border-zinc-800">
+                          <button
+                            disabled={brutosId === d.id}
+                            onClick={() => marcarBrutosEntregues(d.id, d.codigo)}
+                            className="flex items-center gap-1.5 text-xs bg-emerald-700/30 hover:bg-emerald-700/50 border border-emerald-500/30 text-emerald-400 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 w-full justify-center"
+                          >
+                            {brutosId === d.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Upload className="w-3.5 h-3.5" />
+                            }
+                            {brutosId === d.id ? "Registrando..." : "✅ Marquei os brutos como entregues"}
+                          </button>
+                        </div>
+                      )}
+                      {brutosJaEntregues && (
+                        <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Brutos entregues ✓
+                        </p>
+                      )}
+                    </div>
                   )
                 })}
               </div>
