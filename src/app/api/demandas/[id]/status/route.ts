@@ -165,6 +165,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         data: {
           statusInterno: statusInterno as StatusInterno,
           statusVisivel: novoStatusVisivel,
+          // Marcar data de finalização ao chegar em "finalizado"
+          ...(novoStatusVisivel === "finalizado" ? { finalizadaEm: new Date() } : {}),
           ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
           ...(body.linkFinal && { linkFinal: body.linkFinal }),
           ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),
@@ -207,6 +209,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           }
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)
+        }
+      })()
+    }
+
+    // ── Atualizar ultimoConteudo nos produtos ao finalizar ────────────────────
+    if (novoStatusVisivel === "finalizado") {
+      void (async () => {
+        try {
+          const produtosVinculados = await prisma.demandaProduto.findMany({
+            where: { demandaId: id },
+            select: { produtoId: true },
+          })
+          if (produtosVinculados.length > 0) {
+            await prisma.produto.updateMany({
+              where: { id: { in: produtosVinculados.map((p) => p.produtoId) } },
+              data: { ultimoConteudo: new Date() },
+            })
+          }
+        } catch (e) {
+          console.error("[Status] Erro ao atualizar ultimoConteudo:", e)
         }
       })()
     }

@@ -18,27 +18,25 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { peso: "desc" },
     }),
-    // Última demanda FINALIZADA por produto — data real de "conteúdo produzido"
+    // Última demanda FINALIZADA por produto — inclui demandas antigas sem finalizadaEm
+    // (usa finalizadaEm se disponível, senão updatedAt como proxy)
     prisma.demandaProduto.findMany({
-      where: {
-        demanda: {
-          statusVisivel: "finalizado",
-          finalizadaEm: { not: null },
-        },
-      },
+      where: { demanda: { statusVisivel: "finalizado" } },
       select: {
         produtoId: true,
-        demanda: { select: { finalizadaEm: true } },
+        demanda: { select: { finalizadaEm: true, updatedAt: true } },
       },
-      orderBy: { demanda: { finalizadaEm: "desc" } },
+      orderBy: { demanda: { updatedAt: "desc" } },
     }),
   ])
 
   // Mapa produtoId → data mais recente de finalização real
+  // Prioriza finalizadaEm (preciso), usa updatedAt como fallback (demandas antigas)
   const ultimaFinalizacaoMap = new Map<string, Date>()
   for (const r of ultimasFinalizacoes) {
-    if (!ultimaFinalizacaoMap.has(r.produtoId) && r.demanda?.finalizadaEm) {
-      ultimaFinalizacaoMap.set(r.produtoId, r.demanda.finalizadaEm)
+    if (!ultimaFinalizacaoMap.has(r.produtoId) && r.demanda) {
+      const dataRef = r.demanda.finalizadaEm ?? r.demanda.updatedAt
+      ultimaFinalizacaoMap.set(r.produtoId, dataRef)
     }
   }
 

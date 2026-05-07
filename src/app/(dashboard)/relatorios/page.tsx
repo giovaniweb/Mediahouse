@@ -564,7 +564,7 @@ export default function RelatoriosPage() {
   const [tipoSelecionado, setTipoSelecionado] = useState("produtividade_time")
 
   // ── Filtro de período ─────────────────────────────────────────────────────
-  const [periodo, setPeriodo] = useState<Periodo>("mes")
+  const [periodo, setPeriodo] = useState<Periodo>("ano")
   const [periodoCustomDe, setPeriodoCustomDe] = useState(() => {
     const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10)
   })
