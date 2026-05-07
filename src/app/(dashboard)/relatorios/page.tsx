@@ -59,6 +59,13 @@ interface Metricas {
       mediaServico: number
     }[]
   }
+  producao?: {
+    valorPorDemanda: number
+    producaoMes: number
+    producao30d: number
+    demandasFinalizadasMes: number
+    demandasFinalizadas30d: number
+  }
   videomakers: {
     total: number
     ativos: number
@@ -638,14 +645,26 @@ export default function RelatoriosPage() {
             {/* Cards de métricas principais */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`+${m?.demandas.totalSemana ?? 0} esta semana`} cor="blue" />
-              <MetricCard icon={CheckCircle2} label="Concluídas (30d)" value={fmtNum(m?.demandas.concluidas30d ?? 0)} sub={`Taxa: ${m && m.demandas.totalMes > 0 ? ((m.demandas.concluidas30d / m.demandas.totalMes) * 100).toFixed(0) : 0}%`} cor="green" />
-              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Dias para concluir" cor="zinc" />
+              <MetricCard icon={CheckCircle2} label="Concluídas (30d)" value={fmtNum(m?.demandas.concluidas30d ?? 0)} sub={`${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} finalizadas`} cor="green" />
+              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização" cor="zinc" />
               <MetricCard icon={AlertTriangle} label="Em Atraso" value={fmtNum(m?.demandas.emAtraso ?? 0)} sub={`${m?.alertas.criticos ?? 0} alertas críticos`} cor={m && m.demandas.emAtraso > 0 ? "red" : "zinc"} alert={m && m.demandas.emAtraso > 0} />
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MetricCard icon={DollarSign} label="Custo do Mês" value={fmt(m?.custos.totalMes ?? 0)} sub="Contratações" cor="green" />
-              <MetricCard icon={BarChart2} label="Custo/Vídeo" value={fmt(m?.custos.custoPorVideo ?? 0)} sub="Média 30 dias" cor="blue" />
+              <MetricCard
+                icon={DollarSign}
+                label="Valor Produzido"
+                value={fmt(m?.producao?.producaoMes ?? 0)}
+                sub={`${m?.producao?.demandasFinalizadasMes ?? 0} demandas · R$${m?.producao?.valorPorDemanda ?? 200}/dem.`}
+                cor="green"
+              />
+              <MetricCard
+                icon={BarChart2}
+                label="Custo/Vídeo"
+                value={fmt(m?.producao?.valorPorDemanda ?? 200)}
+                sub="Índice de produtividade"
+                cor="blue"
+              />
               <MetricCard icon={Users} label="Videomakers" value={`${m?.videomakers.ativos ?? 0}/${m?.videomakers.total ?? 0}`} sub="Ativos / Total" cor="purple" />
               <MetricCard icon={Zap} label="Urgentes" value={fmtNum(m?.demandas.urgentes ?? 0)} sub={`${m?.demandas.aguardandoAprovacao ?? 0} aguardando aprovação`} cor={m && m.demandas.urgentes > 0 ? "amber" : "zinc"} />
             </div>

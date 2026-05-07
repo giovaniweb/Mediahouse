@@ -14,6 +14,7 @@ export async function GET() {
   inicioSemana.setHours(0, 0, 0, 0)
   const ha30dias = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000)
   const ha7dias = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const VALOR_POR_DEMANDA = 200
 
   // ─── Demandas ─────────────────────────────────────────────────────────────
   const [
@@ -30,9 +31,8 @@ export async function GET() {
     prisma.demanda.count({ where: { statusVisivel: { notIn: ["finalizado"] } } }),
     prisma.demanda.count({ where: { createdAt: { gte: inicioMes } } }),
     prisma.demanda.count({ where: { createdAt: { gte: inicioSemana } } }),
-    prisma.demanda.count({
-      where: { statusInterno: { in: ["postado", "entregue_cliente", "encerrado"] }, updatedAt: { gte: ha30dias } },
-    }),
+    // ✅ Usa finalizadaEm (mais confiável que updatedAt + statusInterno)
+    prisma.demanda.count({ where: { finalizadaEm: { gte: ha30dias } } }),
     prisma.demanda.count({ where: { prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
     prisma.demanda.count({
       where: {
@@ -63,18 +63,26 @@ export async function GET() {
     }),
   ])
 
-  // ─── Tempo médio de conclusão (em dias) ───────────────────────────────────
-  const concluidas = todasDemandas30d.filter(
-    (d) => d.statusInterno === "postado" || d.statusInterno === "entregue_cliente"
-  )
+  // ─── Tempo médio de conclusão (em dias) ─────────────────────────────────────
+  // Usa finalizadaEm → createdAt para cálculo correto (updatedAt muda a qualquer edição)
+  const demandasFinalizadas30d = await prisma.demanda.findMany({
+    where: { finalizadaEm: { not: null, gte: ha30dias } },
+    select: { createdAt: true, finalizadaEm: true },
+  })
   let tempoMedioConclusao = 0
-  if (concluidas.length > 0) {
-    const tempos = concluidas.map((d) => {
-      const diff = d.updatedAt.getTime() - d.createdAt.getTime()
+  if (demandasFinalizadas30d.length > 0) {
+    const tempos = demandasFinalizadas30d.map((d) => {
+      const diff = d.finalizadaEm!.getTime() - d.createdAt.getTime()
       return diff / (1000 * 60 * 60 * 24)
     })
     tempoMedioConclusao = tempos.reduce((a, b) => a + b, 0) / tempos.length
   }
+
+  // ─── Produção (índice de produtividade, não faturamento real) ────────────────
+  const demandasFinalizadasMes = await prisma.demanda.count({ where: { finalizadaEm: { gte: inicioMes } } })
+  const demandasFinalizadas30dCount = demandasFinalizadas30d.length
+  const producaoMes = demandasFinalizadasMes * VALOR_POR_DEMANDA
+  const producao30d = demandasFinalizadas30dCount * VALOR_POR_DEMANDA
 
   // ─── Volume por tipo de vídeo ─────────────────────────────────────────────
   const porTipo: Record<string, number> = {}
@@ -225,6 +233,13 @@ export async function GET() {
       qtdServicos30d: custosTotal._count,
       custoPorVideo: Math.round(custoPorVideo * 100) / 100,
       topVideomakers: topVideomakersDetalhado,
+    },
+    producao: {
+      valorPorDemanda: VALOR_POR_DEMANDA,
+      producaoMes,
+      producao30d,
+      demandasFinalizadasMes,
+      demandasFinalizadas30d: demandasFinalizadas30dCount,
     },
     videomakers: {
       total: totalVideomakers,
