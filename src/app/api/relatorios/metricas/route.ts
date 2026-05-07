@@ -72,23 +72,33 @@ export async function GET(req: NextRequest) {
   ])
 
   // ── Demandas finalizadas no período ───────────────────────────────────────
+  // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
   const concluidas = await prisma.demanda.count({
-    where: { finalizadaEm: { gte: deDate, lte: ateDate } },
+    where: {
+      OR: [
+        { finalizadaEm: { gte: deDate, lte: ateDate } },
+        { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
+      ],
+    },
   })
 
   // ── Tempo médio: só demandas com videomaker envolvido ─────────────────────
   const demandasComVM = await prisma.demanda.findMany({
     where: {
-      finalizadaEm: { not: null, gte: deDate, lte: ateDate },
       videomakerId: { not: null },
+      OR: [
+        { finalizadaEm: { not: null, gte: deDate, lte: ateDate } },
+        { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
+      ],
     },
-    select: { createdAt: true, finalizadaEm: true },
+    select: { createdAt: true, finalizadaEm: true, updatedAt: true },
   })
   let tempoMedioConclusao = 0
   if (demandasComVM.length > 0) {
-    const tempos = demandasComVM.map((d) =>
-      (d.finalizadaEm!.getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24)
-    )
+    const tempos = demandasComVM.map((d) => {
+      const fim = d.finalizadaEm ?? d.updatedAt // fallback para demandas antigas sem finalizadaEm
+      return (fim.getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+    })
     tempoMedioConclusao = tempos.reduce((a, b) => a + b, 0) / tempos.length
   }
 
@@ -188,7 +198,14 @@ export async function GET(req: NextRequest) {
     const fim = new Date(deDate.getTime() + (i + 1) * tamanhoFatia)
     const [criadas, concluidasFatia] = await Promise.all([
       prisma.demanda.count({ where: { createdAt: { gte: inicio, lt: fim } } }),
-      prisma.demanda.count({ where: { finalizadaEm: { gte: inicio, lt: fim } } }),
+      prisma.demanda.count({
+        where: {
+          OR: [
+            { finalizadaEm: { gte: inicio, lt: fim } },
+            { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: inicio, lt: fim } },
+          ],
+        },
+      }),
     ])
     tendencia.push({ semana: `S${i + 1}`, criadas, concluidas: concluidasFatia })
   }
