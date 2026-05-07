@@ -36,18 +36,25 @@ export async function GET(req: NextRequest) {
     deDate.setHours(0, 0, 0, 0)
   }
 
-  // Busca demandas finalizadas no período usando finalizadaEm (mais confiável que HistoricoStatus)
+  // Busca demandas finalizadas no período
+  // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
   const demandas = await prisma.demanda.findMany({
-    where: { finalizadaEm: { not: null, gte: deDate, lte: ateDate } },
+    where: {
+      OR: [
+        { finalizadaEm: { gte: deDate, lte: ateDate } },
+        { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
+      ],
+    },
     select: {
       id: true,
       finalizadaEm: true,
+      updatedAt: true,
       videomakerId: true,
       editorId: true,
       videomaker: { select: { id: true, nome: true, valorDiaria: true } },
       editor: { select: { id: true, nome: true, salario: true } },
     },
-    orderBy: { finalizadaEm: "desc" },
+    orderBy: { updatedAt: "desc" },
   })
 
   const totalDemandas = demandas.length
@@ -57,7 +64,7 @@ export async function GET(req: NextRequest) {
   const mesMap = new Map<string, { label: string; demandas: number; valor: number }>()
 
   demandas.forEach(d => {
-    const dt = d.finalizadaEm!
+    const dt = d.finalizadaEm ?? d.updatedAt // fallback para demandas antigas sem finalizadaEm
     const key = dt.toISOString().slice(0, 7)
     const label = format(dt, "MMM yyyy", { locale: ptBR })
     const existing = mesMap.get(key)
