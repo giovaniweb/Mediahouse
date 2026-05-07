@@ -31,6 +31,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Metricas {
   geradoEm: string
+  periodo?: { de: string; ate: string; tipo: string }
   demandas: {
     totalAtivas: number
     totalMes: number
@@ -546,14 +547,37 @@ function RelatorioConteudo({ conteudo, tipo }: { conteudo: Record<string, any>; 
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
+type Periodo = "semana" | "mes" | "3meses" | "ano" | "custom"
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  semana: "Esta Semana",
+  mes: "Este Mês",
+  "3meses": "3 Meses",
+  ano: "Este Ano",
+  custom: "Personalizado",
+}
+
 export default function RelatoriosPage() {
   const [abaAtiva, setAbaAtiva] = useState<"realtime" | "historico" | "ia">("realtime")
   const [gerando, setGerando] = useState<string | null>(null)
   const [relatorioAtual, setRelatorioAtual] = useState<RelatorioGerado | null>(null)
   const [tipoSelecionado, setTipoSelecionado] = useState("produtividade_time")
 
+  // ── Filtro de período ─────────────────────────────────────────────────────
+  const [periodo, setPeriodo] = useState<Periodo>("mes")
+  const [periodoCustomDe, setPeriodoCustomDe] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10)
+  })
+  const [periodoCustomAte, setPeriodoCustomAte] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const metricasUrl = (() => {
+    const base = "/api/relatorios/metricas"
+    if (periodo === "custom") return `${base}?periodo=custom&de=${periodoCustomDe}&ate=${periodoCustomAte}`
+    return `${base}?periodo=${periodo}`
+  })()
+
   const { data: metricas, mutate: recarregarMetricas, isLoading: loadingMetricas } = useSWR<Metricas>(
-    "/api/relatorios/metricas",
+    metricasUrl,
     fetcher,
     { refreshInterval: 30_000 }
   )
@@ -642,11 +666,57 @@ export default function RelatoriosPage() {
               </div>
             </div>
 
+            {/* ── Seletor de período ─────────────────────────────────────── */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-zinc-500 font-medium">Período:</span>
+              <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
+                {(["semana", "mes", "3meses", "ano", "custom"] as Periodo[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPeriodo(p)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                      periodo === p
+                        ? "bg-purple-600 text-white"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {PERIODO_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date range picker — só aparece quando custom */}
+              {periodo === "custom" && (
+                <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5">
+                  <input
+                    type="date"
+                    value={periodoCustomDe}
+                    onChange={(e) => setPeriodoCustomDe(e.target.value)}
+                    className="bg-transparent text-zinc-200 text-xs outline-none"
+                  />
+                  <span className="text-zinc-600 text-xs">→</span>
+                  <input
+                    type="date"
+                    value={periodoCustomAte}
+                    onChange={(e) => setPeriodoCustomAte(e.target.value)}
+                    className="bg-transparent text-zinc-200 text-xs outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Período exibido */}
+              {m?.periodo && (
+                <span className="text-[10px] text-zinc-600 ml-1">
+                  {new Date(m.periodo.de).toLocaleDateString("pt-BR")} → {new Date(m.periodo.ate).toLocaleDateString("pt-BR")}
+                </span>
+              )}
+            </div>
+
             {/* Cards de métricas principais */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`+${m?.demandas.totalSemana ?? 0} esta semana`} cor="blue" />
-              <MetricCard icon={CheckCircle2} label="Concluídas (30d)" value={fmtNum(m?.demandas.concluidas30d ?? 0)} sub={`${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} finalizadas`} cor="green" />
-              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização" cor="zinc" />
+              <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`${m?.demandas.totalMes ?? 0} criadas no período`} cor="blue" />
+              <MetricCard icon={CheckCircle2} label="Concluídas" value={fmtNum(m?.demandas.concluidas30d ?? 0)} sub={`${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} finalizadas no período`} cor="green" />
+              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização (c/ VM)" cor="zinc" />
               <MetricCard icon={AlertTriangle} label="Em Atraso" value={fmtNum(m?.demandas.emAtraso ?? 0)} sub={`${m?.alertas.criticos ?? 0} alertas críticos`} cor={m && m.demandas.emAtraso > 0 ? "red" : "zinc"} alert={m && m.demandas.emAtraso > 0} />
             </div>
 
