@@ -17,6 +17,7 @@ import {
   BarChart2,
   Clapperboard,
   CalendarDays,
+  Printer,
 } from "lucide-react"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 
@@ -62,6 +63,14 @@ interface PessoaProducao {
   demandas: number
   valor: number
   percentual: number
+  // Editor interno
+  salario?: number | null
+  saldo?: number | null
+  sePagou?: boolean | null
+  percSalario?: number | null
+  // Videomaker externo
+  valorDiaria?: number | null
+  custoTotal?: number | null
 }
 
 interface RespostaProducao {
@@ -97,6 +106,8 @@ const fmt = (v: number) =>
 
 export default function CustosPage() {
   const [aba, setAba] = useState<"custos" | "producao">("custos")
+  const [modoProducao, setModoProducao] = useState<"mes" | "ano">("mes")
+  const [mesSelecionado, setMesSelecionado] = useState(() => new Date().toISOString().slice(0, 7))
   const [filtroVm, setFiltroVm] = useState("")
   const [filtroPago, setFiltroPago] = useState<"" | "true" | "false">("")
   const [modal, setModal] = useState(false)
@@ -118,8 +129,14 @@ export default function CustosPage() {
     fetcher
   )
 
+  const producaoUrl = aba === "producao"
+    ? modoProducao === "mes"
+      ? `/api/producao?mes=${mesSelecionado}`
+      : "/api/producao"
+    : null
+
   const { data: producaoData, isLoading: loadingProducao } = useSWR<RespostaProducao>(
-    aba === "producao" ? "/api/producao" : null,
+    producaoUrl,
     fetcher
   )
 
@@ -231,148 +248,262 @@ export default function CustosPage() {
         {/* ── ABA: PRODUÇÃO ──────────────────────────────────────────── */}
         {aba === "producao" && (
           <div className="space-y-6">
+
+            {/* Controles: modo + seletor de mês + imprimir */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => setModoProducao("mes")}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    modoProducao === "mes" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Mês específico
+                </button>
+                <button
+                  onClick={() => setModoProducao("ano")}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    modoProducao === "ano" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Últimos 12 meses
+                </button>
+              </div>
+
+              {modoProducao === "mes" && (
+                <input
+                  type="month"
+                  value={mesSelecionado}
+                  onChange={(e) => setMesSelecionado(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500"
+                />
+              )}
+
+              <div className="flex-1" />
+
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Imprimir
+              </button>
+            </div>
+
             {loadingProducao ? (
               <div className="text-center py-16 text-zinc-500">Carregando métricas...</div>
             ) : producaoData ? (
               <>
-                {/* Cards resumo */}
+                {/* Cards KPI */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <BarChart2 className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs text-emerald-400 font-medium uppercase tracking-wide">Produção Acumulada</span>
+                      <span className="text-xs text-emerald-400 font-medium uppercase tracking-wide">
+                        {modoProducao === "mes" ? "Produção no Mês" : "Produção Acumulada"}
+                      </span>
                     </div>
-                    <div className="text-2xl font-bold text-emerald-400">
-                      {fmt(producaoData.valorTotal)}
-                    </div>
+                    <div className="text-2xl font-bold text-emerald-400">{fmt(producaoData.valorTotal)}</div>
                     <div className="text-xs text-zinc-500 mt-1">
-                      {producaoData.totalDemandas} demandas finalizadas · {fmt(producaoData.valorPorDemanda)}/demanda
+                      {producaoData.totalDemandas} demandas · {fmt(producaoData.valorPorDemanda)}/demanda
                     </div>
                   </div>
 
-                  <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CalendarDays className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Este Mês</span>
+                  {modoProducao === "ano" ? (
+                    <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CalendarDays className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Mês Atual</span>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-400">{fmt(producaoData.mesAtual.valor)}</div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {producaoData.mesAtual.demandas} demanda{producaoData.mesAtual.demandas !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold text-blue-400">
-                      {fmt(producaoData.mesAtual.valor)}
+                  ) : (
+                    <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CalendarDays className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Período</span>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-400 capitalize">
+                        {producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? mesSelecionado}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">{producaoData.totalDemandas} demandas finalizadas</div>
                     </div>
-                    <div className="text-xs text-zinc-500 mt-1">
-                      {producaoData.mesAtual.demandas} demanda{producaoData.mesAtual.demandas !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
-                    </div>
-                  </div>
+                  )}
 
                   <div className="bg-purple-950/30 border border-purple-800/30 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Film className="w-4 h-4 text-purple-400" />
                       <span className="text-xs text-purple-400 font-medium uppercase tracking-wide">Demandas Finalizadas</span>
                     </div>
-                    <div className="text-2xl font-bold text-purple-400">
-                      {producaoData.totalDemandas}
-                    </div>
+                    <div className="text-2xl font-bold text-purple-400">{producaoData.totalDemandas}</div>
                     <div className="text-xs text-zinc-500 mt-1">
-                      últimos 12 meses
+                      {modoProducao === "ano" ? "últimos 12 meses" : (producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? "neste mês")}
                     </div>
                   </div>
                 </div>
 
-                {/* Tabela por mês */}
-                <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <CalendarDays className="w-4 h-4 text-zinc-400" />
-                    <h3 className="text-sm font-semibold text-white">Produção por Mês</h3>
-                  </div>
-                  {producaoData.porMes.length === 0 ? (
-                    <p className="text-sm text-zinc-600 text-center py-6">Nenhuma demanda finalizada no período</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {(() => {
-                        const maxDemandas = Math.max(...producaoData.porMes.map(m => m.demandas), 1)
-                        return producaoData.porMes.map(m => (
-                          <div key={m.mes}>
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className={`font-medium w-24 capitalize ${m.demandas > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
-                                {m.label}
-                              </span>
-                              <div className="flex items-center gap-4 text-zinc-500">
-                                <span className={m.demandas > 0 ? "text-zinc-300" : "text-zinc-700"}>
-                                  {m.demandas} demanda{m.demandas !== 1 ? "s" : ""}
-                                </span>
-                                <span className={`font-semibold w-28 text-right ${m.demandas > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
-                                  {fmt(m.valor)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="h-1.5 bg-zinc-700/60 rounded-full">
-                              <div
-                                className="h-full bg-emerald-500 rounded-full transition-all"
-                                style={{ width: `${(m.demandas / maxDemandas) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Por videomaker interno (Editor) */}
-                {producaoData.porEditor.length > 0 && (
+                {/* Tabela por mês (só no modo 12 meses) */}
+                {modoProducao === "ano" && (
                   <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-4">
-                      <Clapperboard className="w-4 h-4 text-zinc-400" />
-                      <h3 className="text-sm font-semibold text-white">Por Videomaker Interno (Editor)</h3>
+                      <CalendarDays className="w-4 h-4 text-zinc-400" />
+                      <h3 className="text-sm font-semibold text-white">Produção por Mês</h3>
                     </div>
-                    <div className="space-y-2">
-                      {producaoData.porEditor.map(e => (
-                        <div key={e.id}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-zinc-200 font-medium">{e.nome}</span>
-                            <div className="flex items-center gap-4 text-zinc-500">
-                              <span className="text-zinc-300">{e.demandas} demanda{e.demandas !== 1 ? "s" : ""}</span>
-                              <span className="font-semibold text-emerald-400 w-28 text-right">{fmt(e.valor)}</span>
+                    {producaoData.porMes.filter(m => m.demandas > 0).length === 0 ? (
+                      <p className="text-sm text-zinc-600 text-center py-6">Nenhuma demanda finalizada no período</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(() => {
+                          const maxDemandas = Math.max(...producaoData.porMes.map(m => m.demandas), 1)
+                          return producaoData.porMes.map(m => (
+                            <div key={m.mes}>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className={`font-medium w-24 capitalize ${m.demandas > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
+                                  {m.label}
+                                </span>
+                                <div className="flex items-center gap-4 text-zinc-500">
+                                  <span className={m.demandas > 0 ? "text-zinc-300" : "text-zinc-700"}>
+                                    {m.demandas} demanda{m.demandas !== 1 ? "s" : ""}
+                                  </span>
+                                  <span className={`font-semibold w-28 text-right ${m.demandas > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
+                                    {fmt(m.valor)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 bg-zinc-700/60 rounded-full">
+                                <div
+                                  className="h-full bg-emerald-500 rounded-full transition-all"
+                                  style={{ width: `${(m.demandas / maxDemandas) * 100}%` }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div className="h-1.5 bg-zinc-700/60 rounded-full">
-                            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${e.percentual}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          ))
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Por videomaker externo */}
+                {/* ── Videomaker Interno — comparativo produção vs salário ── */}
+                {producaoData.porEditor.length > 0 && (
+                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700">
+                      <Clapperboard className="w-4 h-4 text-zinc-400" />
+                      <h3 className="text-sm font-semibold text-white">Videomaker Interno</h3>
+                      <span className="text-xs text-zinc-500 ml-1">— produção vs salário</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-700/60 bg-zinc-800/60">
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Nome</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Demandas</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Produção</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Salário</th>
+                          <th className="text-center px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Resultado</th>
+                          <th className="px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-36">Cobertura</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {producaoData.porEditor.map(e => (
+                          <tr key={e.id} className="border-b border-zinc-700/30 hover:bg-zinc-800/20 transition-colors">
+                            <td className="px-4 py-3 font-medium text-zinc-200">{e.nome}</td>
+                            <td className="px-4 py-3 text-right text-zinc-400">{e.demandas}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-emerald-400">{fmt(e.valor)}</td>
+                            <td className="px-4 py-3 text-right text-zinc-400">
+                              {e.salario != null ? fmt(e.salario) : <span className="text-zinc-600 text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {e.sePagou === true ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                  ✅ Se pagou
+                                </span>
+                              ) : e.sePagou === false ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 bg-red-500/15 border border-red-500/30 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                  🔴 {e.saldo != null ? fmt(e.saldo) : "Déficit"}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-zinc-600">Sem salário</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {e.percSalario != null ? (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className={`text-[10px] font-semibold ${e.sePagou ? "text-emerald-400" : "text-red-400"}`}>
+                                      {e.percSalario}%
+                                    </span>
+                                  </div>
+                                  <div className="h-2 bg-zinc-700/60 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${e.sePagou ? "bg-emerald-500" : "bg-red-500"}`}
+                                      style={{ width: `${Math.min(e.percSalario, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="h-2 bg-zinc-700/30 rounded-full" />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ── Videomaker Externo — produção vs custo pago ── */}
                 {producaoData.porVideomaker.length > 0 && (
-                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700">
                       <Users className="w-4 h-4 text-zinc-400" />
-                      <h3 className="text-sm font-semibold text-white">Por Videomaker Externo</h3>
+                      <h3 className="text-sm font-semibold text-white">Videomaker Externo</h3>
+                      <span className="text-xs text-zinc-500 ml-1">— produção vs custo pago</span>
                     </div>
-                    <div className="space-y-2">
-                      {producaoData.porVideomaker.map(v => (
-                        <div key={v.id}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-zinc-200 font-medium">{v.nome}</span>
-                            <div className="flex items-center gap-4 text-zinc-500">
-                              <span className="text-zinc-300">{v.demandas} demanda{v.demandas !== 1 ? "s" : ""}</span>
-                              <span className="font-semibold text-emerald-400 w-28 text-right">{fmt(v.valor)}</span>
-                            </div>
-                          </div>
-                          <div className="h-1.5 bg-zinc-700/60 rounded-full">
-                            <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${v.percentual}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-700/60 bg-zinc-800/60">
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Nome</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Demandas</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Produção</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Custo Pago</th>
+                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {producaoData.porVideomaker.map(v => {
+                          const saldo = v.custoTotal != null ? v.valor - v.custoTotal : null
+                          return (
+                            <tr key={v.id} className="border-b border-zinc-700/30 hover:bg-zinc-800/20 transition-colors">
+                              <td className="px-4 py-3 font-medium text-zinc-200">{v.nome}</td>
+                              <td className="px-4 py-3 text-right text-zinc-400">{v.demandas}</td>
+                              <td className="px-4 py-3 text-right font-semibold text-emerald-400">{fmt(v.valor)}</td>
+                              <td className="px-4 py-3 text-right text-zinc-400">
+                                {v.custoTotal != null ? fmt(v.custoTotal) : <span className="text-zinc-600 text-xs">Sem registro</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {saldo != null ? (
+                                  <span className={`font-semibold ${saldo >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {saldo >= 0 ? "+" : ""}{fmt(saldo)}
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-600 text-xs">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
                 {producaoData.totalDemandas === 0 && (
                   <div className="text-center py-16 text-zinc-500">
                     <Film className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm">Nenhuma demanda finalizada nos últimos 12 meses</p>
+                    <p className="text-sm">Nenhuma demanda finalizada no período</p>
                     <p className="text-xs mt-1 text-zinc-600">Os dados aparecerão conforme as demandas forem concluídas</p>
                   </div>
                 )}

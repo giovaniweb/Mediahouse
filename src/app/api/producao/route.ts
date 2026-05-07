@@ -7,150 +7,126 @@ import { ptBR } from "date-fns/locale"
 // Valor médio por demanda finalizada — índice de produtividade, não faturamento real
 const VALOR_POR_DEMANDA = 200
 
-// GET /api/producao?de=2026-01-01&ate=2026-12-31
-// Retorna métricas de produção baseadas em demandas finalizadas (statusNovo = "encerrado")
+// GET /api/producao?mes=2026-05        — mês específico
+// GET /api/producao?de=2026-01-01&ate=2026-12-31  — intervalo customizado
+// Default: últimos 12 meses
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const sp = req.nextUrl.searchParams
+  const mesParam = sp.get("mes")
   const deParam = sp.get("de")
   const ateParam = sp.get("ate")
 
-  // Default: últimos 12 meses
-  const ateDate = ateParam ? new Date(ateParam) : new Date()
-  ateDate.setHours(23, 59, 59, 999)
+  let deDate: Date
+  let ateDate: Date
 
-  const deDate = deParam
-    ? new Date(deParam)
-    : new Date(ateDate.getFullYear() - 1, ateDate.getMonth(), 1)
-  deDate.setHours(0, 0, 0, 0)
+  if (mesParam) {
+    // ?mes=2026-05 → primeiro e último dia do mês
+    const [ano, mes] = mesParam.split("-").map(Number)
+    deDate = new Date(ano, mes - 1, 1, 0, 0, 0, 0)
+    ateDate = new Date(ano, mes, 0, 23, 59, 59, 999)
+  } else {
+    ateDate = ateParam ? new Date(ateParam) : new Date()
+    ateDate.setHours(23, 59, 59, 999)
+    deDate = deParam
+      ? new Date(deParam)
+      : new Date(ateDate.getFullYear() - 1, ateDate.getMonth(), 1)
+    deDate.setHours(0, 0, 0, 0)
+  }
 
-  // Busca todos os registros de finalização no período
-  const historicos = await prisma.historicoStatus.findMany({
-    where: {
-      statusNovo: "encerrado",
-      createdAt: { gte: deDate, lte: ateDate },
+  // Busca demandas finalizadas no período usando finalizadaEm (mais confiável que HistoricoStatus)
+  const demandas = await prisma.demanda.findMany({
+    where: { finalizadaEm: { not: null, gte: deDate, lte: ateDate } },
+    select: {
+      id: true,
+      finalizadaEm: true,
+      videomakerId: true,
+      editorId: true,
+      videomaker: { select: { id: true, nome: true, valorDiaria: true } },
+      editor: { select: { id: true, nome: true, salario: true } },
     },
-    include: {
-      demanda: {
-        select: {
-          id: true,
-          videomakerId: true,
-          editorId: true,
-          videomaker: { select: { id: true, nome: true } },
-          editor: { select: { id: true, nome: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
+    orderBy: { finalizadaEm: "desc" },
   })
 
-  // Deduplica por demandaId (pega apenas o registro mais recente de finalização por demanda)
-  const vistos = new Set<string>()
-  const unicos = historicos.filter(h => {
-    if (!h.demandaId || vistos.has(h.demandaId)) return false
-    vistos.add(h.demandaId)
-    return true
-  })
-
-  const totalDemandas = unicos.length
+  const totalDemandas = demandas.length
   const valorTotal = totalDemandas * VALOR_POR_DEMANDA
 
   // ── Por mês ──────────────────────────────────────────────────────────────
   const mesMap = new Map<string, { label: string; demandas: number; valor: number }>()
 
-  unicos.forEach(h => {
-    const key = h.createdAt.toISOString().slice(0, 7) // "2026-04"
-    const label = format(h.createdAt, "MMM yyyy", { locale: ptBR })
+  demandas.forEach(d => {
+    const dt = d.finalizadaEm!
+    const key = dt.toISOString().slice(0, 7)
+    const label = format(dt, "MMM yyyy", { locale: ptBR })
     const existing = mesMap.get(key)
-    if (existing) {
-      existing.demandas++
-      existing.valor += VALOR_POR_DEMANDA
-    } else {
-      mesMap.set(key, { label, demandas: 1, valor: VALOR_POR_DEMANDA })
-    }
+    if (existing) { existing.demandas++; existing.valor += VALOR_POR_DEMANDA }
+    else mesMap.set(key, { label, demandas: 1, valor: VALOR_POR_DEMANDA })
   })
 
-  // Preenche meses sem demandas (para o gráfico não ter lacunas)
-  const cursor = new Date(deDate)
-  cursor.setDate(1)
+  // Preenche meses sem produção (para o gráfico não ter lacunas)
+  const cursor = new Date(deDate); cursor.setDate(1)
   while (cursor <= ateDate) {
     const key = cursor.toISOString().slice(0, 7)
-    if (!mesMap.has(key)) {
-      mesMap.set(key, {
-        label: format(cursor, "MMM yyyy", { locale: ptBR }),
-        demandas: 0,
-        valor: 0,
-      })
-    }
+    if (!mesMap.has(key)) mesMap.set(key, { label: format(cursor, "MMM yyyy", { locale: ptBR }), demandas: 0, valor: 0 })
     cursor.setMonth(cursor.getMonth() + 1)
   }
 
   const porMes = Array.from(mesMap.entries())
     .map(([mes, v]) => ({ mes, ...v }))
-    .sort((a, b) => b.mes.localeCompare(a.mes)) // mais recente primeiro
+    .sort((a, b) => b.mes.localeCompare(a.mes))
 
-  // Mês atual
   const mesAtualKey = new Date().toISOString().slice(0, 7)
-  const mesAtual = porMes.find(m => m.mes === mesAtualKey) ?? {
-    mes: mesAtualKey,
-    label: format(new Date(), "MMM yyyy", { locale: ptBR }),
-    demandas: 0,
-    valor: 0,
-  }
+  const mesAtual = porMes.find(m => m.mes === mesAtualKey)
+    ?? { mes: mesAtualKey, label: format(new Date(), "MMM yyyy", { locale: ptBR }), demandas: 0, valor: 0 }
 
-  // ── Por editor (videomaker interno) ──────────────────────────────────────
-  const editorMap = new Map<string, { id: string; nome: string; demandas: number; valor: number }>()
-
-  unicos.forEach(h => {
-    const ed = h.demanda?.editor
-    if (!ed) return
-    const existing = editorMap.get(ed.id)
-    if (existing) {
-      existing.demandas++
-      existing.valor += VALOR_POR_DEMANDA
-    } else {
-      editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA })
-    }
+  // ── Por editor (videomaker interno, tem salário fixo) ─────────────────────
+  const editorMap = new Map<string, { id: string; nome: string; demandas: number; valor: number; salario: number | null }>()
+  demandas.forEach(d => {
+    const ed = d.editor; if (!ed) return
+    const ex = editorMap.get(ed.id)
+    if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
+    else editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA, salario: ed.salario ?? null })
   })
-
-  const maxEditorDemandas = Math.max(...Array.from(editorMap.values()).map(e => e.demandas), 1)
+  const maxEdDemandas = Math.max(...Array.from(editorMap.values()).map(e => e.demandas), 1)
   const porEditor = Array.from(editorMap.values())
-    .map(e => ({ ...e, percentual: Math.round((e.demandas / maxEditorDemandas) * 100) }))
+    .map(e => ({
+      ...e,
+      percentual: Math.round((e.demandas / maxEdDemandas) * 100),
+      saldo: e.salario != null ? e.valor - e.salario : null,
+      sePagou: e.salario != null ? e.valor >= e.salario : null,
+      percSalario: e.salario != null && e.salario > 0 ? Math.min(Math.round((e.valor / e.salario) * 100), 150) : null,
+    }))
     .sort((a, b) => b.demandas - a.demandas)
 
-  // ── Por videomaker externo ────────────────────────────────────────────────
-  const vmMap = new Map<string, { id: string; nome: string; demandas: number; valor: number }>()
-
-  unicos.forEach(h => {
-    const vm = h.demanda?.videomaker
-    if (!vm) return
-    const existing = vmMap.get(vm.id)
-    if (existing) {
-      existing.demandas++
-      existing.valor += VALOR_POR_DEMANDA
-    } else {
-      vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA })
-    }
+  // ── Por videomaker externo (pagos por job, sem salário fixo) ──────────────
+  const vmMap = new Map<string, { id: string; nome: string; demandas: number; valor: number; valorDiaria: number | null }>()
+  demandas.forEach(d => {
+    const vm = d.videomaker; if (!vm) return
+    const ex = vmMap.get(vm.id)
+    if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
+    else vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA, valorDiaria: vm.valorDiaria ?? null })
   })
-
+  // Custo real pago a cada videomaker externo no período
+  const custosVm = await prisma.custoVideomaker.groupBy({
+    by: ["videomakerId"],
+    _sum: { valor: true },
+    where: { dataReferencia: { gte: deDate, lte: ateDate } },
+  })
+  const custoVmMap = new Map(custosVm.map(c => [c.videomakerId, c._sum.valor ?? 0]))
   const maxVmDemandas = Math.max(...Array.from(vmMap.values()).map(v => v.demandas), 1)
   const porVideomaker = Array.from(vmMap.values())
-    .map(v => ({ ...v, percentual: Math.round((v.demandas / maxVmDemandas) * 100) }))
+    .map(v => ({
+      ...v,
+      percentual: Math.round((v.demandas / maxVmDemandas) * 100),
+      custoTotal: custoVmMap.get(v.id) ?? null,
+    }))
     .sort((a, b) => b.demandas - a.demandas)
 
   return NextResponse.json({
     valorPorDemanda: VALOR_POR_DEMANDA,
-    totalDemandas,
-    valorTotal,
-    mesAtual,
-    porMes,
-    porEditor,
-    porVideomaker,
-    periodo: {
-      de: deDate.toISOString(),
-      ate: ateDate.toISOString(),
-    },
+    totalDemandas, valorTotal, mesAtual, porMes, porEditor, porVideomaker,
+    periodo: { de: deDate.toISOString(), ate: ateDate.toISOString() },
   })
 }
