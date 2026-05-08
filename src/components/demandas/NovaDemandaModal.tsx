@@ -153,9 +153,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Erro ao criar demanda")
 
-      toast.success(`Demanda ${json.demanda?.codigo ?? ""} criada!`)
+      toast.success(`Demanda ${json.codigo ?? ""} criada!`)
       onClose()
-      router.push(`/demandas/${json.demanda?.id}`)
+      router.push(`/demandas/${json.id}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar demanda")
     } finally {
