@@ -339,10 +339,15 @@ export default function DemandaDetailPage() {
       let videoUrl = urlVideoInput.trim()
 
       if (linkModalTab === "upload" && linkModalFile) {
-        // Upload via Supabase Storage (presigned URL — sem passar pelo Vercel)
-        videoUrl = await uploadPresigned(linkModalFile, linkModalTipo)
-        if (linkModalTipo === "final") setLinkFinal(videoUrl)
-        else setLinkBrutos(videoUrl)
+        // Vídeo final → Google Drive (sem limite de tamanho)
+        // Brutos → Supabase (arquivos menores, fluxo interno)
+        if (linkModalTipo === "final") {
+          videoUrl = await uploadParaDrive(linkModalFile, "final")
+          setLinkFinal(videoUrl)
+        } else {
+          videoUrl = await uploadPresigned(linkModalFile, "brutos")
+          setLinkBrutos(videoUrl)
+        }
       } else {
         // URL externa: salva diretamente no DB
         await fetch(`/api/demandas/${id}/upload-video`, {

@@ -129,21 +129,24 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
-  // ── Upload via Supabase presigned URL (XHR para rastrear progresso) ─────────
+  // ── Upload via Google Drive (sessão resumável — XHR para rastrear progresso) ──
   async function uploadPresigned(file: File): Promise<string> {
     if (!demandaId) throw new Error("demandaId ausente")
     setUploadProgress(0)
     const contentType = file.type || "video/mp4"
-    const urlRes = await fetch(
-      `/api/demandas/${demandaId}/upload-url?tipo=final&contentType=${encodeURIComponent(contentType)}`
-    )
-    if (!urlRes.ok) {
-      const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" }))
-      throw new Error((err as { error?: string }).error ?? "Erro ao gerar URL de upload")
-    }
-    const { uploadUrl, publicUrl } = await urlRes.json() as { uploadUrl: string; publicUrl: string }
+    const ext = file.name.split(".").pop() ?? "mp4"
+    const fileName = `video_final_${demandaId}_${Date.now()}.${ext}`
 
-    // XHR para ter progresso — fetch não expõe upload progress
+    // 1. Cria sessão resumável no Google Drive
+    const params = new URLSearchParams({ fileName, fileSize: String(file.size), contentType })
+    const urlRes = await fetch(`/api/demandas/${demandaId}/drive-upload-url?${params}`)
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({ error: "Erro ao criar sessão no Drive" }))
+      throw new Error((err as { error?: string }).error ?? "Erro ao criar sessão no Drive")
+    }
+    const { sessionUri, publicUrl } = await urlRes.json() as { sessionUri: string; publicUrl: string }
+
+    // 2. Upload direto do browser → Google via XHR (com barra de progresso)
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.upload.onprogress = (e) => {
@@ -151,15 +154,17 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
       }
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) resolve()
-        else reject(new Error(`Falha no upload: HTTP ${xhr.status}`))
+        else reject(new Error(`Falha no upload para o Drive: HTTP ${xhr.status}`))
       }
-      xhr.onerror = () => reject(new Error("Falha na conexão. Verifique sua internet."))
-      xhr.open("PUT", uploadUrl)
+      xhr.onerror = () => reject(new Error("Falha na conexão com o Google. Verifique sua internet."))
+      xhr.open("PUT", sessionUri)
       xhr.setRequestHeader("Content-Type", contentType)
       xhr.send(file)
     })
 
     setUploadProgress(100)
+
+    // 3. Salva URL do Drive na demanda
     await fetch(`/api/demandas/${demandaId}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -267,7 +272,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
       })
-      toast.success("✅ Enviado! Link de aprovação (30 dias) enviado ao solicitante.")
+      toast.success("✅ Vídeo salvo no Drive! Link de aprovação (30 dias) enviado ao solicitante.")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -583,7 +588,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                       />
                     </div>
                   )}
-                  <p className="text-[10px] text-zinc-600 text-center mt-1">Upload → gera link 30 dias → WhatsApp ao solicitante</p>
+                  <p className="text-[10px] text-zinc-600 text-center mt-1">Drive → gera link 30 dias → WhatsApp ao solicitante</p>
                 </div>
 
                 {/* Comentários */}
