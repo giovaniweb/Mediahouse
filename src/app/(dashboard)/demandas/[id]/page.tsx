@@ -893,20 +893,37 @@ export default function DemandaDetailPage() {
                 {!editMode && (
                   <div className="mt-2 space-y-2">
                     {demanda.linkFinal && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPlayerUrl(demanda.linkFinal)}
-                          className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
-                        >
-                          <Play className="w-3 h-3" /> Ver vídeo
-                        </button>
-                        <button
-                          onClick={() => deleteVideoLink("final")}
-                          className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 className="w-3 h-3" /> Remover
-                        </button>
-                      </div>
+                      <>
+                        {/* Badge de storage */}
+                        {(() => {
+                          const url = demanda.linkFinal
+                          if (url.includes("drive.google.com")) return (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-blue-900/50 text-blue-300 border border-blue-700/40 rounded-full px-2.5 py-0.5">
+                              ☁️ Google Drive
+                            </span>
+                          )
+                          if (url.includes("supabase")) return (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700/40 rounded-full px-2.5 py-0.5">
+                              🗄 Supabase
+                            </span>
+                          )
+                          return null
+                        })()}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setPlayerUrl(demanda.linkFinal)}
+                            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
+                          >
+                            <Play className="w-3 h-3" /> Ver vídeo
+                          </button>
+                          <button
+                            onClick={() => deleteVideoLink("final")}
+                            className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" /> Remover
+                          </button>
+                        </div>
+                      </>
                     )}
                     <button
                       onClick={() => abrirModalUpload("final")}
@@ -914,7 +931,7 @@ export default function DemandaDetailPage() {
                     >
                       <Send className="w-4 h-4" /> 🚀 Enviar para Aprovação
                     </button>
-                    <p className="text-[11px] text-zinc-600 text-center">Upload → gera link → WhatsApp automático ao solicitante</p>
+                    <p className="text-[11px] text-zinc-600 text-center">Drive → gera link → WhatsApp automático ao solicitante</p>
                   </div>
                 )}
               </div>

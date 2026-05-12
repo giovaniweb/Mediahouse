@@ -213,6 +213,14 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
   // Força download via Supabase ?download=true (Content-Disposition: attachment no servidor)
   // O atributo download do <a> só funciona para same-origin — para cross-origin precisamos disso
+  /** Retorna um badge de onde o vídeo está armazenado, baseado na URL */
+  function getStorageBadge(url: string): { icon: string; label: string; cls: string } | null {
+    if (url.includes("drive.google.com")) return { icon: "☁️", label: "Google Drive", cls: "bg-blue-600/80 text-blue-100" }
+    if (url.includes("supabase")) return { icon: "🗄", label: "Supabase", cls: "bg-zinc-600/80 text-zinc-300" }
+    if (url.includes("youtu")) return { icon: "▶️", label: "YouTube", cls: "bg-red-700/80 text-red-100" }
+    return null
+  }
+
   function makeDownloadUrl(url: string): string {
     const sep = url.includes("?") ? "&" : "?"
     return `${url}${sep}download=true`
@@ -491,9 +499,19 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                               </div>
                             </div>
 
-                            {/* Label bottom-left */}
-                            <div className="absolute bottom-2 left-2 text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">
-                              🎬 Vídeo Final
+                            {/* Label bottom-left + badge de storage */}
+                            <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                              <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">
+                                🎬 Vídeo Final
+                              </span>
+                              {(() => {
+                                const badge = getStorageBadge(demanda.linkFinal)
+                                return badge ? (
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>
+                                    {badge.icon} {badge.label}
+                                  </span>
+                                ) : null
+                              })()}
                             </div>
 
                             {/* Botões top-right — aparecem no hover */}
