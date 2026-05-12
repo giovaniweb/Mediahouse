@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, ExternalLink } from "lucide-react"
+import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -2076,17 +2076,14 @@ function TabEmpresa() {
   )
 }
 
-export default function ConfiguracoesPage() {
-  const { data: session } = useSession()
+/** Componente interno que usa useSearchParams — deve ficar dentro de <Suspense> */
+function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   const searchParams = useSearchParams()
-  const [tab, setTab] = useState<Tab>("usuarios")
-
-  // Mostrar toast após callback do Google Drive OAuth2
   useEffect(() => {
     const driveStatus = searchParams?.get("drive")
     const driveEmail = searchParams?.get("email")
     const tabParam = searchParams?.get("tab")
-    if (tabParam === "empresa") setTab("empresa")
+    if (tabParam === "empresa") onSetTab("empresa")
     if (driveStatus === "conectado" && driveEmail) {
       toast.success(`Google Drive conectado como ${driveEmail}!`)
     } else if (driveStatus === "recusado") {
@@ -2098,6 +2095,12 @@ export default function ConfiguracoesPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  return null
+}
+
+export default function ConfiguracoesPage() {
+  const { data: session } = useSession()
+  const [tab, setTab] = useState<Tab>("usuarios")
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "usuarios", label: "Usuários", icon: Users },
@@ -2127,6 +2130,10 @@ export default function ConfiguracoesPage() {
   return (
     <>
       <Header title="Configurações" />
+      {/* Handler do callback OAuth2 do Google Drive (sem renderização visual) */}
+      <Suspense fallback={null}>
+        <DriveCallbackHandler onSetTab={setTab} />
+      </Suspense>
       <main className="flex-1 p-6">
         <div className="max-w-4xl mx-auto">
           {/* Tabs */}
