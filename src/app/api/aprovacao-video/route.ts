@@ -37,7 +37,8 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+  // .trim() evita newline acidental no env var que quebra o link no WhatsApp
+  const baseUrl = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim().replace(/\/$/, "")
   const link = `${baseUrl}/aprovar/${aprovacao.token}`
 
   // Atualiza demanda com link do cliente
@@ -46,19 +47,23 @@ export async function POST(req: NextRequest) {
     data: { linkCliente: link },
   })
 
-  // NOVO: Notifica solicitante via WhatsApp com o link de aprovação
+  // Notifica solicitante via WhatsApp com o link de aprovação
   const telefoneSolicitante = demanda.telefoneSolicitante || demanda.solicitante?.telefone
   const nomeSolicitante = demanda.nomeSolicitante || demanda.solicitante?.nome || "Solicitante"
+  // Trunca título longo para não poluir a mensagem
+  const tituloMsg = demanda.titulo.length > 50
+    ? demanda.titulo.substring(0, 47) + "..."
+    : demanda.titulo
 
   if (telefoneSolicitante) {
-    const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link. Válido por ${expiresInDays || 30} dias._`
+    const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n\n🔗 Acesse pelo link abaixo:\n${link}\n\n_Válido por ${expiresInDays || 30} dias._`
 
     void sendWhatsappMessage(telefoneSolicitante, msg, demandaId).catch(() => null)
   }
 
-  // NOVO: Notifica admin/gestor que link foi gerado
+  // Notifica admin/gestor que link foi gerado
   void notificarGestores(
-    `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`
+    `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`
   )
 
   return NextResponse.json({ ok: true, token: aprovacao.token, link })
