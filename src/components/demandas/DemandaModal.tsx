@@ -92,6 +92,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const [motivoReprova, setMotivoReprova] = useState("")
   const [salvandoAprovacao, setSalvandoAprovacao] = useState(false)
   const [enviandoAprovacao, setEnviandoAprovacao] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const fileRefAprovacao = useRef<HTMLInputElement>(null)
   // Brutos URL
   const [brutosUrlInput, setBrutosUrlInput] = useState("")
@@ -128,27 +129,45 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
-  // ── Upload via URL presigned (bypass limite Vercel) ──────────────────────
-  async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
-    const contentType = file.type || "video/mp4"
-    const urlRes = await fetch(
-      `/api/demandas/${demandaId}/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
-    )
-    if (!urlRes.ok) {
-      const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" }))
-      throw new Error(err.error ?? "Erro ao gerar URL de upload")
-    }
-    const { uploadUrl, publicUrl } = await urlRes.json() as { uploadUrl: string; publicUrl: string }
-    const uploadRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
+  // ── Upload direto para Google Drive (sem limite de tamanho) ──────────────
+  async function uploadParaDrive(file: File): Promise<string> {
+    if (!demandaId) throw new Error("demandaId ausente")
+    setUploadProgress(0)
+    const ext = file.name.split(".").pop() ?? "mp4"
+    const codigo = demanda?.codigo ?? demandaId
+    const fileName = `${codigo}_final_${Date.now()}.${ext}`
+    const params = new URLSearchParams({
+      fileName,
+      fileSize: String(file.size),
+      contentType: file.type || "video/mp4",
     })
-    if (!uploadRes.ok) throw new Error(`Falha no upload: ${uploadRes.statusText}`)
+    const urlRes = await fetch(`/api/demandas/${demandaId}/drive-upload-url?${params}`)
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({ error: "Erro ao criar sessão Drive" }))
+      throw new Error((err as { error?: string }).error ?? "Erro ao criar sessão Drive")
+    }
+    const { sessionUri, publicUrl } = await urlRes.json() as { sessionUri: string; publicUrl: string }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else reject(new Error(`Falha no upload para o Drive: HTTP ${xhr.status}`))
+      }
+      xhr.onerror = () => reject(new Error("Falha na conexão com o Google. Verifique sua internet."))
+      xhr.open("PUT", sessionUri)
+      xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
+      xhr.send(file)
+    })
+
+    setUploadProgress(100)
     await fetch(`/api/demandas/${demandaId}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: publicUrl, tipo }),
+      body: JSON.stringify({ url: publicUrl, tipo: "final" }),
     })
     return publicUrl
   }
@@ -236,12 +255,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
   async function handleEnviarParaAprovacao(file: File) {
     setEnviandoAprovacao(true)
+    setUploadProgress(0)
     try {
-      const url = await uploadPresigned(file, "final")
+      // Upload para Google Drive (sem limite de tamanho)
+      const url = await uploadParaDrive(file)
+      // Gera link de aprovação com 30 dias de validade
       const res = await fetch("/api/aprovacao-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId, urlVideo: url, expiresInDays: 7 }),
+        body: JSON.stringify({ demandaId, urlVideo: url, expiresInDays: 30 }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao gerar link de aprovação")
       await fetch(`/api/demandas/${demandaId}/status`, {
@@ -249,12 +271,13 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
       })
-      toast.success("✅ Enviado! Link de aprovação enviado ao solicitante.")
+      toast.success("✅ Enviado! Link de aprovação (30 dias) enviado ao solicitante.")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setEnviandoAprovacao(false)
+      setUploadProgress(0)
     }
   }
 
@@ -549,9 +572,21 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors disabled:opacity-50 w-full"
                   >
                     {enviandoAprovacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    {enviandoAprovacao ? "Enviando..." : "🚀 Enviar Vídeo para Aprovação"}
+                    {enviandoAprovacao
+                      ? uploadProgress > 0 && uploadProgress < 100
+                        ? `Enviando… ${uploadProgress}%`
+                        : "Finalizando…"
+                      : "🚀 ✨ Enviar Vídeo para Aprovação"}
                   </button>
-                  <p className="text-[10px] text-zinc-600 text-center mt-1">Upload → gera link → WhatsApp ao solicitante</p>
+                  {enviandoAprovacao && uploadProgress > 0 && (
+                    <div className="mt-1.5 w-full bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-zinc-600 text-center mt-1">Upload → Drive → link 30 dias → WhatsApp ao solicitante</p>
                 </div>
 
                 {/* Comentários */}
