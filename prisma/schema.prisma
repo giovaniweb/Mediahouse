@@ -1043,6 +1043,7 @@ model ConfigEmpresa {
   googleRefreshToken     String?
   googleDriveEmail       String?
   googleDriveConnectedAt DateTime?
+  googleDriveFolderId    String?   // ID da pasta onde os vídeos são salvos
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.configEmpresa.findFirst()
 
-  const data = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: Record<string, any> = {
     cnpj: body.cnpj ?? null,
     razaoSocial: body.razaoSocial ?? null,
     nomeFantasia: body.nomeFantasia ?? null,
@@ -37,6 +38,11 @@ export async function POST(req: NextRequest) {
     pixKey: body.pixKey ?? null,
     pixTipo: body.pixTipo ?? null,
     observacoesNF: body.observacoesNF ?? null,
+  }
+
+  // Campos Drive — só sobrescreve se vieram no body (evitar apagar OAuth token)
+  if ("googleDriveFolderId" in body) {
+    data.googleDriveFolderId = body.googleDriveFolderId || null
   }
 
   let empresa

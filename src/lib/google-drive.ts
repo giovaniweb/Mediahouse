@@ -149,9 +149,13 @@ export async function criarSessaoUploadDrive(opts: {
   fileSize: number
   contentType: string
 }): Promise<DriveUploadSession> {
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+  // Prioridade: banco (configurado pelo admin) > variável de ambiente
+  const config = await prisma.configEmpresa.findFirst({
+    select: { googleDriveFolderId: true },
+  })
+  const folderId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
   if (!folderId) {
-    throw new Error("GOOGLE_DRIVE_FOLDER_ID não configurado no .env.")
+    throw new Error("Pasta do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }
 
   const token = await getAccessToken()

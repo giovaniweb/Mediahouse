@@ -87,6 +87,6 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.redirect(
-    `${baseUrl}/configuracoes?tab=empresa&drive=conectado&email=${encodeURIComponent(email)}`
+    `${baseUrl}/configuracoes?tab=drive&drive=conectado&email=${encodeURIComponent(email)}`
   )
 }

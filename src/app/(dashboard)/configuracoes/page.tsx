@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa"
+type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive"
 
 const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
 const TIPO_LABEL: Record<string, string> = {
@@ -2022,46 +2022,6 @@ function TabEmpresa() {
         />
       </div>
 
-      {/* Google Drive OAuth2 */}
-      <div className="border-t border-zinc-800 pt-4">
-        <h4 className="text-sm font-semibold text-zinc-300 mb-1 flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-blue-400" /> Google Drive
-        </h4>
-        <p className="text-xs text-zinc-500 mb-3">
-          Conecte sua conta Google para habilitar uploads de vídeos diretamente no Drive (sem limite de 50 MB do Supabase).
-        </p>
-        {empresa?.googleDriveEmail ? (
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs bg-emerald-900/50 text-emerald-400 border border-emerald-700/50 rounded-full px-3 py-1.5 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Conectado como {empresa.googleDriveEmail}
-            </span>
-            <a
-              href="/api/auth/setup-drive"
-              className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Reconectar
-            </a>
-          </div>
-        ) : (
-          <a
-            href="/api/auth/setup-drive"
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <HardDrive className="w-4 h-4" /> Conectar Google Drive
-          </a>
-        )}
-        {!empresa?.googleDriveEmail && (
-          <p className="text-xs text-zinc-600 mt-2">
-            Pré-requisito: Crie um OAuth 2.0 Client ID no{" "}
-            <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-              Google Cloud Console
-            </a>{" "}
-            e adicione as variáveis GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET ao ambiente.
-          </p>
-        )}
-      </div>
-
       <div className="flex justify-end">
         <button
           onClick={salvar}
@@ -2076,6 +2036,188 @@ function TabEmpresa() {
   )
 }
 
+// ─── Google Drive ─────────────────────────────────────────────────────────────
+
+function TabGoogleDrive() {
+  const { data, mutate } = useSWR("/api/config/empresa", fetcher)
+  const empresa = data?.empresa
+
+  const [folderInput, setFolderInput] = useState("")
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  if (empresa && !loaded) {
+    // Mostrar URL completa da pasta se tiver ID salvo
+    setFolderInput(
+      empresa.googleDriveFolderId
+        ? `https://drive.google.com/drive/folders/${empresa.googleDriveFolderId}`
+        : ""
+    )
+    setLoaded(true)
+  }
+
+  /** Extrai o folder ID de uma URL do Drive ou retorna o valor direto (se já for ID) */
+  function extrairFolderId(input: string): string {
+    const trimmed = input.trim()
+    const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{10,})/)
+    if (match) return match[1]
+    // Se não for URL, assume que é ID direto
+    if (/^[a-zA-Z0-9_-]{15,}$/.test(trimmed)) return trimmed
+    return trimmed
+  }
+
+  const salvarPasta = async () => {
+    const folderId = extrairFolderId(folderInput)
+    setSaving(true)
+    try {
+      await fetch("/api/config/empresa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googleDriveFolderId: folderId || null }),
+      })
+      toast.success("Pasta do Drive salva!")
+      mutate()
+    } catch {
+      toast.error("Erro ao salvar pasta")
+    } finally { setSaving(false) }
+  }
+
+  const folderId = empresa?.googleDriveFolderId
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h3 className="font-semibold text-zinc-200 flex items-center gap-2 mb-1">
+          <HardDrive className="w-4 h-4 text-blue-400" /> Google Drive
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Conecte sua conta Google e configure a pasta onde os vídeos finais serão salvos.
+          Após configurado, os uploads vão direto para o Drive sem limite de tamanho.
+        </p>
+      </div>
+
+      {/* Status da conexão */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h4 className="text-sm font-semibold text-zinc-300">🔗 Conta Google</h4>
+
+        {empresa?.googleDriveEmail ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-2 bg-emerald-900/50 text-emerald-400 border border-emerald-700/50 rounded-full px-4 py-2 text-sm font-medium">
+                <CheckCircle2 className="w-4 h-4" />
+                Conectado como {empresa.googleDriveEmail}
+              </span>
+            </div>
+            {empresa.googleDriveConnectedAt && (
+              <p className="text-xs text-zinc-600">
+                Conectado em{" "}
+                {new Date(empresa.googleDriveConnectedAt).toLocaleDateString("pt-BR", {
+                  day: "2-digit", month: "long", year: "numeric",
+                })}
+              </p>
+            )}
+            <a
+              href="/api/auth/setup-drive"
+              className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Reconectar / Trocar conta
+            </a>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-zinc-400">Nenhuma conta conectada.</p>
+            <a
+              href="/api/auth/setup-drive"
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
+            >
+              <HardDrive className="w-4 h-4" /> Conectar Google Drive
+            </a>
+            <p className="text-xs text-zinc-600">
+              Você será redirecionado para o Google para autorizar o acesso.
+              Apenas leitura e escrita de arquivos — sem acesso a outros dados.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Pasta de destino */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h4 className="text-sm font-semibold text-zinc-300">📂 Pasta de Destino dos Vídeos</h4>
+        <p className="text-xs text-zinc-500">
+          Cole o link da pasta do Google Drive onde os vídeos finais serão salvos.
+          A pasta deve ser compartilhada com a conta conectada acima.
+        </p>
+
+        {folderId && (
+          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-3 py-2">
+            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Pasta configurada:</span>
+            <a
+              href={`https://drive.google.com/drive/folders/${folderId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-emerald-300 font-mono truncate max-w-[200px]"
+              title={folderId}
+            >
+              {folderId.slice(0, 20)}…
+            </a>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={folderInput}
+            onChange={e => setFolderInput(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/1abc_ID_da_pasta"
+            className="flex-1 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-800 text-zinc-200 placeholder-zinc-500"
+          />
+          <button
+            onClick={salvarPasta}
+            disabled={saving || !folderInput.trim()}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Salvar Pasta
+          </button>
+        </div>
+        <p className="text-xs text-zinc-600">
+          💡 Dica: abra a pasta no Drive, copie a URL completa da barra de endereço e cole aqui.
+          O ID será extraído automaticamente.
+        </p>
+      </div>
+
+      {/* Status geral */}
+      {empresa?.googleDriveEmail && folderId ? (
+        <div className="flex items-start gap-3 bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-4">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-400">Google Drive pronto para uso!</p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Uploads de vídeos finais serão salvos automaticamente na pasta configurada.
+              Sem limite de 50 MB.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
+          <AlertCircle className="w-5 h-5 text-zinc-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-zinc-400">
+              {!empresa?.googleDriveEmail && !folderId
+                ? "Conecte sua conta Google e configure a pasta para ativar os uploads via Drive."
+                : !empresa?.googleDriveEmail
+                ? "Falta conectar a conta Google."
+                : "Falta configurar a pasta de destino."}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Componente interno que usa useSearchParams — deve ficar dentro de <Suspense> */
 function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   const searchParams = useSearchParams()
@@ -2084,6 +2226,7 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
     const driveEmail = searchParams?.get("email")
     const tabParam = searchParams?.get("tab")
     if (tabParam === "empresa") onSetTab("empresa")
+    if (tabParam === "drive") onSetTab("drive")
     if (driveStatus === "conectado" && driveEmail) {
       toast.success(`Google Drive conectado como ${driveEmail}!`)
     } else if (driveStatus === "recusado") {
@@ -2106,6 +2249,7 @@ export default function ConfiguracoesPage() {
     { id: "usuarios", label: "Usuários", icon: Users },
     { id: "meu_perfil", label: "Meu Perfil", icon: Settings },
     { id: "empresa", label: "Dados da Empresa", icon: Building2 },
+    { id: "drive", label: "Google Drive", icon: HardDrive },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
@@ -2176,6 +2320,7 @@ export default function ConfiguracoesPage() {
             {tab === "parametros" && <TabParametros />}
             {tab === "trello" && <TabTrello />}
             {tab === "empresa" && <TabEmpresa />}
+            {tab === "drive" && <TabGoogleDrive />}
           </div>
         </div>
       </main>
