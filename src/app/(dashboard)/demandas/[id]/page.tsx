@@ -188,14 +188,12 @@ export default function DemandaDetailPage() {
   async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
     const contentType = file.type || "video/mp4"
 
-    // Valida tamanho antes de tentar o upload — Supabase tem limite de 50 MB por arquivo
-    // (limite de projeto, independente do bucket). Arquivos maiores falham com HTTP 413.
-    const MAX_UPLOAD_MB = 49
+    // Valida tamanho (Supabase Pro suporta até 5 GB após configurar no dashboard)
+    const MAX_UPLOAD_MB = 490
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
       const fileMb = (file.size / (1024 * 1024)).toFixed(0)
       throw new Error(
-        `Arquivo muito grande (${fileMb} MB). Limite atual: ${MAX_UPLOAD_MB} MB. ` +
-        `Use o Google Drive ou YouTube e cole o link na aba "Por URL".`
+        `Arquivo muito grande (${fileMb} MB). Limite máximo: ${MAX_UPLOAD_MB} MB.`
       )
     }
 
@@ -341,15 +339,10 @@ export default function DemandaDetailPage() {
       let videoUrl = urlVideoInput.trim()
 
       if (linkModalTab === "upload" && linkModalFile) {
-        // Vídeo final → Google Drive (sem limite de tamanho)
-        // Brutos → Supabase (arquivos internos menores)
-        if (linkModalTipo === "final") {
-          videoUrl = await uploadParaDrive(linkModalFile, "final")
-          setLinkFinal(videoUrl)
-        } else {
-          videoUrl = await uploadPresigned(linkModalFile, "brutos")
-          setLinkBrutos(videoUrl)
-        }
+        // Upload via Supabase Storage (presigned URL — sem passar pelo Vercel)
+        videoUrl = await uploadPresigned(linkModalFile, linkModalTipo)
+        if (linkModalTipo === "final") setLinkFinal(videoUrl)
+        else setLinkBrutos(videoUrl)
       } else {
         // URL externa: salva diretamente no DB
         await fetch(`/api/demandas/${id}/upload-video`, {
