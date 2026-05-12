@@ -51,7 +51,18 @@ export default function DemandasPage() {
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
-  const demandas = data?.demandas ?? []
+  const demandasAll = data?.demandas ?? []
+
+  // Coluna Concluído mostra só os últimos 30 dias (histórico completo em /historico)
+  const TRINTA_DIAS_MS = 30 * 24 * 60 * 60 * 1000
+  const agora30 = Date.now()
+  const demandas = demandasAll.filter((d: { statusVisivel: string; finalizadaEm?: string | null; updatedAt?: string }) => {
+    if (d.statusVisivel !== "finalizado") return true
+    const ref = d.finalizadaEm
+      ? new Date(d.finalizadaEm).getTime()
+      : new Date(d.updatedAt ?? 0).getTime()
+    return agora30 - ref <= TRINTA_DIAS_MS
+  })
 
   // Mapeamento coluna → statusInterno representativo (dispara notificações WhatsApp)
   const COLUNA_PARA_STATUS: Record<string, string> = {

@@ -201,6 +201,14 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, userTipo 
                     </button>
                   </Link>
                 )}
+                {col.id === "finalizado" && (
+                  <Link
+                    href="/historico"
+                    className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors ml-auto"
+                  >
+                    Ver todos →
+                  </Link>
+                )}
               </div>
 
               {/* Cards */}

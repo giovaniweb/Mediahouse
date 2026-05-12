@@ -60,6 +60,14 @@ export async function GET(req: NextRequest) {
   const statusVisivel = searchParams.get("statusVisivel")
   const statusInterno = searchParams.get("statusInterno")
   const editorId = searchParams.get("editorId")
+  const tipoVideo = searchParams.get("tipoVideo")
+  const deParam = searchParams.get("de")
+  const ateParam = searchParams.get("ate")
+  // Paginação (usada pela página /historico)
+  const limitParam = searchParams.get("limit")
+  const offsetParam = searchParams.get("offset")
+  const limit = limitParam ? Math.min(200, parseInt(limitParam)) : undefined
+  const offset = offsetParam ? parseInt(offsetParam) : undefined
   let videomakerId = searchParams.get("videomakerId") ?? undefined
 
   // Auto-filtro: videomakers externos só veem suas próprias demandas
@@ -78,34 +86,66 @@ export async function GET(req: NextRequest) {
   if (statusInterno) where.statusInterno = statusInterno
   if (editorId) where.editorId = editorId
   if (videomakerId) where.videomakerId = videomakerId
+  if (tipoVideo) where.tipoVideo = tipoVideo
+
+  // Filtro por data de finalização (usado pela página /historico)
+  if (deParam || ateParam) {
+    where.OR = [
+      {
+        finalizadaEm: {
+          ...(deParam ? { gte: new Date(deParam) } : {}),
+          ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
+        },
+      },
+      {
+        finalizadaEm: null,
+        updatedAt: {
+          ...(deParam ? { gte: new Date(deParam) } : {}),
+          ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
+        },
+      },
+    ]
+  }
 
   const produtoId = searchParams.get("produtoId")
   if (produtoId) where.produtos = { some: { produtoId } }
 
   const search = searchParams.get("search")
-  if (search) {
+  if (search && !where.OR) {
     where.OR = [
       { titulo: { contains: search, mode: "insensitive" } },
       { codigo: { contains: search, mode: "insensitive" } },
       { descricao: { contains: search, mode: "insensitive" } },
     ]
+  } else if (search && where.OR) {
+    // Se já tem OR (filtro de data), fazer AND com busca via título/código direto
+    where.titulo = { contains: search, mode: "insensitive" }
   }
 
-  const demandas = await prisma.demanda.findMany({
-    where,
-    include: {
-      solicitante: { select: { id: true, nome: true, email: true } },
-      videomaker: { select: { id: true, nome: true, cidade: true } },
-      editor: { select: { id: true, nome: true } },
-      _count: { select: { comentarios: true, arquivos: true } },
-    },
-    orderBy: [
-      { prioridade: "desc" },
-      { createdAt: "desc" },
-    ],
-  })
+  // Paginação: quando limit está presente, retorna total também
+  const usePagination = !!limit
 
-  return NextResponse.json({ demandas })
+  const [demandas, total] = await Promise.all([
+    prisma.demanda.findMany({
+      where,
+      include: {
+        solicitante: { select: { id: true, nome: true, email: true } },
+        videomaker: { select: { id: true, nome: true, cidade: true } },
+        editor: { select: { id: true, nome: true } },
+        produtos: { select: { produto: { select: { nome: true } } } },
+        _count: { select: { comentarios: true, arquivos: true } },
+      },
+      orderBy: [
+        { prioridade: "desc" },
+        { createdAt: "desc" },
+      ],
+      ...(limit ? { take: limit } : {}),
+      ...(offset ? { skip: offset } : {}),
+    }),
+    usePagination ? prisma.demanda.count({ where }) : Promise.resolve(undefined),
+  ])
+
+  return NextResponse.json({ demandas, ...(usePagination ? { total } : {}) })
 }
 
 export async function POST(req: NextRequest) {

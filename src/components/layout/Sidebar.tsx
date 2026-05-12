@@ -21,6 +21,8 @@ import {
   Lightbulb,
   MessageSquare,
   FileText,
+  Archive,
+  PlayCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -34,6 +36,7 @@ const sections = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/demandas", label: "Demandas", icon: Film },
+      { href: "/historico", label: "Histórico", icon: Archive },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
@@ -55,6 +58,7 @@ const sections = [
       { href: "/ia", label: "Central IA", icon: BrainCircuit },
       { href: "/alertas", label: "Alertas IA", icon: Bell },
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
+      { href: "/galeria", label: "Galeria", icon: PlayCircle },
     ],
   },
   {
