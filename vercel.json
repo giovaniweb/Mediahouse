@@ -25,7 +25,7 @@
     },
     {
       "path": "/api/cron/agentes?agente=lembretes",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/cron/agentes?agente=briefing",
