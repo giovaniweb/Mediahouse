@@ -49,6 +49,7 @@ export default function SobrePage() {
           <div className="flex items-center gap-6 text-sm text-zinc-400">
             <Link href="#como-funciona" className="hover:text-white transition-colors hidden md:block">Como funciona</Link>
             <Link href="#seja-parceiro" className="hover:text-white transition-colors hidden md:block">Seja Parceiro</Link>
+            <Link href="/galeria" className="hover:text-white transition-colors hidden md:block">Galeria</Link>
             <Link href="/cadastrar-demanda" className="hover:text-white transition-colors hidden md:block">Abrir Demanda</Link>
             <Link
               href="/login"
@@ -264,6 +265,7 @@ export default function SobrePage() {
           <div className="flex items-center gap-4">
             <Link href="#como-funciona" className="hover:text-white transition-colors">Como funciona</Link>
             <Link href="/cadastrar-videomaker" className="hover:text-white transition-colors">Seja Parceiro</Link>
+            <Link href="/galeria" className="hover:text-white transition-colors">Galeria</Link>
             <Link href="/login" className="hover:text-white transition-colors">Sistema</Link>
           </div>
         </div>
