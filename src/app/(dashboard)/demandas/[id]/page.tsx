@@ -75,6 +75,7 @@ export default function DemandaDetailPage() {
   const [linkModalTab, setLinkModalTab] = useState<"upload" | "url">("upload")
   const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
   const [linkModalTipo, setLinkModalTipo] = useState<"final" | "brutos">("final")
+  const [uploadProgress, setUploadProgress] = useState(0) // 0-100 durante upload Drive
   const fileRefLinkModal = useRef<HTMLInputElement>(null)
   const [playerUrl, setPlayerUrl] = useState<string | null>(null)
   const [copiado, setCopiado] = useState(false)
@@ -187,6 +188,17 @@ export default function DemandaDetailPage() {
   async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
     const contentType = file.type || "video/mp4"
 
+    // Valida tamanho antes de tentar o upload — Supabase tem limite de 50 MB por arquivo
+    // (limite de projeto, independente do bucket). Arquivos maiores falham com HTTP 413.
+    const MAX_UPLOAD_MB = 49
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      const fileMb = (file.size / (1024 * 1024)).toFixed(0)
+      throw new Error(
+        `Arquivo muito grande (${fileMb} MB). Limite atual: ${MAX_UPLOAD_MB} MB. ` +
+        `Use o Google Drive ou YouTube e cole o link na aba "Por URL".`
+      )
+    }
+
     // 1. Busca URL presigned do servidor
     const urlRes = await fetch(
       `/api/demandas/${id}/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
@@ -205,7 +217,12 @@ export default function DemandaDetailPage() {
     })
     if (!uploadRes.ok) {
       const errText = await uploadRes.text().catch(() => "")
-      throw new Error(`Falha no upload: ${errText || uploadRes.statusText}`)
+      // Tenta extrair mensagem legível do JSON de erro do Supabase
+      let msg = `HTTP ${uploadRes.status}`
+      if (errText) {
+        try { msg = (JSON.parse(errText) as { message?: string }).message ?? errText } catch { msg = errText }
+      }
+      throw new Error(`Falha no upload: ${msg}`)
     }
 
     // 3. Salva a URL na demanda
@@ -218,6 +235,59 @@ export default function DemandaDetailPage() {
     return publicUrl
   }
 
+  // ── Upload via Google Drive (sem limite de tamanho) ───────────────────────
+  // O browser faz o PUT direto ao Google via sessão resumável — não passa pelo Vercel.
+  async function uploadParaDrive(file: File, tipo: "final" | "brutos"): Promise<string> {
+    setUploadProgress(0)
+
+    const ext = file.name.split(".").pop() ?? "mp4"
+    const demandaCodigo = (demanda as { codigo?: string })?.codigo ?? id
+    const fileName = `${demandaCodigo}_${tipo}_${Date.now()}.${ext}`
+
+    // 1. Gera sessão de upload resumável no Google Drive
+    const params = new URLSearchParams({
+      fileName,
+      fileSize: String(file.size),
+      contentType: file.type || "video/mp4",
+    })
+    const urlRes = await fetch(`/api/demandas/${id}/drive-upload-url?${params}`)
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({ error: "Erro ao criar sessão Drive" }))
+      throw new Error((err as { error?: string }).error ?? "Erro ao criar sessão Drive")
+    }
+    const { sessionUri, publicUrl } = (await urlRes.json()) as { sessionUri: string; publicUrl: string }
+
+    // 2. Upload direto do browser → Google via XHR (para rastrear progresso)
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`Falha no upload para o Drive: HTTP ${xhr.status}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error("Falha na conexão com o Google. Verifique sua internet."))
+      xhr.ontimeout = () => reject(new Error("Timeout no upload. Arquivo muito grande ou conexão lenta."))
+      xhr.open("PUT", sessionUri)
+      xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
+      xhr.send(file)
+    })
+
+    setUploadProgress(100)
+
+    // 3. Salva URL do Drive na demanda
+    await fetch(`/api/demandas/${id}/upload-video`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: publicUrl, tipo }),
+    })
+
+    return publicUrl
+  }
 
   // ── Atribuição rápida (sem entrar em edit mode) ───────────────────────────
   async function atribuirRapido(campo: "videomakerId" | "editorId", valor: string) {
@@ -271,9 +341,15 @@ export default function DemandaDetailPage() {
       let videoUrl = urlVideoInput.trim()
 
       if (linkModalTab === "upload" && linkModalFile) {
-        videoUrl = await uploadPresigned(linkModalFile, linkModalTipo)
-        if (linkModalTipo === "final") setLinkFinal(videoUrl)
-        else setLinkBrutos(videoUrl)
+        // Vídeo final → Google Drive (sem limite de tamanho)
+        // Brutos → Supabase (arquivos internos menores)
+        if (linkModalTipo === "final") {
+          videoUrl = await uploadParaDrive(linkModalFile, "final")
+          setLinkFinal(videoUrl)
+        } else {
+          videoUrl = await uploadPresigned(linkModalFile, "brutos")
+          setLinkBrutos(videoUrl)
+        }
       } else {
         // URL externa: salva diretamente no DB
         await fetch(`/api/demandas/${id}/upload-video`, {
@@ -1184,8 +1260,26 @@ export default function DemandaDetailPage() {
                   >
                     <Upload className="w-5 h-5 text-zinc-500" />
                     <span className="text-xs text-zinc-400">Clique para escolher arquivo</span>
-                    <span className="text-[11px] text-zinc-600">mp4, mov, avi, webm · máx 500MB</span>
+                    {linkModalTipo === "final"
+                      ? <span className="text-[11px] text-emerald-600">mp4, mov, avi, webm · via Google Drive · sem limite de tamanho</span>
+                      : <span className="text-[11px] text-zinc-600">mp4, mov, avi, webm · máx 49 MB</span>
+                    }
                   </button>
+                )}
+                {/* Barra de progresso do upload Drive */}
+                {gerandoLink && linkModalTipo === "final" && uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-zinc-400">
+                      <span>Enviando para o Google Drive…</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
                 <div className="flex gap-2">
                   <button
@@ -1194,13 +1288,13 @@ export default function DemandaDetailPage() {
                     className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white text-sm py-2 rounded-xl hover:bg-purple-500 disabled:opacity-50 font-medium"
                   >
                     {gerandoLink
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {linkModalTipo === "final" && uploadProgress > 0 && uploadProgress < 100 ? `${uploadProgress}%…` : "Enviando…"}</>
                       : linkModalTipo === "brutos"
                         ? <><Upload className="w-3.5 h-3.5" /> Enviar Brutos</>
                         : <><Send className="w-3.5 h-3.5" /> Enviar para Aprovação</>
                     }
                   </button>
-                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final"); setUploadProgress(0) }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
                     Cancelar
                   </button>
                 </div>

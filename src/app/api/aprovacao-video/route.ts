@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const expiresAt = expiresInDays
     ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
-    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // padrão: 7 dias
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // padrão: 30 dias
 
   const aprovacao = await prisma.aprovacaoVideo.create({
     data: {
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const nomeSolicitante = demanda.nomeSolicitante || demanda.solicitante?.nome || "Solicitante"
 
   if (telefoneSolicitante) {
-    const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link. Válido por ${expiresInDays || 7} dias._`
+    const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link. Válido por ${expiresInDays || 30} dias._`
 
     void sendWhatsappMessage(telefoneSolicitante, msg, demandaId).catch(() => null)
   }

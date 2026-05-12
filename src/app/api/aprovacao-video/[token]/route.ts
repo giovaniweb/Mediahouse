@@ -54,19 +54,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     data: { status: novoStatus, aprovadoPor, comentario },
   })
 
-  // Se aprovado, atualiza status da demanda
+  // Se aprovado, finaliza a demanda diretamente (vai para galeria)
   if (acao === "aprovar") {
     await prisma.demanda.update({
       where: { id: aprovacao.demandaId },
-      data: { statusInterno: "aprovado", statusVisivel: "para_postar" },
+      data: {
+        statusInterno: "encerrado",
+        statusVisivel: "finalizado",
+        finalizadaEm: new Date(), // dispara aparecimento na galeria pública
+      },
     })
     await prisma.historicoStatus.create({
       data: {
         demandaId: aprovacao.demandaId,
         statusAnterior: aprovacao.status,
-        statusNovo: "aprovado",
+        statusNovo: "encerrado",
         origem: "manual",
-        observacao: `Vídeo aprovado pelo cliente${aprovadoPor ? ` (${aprovadoPor})` : ""}`,
+        observacao: `Vídeo aprovado pelo cliente${aprovadoPor ? ` (${aprovadoPor})` : ""} — finalizado automaticamente`,
       },
     })
   } else {
@@ -109,7 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   if (demanda) {
     const msgBase = acao === "aprovar"
-      ? `✅ *Vídeo Aprovado pelo Cliente!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}${aprovadoPor ? `\n👤 Aprovado por: ${aprovadoPor}` : ""}\n\nPróximo passo: postagem.`
+      ? `✅ *Vídeo Aprovado pelo Cliente!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}${aprovadoPor ? `\n👤 Aprovado por: ${aprovadoPor}` : ""}\n\nDemanda finalizada e disponível na galeria. 🎬`
       : `🔄 *Cliente Pediu Ajustes!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
 
     // Notifica gestores
