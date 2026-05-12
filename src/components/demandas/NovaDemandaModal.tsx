@@ -52,6 +52,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const [localEvento, setLocalEvento] = useState("")
   const [dataEvento, setDataEvento] = useState("")
 
+  // ── Links ────────────────────────────────────────────────────────────────
+  const [linkBrutos, setLinkBrutos] = useState("")
+
   // ── Estado do form ───────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -87,6 +90,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       setCidade("")
       setLocalEvento("")
       setDataEvento("")
+      setLinkBrutos("")
       setErrors({})
     }
   }, [open])
@@ -142,6 +146,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         ...(tipo === "cobertura" && { localEvento: localEvento.trim() }),
         ...(tipo === "cobertura" && dataEvento && { dataEvento: new Date(dataEvento).toISOString() }),
         cobertura: tipo === "cobertura",
+        ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
       }
 
       const res = await fetch("/api/demandas", {
@@ -353,6 +358,23 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Link dos Brutos */}
+          <div>
+            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
+              Link dos Brutos <span className="text-zinc-600">(opcional)</span>
+            </label>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+              <input
+                type="url"
+                value={linkBrutos}
+                onChange={e => setLinkBrutos(e.target.value)}
+                placeholder="https://drive.google.com/... ou link da pasta com os arquivos brutos"
+                className={cn(inputClass, "pl-9")}
+              />
             </div>
           </div>
 

@@ -21,11 +21,15 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   const { id } = await params
 
-  // Busca demanda original com produto vinculado
+  // Busca demanda original com produtos e checklist
   const original = await prisma.demanda.findUnique({
     where: { id },
     include: {
       produtos: { select: { produtoId: true } },
+      checklistItens: {
+        select: { texto: true, ordem: true, grupo: true },
+        orderBy: { ordem: "asc" },
+      },
     },
   })
 
@@ -64,15 +68,43 @@ export async function POST(_req: NextRequest, { params }: Params) {
       referencia: original.referencia,
       localGravacao: original.localGravacao,
       classificacao: original.classificacao,
-      // videomakerId/editorId/linkFinal/linkBrutos NÃO copiados — nova demanda começa limpa
+      // Equipe
+      videomakerId: original.videomakerId ?? undefined,
+      editorId: original.editorId ?? undefined,
+      // Dados do solicitante
+      telefoneSolicitante: original.telefoneSolicitante ?? undefined,
+      nomeSolicitante: original.nomeSolicitante ?? undefined,
+      // Datas operacionais
+      dataCaptacao: original.dataCaptacao ?? undefined,
+      // Cliente final
+      clienteFinalNome: original.clienteFinalNome ?? undefined,
+      clienteFinalTelefone: original.clienteFinalTelefone ?? undefined,
+      clienteFinalEmail: original.clienteFinalEmail ?? undefined,
+      // Pastas Drive
+      linkFolderBrutos: original.linkFolderBrutos ?? undefined,
+      linkFolderFinal: original.linkFolderFinal ?? undefined,
+      // linkFinal/linkBrutos/linkPostagem/linkCliente NÃO copiados — são outputs de produção
     },
   })
 
-  // Copiar produto vinculado se existir
-  if (original.produtos[0]?.produtoId) {
-    await prisma.demandaProduto.create({
-      data: { demandaId: nova.id, produtoId: original.produtos[0].produtoId },
+  // Copiar TODOS os produtos vinculados
+  if (original.produtos.length > 0) {
+    await prisma.demandaProduto.createMany({
+      data: original.produtos.map(p => ({ demandaId: nova.id, produtoId: p.produtoId })),
     }).catch(() => null)
+  }
+
+  // Copiar checklist (todos os itens desmarcados — começa do zero)
+  if (original.checklistItens.length > 0) {
+    await prisma.checklistItem.createMany({
+      data: original.checklistItens.map(item => ({
+        demandaId: nova.id,
+        texto: item.texto,
+        ordem: item.ordem,
+        grupo: item.grupo,
+        concluido: false,
+      })),
+    }).catch(e => console.error("[Duplicate] Erro ao copiar checklist:", e))
   }
 
   return NextResponse.json({ demanda: nova }, { status: 201 })
