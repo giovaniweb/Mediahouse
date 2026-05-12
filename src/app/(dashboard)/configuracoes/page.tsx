@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2 } from "lucide-react"
+import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, ExternalLink } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
+import { useSearchParams } from "next/navigation"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -2021,6 +2022,46 @@ function TabEmpresa() {
         />
       </div>
 
+      {/* Google Drive OAuth2 */}
+      <div className="border-t border-zinc-800 pt-4">
+        <h4 className="text-sm font-semibold text-zinc-300 mb-1 flex items-center gap-2">
+          <HardDrive className="w-4 h-4 text-blue-400" /> Google Drive
+        </h4>
+        <p className="text-xs text-zinc-500 mb-3">
+          Conecte sua conta Google para habilitar uploads de vídeos diretamente no Drive (sem limite de 50 MB do Supabase).
+        </p>
+        {empresa?.googleDriveEmail ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs bg-emerald-900/50 text-emerald-400 border border-emerald-700/50 rounded-full px-3 py-1.5 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Conectado como {empresa.googleDriveEmail}
+            </span>
+            <a
+              href="/api/auth/setup-drive"
+              className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Reconectar
+            </a>
+          </div>
+        ) : (
+          <a
+            href="/api/auth/setup-drive"
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <HardDrive className="w-4 h-4" /> Conectar Google Drive
+          </a>
+        )}
+        {!empresa?.googleDriveEmail && (
+          <p className="text-xs text-zinc-600 mt-2">
+            Pré-requisito: Crie um OAuth 2.0 Client ID no{" "}
+            <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+              Google Cloud Console
+            </a>{" "}
+            e adicione as variáveis GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET ao ambiente.
+          </p>
+        )}
+      </div>
+
       <div className="flex justify-end">
         <button
           onClick={salvar}
@@ -2037,7 +2078,26 @@ function TabEmpresa() {
 
 export default function ConfiguracoesPage() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
   const [tab, setTab] = useState<Tab>("usuarios")
+
+  // Mostrar toast após callback do Google Drive OAuth2
+  useEffect(() => {
+    const driveStatus = searchParams?.get("drive")
+    const driveEmail = searchParams?.get("email")
+    const tabParam = searchParams?.get("tab")
+    if (tabParam === "empresa") setTab("empresa")
+    if (driveStatus === "conectado" && driveEmail) {
+      toast.success(`Google Drive conectado como ${driveEmail}!`)
+    } else if (driveStatus === "recusado") {
+      toast.error("Autorização recusada. Tente novamente.")
+    } else if (driveStatus && driveStatus.startsWith("erro")) {
+      toast.error("Falha ao conectar Google Drive. Verifique as credenciais.")
+    } else if (driveStatus === "sem_credenciais") {
+      toast.error("GOOGLE_CLIENT_ID ou GOOGLE_CLIENT_SECRET não configurados.")
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "usuarios", label: "Usuários", icon: Users },

@@ -1,17 +1,60 @@
 /**
- * Google Drive — upload de vídeos finais via Service Account
+ * Google Drive — upload de vídeos finais
  *
- * Fluxo: backend cria uma sessão de upload resumável → frontend envia o arquivo
- * diretamente ao Google (sem passar pelo Vercel) → sem limite de tamanho.
+ * Estratégia de autenticação (em ordem de prioridade):
+ * 1. OAuth2 com conta pessoal (refresh_token salvo em ConfigEmpresa)
+ * 2. Service Account JWT (fallback — só funciona em Google Workspace Shared Drives)
+ *
+ * Fluxo de upload: backend cria sessão resumável → browser PUT direto ao Google
+ * (sem passar pelo Vercel) → sem limite de tamanho.
  */
 
 import crypto from "crypto"
+import { prisma } from "@/lib/prisma"
 
 // ── Cache do access_token (válido por ~1 hora) ──────────────────────────────
 let cachedToken: { token: string; expiresAt: number } | null = null
 
+// ── OAuth2 — conta pessoal ───────────────────────────────────────────────────
+
+/**
+ * Tenta obter access_token usando o refresh_token OAuth2 salvo em ConfigEmpresa.
+ * Retorna null se não houver refresh_token configurado.
+ */
+async function getAccessTokenFromOAuth(): Promise<string | null> {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+
+  const config = await prisma.configEmpresa.findFirst({
+    select: { googleRefreshToken: true },
+  })
+  if (!config?.googleRefreshToken) return null
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: config.googleRefreshToken,
+      grant_type: "refresh_token",
+    }),
+  })
+
+  if (!res.ok) {
+    console.error("[google-drive] Falha ao renovar OAuth2 token:", await res.text())
+    return null
+  }
+
+  const { access_token } = (await res.json()) as { access_token?: string }
+  return access_token ?? null
+}
+
+// ── Service Account JWT (fallback) ──────────────────────────────────────────
+
 /** Gera o JWT de service account e troca por um access_token do Google OAuth2. */
-async function getAccessToken(): Promise<string> {
+async function getAccessTokenFromServiceAccount(): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
 
   // Reutiliza token se ainda válido (margem de 5 minutos)
@@ -24,13 +67,11 @@ async function getAccessToken(): Promise<string> {
 
   if (!email || !rawKey) {
     throw new Error(
-      "Credenciais Google ausentes. Defina GOOGLE_SERVICE_ACCOUNT_EMAIL e GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY no .env."
+      "Credenciais Google ausentes. Configure GOOGLE_CLIENT_ID+SECRET (OAuth2) ou GOOGLE_SERVICE_ACCOUNT_EMAIL+KEY (.env)."
     )
   }
 
-  // A chave pode chegar com literais \n (de variável de ambiente) — normaliza para quebras reais
   const privateKey = rawKey.replace(/\\n/g, "\n")
-
   const jwt = criarJWT(email, privateKey, now)
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -44,7 +85,7 @@ async function getAccessToken(): Promise<string> {
 
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Falha ao obter token Google: ${err}`)
+    throw new Error(`Falha ao obter token Google (service account): ${err}`)
   }
 
   const { access_token, expires_in } = (await res.json()) as {
@@ -54,6 +95,13 @@ async function getAccessToken(): Promise<string> {
 
   cachedToken = { token: access_token, expiresAt: now + (expires_in ?? 3600) }
   return access_token
+}
+
+/** Tenta OAuth2 primeiro; cai para service account se necessário. */
+async function getAccessToken(): Promise<string> {
+  const oauthToken = await getAccessTokenFromOAuth()
+  if (oauthToken) return oauthToken
+  return getAccessTokenFromServiceAccount()
 }
 
 /** Cria um JWT RS256 para autenticação de service account. */
@@ -108,8 +156,6 @@ export async function criarSessaoUploadDrive(opts: {
 
   const token = await getAccessToken()
 
-  // 1. Inicia sessão de upload resumável
-  // O Google cria o arquivo (metadata) e retorna Location + fileId
   const metadata = {
     name: opts.fileName,
     parents: [folderId],
@@ -142,7 +188,6 @@ export async function criarSessaoUploadDrive(opts: {
   const fileData = (await initRes.json()) as { id: string }
   const fileId = fileData.id
 
-  // 2. Torna o arquivo público (qualquer pessoa com o link pode visualizar)
   await tornarPublico(fileId, token)
 
   const publicUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
@@ -163,7 +208,6 @@ async function tornarPublico(fileId: string, token: string): Promise<void> {
 
   if (!res.ok) {
     const err = await res.text()
-    // Não bloquear o upload por falha de permissão — loga e continua
     console.error(`[google-drive] Falha ao tornar público fileId=${fileId}:`, err)
   }
 }

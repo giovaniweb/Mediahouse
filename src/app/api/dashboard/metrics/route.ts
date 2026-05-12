@@ -44,7 +44,7 @@ export async function GET() {
     prisma.demanda.count({
       where: {
         dataLimite: { lt: new Date() },
-        statusVisivel: { notIn: ["finalizado"] },
+        statusVisivel: { notIn: ["finalizado", "aprovacao", "para_postar"] },
       },
     }),
     prisma.demanda.count({

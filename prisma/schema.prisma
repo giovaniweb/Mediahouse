@@ -1038,6 +1038,12 @@ model ConfigEmpresa {
   pixKey        String?   // CNPJ, email, celular ou chave aleatória
   pixTipo       String?   // "cnpj" | "email" | "telefone" | "aleatoria"
   observacoesNF String?   // instrução para videomakers ao emitir NF
+
+  // Google Drive — OAuth2 (refresh token da conta pessoal do usuário)
+  googleRefreshToken     String?
+  googleDriveEmail       String?
+  googleDriveConnectedAt DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

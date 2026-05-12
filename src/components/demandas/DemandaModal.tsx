@@ -294,7 +294,8 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const statusColor = STATUS_COLOR[demanda?.statusInterno] ?? "bg-zinc-700/60 text-zinc-300 border-zinc-600"
   const historicos = demanda?.historicos?.slice(0, 6) ?? []
   const comentarios = demanda?.comentarios ?? []
-  const isVencida = demanda?.dataLimite && new Date(demanda.dataLimite) < new Date()
+  const isVencida = demanda?.dataLimite && new Date(demanda.dataLimite) < new Date() &&
+    !["aprovacao", "para_postar"].includes(demanda.statusVisivel ?? "")
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">

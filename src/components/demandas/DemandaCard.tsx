@@ -50,9 +50,12 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
 
-  const isOverdue = demanda.dataLimite && new Date(demanda.dataLimite) < new Date()
+  const PAUSAR_PRAZO = ["aprovacao", "para_postar"]
+  const isOverdue = demanda.dataLimite && new Date(demanda.dataLimite) < new Date() &&
+    !PAUSAR_PRAZO.includes(demanda.statusVisivel ?? "")
   const isNearDeadline = demanda.dataLimite && !isOverdue &&
-    new Date(demanda.dataLimite) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    new Date(demanda.dataLimite) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) &&
+    !PAUSAR_PRAZO.includes(demanda.statusVisivel ?? "")
 
   const isCobertura = demanda.tipoVideo?.toLowerCase().includes("cobertura")
   const aguardandoVM = isCobertura && demanda.statusInterno === "videomaker_notificado"

@@ -76,6 +76,9 @@ async function buscarDemandas(input: Record<string, unknown>): Promise<string> {
   }
   if (input.em_atraso) {
     where.dataLimite = { lt: hoje }
+    where.statusVisivel = {
+      notIn: ["aprovacao", "para_postar", "finalizado"],
+    }
     where.statusInterno = {
       notIn: ["postado", "entregue_cliente", "encerrado", "expirado"],
     }
