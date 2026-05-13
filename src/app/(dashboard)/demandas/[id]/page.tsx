@@ -239,20 +239,24 @@ export default function DemandaDetailPage() {
     return publicUrl
   }
 
-  // ── Upload via Google Drive (sem limite de tamanho) ───────────────────────
-  // O browser faz o PUT direto ao Google via sessão resumável — não passa pelo Vercel.
+  // ── Upload via Google Drive (chunks via servidor — sem CORS) ──────────────
+  // O browser envia chunks para o nosso servidor, que os repassa ao Google.
+  // Evita o problema de CORS que ocorre com PUT direto do browser para googleapis.com
+  // usando sessões autenticadas com Service Account.
   async function uploadParaDrive(file: File, tipo: "final" | "brutos"): Promise<string> {
     setUploadProgress(0)
 
+    const CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB por chunk (dentro do limite Vercel 4.5 MB)
+    const contentType = file.type || "video/mp4"
     const ext = file.name.split(".").pop() ?? "mp4"
     const demandaCodigo = (demanda as { codigo?: string })?.codigo ?? id
     const fileName = `${demandaCodigo}_${tipo}_${Date.now()}.${ext}`
 
-    // 1. Gera sessão de upload resumável no Google Drive
+    // 1. Criar sessão de upload resumável no Google Drive (server-side)
     const params = new URLSearchParams({
       fileName,
       fileSize: String(file.size),
-      contentType: file.type || "video/mp4",
+      contentType,
     })
     const urlRes = await fetch(`/api/demandas/${id}/drive-upload-url?${params}`)
     if (!urlRes.ok) {
@@ -261,27 +265,32 @@ export default function DemandaDetailPage() {
     }
     const { sessionUri, publicUrl } = (await urlRes.json()) as { sessionUri: string; publicUrl: string }
 
-    // 2. Upload direto do browser → Google via XHR (para rastrear progresso)
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
-      }
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
-        } else {
-          reject(new Error(`Falha no upload para o Drive: HTTP ${xhr.status}`))
-        }
-      }
-      xhr.onerror = () => reject(new Error("Falha na conexão com o Google. Verifique sua internet."))
-      xhr.ontimeout = () => reject(new Error("Timeout no upload. Arquivo muito grande ou conexão lenta."))
-      xhr.open("PUT", sessionUri)
-      xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
-      xhr.send(file)
-    })
+    // 2. Upload em chunks via servidor (server-to-server, sem CORS)
+    let offset = 0
+    while (offset < file.size) {
+      const end   = Math.min(offset + CHUNK_SIZE, file.size)
+      const chunk = file.slice(offset, end)
 
-    setUploadProgress(100)
+      const res = await fetch(`/api/demandas/${id}/drive-upload-chunk`, {
+        method: "POST",
+        headers: {
+          "Content-Type":   "application/octet-stream",
+          "x-session-uri":  sessionUri,
+          "x-offset":       String(offset),
+          "x-total-size":   String(file.size),
+          "x-content-type": contentType,
+        },
+        body: chunk,
+      })
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(json.error ?? `Falha no upload (bytes ${offset}–${end})`)
+      }
+
+      offset = end
+      setUploadProgress(Math.round((offset / file.size) * 100))
+    }
 
     // 3. Salva URL do Drive na demanda
     await fetch(`/api/demandas/${id}/upload-video`, {
