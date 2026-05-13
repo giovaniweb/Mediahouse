@@ -206,6 +206,7 @@ export async function POST(req: NextRequest) {
       editorId: data.editorId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
+      linkBrutos: data.linkBrutos || undefined,
     },
   })
 

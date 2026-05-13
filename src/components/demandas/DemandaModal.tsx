@@ -113,7 +113,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     try {
       // "aprovado" e "ajuste_solicitado" são os StatusInterno válidos no schema
       const statusInterno = acao === "aprovar" ? "aprovado" : "ajuste_solicitado"
-      await fetch(`/api/demandas/${demandaId}/status`, {
+      const res = await fetch(`/api/demandas/${demandaId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -121,9 +121,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
           observacao: acao === "reprovar" ? motivoReprova : undefined,
         }),
       })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error((errJson as { error?: string }).error ?? `Erro ao salvar (HTTP ${res.status})`)
+      }
       setAprovandoAcao(null)
       setMotivoReprova("")
       mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar aprovação")
     } finally {
       setSalvandoAprovacao(false)
     }
@@ -274,7 +280,10 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ demandaId, urlVideo: url, expiresInDays: 30 }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao gerar link de aprovação")
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error((errJson as { error?: string }).error ?? `Erro ao gerar link de aprovação (HTTP ${res.status})`)
+      }
       await fetch(`/api/demandas/${demandaId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

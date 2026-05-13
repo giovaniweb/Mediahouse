@@ -189,8 +189,12 @@ export async function criarSessaoUploadDrive(opts: {
     throw new Error("Google Drive não retornou Location header para a sessão de upload.")
   }
 
-  const fileData = (await initRes.json()) as { id: string }
-  const fileId = fileData.id
+  const fileData = (await initRes.json().catch(() => ({} as { id?: string }))) as { id?: string }
+  const fileId = fileData.id ?? ""
+
+  if (!fileId) {
+    throw new Error("Google Drive não retornou o ID do arquivo na resposta de início de upload.")
+  }
 
   await tornarPublico(fileId, token)
 

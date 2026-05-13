@@ -27,15 +27,21 @@ export async function POST(req: NextRequest) {
     ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // padrão: 30 dias
 
-  const aprovacao = await prisma.aprovacaoVideo.create({
-    data: {
-      demandaId,
-      urlVideo,
-      nomeVideo: nomeVideo ?? demanda.titulo,
-      status: "pendente",
-      expiresAt,
-    },
-  })
+  let aprovacao: Awaited<ReturnType<typeof prisma.aprovacaoVideo.create>>
+  try {
+    aprovacao = await prisma.aprovacaoVideo.create({
+      data: {
+        demandaId,
+        urlVideo,
+        nomeVideo: nomeVideo ?? demanda.titulo,
+        status: "pendente",
+        expiresAt,
+      },
+    })
+  } catch (e) {
+    console.error("[aprovacao-video] Erro ao criar registro:", e)
+    return NextResponse.json({ error: "Erro interno ao criar link de aprovação" }, { status: 500 })
+  }
 
   // .trim() evita newline acidental no env var que quebra o link no WhatsApp
   const baseUrl = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim().replace(/\/$/, "")

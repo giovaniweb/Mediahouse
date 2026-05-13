@@ -155,8 +155,12 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         body: JSON.stringify(body),
       })
 
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Erro ao criar demanda")
+      // Ler o body de forma defensiva — servidor pode retornar HTML ou body vazio em erros 500
+      const text = await res.text()
+      let json: Record<string, unknown> = {}
+      try { json = JSON.parse(text) } catch { /* body não é JSON */ }
+
+      if (!res.ok) throw new Error((json.error as string | undefined) ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
 
       toast.success(`Demanda ${json.codigo ?? ""} criada!`)
       onClose()
