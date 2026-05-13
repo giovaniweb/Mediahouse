@@ -160,42 +160,67 @@ export async function criarSessaoUploadDrive(opts: {
 
   const token = await getAccessToken()
 
-  const metadata = {
-    name: opts.fileName,
-    parents: [folderId],
-  }
-
-  const initRes = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id",
+  // ── Passo 1: Cria o arquivo com metadata (sem conteúdo) → garante fileId ──
+  // O endpoint de upload resumável nem sempre devolve o id no body; criar
+  // o arquivo primeiro com POST simples é a forma confiável de obter o id.
+  const createRes = await fetch(
+    "https://www.googleapis.com/drive/v3/files",
     {
       method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: opts.fileName,
+        parents: [folderId],
+        mimeType: opts.contentType,
+      }),
+    }
+  )
+
+  if (!createRes.ok) {
+    const err = await createRes.text()
+    throw new Error(`Falha ao criar arquivo no Drive: ${err}`)
+  }
+
+  const createData = (await createRes.json().catch(() => ({} as { id?: string }))) as { id?: string }
+  const fileId = createData.id ?? ""
+  if (!fileId) {
+    throw new Error("Google Drive não retornou ID do arquivo criado.")
+  }
+
+  // ── Passo 2: Inicia sessão de upload resumável para o arquivo criado ──────
+  const sessionRes = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=resumable`,
+    {
+      method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "X-Upload-Content-Type": opts.contentType,
         "X-Upload-Content-Length": String(opts.fileSize),
       },
-      body: JSON.stringify(metadata),
+      body: JSON.stringify({}),
     }
   )
 
-  if (!initRes.ok) {
-    const err = await initRes.text()
-    throw new Error(`Falha ao criar sessão Drive: ${err}`)
+  if (!sessionRes.ok) {
+    const err = await sessionRes.text()
+    // Limpar arquivo vazio criado no passo 1
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => null)
+    throw new Error(`Falha ao iniciar sessão de upload Drive: ${err}`)
   }
 
-  const sessionUri = initRes.headers.get("Location")
+  const sessionUri = sessionRes.headers.get("Location")
   if (!sessionUri) {
     throw new Error("Google Drive não retornou Location header para a sessão de upload.")
   }
 
-  const fileData = (await initRes.json().catch(() => ({} as { id?: string }))) as { id?: string }
-  const fileId = fileData.id ?? ""
-
-  if (!fileId) {
-    throw new Error("Google Drive não retornou o ID do arquivo na resposta de início de upload.")
-  }
-
+  // ── Passo 3: Tornar público antes do upload (URL já conhecida) ────────────
   await tornarPublico(fileId, token)
 
   const publicUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
