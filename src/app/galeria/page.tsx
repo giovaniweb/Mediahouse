@@ -100,7 +100,8 @@ function parseVideoUrl(url: string): {
 
 function getDriveThumbnail(url: string): string | null {
   const match = url.match(/\/file\/d\/([^/]+)/)
-  if (match) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400`
+  // Usa proxy server-side com service account — evita problema de autenticação do Drive
+  if (match) return `/api/publico/drive-thumbnail?fileId=${match[1]}`
   return null
 }
 
@@ -156,7 +157,6 @@ function AnimatedCounter({ value }: { value: number }) {
 
 function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => void }) {
   const [playing, setPlaying] = useState(false)
-  const [videoThumb, setVideoThumb] = useState<string | null>(null)
   const [thumbFailed, setThumbFailed] = useState(false)
   const { tipo, embedUrl, youtubeId } = parseVideoUrl(video.linkFinal)
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
@@ -164,53 +164,15 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
   const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo)
   const gradient = getPlaceholderGradient(video.id)
 
-  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube hqdefault, 3) Drive thumbnail, 4) Canvas capture
+  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube hqdefault, 3) Drive thumbnail (via proxy)
+  // Para Supabase sem thumbnail salva: elemento <video preload="metadata"> mostra o 1º frame nativamente
+  // (sem canvas — evita problema de CORS com toDataURL)
   const thumbnailUrl = video.thumbnailUrl
     ?? (youtubeId ? `https://i3.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null)
     ?? (tipo === "drive" ? getDriveThumbnail(video.linkFinal) : null)
 
-  // Captura primeiro frame de vídeos Supabase sem thumbnail salva
-  useEffect(() => {
-    if (tipo !== "video" || thumbnailUrl) return
-    let cancelled = false
-    const vid = document.createElement("video")
-    vid.crossOrigin = "anonymous"
-    vid.preload = "metadata"
-    vid.muted = true
-    vid.playsInline = true
-
-    const cleanup = () => { vid.src = ""; vid.load() }
-
-    vid.addEventListener("loadedmetadata", () => {
-      vid.currentTime = Math.min(1, vid.duration * 0.1 || 1)
-    }, { once: true })
-
-    vid.addEventListener("seeked", () => {
-      if (cancelled) { cleanup(); return }
-      try {
-        const canvas = document.createElement("canvas")
-        const w = vid.videoWidth || 640
-        const h = vid.videoHeight || 360
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext("2d")
-        if (ctx) {
-          ctx.drawImage(vid, 0, 0, w, h)
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.75)
-          if (!cancelled) setVideoThumb(dataUrl)
-        }
-      } catch { /* canvas tainted por CORS — mantém gradiente */ }
-      cleanup()
-    }, { once: true })
-
-    vid.addEventListener("error", () => { cleanup(); if (!cancelled) setThumbFailed(true) }, { once: true })
-    vid.src = embedUrl
-
-    return () => { cancelled = true; cleanup() }
-  }, [tipo, embedUrl, thumbnailUrl])
-
   // YouTube: esconde card se vídeo indisponível (404 ou placeholder cinza 120px)
-  // Drive/Supabase: ao falhar, cai no gradiente (não esconde o card)
+  // Drive/outro: ao falhar, cai no gradiente (não esconde o card)
   function handleThumbError() {
     if (tipo === "youtube") {
       onHide(video.id)
@@ -269,16 +231,32 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
             className={`relative cursor-pointer overflow-hidden ${isPortrait ? "aspect-[9/16]" : "aspect-video"}`}
             onClick={() => setPlaying(true)}
           >
-            {(thumbnailUrl || videoThumb) && !thumbFailed ? (
+            {thumbnailUrl && !thumbFailed ? (
+              /* Thumbnail salvo (Supabase JPEG) ou YouTube ou Drive via proxy */
               <img
-                src={(thumbnailUrl || videoThumb)!}
+                src={thumbnailUrl}
                 alt={video.titulo}
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 onError={handleThumbError}
                 onLoad={handleThumbLoad}
               />
+            ) : tipo === "video" && !thumbFailed ? (
+              /* Vídeos Supabase sem thumbnail salva: exibe 1º frame via <video preload="metadata">
+                 — sem canvas, sem CORS, o browser mostra o frame pausado nativamente */
+              <video
+                src={embedUrl}
+                preload="metadata"
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget
+                  v.currentTime = Math.min(1, (v.duration || 2) * 0.1)
+                }}
+                onError={() => setThumbFailed(true)}
+              />
             ) : (
-              /* Gradiente com ícone — thumbnail falhou ou não disponível */
+              /* Gradiente com ícone — thumbnail falhou ou tipo externo sem thumbnail */
               <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex flex-col items-center justify-center gap-3`}>
                 <Film className="w-8 h-8 text-white/20" />
                 <p className="text-white/70 text-xs font-medium px-4 text-center leading-snug line-clamp-3">

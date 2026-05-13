@@ -98,7 +98,7 @@ async function getAccessTokenFromServiceAccount(): Promise<string> {
 }
 
 /** Tenta OAuth2 primeiro; cai para service account se necessário. */
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const oauthToken = await getAccessTokenFromOAuth()
   if (oauthToken) return oauthToken
   return getAccessTokenFromServiceAccount()
