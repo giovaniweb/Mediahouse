@@ -156,6 +156,7 @@ function AnimatedCounter({ value }: { value: number }) {
 function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => void }) {
   const [playing, setPlaying] = useState(false)
   const [videoThumb, setVideoThumb] = useState<string | null>(null)
+  const [thumbFailed, setThumbFailed] = useState(false)
   const { tipo, embedUrl, youtubeId } = parseVideoUrl(video.linkFinal)
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
   const finDate = fmtDate(video.finalizadaEm ?? video.updatedAt)
@@ -202,15 +203,20 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
       cleanup()
     }, { once: true })
 
-    vid.addEventListener("error", cleanup, { once: true })
+    vid.addEventListener("error", () => { cleanup(); if (!cancelled) setThumbFailed(true) }, { once: true })
     vid.src = embedUrl
 
     return () => { cancelled = true; cleanup() }
   }, [tipo, embedUrl, thumbnailUrl])
 
-  // Hide YouTube cards: 404 → onError; 120×90 grey placeholder → onLoad check
+  // YouTube: esconde card se vídeo indisponível (404 ou placeholder cinza 120px)
+  // Drive/Supabase: ao falhar, cai no gradiente (não esconde o card)
   function handleThumbError() {
-    if (tipo === "youtube") onHide(video.id)
+    if (tipo === "youtube") {
+      onHide(video.id)
+    } else {
+      setThumbFailed(true)
+    }
   }
   function handleThumbLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     if (tipo === "youtube" && e.currentTarget.naturalWidth <= 120) {
@@ -263,7 +269,7 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
             className={`relative cursor-pointer overflow-hidden ${isPortrait ? "aspect-[9/16]" : "aspect-video"}`}
             onClick={() => setPlaying(true)}
           >
-            {thumbnailUrl || videoThumb ? (
+            {(thumbnailUrl || videoThumb) && !thumbFailed ? (
               <img
                 src={(thumbnailUrl || videoThumb)!}
                 alt={video.titulo}
@@ -272,7 +278,7 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
                 onLoad={handleThumbLoad}
               />
             ) : (
-              /* Gradiente com ícone — para vídeos sem thumbnail ainda */
+              /* Gradiente com ícone — thumbnail falhou ou não disponível */
               <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex flex-col items-center justify-center gap-3`}>
                 <Film className="w-8 h-8 text-white/20" />
                 <p className="text-white/70 text-xs font-medium px-4 text-center leading-snug line-clamp-3">
