@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -184,6 +185,88 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
       }),
     ])
+
+    // ── Auto-aprovar AprovacaoVideo + Drive upload quando vai para Para Postar ─
+    if (novoStatusVisivel === "para_postar") {
+      try {
+        const aprovacoesPendentes = await prisma.aprovacaoVideo.findMany({
+          where: { demandaId: id, status: "pendente" },
+          select: { id: true, urlVideo: true, demandaId: true },
+        })
+        if (aprovacoesPendentes.length > 0) {
+          // Marcar como aprovadas (síncrono, antes da resposta)
+          await prisma.aprovacaoVideo.updateMany({
+            where: { demandaId: id, status: "pendente" },
+            data: { status: "aprovado", aprovadoPor: "Sistema (Para Postar)" },
+          })
+          await prisma.alertaIA.create({
+            data: {
+              demandaId: id,
+              tipoAlerta: "video_aprovado",
+              mensagem: `✅ ${aprovacoesPendentes.length} vídeo(s) aprovado(s) automaticamente ao mover para Para Postar`,
+              severidade: "info",
+            },
+          }).catch(() => null)
+          // Drive upload em background, após resposta ao cliente
+          const aprovacoesCopy = aprovacoesPendentes
+          after(async () => {
+            for (const aprovacao of aprovacoesCopy) {
+              try {
+                const urlVideo = aprovacao.urlVideo
+                if (!urlVideo || !urlVideo.includes("supabase")) continue
+                const dem = await prisma.demanda.findUnique({
+                  where: { id: aprovacao.demandaId },
+                  include: { produtos: { select: { produto: { select: { nome: true } } } } },
+                })
+                if (!dem) continue
+                const arq = await prisma.arquivo.findFirst({
+                  where: { demandaId: dem.id, url: urlVideo, tipoArquivo: "final" },
+                })
+                const seq = arq?.sequencia ?? 1
+                const seqStr = String(seq).padStart(3, "0")
+                const sanitize = (s: string) => s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
+                const parts: string[] = []
+                const prod = dem.produtos?.[0]?.produto?.nome
+                if (prod) parts.push(sanitize(prod).substring(0, 30))
+                parts.push(sanitize(dem.titulo).substring(0, 40))
+                parts.push(dem.codigo)
+                const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
+                const fileName = `${parts.join("_")}_${seqStr}.${ext}`
+                const supaRes = await fetch(urlVideo)
+                if (!supaRes.ok || !supaRes.body) continue
+                const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
+                if (fileSize <= 0) continue
+                const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
+                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+                const driveRes = await fetch(sessionUri, {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": contentType,
+                    "Content-Length": String(fileSize),
+                    "Content-Range": `bytes 0-${fileSize - 1}/${fileSize}`,
+                  },
+                  body: supaRes.body,
+                  // @ts-ignore — duplex necessário no Node.js fetch para body streaming
+                  duplex: "half",
+                })
+                if (driveRes.status === 200 || driveRes.status === 201) {
+                  if (arq) await prisma.arquivo.update({ where: { id: arq.id }, data: { url: publicUrl } })
+                  await prisma.demanda.update({ where: { id: dem.id }, data: { linkFinal: publicUrl } })
+                  console.info(`[ParaPostar/Status] Drive upload concluído (${seqStr}): ${publicUrl}`)
+                } else {
+                  const errText = await driveRes.text().catch(() => "")
+                  console.error(`[ParaPostar/Status] Drive HTTP ${driveRes.status} (${seqStr}):`, errText.slice(0, 200))
+                }
+              } catch (e) {
+                console.error(`[ParaPostar/Status] Erro Drive upload:`, e)
+              }
+            }
+          })
+        }
+      } catch (e) {
+        console.error("[Status] Erro auto-aprovação para_postar:", e)
+      }
+    }
 
     // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
     if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {

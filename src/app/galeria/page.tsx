@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Search, Film, Play, ExternalLink, Loader2 } from "lucide-react"
+import { Search, Film, Play, ExternalLink, Loader2, Download } from "lucide-react"
 
 interface Video {
   id: string
@@ -58,6 +58,20 @@ function extractYoutubeId(url: string): string | null {
   return null
 }
 
+// Extrai thumbnail do Google Drive para preview
+function getDriveThumbnail(url: string): string | null {
+  const match = url.match(/\/file\/d\/([^/]+)/)
+  if (match) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400`
+  return null
+}
+
+// Monta URL de download
+function getDownloadUrl(url: string): string {
+  const match = url.match(/\/file\/d\/([^/]+)/)
+  if (match) return `https://drive.google.com/uc?export=download&id=${match[1]}`
+  return url // Supabase / direto: URL já serve para download
+}
+
 // Detecta tipo e monta embed URL
 function parseVideoUrl(url: string): {
   tipo: "youtube" | "drive" | "video" | "external"
@@ -94,10 +108,12 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
   const finDate = fmtDate(video.finalizadaEm ?? video.updatedAt)
 
-  // Thumbnail: YouTube usa a API de imagem; outros usam placeholder
+  // Thumbnail: YouTube usa API ytimg; Drive usa thumbnail API; outros usam placeholder
   const thumbnailUrl = youtubeId
     ? `https://i3.ytimg.com/vi/${youtubeId}/hqdefault.jpg`
-    : null
+    : tipo === "drive"
+      ? getDriveThumbnail(video.linkFinal)
+      : null
 
   // Se a thumbnail do YouTube falhar → vídeo não existe, esconder card
   function handleThumbError() {
@@ -169,11 +185,25 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
           <p className="text-sm font-medium text-zinc-200 leading-snug line-clamp-2 mb-2">
             {video.titulo}
           </p>
-          <div className="flex items-center justify-between">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${badgeClass}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${badgeClass}`}>
               {TIPO_LABEL[video.tipoVideo] ?? video.tipoVideo}
             </span>
-            {finDate && <span className="text-[10px] text-zinc-500">{finDate}</span>}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {finDate && <span className="text-[10px] text-zinc-500">{finDate}</span>}
+              {tipo !== "youtube" && (
+                <a
+                  href={getDownloadUrl(video.linkFinal)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Baixar vídeo"
+                  className="p-1 rounded-md bg-zinc-700/50 hover:bg-zinc-600 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -257,7 +287,7 @@ export default function GaleriaPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center gap-3">
           {/* Logo + contador */}
           <div className="flex items-center gap-3 mr-auto">
-            <a href="/sobre" className="flex items-center gap-2">
+            <a href="/" className="flex items-center gap-2">
               <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
               <div>
                 <span className="text-sm font-bold text-white leading-none">NuFlow</span>
@@ -271,6 +301,14 @@ export default function GaleriaPage() {
               </span>
             </div>
           </div>
+
+          {/* Acessar sistema */}
+          <a
+            href="/dashboard"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex-shrink-0"
+          >
+            Acessar Sistema →
+          </a>
 
           {/* Busca + filtro */}
           <div className="flex gap-2 w-full sm:w-auto">

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
-    statusVisivel: "finalizado",
+    statusVisivel: { in: ["finalizado", "para_postar"] },
     linkFinal: { not: null },
     ...(tipo ? { tipoVideo: tipo } : {}),
     ...(search ? {
