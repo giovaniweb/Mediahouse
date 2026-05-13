@@ -371,7 +371,7 @@ export default function DemandaDetailPage() {
         // Vídeo final → Google Drive (sem limite de tamanho)
         // Brutos → Supabase (arquivos menores, fluxo interno)
         if (linkModalTipo === "final") {
-          videoUrl = await uploadParaDrive(linkModalFile, "final")
+          videoUrl = await uploadPresigned(linkModalFile, "final")
           setLinkFinal(videoUrl)
         } else {
           videoUrl = await uploadPresigned(linkModalFile, "brutos")
