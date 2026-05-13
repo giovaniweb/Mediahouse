@@ -117,6 +117,8 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       if (!localEvento.trim()) errs.localEvento = "Local obrigatório"
       if (!dataEvento) errs.dataEvento = "Data do evento obrigatória"
     }
+    if (!produtoId) errs.produtoId = "Selecione o equipamento/produto"
+    if (!classificacao) errs.classificacao = "Selecione B2C ou B2B"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Informe o motivo"
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -140,8 +142,8 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         prioridade,
         ...(motivoUrgencia && { motivoUrgencia }),
         ...(dataLimite && { dataLimite: new Date(dataLimite).toISOString() }),
-        ...(produtoId && { produtoId }),
-        ...(classificacao && { classificacao }),
+        produtoId,
+        classificacao,
         ...(referencia && { referencia }),
         ...(tipo === "cobertura" && { localEvento: localEvento.trim() }),
         ...(tipo === "cobertura" && dataEvento && { dataEvento: new Date(dataEvento).toISOString() }),
@@ -337,31 +339,43 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
           {/* Produto + Classificação */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Produto (opcional)</label>
-              <select value={produtoId} onChange={e => setProdutoId(e.target.value)} className={selectClass}>
-                <option value="">Sem produto</option>
+              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
+                Equipamento / Produto <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={produtoId}
+                onChange={e => { setProdutoId(e.target.value); setErrors(prev => ({ ...prev, produtoId: "" })) }}
+                className={cn(selectClass, errors.produtoId && "border-red-500 focus:ring-red-500")}
+              >
+                <option value="">Selecione o equipamento…</option>
                 {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
+              {errors.produtoId && <p className="text-xs text-red-400 mt-1">{errors.produtoId}</p>}
             </div>
             <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Classificação</label>
+              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
+                Classificação <span className="text-red-400">*</span>
+              </label>
               <div className="flex gap-2">
                 {(["b2c", "b2b"] as const).map(c => (
                   <button
                     key={c}
-                    onClick={() => setClassificacao(prev => prev === c ? "" : c)}
+                    onClick={() => { setClassificacao(prev => prev === c ? "" : c); setErrors(prev => ({ ...prev, classificacao: "" })) }}
                     className={cn(
                       "flex-1 py-2.5 rounded-lg text-xs font-bold border transition-colors uppercase",
                       classificacao === c
                         ? c === "b2c" ? "bg-purple-600/20 border-purple-500 text-purple-300"
                           : "bg-blue-600/20 border-blue-500 text-blue-300"
-                        : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600"
+                        : errors.classificacao
+                          ? "bg-zinc-800 border-red-500 text-zinc-500 hover:border-red-400"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600"
                     )}
                   >
                     {c.toUpperCase()}
                   </button>
                 ))}
               </div>
+              {errors.classificacao && <p className="text-xs text-red-400 mt-1">{errors.classificacao}</p>}
             </div>
           </div>
 
