@@ -2045,6 +2045,8 @@ function TabGoogleDrive() {
   const [folderInput, setFolderInput] = useState("")
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   if (empresa && !loaded) {
     // Mostrar URL completa da pasta se tiver ID salvo
@@ -2117,12 +2119,43 @@ function TabGoogleDrive() {
                 })}
               </p>
             )}
-            <a
-              href="/api/auth/setup-drive"
-              className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Reconectar / Trocar conta
-            </a>
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href="/api/auth/setup-drive"
+                className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Reconectar / Trocar conta
+              </a>
+              <button
+                onClick={async () => {
+                  setTesting(true)
+                  setTestResult(null)
+                  try {
+                    const res = await fetch("/api/auth/setup-drive/test")
+                    const json = await res.json()
+                    if (res.ok && json.ok) {
+                      setTestResult({ ok: true, msg: `✅ Conexão OK! Arquivo de teste criado: ${json.fileName}` })
+                    } else {
+                      setTestResult({ ok: false, msg: `❌ Erro: ${json.error ?? "Falha no teste"}` })
+                    }
+                  } catch {
+                    setTestResult({ ok: false, msg: "❌ Erro de rede ao testar conexão" })
+                  } finally {
+                    setTesting(false)
+                  }
+                }}
+                disabled={testing}
+                className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50"
+              >
+                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                Testar conexão
+              </button>
+            </div>
+            {testResult && (
+              <p className={`text-xs px-3 py-2 rounded-lg border ${testResult.ok ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-red-900/30 border-red-700/40 text-red-400"}`}>
+                {testResult.msg}
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
