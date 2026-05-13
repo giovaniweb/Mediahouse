@@ -143,7 +143,10 @@ export default function DemandaDetailPage() {
           produtoId: produtoId || null,
         }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao salvar")
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(err.error ?? "Erro ao salvar")
+      }
       toast.success("Demanda atualizada!")
       setEditMode(false)
       mutate()
@@ -158,7 +161,10 @@ export default function DemandaDetailPage() {
     if (!confirm(`Tem certeza que deseja excluir a demanda ${demanda.codigo}? Esta ação não pode ser desfeita.`)) return
     try {
       const res = await fetch(`/api/demandas/${id}`, { method: "DELETE" })
-      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao excluir")
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(err.error ?? "Erro ao excluir")
+      }
       toast.success("Demanda excluída!")
       router.push("/demandas")
     } catch (e) {
@@ -295,7 +301,10 @@ export default function DemandaDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [campo]: valor || null }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(err.error ?? "Erro ao atribuir")
+      }
       const label = campo === "videomakerId" ? "Videomaker atribuído!" : "Editor atribuído!"
       toast.success(label)
       mutate()
@@ -375,9 +384,11 @@ export default function DemandaDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ demandaId: id, urlVideo: videoUrl, expiresInDays: 7 }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error)
-      setLinkGerado(json.link)
+      const text = await res.text()
+      let json: { ok?: boolean; link?: string; error?: string } = {}
+      try { json = JSON.parse(text) } catch { /* body não é JSON */ }
+      if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
+      setLinkGerado(json.link ?? "")
 
       await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
@@ -1394,8 +1405,10 @@ function IACard({ demandaId }: { demandaId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ demandaId }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Erro na análise IA")
+      const text = await res.text()
+      let json: { error?: string; sugestao?: string } = {}
+      try { json = JSON.parse(text) } catch { /* not JSON */ }
+      if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || "Erro na análise IA"))
       setAnalise(json.sugestao ?? "Sem sugestão retornada.")
     } catch (e) {
       toast.error(String(e))
