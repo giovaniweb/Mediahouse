@@ -135,42 +135,65 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
-  // ── Upload via Google Drive (sessão resumável — XHR para rastrear progresso) ──
+  // ── Upload via Google Drive em chunks via servidor (sem CORS) ───────────────
+  // O browser envia blocos de 4 MB para o nosso servidor, que os repassa
+  // ao Google Drive server-to-server, evitando o bloqueio de CORS com googleapis.
   async function uploadPresigned(file: File): Promise<string> {
     if (!demandaId) throw new Error("demandaId ausente")
     setUploadProgress(0)
+
+    const CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB (limite Vercel = 4.5 MB)
     const contentType = file.type || "video/mp4"
     const ext = file.name.split(".").pop() ?? "mp4"
-    const fileName = `video_final_${demandaId}_${Date.now()}.${ext}`
 
-    // 1. Cria sessão resumável no Google Drive
+    // Filename: [produto]_[titulo]_[codigo]
+    const sanitize = (s: string) =>
+      s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
+    const produtoNome = demanda?.produtos?.[0]?.produto?.nome as string | undefined
+    const parts: string[] = []
+    if (produtoNome) parts.push(sanitize(produtoNome).substring(0, 30))
+    if (demanda?.titulo) parts.push(sanitize(demanda.titulo as string).substring(0, 40))
+    if (demanda?.codigo) parts.push(demanda.codigo as string)
+    const fileBaseName = parts.length > 0 ? parts.join("_") : `video_final_${demandaId}`
+    const fileName = `${fileBaseName}.${ext}`
+
+    // 1. Criar sessão no Drive (server-side)
     const params = new URLSearchParams({ fileName, fileSize: String(file.size), contentType })
     const urlRes = await fetch(`/api/demandas/${demandaId}/drive-upload-url?${params}`)
     if (!urlRes.ok) {
       const err = await urlRes.json().catch(() => ({ error: "Erro ao criar sessão no Drive" }))
       throw new Error((err as { error?: string }).error ?? "Erro ao criar sessão no Drive")
     }
-    const { sessionUri, publicUrl } = await urlRes.json() as { sessionUri: string; publicUrl: string }
+    const { sessionUri, publicUrl } = (await urlRes.json()) as { sessionUri: string; publicUrl: string }
 
-    // 2. Upload direto do browser → Google via XHR (com barra de progresso)
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+    // 2. Upload em chunks via servidor (sem CORS — server-to-server)
+    let offset = 0
+    while (offset < file.size) {
+      const end   = Math.min(offset + CHUNK_SIZE, file.size)
+      const chunk = file.slice(offset, end)
+
+      const res = await fetch(`/api/demandas/${demandaId}/drive-upload-chunk`, {
+        method: "POST",
+        headers: {
+          "Content-Type":   "application/octet-stream",
+          "x-session-uri":  sessionUri,
+          "x-offset":       String(offset),
+          "x-total-size":   String(file.size),
+          "x-content-type": contentType,
+        },
+        body: chunk,
+      })
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(json.error ?? `Falha no upload (bytes ${offset}–${end})`)
       }
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve()
-        else reject(new Error(`Falha no upload para o Drive: HTTP ${xhr.status}`))
-      }
-      xhr.onerror = () => reject(new Error("Falha na conexão com o Google. Verifique sua internet."))
-      xhr.open("PUT", sessionUri)
-      xhr.setRequestHeader("Content-Type", contentType)
-      xhr.send(file)
-    })
 
-    setUploadProgress(100)
+      offset = end
+      setUploadProgress(Math.round((offset / file.size) * 100))
+    }
 
-    // 3. Salva URL do Drive na demanda
+    // 3. Salva URL na demanda
     await fetch(`/api/demandas/${demandaId}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

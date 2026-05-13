@@ -249,8 +249,19 @@ export default function DemandaDetailPage() {
     const CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB por chunk (dentro do limite Vercel 4.5 MB)
     const contentType = file.type || "video/mp4"
     const ext = file.name.split(".").pop() ?? "mp4"
+
+    // Filename: [produto]_[titulo]_[codigo]
+    const sanitize = (s: string) =>
+      s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
+    const produtoNome = (demanda as { produtos?: { produto?: { nome?: string } }[] })
+      ?.produtos?.[0]?.produto?.nome
+    const demandaTitulo = (demanda as { titulo?: string })?.titulo
     const demandaCodigo = (demanda as { codigo?: string })?.codigo ?? id
-    const fileName = `${demandaCodigo}_${tipo}_${Date.now()}.${ext}`
+    const parts: string[] = []
+    if (produtoNome) parts.push(sanitize(produtoNome).substring(0, 30))
+    if (demandaTitulo) parts.push(sanitize(demandaTitulo).substring(0, 40))
+    if (demandaCodigo) parts.push(String(demandaCodigo))
+    const fileName = (parts.length > 0 ? parts.join("_") : `video_${tipo}`) + `.${ext}`
 
     // 1. Criar sessão de upload resumável no Google Drive (server-side)
     const params = new URLSearchParams({
