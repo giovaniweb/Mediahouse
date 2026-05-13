@@ -102,21 +102,19 @@ export async function PUT(req: NextRequest, { params }: Params) {
         if (!jaExiste) {
           const demandaFull = await prisma.demanda.findUnique({
             where: { id },
-            select: { codigo: true, tipoVideo: true, videomaker: { select: { valorDiaria: true } } },
+            select: { codigo: true, titulo: true, videomaker: { select: { valorDiaria: true } } },
           })
-          const baseCost = 250 // R$250 por video
-          const isCobertura = demandaFull?.tipoVideo?.toLowerCase().includes("cobertura")
-          const diaria = demandaFull?.videomaker?.valorDiaria ?? 0
-          const valor = isCobertura ? baseCost + diaria : baseCost
+          const valor = demandaFull?.videomaker?.valorDiaria ?? 0
 
           await prisma.custoVideomaker.create({
             data: {
               videomakerId: demandaAtual.videomakerId,
               demandaId: id,
-              tipo: "diaria",
+              tipo: "projeto",
               valor,
-              descricao: `Video ${demandaFull?.codigo} - ${demandaFull?.tipoVideo}${isCobertura ? ` (R$250 + diaria R$${diaria})` : ""}`,
+              descricao: `Serviço: ${demandaFull?.codigo} — ${demandaFull?.titulo}`,
               dataReferencia: new Date(),
+              pago: false,
               statusPagamento: "pendente_nf",
             },
           })

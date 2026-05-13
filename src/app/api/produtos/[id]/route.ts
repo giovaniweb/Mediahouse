@@ -69,22 +69,24 @@ export async function GET(
   const b2cCount = demandas.filter((d) => d.classificacao === "b2c").length
   const b2bCount = demandas.filter((d) => d.classificacao === "b2b").length
 
-  // Bug 4 fix: CustoVideomaker.demandaId é opcional — a maioria dos custos não tem demandaId.
-  // Em vez de iterar d.custos (que só encontra custos vinculados a demandas específicas),
-  // consultar custos agrupados por videomakerId de todos os VMs ligados a este produto.
-  const vmIds = [...new Set(demandas.filter((d) => d.videomakerId).map((d) => d.videomakerId!))]
+  // Fix 5: Consultar custos por demandaId IN [demandas do produto] — mais preciso que por vmId.
+  // Evita incluir custos de outros produtos do mesmo videomaker.
+  const demandaIds = demandas.map((d) => d.id)
   let totalCusto = 0
+  const custosPorDemandaId = new Map<string, number>()
   const custosPorVmId = new Map<string, number>()
-  if (vmIds.length > 0) {
-    const custosAgg = await prisma.custoVideomaker.groupBy({
-      by: ["videomakerId"],
-      where: { videomakerId: { in: vmIds } },
-      _sum: { valor: true },
+  if (demandaIds.length > 0) {
+    const custosDemandasProduto = await prisma.custoVideomaker.findMany({
+      where: { demandaId: { in: demandaIds } },
+      select: { valor: true, videomakerId: true, demandaId: true },
     })
-    for (const c of custosAgg) {
-      const val = c._sum.valor ?? 0
-      custosPorVmId.set(c.videomakerId, val)
-      totalCusto += val
+    for (const c of custosDemandasProduto) {
+      const prev = custosPorDemandaId.get(c.demandaId ?? "") ?? 0
+      custosPorDemandaId.set(c.demandaId ?? "", prev + c.valor)
+      totalCusto += c.valor
+      // Também agrupar por VM para videomakerStats
+      const vmPrev = custosPorVmId.get(c.videomakerId) ?? 0
+      custosPorVmId.set(c.videomakerId, vmPrev + c.valor)
     }
   }
   const custoMedio = totalVideos > 0 ? totalCusto / totalVideos : 0
@@ -95,7 +97,7 @@ export async function GET(
     statusBreakdown[d.statusVisivel] = (statusBreakdown[d.statusVisivel] || 0) + 1
   }
 
-  // Videomaker stats — usa custosPorVmId (query direta) em vez de d.custos (que requer demandaId)
+  // Videomaker stats — usa custosPorVmId agrupado por demandaId do produto
   const vmMap = new Map<string, { nome: string; count: number; totalCusto: number }>()
   for (const d of demandas) {
     if (d.videomaker) {

@@ -317,6 +317,38 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })()
     }
 
+    // ── Auto-criar CustoVideomaker ao finalizar ───────────────────────────────
+    if (novoStatusVisivel === "finalizado" && demandaAtual.videomakerId) {
+      void (async () => {
+        try {
+          const jaExiste = await prisma.custoVideomaker.findFirst({
+            where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+          })
+          if (!jaExiste) {
+            const vm = await prisma.videomaker.findUnique({
+              where: { id: demandaAtual.videomakerId! },
+              select: { valorDiaria: true },
+            })
+            await prisma.custoVideomaker.create({
+              data: {
+                videomakerId: demandaAtual.videomakerId!,
+                demandaId: id,
+                tipo: "projeto",
+                valor: vm?.valorDiaria ?? 0,
+                descricao: `Serviço: ${demandaAtual.codigo} — ${demandaAtual.titulo}`,
+                dataReferencia: new Date(),
+                pago: false,
+                statusPagamento: "pendente_nf",
+              },
+            })
+            console.info(`[Status] Custo auto-criado para ${demandaAtual.codigo} — VM ${demandaAtual.videomakerId}`)
+          }
+        } catch (e) {
+          console.error("[Status] Erro ao auto-criar custo:", e)
+        }
+      })()
+    }
+
     // ── Notificações WhatsApp assíncronas (não bloqueia resposta) ─────────────
     void notificarMudancaKanban(
       statusInterno,
