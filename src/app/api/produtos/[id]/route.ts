@@ -27,8 +27,9 @@ export async function GET(
               tipoVideo: true,
               videomakerId: true,
               createdAt: true,
+              finalizadaEm: true,
+              updatedAt: true,
               videomaker: { select: { id: true, nome: true, valorDiaria: true } },
-              custos: { select: { valor: true } },
             },
           },
         },
@@ -43,7 +44,19 @@ export async function GET(
   }
 
   const now = new Date()
-  const refDate = produto.ultimoConteudo ?? produto.createdAt
+
+  // Bug 2 fix: usar última demanda FINALIZADA para o produto (igual à página de lista)
+  // em vez de produto.ultimoConteudo que pode estar desatualizado
+  const ultimaFinalizacaoProduto = await prisma.demandaProduto.findFirst({
+    where: { produtoId: id, demanda: { statusVisivel: "finalizado" } },
+    orderBy: { demanda: { updatedAt: "desc" } },
+    select: { demanda: { select: { finalizadaEm: true, updatedAt: true } } },
+  })
+  const refDate =
+    (ultimaFinalizacaoProduto?.demanda?.finalizadaEm ?? ultimaFinalizacaoProduto?.demanda?.updatedAt)
+    ?? produto.ultimoConteudo
+    ?? produto.createdAt
+
   const diasSemConteudo = Math.floor(
     (now.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
   )
@@ -56,10 +69,22 @@ export async function GET(
   const b2cCount = demandas.filter((d) => d.classificacao === "b2c").length
   const b2bCount = demandas.filter((d) => d.classificacao === "b2b").length
 
+  // Bug 4 fix: CustoVideomaker.demandaId é opcional — a maioria dos custos não tem demandaId.
+  // Em vez de iterar d.custos (que só encontra custos vinculados a demandas específicas),
+  // consultar custos agrupados por videomakerId de todos os VMs ligados a este produto.
+  const vmIds = [...new Set(demandas.filter((d) => d.videomakerId).map((d) => d.videomakerId!))]
   let totalCusto = 0
-  for (const d of demandas) {
-    for (const c of d.custos) {
-      totalCusto += c.valor
+  const custosPorVmId = new Map<string, number>()
+  if (vmIds.length > 0) {
+    const custosAgg = await prisma.custoVideomaker.groupBy({
+      by: ["videomakerId"],
+      where: { videomakerId: { in: vmIds } },
+      _sum: { valor: true },
+    })
+    for (const c of custosAgg) {
+      const val = c._sum.valor ?? 0
+      custosPorVmId.set(c.videomakerId, val)
+      totalCusto += val
     }
   }
   const custoMedio = totalVideos > 0 ? totalCusto / totalVideos : 0
@@ -70,24 +95,22 @@ export async function GET(
     statusBreakdown[d.statusVisivel] = (statusBreakdown[d.statusVisivel] || 0) + 1
   }
 
-  // Videomaker stats
+  // Videomaker stats — usa custosPorVmId (query direta) em vez de d.custos (que requer demandaId)
   const vmMap = new Map<string, { nome: string; count: number; totalCusto: number }>()
   for (const d of demandas) {
     if (d.videomaker) {
-      const existing = vmMap.get(d.videomaker.id) || { nome: d.videomaker.nome, count: 0, totalCusto: 0 }
+      const existing = vmMap.get(d.videomaker.id) || { nome: d.videomaker.nome, count: 0, totalCusto: custosPorVmId.get(d.videomaker.id) ?? 0 }
       existing.count++
-      for (const c of d.custos) {
-        existing.totalCusto += c.valor
-      }
       vmMap.set(d.videomaker.id, existing)
     }
   }
   const videomakerStats = Array.from(vmMap.entries()).map(([vmId, v]) => ({ id: vmId, ...v }))
 
   // Monthly timeline
+  // Bug 3 fix: usar dp.demanda.createdAt (data da demanda) e não dp.createdAt (data do vínculo ao produto)
   const monthlyMap = new Map<string, number>()
   for (const dp of produto.demandas) {
-    const month = dp.createdAt.toISOString().slice(0, 7)
+    const month = dp.demanda.createdAt.toISOString().slice(0, 7)
     monthlyMap.set(month, (monthlyMap.get(month) || 0) + 1)
   }
   const monthlyTimeline = Array.from(monthlyMap.entries())
@@ -100,13 +123,16 @@ export async function GET(
   const demandasConcluidas = demandas.filter((d) => d.statusVisivel === "finalizado").length
 
   // Average completion time (days)
+  // Bug 1 fix: usar finalizadaEm (ou updatedAt como fallback) em vez de now.
+  // Antes: (now - createdAt) que cresce indefinidamente. Agora: (finalizadaEm - createdAt).
   let tempoMedioConclusao = 0
   const concluidas = produto.demandas.filter((dp) => dp.demanda.statusVisivel === "finalizado")
   if (concluidas.length > 0) {
     let totalDias = 0
     for (const dp of concluidas) {
-      const dias = Math.floor((now.getTime() - dp.demanda.createdAt.getTime()) / (1000 * 60 * 60 * 24))
-      totalDias += dias
+      const ref = dp.demanda.finalizadaEm ?? dp.demanda.updatedAt
+      const dias = Math.floor((ref.getTime() - dp.demanda.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      totalDias += Math.max(0, dias) // garantir que não seja negativo
     }
     tempoMedioConclusao = Math.round(totalDias / concluidas.length)
   }

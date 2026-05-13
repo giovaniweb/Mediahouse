@@ -159,9 +159,17 @@ export async function GET(req: NextRequest) {
     prisma.videomaker.count({ where: { status: { in: ["ativo", "preferencial"] } } }),
   ])
 
+  // Bug 6 fix: contar demandas finalizadas no período OU ativas com videomakerId atribuído,
+  // em vez de apenas demandas CRIADAS no período (que resultava em ranking vazio em meses recentes)
   const videomakersComDemandas = await prisma.demanda.groupBy({
     by: ["videomakerId"],
-    where: { createdAt: { gte: deDate, lte: ateDate }, videomakerId: { not: null } },
+    where: {
+      videomakerId: { not: null },
+      OR: [
+        { finalizadaEm: { gte: deDate, lte: ateDate } },
+        { statusVisivel: { notIn: ["finalizado"] } },
+      ],
+    },
     _count: { id: true },
     orderBy: { _count: { id: "desc" } },
     take: 5,
@@ -231,7 +239,10 @@ export async function GET(req: NextRequest) {
       totalSemana: custosAggregate._sum.valor ?? 0,
       total30d: custosAggregate._sum.valor ?? 0,
       qtdServicos30d: custosAggregate._count,
-      custoPorVideo: VALOR_POR_DEMANDA,
+      // Bug 5 fix: custo real médio por serviço (não mais hardcoded em 200)
+      custoPorVideo: custosAggregate._count > 0
+        ? Math.round((custosAggregate._sum.valor ?? 0) / custosAggregate._count)
+        : 0,
       topVideomakers: topVideomakersDetalhado,
     },
     producao: {
