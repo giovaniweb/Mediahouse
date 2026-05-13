@@ -2047,6 +2047,8 @@ function TabGoogleDrive() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ processados: number; erros: number } | null>(null)
 
   if (empresa && !loaded) {
     // Mostrar URL completa da pasta se tiver ID salvo
@@ -2247,6 +2249,53 @@ function TabGoogleDrive() {
           </div>
         </div>
       )}
+
+      {/* Sincronização em lote de vídeos existentes */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <div>
+          <h4 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+            <Upload className="w-4 h-4 text-purple-400" /> Sincronizar Vídeos Existentes com Drive
+          </h4>
+          <p className="text-xs text-zinc-500 mt-1">
+            Envia todos os vídeos finalizados (no Supabase) para o Google Drive em lote.
+            O link da galeria permanece no Supabase — Drive é cópia de entrega.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={async () => {
+              setSyncing(true)
+              setSyncResult(null)
+              try {
+                const res = await fetch("/api/admin/sync-drive", { method: "POST" })
+                const json = await res.json()
+                if (!res.ok) throw new Error(json.error ?? "Erro ao sincronizar")
+                setSyncResult({ processados: json.processados, erros: json.erros })
+                toast.success(`✅ Sync concluído: ${json.processados} vídeo(s) enviado(s) ao Drive!`)
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Erro ao sincronizar")
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            disabled={syncing}
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {syncing ? "Sincronizando…" : "📤 Sincronizar com Drive"}
+          </button>
+          {syncResult && (
+            <span className={`text-xs px-3 py-1.5 rounded-lg border ${syncResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
+              {syncResult.processados} enviado(s){syncResult.erros > 0 ? ` · ${syncResult.erros} erro(s)` : ""}
+            </span>
+          )}
+        </div>
+        {syncing && (
+          <p className="text-xs text-zinc-500 animate-pulse">
+            Processando vídeos… pode demorar alguns minutos para arquivos grandes.
+          </p>
+        )}
+      </div>
     </div>
   )
 }

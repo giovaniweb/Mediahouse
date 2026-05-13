@@ -322,6 +322,9 @@ model Demanda {
   linkFolderBrutos     String?    // pasta [Material Bruto] no Drive
   linkFolderFinal      String?    // pasta [Material Pronto] no Drive
 
+  // Thumbnail gerada no cliente e salva no Supabase
+  thumbnailUrl         String?    // JPEG em /storage/v1/object/public/uploads/thumbnails/...
+
   // Controle de limpeza pós-finalização
   finalizadaEm         DateTime?  // setado automaticamente quando statusVisivel = "finalizado"
   limpezaNotificadaEm  DateTime?  // quando foi enviado aviso de 20 dias
@@ -409,15 +412,16 @@ model ChecklistItem {
 }
 
 model Arquivo {
-  id          String      @id @default(cuid())
-  demandaId   String
-  tipoArquivo TipoArquivo
-  nomeArquivo String
-  url         String
-  tamanho     Int?
-  origem      String?
-  sequencia   Int?        // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
-  createdAt   DateTime    @default(now())
+  id           String      @id @default(cuid())
+  demandaId    String
+  tipoArquivo  TipoArquivo
+  nomeArquivo  String
+  url          String
+  tamanho      Int?
+  origem       String?
+  sequencia    Int?        // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
+  thumbnailUrl String?     // JPEG thumbnail no Supabase (gerado no cliente)
+  createdAt    DateTime    @default(now())
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 

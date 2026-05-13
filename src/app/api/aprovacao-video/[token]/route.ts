@@ -136,18 +136,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         })
 
         if (driveRes.status === 200 || driveRes.status === 201) {
-          // Atualiza o Arquivo com a URL permanente do Drive (substitui Supabase URL)
+          // Atualiza Arquivo.url para URL do Drive (para download/entrega ao cliente)
+          // NÃO atualiza linkFinal — mantém URL do Supabase para galeria/player
           if (arq) {
             await prisma.arquivo.update({
               where: { id: arq.id },
               data: { url: publicUrl },
             })
           }
-          // Atualiza linkFinal com o Drive URL mais recente (backward compat)
-          await prisma.demanda.update({
-            where: { id: dem.id },
-            data: { linkFinal: publicUrl },
-          })
           console.info(`[AprovacaoVideo] Drive upload concluído (${seqStr}): ${publicUrl}`)
         } else {
           const errText = await driveRes.text().catch(() => "")

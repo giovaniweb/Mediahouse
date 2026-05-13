@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js"
 
 type Params = { params: Promise<{ id: string }> }
 
-const TIPOS_VALIDOS = ["final", "brutos"] as const
-type TipoVideo = (typeof TIPOS_VALIDOS)[number]
+const TIPOS_VALIDOS = ["final", "brutos", "thumbnail"] as const
+type TipoUpload = (typeof TIPOS_VALIDOS)[number]
 
 const EXT_MAPA: Record<string, string> = {
   "video/mp4": "mp4",
@@ -16,18 +16,21 @@ const EXT_MAPA: Record<string, string> = {
   "video/x-matroska": "mkv",
   "application/zip": "zip",
   "application/x-zip-compressed": "zip",
+  "image/jpeg": "jpg",
+  "image/png":  "png",
+  "image/webp": "webp",
 }
 
 // GET /api/demandas/[id]/upload-url?tipo=final&contentType=video%2Fmp4
+// Também aceita tipo=thumbnail&contentType=image%2Fjpeg para thumbnails
 // Gera URL presigned do Supabase para upload direto do browser
-// (bypassa o limite de 4.5MB do Vercel em funções serverless)
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
   const sp = req.nextUrl.searchParams
-  const tipo = sp.get("tipo") as TipoVideo
+  const tipo = sp.get("tipo") as TipoUpload
   const contentType = sp.get("contentType") ?? "video/mp4"
 
   if (!tipo || !TIPOS_VALIDOS.includes(tipo)) {
@@ -44,8 +47,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-  const ext = EXT_MAPA[contentType] ?? "mp4"
-  const objectPath = `videos/${id}/${tipo}/${Date.now()}.${ext}`
+  const ext = EXT_MAPA[contentType] ?? (tipo === "thumbnail" ? "jpg" : "mp4")
+  // Thumbnails ficam em pasta separada; vídeos em videos/{id}/{tipo}/
+  const objectPath = tipo === "thumbnail"
+    ? `thumbnails/${id}/${Date.now()}.${ext}`
+    : `videos/${id}/${tipo}/${Date.now()}.${ext}`
   const bucket = "uploads"
 
   const supabase = createClient(supabaseUrl, supabaseKey)

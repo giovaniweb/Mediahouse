@@ -192,6 +192,37 @@ export default function DemandaDetailPage() {
   }
 
   // ── Upload via URL presigned (bypass limite 4.5MB do Vercel) ────────────
+  // Captura primeiro frame de um arquivo de vídeo (client-side Canvas)
+  async function captureVideoThumbnail(file: File): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      const video = document.createElement("video")
+      video.preload = "metadata"
+      video.muted = true
+      video.playsInline = true
+      const objectUrl = URL.createObjectURL(file)
+      video.src = objectUrl
+      const cleanup = () => URL.revokeObjectURL(objectUrl)
+
+      video.addEventListener("loadedmetadata", () => {
+        video.currentTime = Math.min(1, (video.duration || 2) * 0.1)
+      }, { once: true })
+
+      video.addEventListener("seeked", () => {
+        cleanup()
+        try {
+          const w = Math.min(video.videoWidth || 640, 800)
+          const h = Math.round(w * (video.videoHeight || 360) / (video.videoWidth || 640))
+          const canvas = document.createElement("canvas")
+          canvas.width = w; canvas.height = h
+          canvas.getContext("2d")?.drawImage(video, 0, 0, w, h)
+          canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.8)
+        } catch { resolve(null) }
+      }, { once: true })
+
+      video.addEventListener("error", () => { cleanup(); resolve(null) }, { once: true })
+    })
+  }
+
   async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
     const contentType = file.type || "video/mp4"
 
@@ -230,11 +261,33 @@ export default function DemandaDetailPage() {
       throw new Error(`Falha no upload: ${msg}`)
     }
 
-    // 3. Salva a URL na demanda
+    // 3. Para vídeos finais: captura thumbnail e faz upload separado para Supabase
+    let thumbnailUrl: string | undefined
+    if (tipo === "final") {
+      try {
+        const thumbBlob = await captureVideoThumbnail(file)
+        if (thumbBlob) {
+          const thumbUrlRes = await fetch(
+            `/api/demandas/${id}/upload-url?tipo=thumbnail&contentType=image%2Fjpeg`
+          )
+          if (thumbUrlRes.ok) {
+            const { uploadUrl: thumbUploadUrl, publicUrl: thumbPublicUrl } = await thumbUrlRes.json() as { uploadUrl: string; publicUrl: string }
+            const thumbUpRes = await fetch(thumbUploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": "image/jpeg" },
+              body: thumbBlob,
+            })
+            if (thumbUpRes.ok) thumbnailUrl = thumbPublicUrl
+          }
+        }
+      } catch { /* falha silenciosa — thumbnail não é crítica */ }
+    }
+
+    // 4. Salva a URL na demanda (+ thumbnailUrl se disponível)
     await fetch(`/api/demandas/${id}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: publicUrl, tipo }),
+      body: JSON.stringify({ url: publicUrl, tipo, ...(thumbnailUrl ? { thumbnailUrl } : {}) }),
     })
 
     return publicUrl

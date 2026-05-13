@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
         tipoVideo: true,
         departamento: true,
         linkFinal: true,
+        thumbnailUrl: true,
         finalizadaEm: true,
         updatedAt: true,
         produtos: {
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
       tipoVideo: v.tipoVideo,
       departamento: v.departamento,
       linkFinal: v.linkFinal,
+      thumbnailUrl: v.thumbnailUrl ?? null,
       finalizadaEm: v.finalizadaEm,
       updatedAt: v.updatedAt,
       produto: v.produtos[0]?.produto?.nome ?? null,

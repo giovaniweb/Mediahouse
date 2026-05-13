@@ -250,8 +250,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                   duplex: "half",
                 })
                 if (driveRes.status === 200 || driveRes.status === 201) {
+                  // Atualiza Arquivo.url para URL do Drive (para download), mas mantém linkFinal
+                  // apontando para Supabase (para galeria/player sem restrições de CORS)
                   if (arq) await prisma.arquivo.update({ where: { id: arq.id }, data: { url: publicUrl } })
-                  await prisma.demanda.update({ where: { id: dem.id }, data: { linkFinal: publicUrl } })
                   console.info(`[ParaPostar/Status] Drive upload concluído (${seqStr}): ${publicUrl}`)
                 } else {
                   const errText = await driveRes.text().catch(() => "")

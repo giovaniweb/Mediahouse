@@ -10,6 +10,7 @@ interface Video {
   tipoVideo: string
   departamento: string | null
   linkFinal: string
+  thumbnailUrl: string | null
   finalizadaEm: string | null
   updatedAt: string
   produto: string | null
@@ -163,13 +164,12 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
   const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo)
   const gradient = getPlaceholderGradient(video.id)
 
-  const thumbnailUrl = youtubeId
-    ? `https://i3.ytimg.com/vi/${youtubeId}/hqdefault.jpg`
-    : tipo === "drive"
-      ? getDriveThumbnail(video.linkFinal)
-      : null
+  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube hqdefault, 3) Drive thumbnail, 4) Canvas capture
+  const thumbnailUrl = video.thumbnailUrl
+    ?? (youtubeId ? `https://i3.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null)
+    ?? (tipo === "drive" ? getDriveThumbnail(video.linkFinal) : null)
 
-  // Captura primeiro frame de vídeos Supabase/diretos via Canvas API
+  // Captura primeiro frame de vídeos Supabase sem thumbnail salva
   useEffect(() => {
     if (tipo !== "video" || thumbnailUrl) return
     let cancelled = false

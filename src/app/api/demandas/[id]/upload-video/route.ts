@@ -41,6 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const url: string | null = body.url ?? null
   const tipo = body.tipo as string
   const arquivoId: string | undefined = body.arquivoId
+  const thumbnailUrl: string | undefined = body.thumbnailUrl  // JPEG gerado no cliente
 
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
@@ -61,27 +62,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // ── Salvar nova URL ───────────────────────────────────────────────────────
+  let arqId: string | undefined
   if (url && tipo === "final") {
     // Conta quantos registros já existem para atribuir sequência correta
     const existingCount = await prisma.arquivo.count({
       where: { demandaId: id, tipoArquivo: "final" },
     })
     const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
-    await prisma.arquivo.create({
+    const arq = await prisma.arquivo.create({
       data: {
         demandaId: id,
         tipoArquivo: "final",
         nomeArquivo,
         url,
         sequencia: existingCount + 1,
+        ...(thumbnailUrl ? { thumbnailUrl } : {}),
       },
     })
+    arqId = arq.id
   }
 
   // Sempre atualiza o campo linkFinal/linkBrutos (backward compat)
-  await prisma.demanda.update({ where: { id }, data: { [campo]: url } })
+  // Se thumbnailUrl foi fornecida, salva também em Demanda.thumbnailUrl (acesso rápido para galeria)
+  await prisma.demanda.update({
+    where: { id },
+    data: {
+      [campo]: url,
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    },
+  })
 
-  return NextResponse.json({ ok: true, url, campo })
+  return NextResponse.json({ ok: true, url, campo, arqId })
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
