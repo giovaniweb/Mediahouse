@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Search, Play, ExternalLink, Loader2, Download, Sparkles } from "lucide-react"
+import { Search, Play, ExternalLink, Loader2, Download, Sparkles, Film } from "lucide-react"
 
 interface Video {
   id: string
@@ -155,6 +155,7 @@ function AnimatedCounter({ value }: { value: number }) {
 
 function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => void }) {
   const [playing, setPlaying] = useState(false)
+  const [videoThumb, setVideoThumb] = useState<string | null>(null)
   const { tipo, embedUrl, youtubeId } = parseVideoUrl(video.linkFinal)
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
   const finDate = fmtDate(video.finalizadaEm ?? video.updatedAt)
@@ -166,6 +167,46 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
     : tipo === "drive"
       ? getDriveThumbnail(video.linkFinal)
       : null
+
+  // Captura primeiro frame de vídeos Supabase/diretos via Canvas API
+  useEffect(() => {
+    if (tipo !== "video" || thumbnailUrl) return
+    let cancelled = false
+    const vid = document.createElement("video")
+    vid.crossOrigin = "anonymous"
+    vid.preload = "metadata"
+    vid.muted = true
+    vid.playsInline = true
+
+    const cleanup = () => { vid.src = ""; vid.load() }
+
+    vid.addEventListener("loadedmetadata", () => {
+      vid.currentTime = Math.min(1, vid.duration * 0.1 || 1)
+    }, { once: true })
+
+    vid.addEventListener("seeked", () => {
+      if (cancelled) { cleanup(); return }
+      try {
+        const canvas = document.createElement("canvas")
+        const w = vid.videoWidth || 640
+        const h = vid.videoHeight || 360
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext("2d")
+        if (ctx) {
+          ctx.drawImage(vid, 0, 0, w, h)
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75)
+          if (!cancelled) setVideoThumb(dataUrl)
+        }
+      } catch { /* canvas tainted por CORS — mantém gradiente */ }
+      cleanup()
+    }, { once: true })
+
+    vid.addEventListener("error", cleanup, { once: true })
+    vid.src = embedUrl
+
+    return () => { cancelled = true; cleanup() }
+  }, [tipo, embedUrl, thumbnailUrl])
 
   // Hide YouTube cards: 404 → onError; 120×90 grey placeholder → onLoad check
   function handleThumbError() {
@@ -222,22 +263,21 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
             className={`relative cursor-pointer overflow-hidden ${isPortrait ? "aspect-[9/16]" : "aspect-video"}`}
             onClick={() => setPlaying(true)}
           >
-            {thumbnailUrl ? (
+            {thumbnailUrl || videoThumb ? (
               <img
-                src={thumbnailUrl}
+                src={(thumbnailUrl || videoThumb)!}
                 alt={video.titulo}
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 onError={handleThumbError}
                 onLoad={handleThumbLoad}
               />
             ) : (
-              /* Gradiente com título — para vídeos sem thumbnail */
-              <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
-                <div className="absolute inset-0 flex items-end p-4">
-                  <p className="text-white/90 text-sm font-semibold leading-snug line-clamp-4">
-                    {video.titulo}
-                  </p>
-                </div>
+              /* Gradiente com ícone — para vídeos sem thumbnail ainda */
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex flex-col items-center justify-center gap-3`}>
+                <Film className="w-8 h-8 text-white/20" />
+                <p className="text-white/70 text-xs font-medium px-4 text-center leading-snug line-clamp-3">
+                  {video.titulo}
+                </p>
               </div>
             )}
 
@@ -396,19 +436,27 @@ export default function GaleriaPage() {
     <div className="min-h-screen bg-zinc-950 text-white">
 
       {/* ── Header fixo ───────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-          <a href="/" className="flex items-center gap-2 flex-shrink-0 group">
-            <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" />
-            <span className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">NuFlow</span>
+      <header className="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          {/* Logo */}
+          <a href="/sobre" className="flex items-center gap-2 flex-shrink-0">
+            <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
+            <span className="font-bold text-lg tracking-tight text-white">NuFlow</span>
           </a>
-          <div className="flex-1" />
-          <a
-            href="/dashboard"
-            className="text-xs font-medium px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-          >
-            Acessar Sistema →
-          </a>
+
+          {/* Nav links */}
+          <div className="flex items-center gap-6 text-sm text-zinc-400">
+            <a href="/sobre#como-funciona" className="hover:text-white transition-colors hidden md:block">Como funciona</a>
+            <a href="/sobre#seja-parceiro" className="hover:text-white transition-colors hidden md:block">Seja Parceiro</a>
+            <a href="/galeria" className="text-white font-medium hidden md:block">Galeria</a>
+            <a href="/cadastrar-demanda" className="hover:text-white transition-colors hidden md:block">Abrir Demanda</a>
+            <a
+              href="/login"
+              className="bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 transition-colors"
+            >
+              Acessar Sistema
+            </a>
+          </div>
         </div>
       </header>
 
@@ -450,7 +498,7 @@ export default function GaleriaPage() {
       </section>
 
       {/* ── Filtros sticky ────────────────────────────────────────── */}
-      <div className="sticky top-14 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/40">
+      <div className="sticky top-[65px] z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap gap-2 items-center">
           {/* Busca */}
           <div className="relative flex-1 min-w-56">
