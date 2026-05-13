@@ -467,97 +467,125 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                       </button>
                     )}
 
-                    {/* Vídeo Final — thumbnail card */}
-                    {demanda.linkFinal && (() => {
-                      const thumbUrl = getThumbUrl(demanda.linkFinal)
-                      const { type: videoType } = getEmbedUrl(demanda.linkFinal)
-                      const canDownload = videoType === "video" // mp4 direto
+                    {/* Vídeos Finais — lista multi-vídeo */}
+                    {(() => {
+                      const videosFinais = ((demanda.arquivos ?? []) as Array<{ id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null }>)
+                        .filter(a => a.tipoArquivo === "final")
+                      // Fallback para demandas antigas sem registros Arquivo
+                      const temArquivos = videosFinais.length > 0
+                      const temLinkLegado = !temArquivos && !!demanda.linkFinal
+
+                      if (!temArquivos && !temLinkLegado) return null
                       return (
                         <div className="space-y-1.5">
-                          <div
-                            className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
-                            onClick={() => setPlayerUrl(demanda.linkFinal)}
-                          >
-                            {/* Background: img for YouTube/Drive, video element for direct mp4 */}
-                            {thumbUrl ? (
-                              <img
-                                src={thumbUrl}
-                                alt="thumbnail"
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <video
-                                src={demanda.linkFinal}
-                                preload="metadata"
-                                muted
-                                className="w-full h-full object-cover"
-                                onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }}
-                              />
-                            )}
-
-                            {/* Dark overlay */}
-                            <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
-
-                            {/* Centered play button */}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover/thumb:bg-white/30 group-hover/thumb:scale-110 transition-all duration-200">
-                                <Play className="w-7 h-7 text-white ml-1" fill="white" />
-                              </div>
-                            </div>
-
-                            {/* Label bottom-left + badge de storage */}
-                            <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                              <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">
-                                🎬 Vídeo Final
+                          {/* Título com contador */}
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-zinc-400">🎬 Vídeos Finais</span>
+                            {videosFinais.length > 0 && (
+                              <span className="bg-purple-600/20 text-purple-300 border border-purple-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                {videosFinais.length}
                               </span>
-                              {(() => {
-                                const badge = getStorageBadge(demanda.linkFinal)
-                                return badge ? (
-                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>
-                                    {badge.icon} {badge.label}
-                                  </span>
-                                ) : null
-                              })()}
-                            </div>
-
-                            {/* Botões top-right — aparecem no hover */}
-                            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-all">
-                              {/* Download — só para mp4 direto */}
-                              {canDownload && (
-                                <a
-                                  href={makeDownloadUrl(demanda.linkFinal)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  title="Baixar vídeo"
-                                  className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-blue-400 transition-colors"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                </a>
-                              )}
-                              <button
-                                onClick={e => { e.stopPropagation(); deleteLink("final") }}
-                                disabled={!!deletingLink}
-                                title="Remover link"
-                                className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 transition-colors disabled:opacity-30"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            )}
                           </div>
 
-                          {/* Botão de download abaixo do card — sempre visível para mp4 */}
-                          {canDownload && (
-                            <a
-                              href={makeDownloadUrl(demanda.linkFinal)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors py-1"
-                            >
-                              <Download className="w-3 h-3" />
-                              Baixar vídeo
-                            </a>
-                          )}
+                          {/* Lista de arquivos */}
+                          {temArquivos && videosFinais.map(arq => {
+                            const { type: videoType } = getEmbedUrl(arq.url)
+                            const canDownload = videoType === "video"
+                            const thumbUrl = getThumbUrl(arq.url)
+                            return (
+                              <div key={arq.id} className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
+                                onClick={() => setPlayerUrl(arq.url)}>
+                                {thumbUrl ? (
+                                  <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                                ) : (
+                                  <video src={arq.url} preload="metadata" muted className="w-full h-full object-cover"
+                                    onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
+                                )}
+                                <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover/thumb:bg-white/30 group-hover/thumb:scale-110 transition-all duration-200">
+                                    <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                                  </div>
+                                </div>
+                                {/* Sequencia + badge */}
+                                <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                                  <span className="text-[10px] font-mono font-bold text-white bg-purple-600/80 backdrop-blur-sm px-2 py-0.5 rounded">
+                                    {String(arq.sequencia ?? 0).padStart(3, "0")}
+                                  </span>
+                                  {(() => {
+                                    const badge = getStorageBadge(arq.url)
+                                    return badge ? (
+                                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>
+                                        {badge.icon} {badge.label}
+                                      </span>
+                                    ) : null
+                                  })()}
+                                </div>
+                                {/* Botões hover */}
+                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-all">
+                                  {canDownload && (
+                                    <a href={makeDownloadUrl(arq.url)} target="_blank" rel="noreferrer"
+                                      onClick={e => e.stopPropagation()} title="Baixar"
+                                      className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-blue-400 transition-colors">
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                  <button onClick={e => { e.stopPropagation(); deleteLink("final") }}
+                                    disabled={!!deletingLink} title="Remover"
+                                    className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 transition-colors disabled:opacity-30">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* Fallback legado */}
+                          {temLinkLegado && (() => {
+                            const { type: videoType } = getEmbedUrl(demanda.linkFinal!)
+                            const canDownload = videoType === "video"
+                            const thumbUrl = getThumbUrl(demanda.linkFinal!)
+                            return (
+                              <div className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
+                                onClick={() => setPlayerUrl(demanda.linkFinal!)}>
+                                {thumbUrl ? (
+                                  <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                                ) : (
+                                  <video src={demanda.linkFinal!} preload="metadata" muted className="w-full h-full object-cover"
+                                    onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
+                                )}
+                                <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+                                    <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                                  </div>
+                                </div>
+                                <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                                  <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">🎬 Vídeo Final</span>
+                                  {(() => { const badge = getStorageBadge(demanda.linkFinal!); return badge ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>{badge.icon} {badge.label}</span> : null })()}
+                                </div>
+                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-all">
+                                  {canDownload && (
+                                    <a href={makeDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Baixar"
+                                      className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-blue-400 transition-colors">
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                  <button onClick={e => { e.stopPropagation(); deleteLink("final") }} disabled={!!deletingLink}
+                                    className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 transition-colors disabled:opacity-30">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                {canDownload && (
+                                  <a href={makeDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer"
+                                    className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors py-1 absolute -bottom-6 left-0 right-0">
+                                    <Download className="w-3 h-3" /> Baixar vídeo
+                                  </a>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })()}

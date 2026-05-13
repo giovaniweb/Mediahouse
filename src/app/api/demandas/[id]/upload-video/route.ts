@@ -29,8 +29,8 @@ const EXT_MAPA: Record<string, string> = {
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
-// PATCH: recebe { url, tipo } após upload direto do browser ao Supabase
-// url pode ser null para limpar o campo (exclusão do link)
+// PATCH: recebe { url, tipo, arquivoId? } após upload direto do browser ao Supabase
+// url pode ser null para deletar (por arquivoId específico ou por tipo)
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -40,12 +40,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // url pode ser null para excluir — apenas undefined é inválido
   const url: string | null = body.url ?? null
   const tipo = body.tipo as string
+  const arquivoId: string | undefined = body.arquivoId
 
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
   }
 
   const campo = tipo === "final" ? "linkFinal" : "linkBrutos"
+
+  // ── Delete por arquivoId específico (multi-vídeo) ─────────────────────────
+  if (url === null && arquivoId) {
+    await prisma.arquivo.delete({ where: { id: arquivoId } })
+    // Atualiza linkFinal/linkBrutos para o vídeo mais recente restante (ou null)
+    const ultimo = await prisma.arquivo.findFirst({
+      where: { demandaId: id, tipoArquivo: tipo === "final" ? "final" : "bruto" },
+      orderBy: { sequencia: "desc" },
+    })
+    await prisma.demanda.update({ where: { id }, data: { [campo]: ultimo?.url ?? null } })
+    return NextResponse.json({ ok: true, url: ultimo?.url ?? null, campo })
+  }
+
+  // ── Salvar nova URL ───────────────────────────────────────────────────────
+  if (url && tipo === "final") {
+    // Conta quantos registros já existem para atribuir sequência correta
+    const existingCount = await prisma.arquivo.count({
+      where: { demandaId: id, tipoArquivo: "final" },
+    })
+    const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
+    await prisma.arquivo.create({
+      data: {
+        demandaId: id,
+        tipoArquivo: "final",
+        nomeArquivo,
+        url,
+        sequencia: existingCount + 1,
+      },
+    })
+  }
+
+  // Sempre atualiza o campo linkFinal/linkBrutos (backward compat)
   await prisma.demanda.update({ where: { id }, data: { [campo]: url } })
 
   return NextResponse.json({ ok: true, url, campo })

@@ -416,6 +416,7 @@ model Arquivo {
   url         String
   tamanho     Int?
   origem      String?
+  sequencia   Int?        // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
   createdAt   DateTime    @default(now())
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)

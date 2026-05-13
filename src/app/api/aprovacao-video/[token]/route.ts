@@ -90,7 +90,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         })
         if (!dem) return
 
-        // Constrói nome: [produto]_[titulo]_[codigo].ext
+        // Busca o Arquivo correspondente a este vídeo para obter sequencia
+        const arq = await prisma.arquivo.findFirst({
+          where: { demandaId: dem.id, url: urlVideo, tipoArquivo: "final" },
+        })
+        const seq = arq?.sequencia ?? 1
+        const seqStr = String(seq).padStart(3, "0") // "001", "002", "003"...
+
+        // Constrói nome: [produto]_[titulo]_[codigo]_001.ext
         const sanitize = (s: string) => s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
         const parts: string[] = []
         const prod = dem.produtos?.[0]?.produto?.nome
@@ -98,7 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         parts.push(sanitize(dem.titulo).substring(0, 40))
         parts.push(dem.codigo)
         const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
-        const fileName = `${parts.join("_")}.${ext}`
+        const fileName = `${parts.join("_")}_${seqStr}.${ext}`
 
         // Stream direto: Supabase → Drive (sem buffer intermediário — server-to-server, sem CORS)
         const supaRes = await fetch(urlVideo)
@@ -129,12 +136,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         })
 
         if (driveRes.status === 200 || driveRes.status === 201) {
-          // Atualiza linkFinal com a URL permanente do Drive
+          // Atualiza o Arquivo com a URL permanente do Drive (substitui Supabase URL)
+          if (arq) {
+            await prisma.arquivo.update({
+              where: { id: arq.id },
+              data: { url: publicUrl },
+            })
+          }
+          // Atualiza linkFinal com o Drive URL mais recente (backward compat)
           await prisma.demanda.update({
             where: { id: dem.id },
             data: { linkFinal: publicUrl },
           })
-          console.info(`[AprovacaoVideo] Drive upload concluído: ${publicUrl}`)
+          console.info(`[AprovacaoVideo] Drive upload concluído (${seqStr}): ${publicUrl}`)
         } else {
           const errText = await driveRes.text().catch(() => "")
           console.error(`[AprovacaoVideo] Drive retornou HTTP ${driveRes.status}:`, errText.slice(0, 300))

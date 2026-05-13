@@ -18,7 +18,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       gestor: { select: { id: true, nome: true } },
       videomaker: { select: { id: true, nome: true, cidade: true, telefone: true } },
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
-      arquivos: { orderBy: { createdAt: "desc" } },
+      arquivos: {
+        orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
+        select: { id: true, tipoArquivo: true, url: true, nomeArquivo: true, sequencia: true, createdAt: true },
+      },
       historicos: {
         include: { usuario: { select: { id: true, nome: true } } },
         orderBy: { createdAt: "desc" },
