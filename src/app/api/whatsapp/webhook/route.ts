@@ -593,47 +593,65 @@ async function processarMensagem(body: unknown) {
 
   // ── Comandos estruturados (resposta rápida sem IA) ──────────────────────
 
-  if (textoUpper === "SIM" || textoUpper === "CONFIRMAR" || textoUpper === "SIM!" || textoUpper === "TOPO" || textoUpper === "TOPEI" || /^(SIM|CONFIRMAR|TOPO|TOPEI)[.!,\s]*$/.test(textoUpper)) {
-    if (videomaker) {
-      const demanda = await prisma.demanda.findFirst({
-        where: { videomakerId: videomaker.id, statusInterno: "videomaker_notificado" },
+  // ── Helper: busca demanda com videomaker_notificado por videomakerId OU por mensagem enviada ──
+  // Fallback essencial: quando o videomaker não está cadastrado no Prisma (ou o telefone não bate),
+  // buscamos pela última mensagem SAÍDA enviada a este número com demanda em videomaker_notificado.
+  async function encontrarDemandaNotificada(vmId?: string): Promise<import("@prisma/client").Demanda | null> {
+    if (vmId) {
+      const d = await prisma.demanda.findFirst({
+        where: { videomakerId: vmId, statusInterno: "videomaker_notificado" },
         orderBy: { createdAt: "desc" },
       })
-      if (demanda) {
-        await prisma.$transaction([
-          prisma.demanda.update({ where: { id: demanda.id }, data: { statusInterno: "videomaker_aceitou" } }),
-          prisma.historicoStatus.create({
-            data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_aceitou", origem: "whatsapp", observacao: "Confirmado via WhatsApp" },
-          }),
-        ])
-        await sendWhatsappMessage(replyJid, `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`, demanda.id)
+      if (d) return d
+    }
+    // Fallback: procura na última mensagem saída para este telefone que tem demandaId vinculada
+    const msgRecente = await prisma.mensagemWhatsapp.findFirst({
+      where: {
+        direcao: "saida",
+        telefone: { contains: tel8 },
+        demandaId: { not: null },
+        demanda: { statusInterno: "videomaker_notificado" },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { demandaId: true },
+    })
+    if (!msgRecente?.demandaId) return null
+    return prisma.demanda.findFirst({
+      where: { id: msgRecente.demandaId, statusInterno: "videomaker_notificado" },
+    })
+  }
 
-        // Notifica admin
-        await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker ACEITOU captação")
-        return
-      }
+  if (textoUpper === "SIM" || textoUpper === "CONFIRMAR" || textoUpper === "SIM!" || textoUpper === "TOPO" || textoUpper === "TOPEI" || /^(SIM|CONFIRMAR|TOPO|TOPEI)[.!,\s]*$/.test(textoUpper)) {
+    const demanda = await encontrarDemandaNotificada(videomaker?.id)
+    if (demanda) {
+      await prisma.$transaction([
+        prisma.demanda.update({ where: { id: demanda.id }, data: { statusInterno: "videomaker_aceitou" } }),
+        prisma.historicoStatus.create({
+          data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_aceitou", origem: "whatsapp", observacao: "Confirmado via WhatsApp" },
+        }),
+      ])
+      await sendWhatsappMessage(replyJid, `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`, demanda.id)
+
+      // Notifica admin
+      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker ACEITOU captação")
+      return
     }
   }
 
   if (textoUpper === "NÃO" || textoUpper === "NAO" || textoUpper === "RECUSAR" || textoUpper === "RECUSO") {
-    if (videomaker) {
-      const demanda = await prisma.demanda.findFirst({
-        where: { videomakerId: videomaker.id, statusInterno: "videomaker_notificado" },
-        orderBy: { createdAt: "desc" },
-      })
-      if (demanda) {
-        await prisma.$transaction([
-          prisma.demanda.update({ where: { id: demanda.id }, data: { statusInterno: "videomaker_recusou", videomakerId: null } }),
-          prisma.historicoStatus.create({
-            data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_recusou", origem: "whatsapp", observacao: "Recusado via WhatsApp" },
-          }),
-        ])
-        await sendWhatsappMessage(replyJid, `Entendido. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`, demanda.id)
+    const demanda = await encontrarDemandaNotificada(videomaker?.id)
+    if (demanda) {
+      await prisma.$transaction([
+        prisma.demanda.update({ where: { id: demanda.id }, data: { statusInterno: "videomaker_recusou", videomakerId: null } }),
+        prisma.historicoStatus.create({
+          data: { demandaId: demanda.id, statusAnterior: "videomaker_notificado", statusNovo: "videomaker_recusou", origem: "whatsapp", observacao: "Recusado via WhatsApp" },
+        }),
+      ])
+      await sendWhatsappMessage(replyJid, `Entendido. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`, demanda.id)
 
-        // Notifica admin
-        await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker RECUSOU captação — precisa escalar outro")
-        return
-      }
+      // Notifica admin
+      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker RECUSOU captação — precisa escalar outro")
+      return
     }
   }
 
