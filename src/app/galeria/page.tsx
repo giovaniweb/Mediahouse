@@ -78,24 +78,26 @@ function parseVideoUrl(url: string): {
   tipo: "youtube" | "drive" | "video" | "external"
   embedUrl: string
   youtubeId: string | null
+  isYoutubeShorts: boolean
 } {
   try {
     const u = new URL(url)
     if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
       const vid = extractYoutubeId(url) ?? ""
-      return { tipo: "youtube", embedUrl: `https://www.youtube.com/embed/${vid}?rel=0&autoplay=1`, youtubeId: vid }
+      const isShorts = u.hostname.includes("youtube.com") && u.pathname.includes("/shorts/")
+      return { tipo: "youtube", embedUrl: `https://www.youtube.com/embed/${vid}?rel=0&autoplay=1`, youtubeId: vid, isYoutubeShorts: isShorts }
     }
     if (u.hostname.includes("drive.google.com")) {
       const match = u.pathname.match(/\/file\/d\/([^/]+)/)
       if (match) {
-        return { tipo: "drive", embedUrl: `https://drive.google.com/file/d/${match[1]}/preview`, youtubeId: null }
+        return { tipo: "drive", embedUrl: `https://drive.google.com/file/d/${match[1]}/preview`, youtubeId: null, isYoutubeShorts: false }
       }
     }
     if (/\.(mp4|webm|mov|avi)(\?|$)/i.test(url)) {
-      return { tipo: "video", embedUrl: url, youtubeId: null }
+      return { tipo: "video", embedUrl: url, youtubeId: null, isYoutubeShorts: false }
     }
   } catch { /* invalid url */ }
-  return { tipo: "external", embedUrl: url, youtubeId: null }
+  return { tipo: "external", embedUrl: url, youtubeId: null, isYoutubeShorts: false }
 }
 
 function getDriveThumbnail(url: string): string | null {
@@ -158,17 +160,18 @@ function AnimatedCounter({ value }: { value: number }) {
 function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => void }) {
   const [playing, setPlaying] = useState(false)
   const [thumbFailed, setThumbFailed] = useState(false)
-  const { tipo, embedUrl, youtubeId } = parseVideoUrl(video.linkFinal)
+  const { tipo, embedUrl, youtubeId, isYoutubeShorts } = parseVideoUrl(video.linkFinal)
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
   const finDate = fmtDate(video.finalizadaEm ?? video.updatedAt)
-  const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo)
+  const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo) || isYoutubeShorts
   const gradient = getPlaceholderGradient(video.id)
 
-  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube hqdefault, 3) Drive thumbnail (via proxy)
+  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube mqdefault (16:9 real), 3) Drive thumbnail (via proxy)
   // Para Supabase sem thumbnail salva: elemento <video preload="metadata"> mostra o 1º frame nativamente
   // (sem canvas — evita problema de CORS com toDataURL)
+  // mqdefault.jpg (320x180) é genuinamente 16:9; hqdefault.jpg (480x360) tem barras pretas e parece quadrado
   const thumbnailUrl = video.thumbnailUrl
-    ?? (youtubeId ? `https://i3.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null)
+    ?? (youtubeId ? `https://i3.ytimg.com/vi/${youtubeId}/mqdefault.jpg` : null)
     ?? (tipo === "drive" ? getDriveThumbnail(video.linkFinal) : null)
 
   // YouTube: esconde card se vídeo indisponível (404 ou placeholder cinza 120px)

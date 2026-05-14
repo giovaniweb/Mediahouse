@@ -334,8 +334,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
             templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao),
             id
           ).catch(() => null)
-          // Auto-mudar status para "videomaker_notificado" (aguardando confirmação)
-          autoStatusVideomakerNotificado = true
         } else {
           // Demandas normais: template padrão
           void sendWhatsappMessage(
@@ -344,6 +342,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
             id
           ).catch(() => null)
         }
+        // Sempre mudar status para "videomaker_notificado" quando VM é atribuído e notificado
+        // (seja cobertura ou demanda normal) — permite que o "SIM" / "NÃO" via WhatsApp funcione
+        autoStatusVideomakerNotificado = true
       }
     }
   }
