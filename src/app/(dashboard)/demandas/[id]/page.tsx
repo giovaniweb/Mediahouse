@@ -10,6 +10,7 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
+  CalendarRange, ArrowUpRight,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -511,6 +512,24 @@ export default function DemandaDetailPage() {
   const [quickBrutosInput, setQuickBrutosInput] = useState("")
   const [showQuickBrutos, setShowQuickBrutos] = useState(false)
   const [savingBrutos, setSavingBrutos] = useState(false)
+
+  // ── Converter em Evento de Cobertura ────────────────────────────────────
+  const [convertendoEvento, setConvertendoEvento] = useState(false)
+  async function converterEmEvento() {
+    if (!confirm("Criar um Evento de Cobertura a partir desta demanda?\n\nOs dados (título, local, data, videomaker) serão copiados para o novo evento.")) return
+    setConvertendoEvento(true)
+    try {
+      const res = await fetch(`/api/demandas/${id}/converter-evento`, { method: "POST" })
+      const json = await res.json().catch(() => ({} as { cobertura?: { id: string }; error?: string }))
+      if (!res.ok) throw new Error(json.error ?? "Erro ao converter")
+      toast.success("✅ Evento criado! Redirecionando...")
+      mutate()
+      setTimeout(() => router.push(`/eventos/${json.cobertura.id}`), 1200)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao converter em evento")
+      setConvertendoEvento(false)
+    }
+  }
 
   // ── Pastas de Cobertura ──────────────────────────────────────────────────
   const [editingFolder, setEditingFolder] = useState<"brutos" | "final" | null>(null)
@@ -1164,6 +1183,47 @@ export default function DemandaDetailPage() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── Converter em Evento ──────────────────────────────────────── */}
+          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+              <h2 className="font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+                <CalendarRange className="w-4 h-4 text-purple-400" /> Evento de Cobertura
+              </h2>
+              {demanda.coberturaId ? (
+                /* Já vinculado */
+                <div className="flex items-center justify-between bg-purple-600/10 border border-purple-600/20 rounded-lg px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                    <span className="text-sm text-purple-300 font-medium">Evento criado</span>
+                  </div>
+                  <Link
+                    href={`/eventos/${demanda.coberturaId}`}
+                    className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    Abrir Evento <ArrowUpRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              ) : (
+                /* Ainda não convertida */
+                <div>
+                  <p className="text-xs text-zinc-500 mb-3">
+                    Converta esta demanda em um Evento de Cobertura para gerenciar uploads por dia, checklist de equipamentos e relatório de produção.
+                  </p>
+                  <button
+                    onClick={converterEmEvento}
+                    disabled={convertendoEvento}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {convertendoEvento
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Criando evento...</>
+                      : <><CalendarRange className="w-3.5 h-3.5" /> Converter em Evento</>
+                    }
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -368,6 +368,10 @@ model Demanda {
   notasFiscais       NotaFiscalUpload[]
   ideia              IdeiaVideo?
 
+  // Evento de cobertura vinculado (quando convertida)
+  coberturaId        String?
+  coberturaEvento    EventoCobertura?   @relation(fields: [coberturaId], references: [id])
+
   @@map("demandas")
 }
 
@@ -1150,6 +1154,7 @@ model EventoCobertura {
   uploads    EventoCoberturaUpload[]
   album      EventoCoberturaAlbum[]
   log        EventoCoberturaLog[]
+  demandas   Demanda[]
 
   @@map("coberturas")
 }
