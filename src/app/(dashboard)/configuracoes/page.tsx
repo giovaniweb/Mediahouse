@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { Users, MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
+type Tab = "usuarios" | "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
 
 const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
 const TIPO_LABEL: Record<string, string> = {
@@ -684,512 +684,6 @@ function TabWhatsapp() {
           ))}
         </ul>
       </div>
-    </div>
-  )
-}
-
-// ─── Trello ───────────────────────────────────────────────────────────────────
-
-function TabTrello() {
-  const { data, mutate } = useSWR<{ config: { apiKey: string; token: string; boardId: string; ativo: boolean } | null }>(
-    "/api/configuracoes/trello", fetcher
-  )
-  const cfg = data?.config
-  const [form, setForm] = useState({ apiKey: cfg?.apiKey ?? "", token: cfg?.token ?? "", boardId: cfg?.boardId ?? "" })
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
-
-  async function salvar() {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/configuracoes/trello", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      setMsg({ type: "ok", text: "Configuração salva!" })
-      mutate()
-    } catch (e: unknown) {
-      setMsg({ type: "err", text: e instanceof Error ? e.message : "Erro" })
-    } finally { setLoading(false) }
-  }
-
-  async function sincronizar() {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/configuracoes/trello/sync", { method: "POST" })
-      const json = await res.json()
-      if (json.ok) setMsg({ type: "ok", text: `Sincronizado! ${json.count ?? 0} cartão(ões) atualizados.` })
-      else setMsg({ type: "err", text: json.error ?? "Erro" })
-    } catch {
-      setMsg({ type: "err", text: "Erro ao sincronizar" })
-    } finally { setLoading(false) }
-  }
-
-  return (
-    <div className="space-y-4 max-w-lg">
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-        <Trello className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-        <div className="text-sm text-blue-700">
-          <p className="font-semibold">Trello Integration</p>
-          <p className="text-xs mt-1">Sincronize automaticamente as demandas com seu quadro do Trello. As mudanças de status no NuFlow atualizam os cartões do Trello em tempo real.</p>
-        </div>
-      </div>
-
-      {msg && (
-        <div className={cn("text-sm px-3 py-2 rounded-lg", msg.type === "ok" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700")}>
-          {msg.text}
-        </div>
-      )}
-
-      {cfg?.ativo && (
-        <div className="flex items-center gap-2 text-xs font-medium text-green-600">
-          <CheckCircle2 className="w-4 h-4" /> Integração ativa
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs font-medium text-zinc-500 block mb-1">API Key *</label>
-          <input
-            type="password"
-            className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
-            value={form.apiKey}
-            onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
-            placeholder="Trello API Key"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-zinc-500 block mb-1">Token *</label>
-          <input
-            type="password"
-            className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
-            value={form.token}
-            onChange={e => setForm(f => ({ ...f, token: e.target.value }))}
-            placeholder="Trello Token"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-zinc-500 block mb-1">Board ID *</label>
-          <input
-            className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
-            value={form.boardId}
-            onChange={e => setForm(f => ({ ...f, boardId: e.target.value }))}
-            placeholder="abc12345"
-          />
-          <p className="text-[11px] text-zinc-400 mt-1">Encontre no URL do seu quadro: trello.com/b/<strong>BOARD_ID</strong>/nome</p>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <button onClick={salvar} disabled={loading} className="bg-zinc-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-zinc-700 disabled:opacity-50">Salvar</button>
-        {cfg?.ativo && (
-          <button onClick={sincronizar} disabled={loading} className="flex items-center gap-1.5 border border-zinc-200 text-sm px-4 py-2 rounded-lg hover:bg-zinc-50 disabled:opacity-50">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /> Sincronizar Agora
-          </button>
-        )}
-      </div>
-
-      <div className="border-t border-zinc-100 pt-4">
-        <p className="text-xs font-semibold text-zinc-500 mb-2">Mapeamento de colunas (StatusVisível → Lista Trello):</p>
-        <div className="grid grid-cols-2 gap-1 text-xs text-zinc-500">
-          {[
-            ["Entrada", "📥 Entrada"],
-            ["Produção", "🎬 Em Produção"],
-            ["Edição", "✂️ Edição"],
-            ["Aprovação", "✅ Aprovação"],
-            ["Para Postar", "📤 Para Postar"],
-            ["Finalizado", "🏁 Finalizado"],
-          ].map(([a, b]) => (
-            <div key={a} className="flex items-center gap-1">
-              <span className="font-medium text-zinc-600">{a}</span>
-              <span className="text-zinc-300">→</span>
-              <span>{b}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ─── Import JSON Section ──────────────────────────────────── */}
-      <TrelloJsonImport />
-    </div>
-  )
-}
-
-// ─── Trello JSON File Import ─────────────────────────────────────────────────
-
-interface TrelloLabel {
-  name?: string
-  color?: string
-}
-
-interface TrelloCard {
-  id: string
-  name: string
-  desc?: string
-  idList: string
-  labels?: TrelloLabel[]
-  due?: string | null
-}
-
-interface TrelloList {
-  id: string
-  name: string
-}
-
-interface ListPreview {
-  listName: string
-  mappedStatus: string
-  cardCount: number
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  entrada: "Entrada",
-  producao: "Produção",
-  edicao: "Edição",
-  aprovacao: "Aprovação",
-  para_postar: "Para Postar",
-  finalizado: "Finalizado",
-}
-
-const LIST_KEYWORDS_CLIENT: Array<{ keywords: string[]; status: string }> = [
-  { keywords: ["entrada", "inbox", "backlog", "novo", "novas", "new"], status: "entrada" },
-  { keywords: ["produção", "producao", "doing", "andamento", "em progresso", "in progress"], status: "producao" },
-  { keywords: ["edição", "edicao", "edit", "editing"], status: "edicao" },
-  { keywords: ["revisão", "revisao", "review", "aprovação", "aprovacao", "approv"], status: "aprovacao" },
-  { keywords: ["para postar", "post", "publicar", "agendar", "schedule"], status: "para_postar" },
-  { keywords: ["entregue", "done", "concluído", "concluido", "finalizado", "finished", "complete"], status: "finalizado" },
-]
-
-function resolveStatusClient(listName: string): string {
-  const lower = listName.toLowerCase().trim()
-  for (const rule of LIST_KEYWORDS_CLIENT) {
-    for (const kw of rule.keywords) {
-      if (lower.includes(kw)) return rule.status
-    }
-  }
-  return "entrada"
-}
-
-interface ImportResult {
-  ok: boolean
-  imported: number
-  skipped: number
-  total: number
-  errors: string[]
-  details: Array<{ card: string; status: "imported" | "skipped" | "error"; info?: string }>
-}
-
-function TrelloJsonImport() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [dragOver, setDragOver] = useState(false)
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [trelloData, setTrelloData] = useState<{ lists: TrelloList[]; cards: TrelloCard[] } | null>(null)
-  const [preview, setPreview] = useState<ListPreview[] | null>(null)
-  const [totalCards, setTotalCards] = useState(0)
-  const [importing, setImporting] = useState(false)
-  const [progress, setProgress] = useState<string | null>(null)
-  const [result, setResult] = useState<ImportResult | null>(null)
-  const [parseError, setParseError] = useState<string | null>(null)
-
-  const processFile = useCallback((file: File) => {
-    setResult(null)
-    setParseError(null)
-    setPreview(null)
-    setTrelloData(null)
-    setFileName(file.name)
-
-    if (!file.name.endsWith(".json")) {
-      setParseError("O arquivo precisa ser .json")
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string)
-
-        if (!Array.isArray(json.lists) || !Array.isArray(json.cards)) {
-          setParseError("Arquivo JSON inválido. Deve conter 'lists' e 'cards' (export do Trello).")
-          return
-        }
-
-        const lists: TrelloList[] = json.lists
-        const cards: TrelloCard[] = json.cards
-
-        // Build preview: group cards by list
-        const listMap = new Map<string, string>(lists.map((l) => [l.id, l.name]))
-        const countByList = new Map<string, number>()
-        for (const card of cards) {
-          const listId = card.idList
-          countByList.set(listId, (countByList.get(listId) ?? 0) + 1)
-        }
-
-        const previewData: ListPreview[] = lists
-          .filter((l) => (countByList.get(l.id) ?? 0) > 0)
-          .map((l) => ({
-            listName: l.name,
-            mappedStatus: resolveStatusClient(l.name),
-            cardCount: countByList.get(l.id) ?? 0,
-          }))
-
-        setTrelloData({ lists, cards })
-        setPreview(previewData)
-        setTotalCards(cards.length)
-      } catch {
-        setParseError("Erro ao ler o JSON. Verifique se o arquivo é um export válido do Trello.")
-      }
-    }
-    reader.readAsText(file)
-  }, [])
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) processFile(file)
-  }, [processFile])
-
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
-  }, [processFile])
-
-  async function importar() {
-    if (!trelloData) return
-    setImporting(true)
-    setProgress("Enviando dados...")
-    setResult(null)
-
-    try {
-      const res = await fetch("/api/configuracoes/trello/import-json", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(trelloData),
-      })
-
-      const json: ImportResult = await res.json()
-
-      if (!res.ok) {
-        setParseError(json.errors?.[0] ?? "Erro ao importar")
-        return
-      }
-
-      setResult(json)
-      setProgress(null)
-      toast.success(`${json.imported} card(s) importado(s)!`)
-    } catch {
-      setParseError("Erro de conexão ao importar")
-    } finally {
-      setImporting(false)
-      setProgress(null)
-    }
-  }
-
-  function resetAll() {
-    setFileName(null)
-    setTrelloData(null)
-    setPreview(null)
-    setTotalCards(0)
-    setResult(null)
-    setParseError(null)
-    setProgress(null)
-    if (fileInputRef.current) fileInputRef.current.value = ""
-  }
-
-  return (
-    <div className="border-t border-zinc-800 pt-6 mt-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <FileJson className="w-5 h-5 text-emerald-400" />
-        <h3 className="text-sm font-semibold text-zinc-200">Importar do Trello (JSON)</h3>
-      </div>
-
-      <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 text-xs text-zinc-400 space-y-1">
-        <p className="font-medium text-zinc-300">Como exportar do Trello:</p>
-        <ol className="list-decimal list-inside space-y-0.5">
-          <li>Abra seu board no Trello</li>
-          <li>Clique no menu <span className="text-zinc-300 font-medium">(... Mostrar menu)</span></li>
-          <li>Clique em <span className="text-zinc-300 font-medium">Mais</span> → <span className="text-zinc-300 font-medium">Imprimir e exportar</span></li>
-          <li>Selecione <span className="text-zinc-300 font-medium">Exportar como JSON</span></li>
-          <li>Faça upload do arquivo abaixo</li>
-        </ol>
-      </div>
-
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors",
-          dragOver
-            ? "border-emerald-500 bg-emerald-500/10"
-            : "border-zinc-700 hover:border-zinc-500 bg-zinc-900/50"
-        )}
-      >
-        <Upload className={cn("w-8 h-8", dragOver ? "text-emerald-400" : "text-zinc-500")} />
-        {fileName ? (
-          <div className="text-center">
-            <p className="text-sm text-zinc-200 font-medium">{fileName}</p>
-            <p className="text-xs text-zinc-500 mt-1">Clique para trocar o arquivo</p>
-          </div>
-        ) : (
-          <div className="text-center">
-            <p className="text-sm text-zinc-300">Arraste o arquivo JSON aqui</p>
-            <p className="text-xs text-zinc-500 mt-1">ou clique para selecionar</p>
-          </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-      </div>
-
-      {/* Parse error */}
-      {parseError && (
-        <div className="bg-red-500/10 border border-red-800 rounded-lg px-4 py-3 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-300">{parseError}</p>
-        </div>
-      )}
-
-      {/* Preview table */}
-      {preview && preview.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
-            Preview — {totalCards} card(s) encontrado(s)
-          </p>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Lista do Trello</th>
-                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Status no NuFlow</th>
-                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Cards</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.map((row, i) => (
-                  <tr key={i} className="border-b border-zinc-800/50 last:border-0">
-                    <td className="px-4 py-2 text-zinc-300">{row.listName}</td>
-                    <td className="px-4 py-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[11px]">
-                        {STATUS_LABEL[row.mappedStatus] ?? row.mappedStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right text-zinc-400 font-mono">{row.cardCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Import button */}
-          {!result && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={importar}
-                disabled={importing}
-                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
-              >
-                {importing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Importando...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    Importar {totalCards} card(s)
-                  </>
-                )}
-              </button>
-              <button
-                onClick={resetAll}
-                disabled={importing}
-                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-
-          {/* Progress */}
-          {progress && (
-            <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-              {progress}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Results */}
-      {result && (
-        <div className="space-y-3">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
-            <p className="text-sm font-semibold text-zinc-200">Resultado da importação</p>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-emerald-500/10 border border-emerald-800 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-400">{result.imported}</p>
-                <p className="text-[11px] text-emerald-500 mt-0.5">Importados</p>
-              </div>
-              <div className="bg-amber-500/10 border border-amber-800 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-amber-400">{result.skipped}</p>
-                <p className="text-[11px] text-amber-500 mt-0.5">Já existentes</p>
-              </div>
-              <div className="bg-red-500/10 border border-red-800 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-400">{result.errors.length}</p>
-                <p className="text-[11px] text-red-500 mt-0.5">Erros</p>
-              </div>
-            </div>
-
-            {result.errors.length > 0 && (
-              <div className="bg-red-500/5 border border-red-900 rounded-lg p-3">
-                <p className="text-xs font-semibold text-red-400 mb-1">Erros:</p>
-                <ul className="text-xs text-red-300 space-y-0.5">
-                  {result.errors.map((err, i) => (
-                    <li key={i} className="truncate">• {err}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {result.details.length > 0 && (
-              <details className="group">
-                <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300 transition-colors">
-                  Ver detalhes ({result.details.length} itens)
-                </summary>
-                <div className="mt-2 max-h-48 overflow-y-auto space-y-0.5">
-                  {result.details.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs py-0.5">
-                      {d.status === "imported" && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />}
-                      {d.status === "skipped" && <XCircle className="w-3 h-3 text-amber-400 shrink-0" />}
-                      {d.status === "error" && <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />}
-                      <span className="text-zinc-300 truncate flex-1">{d.card}</span>
-                      {d.info && <span className="text-zinc-600 text-[11px] shrink-0">{d.info}</span>}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
-          </div>
-
-          <button
-            onClick={resetAll}
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Importar outro arquivo
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -2657,7 +2151,6 @@ export default function ConfiguracoesPage() {
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
-    { id: "trello", label: "Trello", icon: Trello },
     { id: "depoimentos", label: "Depoimentos", icon: Video },
   ]
 
@@ -2684,49 +2177,54 @@ export default function ConfiguracoesPage() {
         <DriveCallbackHandler onSetTab={setTab} />
       </Suspense>
       <main className="flex-1 p-6">
-        <div className="max-w-4xl mx-auto">
-          {/* Tabs */}
-          <div className="flex gap-0 mb-6 border-b border-zinc-800 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {tabs.map((t) => {
-              const Icon = t.icon
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px",
-                    tab === t.id ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
+        <div className="max-w-5xl mx-auto flex gap-6">
+          {/* Sidebar Nav */}
+          <nav className="w-48 shrink-0">
+            <div className="sticky top-6 space-y-0.5">
+              {tabs.map((t) => {
+                const Icon = t.icon
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors text-left",
+                      tab === t.id
+                        ? "bg-zinc-800 text-white font-medium"
+                        : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                    )}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
 
           {/* Content */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-            {tab === "usuarios" && <TabUsuarios />}
-            {tab === "meu_perfil" && <TabMeuPerfil />}
-            {tab === "whatsapp" && (
-              <div className="space-y-8">
-                <TabWhatsapp />
-                <div className="border-t border-zinc-800 pt-6">
-                  <p className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-                    <QrCode className="h-4 w-4 text-zinc-500" />
-                    Conectar / Reconectar WhatsApp
-                  </p>
-                  <TabWhatsappQR />
+          <div className="flex-1 min-w-0">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              {tab === "usuarios" && <TabUsuarios />}
+              {tab === "meu_perfil" && <TabMeuPerfil />}
+              {tab === "whatsapp" && (
+                <div className="space-y-8">
+                  <TabWhatsapp />
+                  <div className="border-t border-zinc-800 pt-6">
+                    <p className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+                      <QrCode className="h-4 w-4 text-zinc-500" />
+                      Conectar / Reconectar WhatsApp
+                    </p>
+                    <TabWhatsappQR />
+                  </div>
                 </div>
-              </div>
-            )}
-            {tab === "email" && <TabEmail />}
-            {tab === "parametros" && <TabParametros />}
-            {tab === "trello" && <TabTrello />}
-            {tab === "empresa" && <TabEmpresa />}
-            {tab === "drive" && <TabGoogleDrive />}
-            {tab === "depoimentos" && <TabDepoimentos />}
+              )}
+              {tab === "email" && <TabEmail />}
+              {tab === "parametros" && <TabParametros />}
+              {tab === "empresa" && <TabEmpresa />}
+              {tab === "drive" && <TabGoogleDrive />}
+              {tab === "depoimentos" && <TabDepoimentos />}
+            </div>
           </div>
         </div>
       </main>
