@@ -1877,7 +1877,10 @@ function TabDepoimentos() {
     setUploadProgress(0)
     try {
       const urlRes = await fetch(`/api/admin/depoimentos/upload-url?contentType=${encodeURIComponent(file.type || "video/mp4")}`)
-      if (!urlRes.ok) { toast.error("Erro ao gerar URL de upload"); return }
+      if (!urlRes.ok) {
+        const errData = await urlRes.json().catch(() => ({ error: `HTTP ${urlRes.status}` }))
+        throw new Error(errData.error ?? "Erro ao gerar URL de upload")
+      }
       const { uploadUrl, publicUrl } = await urlRes.json()
 
       await new Promise<void>((resolve, reject) => {
