@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive } from "lucide-react"
+import { Users, MessageCircle, Trello, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive"
+type Tab = "usuarios" | "whatsapp" | "trello" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
 
 const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
 const TIPO_LABEL: Record<string, string> = {
@@ -1375,6 +1375,8 @@ function TabParametros() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState("")
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
 
   async function criar() {
     if (!newLabel.trim()) return
@@ -1509,6 +1511,50 @@ function TabParametros() {
             className="flex items-center gap-1.5 bg-white text-zinc-900 text-sm font-medium px-3 py-2 rounded-lg hover:bg-zinc-100 disabled:opacity-40">
             <Plus className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Backfill de custos retroativos */}
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-orange-400" /> Gerar Custos Retroativos
+            </h4>
+            <p className="text-xs text-zinc-500 mt-1">
+              Cria registros de custo para demandas finalizadas que ainda não têm custo vinculado.
+              Usa o <strong className="text-zinc-400">valor/diária</strong> de cada videomaker.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={async () => {
+                setBackfilling(true)
+                setBackfillResult(null)
+                try {
+                  const res = await fetch("/api/admin/backfill-custos", { method: "POST" })
+                  const json = await res.json()
+                  if (!res.ok) throw new Error(json.error ?? "Erro ao executar backfill")
+                  setBackfillResult({ processados: json.processados, pulados: json.pulados, erros: json.erros })
+                  toast.success(`✅ Backfill: ${json.processados} custo(s) criado(s)!`)
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Erro no backfill")
+                } finally {
+                  setBackfilling(false)
+                }
+              }}
+              disabled={backfilling}
+              className="inline-flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+              {backfilling ? "Processando…" : "⚙️ Gerar custos retroativos"}
+            </button>
+            {backfillResult && (
+              <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
+                {backfillResult.processados} criado(s) · {backfillResult.pulados} já existiam{backfillResult.erros > 0 ? ` · ${backfillResult.erros} erro(s)` : ""}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2049,9 +2095,6 @@ function TabGoogleDrive() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ processados: number; erros: number } | null>(null)
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillResult, setBackfillResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
-
   if (empresa && !loaded) {
     // Mostrar URL completa da pasta se tiver ID salvo
     setFolderInput(
@@ -2299,46 +2342,281 @@ function TabGoogleDrive() {
         )}
       </div>
 
-      {/* Backfill de custos retroativos */}
-      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
-        <div>
-          <h4 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-orange-400" /> Gerar Custos Retroativos
-          </h4>
-          <p className="text-xs text-zinc-500 mt-1">
-            Cria registros de custo para demandas finalizadas que ainda não têm custo vinculado.
-            Usa o <strong className="text-zinc-400">valor/diária</strong> de cada videomaker.
-          </p>
+    </div>
+  )
+}
+
+// ─── Depoimentos ────────────────────────────────────────────────────────────
+
+interface DepoimentoAdmin {
+  id: string
+  nome: string
+  cidade: string | null
+  videoUrl: string
+  thumbnailUrl: string | null
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+}
+
+function TabDepoimentos() {
+  const { data, mutate } = useSWR<{ depoimentos: DepoimentoAdmin[] }>("/api/admin/depoimentos", fetcher)
+  const depoimentos = data?.depoimentos ?? []
+
+  // Form state
+  const [nome, setNome] = useState("")
+  const [cidade, setCidade] = useState("")
+  const [videoUrl, setVideoUrl] = useState("")
+  const [descricao, setDescricao] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editFields, setEditFields] = useState<Partial<DepoimentoAdmin>>({})
+  const [editSaving, setEditSaving] = useState(false)
+
+  async function uploadVideo(file: File) {
+    setUploading(true)
+    setUploadProgress(0)
+    try {
+      const urlRes = await fetch(`/api/admin/depoimentos/upload-url?contentType=${encodeURIComponent(file.type || "video/mp4")}`)
+      if (!urlRes.ok) { toast.error("Erro ao gerar URL de upload"); return }
+      const { uploadUrl, publicUrl } = await urlRes.json()
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)))
+        xhr.onerror = () => reject(new Error("Falha na conexão"))
+        xhr.open("PUT", uploadUrl)
+        xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
+        xhr.send(file)
+      })
+
+      setVideoUrl(publicUrl)
+      toast.success("Vídeo enviado!")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao fazer upload")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function salvar() {
+    if (!nome.trim() || !videoUrl.trim()) { toast.error("Nome e URL do vídeo são obrigatórios"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/admin/depoimentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: nome.trim(), cidade: cidade.trim(), videoUrl: videoUrl.trim(), descricao: descricao.trim() }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Erro") }
+      toast.success("Depoimento adicionado!")
+      setNome(""); setCidade(""); setVideoUrl(""); setDescricao("")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggleAtivo(dep: DepoimentoAdmin) {
+    await fetch(`/api/admin/depoimentos/${dep.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: !dep.ativo }),
+    })
+    mutate()
+  }
+
+  async function moverOrdem(dep: DepoimentoAdmin, dir: "up" | "down") {
+    const sorted = [...depoimentos].sort((a, b) => a.ordem - b.ordem)
+    const idx = sorted.findIndex(d => d.id === dep.id)
+    const swapIdx = dir === "up" ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sorted.length) return
+    const other = sorted[swapIdx]
+    await Promise.all([
+      fetch(`/api/admin/depoimentos/${dep.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ordem: other.ordem }) }),
+      fetch(`/api/admin/depoimentos/${other.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ordem: dep.ordem }) }),
+    ])
+    mutate()
+  }
+
+  async function deletar(id: string) {
+    if (!confirm("Excluir este depoimento?")) return
+    await fetch(`/api/admin/depoimentos/${id}`, { method: "DELETE" })
+    toast.success("Excluído!")
+    mutate()
+  }
+
+  async function salvarEdit(id: string) {
+    setEditSaving(true)
+    try {
+      await fetch(`/api/admin/depoimentos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editFields),
+      })
+      toast.success("Salvo!")
+      setEditingId(null)
+      setEditFields({})
+      mutate()
+    } catch {
+      toast.error("Erro ao salvar")
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const inpClass = "w-full border border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-500 bg-zinc-800 text-zinc-200 placeholder:text-zinc-500"
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2 mb-1">
+          <Video className="w-4 h-4 text-amber-400" />
+          Depoimentos de Videomakers
+        </h3>
+        <p className="text-sm text-zinc-400">Gerencie os vídeos que aparecem na seção de depoimentos do site público.</p>
+      </div>
+
+      {/* Formulário: Novo */}
+      <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4">
+        <p className="text-sm font-semibold text-zinc-300">Adicionar Depoimento</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Nome do videomaker *</label>
+            <input className={inpClass} value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: João Silva" />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Cidade</label>
+            <input className={inpClass} value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex: Belo Horizonte / MG" />
+          </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={async () => {
-              setBackfilling(true)
-              setBackfillResult(null)
-              try {
-                const res = await fetch("/api/admin/backfill-custos", { method: "POST" })
-                const json = await res.json()
-                if (!res.ok) throw new Error(json.error ?? "Erro ao executar backfill")
-                setBackfillResult({ processados: json.processados, pulados: json.pulados, erros: json.erros })
-                toast.success(`✅ Backfill: ${json.processados} custo(s) criado(s)!`)
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Erro no backfill")
-              } finally {
-                setBackfilling(false)
-              }
-            }}
-            disabled={backfilling}
-            className="inline-flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
-            {backfilling ? "Processando…" : "⚙️ Gerar custos retroativos"}
-          </button>
-          {backfillResult && (
-            <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
-              {backfillResult.processados} criado(s) · {backfillResult.pulados} já existiam{backfillResult.erros > 0 ? ` · ${backfillResult.erros} erro(s)` : ""}
-            </span>
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Vídeo (URL ou upload direto) *</label>
+          <div className="flex gap-2">
+            <input
+              className={inpClass}
+              value={videoUrl}
+              onChange={e => setVideoUrl(e.target.value)}
+              placeholder="https://youtube.com/... ou https://drive.google.com/..."
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex-none flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 rounded-lg text-sm text-zinc-300 transition-colors disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {uploading ? `${uploadProgress}%` : "Upload"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadVideo(f) }}
+            />
+          </div>
+          {uploading && (
+            <div className="mt-2 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <div className="h-full bg-amber-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+            </div>
           )}
         </div>
+        <div>
+          <label className="text-xs text-zinc-400 mb-1 block">Frase / depoimento curto (opcional)</label>
+          <input className={inpClass} value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: A Contourline me deu visibilidade e pagamento em dia!" />
+        </div>
+        <button
+          onClick={salvar}
+          disabled={saving || !nome.trim() || !videoUrl.trim()}
+          className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-sm transition-colors disabled:opacity-40"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          Salvar Depoimento
+        </button>
+      </div>
+
+      {/* Lista */}
+      <div>
+        <p className="text-sm font-semibold text-zinc-300 mb-3">
+          Depoimentos cadastrados ({depoimentos.length})
+        </p>
+        {depoimentos.length === 0 ? (
+          <div className="text-center py-10 text-zinc-500 text-sm">Nenhum depoimento ainda.</div>
+        ) : (
+          <div className="space-y-3">
+            {[...depoimentos].sort((a, b) => a.ordem - b.ordem).map((dep) => (
+              <div key={dep.id} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-4">
+                {editingId === dep.id ? (
+                  /* Modo edição inline */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <input className={inpClass} value={editFields.nome ?? dep.nome} onChange={e => setEditFields(p => ({ ...p, nome: e.target.value }))} placeholder="Nome" />
+                      <input className={inpClass} value={editFields.cidade ?? dep.cidade ?? ""} onChange={e => setEditFields(p => ({ ...p, cidade: e.target.value }))} placeholder="Cidade" />
+                    </div>
+                    <input className={inpClass} value={editFields.videoUrl ?? dep.videoUrl} onChange={e => setEditFields(p => ({ ...p, videoUrl: e.target.value }))} placeholder="URL do vídeo" />
+                    <input className={inpClass} value={editFields.descricao ?? dep.descricao ?? ""} onChange={e => setEditFields(p => ({ ...p, descricao: e.target.value }))} placeholder="Frase/depoimento" />
+                    <div className="flex gap-2">
+                      <button onClick={() => salvarEdit(dep.id)} disabled={editSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-xs transition-colors">
+                        {editSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />} Salvar
+                      </button>
+                      <button onClick={() => { setEditingId(null); setEditFields({}) }} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-xs transition-colors">Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Modo visualização */
+                  <div className="flex items-center gap-3">
+                    {/* Thumb */}
+                    <div className="w-10 h-16 rounded-lg bg-zinc-700 overflow-hidden flex-none flex items-center justify-center" style={{ aspectRatio: "9/16" }}>
+                      {dep.thumbnailUrl ? (
+                        <img src={dep.thumbnailUrl} alt={dep.nome} className="w-full h-full object-cover" />
+                      ) : (
+                        <Play className="w-4 h-4 text-zinc-500" />
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-zinc-200">{dep.nome}</p>
+                      {dep.cidade && <p className="text-xs text-zinc-500">{dep.cidade}</p>}
+                      {dep.descricao && <p className="text-xs text-zinc-400 italic truncate">"{dep.descricao}"</p>}
+                    </div>
+                    {/* Status */}
+                    <button
+                      onClick={() => toggleAtivo(dep)}
+                      className={`flex-none text-xs px-2 py-1 rounded-full font-medium transition-colors ${dep.ativo ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-zinc-700 text-zinc-500 hover:bg-zinc-600"}`}
+                    >
+                      {dep.ativo ? "● ativo" : "inativo"}
+                    </button>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 flex-none">
+                      <button onClick={() => moverOrdem(dep, "up")} className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 transition-colors" title="Mover para cima">
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => moverOrdem(dep, "down")} className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 transition-colors" title="Mover para baixo">
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => { setEditingId(dep.id); setEditFields({}) }} className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => deletar(dep.id)} className="p-1.5 rounded-lg hover:bg-red-900/40 text-zinc-500 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -2380,6 +2658,7 @@ export default function ConfiguracoesPage() {
     { id: "email", label: "E-mail", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
     { id: "trello", label: "Trello", icon: Trello },
+    { id: "depoimentos", label: "Depoimentos", icon: Video },
   ]
 
   if (!["admin", "gestor"].includes(session?.user?.tipo ?? "")) {
@@ -2407,7 +2686,7 @@ export default function ConfiguracoesPage() {
       <main className="flex-1 p-6">
         <div className="max-w-4xl mx-auto">
           {/* Tabs */}
-          <div className="flex gap-0 mb-6 border-b border-zinc-800">
+          <div className="flex gap-0 mb-6 border-b border-zinc-800 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {tabs.map((t) => {
               const Icon = t.icon
               return (
@@ -2447,6 +2726,7 @@ export default function ConfiguracoesPage() {
             {tab === "trello" && <TabTrello />}
             {tab === "empresa" && <TabEmpresa />}
             {tab === "drive" && <TabGoogleDrive />}
+            {tab === "depoimentos" && <TabDepoimentos />}
           </div>
         </div>
       </main>

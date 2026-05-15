@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
-  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download,
+  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy,
 } from "lucide-react"
 import useSWR from "swr"
 import { format } from "date-fns"
@@ -100,6 +100,9 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const [savingBrutosUrl, setSavingBrutosUrl] = useState(false)
   // Excluir link
   const [deletingLink, setDeletingLink] = useState<"brutos" | "final" | null>(null)
+  // Gerar link de aprovação
+  const [gerandoLink, setGerandoLink] = useState(false)
+  const [linkAprovacaoGerado, setLinkAprovacaoGerado] = useState<string | null>(null)
   // Player de vídeo
   const [playerUrl, setPlayerUrl] = useState<string | null>(null)
 
@@ -196,14 +199,14 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     }
   }
 
-  async function deleteLink(tipo: "brutos" | "final") {
+  async function deleteLink(tipo: "brutos" | "final", arquivoId?: string) {
     if (!confirm(`Remover o link de ${tipo === "brutos" ? "brutos" : "vídeo final"}?`)) return
     setDeletingLink(tipo)
     try {
       await fetch(`/api/demandas/${demandaId}/upload-video`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: null, tipo }),
+        body: JSON.stringify({ url: null, tipo, ...(arquivoId && { arquivoId }) }),
       })
       toast.success("Link removido!")
       mutate()
@@ -211,6 +214,40 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
       toast.error("Erro ao remover link")
     } finally {
       setDeletingLink(null)
+    }
+  }
+
+  async function gerarLinkAprovacao() {
+    if (!demandaId || !demanda) return
+    const videoUrl = ((demanda.arquivos ?? []) as Array<{ tipoArquivo: string; url: string }>)
+      .find(a => a.tipoArquivo === "final")?.url ?? demanda.linkFinal
+    if (!videoUrl) {
+      toast.error("Nenhum vídeo final encontrado. Faça upload primeiro.")
+      return
+    }
+    setGerandoLink(true)
+    try {
+      const res = await fetch("/api/aprovacao-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demandaId, urlVideo: videoUrl }),
+      })
+      const text = await res.text()
+      let json: { ok?: boolean; link?: string; error?: string } = {}
+      try { json = JSON.parse(text) } catch { /* not json */ }
+      if (!res.ok) throw new Error(json.error ?? `Erro HTTP ${res.status}`)
+      await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: "revisao_pendente" }),
+      })
+      setLinkAprovacaoGerado(json.link ?? "")
+      toast.success("✅ Link gerado! WhatsApp enviado ao solicitante.")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar link")
+    } finally {
+      setGerandoLink(false)
     }
   }
 
@@ -224,7 +261,9 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     return null
   }
 
-  function makeDownloadUrl(url: string): string {
+  function getDownloadUrl(url: string): string {
+    const driveMatch = url.match(/\/file\/d\/([^/]+)/)
+    if (driveMatch) return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`
     const sep = url.includes("?") ? "&" : "?"
     return `${url}${sep}download=true`
   }
@@ -490,51 +529,54 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
                           {/* Lista de arquivos */}
                           {temArquivos && videosFinais.map(arq => {
-                            const { type: videoType } = getEmbedUrl(arq.url)
-                            const canDownload = videoType === "video"
                             const thumbUrl = getThumbUrl(arq.url)
                             return (
-                              <div key={arq.id} className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
-                                onClick={() => setPlayerUrl(arq.url)}>
-                                {thumbUrl ? (
-                                  <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
-                                ) : (
-                                  <video src={arq.url} preload="metadata" muted className="w-full h-full object-cover"
-                                    onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
-                                )}
-                                <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover/thumb:bg-white/30 group-hover/thumb:scale-110 transition-all duration-200">
-                                    <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                              <div key={arq.id} className="space-y-1.5">
+                                {/* Thumbnail clicável para player */}
+                                <div className="relative rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
+                                  onClick={() => setPlayerUrl(arq.url)}>
+                                  {thumbUrl ? (
+                                    <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <video src={arq.url} preload="metadata" muted className="w-full h-full object-cover"
+                                      onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
+                                  )}
+                                  <div className="absolute inset-0 bg-black/40 hover:bg-black/20 transition-colors" />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center hover:bg-white/30 hover:scale-110 transition-all duration-200">
+                                      <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                                    </div>
+                                  </div>
+                                  {/* Sequencia + badge storage */}
+                                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                                    <span className="text-[10px] font-mono font-bold text-white bg-purple-600/80 backdrop-blur-sm px-2 py-0.5 rounded">
+                                      {String(arq.sequencia ?? 0).padStart(3, "0")}
+                                    </span>
+                                    {(() => {
+                                      const badge = getStorageBadge(arq.url)
+                                      return badge ? (
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>
+                                          {badge.icon} {badge.label}
+                                        </span>
+                                      ) : null
+                                    })()}
                                   </div>
                                 </div>
-                                {/* Sequencia + badge */}
-                                <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                                  <span className="text-[10px] font-mono font-bold text-white bg-purple-600/80 backdrop-blur-sm px-2 py-0.5 rounded">
-                                    {String(arq.sequencia ?? 0).padStart(3, "0")}
-                                  </span>
-                                  {(() => {
-                                    const badge = getStorageBadge(arq.url)
-                                    return badge ? (
-                                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>
-                                        {badge.icon} {badge.label}
-                                      </span>
-                                    ) : null
-                                  })()}
-                                </div>
-                                {/* Botões hover */}
-                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-all">
-                                  {canDownload && (
-                                    <a href={makeDownloadUrl(arq.url)} target="_blank" rel="noreferrer"
-                                      onClick={e => e.stopPropagation()} title="Baixar"
-                                      className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-blue-400 transition-colors">
-                                      <Download className="w-3.5 h-3.5" />
-                                    </a>
-                                  )}
-                                  <button onClick={e => { e.stopPropagation(); deleteLink("final") }}
-                                    disabled={!!deletingLink} title="Remover"
-                                    className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 transition-colors disabled:opacity-30">
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                {/* Barra de ações — sempre visível */}
+                                <div className="flex items-center gap-1.5">
+                                  <button onClick={() => setPlayerUrl(arq.url)}
+                                    className="flex-1 flex items-center justify-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white py-1.5 rounded-lg transition-colors">
+                                    <Play className="w-3 h-3" /> Assistir
+                                  </button>
+                                  <a href={getDownloadUrl(arq.url)} target="_blank" rel="noreferrer"
+                                    onClick={e => e.stopPropagation()} title="Baixar vídeo"
+                                    className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-blue-900/60 border border-zinc-700 hover:border-blue-700 text-zinc-400 hover:text-blue-400 py-1.5 px-2.5 rounded-lg transition-colors">
+                                    <Download className="w-3 h-3" />
+                                  </a>
+                                  <button onClick={e => { e.stopPropagation(); deleteLink("final", arq.id) }}
+                                    disabled={!!deletingLink} title="Remover vídeo"
+                                    className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-red-900/60 border border-zinc-700 hover:border-red-700 text-zinc-400 hover:text-red-400 py-1.5 px-2.5 rounded-lg transition-colors disabled:opacity-30">
+                                    <Trash2 className="w-3 h-3" />
                                   </button>
                                 </div>
                               </div>
@@ -543,46 +585,46 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
                           {/* Fallback legado */}
                           {temLinkLegado && (() => {
-                            const { type: videoType } = getEmbedUrl(demanda.linkFinal!)
-                            const canDownload = videoType === "video"
                             const thumbUrl = getThumbUrl(demanda.linkFinal!)
                             return (
-                              <div className="relative group/thumb rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
-                                onClick={() => setPlayerUrl(demanda.linkFinal!)}>
-                                {thumbUrl ? (
-                                  <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
-                                ) : (
-                                  <video src={demanda.linkFinal!} preload="metadata" muted className="w-full h-full object-cover"
-                                    onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
-                                )}
-                                <div className="absolute inset-0 bg-black/50 group-hover/thumb:bg-black/30 transition-colors" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
-                                    <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                              <div className="space-y-1.5">
+                                {/* Thumbnail clicável para player */}
+                                <div className="relative rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
+                                  onClick={() => setPlayerUrl(demanda.linkFinal!)}>
+                                  {thumbUrl ? (
+                                    <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <video src={demanda.linkFinal!} preload="metadata" muted className="w-full h-full object-cover"
+                                      onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1 }} />
+                                  )}
+                                  <div className="absolute inset-0 bg-black/40 hover:bg-black/20 transition-colors" />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center hover:bg-white/30 hover:scale-110 transition-all duration-200">
+                                      <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                                    </div>
+                                  </div>
+                                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                                    <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">🎬 Vídeo Final</span>
+                                    {(() => { const badge = getStorageBadge(demanda.linkFinal!); return badge ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>{badge.icon} {badge.label}</span> : null })()}
                                   </div>
                                 </div>
-                                <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                                  <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">🎬 Vídeo Final</span>
-                                  {(() => { const badge = getStorageBadge(demanda.linkFinal!); return badge ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>{badge.icon} {badge.label}</span> : null })()}
-                                </div>
-                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-all">
-                                  {canDownload && (
-                                    <a href={makeDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Baixar"
-                                      className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-blue-400 transition-colors">
-                                      <Download className="w-3.5 h-3.5" />
-                                    </a>
-                                  )}
+                                {/* Barra de ações — sempre visível */}
+                                <div className="flex items-center gap-1.5">
+                                  <button onClick={() => setPlayerUrl(demanda.linkFinal!)}
+                                    className="flex-1 flex items-center justify-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white py-1.5 rounded-lg transition-colors">
+                                    <Play className="w-3 h-3" /> Assistir
+                                  </button>
+                                  <a href={getDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer"
+                                    onClick={e => e.stopPropagation()} title="Baixar vídeo"
+                                    className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-blue-900/60 border border-zinc-700 hover:border-blue-700 text-zinc-400 hover:text-blue-400 py-1.5 px-2.5 rounded-lg transition-colors">
+                                    <Download className="w-3 h-3" />
+                                  </a>
                                   <button onClick={e => { e.stopPropagation(); deleteLink("final") }} disabled={!!deletingLink}
-                                    className="w-7 h-7 rounded bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/60 hover:text-red-400 transition-colors disabled:opacity-30">
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    title="Remover vídeo"
+                                    className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-red-900/60 border border-zinc-700 hover:border-red-700 text-zinc-400 hover:text-red-400 py-1.5 px-2.5 rounded-lg transition-colors disabled:opacity-30">
+                                    <Trash2 className="w-3 h-3" />
                                   </button>
                                 </div>
-                                {canDownload && (
-                                  <a href={makeDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer"
-                                    className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors py-1 absolute -bottom-6 left-0 right-0">
-                                    <Download className="w-3 h-3" /> Baixar vídeo
-                                  </a>
-                                )}
                               </div>
                             )
                           })()}
@@ -641,6 +683,34 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     </div>
                   )}
                   <p className="text-[10px] text-zinc-600 text-center mt-1">Drive → gera link 30 dias → WhatsApp ao solicitante</p>
+
+                  {/* Gerar link de aprovação para vídeo já existente (sem re-upload) */}
+                  {((demanda.linkFinal || ((demanda.arquivos ?? []) as Array<{ tipoArquivo: string }>).some(a => a.tipoArquivo === "final")) &&
+                    demanda.statusVisivel !== "finalizado") && (
+                    <div className="mt-2 border-t border-zinc-700/50 pt-2">
+                      {linkAprovacaoGerado ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] text-green-400 font-medium">✅ Link gerado:</p>
+                          <div className="flex items-center gap-1.5 bg-zinc-800/60 border border-green-700/40 rounded-lg px-2.5 py-1.5">
+                            <span className="text-[10px] text-zinc-300 truncate flex-1 font-mono">{linkAprovacaoGerado}</span>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(linkAprovacaoGerado); toast.success("Copiado!") }}
+                              className="shrink-0 p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={gerarLinkAprovacao}
+                          disabled={gerandoLink}
+                          className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 text-zinc-300 hover:text-white font-medium transition-colors disabled:opacity-50 w-full">
+                          {gerandoLink ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                          {gerandoLink ? "Gerando..." : "🔗 Gerar Link de Aprovação"}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Comentários */}
@@ -769,6 +839,34 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     ) : (
                       <div className="space-y-2">
                         <p className="text-xs text-zinc-500">Aguardando aprovação do cliente.</p>
+                        {/* Link de aprovação — copiar para enviar manualmente */}
+                        {demanda.aprovacoesVideo?.[0]?.token && (() => {
+                          const linkAprovacao = `${typeof window !== "undefined" ? window.location.origin : "https://nuflow.space"}/aprovar/${demanda.aprovacoesVideo[0].token}`
+                          return (
+                            <div className="flex items-center gap-1.5 bg-zinc-800/60 border border-zinc-700/50 rounded-lg px-2.5 py-1.5">
+                              <span className="text-xs text-zinc-400 truncate flex-1 font-mono">{linkAprovacao}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(linkAprovacao)
+                                  toast.success("Link copiado!")
+                                }}
+                                title="Copiar link de aprovação"
+                                className="shrink-0 p-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <a
+                                href={linkAprovacao}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Abrir link de aprovação"
+                                className="shrink-0 p-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          )
+                        })()}
                         {aprovandoAcao === "reprovar" ? (
                           <div className="space-y-2">
                             <textarea
