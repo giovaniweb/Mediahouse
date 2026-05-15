@@ -350,12 +350,24 @@ export default function SobrePage() {
                     {/* 9:16 card */}
                     <div className="relative w-44 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800/80 shadow-xl"
                       style={{ aspectRatio: "9/16" }}>
-                      {/* Thumbnail or gradient */}
+                      {/* Thumbnail or video preview or gradient */}
                       {thumb ? (
                         <img
                           src={thumb}
                           alt={dep.nome}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : dep.videoUrl && (dep.videoUrl.includes("supabase") || dep.videoUrl.endsWith(".mp4") || dep.videoUrl.endsWith(".mov")) ? (
+                        <video
+                          src={dep.videoUrl}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onLoadedMetadata={(e) => {
+                            const v = e.currentTarget
+                            v.currentTime = Math.min(1, (v.duration || 2) * 0.1)
+                          }}
                         />
                       ) : (
                         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/60 via-zinc-900 to-blue-900/60" />

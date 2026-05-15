@@ -1861,6 +1861,7 @@ function TabDepoimentos() {
   const [nome, setNome] = useState("")
   const [cidade, setCidade] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
+  const [thumbnailUrl, setThumbnailUrl] = useState("")
   const [descricao, setDescricao] = useState("")
   const [saving, setSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -1872,10 +1873,52 @@ function TabDepoimentos() {
   const [editFields, setEditFields] = useState<Partial<DepoimentoAdmin>>({})
   const [editSaving, setEditSaving] = useState(false)
 
+  // Captura o primeiro frame do vídeo como JPEG via Canvas
+  async function captureThumb(file: File): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      const video = document.createElement("video")
+      const url = URL.createObjectURL(file)
+      video.muted = true
+      video.playsInline = true
+      video.preload = "metadata"
+      video.src = url
+      const cleanup = () => URL.revokeObjectURL(url)
+      video.onerror = () => { cleanup(); resolve(null) }
+      video.onloadedmetadata = () => {
+        video.currentTime = Math.min(1, (video.duration || 2) * 0.1)
+      }
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement("canvas")
+          canvas.width = video.videoWidth || 360
+          canvas.height = video.videoHeight || 640
+          canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height)
+          canvas.toBlob((blob) => { cleanup(); resolve(blob) }, "image/jpeg", 0.8)
+        } catch { cleanup(); resolve(null) }
+      }
+    })
+  }
+
   async function uploadVideo(file: File) {
     setUploading(true)
     setUploadProgress(0)
     try {
+      // 1. Capturar thumbnail antes de subir o vídeo
+      const thumbBlob = await captureThumb(file)
+      if (thumbBlob) {
+        const thumbRes = await fetch("/api/admin/depoimentos/upload-url?contentType=image%2Fjpeg")
+        if (thumbRes.ok) {
+          const { uploadUrl: thumbUploadUrl, publicUrl: thumbPublicUrl } = await thumbRes.json()
+          await fetch(thumbUploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": "image/jpeg" },
+            body: thumbBlob,
+          })
+          setThumbnailUrl(thumbPublicUrl)
+        }
+      }
+
+      // 2. Upload do vídeo
       const urlRes = await fetch(`/api/admin/depoimentos/upload-url?contentType=${encodeURIComponent(file.type || "video/mp4")}`)
       if (!urlRes.ok) {
         const errData = await urlRes.json().catch(() => ({ error: `HTTP ${urlRes.status}` }))
@@ -1911,11 +1954,11 @@ function TabDepoimentos() {
       const res = await fetch("/api/admin/depoimentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: nome.trim(), cidade: cidade.trim(), videoUrl: videoUrl.trim(), descricao: descricao.trim() }),
+        body: JSON.stringify({ nome: nome.trim(), cidade: cidade.trim(), videoUrl: videoUrl.trim(), thumbnailUrl: thumbnailUrl.trim() || undefined, descricao: descricao.trim() }),
       })
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Erro") }
       toast.success("Depoimento adicionado!")
-      setNome(""); setCidade(""); setVideoUrl(""); setDescricao("")
+      setNome(""); setCidade(""); setVideoUrl(""); setThumbnailUrl(""); setDescricao("")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro")
