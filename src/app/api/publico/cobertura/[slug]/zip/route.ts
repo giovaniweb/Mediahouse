@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import archiver from "archiver"
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const archiver = require("archiver") as typeof import("archiver")
 import { Readable } from "stream"
 
 /** Convert a Web ReadableStream to a Node.js Readable */
