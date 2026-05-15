@@ -1,8 +1,30 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
-import { Film, ArrowRight, CheckCircle2, ClipboardList, Camera, Star, Shield, Heart, Crown, Zap, Users } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { ArrowRight, CheckCircle2, ClipboardList, Camera, Star, Shield, Heart, Crown, Zap, Users, ChevronLeft, ChevronRight, Play, X } from "lucide-react"
+
+interface Depoimento {
+  id: string
+  nome: string
+  cidade: string | null
+  videoUrl: string
+  thumbnailUrl: string | null
+  descricao: string | null
+}
+
+function getVideoEmbed(url: string): { type: "youtube" | "drive" | "video"; src: string } {
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/)
+  if (ytMatch) return { type: "youtube", src: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0&playsinline=1` }
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/)
+  if (driveMatch) return { type: "drive", src: `https://drive.google.com/file/d/${driveMatch[1]}/preview` }
+  return { type: "video", src: url }
+}
+
+function getYoutubeThumbnail(url: string): string | null {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/)
+  return m ? `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg` : null
+}
 
 const PALAVRAS_CICLO = ["que convence", "que converte", "que confiam", "que explica"]
 
@@ -25,6 +47,20 @@ export default function SobrePage() {
   const [palavraIdx, setPalavraIdx] = useState(0)
   const [fade, setFade] = useState(true)
 
+  // Depoimentos
+  const [depoimentos, setDepoimentos] = useState<Depoimento[]>([])
+  const [currentDep, setCurrentDep] = useState(0)
+  const [playingDep, setPlayingDep] = useState<Depoimento | null>(null)
+  const [isHoveringCarousel, setIsHoveringCarousel] = useState(false)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const CARD_W = 196 // 176px (w-44) + 20px gap
+
+  const goTo = useCallback((i: number) => {
+    const clamped = Math.max(0, Math.min(i, depoimentos.length - 1))
+    trackRef.current?.scrollTo({ left: clamped * CARD_W, behavior: "smooth" })
+    setCurrentDep(clamped)
+  }, [depoimentos.length])
+
   useEffect(() => {
     const intervalo = setInterval(() => {
       setFade(false)
@@ -34,6 +70,33 @@ export default function SobrePage() {
       }, 300)
     }, 2200)
     return () => clearInterval(intervalo)
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/publico/depoimentos")
+      .then(r => r.json())
+      .then(d => setDepoimentos(d.depoimentos ?? []))
+      .catch(() => null)
+  }, [])
+
+  // Auto-advance
+  useEffect(() => {
+    if (depoimentos.length <= 1 || playingDep || isHoveringCarousel) return
+    const id = setInterval(() => {
+      setCurrentDep(c => {
+        const next = (c + 1) % depoimentos.length
+        trackRef.current?.scrollTo({ left: next * CARD_W, behavior: "smooth" })
+        return next
+      })
+    }, 4000)
+    return () => clearInterval(id)
+  }, [depoimentos.length, playingDep, isHoveringCarousel])
+
+  // Close player on ESC
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPlayingDep(null) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
   }, [])
 
   return (
@@ -230,6 +293,170 @@ export default function SobrePage() {
           <p className="text-xs text-zinc-600 mt-3">Seu cadastro passa por análise. Retornamos em até 3 dias úteis.</p>
         </div>
       </section>
+
+      {/* Depoimentos */}
+      {depoimentos.length > 0 && (
+        <section id="depoimentos" className="py-20 bg-zinc-900/40 border-y border-zinc-800 overflow-hidden">
+          <div className="max-w-6xl mx-auto px-6 mb-10">
+            <p className="text-xs font-semibold tracking-widest text-amber-400 uppercase mb-3">
+              O que dizem os parceiros
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
+              Videomakers que já trabalharam com a gente
+            </h2>
+          </div>
+
+          {/* Carrossel */}
+          <div
+            className="relative"
+            onMouseEnter={() => setIsHoveringCarousel(true)}
+            onMouseLeave={() => setIsHoveringCarousel(false)}
+          >
+            {/* Prev button */}
+            {currentDep > 0 && (
+              <button
+                onClick={() => goTo(currentDep - 1)}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-zinc-800/90 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors shadow-lg"
+              >
+                <ChevronLeft className="w-5 h-5 text-white" />
+              </button>
+            )}
+            {/* Next button */}
+            {currentDep < depoimentos.length - 1 && (
+              <button
+                onClick={() => goTo(currentDep + 1)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-zinc-800/90 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors shadow-lg"
+              >
+                <ChevronRight className="w-5 h-5 text-white" />
+              </button>
+            )}
+
+            {/* Track */}
+            <div
+              ref={trackRef}
+              className="flex gap-5 px-8 overflow-x-auto"
+              style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none", msOverflowStyle: "none" }}
+            >
+              {/* Left padding card (invisible, just for centering effect on mobile) */}
+              {depoimentos.map((dep) => {
+                const thumb = dep.thumbnailUrl ?? getYoutubeThumbnail(dep.videoUrl)
+                return (
+                  <div
+                    key={dep.id}
+                    onClick={() => setPlayingDep(dep)}
+                    className="flex-none w-44 cursor-pointer group"
+                    style={{ scrollSnapAlign: "start" }}
+                  >
+                    {/* 9:16 card */}
+                    <div className="relative w-44 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800/80 shadow-xl"
+                      style={{ aspectRatio: "9/16" }}>
+                      {/* Thumbnail or gradient */}
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt={dep.nome}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/60 via-zinc-900 to-blue-900/60" />
+                      )}
+
+                      {/* Dark overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+
+                      {/* Play button */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center transition-transform duration-200 group-hover:scale-110 group-hover:bg-white/30">
+                          <Play className="w-6 h-6 text-white fill-white ml-1" />
+                        </div>
+                      </div>
+
+                      {/* Info na base */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <p className="text-sm font-bold text-white leading-tight">{dep.nome}</p>
+                        {dep.cidade && (
+                          <p className="text-xs text-zinc-400 mt-0.5">{dep.cidade}</p>
+                        )}
+                        {dep.descricao && (
+                          <p className="text-xs text-zinc-300 mt-1.5 line-clamp-2 leading-relaxed italic">
+                            "{dep.descricao}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Dots */}
+            {depoimentos.length > 1 && (
+              <div className="flex justify-center gap-1.5 mt-6">
+                {depoimentos.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => goTo(i)}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      i === currentDep ? "bg-amber-400 w-5" : "bg-zinc-600 w-1.5 hover:bg-zinc-500"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Player Lightbox */}
+          {playingDep && (() => {
+            const embed = getVideoEmbed(playingDep.videoUrl)
+            return (
+              <div
+                className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4"
+                onClick={() => setPlayingDep(null)}
+              >
+                <div
+                  className="relative"
+                  style={{ height: "min(90vh, 560px)", aspectRatio: "9/16" }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Close button */}
+                  <button
+                    onClick={() => setPlayingDep(null)}
+                    className="absolute -top-10 right-0 flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm z-10"
+                  >
+                    <X className="w-4 h-4" /> Fechar
+                  </button>
+
+                  {/* Player */}
+                  <div className="w-full h-full rounded-2xl overflow-hidden bg-zinc-950 shadow-2xl">
+                    {embed.type === "video" ? (
+                      <video
+                        src={embed.src}
+                        controls
+                        autoPlay
+                        playsInline
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <iframe
+                        src={embed.src}
+                        className="w-full h-full"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                      />
+                    )}
+                  </div>
+
+                  {/* Info abaixo */}
+                  <div className="mt-3 text-center">
+                    <p className="text-white font-semibold">{playingDep.nome}</p>
+                    {playingDep.cidade && <p className="text-zinc-400 text-sm">{playingDep.cidade}</p>}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+        </section>
+      )}
 
       {/* CTA final */}
       <section className="border-t border-zinc-800 bg-zinc-900/30">

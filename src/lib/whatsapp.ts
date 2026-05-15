@@ -84,11 +84,11 @@ export const templates = {
   demandaAprovada: (codigo: string, titulo: string) =>
     `✅ *NuFlow — Demanda Aprovada*\n\nSua demanda foi aprovada!\n\n📋 *${codigo}* — ${titulo}\n\nEm breve nossa equipe entrará em contato. 🎬`,
 
-  videomakertNotificado: (codigo: string, titulo: string, data: string) =>
-    `🎬 *NuFlow — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
+  videomakertNotificado: (codigo: string, titulo: string, data: string, link?: string) =>
+    `🎬 *NuFlow — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\n👆 *Veja os detalhes e confirme:*\n${link ?? "Entre em contato com a equipe"}`,
 
-  coberturaConfirmacao: (nome: string, codigo: string, titulo: string, data: string, local: string, cidade: string, descricao?: string | null) =>
-    `🎥 *NuFlow — Solicitação de Cobertura*\n\nOlá, ${nome}! Temos uma cobertura e gostaríamos de confirmar sua disponibilidade.\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n📍 Local: ${local}${cidade ? `, ${cidade}` : ""}${descricao ? `\n\n📝 *Descrição do Job:*\n${descricao.slice(0, 300)}${descricao.length > 300 ? "..." : ""}` : ""}\n\n💰 *Pagamento:* realizado em até *15 dias* após o envio da nota fiscal.\n🧾 A nota fiscal deverá ser enviada assim que os brutos forem entregues.\n\nVocê topa? Responda *SIM* para confirmar ou *NÃO* para recusar.\nSe tiver dúvidas sobre o evento, pode perguntar aqui mesmo! 😊`,
+  coberturaConfirmacao: (nome: string, codigo: string, titulo: string, data: string, local: string, cidade: string, descricao?: string | null, link?: string) =>
+    `🎥 *NuFlow — Solicitação de Cobertura*\n\nOlá, ${nome}! Temos uma cobertura e gostaríamos de confirmar sua disponibilidade.\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n📍 Local: ${local}${cidade ? `, ${cidade}` : ""}${descricao ? `\n\n📝 *Descrição do Job:*\n${descricao.slice(0, 300)}${descricao.length > 300 ? "..." : ""}` : ""}\n\n💰 *Pagamento:* realizado em até *15 dias* após o envio da nota fiscal.\n🧾 A nota fiscal deverá ser enviada assim que os brutos forem entregues.\n\n👆 *Veja os detalhes e confirme:*\n${link ?? "Entre em contato com a equipe"}`,
 
   edicaoFinalizada: (codigo: string, titulo: string) =>
     `✂️ *NuFlow — Edição Concluída*\n\nA edição da sua demanda foi finalizada!\n\n📋 *${codigo}* — ${titulo}\n\nAguardando sua aprovação. Acesse o link enviado. 👆`,
@@ -98,6 +98,14 @@ export const templates = {
 
   captacaoLembrete: (codigo: string, titulo: string, data: string, local: string) =>
     `⏰ *NuFlow — Lembrete de Captação*\n\nAmanhã você tem uma captação agendada!\n\n📋 *${codigo}* — ${titulo}\n📅 ${data}\n📍 ${local}\n\nQualquer dúvida, entre em contato.`,
+
+  // Notifica o solicitante que um profissional foi atribuído à demanda dele
+  profissionalSelecionadoSolicitante: (nomeProfissional: string, codigo: string, titulo: string, telefoneProfissional?: string) =>
+    `🎬 *NuFlow — Sua demanda está em andamento!*\n\n*${codigo}* — ${titulo}\n\n👤 *${nomeProfissional}* foi selecionado para trabalhar no seu projeto.${telefoneProfissional ? `\n\nQualquer dúvida, fale diretamente com ele:\n📱 ${telefoneProfissional}` : "\n\nQualquer dúvida, entre em contato com nossa equipe."}`,
+
+  // Notifica o editor interno quando é atribuído a uma demanda
+  editorSelecionado: (codigo: string, titulo: string) =>
+    `✂️ *NuFlow — Nova Edição*\n\nVocê foi escalado para editar um projeto!\n\n📋 *${codigo}* — ${titulo}\n\nAcesse o sistema para ver os detalhes e os brutos. 🎞️`,
 
   // ── Templates TDAH ──────────────────────────────────────────────────────
 

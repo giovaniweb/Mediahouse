@@ -38,6 +38,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
       produtos: {
         include: { produto: { select: { id: true, nome: true } } },
       },
+      aprovacoesVideo: {
+        where: { status: "pendente" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { token: true, urlVideo: true, status: true, createdAt: true },
+      },
     },
   })
 
@@ -297,18 +303,31 @@ export async function PUT(req: NextRequest, { params }: Params) {
     return NextResponse.json(demanda)
   }
 
-  // Detectar mudança de videomakerId para notificação WhatsApp
+  // Detectar mudança de videomakerId / editorId para notificação WhatsApp
   let videomakeridAnterior: string | null | undefined
   let autoStatusVideomakerNotificado = false
-  if (body.videomakerId !== undefined) {
-    const demandaAntes = await prisma.demanda.findUnique({
+  // Buscar estado anterior quando qualquer dos dois campos pode mudar
+  let demandaAntes: {
+    videomakerId: string | null; editorId: string | null; codigo: string; titulo: string;
+    descricao: string | null; dataCaptacao: Date | null; tipoVideo: string | null;
+    localGravacao: string | null; cidade: string | null; statusInterno: string;
+    telefoneSolicitante: string | null;
+    solicitante: { telefone: string | null } | null;
+  } | null = null
+
+  if (body.videomakerId !== undefined || body.editorId !== undefined) {
+    demandaAntes = await prisma.demanda.findUnique({
       where: { id },
       select: {
-        videomakerId: true, codigo: true, titulo: true, descricao: true,
+        videomakerId: true, editorId: true, codigo: true, titulo: true, descricao: true,
         dataCaptacao: true, tipoVideo: true, localGravacao: true, cidade: true,
-        statusInterno: true,
+        statusInterno: true, telefoneSolicitante: true,
+        solicitante: { select: { telefone: true } },
       },
     })
+  }
+
+  if (body.videomakerId !== undefined) {
     videomakeridAnterior = demandaAntes?.videomakerId
 
     // Se mudou o videomaker, notificar o NOVO videomaker via WhatsApp
@@ -324,27 +343,91 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
         const isCobertura = demandaAntes.tipoVideo?.toLowerCase().includes("cobertura")
 
+        // Criar ConviteVideomaker com token (validade 72h) para confirmação via link
+        let conviteLink: string | undefined
+        try {
+          const convite = await prisma.conviteVideomaker.create({
+            data: {
+              demandaId: id,
+              videomakerId: body.videomakerId,
+              expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+            },
+          })
+          const baseUrl = process.env.NEXTAUTH_URL ?? "https://nuflow.space"
+          conviteLink = `${baseUrl}/convite/${convite.token}`
+        } catch (e) {
+          console.error("[Convite] Erro ao criar convite:", e)
+        }
+
         if (isCobertura) {
-          // Template rico para cobertura — inclui local, cidade, descrição e condições de pagamento
+          // Template rico para cobertura — inclui local, cidade, descrição, pagamento e link
           const local = body.localGravacao || demandaAntes.localGravacao || "A confirmar"
           const cidade = body.cidade || demandaAntes.cidade || ""
           const descricao = body.descricao || demandaAntes.descricao || null
           void sendWhatsappMessage(
             novoVm.telefone,
-            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao),
+            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao, conviteLink),
             id
           ).catch(() => null)
         } else {
-          // Demandas normais: template padrão
+          // Demandas normais: template padrão com link
           void sendWhatsappMessage(
             novoVm.telefone,
-            templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt),
+            templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt, conviteLink),
             id
           ).catch(() => null)
         }
         // Sempre mudar status para "videomaker_notificado" quando VM é atribuído e notificado
-        // (seja cobertura ou demanda normal) — permite que o "SIM" / "NÃO" via WhatsApp funcione
+        // (seja cobertura ou demanda normal) — permite que o SIM/NÃO via WhatsApp ainda funcione como fallback
         autoStatusVideomakerNotificado = true
+
+        // Notificar solicitante que um profissional foi selecionado
+        const telSolicitante = demandaAntes.telefoneSolicitante || demandaAntes.solicitante?.telefone
+        if (telSolicitante) {
+          // Formata o telefone do VM para exibir ao solicitante (ex: (31) 99999-9999)
+          const telVmFmt = novoVm.telefone
+            ? novoVm.telefone.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")
+            : undefined
+          void sendWhatsappMessage(
+            telSolicitante,
+            templates.profissionalSelecionadoSolicitante(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, telVmFmt),
+            id
+          ).catch(() => null)
+        }
+      }
+    }
+  }
+
+  // Detectar mudança de editorId para notificação WhatsApp
+  if (body.editorId !== undefined && demandaAntes) {
+    const editorAnterior = demandaAntes.editorId
+    if (body.editorId && body.editorId !== editorAnterior) {
+      const novoEditor = await prisma.editor.findUnique({
+        where: { id: body.editorId },
+        select: { nome: true, telefone: true, whatsapp: true },
+      })
+      if (novoEditor && demandaAntes) {
+        const telEditor = novoEditor.whatsapp || novoEditor.telefone
+        // Notificar editor
+        if (telEditor) {
+          void sendWhatsappMessage(
+            telEditor,
+            templates.editorSelecionado(demandaAntes.codigo, demandaAntes.titulo),
+            id
+          ).catch(() => null)
+        }
+        // Notificar solicitante que editor foi atribuído
+        const telSolicitante = demandaAntes.telefoneSolicitante || demandaAntes.solicitante?.telefone
+        if (telSolicitante) {
+          const telEditorFmt = telEditor
+            ? telEditor.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")
+            : undefined
+          void sendWhatsappMessage(
+            telSolicitante,
+            templates.profissionalSelecionadoSolicitante(novoEditor.nome, demandaAntes.codigo, demandaAntes.titulo, telEditorFmt),
+            id
+          ).catch(() => null)
+        }
       }
     }
   }

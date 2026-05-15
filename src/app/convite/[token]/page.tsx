@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Check, X, Loader2, Calendar, MapPin, Film, AlertTriangle, Clock } from "lucide-react"
+import { Check, X, Loader2, Calendar, MapPin, Film, AlertTriangle, Clock, DollarSign } from "lucide-react"
 
 interface ConviteData {
   id: string
@@ -17,15 +17,21 @@ interface ConviteData {
     cidade: string
     dataEvento?: string
     localEvento?: string
+    localGravacao?: string
     dataCaptacao?: string
     prioridade: string
   }
 }
 
+type ErroState = {
+  mensagem: string
+  statusConvite?: "aceito" | "recusado" | "expirado"
+}
+
 export default function ConvitePage() {
   const { token } = useParams<{ token: string }>()
   const [convite, setConvite] = useState<ConviteData | null>(null)
-  const [erro, setErro] = useState("")
+  const [erro, setErro] = useState<ErroState | null>(null)
   const [loading, setLoading] = useState(true)
   const [respondendo, setRespondendo] = useState(false)
   const [resultado, setResultado] = useState<"aceito" | "recusado" | null>(null)
@@ -33,14 +39,16 @@ export default function ConvitePage() {
   useEffect(() => {
     fetch(`/api/convites/${token}`)
       .then(async (r) => {
+        const data = await r.json()
         if (!r.ok) {
-          const data = await r.json()
-          throw new Error(data.error || "Erro ao carregar convite")
+          // Convite já respondido ou expirado — mostrar estado específico
+          const statusConvite = data.status as "aceito" | "recusado" | "expirado" | undefined
+          throw { mensagem: data.error || "Erro ao carregar convite", statusConvite }
         }
-        return r.json()
+        return data
       })
       .then(setConvite)
-      .catch((e) => setErro(e.message))
+      .catch((e) => setErro({ mensagem: e.mensagem || e.message || "Erro", statusConvite: e.statusConvite }))
       .finally(() => setLoading(false))
   }, [token])
 
@@ -58,7 +66,7 @@ export default function ConvitePage() {
       }
       setResultado(acao === "aceitar" ? "aceito" : "recusado")
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro")
+      setErro({ mensagem: e instanceof Error ? e.message : "Erro" })
     } finally {
       setRespondendo(false)
     }
@@ -72,13 +80,54 @@ export default function ConvitePage() {
     )
   }
 
+  // Convite já respondido — mostrar estado específico
+  if (erro?.statusConvite) {
+    const isAceito = erro.statusConvite === "aceito"
+    const isRecusado = erro.statusConvite === "recusado"
+    const isExpirado = erro.statusConvite === "expirado"
+
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md text-center">
+          {isAceito && (
+            <>
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+                <Check className="w-8 h-8 text-green-400" />
+              </div>
+              <h1 className="text-xl font-bold text-zinc-100 mb-2">Você já aceitou esta demanda! ✅</h1>
+              <p className="text-zinc-400">Fique de olho no WhatsApp para os próximos passos. Boa captação! 🎬</p>
+            </>
+          )}
+          {isRecusado && (
+            <>
+              <div className="w-16 h-16 rounded-full bg-zinc-700/40 flex items-center justify-center mx-auto mb-4">
+                <X className="w-8 h-8 text-zinc-400" />
+              </div>
+              <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite já recusado</h1>
+              <p className="text-zinc-400">Você já recusou esta demanda anteriormente. O gestor foi notificado.</p>
+            </>
+          )}
+          {isExpirado && (
+            <>
+              <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
+                <Clock className="w-8 h-8 text-yellow-400" />
+              </div>
+              <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite expirado</h1>
+              <p className="text-zinc-400">Este link não é mais válido. Entre em contato com a equipe se ainda tiver interesse.</p>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (erro) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md text-center">
           <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Indisponivel</h1>
-          <p className="text-zinc-400">{erro}</p>
+          <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Indisponível</h1>
+          <p className="text-zinc-400">{erro.mensagem}</p>
         </div>
       </div>
     )
@@ -93,8 +142,8 @@ export default function ConvitePage() {
               <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
                 <Check className="w-8 h-8 text-green-400" />
               </div>
-              <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Aceito!</h1>
-              <p className="text-zinc-400">Voce foi atribuido a demanda. Voce recebera os proximos passos via WhatsApp.</p>
+              <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Aceito! ✅</h1>
+              <p className="text-zinc-400">Você foi confirmado nesta demanda. Aguarde os próximos passos via WhatsApp. Boa captação! 🎬</p>
             </>
           ) : (
             <>
@@ -102,7 +151,7 @@ export default function ConvitePage() {
                 <X className="w-8 h-8 text-red-400" />
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Recusado</h1>
-              <p className="text-zinc-400">Tudo bem! O gestor sera notificado e buscara outro profissional.</p>
+              <p className="text-zinc-400">Tudo bem! O gestor será notificado e buscará outro profissional.</p>
             </>
           )}
         </div>
@@ -111,6 +160,7 @@ export default function ConvitePage() {
   }
 
   const d = convite!.demanda
+  const localExibir = d.localEvento || d.localGravacao
 
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
@@ -124,7 +174,7 @@ export default function ConvitePage() {
         {/* Info */}
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-zinc-300">
-            Ola <span className="font-semibold text-white">{convite!.videomaker.nome}</span>, voce foi convidado para participar desta demanda:
+            Olá <span className="font-semibold text-white">{convite!.videomaker.nome}</span>, você foi convidado para participar desta demanda:
           </p>
 
           <div className="bg-zinc-800/50 rounded-xl p-4 space-y-3">
@@ -133,11 +183,11 @@ export default function ConvitePage() {
               <span className="text-zinc-400">Tipo:</span>
               <span className="text-zinc-200">{d.tipoVideo}</span>
             </div>
-            {d.localEvento && (
+            {localExibir && (
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-400">Local:</span>
-                <span className="text-zinc-200">{d.localEvento}</span>
+                <span className="text-zinc-200">{localExibir}</span>
               </div>
             )}
             {(d.dataEvento || d.dataCaptacao) && (
@@ -153,11 +203,13 @@ export default function ConvitePage() {
                 </span>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="w-4 h-4 text-zinc-500" />
-              <span className="text-zinc-400">Cidade:</span>
-              <span className="text-zinc-200">{d.cidade}</span>
-            </div>
+            {d.cidade && (
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="w-4 h-4 text-zinc-500" />
+                <span className="text-zinc-400">Cidade:</span>
+                <span className="text-zinc-200">{d.cidade}</span>
+              </div>
+            )}
             {d.prioridade !== "normal" && (
               <div className="flex items-center gap-2 text-sm">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
@@ -168,14 +220,26 @@ export default function ConvitePage() {
 
           {d.descricao && (
             <div>
-              <p className="text-xs text-zinc-500 uppercase font-semibold mb-1">Descricao</p>
-              <p className="text-sm text-zinc-300 leading-relaxed">{d.descricao}</p>
+              <p className="text-xs text-zinc-500 uppercase font-semibold mb-1">Descrição</p>
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{d.descricao}</p>
             </div>
           )}
 
+          {/* Seção de Pagamento */}
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-amber-400" />
+              <p className="text-sm text-amber-300 font-medium">Pagamento</p>
+            </div>
+            <p className="text-sm text-zinc-300">
+              Realizado em até <strong className="text-white">15 dias</strong> após o envio da nota fiscal.
+            </p>
+            <p className="text-xs text-zinc-500 mt-1">A nota fiscal deverá ser enviada assim que os brutos forem entregues.</p>
+          </div>
+
           <div className="flex items-center gap-2 text-xs text-zinc-600">
             <Clock className="w-3.5 h-3.5" />
-            Expira em {new Date(convite!.expiresAt).toLocaleDateString("pt-BR")} as{" "}
+            Expira em {new Date(convite!.expiresAt).toLocaleDateString("pt-BR")} às{" "}
             {new Date(convite!.expiresAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>

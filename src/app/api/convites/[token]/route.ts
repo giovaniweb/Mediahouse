@@ -23,6 +23,7 @@ export async function GET(
           cidade: true,
           dataEvento: true,
           localEvento: true,
+          localGravacao: true,
           dataCaptacao: true,
           prioridade: true,
         },
@@ -100,7 +101,15 @@ export async function POST(
       `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`
     )
   } else {
-    // Recusou → registrar no histórico
+    // Recusou → atualizar demanda + registrar histórico
+    await prisma.demanda.update({
+      where: { id: convite.demandaId },
+      data: {
+        videomakerId: null,               // libera o slot para outro VM
+        statusInterno: "videomaker_recusou",
+      },
+    })
+
     await prisma.historicoStatus.create({
       data: {
         demandaId: convite.demandaId,
@@ -111,7 +120,6 @@ export async function POST(
       },
     })
 
-    // NOVO: Notifica admin/gestor via WhatsApp
     void notificarGestores(
       `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`
     )

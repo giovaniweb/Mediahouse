@@ -1055,3 +1055,18 @@ model ConfigEmpresa {
 
   @@map("config_empresa")
 }
+
+model Depoimento {
+  id           String   @id @default(cuid())
+  nome         String
+  cidade       String?
+  videoUrl     String
+  thumbnailUrl String?
+  descricao    String?  @db.Text
+  ativo        Boolean  @default(true)
+  ordem        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("depoimentos")
+}
