@@ -68,6 +68,8 @@ export const authConfig: NextAuthConfig = {
         "/api/me",            // dados do usuário logado
         "/api/permissoes",    // permissões do usuário
         "/galeria",           // galeria pública de vídeos finalizados
+        "/e",                 // página pública de download de eventos
+        "/api/publico/cobertura", // API pública de coberturas
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")

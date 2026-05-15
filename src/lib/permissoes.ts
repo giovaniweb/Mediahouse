@@ -20,6 +20,7 @@ export type PermissaoKey =
   | "verUsuarios"
   | "verConfiguracoes"
   | "verIdeias"
+  | "verEventos"
   | "criarDemanda"
   | "editarDemanda"
   | "excluirDemanda"
@@ -44,6 +45,7 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   verUsuarios: "Ver Usuários",
   verConfiguracoes: "Ver Configurações",
   verIdeias: "Ver Banco de Ideias",
+  verEventos: "Ver Eventos & Coberturas",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
   excluirDemanda: "Excluir Demanda",
@@ -72,6 +74,7 @@ export const PERMISSAO_GRUPOS = [
       "verUsuarios",
       "verConfiguracoes",
       "verIdeias",
+      "verEventos",
     ] as PermissaoKey[],
   },
   {
@@ -109,6 +112,7 @@ const BASE_FALSE: PresetPerms = {
   verUsuarios: false,
   verConfiguracoes: false,
   verIdeias: false,
+  verEventos: false,
   criarDemanda: false,
   editarDemanda: false,
   excluirDemanda: false,
@@ -203,4 +207,5 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/usuarios": "verUsuarios",
   "/configuracoes": "verConfiguracoes",
   "/ideias": "verIdeias",
+  "/eventos": "verEventos",
 }

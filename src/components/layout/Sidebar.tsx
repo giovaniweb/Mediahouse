@@ -11,6 +11,7 @@ import {
   BarChart2,
   Settings,
   CalendarDays,
+  CalendarRange,
   ClipboardCheck,
   DollarSign,
   UserCog,
@@ -41,6 +42,7 @@ const sections = [
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
+      { href: "/eventos", label: "Eventos", icon: CalendarRange },
     ],
   },
   {

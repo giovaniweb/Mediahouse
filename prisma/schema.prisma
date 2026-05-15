@@ -165,6 +165,7 @@ model Usuario {
   videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
   editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
   ideias          IdeiaVideo[]
+  coberturasCriadas EventoCobertura[] @relation("CoberturasCreadas")
 
   @@map("usuarios")
 }
@@ -215,8 +216,9 @@ model Videomaker {
   eventos        Evento[]
   custos         CustoVideomaker[]
   avaliacoes     AvaliacaoVideomaker[]
-  convites       ConviteVideomaker[]
-  notasFiscais   NotaFiscalUpload[]
+  convites         ConviteVideomaker[]
+  notasFiscais     NotaFiscalUpload[]
+  coberturaEquipe  EventoCoberturaEquipe[]
 
   @@map("videomakers")
 }
@@ -855,8 +857,9 @@ model Produto {
   updatedAt       DateTime  @updatedAt
 
   fabricante      Fabricante?      @relation(fields: [fabricanteId], references: [id])
-  demandas        DemandaProduto[]
-  ideias          IdeiaVideo[]
+  demandas    DemandaProduto[]
+  ideias      IdeiaVideo[]
+  coberturas  EventoCobertura[]
 
   @@map("produtos")
 }
@@ -960,6 +963,7 @@ model PermissaoUsuario {
   verUsuarios     Boolean @default(false)
   verConfiguracoes Boolean @default(false)
   verIdeias        Boolean @default(false)
+  verEventos       Boolean @default(false)
 
   // Ações em demandas
   criarDemanda    Boolean @default(false)
@@ -1069,4 +1073,165 @@ model Depoimento {
   updatedAt    DateTime @updatedAt
 
   @@map("depoimentos")
+}
+
+// ─────────────────────────────────────────────
+// EVENTOS & COBERTURAS
+// ─────────────────────────────────────────────
+
+enum TipoCobertura {
+  congresso
+  feira
+  evento_corporativo
+  show
+  lancamento
+  outro
+}
+
+enum StatusCobertura {
+  planejamento
+  em_andamento
+  concluido
+  cancelado
+}
+
+enum FuncaoEquipe {
+  captacao
+  edicao
+  fotografia
+  drone
+  suporte
+}
+
+enum CategoriaChecklist {
+  equipamento
+  logistica
+  conteudo
+  entrega
+}
+
+enum TipoMomento {
+  abertura
+  palestra
+  workshop
+  coquetel
+  exposicao
+  bastidores
+  encerramento
+  outro
+}
+
+model EventoCobertura {
+  id                  String          @id @default(cuid())
+  titulo              String
+  slug                String          @unique
+  tipo                TipoCobertura   @default(outro)
+  status              StatusCobertura @default(planejamento)
+  descricao           String?         @db.Text
+  cliente             String?
+  local               String?
+  cidade              String?
+  dataInicio          DateTime
+  dataFim             DateTime
+  totalDias           Int             @default(1)
+  diasAtivos          Int             @default(0)
+  linkDrive           String?
+  linkDownloadPublico Boolean         @default(false)
+  senhaDownload       String?
+  produtoId           String?
+  createdById         String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  produto    Produto?                   @relation(fields: [produtoId], references: [id])
+  createdBy  Usuario                    @relation("CoberturasCreadas", fields: [createdById], references: [id])
+  equipe     EventoCoberturaEquipe[]
+  checklist  EventoCoberturaChecklist[]
+  uploads    EventoCoberturaUpload[]
+  album      EventoCoberturaAlbum[]
+  log        EventoCoberturaLog[]
+
+  @@map("coberturas")
+}
+
+model EventoCoberturaEquipe {
+  id               String       @id @default(cuid())
+  coberturaId      String
+  videomakerId     String?
+  nome             String
+  funcao           FuncaoEquipe @default(captacao)
+  diariasTotal     Int          @default(0)
+  diariasEfetuadas Int          @default(0)
+  valorDiaria      Float?
+  createdAt        DateTime     @default(now())
+
+  cobertura  EventoCobertura       @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  videomaker Videomaker?           @relation(fields: [videomakerId], references: [id])
+  uploads    EventoCoberturaUpload[]
+
+  @@map("coberturas_equipe")
+}
+
+model EventoCoberturaChecklist {
+  id           String             @id @default(cuid())
+  coberturaId  String
+  dia          Int
+  texto        String
+  categoria    CategoriaChecklist @default(equipamento)
+  concluido    Boolean            @default(false)
+  concluidoEm  DateTime?
+  concluidoPor String?
+  createdAt    DateTime           @default(now())
+
+  cobertura EventoCobertura @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+
+  @@map("coberturas_checklist")
+}
+
+model EventoCoberturaUpload {
+  id           String      @id @default(cuid())
+  coberturaId  String
+  membroId     String?
+  dia          Int
+  tipo         String      @default("video")
+  momento      TipoMomento @default(outro)
+  titulo       String?
+  url          String
+  thumbnailUrl String?
+  duracao      Int?
+  tamanhoBytes BigInt?
+  driveUrl     String?
+  createdAt    DateTime    @default(now())
+
+  cobertura EventoCobertura        @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  membro    EventoCoberturaEquipe? @relation(fields: [membroId], references: [id])
+
+  @@map("coberturas_uploads")
+}
+
+model EventoCoberturaAlbum {
+  id          String      @id @default(cuid())
+  coberturaId String
+  nome        String
+  momento     TipoMomento @default(outro)
+  dia         Int?
+  fotos       String[]
+  createdAt   DateTime    @default(now())
+
+  cobertura EventoCobertura @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+
+  @@map("coberturas_album")
+}
+
+model EventoCoberturaLog {
+  id          String   @id @default(cuid())
+  coberturaId String
+  usuarioId   String?
+  acao        String
+  detalhe     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  cobertura EventoCobertura @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+
+  @@map("coberturas_log")
 }
