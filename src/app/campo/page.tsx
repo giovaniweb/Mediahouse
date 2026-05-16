@@ -6,28 +6,19 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { signOut, useSession } from "next-auth/react"
 import useSWR from "swr"
 import {
-  Home,
   CalendarRange,
   FileText,
   Calendar,
   Images,
-  CheckSquare,
-  Square,
-  Upload,
   LogOut,
   MapPin,
   Loader2,
   CheckCircle2,
-  Play,
-  Trophy,
-  ChevronDown,
-  ChevronUp,
   Camera,
   Search,
   Image as ImageIcon,
   Video,
   X,
-  Plus,
   Clock,
   AlertCircle,
   Sparkles,
@@ -38,8 +29,13 @@ import { cn } from "@/lib/utils"
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const NAV_BG = "#06142E"
-const CARD_BG = "#0A1F3F"
+const CARD_BG = "#0B2A32"
 const ACCENT = "#00A58A"
+const GREEN = "#7DD37B"
+const LINE = "rgba(234,244,244,.11)"
+const MUTED = "rgba(234,244,244,.62)"
+const TEXT = "#EAF4F4"
+const SOFT = "rgba(0,165,138,.16)"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type TabId = "inicio" | "eventos" | "demandas" | "agenda" | "galeria"
@@ -159,38 +155,93 @@ function formatTime(iso: string) {
 }
 
 // ─── Bottom Navigation ────────────────────────────────────────────────────────
-const NAV_TABS: { id: TabId; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string }[] = [
-  { id: "inicio", icon: Home, label: "Início" },
-  { id: "eventos", icon: CalendarRange, label: "Eventos" },
-  { id: "demandas", icon: FileText, label: "Demandas" },
-  { id: "agenda", icon: Calendar, label: "Agenda" },
-  { id: "galeria", icon: Images, label: "Galeria" },
+const NAV_TABS: { id: TabId; label: string }[] = [
+  { id: "inicio", label: "Início" },
+  { id: "eventos", label: "Eventos" },
+  { id: "demandas", label: "Demandas" },
+  { id: "agenda", label: "Agenda" },
+  { id: "galeria", label: "Galeria" },
 ]
+
+function NavIcon({ id, active }: { id: TabId; active: boolean }) {
+  const col = active ? GREEN : "rgba(234,244,244,.48)"
+  const sw = 1.8
+  if (id === "inicio") return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
+    </svg>
+  )
+  if (id === "eventos") return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+      <rect x={3} y={4} width={18} height={18} rx={2}/><path d="M16 2v4M8 2v4M3 10h18"/>
+    </svg>
+  )
+  if (id === "demandas") return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l2 2 4-4"/><rect x={5} y={5} width={14} height={14} rx={1}/>
+    </svg>
+  )
+  if (id === "agenda") return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 3v4M17 3v4M4 8h16"/><rect x={4} y={5} width={16} height={16} rx={1}/>
+    </svg>
+  )
+  // galeria
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
+      <rect x={4} y={5} width={16} height={14} rx={1}/><path d="m4 16 5-5 4 4 2-2 5 5"/>
+    </svg>
+  )
+}
 
 function BottomNav({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   return (
-    <nav
-      className="shrink-0 flex items-stretch border-t"
-      style={{ backgroundColor: NAV_BG, borderColor: "rgba(255,255,255,0.08)" }}
-    >
-      {NAV_TABS.map(({ id, icon: Icon, label }) => {
+    <nav style={{
+      position: "absolute",
+      left: 14, right: 14, bottom: 12, height: 72,
+      background: "rgba(8,28,42,.78)",
+      border: `1px solid ${LINE}`,
+      borderRadius: 28,
+      display: "grid",
+      gridTemplateColumns: "repeat(5,1fr)",
+      zIndex: 80,
+      backdropFilter: "blur(24px)",
+      WebkitBackdropFilter: "blur(24px)",
+      boxShadow: "0 18px 42px rgba(0,0,0,.48)",
+    }}>
+      {NAV_TABS.map(({ id, label }) => {
         const active = tab === id
         return (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors"
+            style={{
+              border: 0,
+              background: "transparent",
+              color: active ? TEXT : "rgba(234,244,244,.48)",
+              fontSize: 9.8,
+              fontWeight: 560,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              borderRadius: 20,
+              margin: "6px 2px",
+              position: "relative",
+              cursor: "pointer",
+            }}
           >
-            <Icon
-              className="w-5 h-5 transition-colors"
-              style={{ color: active ? ACCENT : "rgba(255,255,255,0.4)" }}
-            />
-            <span
-              className="text-[10px] font-medium transition-colors"
-              style={{ color: active ? ACCENT : "rgba(255,255,255,0.4)" }}
-            >
-              {label}
-            </span>
+            <NavIcon id={id} active={active} />
+            {label}
+            {active && (
+              <span style={{
+                position: "absolute",
+                bottom: 4,
+                width: 4, height: 4, borderRadius: "50%",
+                background: ACCENT,
+              }} />
+            )}
           </button>
         )
       })}
@@ -204,170 +255,197 @@ function TabInicio({
   ranking,
   minhaPosicao,
   meuTotal,
+  onTabChange,
 }: {
   coberturas: Cobertura[]
   ranking: RankingItem[]
   minhaPosicao: number | null
   meuTotal: number
+  onTabChange: (t: TabId) => void
 }) {
   const { data: session } = useSession()
-  const [expanded, setExpanded] = useState<string | null>(coberturas[0]?.id ?? null)
-
-  const hoje = new Date()
-  const saudacao =
-    hoje.getHours() < 12 ? "Bom dia" : hoje.getHours() < 18 ? "Boa tarde" : "Boa noite"
-
   const nome = session?.user?.name?.split(" ")[0] ?? "Equipe"
+  const primeiroEvento = coberturas[0] ?? null
+
+  const checklistPct = primeiroEvento && primeiroEvento._count.checklist > 0
+    ? Math.round((primeiroEvento.checklist.filter((i) => i.concluido).length / primeiroEvento._count.checklist) * 100)
+    : 0
+
+  const maxUploads = ranking.length > 0 ? Math.max(...ranking.map(r => r.total), 1) : 1
 
   return (
-    <div className="p-4 space-y-5">
-      {/* Header saudação */}
-      <div>
-        <p className="text-xs" style={{ color: ACCENT }}>
-          {saudacao} 👋
-        </p>
-        <h1 className="text-xl font-bold text-white">{nome}!</h1>
-        <p className="text-xs text-zinc-400 mt-0.5">
-          {hoje.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
-        </p>
+    <div style={{ padding: "54px 18px 0" }}>
+      {/* Row: greeting + avatar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: TEXT }}>Olá, {nome} 👋</div>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>Bem-vindo ao NuFlow.</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 14, background: SOFT,
+            display: "grid", placeItems: "center", color: "#BFF7D0", fontSize: 16, fontWeight: 700,
+          }}>
+            {session?.user?.name?.charAt(0)?.toUpperCase() ?? "?"}
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              fontSize: 11.5, color: MUTED, background: "transparent", border: 0, cursor: "pointer",
+            }}
+          >
+            <LogOut style={{ width: 13, height: 13 }} />
+            Sair
+          </button>
+        </div>
       </div>
 
-      {/* Ranking semanal */}
-      {(minhaPosicao || ranking.length > 0) && (
-        <div
-          className="rounded-2xl p-4"
-          style={{ backgroundColor: CARD_BG, border: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="w-4 h-4" style={{ color: ACCENT }} />
-            <span className="text-sm font-semibold text-white">Ranking da Semana</span>
+      {/* Hero event card */}
+      <div style={{ fontSize: 13, color: MUTED, fontWeight: 650, margin: "0 0 9px" }}>Evento do dia</div>
+      {primeiroEvento ? (
+        <div style={{
+          height: 274,
+          borderRadius: 26,
+          overflow: "hidden",
+          background: "linear-gradient(135deg, rgba(0,65,98,.86), rgba(0,165,138,.44)), url('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=900&q=80')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          border: "1px solid rgba(0,165,138,.34)",
+          padding: 18,
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 18px 40px rgba(0,165,138,.18), inset 0 1px 0 rgba(255,255,255,.08)",
+        }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center",
+            padding: "7px 12px", borderRadius: 999,
+            background: "rgba(0,165,138,.18)", color: "#BFF7D0",
+            fontSize: 12, fontWeight: 700, width: "max-content",
+          }}>
+            {primeiroEvento.status === "em_andamento" ? "Evento de hoje" : primeiroEvento.status}
+          </span>
+          <h2 style={{
+            fontSize: 27, lineHeight: 1.02, letterSpacing: "-.04em", fontWeight: 730,
+            margin: "12px 0 9px", maxWidth: 295, color: TEXT,
+          }}>
+            {primeiroEvento.titulo}
+          </h2>
+          <div style={{ fontSize: 15, fontWeight: 570, color: "rgba(234,244,244,.84)", marginBottom: 8 }}>
+            {[primeiroEvento.local, primeiroEvento.cidade].filter(Boolean).join(" · ")}
           </div>
-          {minhaPosicao && (
-            <div
-              className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl"
-              style={{ backgroundColor: `${ACCENT}15`, border: `1px solid ${ACCENT}40` }}
+          <div style={{ fontSize: 12.5, color: "rgba(234,244,244,.72)", marginTop: 2 }}>
+            ◷ {formatDate(primeiroEvento.dataInicio)} – {formatDate(primeiroEvento.dataFim)} · Checklist {checklistPct}%
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: "auto" }}>
+            <button
+              onClick={() => onTabChange("eventos")}
+              style={{
+                height: 51, borderRadius: 16,
+                border: "1px solid rgba(234,244,244,.20)",
+                background: "rgba(234,244,244,.11)",
+                color: "white", fontWeight: 670,
+                backdropFilter: "blur(14px)",
+                cursor: "pointer",
+                fontSize: 14,
+              }}
             >
-              <span className="text-lg font-bold" style={{ color: ACCENT }}>
-                #{minhaPosicao}
-              </span>
-              <span className="text-sm text-white font-medium">Você esta semana</span>
-              <span className="ml-auto text-xs" style={{ color: ACCENT }}>
-                {meuTotal} upload(s)
-              </span>
-            </div>
-          )}
-          <div className="space-y-2">
-            {ranking.slice(0, 5).map((r) => (
-              <div key={r.videomakerId} className="flex items-center gap-2">
-                <span
-                  className="text-xs font-bold w-5 text-center"
-                  style={{ color: r.posicao === 1 ? "#FFD700" : "rgba(255,255,255,0.4)" }}
-                >
-                  {r.posicao === 1 ? "🥇" : `#${r.posicao}`}
-                </span>
-                <span
-                  className={cn("text-sm flex-1", r.isMeu ? "font-semibold text-white" : "text-zinc-300")}
-                >
-                  {r.nome}
-                </span>
-                <span className="text-xs text-zinc-500">{r.total} uploads</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Wallet Cards — eventos */}
-      {coberturas.length > 0 ? (
-        <div>
-          <p className="text-xs font-semibold text-zinc-400 uppercase mb-3 tracking-wide">
-            Eventos Ativos
-          </p>
-          <div className="space-y-3">
-            {coberturas.map((c) => {
-              const isOpen = expanded === c.id
-              const checklistPct =
-                c._count.checklist > 0
-                  ? Math.round(
-                      (c.checklist.filter((i) => i.concluido).length / c._count.checklist) * 100
-                    )
-                  : 0
-
-              return (
-                <div
-                  key={c.id}
-                  className="rounded-2xl overflow-hidden cursor-pointer"
-                  style={{
-                    backgroundColor: CARD_BG,
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-                  }}
-                  onClick={() => setExpanded(isOpen ? null : c.id)}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span
-                            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: `${ACCENT}20`, color: ACCENT }}
-                          >
-                            {c.tipo}
-                          </span>
-                        </div>
-                        <h3 className="text-sm font-bold text-white truncate">{c.titulo}</h3>
-                        {(c.local || c.cidade) && (
-                          <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
-                            <MapPin className="w-3 h-3 shrink-0" />
-                            {[c.local, c.cidade].filter(Boolean).join(", ")}
-                          </p>
-                        )}
-                      </div>
-                      {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
-                      )}
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-zinc-500">Checklist</span>
-                        <span className="text-[10px]" style={{ color: ACCENT }}>
-                          {checklistPct}%
-                        </span>
-                      </div>
-                      <div className="h-1 bg-zinc-700 rounded-full">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${checklistPct}%`, backgroundColor: ACCENT }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center gap-4 mt-3">
-                      <span className="flex items-center gap-1 text-xs text-zinc-500">
-                        <Upload className="w-3 h-3" />
-                        {c._count.uploads} upload(s)
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-zinc-500">
-                        <Clock className="w-3 h-3" />
-                        {formatDate(c.dataInicio)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+              ☁️ Upload
+            </button>
+            <button
+              onClick={() => onTabChange("eventos")}
+              style={{
+                height: 51, borderRadius: 16,
+                border: "1px solid rgba(234,244,244,.20)",
+                background: "rgba(234,244,244,.11)",
+                color: "white", fontWeight: 670,
+                backdropFilter: "blur(14px)",
+                cursor: "pointer",
+                fontSize: 14,
+              }}
+            >
+              Detalhes ›
+            </button>
           </div>
         </div>
       ) : (
-        <div className="text-center py-12">
-          <CalendarRange className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
-          <p className="text-sm text-zinc-500">Nenhum evento ativo</p>
+        <div style={{
+          height: 160, borderRadius: 26, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 10,
+          border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
+        }}>
+          <CalendarRange style={{ width: 32, height: 32, color: MUTED }} />
+          <p style={{ fontSize: 13, color: MUTED }}>Nenhum evento ativo</p>
         </div>
+      )}
+
+      {/* Ranking */}
+      {ranking.length > 0 && (
+        <>
+          <div style={{ fontSize: 13, color: MUTED, fontWeight: 650, margin: "18px 0 9px" }}>Ranking da semana</div>
+          <div style={{
+            borderRadius: 24, border: `1px solid ${LINE}`,
+            background: "linear-gradient(180deg,rgba(234,244,244,.05),rgba(234,244,244,.02))",
+            padding: 16, marginBottom: 8,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <b style={{ color: TEXT }}>Videomakers</b>
+                <div style={{ fontSize: 11, color: MUTED }}>Gamificação por entrega</div>
+              </div>
+              <div style={{
+                width: 38, height: 38, borderRadius: 14, background: SOFT,
+                display: "grid", placeItems: "center", color: "#BFF7D0", fontSize: 18,
+              }}>🏆</div>
+            </div>
+            {minhaPosicao && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 12px", borderRadius: 12, marginBottom: 10,
+                background: SOFT, border: `1px solid rgba(0,165,138,.3)`,
+              }}>
+                <span style={{ fontSize: 16, fontWeight: 800, color: ACCENT }}>#{minhaPosicao}</span>
+                <span style={{ fontSize: 13, color: TEXT }}>Você esta semana</span>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: ACCENT }}>{meuTotal} upload(s)</span>
+              </div>
+            )}
+            {ranking.slice(0, 5).map((r) => (
+              <div key={r.videomakerId} style={{
+                display: "grid", gridTemplateColumns: "24px 34px 1fr auto",
+                gap: 10, alignItems: "center", padding: "8px 0",
+              }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: 999,
+                  background: "rgba(234,244,244,.055)",
+                  display: "grid", placeItems: "center",
+                  fontSize: 11, color: "#cdd2df",
+                }}>
+                  {r.posicao}
+                </div>
+                <div style={{
+                  width: 34, height: 34, borderRadius: "50%",
+                  background: `linear-gradient(135deg, #0F3F48, #06142E)`,
+                  display: "grid", placeItems: "center",
+                  fontSize: 15, color: TEXT,
+                  border: `1px solid ${LINE}`,
+                }}>
+                  {r.nome.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 650, color: r.isMeu ? TEXT : MUTED }}>{r.nome}</div>
+                  <div style={{ height: 4, borderRadius: 999, background: "rgba(234,244,244,.08)", marginTop: 5, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: 999,
+                      background: `linear-gradient(90deg, ${ACCENT}, ${GREEN})`,
+                      width: `${Math.round((r.total / maxUploads) * 100)}%`,
+                    }} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: "#d9dce7" }}>{r.total} pts</div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -578,340 +656,413 @@ function TabEventos({
     }
   }
 
+  // ── Wallet state ──
+  const [positions, setPositions] = useState<number[]>([])
+  useEffect(() => {
+    setPositions(coberturas.map((_, i) => i))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coberturas.length])
+
+  function bringToFront(index: number) {
+    setPositions((prev) => {
+      const pos = prev[index]
+      if (pos === 0) return prev
+      return prev.map((p) => (p < pos ? p + 1 : p === pos ? 0 : p))
+    })
+  }
+
+  const POS_STYLES: Record<number, React.CSSProperties> = {
+    0: { top: 0, height: 315, zIndex: 40, filter: "saturate(1.05) brightness(1.03)", transform: "scale(1)" },
+    1: { top: 286, height: 142, zIndex: 30, filter: "saturate(.95) brightness(.88)", transform: "scale(.992)" },
+    2: { top: 410, height: 142, zIndex: 20, filter: "saturate(.90) brightness(.82)", transform: "scale(.982)" },
+    3: { top: 534, height: 142, zIndex: 10, filter: "saturate(.86) brightness(.76)", transform: "scale(.972)" },
+  }
+
+  const THEMES = [
+    "linear-gradient(135deg, rgba(0,65,98,.90), rgba(0,165,138,.50))",
+    "linear-gradient(135deg, #004162, #007284)",
+    "linear-gradient(135deg, #014651, #00A58A)",
+    "linear-gradient(135deg, #161514, #014651)",
+  ]
+
+  const activeIndex = positions.indexOf(0)
+  const activeCobertura = coberturas[activeIndex] ?? coberturas[0] ?? null
+
+  // derive panel state from the active card
+  const dia = diaAtivo[activeCobertura?.id ?? ""] ?? 1
+  const currentSubTab = subTab[activeCobertura?.id ?? ""] ?? "checklist"
+
+  const checklistDia = activeCobertura ? activeCobertura.checklist.filter((item) => item.dia === dia) : []
+  const checklistConcluidos = checklistDia.filter((i) => i.concluido).length
+  const checklistPct = checklistDia.length > 0 ? Math.round((checklistConcluidos / checklistDia.length) * 100) : 0
+  const uploadsDia = activeCobertura ? activeCobertura.uploads.filter((u) => u.dia === dia) : []
+
+  const checklistPorCategoria: Record<string, ChecklistItem[]> = {}
+  for (const item of checklistDia) {
+    if (!checklistPorCategoria[item.categoria]) checklistPorCategoria[item.categoria] = []
+    checklistPorCategoria[item.categoria].push(item)
+  }
+
   return (
-    <div className="p-4 space-y-3">
-      <h2 className="text-base font-bold text-white">Meus Eventos</h2>
-
-      {coberturas.length === 0 && (
-        <div className="text-center py-12">
-          <CalendarRange className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
-          <p className="text-sm text-zinc-500">Você não está escalado em nenhum evento</p>
+    <div style={{ padding: "54px 18px 0" }}>
+      {/* Intro row */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
+            Eventos
+          </h2>
+          <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>
+            {coberturas.length > 0 ? `${coberturas.length} evento(s) ativo(s)` : "Nenhum evento ativo"}
+          </p>
         </div>
-      )}
+        <div style={{
+          width: 58, height: 58, borderRadius: 24,
+          border: `1px solid rgba(0,165,138,.55)`,
+          background: "rgba(0,165,138,.07)",
+          fontSize: 24, color: "#BFF7D0",
+          display: "grid", placeItems: "center",
+        }}>🎬</div>
+      </div>
 
-      {coberturas.map((c) => {
-        const isOpen = expanded === c.id
-        const currentSubTab = subTab[c.id] ?? "checklist"
-        const dia = diaAtivo[c.id] ?? 1
-        const totalDias = c.totalDias || 1
-
-        const diasList = Array.from({ length: totalDias }, (_, i) => i + 1)
-        const checklistDia = c.checklist.filter((item) => item.dia === dia)
-        const checklistConcluidos = checklistDia.filter((i) => i.concluido).length
-        const checklistPct = checklistDia.length > 0 ? Math.round((checklistConcluidos / checklistDia.length) * 100) : 0
-
-        const uploadsDia = c.uploads.filter((u) => u.dia === dia)
-
-        // Agrupar checklist por categoria
-        const checklistPorCategoria: Record<string, ChecklistItem[]> = {}
-        for (const item of checklistDia) {
-          if (!checklistPorCategoria[item.categoria]) checklistPorCategoria[item.categoria] = []
-          checklistPorCategoria[item.categoria].push(item)
-        }
-
-        return (
-          <div
-            key={c.id}
-            className="rounded-2xl overflow-hidden"
-            style={{ backgroundColor: CARD_BG, border: "1px solid rgba(255,255,255,0.07)" }}
-          >
-            {/* Header do card */}
-            <button
-              className="w-full p-4 text-left"
-              onClick={() => setExpanded(isOpen ? null : c.id)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-zinc-500 mb-0.5">{c.tipo}</p>
-                  <h3 className="text-sm font-semibold text-white truncate">{c.titulo}</h3>
-                  {(c.local || c.cidade) && (
-                    <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3" />
-                      {[c.local, c.cidade].filter(Boolean).join(", ")}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-xs text-zinc-500">
-                      {formatDate(c.dataInicio)} – {formatDate(c.dataFim)}
-                    </span>
-                    <span className="text-xs" style={{ color: ACCENT }}>
-                      {checklistPct}% ✓
-                    </span>
-                  </div>
-                </div>
-                {isOpen ? (
-                  <ChevronUp className="w-4 h-4 text-zinc-500 shrink-0 mt-1" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0 mt-1" />
-                )}
-              </div>
-            </button>
-
-            {/* Conteúdo expandido */}
-            {isOpen && (
-              <div>
-                {/* Seletor de dia */}
-                {totalDias > 1 && (
-                  <div
-                    className="flex gap-2 px-4 pb-2 overflow-x-auto"
-                    style={{ scrollbarWidth: "none" }}
-                  >
-                    {diasList.map((d) => (
-                      <button
-                        key={d}
-                        onClick={() => setDiaAtivo((p) => ({ ...p, [c.id]: d }))}
-                        className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors"
-                        style={
-                          dia === d
-                            ? { backgroundColor: ACCENT, color: "#fff" }
-                            : { backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }
-                        }
-                      >
-                        Dia {d}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Sub-tabs */}
-                <div
-                  className="flex border-b"
-                  style={{ borderColor: "rgba(255,255,255,0.07)" }}
+      {coberturas.length === 0 ? (
+        <div style={{
+          height: 200, borderRadius: 26, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 12,
+          border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
+        }}>
+          <CalendarRange style={{ width: 36, height: 36, color: MUTED }} />
+          <p style={{ fontSize: 13, color: MUTED }}>Você não está escalado em nenhum evento</p>
+        </div>
+      ) : (
+        <>
+          {/* Wallet stage */}
+          <div style={{
+            height: 620,
+            border: `1px solid ${LINE}`,
+            borderRadius: 34,
+            background: "linear-gradient(180deg,rgba(234,244,244,.04),rgba(234,244,244,.015))",
+            overflow: "hidden",
+            position: "relative",
+            marginBottom: 20,
+          }}>
+            {coberturas.slice(0, 4).map((c, index) => {
+              const pos = positions[index] ?? index
+              const cChecklistDia = c.checklist.filter((i) => i.dia === (diaAtivo[c.id] ?? 1))
+              const cPct = cChecklistDia.length > 0
+                ? Math.round((cChecklistDia.filter((i) => i.concluido).length / cChecklistDia.length) * 100)
+                : 0
+              const isActive = pos === 0
+              return (
+                <article
+                  key={c.id}
+                  style={{
+                    position: "absolute",
+                    left: 0, right: 0,
+                    borderRadius: 27,
+                    overflow: "hidden",
+                    border: `1px solid ${LINE}`,
+                    boxShadow: "0 18px 46px rgba(0,0,0,.38)",
+                    background: THEMES[index % 4],
+                    transition: "top .55s cubic-bezier(.22,1,.36,1), height .55s cubic-bezier(.22,1,.36,1), transform .55s cubic-bezier(.22,1,.36,1), filter .25s ease",
+                    cursor: pos !== 0 ? "pointer" : "default",
+                    ...POS_STYLES[Math.min(pos, 3)],
+                  }}
+                  onClick={() => { if (pos !== 0) bringToFront(index) }}
                 >
-                  {(["checklist", "upload", "galeria"] as const).map((st) => (
+                  {isActive ? (
+                    /* Expanded card */
+                    <div style={{ padding: "22px 20px 16px", height: "100%", display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center",
+                          padding: "6px 12px", borderRadius: 999,
+                          background: "rgba(0,165,138,.22)", color: "#BFF7D0",
+                          fontSize: 11.5, fontWeight: 700,
+                        }}>
+                          {c.status === "em_andamento" ? "Em andamento" : c.status}
+                        </span>
+                        <span style={{ fontSize: 12, color: "rgba(234,244,244,.7)" }}>
+                          {formatDate(c.dataInicio)}
+                        </span>
+                      </div>
+                      <h3 style={{
+                        fontSize: 26, lineHeight: 1.02, letterSpacing: "-.04em",
+                        fontWeight: 730, color: TEXT, margin: "0 0 8px", maxWidth: 280,
+                      }}>
+                        {c.titulo}
+                      </h3>
+                      {(c.local || c.cidade) && (
+                        <div style={{ fontSize: 14, fontWeight: 570, color: "rgba(234,244,244,.8)", marginBottom: 6 }}>
+                          📍 {[c.local, c.cidade].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: "rgba(234,244,244,.6)", marginBottom: 14 }}>
+                        ✓ Checklist {cPct}% · {c._count.uploads} upload(s)
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: "auto" }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSubTab((p) => ({ ...p, [c.id]: "upload" })) }}
+                          style={{
+                            height: 46, borderRadius: 14,
+                            border: "1px solid rgba(234,244,244,.22)",
+                            background: "rgba(234,244,244,.12)",
+                            color: "white", fontWeight: 670,
+                            backdropFilter: "blur(14px)", cursor: "pointer", fontSize: 13,
+                          }}
+                        >
+                          ☁️ Upload
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSubTab((p) => ({ ...p, [c.id]: "checklist" })) }}
+                          style={{
+                            height: 46, borderRadius: 14,
+                            border: "1px solid rgba(234,244,244,.22)",
+                            background: "rgba(0,165,138,.22)",
+                            color: "white", fontWeight: 670,
+                            backdropFilter: "blur(14px)", cursor: "pointer", fontSize: 13,
+                          }}
+                        >
+                          ✓ Checklist
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Collapsed card */
+                    <div style={{
+                      padding: "44px 20px 16px", height: "100%",
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, color: "rgba(234,244,244,.55)", marginBottom: 4 }}>
+                          {c.status}
+                        </div>
+                        <div style={{
+                          fontSize: 18, fontWeight: 700, color: TEXT,
+                          letterSpacing: "-.03em", whiteSpace: "nowrap",
+                          overflow: "hidden", textOverflow: "ellipsis", maxWidth: "70vw",
+                        }}>
+                          {c.titulo}
+                        </div>
+                        {c.cidade && (
+                          <div style={{ fontSize: 12, color: "rgba(234,244,244,.55)", marginTop: 4 }}>
+                            📍 {c.cidade}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 22, opacity: .7 }}>›</div>
+                    </div>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+
+          {/* Detail panel for active card */}
+          {activeCobertura && (
+            <div style={{
+              borderRadius: 24, border: `1px solid ${LINE}`,
+              background: "rgba(234,244,244,.03)", overflow: "hidden",
+            }}>
+              {/* Sub-tabs */}
+              <div style={{
+                display: "flex",
+                borderBottom: `1px solid ${LINE}`,
+              }}>
+                {(["checklist", "upload", "galeria"] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setSubTab((p) => ({ ...p, [activeCobertura.id]: st }))}
+                    style={{
+                      flex: 1, padding: "12px 4px", fontSize: 12.5, fontWeight: 600,
+                      background: "transparent", border: 0,
+                      borderBottom: currentSubTab === st ? `2px solid ${ACCENT}` : "2px solid transparent",
+                      color: currentSubTab === st ? ACCENT : MUTED,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {st === "checklist" ? "✓ Checklist" : st === "upload" ? "↑ Upload" : "◻ Galeria"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Seletor de dia */}
+              {activeCobertura.totalDias > 1 && (
+                <div style={{ display: "flex", gap: 8, padding: "12px 16px 4px", overflowX: "auto", scrollbarWidth: "none" }}>
+                  {Array.from({ length: activeCobertura.totalDias }, (_, i) => i + 1).map((d) => (
                     <button
-                      key={st}
-                      onClick={() => setSubTab((p) => ({ ...p, [c.id]: st }))}
-                      className="flex-1 py-2 text-xs font-medium capitalize transition-colors border-b-2"
-                      style={
-                        currentSubTab === st
-                          ? { color: ACCENT, borderColor: ACCENT }
-                          : { color: "rgba(255,255,255,0.4)", borderColor: "transparent" }
-                      }
+                      key={d}
+                      onClick={() => setDiaAtivo((p) => ({ ...p, [activeCobertura.id]: d }))}
+                      style={{
+                        flexShrink: 0, padding: "5px 14px", borderRadius: 999, fontSize: 12, fontWeight: 600,
+                        background: dia === d ? ACCENT : "rgba(234,244,244,.08)",
+                        color: dia === d ? "#fff" : MUTED,
+                        border: 0, cursor: "pointer",
+                      }}
                     >
-                      {st === "checklist" ? "✓ Checklist" : st === "upload" ? "↑ Upload" : "◻ Galeria"}
+                      Dia {d}
                     </button>
                   ))}
                 </div>
+              )}
 
-                {/* Checklist */}
-                {currentSubTab === "checklist" && (
-                  <div className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-400">
-                        {checklistConcluidos}/{checklistDia.length} concluídos
-                      </span>
-                      <span className="text-xs font-semibold" style={{ color: ACCENT }}>
-                        {checklistPct}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-zinc-700 rounded-full">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${checklistPct}%`, backgroundColor: ACCENT }}
-                      />
-                    </div>
-
-                    {Object.entries(checklistPorCategoria).map(([cat, items]) => (
-                      <div key={cat}>
-                        <p
-                          className={cn(
-                            "text-[10px] font-semibold uppercase tracking-wide mb-1.5",
-                            getCategoriaColor(cat)
-                          )}
+              {/* Checklist */}
+              {currentSubTab === "checklist" && (
+                <div style={{ padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: MUTED }}>{checklistConcluidos}/{checklistDia.length} concluídos</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>{checklistPct}%</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 999, background: "rgba(234,244,244,.08)", marginBottom: 14, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${ACCENT}, ${GREEN})`, width: `${checklistPct}%`, transition: "width .3s" }} />
+                  </div>
+                  {Object.entries(checklistPorCategoria).map(([cat, items]) => (
+                    <div key={cat} style={{ marginBottom: 12 }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8, color: cat === "equipamento" ? "#60a5fa" : cat === "logistica" ? "#fbbf24" : cat === "conteudo" ? "#c084fc" : GREEN }}>
+                        {getCategoriaLabel(cat)}
+                      </p>
+                      {items.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleToggleChecklist(activeCobertura.id, item.id, item.concluido)}
+                          disabled={togglingItem === item.id}
+                          style={{
+                            width: "100%", display: "flex", alignItems: "center", gap: 12,
+                            padding: "10px 12px", borderRadius: 14, marginBottom: 6,
+                            background: item.concluido ? "rgba(0,165,138,.1)" : "rgba(234,244,244,.04)",
+                            border: `1px solid ${item.concluido ? "rgba(0,165,138,.25)" : LINE}`,
+                            cursor: "pointer",
+                          }}
                         >
-                          {getCategoriaLabel(cat)}
-                        </p>
-                        <div className="space-y-1">
-                          {items.map((item) => (
-                            <button
-                              key={item.id}
-                              onClick={() => handleToggleChecklist(c.id, item.id, item.concluido)}
-                              disabled={togglingItem === item.id}
-                              className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl text-left transition-colors active:scale-98"
-                              style={{
-                                backgroundColor: item.concluido
-                                  ? "rgba(0,165,138,0.1)"
-                                  : "rgba(255,255,255,0.04)",
-                                border: item.concluido
-                                  ? `1px solid ${ACCENT}30`
-                                  : "1px solid rgba(255,255,255,0.06)",
-                              }}
-                            >
-                              {togglingItem === item.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-zinc-400 shrink-0" />
-                              ) : item.concluido ? (
-                                <CheckCircle2
-                                  className="w-4 h-4 shrink-0"
-                                  style={{ color: ACCENT }}
-                                />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full border-2 border-zinc-600 shrink-0" />
-                              )}
-                              <span
-                                className={cn(
-                                  "text-sm",
-                                  item.concluido ? "text-zinc-400 line-through" : "text-zinc-200"
-                                )}
-                              >
-                                {item.texto}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-
-                    {checklistDia.length === 0 && (
-                      <p className="text-sm text-zinc-500 text-center py-4">
-                        Sem itens para o Dia {dia}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Upload */}
-                {currentSubTab === "upload" && (
-                  <div className="p-4 space-y-4">
-                    <p className="text-xs text-zinc-400">Upload para o Dia {dia}</p>
-
-                    {/* Botões de upload */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => {
-                          setUploadingFor(`${c.id}-foto`)
-                          fileInputRef.current?.setAttribute(
-                            "data-cobertura",
-                            c.id
-                          )
-                          fileInputRef.current?.setAttribute("data-tipo", "foto")
-                          fileInputRef.current?.setAttribute(
-                            "accept",
-                            "image/*"
-                          )
-                          fileInputRef.current?.removeAttribute("multiple")
-                          fileInputRef.current?.setAttribute("multiple", "true")
-                          fileInputRef.current?.click()
-                        }}
-                        className="flex flex-col items-center gap-2 py-4 rounded-xl border border-dashed border-zinc-600 hover:border-zinc-400 transition-colors"
-                      >
-                        <Camera className="w-6 h-6 text-zinc-400" />
-                        <span className="text-xs text-zinc-400">Fotos</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUploadingFor(`${c.id}-video`)
-                          fileInputRef.current?.setAttribute("data-cobertura", c.id)
-                          fileInputRef.current?.setAttribute("data-tipo", "video")
-                          fileInputRef.current?.setAttribute("accept", "video/*")
-                          fileInputRef.current?.removeAttribute("multiple")
-                          fileInputRef.current?.click()
-                        }}
-                        className="flex flex-col items-center gap-2 py-4 rounded-xl border border-dashed border-zinc-600 hover:border-zinc-400 transition-colors"
-                      >
-                        <Video className="w-6 h-6 text-zinc-400" />
-                        <span className="text-xs text-zinc-400">Vídeo</span>
-                      </button>
-                    </div>
-
-                    {/* Progresso de uploads ativos */}
-                    {Object.entries(uploading)
-                      .filter(([k, v]) => k.startsWith(c.id) && v)
-                      .map(([key]) => (
-                        <div key={key} className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-400">Enviando...</span>
-                            <span className="text-xs" style={{ color: ACCENT }}>
-                              {uploadProgress[key] ?? 0}%
-                            </span>
-                          </div>
-                          <div className="h-1.5 bg-zinc-700 rounded-full">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${uploadProgress[key] ?? 0}%`,
-                                backgroundColor: ACCENT,
-                              }}
-                            />
-                          </div>
-                        </div>
+                          {togglingItem === item.id
+                            ? <Loader2 style={{ width: 16, height: 16, flexShrink: 0, color: ACCENT }} className="animate-spin" />
+                            : item.concluido
+                              ? <CheckCircle2 style={{ width: 16, height: 16, flexShrink: 0, color: ACCENT }} />
+                              : <div style={{ width: 16, height: 16, borderRadius: "50%", border: "2px solid rgba(234,244,244,.25)", flexShrink: 0 }} />
+                          }
+                          <span style={{ fontSize: 13.5, color: item.concluido ? MUTED : TEXT, textDecoration: item.concluido ? "line-through" : "none", textAlign: "left" }}>
+                            {item.texto}
+                          </span>
+                        </button>
                       ))}
+                      {checklistDia.length === 0 && (
+                        <p style={{ fontSize: 13, color: MUTED, textAlign: "center", padding: 16 }}>Sem itens para o Dia {dia}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                    {/* Uploads recentes do dia */}
-                    {uploadsDia.length > 0 && (
-                      <div>
-                        <p className="text-xs text-zinc-500 mb-2">Enviados hoje</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {uploadsDia.slice(0, 9).map((up) => (
-                            <div
-                              key={up.id}
-                              className="aspect-video rounded-lg overflow-hidden bg-zinc-700 relative"
-                            >
-                              {up.thumbnailUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={up.thumbnailUrl}
-                                  alt={up.titulo ?? "Upload"}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <Video className="w-4 h-4 text-zinc-500" />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              {/* Upload */}
+              {currentSubTab === "upload" && (
+                <div style={{ padding: 16 }}>
+                  <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>Upload para o Dia {dia}</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    <button
+                      onClick={() => {
+                        setUploadingFor(`${activeCobertura.id}-foto`)
+                        fileInputRef.current?.setAttribute("data-cobertura", activeCobertura.id)
+                        fileInputRef.current?.setAttribute("data-tipo", "foto")
+                        fileInputRef.current?.setAttribute("accept", "image/*")
+                        fileInputRef.current?.removeAttribute("multiple")
+                        fileInputRef.current?.setAttribute("multiple", "true")
+                        fileInputRef.current?.click()
+                      }}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                        padding: "18px 4px", borderRadius: 18,
+                        border: `1px dashed rgba(234,244,244,.22)`,
+                        background: "rgba(234,244,244,.035)", cursor: "pointer",
+                      }}
+                    >
+                      <Camera style={{ width: 26, height: 26, color: MUTED }} />
+                      <span style={{ fontSize: 12, color: MUTED }}>Fotos</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setUploadingFor(`${activeCobertura.id}-video`)
+                        fileInputRef.current?.setAttribute("data-cobertura", activeCobertura.id)
+                        fileInputRef.current?.setAttribute("data-tipo", "video")
+                        fileInputRef.current?.setAttribute("accept", "video/*")
+                        fileInputRef.current?.removeAttribute("multiple")
+                        fileInputRef.current?.click()
+                      }}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                        padding: "18px 4px", borderRadius: 18,
+                        border: `1px dashed rgba(0,165,138,.35)`,
+                        background: "rgba(0,165,138,.06)", cursor: "pointer",
+                      }}
+                    >
+                      <Video style={{ width: 26, height: 26, color: ACCENT }} />
+                      <span style={{ fontSize: 12, color: ACCENT }}>Vídeo</span>
+                    </button>
                   </div>
-                )}
 
-                {/* Galeria simples */}
-                {currentSubTab === "galeria" && (
-                  <div className="p-4">
-                    {c.uploads.length === 0 ? (
-                      <p className="text-sm text-zinc-500 text-center py-8">
-                        Nenhum upload ainda
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {c.uploads.map((up) => (
-                          <a
-                            key={up.id}
-                            href={up.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="aspect-video rounded-lg overflow-hidden bg-zinc-700 relative block"
-                          >
-                            {up.thumbnailUrl ? (
+                  {/* Upload progress bars */}
+                  {Object.entries(uploading).filter(([k, v]) => k.startsWith(activeCobertura.id) && v).map(([key]) => (
+                    <div key={key} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: MUTED }}>Enviando...</span>
+                        <span style={{ fontSize: 12, color: ACCENT }}>{uploadProgress[key] ?? 0}%</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 999, background: "rgba(234,244,244,.08)", overflow: "hidden" }}>
+                        <div style={{ height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${ACCENT}, ${GREEN})`, width: `${uploadProgress[key] ?? 0}%`, transition: "width .2s" }} />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Recent uploads grid */}
+                  {uploadsDia.length > 0 && (
+                    <div>
+                      <p style={{ fontSize: 12, color: MUTED, marginBottom: 10 }}>Enviados — Dia {dia}</p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                        {uploadsDia.slice(0, 9).map((up) => (
+                          <div key={up.id} style={{ aspectRatio: "16/9", borderRadius: 10, overflow: "hidden", background: "rgba(234,244,244,.06)" }}>
+                            {up.thumbnailUrl
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={up.thumbnailUrl}
-                                alt={up.titulo ?? "Upload"}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Video className="w-4 h-4 text-zinc-500" />
-                              </div>
-                            )}
-                            <div className="absolute bottom-1 right-1">
-                              <span className="text-[9px] bg-black/60 text-white px-1 py-0.5 rounded">
-                                D{up.dia}
-                              </span>
-                            </div>
-                          </a>
+                              ? <img src={up.thumbnailUrl} alt={up.titulo ?? "Upload"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <Video style={{ width: 16, height: 16, color: MUTED }} />
+                                </div>
+                            }
+                          </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Galeria */}
+              {currentSubTab === "galeria" && (
+                <div style={{ padding: 16 }}>
+                  {activeCobertura.uploads.length === 0 ? (
+                    <p style={{ fontSize: 13, color: MUTED, textAlign: "center", padding: 24 }}>Nenhum upload ainda</p>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                      {activeCobertura.uploads.map((up) => (
+                        <a key={up.id} href={up.url} target="_blank" rel="noreferrer"
+                          style={{ display: "block", aspectRatio: "16/9", borderRadius: 10, overflow: "hidden", background: "rgba(234,244,244,.06)", position: "relative" }}>
+                          {up.thumbnailUrl
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={up.thumbnailUrl} alt={up.titulo ?? "Upload"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <Video style={{ width: 14, height: 14, color: MUTED }} />
+                              </div>
+                          }
+                          <div style={{ position: "absolute", bottom: 4, right: 4 }}>
+                            <span style={{ fontSize: 9, background: "rgba(0,0,0,.65)", color: "white", padding: "1px 5px", borderRadius: 4 }}>D{up.dia}</span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Input de arquivo oculto */}
       <input
@@ -926,7 +1077,6 @@ function TabEventos({
           if (files && files.length > 0 && coberturaId) {
             handleUpload(coberturaId, files, tipo)
           }
-          // Reset
           e.target.value = ""
           setUploadingFor(null)
         }}
@@ -936,120 +1086,128 @@ function TabEventos({
 }
 
 // ─── Tab Demandas ─────────────────────────────────────────────────────────────
-function TabDemandas({ demandas }: { demandas: Demanda[] }) {
-  const prioridadeColor: Record<string, string> = {
-    urgente: "text-red-400",
-    alta: "text-orange-400",
-    normal: "text-zinc-400",
-  }
+const STATUS_PILL: Record<string, { bg: string; color: string }> = {
+  entrada:      { bg: "rgba(234,244,244,.08)", color: MUTED },
+  em_andamento: { bg: "rgba(96,165,250,.15)",  color: "#93c5fd" },
+  editando:     { bg: "rgba(167,139,250,.15)", color: "#c4b5fd" },
+  revisao:      { bg: "rgba(251,191,36,.13)",  color: "#fcd34d" },
+  aprovacao:    { bg: "rgba(251,146,60,.13)",  color: "#fdba74" },
+  para_postar:  { bg: "rgba(52,211,153,.13)",  color: "#6ee7b7" },
+  finalizado:   { bg: "rgba(0,165,138,.18)",   color: "#BFF7D0" },
+}
 
+function TabDemandas({ demandas }: { demandas: Demanda[] }) {
   return (
-    <div className="p-4 space-y-3">
-      <h2 className="text-base font-bold text-white">Minhas Demandas</h2>
+    <div style={{ padding: "54px 18px 0" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
+          Demandas
+        </h2>
+        <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>
+          {demandas.length > 0 ? `${demandas.length} demanda(s) ativa(s)` : "Nenhuma demanda ativa"}
+        </p>
+      </div>
 
       {demandas.length === 0 && (
-        <div className="text-center py-12">
-          <FileText className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
-          <p className="text-sm text-zinc-500">Nenhuma demanda ativa</p>
+        <div style={{
+          height: 200, borderRadius: 26, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 12,
+          border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
+        }}>
+          <FileText style={{ width: 36, height: 36, color: MUTED }} />
+          <p style={{ fontSize: 13, color: MUTED }}>Nenhuma demanda ativa</p>
         </div>
       )}
 
-      {demandas.map((d) => {
-        const isVencida = d.dataLimite && new Date(d.dataLimite) < new Date()
-        return (
-          <a
-            key={d.id}
-            href={`/demandas/${d.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-2xl p-4 transition-opacity active:opacity-70"
-            style={{ backgroundColor: CARD_BG, border: "1px solid rgba(255,255,255,0.07)" }}
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <span
-                className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                  STATUS_COLOR[d.statusVisivel] ?? "bg-zinc-700 text-zinc-300"
-                )}
-              >
-                {STATUS_LABEL[d.statusVisivel] ?? d.statusVisivel}
-              </span>
-              {d.prioridade && d.prioridade !== "normal" && (
-                <span
-                  className={cn("text-[10px] font-bold uppercase", prioridadeColor[d.prioridade] ?? "")}
-                >
-                  {d.prioridade}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {demandas.map((d) => {
+          const isVencida = d.dataLimite && new Date(d.dataLimite) < new Date()
+          const pill = STATUS_PILL[d.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
+          return (
+            <a
+              key={d.id}
+              href={`/demandas/${d.id}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "block", borderRadius: 18, padding: 14,
+                background: "rgba(234,244,244,.035)",
+                border: `1px solid ${LINE}`,
+                textDecoration: "none",
+              }}
+            >
+              {/* Status + prioridade */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                <span style={{
+                  fontSize: 11, padding: "4px 10px", borderRadius: 999, fontWeight: 700,
+                  background: pill.bg, color: pill.color,
+                }}>
+                  {STATUS_LABEL[d.statusVisivel] ?? d.statusVisivel}
                 </span>
-              )}
-            </div>
-
-            <p className="text-[10px] text-zinc-500 font-mono">{d.codigo}</p>
-            <h3 className="text-sm font-semibold text-white mt-0.5 line-clamp-2">{d.titulo}</h3>
-
-            {d.produtos?.[0] && (
-              <p className="text-xs text-zinc-500 mt-1">{d.produtos[0].produto.nome}</p>
-            )}
-
-            <div className="flex items-center gap-3 mt-2">
-              {d.dataLimite && (
-                <span
-                  className={cn(
-                    "flex items-center gap-1 text-xs",
-                    isVencida ? "text-red-400" : "text-zinc-500"
-                  )}
-                >
-                  <Clock className="w-3 h-3" />
-                  {formatDate(d.dataLimite)}
-                </span>
-              )}
-              {(d.cidade || d.localGravacao) && (
-                <span className="flex items-center gap-1 text-xs text-zinc-500">
-                  <MapPin className="w-3 h-3" />
-                  {d.cidade ?? d.localGravacao}
-                </span>
-              )}
-            </div>
-
-            {/* Links de pastas */}
-            {(d.linkFolderBrutos || d.linkFolderFinal) && (
-              <div className="flex gap-2 mt-2">
-                {d.linkFolderBrutos && (
-                  <a
-                    href={d.linkFolderBrutos}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg"
-                    style={{
-                      backgroundColor: "rgba(255,255,255,0.06)",
-                      color: "rgba(255,255,255,0.5)",
-                    }}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Brutos
-                  </a>
-                )}
-                {d.linkFolderFinal && (
-                  <a
-                    href={d.linkFolderFinal}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg"
-                    style={{
-                      backgroundColor: `${ACCENT}15`,
-                      color: ACCENT,
-                    }}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Final
-                  </a>
+                {d.prioridade && d.prioridade !== "normal" && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 800, textTransform: "uppercase",
+                    color: d.prioridade === "urgente" ? "#f87171" : "#fb923c",
+                  }}>
+                    {d.prioridade}
+                  </span>
                 )}
               </div>
-            )}
-          </a>
-        )
-      })}
+
+              <p style={{ fontSize: 10, color: MUTED, fontFamily: "monospace", marginBottom: 2 }}>{d.codigo}</p>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: "0 0 4px", lineHeight: 1.3 }}>{d.titulo}</h3>
+
+              {d.produtos?.[0] && (
+                <p style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>{d.produtos[0].produto.nome}</p>
+              )}
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {d.dataLimite && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: isVencida ? "#f87171" : MUTED }}>
+                    <Clock style={{ width: 12, height: 12 }} />
+                    {formatDate(d.dataLimite)}
+                  </span>
+                )}
+                {(d.cidade || d.localGravacao) && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: MUTED }}>
+                    <MapPin style={{ width: 12, height: 12 }} />
+                    {d.cidade ?? d.localGravacao}
+                  </span>
+                )}
+              </div>
+
+              {/* Links de pastas */}
+              {(d.linkFolderBrutos || d.linkFolderFinal) && (
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  {d.linkFolderBrutos && (
+                    <a href={d.linkFolderBrutos} target="_blank" rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 4, fontSize: 10,
+                        padding: "4px 10px", borderRadius: 8,
+                        background: "rgba(234,244,244,.07)", color: MUTED, textDecoration: "none",
+                      }}>
+                      <ExternalLink style={{ width: 11, height: 11 }} /> Brutos
+                    </a>
+                  )}
+                  {d.linkFolderFinal && (
+                    <a href={d.linkFolderFinal} target="_blank" rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 4, fontSize: 10,
+                        padding: "4px 10px", borderRadius: 8,
+                        background: SOFT, color: ACCENT, textDecoration: "none",
+                      }}>
+                      <ExternalLink style={{ width: 11, height: 11 }} /> Final
+                    </a>
+                  )}
+                </div>
+              )}
+            </a>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1085,65 +1243,86 @@ function TabAgenda({
   ].sort((a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime())
 
   return (
-    <div className="p-4 space-y-3">
-      <h2 className="text-base font-bold text-white">Agenda — Próximos 7 dias</h2>
+    <div style={{ padding: "54px 18px 0" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
+          Agenda
+        </h2>
+        <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>Próximos 7 dias</p>
+      </div>
 
       {allItems.length === 0 && (
-        <div className="text-center py-12">
-          <Calendar className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
-          <p className="text-sm text-zinc-500">Nada agendado nos próximos 7 dias</p>
+        <div style={{
+          height: 200, borderRadius: 26, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 12,
+          border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
+        }}>
+          <Calendar style={{ width: 36, height: 36, color: MUTED }} />
+          <p style={{ fontSize: 13, color: MUTED }}>Nada agendado nos próximos 7 dias</p>
         </div>
       )}
 
-      {allItems.map((item) => {
-        const dt = new Date(item.inicio)
-        const isHoje = dt.toDateString() === hoje.toDateString()
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {allItems.map((item) => {
+          const dt = new Date(item.inicio)
+          const isHoje = dt.toDateString() === hoje.toDateString()
+          const mesLabel = dt.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()
 
-        return (
-          <div
-            key={`${item.tipo}-${item.id}`}
-            className="rounded-2xl p-4"
-            style={{
-              backgroundColor: CARD_BG,
-              border: isHoje ? `1px solid ${ACCENT}50` : "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className="shrink-0 rounded-xl px-2.5 py-1.5 text-center min-w-[42px]"
-                style={{
-                  backgroundColor: isHoje ? ACCENT : "rgba(255,255,255,0.06)",
-                }}
-              >
-                <p className="text-[10px] text-white/70 leading-none">
-                  {dt.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}
-                </p>
-                <p className="text-lg font-bold text-white leading-tight">{dt.getDate()}</p>
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  {isHoje && (
-                    <span className="text-[10px] font-bold" style={{ color: ACCENT }}>
-                      HOJE
-                    </span>
-                  )}
-                  <span className="text-[10px] text-zinc-500">
-                    {item.tipo === "cobertura" ? "Cobertura" : "Evento"} · {formatTime(item.inicio)}
-                  </span>
+          return (
+            <div
+              key={`${item.tipo}-${item.id}`}
+              style={{
+                borderRadius: 18, padding: 14,
+                background: "rgba(234,244,244,.035)",
+                border: `1px solid ${isHoje ? "rgba(0,165,138,.45)" : LINE}`,
+                boxShadow: isHoje ? `0 0 0 1px ${SOFT}` : "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                {/* Date badge */}
+                <div style={{
+                  flexShrink: 0, borderRadius: 14, padding: "8px 10px", textAlign: "center", minWidth: 48,
+                  background: isHoje ? ACCENT : "rgba(234,244,244,.07)",
+                }}>
+                  <p style={{ fontSize: 9.5, color: "rgba(255,255,255,.7)", lineHeight: 1, marginBottom: 2 }}>{mesLabel}</p>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: TEXT, lineHeight: 1 }}>{dt.getDate()}</p>
                 </div>
-                <h3 className="text-sm font-semibold text-white truncate">{item.titulo}</h3>
-                {item.local && (
-                  <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3 h-3" />
-                    {item.local}
-                  </p>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    {isHoje && (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: ACCENT, letterSpacing: ".04em" }}>HOJE</span>
+                    )}
+                    <span style={{
+                      fontSize: 10.5, padding: "2px 8px", borderRadius: 999, fontWeight: 600,
+                      background: item.tipo === "cobertura" ? SOFT : "rgba(234,244,244,.07)",
+                      color: item.tipo === "cobertura" ? ACCENT : MUTED,
+                    }}>
+                      {item.tipo === "cobertura" ? "Cobertura" : "Evento"}
+                    </span>
+                    <span style={{ fontSize: 11, color: MUTED }}>{formatTime(item.inicio)}</span>
+                  </div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {item.titulo}
+                  </h3>
+                  {item.local && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, fontSize: 12, color: MUTED }}>
+                      <MapPin style={{ width: 12, height: 12, flexShrink: 0 }} />
+                      {item.local}
+                    </div>
+                  )}
+                </div>
+
+                {/* Accent dot for today */}
+                {isHoje && (
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: ACCENT, flexShrink: 0, marginTop: 4 }} />
                 )}
               </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1375,74 +1554,132 @@ function TabGaleria({ coberturas }: { coberturas: Cobertura[] }) {
     slug: string
     titulo: string
   } | null>(null)
+  const [activeGaleriaTab, setActiveGaleriaTab] = useState<"feed" | "minha">("feed")
 
   return (
-    <div className="p-4 space-y-3">
-      <h2 className="text-base font-bold text-white">Galeria de Eventos</h2>
-      <p className="text-xs text-zinc-500">
-        Compartilhe o link ou QR Code do evento com os participantes.
-      </p>
+    <div style={{ padding: "54px 18px 0" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
+          Galeria
+        </h2>
+        <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>
+          Links e busca por rosto
+        </p>
+      </div>
+
+      {/* Sub-tab pills */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {(["feed", "minha"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveGaleriaTab(t)}
+            style={{
+              padding: "7px 18px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+              background: activeGaleriaTab === t ? SOFT : "rgba(234,244,244,.06)",
+              color: activeGaleriaTab === t ? ACCENT : MUTED,
+              border: `1px solid ${activeGaleriaTab === t ? "rgba(0,165,138,.35)" : LINE}`,
+              cursor: "pointer",
+            }}
+          >
+            {t === "feed" ? "Eventos" : "Minha Galeria"}
+          </button>
+        ))}
+      </div>
 
       {coberturas.length === 0 && (
-        <div className="text-center py-12">
-          <Images className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
-          <p className="text-sm text-zinc-500">Nenhum evento disponível</p>
+        <div style={{
+          height: 200, borderRadius: 26, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 12,
+          border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
+        }}>
+          <Images style={{ width: 36, height: 36, color: MUTED }} />
+          <p style={{ fontSize: 13, color: MUTED }}>Nenhum evento disponível</p>
         </div>
       )}
 
-      {coberturas.map((c) => {
-        const publicUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/e/${c.slug}`
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {coberturas.map((c, idx) => {
+          const publicUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/e/${c.slug}`
+          const hasUploads = c._count.uploads > 0
 
-        return (
-          <div
-            key={c.id}
-            className="rounded-2xl p-4 space-y-3"
-            style={{ backgroundColor: CARD_BG, border: "1px solid rgba(255,255,255,0.07)" }}
-          >
-            <div>
-              <h3 className="text-sm font-semibold text-white">{c.titulo}</h3>
-              {c.cidade && (
-                <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                  <MapPin className="w-3 h-3" />
-                  {c.cidade}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500 flex-1 truncate font-mono">/e/{c.slug}</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(publicUrl)
-                  toast.success("Link copiado!")
-                }}
-                className="shrink-0 text-xs px-3 py-1.5 rounded-lg"
-                style={{ backgroundColor: `${ACCENT}20`, color: ACCENT }}
-              >
-                Copiar
-              </button>
-              <a
-                href={publicUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 text-xs px-3 py-1.5 rounded-lg"
-                style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}
-              >
-                Abrir
-              </a>
-            </div>
-
-            <button
-              onClick={() => setFaceSearchTarget({ slug: c.slug, titulo: c.titulo })}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed text-sm font-medium"
-              style={{ borderColor: `${ACCENT}40`, color: ACCENT }}
+          return (
+            <div
+              key={c.id}
+              style={{
+                borderRadius: 22, overflow: "hidden",
+                border: `1px solid ${LINE}`,
+              }}
             >
-              <Search className="w-4 h-4" />
-              Buscar por Rosto
-            </button>
-          </div>
-        )
-      })}
+              {/* Hero strip with gradient */}
+              <div style={{
+                height: idx === 0 ? 140 : 90,
+                background: idx === 0
+                  ? "linear-gradient(135deg, rgba(0,65,98,.9), rgba(0,165,138,.55))"
+                  : "linear-gradient(135deg, rgba(0,40,60,.9), rgba(0,90,80,.6))",
+                padding: "16px 18px",
+                display: "flex", flexDirection: "column", justifyContent: "flex-end",
+              }}>
+                <h3 style={{ fontSize: idx === 0 ? 18 : 15, fontWeight: 730, color: TEXT, margin: 0, letterSpacing: "-.03em" }}>
+                  {c.titulo}
+                </h3>
+                {c.cidade && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 12, color: "rgba(234,244,244,.72)" }}>
+                    <MapPin style={{ width: 11, height: 11 }} />
+                    {c.cidade} · {hasUploads ? `${c._count.uploads} upload(s)` : "Sem uploads"}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ padding: "12px 14px", background: "rgba(234,244,244,.025)", display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Link row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: MUTED, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
+                    /e/{c.slug}
+                  </span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("Link copiado!") }}
+                    style={{
+                      flexShrink: 0, padding: "6px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+                      background: SOFT, color: ACCENT, border: 0, cursor: "pointer",
+                    }}
+                  >
+                    Copiar
+                  </button>
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      flexShrink: 0, padding: "6px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+                      background: "rgba(234,244,244,.07)", color: MUTED, textDecoration: "none",
+                    }}
+                  >
+                    Abrir
+                  </a>
+                </div>
+
+                {/* Face search button */}
+                {activeGaleriaTab === "minha" && (
+                  <button
+                    onClick={() => setFaceSearchTarget({ slug: c.slug, titulo: c.titulo })}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      padding: "12px 0", borderRadius: 14,
+                      border: `1px dashed rgba(0,165,138,.4)`, background: "transparent",
+                      color: ACCENT, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    <Search style={{ width: 16, height: 16 }} />
+                    🔍 Buscar por Rosto
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
       {faceSearchTarget && (
         <FaceSearchModal
@@ -1494,49 +1731,20 @@ export default function CampoPage() {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col"
-      style={{ backgroundColor: NAV_BG }}
+      className="fixed inset-0 overflow-hidden"
+      style={{
+        background: "radial-gradient(circle at 50% -10%, rgba(0,165,138,.18), transparent 36%), #06142E",
+      }}
     >
-      {/* Header fixo */}
-      <header
-        className="shrink-0 flex items-center justify-between px-4 py-3 border-b"
-        style={{ backgroundColor: NAV_BG, borderColor: "rgba(255,255,255,0.08)" }}
-      >
-        <div className="flex items-center gap-2">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: ACCENT }}
-          >
-            <Play className="w-3.5 h-3.5 text-white fill-white" />
-          </div>
-          <span className="text-sm font-bold text-white">NuFlow</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Avatar com inicial do usuário */}
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-            style={{ backgroundColor: ACCENT }}
-          >
-            {session?.user?.name?.charAt(0)?.toUpperCase() ?? "?"}
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Sair
-          </button>
-        </div>
-      </header>
-
-      {/* Conteúdo scrollable */}
-      <main className="flex-1 overflow-y-auto">
+      {/* Conteúdo scrollable — sem header fixo */}
+      <main className="absolute inset-0 overflow-y-auto" style={{ paddingBottom: 96 }}>
         {tab === "inicio" && (
           <TabInicio
             coberturas={coberturas}
             ranking={ranking}
             minhaPosicao={minhaPosicao}
             meuTotal={meuTotal}
+            onTabChange={setTab}
           />
         )}
         {tab === "eventos" && (
