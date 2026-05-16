@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { MetricCard } from "@/components/dashboard/MetricCard"
@@ -210,6 +212,15 @@ function InternalDashboard() {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
+  const router = useRouter()
+
+  // Redirecionar mobile para /campo
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768 || /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent)
+    if (isMobile) {
+      router.replace("/campo")
+    }
+  }, [router])
 
   // Videomakers externos têm dashboard próprio
   if (session?.user?.tipo === "videomaker") {
