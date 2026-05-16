@@ -2,6 +2,11 @@
   "buildCommand": "prisma generate && next build",
   "framework": "nextjs",
   "regions": ["gru1"],
+  "functions": {
+    "src/app/api/coberturas/briefing/route.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/agentes?agente=alertas",

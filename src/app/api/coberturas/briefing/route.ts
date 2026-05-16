@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth"
 import Anthropic from "@anthropic-ai/sdk"
 import { extrairJSON } from "@/lib/claude"
 
+// Aumenta o timeout para 60s (Claude + PDF pode levar 15-30s)
+export const maxDuration = 60
+
 const PROMPT_EXTRACAO = `Você é um assistente especializado em extrair dados de briefings de eventos audiovisuais.
 
 Analise o PDF e retorne APENAS um JSON válido (sem markdown, sem texto antes ou depois) com esta estrutura exata:
@@ -143,7 +146,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ dados })
   } catch (e) {
-    console.error("[Briefing] Erro ao processar PDF:", e)
-    return NextResponse.json({ error: "Erro ao processar o briefing" }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error("[Briefing] Erro ao processar PDF:", msg)
+    // Retorna o erro real para facilitar debug em produção
+    return NextResponse.json({ error: `Erro ao processar o briefing: ${msg}` }, { status: 500 })
   }
 }
