@@ -15,9 +15,12 @@ export async function GET() {
     select: { id: true, nome: true },
   })
 
+  // Admin/gestor sempre vê tudo (mesmo que tenha perfil de videomaker)
+  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
+
   let coberturas
 
-  if (vm) {
+  if (vm && !isAdmin) {
     // Usuário tem perfil de videomaker → mostra só os eventos em que está na equipe
     coberturas = await prisma.eventoCobertura.findMany({
       where: {
@@ -44,7 +47,7 @@ export async function GET() {
       orderBy: { dataInicio: "asc" },
     })
   } else {
-    // Admin/gestor sem videomaker vinculado → mostra todos os eventos ativos
+    // Admin/gestor (ou usuário sem videomaker) → mostra todos os eventos ativos
     coberturas = await prisma.eventoCobertura.findMany({
       where: {
         status: { in: ["planejamento", "em_andamento"] },

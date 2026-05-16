@@ -1510,15 +1510,23 @@ export default function CampoPage() {
             <Play className="w-3.5 h-3.5 text-white fill-white" />
           </div>
           <span className="text-sm font-bold text-white">NuFlow</span>
-          <span className="text-xs text-zinc-500 ml-1">Campo</span>
         </div>
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sair
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Avatar com inicial do usuário */}
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
+            style={{ backgroundColor: ACCENT }}
+          >
+            {session?.user?.name?.charAt(0)?.toUpperCase() ?? "?"}
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sair
+          </button>
+        </div>
       </header>
 
       {/* Conteúdo scrollable */}

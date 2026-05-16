@@ -13,9 +13,12 @@ export async function GET() {
     select: { id: true },
   })
 
+  // Admin/gestor sempre vê tudo (mesmo que tenha perfil de videomaker)
+  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
+
   let demandas
 
-  if (vm) {
+  if (vm && !isAdmin) {
     demandas = await prisma.demanda.findMany({
       where: {
         videomakerId: vm.id,
