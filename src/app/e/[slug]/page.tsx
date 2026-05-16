@@ -5,7 +5,8 @@ import { useParams } from "next/navigation"
 import { QRCodeSVG } from "qrcode.react"
 import {
   Download, Play, X, Lock, CalendarRange, MapPin, Clock,
-  Film, Loader2, ChevronDown, ChevronUp, CheckCircle2
+  Film, Loader2, ChevronDown, ChevronUp, CheckCircle2,
+  Image as ImageIcon, Search, Camera, Sparkles, AlertCircle
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -235,6 +236,244 @@ function VideoPlayer({ upload, onClose }: { upload: Upload; onClose: () => void 
   )
 }
 
+// ─── FotoCard ────────────────────────────────────────────────────────────────
+
+function FotoCard({ upload }: { upload: Upload }) {
+  return (
+    <a
+      href={upload.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block aspect-square rounded-xl overflow-hidden bg-zinc-800 relative group"
+    >
+      {upload.thumbnailUrl ? (
+        <img
+          src={upload.thumbnailUrl}
+          alt={upload.titulo ?? "Foto"}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+      ) : (
+        <img
+          src={upload.url}
+          alt={upload.titulo ?? "Foto"}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+        />
+      )}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+      <div className="absolute bottom-1.5 left-1.5">
+        <span className="text-[9px] bg-black/60 text-white px-1.5 py-0.5 rounded-full">
+          Dia {upload.dia}
+        </span>
+      </div>
+    </a>
+  )
+}
+
+// ─── MinhaGaleriaTab ──────────────────────────────────────────────────────────
+
+function MinhaGaleriaTab({ slug, coberturaTitulo }: { slug: string; coberturaTitulo: string }) {
+  const [step, setStep] = useState<"idle" | "searching" | "done" | "error">("idle")
+  const [results, setResults] = useState<
+    Array<{ uploadId: string; url: string; thumbnailUrl: string | null; dia: number; tipo: string }>
+  >([])
+  const [errorMsg, setErrorMsg] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleSelfie(file: File) {
+    setStep("searching")
+    try {
+      const faceapi = await import("@vladmandic/face-api")
+      const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/"
+
+      if (!faceapi.nets.ssdMobilenetv1.isLoaded) {
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ])
+      }
+
+      const img = new window.Image()
+      img.crossOrigin = "anonymous"
+      const objectUrl = URL.createObjectURL(file)
+      await new Promise<void>((res, rej) => {
+        img.onload = () => res()
+        img.onerror = () => rej(new Error("Failed to load image"))
+        img.src = objectUrl
+      })
+
+      const detection = await faceapi
+        .detectSingleFace(img)
+        .withFaceLandmarks()
+        .withFaceDescriptor()
+
+      URL.revokeObjectURL(objectUrl)
+
+      if (!detection) {
+        setErrorMsg("Rosto não detectado. Tente com boa iluminação e rosto centralizado.")
+        setStep("error")
+        return
+      }
+
+      const res = await fetch(`/api/publico/cobertura/${slug}/face-search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptor: Array.from(detection.descriptor) }),
+      })
+      const data = await res.json()
+      setResults(data.matches ?? [])
+      setStep("done")
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Erro ao processar selfie")
+      setStep("error")
+    }
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-8">
+      {step === "idle" && (
+        <div className="text-center space-y-6">
+          <div className="w-20 h-20 rounded-2xl bg-purple-600/10 border border-purple-600/20 flex items-center justify-center mx-auto">
+            <Sparkles className="w-8 h-8 text-purple-400" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white mb-2">Encontre-se nas Fotos</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mx-auto">
+              Tire uma selfie e o sistema usará reconhecimento facial para encontrar todas as fotos
+              e vídeos do evento onde você aparece.
+            </p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-left space-y-2">
+            <p className="text-xs font-medium text-zinc-300">Como funciona:</p>
+            <ul className="text-xs text-zinc-500 space-y-1.5">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">1.</span>
+                O reconhecimento facial roda no seu dispositivo — sua selfie não é enviada para servidores
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">2.</span>
+                Apenas um código matemático (128 números) é comparado com as fotos do evento
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">3.</span>
+                Fotos onde você aparece são exibidas para download
+              </li>
+            </ul>
+          </div>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 mx-auto px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Camera className="w-4 h-4" />
+            Tirar Selfie ou Selecionar Foto
+          </button>
+        </div>
+      )}
+
+      {step === "searching" && (
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-purple-600/10 border border-purple-600/20 flex items-center justify-center">
+            <Search className="w-6 h-6 text-purple-400 animate-pulse" />
+          </div>
+          <p className="text-base font-medium text-white">Analisando rosto...</p>
+          <p className="text-sm text-zinc-500">Carregando modelos de IA e comparando fotos</p>
+          <div className="w-48 h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-full bg-purple-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+          </div>
+        </div>
+      )}
+
+      {step === "error" && (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <AlertCircle className="w-12 h-12 text-red-400" />
+          <p className="text-sm text-red-400 max-w-xs">{errorMsg}</p>
+          <button
+            onClick={() => setStep("idle")}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-xl transition-colors"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      )}
+
+      {step === "done" && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-white">
+              {results.length > 0
+                ? `🎉 ${results.length} foto(s) encontrada(s)`
+                : "Nenhuma foto encontrada"}
+            </h3>
+            <button
+              onClick={() => setStep("idle")}
+              className="text-xs text-purple-400 hover:text-purple-300"
+            >
+              Nova busca
+            </button>
+          </div>
+
+          {results.length === 0 && (
+            <div className="text-center py-10">
+              <ImageIcon className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
+              <p className="text-sm text-zinc-500 max-w-xs mx-auto">
+                Você não foi encontrado nas fotos indexadas deste evento. Tente com outra selfie
+                ou aguarde mais fotos serem adicionadas.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {results.map((r) => (
+              <a
+                key={r.uploadId}
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="aspect-square rounded-xl overflow-hidden bg-zinc-800 relative group block"
+              >
+                {r.thumbnailUrl ? (
+                  <img
+                    src={r.thumbnailUrl}
+                    alt="Resultado"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="w-6 h-6 text-zinc-500" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
+                  <span className="text-[9px] bg-black/70 text-white px-1.5 py-0.5 rounded-full">
+                    Dia {r.dia}
+                  </span>
+                  <span className="text-[9px] bg-purple-600/80 text-white px-1.5 py-0.5 rounded-full">
+                    {r.tipo}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleSelfie(file)
+          e.target.value = ""
+        }}
+      />
+    </div>
+  )
+}
+
 // ─── DiaSection ──────────────────────────────────────────────────────────────
 
 function DiaSection({
@@ -303,6 +542,7 @@ export default function EventoPublicoPage() {
   const [cobertura, setCobertura] = useState<CoberturaPublica | null>(null)
   const [playerUpload, setPlayerUpload] = useState<Upload | null>(null)
   const [showQR, setShowQR] = useState(false)
+  const [abaAtiva, setAbaAtiva] = useState<"videos" | "fotos" | "galeria">("videos")
   const [downloading, setDownloading] = useState(false)
   const [downloadDone, setDownloadDone] = useState(false)
   const [pageUrl, setPageUrl] = useState("")
@@ -424,13 +664,16 @@ export default function EventoPublicoPage() {
   }
 
   // ── Group uploads by day ──
+  const videosUploads = cobertura.uploads.filter((u) => u.tipo === "video")
+  const fotosUploads = cobertura.uploads.filter((u) => u.tipo === "foto")
+
   const diasMap: Record<number, Upload[]> = {}
-  for (const u of cobertura.uploads) {
+  for (const u of videosUploads) {
     if (!diasMap[u.dia]) diasMap[u.dia] = []
     diasMap[u.dia].push(u)
   }
   const diasOrdenados = Object.keys(diasMap).map(Number).sort((a, b) => a - b)
-  const totalVideos = cobertura.uploads.length
+  const totalVideos = videosUploads.length
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -557,23 +800,67 @@ export default function EventoPublicoPage() {
           </div>
         </div>
 
+        {/* ── Tabs ── */}
+        <div className="flex gap-0 border-b border-zinc-800 mb-8">
+          {([
+            { id: "videos" as const, label: `🎬 Vídeos (${totalVideos})` },
+            { id: "fotos" as const, label: `📸 Fotos (${fotosUploads.length})` },
+            { id: "galeria" as const, label: "🔍 Minha Galeria" },
+          ]).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setAbaAtiva(id)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                abaAtiva === id
+                  ? "border-purple-500 text-purple-400"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* ── Videos by Day ── */}
-        {diasOrdenados.length === 0 ? (
-          <div className="text-center py-16 text-zinc-600">
-            <Film className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhum vídeo disponível ainda.</p>
-          </div>
-        ) : (
-          diasOrdenados.map((dia) => (
-            <DiaSection
-              key={dia}
-              dia={dia}
-              uploads={diasMap[dia]}
-              totalDias={cobertura.totalDias}
-              dataInicio={cobertura.dataInicio}
-              onPlay={(u) => setPlayerUpload(u)}
-            />
-          ))
+        {abaAtiva === "videos" && (
+          diasOrdenados.length === 0 ? (
+            <div className="text-center py-16 text-zinc-600">
+              <Film className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">Nenhum vídeo disponível ainda.</p>
+            </div>
+          ) : (
+            diasOrdenados.map((dia) => (
+              <DiaSection
+                key={dia}
+                dia={dia}
+                uploads={diasMap[dia]}
+                totalDias={cobertura.totalDias}
+                dataInicio={cobertura.dataInicio}
+                onPlay={(u) => setPlayerUpload(u)}
+              />
+            ))
+          )
+        )}
+
+        {/* ── Fotos ── */}
+        {abaAtiva === "fotos" && (
+          fotosUploads.length === 0 ? (
+            <div className="text-center py-16 text-zinc-600">
+              <ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">Nenhuma foto disponível ainda.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {fotosUploads.map((foto) => (
+                <FotoCard key={foto.id} upload={foto} />
+              ))}
+            </div>
+          )
+        )}
+
+        {/* ── Minha Galeria (face search) ── */}
+        {abaAtiva === "galeria" && (
+          <MinhaGaleriaTab slug={slug} coberturaTitulo={cobertura.titulo} />
         )}
       </div>
 

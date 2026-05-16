@@ -1208,10 +1208,22 @@ model EventoCoberturaUpload {
   driveUrl     String?
   createdAt    DateTime    @default(now())
 
-  cobertura EventoCobertura        @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
-  membro    EventoCoberturaEquipe? @relation(fields: [membroId], references: [id])
+  cobertura       EventoCobertura        @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  membro          EventoCoberturaEquipe? @relation(fields: [membroId], references: [id])
+  faceDescriptors EventoFaceDescriptor[]
 
   @@map("coberturas_uploads")
+}
+
+model EventoFaceDescriptor {
+  id         String   @id @default(cuid())
+  uploadId   String
+  descriptor Json     // Float32Array serializada como number[] (128 floats)
+  createdAt  DateTime @default(now())
+
+  upload EventoCoberturaUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@map("evento_face_descriptors")
 }
 
 model EventoCoberturaAlbum {
