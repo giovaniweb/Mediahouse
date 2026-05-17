@@ -468,8 +468,7 @@ function TabEventos({
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [togglingItem, setTogglingItem] = useState<string | null>(null)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  // iOS-safe: sem fileInputRef — usamos <label> + <input> inline
 
   const getCategoriaLabel = (cat: string) => {
     const map: Record<string, string> = {
@@ -520,9 +519,13 @@ function TabEventos({
 
         try {
           // 1. Get presigned URL
-          const contentType = file.type || (tipo === "video" ? "video/mp4" : "image/jpeg")
+          // Normalizar content-type: iOS grava QuickTime (.mov), mapear para mp4
+          const rawType = file.type
+          const contentType =
+            rawType === "video/quicktime" ? "video/mp4"
+            : rawType || (tipo === "video" ? "video/mp4" : "image/jpeg")
           const urlRes = await fetch(
-            `/api/coberturas/${coberturaId}/uploads/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
+            `/api/coberturas/${coberturaId}/uploads/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}&dia=${dia}`
           )
           if (!urlRes.ok) throw new Error("Erro ao gerar URL de upload")
           const { uploadUrl, publicUrl } = await urlRes.json()
@@ -956,46 +959,53 @@ function TabEventos({
               {currentSubTab === "upload" && (
                 <div style={{ padding: 16 }}>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>Upload para o Dia {dia}</p>
+                  {/* Botões de upload — padrão <label> garante funcionamento no iOS Safari */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                    <button
-                      onClick={() => {
-                        setUploadingFor(`${activeCobertura.id}-foto`)
-                        fileInputRef.current?.setAttribute("data-cobertura", activeCobertura.id)
-                        fileInputRef.current?.setAttribute("data-tipo", "foto")
-                        fileInputRef.current?.setAttribute("accept", "image/*")
-                        fileInputRef.current?.removeAttribute("multiple")
-                        fileInputRef.current?.setAttribute("multiple", "true")
-                        fileInputRef.current?.click()
-                      }}
-                      style={{
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                        padding: "18px 4px", borderRadius: 18,
-                        border: `1px dashed rgba(234,244,244,.22)`,
-                        background: "rgba(234,244,244,.035)", cursor: "pointer",
-                      }}
-                    >
+                    {/* Fotos */}
+                    <label style={{
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                      padding: "18px 4px", borderRadius: 18,
+                      border: `1px dashed rgba(234,244,244,.22)`,
+                      background: "rgba(234,244,244,.035)", cursor: "pointer",
+                    }}>
                       <Camera style={{ width: 26, height: 26, color: MUTED }} />
                       <span style={{ fontSize: 12, color: MUTED }}>Fotos</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setUploadingFor(`${activeCobertura.id}-video`)
-                        fileInputRef.current?.setAttribute("data-cobertura", activeCobertura.id)
-                        fileInputRef.current?.setAttribute("data-tipo", "video")
-                        fileInputRef.current?.setAttribute("accept", "video/*")
-                        fileInputRef.current?.removeAttribute("multiple")
-                        fileInputRef.current?.click()
-                      }}
-                      style={{
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                        padding: "18px 4px", borderRadius: 18,
-                        border: `1px dashed rgba(0,165,138,.35)`,
-                        background: "rgba(0,165,138,.06)", cursor: "pointer",
-                      }}
-                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const files = e.target.files
+                          if (files && files.length > 0) {
+                            handleUpload(activeCobertura.id, files, "foto")
+                          }
+                          e.currentTarget.value = ""
+                        }}
+                      />
+                    </label>
+                    {/* Vídeo */}
+                    <label style={{
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                      padding: "18px 4px", borderRadius: 18,
+                      border: `1px dashed rgba(0,165,138,.35)`,
+                      background: "rgba(0,165,138,.06)", cursor: "pointer",
+                    }}>
                       <Video style={{ width: 26, height: 26, color: ACCENT }} />
                       <span style={{ fontSize: 12, color: ACCENT }}>Vídeo</span>
-                    </button>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const files = e.target.files
+                          if (files && files.length > 0) {
+                            handleUpload(activeCobertura.id, files, "video")
+                          }
+                          e.currentTarget.value = ""
+                        }}
+                      />
+                    </label>
                   </div>
 
                   {/* Upload progress bars */}
@@ -1064,23 +1074,7 @@ function TabEventos({
         </>
       )}
 
-      {/* Input de arquivo oculto */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        onChange={(e) => {
-          const files = e.target.files
-          const coberturaId = fileInputRef.current?.getAttribute("data-cobertura") ?? ""
-          const tipo = (fileInputRef.current?.getAttribute("data-tipo") ?? "video") as "foto" | "video"
-          if (files && files.length > 0 && coberturaId) {
-            handleUpload(coberturaId, files, tipo)
-          }
-          e.target.value = ""
-          setUploadingFor(null)
-        }}
-      />
+      {/* inputs de arquivo movidos para dentro dos <label> acima */}
     </div>
   )
 }

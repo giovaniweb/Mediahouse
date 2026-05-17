@@ -6,13 +6,16 @@ type Params = { params: Promise<{ id: string }> }
 
 const EXT_MAPA: Record<string, string> = {
   "video/mp4": "mp4",
-  "video/quicktime": "mov",
+  "video/quicktime": "mp4",  // iPhone grava .mov mas mandamos como mp4 para compatibilidade
   "video/x-msvideo": "avi",
   "video/webm": "webm",
   "video/x-matroska": "mkv",
   "image/jpeg": "jpg",
+  "image/jpg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "image/heic": "jpg",  // iOS HEIC → salvar como jpg
+  "image/heif": "jpg",
 }
 
 // GET /api/coberturas/[id]/uploads/upload-url?tipo=video&contentType=video%2Fmp4&dia=1
