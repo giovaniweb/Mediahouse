@@ -197,7 +197,7 @@ function NavIcon({ id, active }: { id: TabId; active: boolean }) {
 function BottomNav({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   return (
     <nav style={{
-      position: "absolute",
+      position: "fixed",
       left: 14, right: 14, bottom: 12, height: 72,
       background: "rgba(8,28,42,.78)",
       border: `1px solid ${LINE}`,
@@ -1096,7 +1096,162 @@ const STATUS_PILL: Record<string, { bg: string; color: string }> = {
   finalizado:   { bg: "rgba(0,165,138,.18)",   color: "#BFF7D0" },
 }
 
+// ─── Demanda Detail Bottom Sheet ──────────────────────────────────────────────
+function DemandaSheet({ demanda, onClose }: { demanda: Demanda; onClose: () => void }) {
+  const isVencida = demanda.dataLimite && new Date(demanda.dataLimite) < new Date()
+  const pill = STATUS_PILL[demanda.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        display: "flex", flexDirection: "column", justifyContent: "flex-end",
+      }}
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)" }} />
+
+      {/* Sheet */}
+      <div
+        style={{
+          position: "relative", zIndex: 1,
+          background: "#0B2238",
+          borderTopLeftRadius: 28, borderTopRightRadius: 28,
+          border: `1px solid ${LINE}`,
+          borderBottom: 0,
+          maxHeight: "82vh", overflowY: "auto",
+          paddingBottom: 32,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Pull handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 8 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 999, background: "rgba(234,244,244,.18)" }} />
+        </div>
+
+        <div style={{ padding: "4px 20px 0" }}>
+          {/* Status + prioridade row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <span style={{
+              fontSize: 11.5, padding: "5px 12px", borderRadius: 999, fontWeight: 700,
+              background: pill.bg, color: pill.color,
+            }}>
+              {STATUS_LABEL[demanda.statusVisivel] ?? demanda.statusVisivel}
+            </span>
+            {demanda.prioridade && demanda.prioridade !== "normal" && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 800, textTransform: "uppercase",
+                color: demanda.prioridade === "urgente" ? "#f87171" : "#fb923c",
+              }}>
+                {demanda.prioridade}
+              </span>
+            )}
+          </div>
+
+          <p style={{ fontSize: 11, color: MUTED, fontFamily: "monospace", margin: "0 0 4px" }}>
+            {demanda.codigo}
+          </p>
+          <h2 style={{ fontSize: 22, fontWeight: 730, color: TEXT, margin: "0 0 6px", letterSpacing: "-.03em", lineHeight: 1.2 }}>
+            {demanda.titulo}
+          </h2>
+
+          {demanda.descricao && (
+            <p style={{ fontSize: 13.5, color: "rgba(234,244,244,.72)", lineHeight: 1.55, margin: "0 0 16px", whiteSpace: "pre-wrap" }}>
+              {demanda.descricao.length > 200 ? demanda.descricao.slice(0, 200) + "…" : demanda.descricao}
+            </p>
+          )}
+
+          {/* Meta grid */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr",
+            gap: 10, marginBottom: 16,
+          }}>
+            {demanda.dataLimite && (
+              <div style={{ padding: "12px 14px", borderRadius: 16, background: "rgba(234,244,244,.04)", border: `1px solid ${LINE}` }}>
+                <p style={{ fontSize: 10, color: MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Prazo</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: isVencida ? "#f87171" : TEXT }}>
+                  {formatDate(demanda.dataLimite)}
+                </p>
+              </div>
+            )}
+            {demanda.tipoVideo && (
+              <div style={{ padding: "12px 14px", borderRadius: 16, background: "rgba(234,244,244,.04)", border: `1px solid ${LINE}` }}>
+                <p style={{ fontSize: 10, color: MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Tipo</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{demanda.tipoVideo}</p>
+              </div>
+            )}
+            {demanda.cidade && (
+              <div style={{ padding: "12px 14px", borderRadius: 16, background: "rgba(234,244,244,.04)", border: `1px solid ${LINE}` }}>
+                <p style={{ fontSize: 10, color: MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Cidade</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{demanda.cidade}</p>
+              </div>
+            )}
+            {demanda.produtos?.[0] && (
+              <div style={{ padding: "12px 14px", borderRadius: 16, background: "rgba(234,244,244,.04)", border: `1px solid ${LINE}` }}>
+                <p style={{ fontSize: 10, color: MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Produto</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{demanda.produtos[0].produto.nome}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Links de pastas */}
+          {(demanda.linkFolderBrutos || demanda.linkFolderFinal) && (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>Pastas</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {demanda.linkFolderBrutos && (
+                  <a href={demanda.linkFolderBrutos} target="_blank" rel="noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "12px 16px", borderRadius: 14,
+                      background: "rgba(234,244,244,.06)", border: `1px solid ${LINE}`,
+                      color: MUTED, textDecoration: "none", fontSize: 13.5,
+                    }}>
+                    <ExternalLink style={{ width: 15, height: 15, flexShrink: 0 }} />
+                    Material Bruto
+                  </a>
+                )}
+                {demanda.linkFolderFinal && (
+                  <a href={demanda.linkFolderFinal} target="_blank" rel="noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "12px 16px", borderRadius: 14,
+                      background: SOFT, border: `1px solid rgba(0,165,138,.3)`,
+                      color: ACCENT, textDecoration: "none", fontSize: 13.5,
+                    }}>
+                    <ExternalLink style={{ width: 15, height: 15, flexShrink: 0 }} />
+                    Material Final
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Open in full */}
+          <a
+            href={`/demandas/${demanda.id}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "14px 0", borderRadius: 18,
+              background: "rgba(234,244,244,.07)", border: `1px solid ${LINE}`,
+              color: TEXT, textDecoration: "none", fontSize: 14, fontWeight: 600,
+            }}
+          >
+            <ExternalLink style={{ width: 16, height: 16 }} />
+            Abrir no sistema completo
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TabDemandas({ demandas }: { demandas: Demanda[] }) {
+  const [selectedDemanda, setSelectedDemanda] = useState<Demanda | null>(null)
+
   return (
     <div style={{ padding: "54px 18px 0" }}>
       {/* Header */}
@@ -1125,16 +1280,14 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
           const isVencida = d.dataLimite && new Date(d.dataLimite) < new Date()
           const pill = STATUS_PILL[d.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
           return (
-            <a
+            <div
               key={d.id}
-              href={`/demandas/${d.id}`}
-              target="_blank"
-              rel="noreferrer"
+              onClick={() => setSelectedDemanda(d)}
               style={{
-                display: "block", borderRadius: 18, padding: 14,
+                borderRadius: 18, padding: 14,
                 background: "rgba(234,244,244,.035)",
                 border: `1px solid ${LINE}`,
-                textDecoration: "none",
+                cursor: "pointer",
               }}
             >
               {/* Status + prioridade */}
@@ -1175,6 +1328,7 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
                     {d.cidade ?? d.localGravacao}
                   </span>
                 )}
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "rgba(234,244,244,.35)" }}>Ver detalhes ›</span>
               </div>
 
               {/* Links de pastas */}
@@ -1204,10 +1358,14 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
                   )}
                 </div>
               )}
-            </a>
+            </div>
           )
         })}
       </div>
+
+      {selectedDemanda && (
+        <DemandaSheet demanda={selectedDemanda} onClose={() => setSelectedDemanda(null)} />
+      )}
     </div>
   )
 }
@@ -1216,11 +1374,27 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
 function TabAgenda({
   eventos,
   coberturas,
+  onEventoAdded,
 }: {
   eventos: AgendaEvento[]
   coberturas: AgendaCobertura[]
+  onEventoAdded: () => void
 }) {
   const hoje = new Date()
+  const [showForm, setShowForm] = useState(false)
+  const [formTitulo, setFormTitulo] = useState("")
+  const [formData, setFormData] = useState(() => {
+    const d = new Date()
+    d.setMinutes(0, 0, 0)
+    return d.toISOString().slice(0, 16)
+  })
+  const [formFim, setFormFim] = useState(() => {
+    const d = new Date()
+    d.setHours(d.getHours() + 1, 0, 0, 0)
+    return d.toISOString().slice(0, 16)
+  })
+  const [formLocal, setFormLocal] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const allItems = [
     ...eventos.map((e) => ({
@@ -1242,24 +1416,75 @@ function TabAgenda({
     })),
   ].sort((a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime())
 
+  async function handleSave() {
+    if (!formTitulo.trim()) { toast.error("Título obrigatório"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/agenda", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: formTitulo.trim(),
+          inicio: new Date(formData).toISOString(),
+          fim: new Date(formFim).toISOString(),
+          local: formLocal.trim() || null,
+          contexto: "sistema",
+          tipo: "captacao",
+          privado: false,
+        }),
+      })
+      if (!res.ok) throw new Error("Erro ao criar evento")
+      toast.success("Evento adicionado!")
+      setShowForm(false)
+      setFormTitulo("")
+      setFormLocal("")
+      onEventoAdded()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div style={{ padding: "54px 18px 0" }}>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
-          Agenda
-        </h2>
-        <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>Próximos 7 dias</p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 32, lineHeight: .98, letterSpacing: "-.045em", margin: 0, fontWeight: 700, color: TEXT }}>
+            Agenda
+          </h2>
+          <p style={{ fontSize: 13, color: MUTED, margin: "8px 0 0" }}>Próximos 7 dias</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          style={{
+            width: 48, height: 48, borderRadius: 18, display: "grid", placeItems: "center",
+            background: ACCENT, border: 0, cursor: "pointer", fontSize: 26, color: "white",
+            boxShadow: `0 6px 20px rgba(0,165,138,.4)`,
+          }}
+        >
+          +
+        </button>
       </div>
 
       {allItems.length === 0 && (
         <div style={{
-          height: 200, borderRadius: 26, display: "flex", flexDirection: "column",
+          height: 180, borderRadius: 26, display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: 12,
           border: `1px dashed ${LINE}`, background: "rgba(234,244,244,.025)",
         }}>
           <Calendar style={{ width: 36, height: 36, color: MUTED }} />
           <p style={{ fontSize: 13, color: MUTED }}>Nada agendado nos próximos 7 dias</p>
+          <button
+            onClick={() => setShowForm(true)}
+            style={{
+              padding: "8px 20px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+              background: SOFT, color: ACCENT, border: `1px solid rgba(0,165,138,.3)`, cursor: "pointer",
+            }}
+          >
+            + Adicionar evento
+          </button>
         </div>
       )}
 
@@ -1323,6 +1548,124 @@ function TabAgenda({
           )
         })}
       </div>
+
+      {/* Add Evento Form Sheet */}
+      {showForm && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
+          onClick={() => setShowForm(false)}
+        >
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)" }} />
+          <div
+            style={{
+              position: "relative", zIndex: 1,
+              background: "#0B2238",
+              borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              border: `1px solid ${LINE}`, borderBottom: 0,
+              paddingBottom: 40,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 8 }}>
+              <div style={{ width: 40, height: 4, borderRadius: 999, background: "rgba(234,244,244,.18)" }} />
+            </div>
+
+            <div style={{ padding: "4px 20px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <h3 style={{ fontSize: 20, fontWeight: 730, color: TEXT, margin: 0 }}>Novo Evento</h3>
+                <button onClick={() => setShowForm(false)} style={{ background: "transparent", border: 0, cursor: "pointer", padding: 4 }}>
+                  <X style={{ width: 20, height: 20, color: MUTED }} />
+                </button>
+              </div>
+
+              {/* Title */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: MUTED, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                  Título *
+                </label>
+                <input
+                  type="text"
+                  value={formTitulo}
+                  onChange={(e) => setFormTitulo(e.target.value)}
+                  placeholder="Ex: Captação AMWC Day 1"
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 14, fontSize: 15,
+                    background: "rgba(234,244,244,.06)", border: `1px solid ${LINE}`,
+                    color: TEXT, outline: "none", boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {/* Start */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                    Início
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={formData}
+                    onChange={(e) => setFormData(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 12px", borderRadius: 14, fontSize: 13,
+                      background: "rgba(234,244,244,.06)", border: `1px solid ${LINE}`,
+                      color: TEXT, outline: "none", colorScheme: "dark", boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                    Fim
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={formFim}
+                    onChange={(e) => setFormFim(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 12px", borderRadius: 14, fontSize: 13,
+                      background: "rgba(234,244,244,.06)", border: `1px solid ${LINE}`,
+                      color: TEXT, outline: "none", colorScheme: "dark", boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Local */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 11, color: MUTED, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                  Local (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formLocal}
+                  onChange={(e) => setFormLocal(e.target.value)}
+                  placeholder="Ex: Centro de Convenções"
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 14, fontSize: 15,
+                    background: "rgba(234,244,244,.06)", border: `1px solid ${LINE}`,
+                    color: TEXT, outline: "none", boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{
+                  width: "100%", padding: "15px 0", borderRadius: 18, fontSize: 15, fontWeight: 700,
+                  background: saving ? "rgba(0,165,138,.4)" : ACCENT,
+                  color: "white", border: 0, cursor: saving ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                {saving ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : null}
+                {saving ? "Salvando…" : "Adicionar à Agenda"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1709,7 +2052,7 @@ export default function CampoPage() {
   }>("/api/campo/demandas", fetcher, { refreshInterval: 30000 })
 
   // Fetch agenda
-  const { data: agendaData } = useSWR<{
+  const { data: agendaData, mutate: mutateAgenda } = useSWR<{
     eventos: AgendaEvento[]
     coberturas: AgendaCobertura[]
   }>("/api/campo/agenda", fetcher, { refreshInterval: 60000 })
@@ -1756,7 +2099,7 @@ export default function CampoPage() {
         )}
         {tab === "demandas" && <TabDemandas demandas={demandas} />}
         {tab === "agenda" && (
-          <TabAgenda eventos={agendaEventos} coberturas={agendaCoberturas} />
+          <TabAgenda eventos={agendaEventos} coberturas={agendaCoberturas} onEventoAdded={() => mutateAgenda()} />
         )}
         {tab === "galeria" && <TabGaleria coberturas={coberturas} />}
       </main>
