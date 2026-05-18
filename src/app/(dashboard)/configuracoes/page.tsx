@@ -115,6 +115,143 @@ function ModalResetSenha({ usuario, onClose, onSave }: {
   )
 }
 
+// ─── Modal Editar Usuário (campos + senha opcional) ──────────────────────────
+function ModalEditarUsuario({ usuario, onClose, onSave }: {
+  usuario: { id: string; nome: string; email: string; telefone?: string; tipo: string }
+  onClose: () => void
+  onSave: () => void
+}) {
+  const [nome, setNome] = useState(usuario.nome)
+  const [email, setEmail] = useState(usuario.email ?? "")
+  const [telefone, setTelefone] = useState(usuario.telefone ?? "")
+  const [tipo, setTipo] = useState(usuario.tipo)
+  const [novaSenha, setNovaSenha] = useState("")
+  const [confirmar, setConfirmar] = useState("")
+  const [mostrar, setMostrar] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const TIPOS = [
+    { value: "admin", label: "Admin" },
+    { value: "gestor", label: "Gestor" },
+    { value: "operacao", label: "Operação" },
+    { value: "solicitante", label: "Solicitante" },
+    { value: "social", label: "Social Media" },
+    { value: "videomaker", label: "Videomaker Ext" },
+    { value: "editor", label: "Videomaker Int" },
+  ]
+
+  const inp = "w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+
+  async function salvar() {
+    if (!nome.trim()) { toast.error("Nome é obrigatório"); return }
+    if (novaSenha && novaSenha.length < 6) { toast.error("Senha deve ter pelo menos 6 caracteres"); return }
+    if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
+    setLoading(true)
+    try {
+      const body: Record<string, string> = { nome, email, telefone, tipo }
+      if (novaSenha) body.novaSenha = novaSenha
+      const res = await fetch(`/api/usuarios/${usuario.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success("Usuário atualizado!")
+      onSave()
+      onClose()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar")
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-white text-sm">Editar Usuário</p>
+            <p className="text-xs text-zinc-400">{usuario.nome}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Nome *</label>
+            <input className={inp} value={nome} onChange={e => setNome(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">E-mail</label>
+            <input className={inp} type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">WhatsApp</label>
+            <input className={inp} type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Tipo</label>
+            <select className={inp} value={tipo} onChange={e => setTipo(e.target.value)}>
+              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+
+          {/* Separator */}
+          <div className="border-t border-zinc-800 pt-3">
+            <p className="text-xs text-zinc-500 mb-3">🔑 Nova senha — deixe em branco para não alterar</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Nova senha</label>
+                <div className="relative">
+                  <input
+                    type={mostrar ? "text" : "password"}
+                    value={novaSenha}
+                    onChange={e => setNovaSenha(e.target.value)}
+                    placeholder="Deixe em branco para manter"
+                    className={`${inp} pr-9`}
+                  />
+                  <button type="button" onClick={() => setMostrar(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                    {mostrar ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              {novaSenha && (
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Confirmar senha</label>
+                  <input
+                    type={mostrar ? "text" : "password"}
+                    value={confirmar}
+                    onChange={e => setConfirmar(e.target.value)}
+                    placeholder="Repita a nova senha"
+                    className={inp}
+                  />
+                  {confirmar && novaSenha !== confirmar && (
+                    <p className="text-xs text-red-400 mt-1">Senhas não coincidem</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={salvar}
+            disabled={loading || (!!novaSenha && (novaSenha.length < 6 || novaSenha !== confirmar))}
+            className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
+          >
+            {loading ? "Salvando..." : "Salvar"}
+          </button>
+          <button onClick={onClose} className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type UsuarioSubTab = "sistema" | "vm_ext" | "vm_int"
 
 function TabUsuarios() {
@@ -130,6 +267,7 @@ function TabUsuarios() {
   const [conflito, setConflito] = useState<{ id: string; nome: string; email: string | null; telefone: string | null } | null>(null)
   const [adicionandoEmail, setAdicionandoEmail] = useState(false)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
+  const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string } | null>(null)
   const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
   const [promoverTipo, setPromoverTipo] = useState("operacao")
   const [loadingPromover, setLoadingPromover] = useState(false)
@@ -223,6 +361,13 @@ function TabUsuarios() {
 
   return (
     <div className="space-y-4">
+      {editTarget && (
+        <ModalEditarUsuario
+          usuario={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={() => { mutate(); setEditTarget(null) }}
+        />
+      )}
       {resetTarget && (
         <ModalResetSenha
           usuario={resetTarget}
@@ -410,22 +555,22 @@ function TabUsuarios() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1.5">
                     {u.tipo === "solicitante" && (
                       <button
                         onClick={() => setPromoverTarget({ id: u.id, nome: u.nome })}
-                        className="text-zinc-500 hover:text-purple-400 transition-colors"
-                        title="Promover usuário"
+                        className="text-xs px-2 py-1 rounded-md border border-zinc-700 text-zinc-400 hover:text-purple-400 hover:border-purple-800 transition-colors"
+                        title="Promover para outro tipo"
                       >
-                        <Pencil className="w-4 h-4" />
+                        Promover
                       </button>
                     )}
                     <button
-                      onClick={() => setResetTarget({ id: u.id, nome: u.nome, email: u.email })}
-                      className="text-zinc-500 hover:text-amber-400 transition-colors"
-                      title="Redefinir senha"
+                      onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
+                      className="text-xs px-2 py-1 rounded-md border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1"
+                      title="Editar usuário (nome, e-mail, tipo, senha)"
                     >
-                      <KeyRound className="w-4 h-4" />
+                      <Pencil className="w-3 h-3" /> Editar
                     </button>
                     <button
                       onClick={() => toggleStatus(u.id, u.status)}
