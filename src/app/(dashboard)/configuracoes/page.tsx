@@ -1595,11 +1595,11 @@ function TabEmpresa() {
     pixKey: "", pixTipo: "cnpj",
     observacoesNF: "",
   })
-  const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Preencher form quando carregar dados existentes
-  if (empresa && !loaded) {
+  // Preencher form quando carregar dados existentes (useEffect evita race condition com SWR)
+  useEffect(() => {
+    if (!empresa) return
     setForm({
       razaoSocial: empresa.razaoSocial ?? "",
       nomeFantasia: empresa.nomeFantasia ?? "",
@@ -1615,8 +1615,8 @@ function TabEmpresa() {
       pixTipo: empresa.pixTipo ?? "cnpj",
       observacoesNF: empresa.observacoesNF ?? "",
     })
-    setLoaded(true)
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]) // re-sincroniza só quando SWR retornar dados novos do servidor
 
   const salvar = async () => {
     setSaving(true)

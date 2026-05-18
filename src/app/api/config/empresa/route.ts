@@ -23,21 +23,24 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.configEmpresa.findFirst()
 
+  // Converte string vazia para null (campo não preenchido = sem dado, não string vazia)
+  const v = (val: unknown) => (typeof val === "string" ? val.trim() || null : (val ?? null))
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: Record<string, any> = {
-    cnpj: body.cnpj ?? null,
-    razaoSocial: body.razaoSocial ?? null,
-    nomeFantasia: body.nomeFantasia ?? null,
-    endereco: body.endereco ?? null,
-    bairro: body.bairro ?? null,
-    cidade: body.cidade ?? null,
-    estado: body.estado ?? null,
-    cep: body.cep ?? null,
-    email: body.email ?? null,
-    telefone: body.telefone ?? null,
-    pixKey: body.pixKey ?? null,
-    pixTipo: body.pixTipo ?? null,
-    observacoesNF: body.observacoesNF ?? null,
+    cnpj: v(body.cnpj),
+    razaoSocial: v(body.razaoSocial),
+    nomeFantasia: v(body.nomeFantasia),
+    endereco: v(body.endereco),
+    bairro: v(body.bairro),
+    cidade: v(body.cidade),
+    estado: v(body.estado),
+    cep: v(body.cep),
+    email: v(body.email),
+    telefone: v(body.telefone),
+    pixKey: v(body.pixKey),
+    pixTipo: v(body.pixTipo),
+    observacoesNF: v(body.observacoesNF),
   }
 
   // Campos Drive — só sobrescreve se vieram no body (evitar apagar OAuth token)
