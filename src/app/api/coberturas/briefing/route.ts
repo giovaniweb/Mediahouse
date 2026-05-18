@@ -146,9 +146,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ dados })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error("[Briefing] Erro ao processar PDF:", msg)
-    // Retorna o erro real para facilitar debug em produção
-    return NextResponse.json({ error: `Erro ao processar o briefing: ${msg}` }, { status: 500 })
+    const msgErro = e instanceof Error ? e.message : String(e)
+    console.error("[Briefing] Erro ao processar PDF:", msgErro)
+    const isCreditsError = msgErro.includes("credit balance") || msgErro.includes("insufficient") || msgErro.includes("402")
+    return NextResponse.json(
+      {
+        error: isCreditsError
+          ? "Saldo insuficiente na API Anthropic. Adicione créditos em anthropic.com/billing ou crie o evento manualmente."
+          : `Erro ao processar o briefing: ${msgErro}`,
+        tipo: isCreditsError ? "api_credits" : "processamento",
+      },
+      { status: 500 }
+    )
   }
 }

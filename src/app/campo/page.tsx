@@ -451,6 +451,520 @@ function TabInicio({
   )
 }
 
+// ─── ExtratoEvento (type for briefing extraction) ────────────────────────────
+interface ExtratoEvento {
+  titulo: string
+  tipo: string
+  cliente: string | null
+  local: string | null
+  cidade: string | null
+  dataInicio: string
+  dataFim: string
+  descricao: string | null
+  programacaoPorDia: Array<{ dia: number; data: string; titulo: string; momentos: string[] }>
+  checklistEspecifico: Array<{ texto: string; categoria: string }>
+  logistica: { hotel: string | null; transporte: string | null } | null
+}
+
+// ─── CriarEventoSheet — bottom sheet with briefing/manual options ─────────────
+function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  type Mode = null | "briefing" | "manual"
+  const [mode, setMode] = useState<Mode>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [loadingBriefing, setLoadingBriefing] = useState(false)
+  const [extrato, setExtrato] = useState<ExtratoEvento | null>(null)
+  const [erroMsg, setErroMsg] = useState("")
+  const [tipoErro, setTipoErro] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  // manual form fields
+  const [titulo, setTitulo] = useState("")
+  const [tipo, setTipo] = useState("outro")
+  const [cliente, setCliente] = useState("")
+  const [local, setLocal] = useState("")
+  const [cidade, setCidade] = useState("")
+  const [dataInicio, setDataInicio] = useState("")
+  const [dataFim, setDataFim] = useState("")
+  // preview editing
+  const [editExtrato, setEditExtrato] = useState<Partial<ExtratoEvento>>({})
+
+  const TIPO_OPTIONS = [
+    { value: "congresso", label: "Congresso" },
+    { value: "feira", label: "Feira" },
+    { value: "evento_corporativo", label: "Evento Corporativo" },
+    { value: "show", label: "Show" },
+    { value: "lancamento", label: "Lançamento" },
+    { value: "outro", label: "Outro" },
+  ]
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "12px 16px", borderRadius: 14,
+    border: `1px solid ${LINE}`, background: "rgba(234,244,244,.06)",
+    color: TEXT, fontSize: 15, outline: "none", boxSizing: "border-box",
+  }
+
+  async function handlePdfSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.type !== "application/pdf") { toast.error("Selecione um arquivo PDF"); return }
+    if (file.size > 20 * 1024 * 1024) { toast.error("PDF muito grande (máximo 20 MB)"); return }
+    setPdfFile(file)
+    setErroMsg("")
+    setTipoErro(null)
+    setLoadingBriefing(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch("/api/coberturas/briefing", { method: "POST", body: form })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setErroMsg(json.error ?? "Erro ao processar o briefing")
+        setTipoErro(json.tipo ?? null)
+        setLoadingBriefing(false)
+        return
+      }
+      setExtrato(json.dados)
+      setEditExtrato(json.dados)
+    } catch {
+      setErroMsg("Erro ao conectar com o servidor")
+      setTipoErro(null)
+    } finally {
+      setLoadingBriefing(false)
+    }
+  }
+
+  async function criarViaBriefing() {
+    if (!extrato) return
+    setSaving(true)
+    try {
+      const body = {
+        titulo: (editExtrato.titulo ?? extrato.titulo),
+        tipo: (editExtrato.tipo ?? extrato.tipo),
+        cliente: (editExtrato.cliente ?? extrato.cliente),
+        local: (editExtrato.local ?? extrato.local),
+        cidade: (editExtrato.cidade ?? extrato.cidade),
+        dataInicio: (editExtrato.dataInicio ?? extrato.dataInicio),
+        dataFim: (editExtrato.dataFim ?? extrato.dataFim),
+        descricao: (editExtrato.descricao ?? extrato.descricao),
+        checklistExtra: extrato.checklistEspecifico,
+        programacaoPorDia: extrato.programacaoPorDia,
+      }
+      const res = await fetch("/api/coberturas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const j = await res.json(); toast.error(j.error ?? "Erro ao criar evento"); return }
+      toast.success("Evento criado com sucesso!")
+      onCreated()
+    } catch {
+      toast.error("Erro ao criar evento")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function criarManual() {
+    if (!titulo || !dataInicio || !dataFim) { toast.error("Preencha título e datas"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/coberturas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo, tipo, cliente, local, cidade, dataInicio, dataFim }),
+      })
+      if (!res.ok) { const j = await res.json(); toast.error(j.error ?? "Erro ao criar evento"); return }
+      toast.success("Evento criado!")
+      onCreated()
+    } catch {
+      toast.error("Erro ao criar evento")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 110, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
+      onClick={onClose}
+    >
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.6)" }} />
+      <div
+        style={{
+          position: "relative", zIndex: 1, background: "#0B2238",
+          borderTopLeftRadius: 30, borderTopRightRadius: 30,
+          border: `1px solid ${LINE}`, borderBottom: 0,
+          maxHeight: "88vh", overflowY: "auto", paddingBottom: 36,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Pull handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 8 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 999, background: "rgba(234,244,244,.18)" }} />
+        </div>
+
+        <div style={{ padding: "4px 20px 0" }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 730, color: TEXT, margin: 0 }}>
+              {mode === null ? "Criar novo evento" : mode === "briefing" ? "📄 Via Briefing PDF" : "✍️ Criar manualmente"}
+            </h2>
+            <button onClick={onClose} style={{ background: "transparent", border: 0, cursor: "pointer", color: MUTED, padding: 4 }}>
+              <X style={{ width: 20, height: 20 }} />
+            </button>
+          </div>
+
+          {/* Mode selector */}
+          {mode === null && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <button
+                onClick={() => setMode("briefing")}
+                style={{
+                  padding: "20px 18px", borderRadius: 18, border: `1px solid ${LINE}`,
+                  background: "rgba(0,165,138,.08)", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 6 }}>📄 Via Briefing PDF</div>
+                <div style={{ fontSize: 13, color: MUTED }}>IA extrai título, datas, programação e checklist automaticamente</div>
+              </button>
+              <button
+                onClick={() => setMode("manual")}
+                style={{
+                  padding: "20px 18px", borderRadius: 18, border: `1px solid ${LINE}`,
+                  background: "rgba(234,244,244,.04)", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 6 }}>✍️ Criar manualmente</div>
+                <div style={{ fontSize: 13, color: MUTED }}>Preencher campos diretamente sem PDF</div>
+              </button>
+            </div>
+          )}
+
+          {/* Briefing mode */}
+          {mode === "briefing" && (
+            <div>
+              {!extrato && !loadingBriefing && (
+                <label style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: 14, padding: "32px 16px", borderRadius: 20,
+                  border: `2px dashed rgba(0,165,138,.4)`, background: "rgba(0,165,138,.05)",
+                  cursor: "pointer", minHeight: 200, justifyContent: "center",
+                }}>
+                  <FileText style={{ width: 48, height: 48, color: ACCENT }} />
+                  <span style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>Selecionar PDF do briefing</span>
+                  <span style={{ fontSize: 11, color: MUTED }}>máximo 20 MB</span>
+                  {pdfFile && <span style={{ fontSize: 12, color: ACCENT }}>{pdfFile.name}</span>}
+                  <input type="file" accept=".pdf" style={{ display: "none" }} onChange={handlePdfSelect} />
+                </label>
+              )}
+
+              {loadingBriefing && (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <Loader2 style={{ width: 40, height: 40, color: ACCENT, margin: "0 auto 12px" }} className="animate-spin" />
+                  <p style={{ color: MUTED, fontSize: 14 }}>Claude está lendo o briefing...</p>
+                </div>
+              )}
+
+              {erroMsg && (
+                <div style={{
+                  padding: "16px", borderRadius: 14, background: "rgba(248,113,113,.1)",
+                  border: "1px solid rgba(248,113,113,.3)", marginBottom: 16,
+                }}>
+                  <p style={{ fontSize: 13.5, color: "#fca5a5", marginBottom: tipoErro === "api_credits" ? 12 : 0 }}>{erroMsg}</p>
+                  {tipoErro === "api_credits" && (
+                    <button
+                      onClick={() => { setMode("manual"); setErroMsg("") }}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, border: `1px solid ${ACCENT}`,
+                        background: SOFT, color: TEXT, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      ✍️ Criar manualmente
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {extrato && !loadingBriefing && (
+                <div>
+                  <p style={{ fontSize: 13, color: GREEN, fontWeight: 700, marginBottom: 16 }}>✓ Briefing extraído — revise antes de criar</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Título *</label>
+                      <input style={inputStyle} value={editExtrato.titulo ?? extrato.titulo} onChange={(e) => setEditExtrato((p) => ({ ...p, titulo: e.target.value }))} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Tipo</label>
+                        <select style={{ ...inputStyle, WebkitAppearance: "none" }} value={editExtrato.tipo ?? extrato.tipo} onChange={(e) => setEditExtrato((p) => ({ ...p, tipo: e.target.value }))}>
+                          {TIPO_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Cliente</label>
+                        <input style={inputStyle} value={editExtrato.cliente ?? extrato.cliente ?? ""} onChange={(e) => setEditExtrato((p) => ({ ...p, cliente: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Início *</label>
+                        <input type="date" style={inputStyle} value={editExtrato.dataInicio ?? extrato.dataInicio} onChange={(e) => setEditExtrato((p) => ({ ...p, dataInicio: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Fim *</label>
+                        <input type="date" style={inputStyle} value={editExtrato.dataFim ?? extrato.dataFim} onChange={(e) => setEditExtrato((p) => ({ ...p, dataFim: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Local</label>
+                        <input style={inputStyle} value={editExtrato.local ?? extrato.local ?? ""} onChange={(e) => setEditExtrato((p) => ({ ...p, local: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Cidade</label>
+                        <input style={inputStyle} value={editExtrato.cidade ?? extrato.cidade ?? ""} onChange={(e) => setEditExtrato((p) => ({ ...p, cidade: e.target.value }))} />
+                      </div>
+                    </div>
+
+                    {extrato.programacaoPorDia.length > 0 && (
+                      <details style={{ padding: "12px 14px", borderRadius: 14, border: `1px solid ${LINE}`, background: "rgba(234,244,244,.03)" }}>
+                        <summary style={{ fontSize: 13, color: MUTED, cursor: "pointer", fontWeight: 600 }}>
+                          📅 Programação ({extrato.programacaoPorDia.length} dia{extrato.programacaoPorDia.length > 1 ? "s" : ""})
+                        </summary>
+                        <div style={{ marginTop: 10 }}>
+                          {extrato.programacaoPorDia.map((d) => (
+                            <div key={d.dia} style={{ marginBottom: 8 }}>
+                              <p style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 4 }}>Dia {d.dia} — {d.titulo}</p>
+                              {d.momentos.slice(0, 4).map((m, i) => (
+                                <p key={i} style={{ fontSize: 11.5, color: MUTED, marginLeft: 12, marginBottom: 2 }}>• {m}</p>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {extrato.checklistEspecifico.length > 0 && (
+                      <details style={{ padding: "12px 14px", borderRadius: 14, border: `1px solid ${LINE}`, background: "rgba(234,244,244,.03)" }}>
+                        <summary style={{ fontSize: 13, color: MUTED, cursor: "pointer", fontWeight: 600 }}>
+                          ✅ Checklist específico ({extrato.checklistEspecifico.length} itens)
+                        </summary>
+                        <div style={{ marginTop: 10 }}>
+                          {extrato.checklistEspecifico.map((item, i) => (
+                            <p key={i} style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>• {item.texto}</p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    <button
+                      onClick={criarViaBriefing}
+                      disabled={saving}
+                      style={{
+                        marginTop: 8, padding: "15px 0", borderRadius: 16,
+                        background: ACCENT, border: 0, color: "#fff",
+                        fontSize: 15, fontWeight: 700, cursor: saving ? "default" : "pointer",
+                        opacity: saving ? 0.7 : 1,
+                      }}
+                    >
+                      {saving ? "Criando..." : "Criar Evento"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual mode */}
+          {mode === "manual" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Título *</label>
+                <input style={inputStyle} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nome do evento" />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Tipo</label>
+                <select style={{ ...inputStyle, WebkitAppearance: "none" }} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                  {TIPO_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Início *</label>
+                  <input type="date" style={inputStyle} value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Fim *</label>
+                  <input type="date" style={inputStyle} value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Local</label>
+                <input style={inputStyle} value={local} onChange={(e) => setLocal(e.target.value)} placeholder="Nome do venue / espaço" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Cidade</label>
+                  <input style={inputStyle} value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade / UF" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>Cliente</label>
+                  <input style={inputStyle} value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Organizadora" />
+                </div>
+              </div>
+              <button
+                onClick={criarManual}
+                disabled={saving}
+                style={{
+                  marginTop: 8, padding: "15px 0", borderRadius: 16,
+                  background: ACCENT, border: 0, color: "#fff",
+                  fontSize: 15, fontWeight: 700, cursor: saving ? "default" : "pointer",
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? "Criando..." : "Criar Evento"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── InfoPanel — shows event details + status change ─────────────────────────
+function InfoPanel({ cobertura, onReload }: { cobertura: Cobertura; onReload: () => void }) {
+  const [changingStatus, setChangingStatus] = useState(false)
+
+  const STATUS_MAP: Record<string, string> = {
+    planejamento: "Planejamento",
+    em_andamento: "Em andamento",
+    concluido: "Concluído",
+    cancelado: "Cancelado",
+  }
+
+  async function handleStatusChange(novoStatus: string) {
+    setChangingStatus(true)
+    try {
+      const res = await fetch(`/api/coberturas/${cobertura.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: novoStatus }),
+      })
+      if (!res.ok) { toast.error("Erro ao atualizar status"); return }
+      toast.success("Status atualizado!")
+      onReload()
+    } catch {
+      toast.error("Erro ao atualizar status")
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    padding: "11px 14px", borderRadius: 14,
+    background: "rgba(234,244,244,.04)", border: `1px solid ${LINE}`,
+  }
+  const labelStyle: React.CSSProperties = { fontSize: 10, color: MUTED, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 3 }
+  const valueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: TEXT }
+
+  return (
+    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* Title */}
+      <div>
+        <p style={{ fontSize: 17, fontWeight: 730, color: TEXT, letterSpacing: "-.02em", margin: "0 0 4px" }}>{cobertura.titulo}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999, background: "rgba(0,165,138,.18)", color: "#BFF7D0", fontWeight: 700 }}>
+            {STATUS_MAP[cobertura.status] ?? cobertura.status}
+          </span>
+          <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999, background: "rgba(234,244,244,.07)", color: MUTED, fontWeight: 600 }}>
+            {cobertura.tipo?.replace(/_/g, " ")}
+          </span>
+        </div>
+      </div>
+
+      {/* Period */}
+      <div style={fieldStyle}>
+        <p style={labelStyle}>Período</p>
+        <p style={valueStyle}>{formatDate(cobertura.dataInicio)} → {formatDate(cobertura.dataFim)}</p>
+      </div>
+
+      {/* Location */}
+      {(cobertura.local || cobertura.cidade) && (
+        <div style={fieldStyle}>
+          <p style={labelStyle}>Local</p>
+          <p style={valueStyle}>{[cobertura.local, cobertura.cidade].filter(Boolean).join(" · ")}</p>
+        </div>
+      )}
+
+      {/* Client */}
+      {cobertura.cliente && (
+        <div style={fieldStyle}>
+          <p style={labelStyle}>Cliente</p>
+          <p style={valueStyle}>{cobertura.cliente}</p>
+        </div>
+      )}
+
+      {/* Product */}
+      {cobertura.produto && (
+        <div style={fieldStyle}>
+          <p style={labelStyle}>Produto</p>
+          <p style={valueStyle}>{cobertura.produto.nome}</p>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        <div style={{ ...fieldStyle, textAlign: "center" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: ACCENT, margin: 0 }}>{cobertura.equipe.length}</p>
+          <p style={{ fontSize: 10, color: MUTED, margin: "2px 0 0" }}>membros</p>
+        </div>
+        <div style={{ ...fieldStyle, textAlign: "center" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: ACCENT, margin: 0 }}>{cobertura._count.uploads}</p>
+          <p style={{ fontSize: 10, color: MUTED, margin: "2px 0 0" }}>uploads</p>
+        </div>
+        <div style={{ ...fieldStyle, textAlign: "center" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: ACCENT, margin: 0 }}>{cobertura.totalDias}</p>
+          <p style={{ fontSize: 10, color: MUTED, margin: "2px 0 0" }}>dias</p>
+        </div>
+      </div>
+
+      {/* Status action button */}
+      {cobertura.status === "planejamento" && (
+        <button
+          onClick={() => handleStatusChange("em_andamento")}
+          disabled={changingStatus}
+          style={{
+            padding: "14px 0", borderRadius: 16, background: ACCENT,
+            border: 0, color: "#fff", fontSize: 14, fontWeight: 700,
+            cursor: changingStatus ? "default" : "pointer", opacity: changingStatus ? 0.7 : 1,
+          }}
+        >
+          ▶ Iniciar Evento
+        </button>
+      )}
+      {cobertura.status === "em_andamento" && (
+        <button
+          onClick={() => handleStatusChange("concluido")}
+          disabled={changingStatus}
+          style={{
+            padding: "14px 0", borderRadius: 16, background: "rgba(125,211,123,.18)",
+            border: `1px solid rgba(125,211,123,.35)`, color: GREEN,
+            fontSize: 14, fontWeight: 700,
+            cursor: changingStatus ? "default" : "pointer", opacity: changingStatus ? 0.7 : 1,
+          }}
+        >
+          ✓ Concluir Evento
+        </button>
+      )}
+      {cobertura.status === "concluido" && (
+        <div style={{ padding: "12px 16px", borderRadius: 14, background: "rgba(125,211,123,.08)", border: `1px solid rgba(125,211,123,.2)`, textAlign: "center" }}>
+          <span style={{ fontSize: 13, color: GREEN, fontWeight: 700 }}>Evento Concluído ✓</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Tab Eventos ──────────────────────────────────────────────────────────────
 function TabEventos({
   coberturas,
@@ -462,8 +976,9 @@ function TabEventos({
   onReload: () => void
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [subTab, setSubTab] = useState<Record<string, "checklist" | "upload" | "galeria">>({})
+  const [subTab, setSubTab] = useState<Record<string, "checklist" | "upload" | "galeria" | "info">>({})
   const [diaAtivo, setDiaAtivo] = useState<Record<string, number>>({})
+  const [showCriarSheet, setShowCriarSheet] = useState(false)
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [togglingItem, setTogglingItem] = useState<string | null>(null)
@@ -693,7 +1208,7 @@ function TabEventos({
 
   // derive panel state from the active card
   const dia = diaAtivo[activeCobertura?.id ?? ""] ?? 1
-  const currentSubTab = subTab[activeCobertura?.id ?? ""] ?? "checklist"
+  const currentSubTab: "checklist" | "upload" | "galeria" | "info" = subTab[activeCobertura?.id ?? ""] ?? "checklist"
 
   const checklistDia = activeCobertura ? activeCobertura.checklist.filter((item) => item.dia === dia) : []
   const checklistConcluidos = checklistDia.filter((i) => i.concluido).length
@@ -718,14 +1233,25 @@ function TabEventos({
             {coberturas.length > 0 ? `${coberturas.length} evento(s) ativo(s)` : "Nenhum evento ativo"}
           </p>
         </div>
-        <div style={{
-          width: 58, height: 58, borderRadius: 24,
-          border: `1px solid rgba(0,165,138,.55)`,
-          background: "rgba(0,165,138,.07)",
-          fontSize: 24, color: "#BFF7D0",
-          display: "grid", placeItems: "center",
-        }}>🎬</div>
+        <button
+          onClick={() => setShowCriarSheet(true)}
+          style={{
+            width: 58, height: 58, borderRadius: 24,
+            border: `1px solid rgba(0,165,138,.55)`,
+            background: "rgba(0,165,138,.07)",
+            fontSize: 32, color: "#BFF7D0",
+            display: "grid", placeItems: "center",
+            cursor: "pointer",
+          }}
+        >+</button>
       </div>
+
+      {showCriarSheet && (
+        <CriarEventoSheet
+          onClose={() => setShowCriarSheet(false)}
+          onCreated={() => { setShowCriarSheet(false); onReload() }}
+        />
+      )}
 
       {coberturas.length === 0 ? (
         <div style={{
@@ -871,19 +1397,19 @@ function TabEventos({
                 display: "flex",
                 borderBottom: `1px solid ${LINE}`,
               }}>
-                {(["checklist", "upload", "galeria"] as const).map((st) => (
+                {(["checklist", "upload", "galeria", "info"] as const).map((st) => (
                   <button
                     key={st}
                     onClick={() => setSubTab((p) => ({ ...p, [activeCobertura.id]: st }))}
                     style={{
-                      flex: 1, padding: "12px 4px", fontSize: 12.5, fontWeight: 600,
+                      flex: 1, padding: "12px 2px", fontSize: 11.5, fontWeight: 600,
                       background: "transparent", border: 0,
                       borderBottom: currentSubTab === st ? `2px solid ${ACCENT}` : "2px solid transparent",
                       color: currentSubTab === st ? ACCENT : MUTED,
                       cursor: "pointer",
                     }}
                   >
-                    {st === "checklist" ? "✓ Checklist" : st === "upload" ? "↑ Upload" : "◻ Galeria"}
+                    {st === "checklist" ? "✓ Check" : st === "upload" ? "↑ Upload" : st === "galeria" ? "◻ Galeria" : "ℹ Info"}
                   </button>
                 ))}
               </div>
@@ -1069,6 +1595,11 @@ function TabEventos({
                   )}
                 </div>
               )}
+
+              {/* Info */}
+              {currentSubTab === "info" && (
+                <InfoPanel cobertura={activeCobertura} onReload={onReload} />
+              )}
             </div>
           )}
         </>
@@ -1222,21 +1753,17 @@ function DemandaSheet({ demanda, onClose }: { demanda: Demanda; onClose: () => v
             </div>
           )}
 
-          {/* Open in full */}
-          <a
-            href={`/demandas/${demanda.id}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "14px 0", borderRadius: 18,
-              background: "rgba(234,244,244,.07)", border: `1px solid ${LINE}`,
-              color: TEXT, textDecoration: "none", fontSize: 14, fontWeight: 600,
-            }}
-          >
-            <ExternalLink style={{ width: 16, height: 16 }} />
-            Abrir no sistema completo
-          </a>
+          {/* Discrete desktop link */}
+          <div style={{ paddingTop: 16, borderTop: `1px solid ${LINE}`, marginTop: 8, textAlign: "center" }}>
+            <a
+              href={`/demandas/${demanda.id}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, color: "rgba(234,244,244,.25)", textDecoration: "underline" }}
+            >
+              Abrir no desktop →
+            </a>
+          </div>
         </div>
       </div>
     </div>
