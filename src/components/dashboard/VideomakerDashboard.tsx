@@ -445,7 +445,7 @@ export function VideomakerDashboard() {
                 <Building2 className="w-4 h-4 text-emerald-400" />
                 Dados para Nota Fiscal
               </h2>
-              {empresa && (
+              {empresa && (empresa.razaoSocial || empresa.cnpj || empresa.pixKey) && (
                 <button
                   onClick={() => setShowAllNFDados(v => !v)}
                   className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -455,8 +455,13 @@ export function VideomakerDashboard() {
                 </button>
               )}
             </div>
-            {!empresa ? (
-              <p className="text-xs text-zinc-500">Dados não cadastrados. Contate a equipe.</p>
+            {!empresa || (!empresa.razaoSocial && !empresa.cnpj && !empresa.pixKey) ? (
+              <p className="text-xs text-zinc-500">
+                Dados não cadastrados.{" "}
+                <a href="/configuracoes" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">
+                  Preencher em Configurações
+                </a>
+              </p>
             ) : (
               <div className="space-y-2 text-xs">
                 {empresa.razaoSocial && (
