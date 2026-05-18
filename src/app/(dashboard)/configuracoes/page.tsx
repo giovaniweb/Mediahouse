@@ -528,13 +528,22 @@ function TabUsuarios() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">E-MAIL / LOGIN</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">TIPO</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">STATUS</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-zinc-500 whitespace-nowrap w-32">AÇÕES</th>
+              <th className="px-4 py-3 w-20"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {filteredUsers.map((u) => (
-              <tr key={u.id} className="hover:bg-zinc-800/30">
-                <td className="px-4 py-3 font-medium text-zinc-200">{u.nome}</td>
+              <tr
+                key={u.id}
+                className="hover:bg-zinc-800/50 cursor-pointer group"
+                onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
+              >
+                <td className="px-4 py-3 font-medium text-zinc-200">
+                  <div className="flex items-center gap-2">
+                    {u.nome}
+                    <Pencil className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-zinc-400 text-xs">{u.email}</td>
                 <td className="px-4 py-3">
                   <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize border",
@@ -554,7 +563,7 @@ function TabUsuarios() {
                     {u.status === "ativo" ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">
                     {u.tipo === "solicitante" && (
                       <button
@@ -566,20 +575,16 @@ function TabUsuarios() {
                       </button>
                     )}
                     <button
-                      onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
-                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
-                      title="Editar usuário (nome, e-mail, tipo e senha)"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
                       onClick={() => toggleStatus(u.id, u.status)}
-                      className="p-1.5 rounded-md transition-colors"
+                      className={cn(
+                        "p-1.5 rounded-md transition-colors",
+                        u.status === "ativo"
+                          ? "text-green-500 hover:text-red-400 hover:bg-red-900/20"
+                          : "text-zinc-600 hover:text-green-400 hover:bg-green-900/20"
+                      )}
                       title={u.status === "ativo" ? "Desativar usuário" : "Reativar usuário"}
                     >
-                      {u.status === "ativo"
-                        ? <XCircle className="w-4 h-4 text-zinc-500 hover:text-red-400" />
-                        : <CheckCircle2 className="w-4 h-4 text-zinc-600 hover:text-green-400" />}
+                      {u.status === "ativo" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                     </button>
                   </div>
                 </td>
