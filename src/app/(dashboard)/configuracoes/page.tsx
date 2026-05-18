@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { Users, MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { Users, MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, KeyRound, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play, UserCog } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -520,15 +520,15 @@ function TabUsuarios() {
         </div>
       )}
 
-      <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="border border-zinc-800 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-zinc-800/50 border-b border-zinc-800">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">NOME</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">E-MAIL / LOGIN</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">TIPO</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">STATUS</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-zinc-500">AÇÕES</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">NOME</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">E-MAIL / LOGIN</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">TIPO</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 whitespace-nowrap">STATUS</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-zinc-500 whitespace-nowrap w-32">AÇÕES</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
@@ -554,30 +554,32 @@ function TabUsuarios() {
                     {u.status === "ativo" ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1.5">
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1">
                     {u.tipo === "solicitante" && (
                       <button
                         onClick={() => setPromoverTarget({ id: u.id, nome: u.nome })}
-                        className="text-xs px-2 py-1 rounded-md border border-zinc-700 text-zinc-400 hover:text-purple-400 hover:border-purple-800 transition-colors"
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-purple-400 hover:bg-purple-900/30 transition-colors"
                         title="Promover para outro tipo"
                       >
-                        Promover
+                        <UserCog className="w-4 h-4" />
                       </button>
                     )}
                     <button
                       onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
-                      className="text-xs px-2 py-1 rounded-md border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1"
-                      title="Editar usuário (nome, e-mail, tipo, senha)"
+                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                      title="Editar usuário (nome, e-mail, tipo e senha)"
                     >
-                      <Pencil className="w-3 h-3" /> Editar
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => toggleStatus(u.id, u.status)}
-                      className="text-zinc-500 hover:text-zinc-200 transition-colors"
-                      title={u.status === "ativo" ? "Desativar" : "Reativar"}
+                      className="p-1.5 rounded-md transition-colors"
+                      title={u.status === "ativo" ? "Desativar usuário" : "Reativar usuário"}
                     >
-                      {u.status === "ativo" ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                      {u.status === "ativo"
+                        ? <XCircle className="w-4 h-4 text-zinc-500 hover:text-red-400" />
+                        : <CheckCircle2 className="w-4 h-4 text-zinc-600 hover:text-green-400" />}
                     </button>
                   </div>
                 </td>
