@@ -10,7 +10,7 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight,
+  CalendarRange, ArrowUpRight, FileText, Download,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -94,7 +94,10 @@ export default function DemandaDetailPage() {
   const [localGravacao, setLocalGravacao] = useState("")
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
-  // fileRefLinkModal já declarado acima — único ref de upload necessário
+  // ── Documentos anexados ───────────────────────────────────────────────────
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [docUploadProgress, setDocUploadProgress] = useState(0)
+  const fileRefDoc = useRef<HTMLInputElement>(null)
 
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
@@ -292,6 +295,62 @@ export default function DemandaDetailPage() {
     })
 
     return publicUrl
+  }
+
+  // ── Upload de documentos (PDF, Word, Excel…) via Supabase presigned URL ───
+  async function uploadDocumento(file: File) {
+    setUploadingDoc(true)
+    setDocUploadProgress(0)
+    try {
+      const contentType = file.type || "application/octet-stream"
+      // 1. Busca URL presigned
+      const urlRes = await fetch(
+        `/api/demandas/${id}/upload-url?tipo=documento&contentType=${encodeURIComponent(contentType)}`
+      )
+      const urlJson = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" })) as { uploadUrl?: string; publicUrl?: string; error?: string }
+      if (!urlRes.ok || !urlJson.uploadUrl) throw new Error(urlJson.error ?? "Erro ao gerar URL de upload")
+
+      // 2. Upload direto para Supabase
+      const uploadRes = await new Promise<boolean>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setDocUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve(true) : reject(new Error(`HTTP ${xhr.status}`))
+        xhr.onerror = () => reject(new Error("Falha na conexão"))
+        xhr.open("PUT", urlJson.uploadUrl!)
+        xhr.setRequestHeader("Content-Type", contentType)
+        xhr.send(file)
+      })
+      if (!uploadRes) throw new Error("Upload falhou")
+
+      // 3. Registra o Arquivo no banco
+      const saveRes = await fetch(`/api/demandas/${id}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlJson.publicUrl, tipo: "documento", nomeArquivo: file.name }),
+      })
+      if (!saveRes.ok) throw new Error("Erro ao salvar documento")
+
+      toast.success("📄 Documento anexado!")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao anexar documento")
+    } finally {
+      setUploadingDoc(false)
+      setDocUploadProgress(0)
+    }
+  }
+
+  async function deletarDocumento(arquivoId: string) {
+    if (!confirm("Remover este documento?")) return
+    const res = await fetch(`/api/demandas/${id}/upload-video`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: null, tipo: "documento", arquivoId }),
+    })
+    if (res.ok) { toast.success("Documento removido"); mutate() }
+    else toast.error("Erro ao remover")
   }
 
   // ── Upload via Google Drive (chunks via servidor — sem CORS) ──────────────
@@ -1098,6 +1157,85 @@ export default function DemandaDetailPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* ── Documentos Anexados ─────────────────────────────────────── */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-zinc-300 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-sky-400" /> Documentos
+                {(() => {
+                  const docs = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
+                  return docs.length > 0 ? (
+                    <span className="bg-sky-600/20 text-sky-300 border border-sky-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {docs.length}
+                    </span>
+                  ) : null
+                })()}
+              </h2>
+              <button
+                onClick={() => fileRefDoc.current?.click()}
+                disabled={uploadingDoc}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-600/30 font-medium transition-colors disabled:opacity-50"
+              >
+                {uploadingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {uploadingDoc ? `${docUploadProgress}%` : "Anexar"}
+              </button>
+              <input
+                ref={fileRefDoc}
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
+              />
+            </div>
+            {(() => {
+              const docs: ArquivoVideo[] = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
+              if (docs.length === 0) {
+                return (
+                  <p className="text-xs text-zinc-600 text-center py-3">
+                    Nenhum documento anexado. Clique em "Anexar" para adicionar PDFs, planilhas, etc.
+                  </p>
+                )
+              }
+              return (
+                <div className="space-y-2">
+                  {docs.map((arq: ArquivoVideo) => {
+                    const ext = arq.nomeArquivo.split(".").pop()?.toUpperCase() ?? "?"
+                    const extColor: Record<string, string> = {
+                      PDF: "text-red-400 bg-red-900/30 border-red-700/40",
+                      DOC: "text-blue-400 bg-blue-900/30 border-blue-700/40",
+                      DOCX: "text-blue-400 bg-blue-900/30 border-blue-700/40",
+                      XLS: "text-green-400 bg-green-900/30 border-green-700/40",
+                      XLSX: "text-green-400 bg-green-900/30 border-green-700/40",
+                      PPT: "text-orange-400 bg-orange-900/30 border-orange-700/40",
+                      PPTX: "text-orange-400 bg-orange-900/30 border-orange-700/40",
+                    }
+                    const colorClass = extColor[ext] ?? "text-zinc-400 bg-zinc-800/60 border-zinc-600/40"
+                    return (
+                      <div key={arq.id} className="flex items-center gap-2.5 bg-zinc-800/50 rounded-lg px-3 py-2.5 border border-zinc-700/40">
+                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0", colorClass)}>
+                          {ext}
+                        </span>
+                        <span className="text-sm text-zinc-300 truncate flex-1 min-w-0" title={arq.nomeArquivo}>
+                          {arq.nomeArquivo}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar"
+                            className="p-1 text-zinc-500 hover:text-sky-400 transition-colors">
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                          <button onClick={() => deletarDocumento(arq.id)} title="Remover"
+                            className="p-1 text-zinc-600 hover:text-red-400 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
 
           {/* ── Pastas de Cobertura ──────────────────────────────────────── */}

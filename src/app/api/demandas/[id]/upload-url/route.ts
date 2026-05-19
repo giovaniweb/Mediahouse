@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js"
 
 type Params = { params: Promise<{ id: string }> }
 
-const TIPOS_VALIDOS = ["final", "brutos", "thumbnail"] as const
+const TIPOS_VALIDOS = ["final", "brutos", "thumbnail", "documento"] as const
 type TipoUpload = (typeof TIPOS_VALIDOS)[number]
 
 const EXT_MAPA: Record<string, string> = {
@@ -19,6 +19,16 @@ const EXT_MAPA: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png":  "png",
   "image/webp": "webp",
+  // Documentos
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-powerpoint": "ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "text/plain": "txt",
+  "text/csv": "csv",
 }
 
 // GET /api/demandas/[id]/upload-url?tipo=final&contentType=video%2Fmp4
@@ -47,10 +57,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-  const ext = EXT_MAPA[contentType] ?? (tipo === "thumbnail" ? "jpg" : "mp4")
-  // Thumbnails ficam em pasta separada; vídeos em videos/{id}/{tipo}/
+  const ext = EXT_MAPA[contentType] ?? (tipo === "thumbnail" ? "jpg" : tipo === "documento" ? "pdf" : "mp4")
+  // Thumbnails ficam em pasta separada; documentos em docs/{id}/; vídeos em videos/{id}/{tipo}/
   const objectPath = tipo === "thumbnail"
     ? `thumbnails/${id}/${Date.now()}.${ext}`
+    : tipo === "documento"
+    ? `docs/${id}/${Date.now()}.${ext}`
     : `videos/${id}/${tipo}/${Date.now()}.${ext}`
   const bucket = "uploads"
 

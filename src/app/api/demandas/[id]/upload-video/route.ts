@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 
 type Params = { params: Promise<{ id: string }> }
 
-const TIPOS_VALIDOS = ["final", "brutos"] as const
+const TIPOS_VALIDOS = ["final", "brutos", "documento"] as const
 type TipoVideo = (typeof TIPOS_VALIDOS)[number]
 
 const MIME_VALIDOS = [
@@ -45,6 +45,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
+  }
+
+  // ── Documento: cria/deleta Arquivo, sem tocar em linkFinal/linkBrutos ─────
+  if (tipo === "documento") {
+    if (url === null && arquivoId) {
+      await prisma.arquivo.delete({ where: { id: arquivoId } })
+      return NextResponse.json({ ok: true, deleted: true })
+    }
+    if (url) {
+      const nomeArquivo = (body.nomeArquivo as string | undefined)
+        ?? url.split("/").pop()?.split("?")[0]
+        ?? "documento"
+      const arq = await prisma.arquivo.create({
+        data: { demandaId: id, tipoArquivo: "documento", nomeArquivo, url },
+      })
+      return NextResponse.json({ ok: true, url, arqId: arq.id })
+    }
+    return NextResponse.json({ error: "url ou arquivoId obrigatório para documento" }, { status: 400 })
   }
 
   const campo = tipo === "final" ? "linkFinal" : "linkBrutos"

@@ -102,6 +102,7 @@ enum TipoArquivo {
   referencia
   postagem
   cliente
+  documento
 }
 
 enum DirecaoWhatsapp {
