@@ -19,6 +19,16 @@ Analise o PDF e retorne APENAS um JSON válido (sem markdown, sem texto antes ou
   "dataInicio": "2026-06-15",
   "dataFim": "2026-06-17",
   "descricao": "Descrição objetiva do evento em 2-3 frases",
+  "standInfo": {
+    "numero": "531",
+    "tamanho": "94,5 m²",
+    "publicoEstimado": 2000,
+    "cota": "Platinum"
+  },
+  "portfolio": [
+    "Nome do produto/equipamento 1 que será exibido ou demonstrado",
+    "Nome do produto/equipamento 2"
+  ],
   "programacaoPorDia": [
     {
       "dia": 1,
@@ -33,7 +43,9 @@ Analise o PDF e retorne APENAS um JSON válido (sem markdown, sem texto antes ou
   ],
   "checklistEspecifico": [
     { "texto": "Item específico relevante para este evento", "categoria": "logistica" },
-    { "texto": "Cobertura do painel principal — horário", "categoria": "conteudo" }
+    { "texto": "Cobertura do painel principal — horário", "categoria": "conteudo" },
+    { "texto": "Cobertura — Palestra: Nome do Palestrante (Produto) — 10h00", "categoria": "conteudo" },
+    { "texto": "Produzir vídeo comercial 30s conforme contrapartida", "categoria": "entrega" }
   ],
   "logistica": {
     "hotel": "Nome do hotel se mencionado no briefing",
@@ -44,10 +56,16 @@ Analise o PDF e retorne APENAS um JSON válido (sem markdown, sem texto antes ou
 REGRAS:
 - "tipo": escolha o mais adequado entre as opções disponíveis
 - "dataInicio" e "dataFim": formato ISO YYYY-MM-DD obrigatório
+- "standInfo": extrair número do stand/booth, área em m², público estimado do evento e nível de cota/patrocínio (ex: Platinum, Gold, Bronze, Diamante). Se não mencionado, usar null para o campo inteiro.
+- "portfolio": listar TODOS os equipamentos, produtos ou serviços que serão expostos, demonstrados ou filmados no stand/evento. Se não mencionado, usar [].
 - "programacaoPorDia": um objeto por dia do evento com os momentos mais importantes
-- "checklistEspecifico": itens ESPECÍFICOS deste evento (não os padrões como "celular carregado"). Exemplos: credenciamento especial, acesso restrito, cobertura de sessão específica, entrevista agendada
+- "checklistEspecifico": itens ESPECÍFICOS deste evento. Incluir OBRIGATORIAMENTE:
+  1. Um item por cada apresentação/palestra/aula científica individual, com nome do palestrante e produto/tema (ex: "Cobertura — Aula Sala Aesthetics: Dra. Roberta Vieira Carraro (Xerf) — 14h30")
+  2. Um item por cada contrapartida de mídia contratada (vídeo comercial, posts, e-mail marketing, banner, anúncio em catálogo, etc.) com categoria "entrega"
+  3. Itens de credenciamento especial, acessos restritos ou procedimentos específicos do evento
+  NÃO incluir itens genéricos como "celular carregado" ou "tripé"
 - "checklistEspecifico.categoria": use apenas "equipamento", "logistica", "conteudo" ou "entrega"
-- Se algum dado não estiver no PDF, use null para o campo
+- Se algum dado não estiver no PDF, use null para campos simples e [] para arrays
 - Retorne APENAS o JSON, sem nenhum texto adicional`
 
 export interface ExtratoEvento {
@@ -59,6 +77,13 @@ export interface ExtratoEvento {
   dataInicio: string
   dataFim: string
   descricao: string | null
+  standInfo?: {
+    numero?: string | null
+    tamanho?: string | null
+    publicoEstimado?: number | null
+    cota?: string | null
+  } | null
+  portfolio?: string[] | null
   programacaoPorDia: Array<{
     dia: number
     data: string
@@ -143,6 +168,8 @@ export async function POST(req: NextRequest) {
     // Garantir arrays existem
     if (!Array.isArray(dados.programacaoPorDia)) dados.programacaoPorDia = []
     if (!Array.isArray(dados.checklistEspecifico)) dados.checklistEspecifico = []
+    if (!Array.isArray(dados.portfolio)) dados.portfolio = []
+    if (dados.standInfo === undefined) dados.standInfo = null
 
     return NextResponse.json({ dados })
   } catch (e) {
