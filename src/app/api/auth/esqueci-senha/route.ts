@@ -17,8 +17,18 @@ export async function POST(req: NextRequest) {
       select: { id: true, nome: true, email: true, status: true },
     })
 
-    if (!usuario || usuario.status === "inativo") {
-      return NextResponse.json({ ok: true })
+    if (!usuario) {
+      return NextResponse.json(
+        { ok: false, error: "E-mail não encontrado. Verifique se digitou corretamente." },
+        { status: 404 }
+      )
+    }
+
+    if (usuario.status === "inativo") {
+      return NextResponse.json(
+        { ok: false, error: "Esta conta está inativa. Entre em contato com o administrador." },
+        { status: 403 }
+      )
     }
 
     // Usuário sem email não pode redefinir senha por este método
