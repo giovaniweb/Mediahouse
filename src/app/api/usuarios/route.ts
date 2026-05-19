@@ -46,11 +46,11 @@ export async function GET(req: NextRequest) {
   }
 
   const videomakers = await prisma.videomaker.findMany({
-    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true },
+    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true, usuarioId: true },
     orderBy: { nome: "asc" },
   })
   const editores = await prisma.editor.findMany({
-    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true },
+    select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true, usuarioId: true },
     orderBy: { nome: "asc" },
   })
 

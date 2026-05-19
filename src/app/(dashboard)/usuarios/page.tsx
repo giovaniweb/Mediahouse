@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/Header"
 import {
   Users, Camera, Film, Shield, Search, CheckCircle2, XCircle,
   Plus, Pencil, X, GitMerge, AlertTriangle, KeyRound, Eye, EyeOff,
-  AlertCircle, UserCog,
+  AlertCircle, UserCog, Trash2, ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -50,6 +50,7 @@ interface Videomaker {
   email?: string
   telefone?: string
   status: string
+  usuarioId?: string | null
 }
 
 interface Editor {
@@ -58,6 +59,7 @@ interface Editor {
   email?: string
   telefone?: string
   status: string
+  usuarioId?: string | null
 }
 
 interface MesclarModal {
@@ -67,6 +69,155 @@ interface MesclarModal {
   buscando: boolean
   mesclando: boolean
   qtdDemandas: number | null
+}
+
+// ─── Modal Perfil Profissional (vm_ext / vm_int) ─────────────────────────────
+function ModalPerfilProfissional({
+  tipo,
+  usuarioId,
+  professionalId,
+  nome,
+  email,
+  telefone,
+  status,
+  onClose,
+  onDeleted,
+}: {
+  tipo: "vm_ext" | "vm_int"
+  usuarioId: string
+  professionalId: string | null
+  nome: string
+  email?: string
+  telefone?: string
+  status: string
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const tipoLabel = tipo === "vm_ext" ? "Videomaker Externo" : "Videomaker Interno"
+  const perfilHref = tipo === "vm_ext"
+    ? (professionalId ? `/videomakers/${professionalId}` : null)
+    : (professionalId ? `/equipe/${professionalId}` : null)
+
+  async function excluir() {
+    setDeleting(true)
+    try {
+      // 1. Deleta o registro profissional (Videomaker ou Editor) se existir
+      if (professionalId) {
+        const endpoint = tipo === "vm_ext" ? `/api/videomakers/${professionalId}` : `/api/editores/${professionalId}`
+        await fetch(endpoint, { method: "DELETE" }).catch(() => null)
+      }
+      // 2. Soft-delete do usuário (desativa a conta)
+      const res = await fetch(`/api/usuarios/${usuarioId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(err.error ?? "Erro ao excluir")
+      }
+      toast.success(`${nome} foi removido do sistema!`)
+      onDeleted()
+      onClose()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-9 h-9 rounded-full flex items-center justify-center",
+              tipo === "vm_ext" ? "bg-amber-500/10" : "bg-indigo-500/10"
+            )}>
+              {tipo === "vm_ext"
+                ? <Camera className="w-4 h-4 text-amber-400" />
+                : <Film className="w-4 h-4 text-indigo-400" />
+              }
+            </div>
+            <div>
+              <p className="font-semibold text-white text-sm">{nome}</p>
+              <p className="text-xs text-zinc-400">{tipoLabel}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Dados */}
+        <div className="space-y-2 border border-zinc-800 rounded-xl p-3 bg-zinc-800/30">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-zinc-500">E-mail</span>
+            <span className="text-xs text-zinc-200">{email || <span className="text-zinc-600 italic">sem e-mail</span>}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-zinc-500">WhatsApp</span>
+            <span className="text-xs text-zinc-200">{telefone || <span className="text-zinc-600 italic">sem telefone</span>}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-zinc-500">Status conta</span>
+            <span className={cn(
+              "text-xs px-2 py-0.5 rounded-full font-medium",
+              status === "ativo" ? "bg-green-500/10 text-green-400" : "bg-zinc-700 text-zinc-500"
+            )}>{status === "ativo" ? "Ativo" : "Inativo"}</span>
+          </div>
+        </div>
+
+        {/* Link perfil completo */}
+        {perfilHref && (
+          <a
+            href={perfilHref}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Ver perfil completo
+          </a>
+        )}
+
+        {/* Botão excluir / confirmação */}
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="w-full flex items-center justify-center gap-2 border border-red-700/60 text-red-400 hover:bg-red-900/20 text-sm py-2 rounded-lg transition-colors font-medium"
+          >
+            <Trash2 className="w-4 h-4" />
+            Excluir do sistema
+          </button>
+        ) : (
+          <div className="border border-red-700/60 bg-red-900/10 rounded-xl p-3 space-y-2">
+            <p className="text-xs text-red-300 font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Confirmar exclusão de {nome}?
+            </p>
+            <p className="text-xs text-zinc-400">Esta ação desativa a conta e remove o registro profissional. Não pode ser desfeita.</p>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={excluir}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deleting ? "Excluindo..." : "Sim, excluir"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 border border-zinc-700 text-zinc-300 text-xs py-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Modal Redefinir Senha ────────────────────────────────────────────────────
@@ -302,6 +453,17 @@ export default function UsuariosPage() {
   const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string } | null>(null)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
   const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
+  const [profModal, setProfModal] = useState<{
+    tipo: "vm_ext" | "vm_int"
+    usuarioId: string
+    professionalId: string | null
+    nome: string
+    email?: string
+    telefone?: string
+    status: string
+  } | null>(null)
+  const [deleteSistemaTarget, setDeleteSistemaTarget] = useState<{ id: string; nome: string } | null>(null)
+  const [deletingSistema, setDeletingSistema] = useState(false)
   const [promoverTipo, setPromoverTipo] = useState("operacao")
   const [loadingPromover, setLoadingPromover] = useState(false)
   const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string } | null>(null)
@@ -408,6 +570,38 @@ export default function UsuariosPage() {
       body: JSON.stringify({ status: novoStatus }),
     })
     mutate()
+  }
+
+  async function excluirSistema() {
+    if (!deleteSistemaTarget) return
+    setDeletingSistema(true)
+    try {
+      const res = await fetch(`/api/usuarios/${deleteSistemaTarget.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(err.error ?? "Erro ao excluir")
+      }
+      toast.success(`${deleteSistemaTarget.nome} foi desativado!`)
+      setDeleteSistemaTarget(null)
+      mutate()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir")
+    } finally { setDeletingSistema(false) }
+  }
+
+  function abrirProfModal(u: Usuario, tipo: "vm_ext" | "vm_int") {
+    const professionalId = tipo === "vm_ext"
+      ? (videomakers.find(vm => vm.usuarioId === u.id)?.id ?? null)
+      : (editores.find(ed => ed.usuarioId === u.id)?.id ?? null)
+    setProfModal({
+      tipo,
+      usuarioId: u.id,
+      professionalId,
+      nome: u.nome,
+      email: u.email,
+      telefone: u.telefone,
+      status: u.status,
+    })
   }
 
   function abrirMesclar(u: Usuario) {
@@ -712,6 +906,14 @@ export default function UsuariosPage() {
                         >
                           {u.status === "ativo" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                         </button>
+                        {/* Excluir */}
+                        <button
+                          onClick={() => setDeleteSistemaTarget({ id: u.id, nome: u.nome })}
+                          className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Excluir usuário"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -748,10 +950,17 @@ export default function UsuariosPage() {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
                   {filtrar(vmExt).map(v => (
-                    <tr key={v.id} className="hover:bg-zinc-800/40 transition-colors">
-                      <td className="px-4 py-3 font-medium text-zinc-100 flex items-center gap-2">
-                        <Camera className="w-4 h-4 text-amber-400 shrink-0" />
-                        {v.nome}
+                    <tr
+                      key={v.id}
+                      className="hover:bg-zinc-800/40 transition-colors cursor-pointer group"
+                      onClick={() => abrirProfModal(v, "vm_ext")}
+                    >
+                      <td className="px-4 py-3 font-medium text-zinc-100">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-amber-400 shrink-0" />
+                          {v.nome}
+                          <Pencil className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-xs text-zinc-400">{(v as Usuario).email || <span className="text-zinc-600 italic">sem e-mail</span>}</p>
@@ -764,10 +973,38 @@ export default function UsuariosPage() {
                           {v.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link href={`/videomakers/${v.id}`} className="text-xs text-zinc-500 hover:text-zinc-200 underline underline-offset-2 transition-colors">
-                          Ver perfil →
-                        </Link>
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            const profId = videomakers.find(vm => vm.usuarioId === v.id)?.id
+                            return profId ? (
+                              <Link
+                                href={`/videomakers/${profId}`}
+                                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                                title="Ver perfil completo"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Link>
+                            ) : null
+                          })()}
+                          <button
+                            onClick={() => abrirProfModal(v, "vm_ext")}
+                            className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                            title="Editar / ver dados"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const profId = videomakers.find(vm => vm.usuarioId === v.id)?.id ?? null
+                              setProfModal({ tipo: "vm_ext", usuarioId: v.id, professionalId: profId, nome: v.nome, email: (v as Usuario).email, telefone: v.telefone, status: v.status })
+                            }}
+                            className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -804,10 +1041,17 @@ export default function UsuariosPage() {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
                   {filtrar(vmInt).map(e => (
-                    <tr key={e.id} className="hover:bg-zinc-800/40 transition-colors">
-                      <td className="px-4 py-3 font-medium text-zinc-100 flex items-center gap-2">
-                        <Film className="w-4 h-4 text-indigo-400 shrink-0" />
-                        {e.nome}
+                    <tr
+                      key={e.id}
+                      className="hover:bg-zinc-800/40 transition-colors cursor-pointer group"
+                      onClick={() => abrirProfModal(e, "vm_int")}
+                    >
+                      <td className="px-4 py-3 font-medium text-zinc-100">
+                        <div className="flex items-center gap-2">
+                          <Film className="w-4 h-4 text-indigo-400 shrink-0" />
+                          {e.nome}
+                          <Pencil className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-xs text-zinc-400">{(e as Usuario).email || <span className="text-zinc-600 italic">sem e-mail</span>}</p>
@@ -820,10 +1064,38 @@ export default function UsuariosPage() {
                           {e.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link href={`/equipe/${e.id}`} className="text-xs text-zinc-500 hover:text-zinc-200 underline underline-offset-2 transition-colors">
-                          Ver perfil →
-                        </Link>
+                      <td className="px-4 py-3 text-right" onClick={ex => ex.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            const profId = editores.find(ed => ed.usuarioId === e.id)?.id
+                            return profId ? (
+                              <Link
+                                href={`/equipe/${profId}`}
+                                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                                title="Ver perfil completo"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Link>
+                            ) : null
+                          })()}
+                          <button
+                            onClick={() => abrirProfModal(e, "vm_int")}
+                            className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                            title="Editar / ver dados"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const profId = editores.find(ed => ed.usuarioId === e.id)?.id ?? null
+                              setProfModal({ tipo: "vm_int", usuarioId: e.id, professionalId: profId, nome: e.nome, email: (e as Usuario).email, telefone: e.telefone, status: e.status })
+                            }}
+                            className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -887,6 +1159,52 @@ export default function UsuariosPage() {
               <button
                 onClick={() => setPromoverTarget(null)}
                 className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal perfil profissional (vm_ext / vm_int) */}
+      {profModal && (
+        <ModalPerfilProfissional
+          {...profModal}
+          onClose={() => setProfModal(null)}
+          onDeleted={() => { setProfModal(null); mutate() }}
+        />
+      )}
+
+      {/* Modal confirmar exclusão (sistema) */}
+      {deleteSistemaTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => !deletingSistema && setDeleteSistemaTarget(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4" onClick={ev => ev.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-white text-sm">Excluir usuário</p>
+                <p className="text-xs text-zinc-400">{deleteSistemaTarget.nome}</p>
+              </div>
+            </div>
+            <p className="text-sm text-zinc-300">
+              Isso desativa a conta de <strong>{deleteSistemaTarget.nome}</strong>. O usuário não poderá mais fazer login.
+            </p>
+            <p className="text-xs text-zinc-500">O histórico de demandas e registros são mantidos no sistema.</p>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={excluirSistema}
+                disabled={deletingSistema}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deletingSistema ? "Excluindo..." : "Sim, excluir"}
+              </button>
+              <button
+                onClick={() => setDeleteSistemaTarget(null)}
+                disabled={deletingSistema}
+                className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors"
               >
                 Cancelar
               </button>
