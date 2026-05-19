@@ -15,11 +15,11 @@ async function createClient() {
   const envKey = process.env.RESEND_API_KEY
   if (envKey) {
     const config = await getConfig().catch(() => null)
+    const senderEmail = config?.senderEmail || "onboarding@resend.dev"
+    const senderNome = config?.senderNome || "NuFlow"
     return {
       resend: new Resend(envKey),
-      from: config?.senderNome
-        ? `"${config.senderNome}" <${config.senderEmail || "onboarding@resend.dev"}>`
-        : `"NuFlow" <onboarding@resend.dev>`,
+      from: `"${senderNome}" <${senderEmail}>`,
       emailsFinanceiro: config?.emailsFinanceiro ?? [],
     }
   }

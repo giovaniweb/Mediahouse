@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, Eye, EyeOff, AlertCircle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, Eye, EyeOff, AlertCircle, AlertTriangle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -272,6 +272,7 @@ function TabEmail() {
   const [testEmail, setTestEmail] = useState("")
   const [loadingTest, setLoadingTest] = useState(false)
   const [mostrarKey, setMostrarKey] = useState(false)
+  const [showDomainGuide, setShowDomainGuide] = useState(false)
 
   async function salvar() {
     setLoading(true)
@@ -308,7 +309,15 @@ function TabEmail() {
       })
       const json = await res.json()
       if (json.ok) toast.success("E-mail de teste enviado!")
-      else toast.error(json.error ?? "Erro ao enviar")
+      else {
+        const textoErro = json.error ?? "Erro desconhecido"
+        const mensagemFriendly = textoErro.includes("testing emails") || textoErro.includes("You can only send testing emails")
+          ? "Domínio de teste: só é possível enviar para o e-mail verificado no Resend. Configure um domínio próprio para enviar para qualquer destinatário."
+          : textoErro.includes("Invalid") || textoErro.includes("invalid")
+          ? "API Key inválida. Verifique se a chave está correta."
+          : textoErro
+        toast.error(`Falha: ${mensagemFriendly}`)
+      }
     } catch { toast.error("Erro ao testar") }
     finally { setLoadingTest(false) }
   }
@@ -327,6 +336,47 @@ function TabEmail() {
           </p>
         </div>
       </div>
+
+      {/* Warning: onboarding@resend.dev restriction */}
+      {(!cfg?.senderEmail || cfg.senderEmail === "onboarding@resend.dev") && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-300 mb-1">
+              Emails não estão chegando para todos os usuários
+            </p>
+            <p className="text-xs text-amber-200/80 leading-relaxed">
+              O remetente atual é <code className="bg-amber-900/40 px-1 rounded">onboarding@resend.dev</code> — domínio de teste do Resend que só permite enviar para o e-mail do titular da conta.{" "}
+              <strong>Videomakers, solicitantes e colaboradores não receberão emails</strong> até que um domínio próprio seja verificado.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowDomainGuide(v => !v)}
+              className="mt-2 text-xs text-amber-300 hover:text-amber-200 underline"
+            >
+              {showDomainGuide ? "Ocultar instruções" : "Ver como configurar um domínio →"}
+            </button>
+            {showDomainGuide && (
+              <div className="mt-3 space-y-2 text-xs text-amber-100/80">
+                <p className="font-semibold">Como configurar em 3 passos:</p>
+                <ol className="list-decimal list-inside space-y-1.5 pl-1">
+                  <li>Acesse <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="underline">resend.com/domains</a> e adicione seu domínio (ex: <code className="bg-amber-900/40 px-1 rounded">nuflow.space</code>)</li>
+                  <li>Adicione os registros DNS (TXT para SPF + CNAME para DKIM) no painel do seu provedor de DNS</li>
+                  <li>Volte aqui e defina o &quot;E-mail Remetente&quot; como <code className="bg-amber-900/40 px-1 rounded">noreply@nuflow.space</code></li>
+                </ol>
+                <a
+                  href="https://resend.com/docs/dashboard/domains/introduction"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-amber-300 underline mt-1"
+                >
+                  Documentação Resend →
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {cfg?.ativo && (
         <div className="flex items-center gap-2 text-xs font-medium text-green-400">
