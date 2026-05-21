@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Film, Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
@@ -37,6 +37,22 @@ function Field({ label, children, error, hint, required }: {
       {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
     </div>
   )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DRAFT HELPERS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const DRAFT_KEY = "nuflow-demanda-draft"
+
+function formatDraftDate(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString("pt-BR", {
+      day: "2-digit", month: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    })
+  } catch { return "" }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -79,6 +95,76 @@ export default function CadastrarDemandaPage() {
 
   // ── Erros ─────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // ── Rascunho autosalvo ────────────────────────────────────────────
+  const [draftInfo, setDraftInfo] = useState<{ savedAt: string } | null>(null)
+  const [draftDismissed, setDraftDismissed] = useState(false)
+
+  function resetForm() {
+    setNomeCliente(""); setEmail(""); setTelefone(""); setEmpresa("")
+    setTipo(null); setTitulo(""); setDescricao(""); setCidade("")
+    setDataLimite(""); setReferencia(""); setTipoVideo("")
+    setLocalEvento(""); setDataEvento(""); setHoraEvento("")
+    setClienteNome(""); setClienteTelefone(""); setClienteEmail("")
+    setStep(0); setErrors({}); setDraftInfo(null); setDraftDismissed(false)
+    if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
+  }
+
+  // Restaura rascunho salvo ao montar (apenas uma vez)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const saved = JSON.parse(raw)
+      if (saved.nomeCliente) setNomeCliente(saved.nomeCliente)
+      if (saved.email) setEmail(saved.email)
+      if (saved.telefone) setTelefone(saved.telefone)
+      if (saved.empresa) setEmpresa(saved.empresa)
+      if (saved.tipo) setTipo(saved.tipo)
+      if (saved.titulo) setTitulo(saved.titulo)
+      if (saved.descricao) setDescricao(saved.descricao)
+      if (saved.cidade) setCidade(saved.cidade)
+      if (saved.dataLimite) setDataLimite(saved.dataLimite)
+      if (saved.referencia) setReferencia(saved.referencia)
+      if (saved.tipoVideo) setTipoVideo(saved.tipoVideo)
+      if (saved.localEvento) setLocalEvento(saved.localEvento)
+      if (saved.dataEvento) setDataEvento(saved.dataEvento)
+      if (saved.horaEvento) setHoraEvento(saved.horaEvento)
+      if (saved.clienteNome) setClienteNome(saved.clienteNome)
+      if (saved.clienteTelefone) setClienteTelefone(saved.clienteTelefone)
+      if (saved.clienteEmail) setClienteEmail(saved.clienteEmail)
+      if (saved.step) setStep(saved.step)
+      if (saved._savedAt) setDraftInfo({ savedAt: saved._savedAt })
+    } catch { /* ignora JSON malformado */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Autosalva sempre que qualquer campo mudar (ignora se já foi enviado)
+  useEffect(() => {
+    if (enviado) return
+    // Não salva se todos os campos principais estiverem vazios
+    if (!nomeCliente && !email && !telefone && !titulo && !descricao) return
+    if (typeof window === "undefined") return
+    const savedAt = new Date().toISOString()
+    const draft = {
+      nomeCliente, email, telefone, empresa, tipo,
+      titulo, descricao, cidade, dataLimite, referencia, tipoVideo,
+      localEvento, dataEvento, horaEvento,
+      clienteNome, clienteTelefone, clienteEmail,
+      step,
+      _savedAt: savedAt,
+    }
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+      setDraftInfo({ savedAt })
+    } catch { /* ignora erros de quota */ }
+  }, [
+    enviado, nomeCliente, email, telefone, empresa, tipo,
+    titulo, descricao, cidade, dataLimite, referencia, tipoVideo,
+    localEvento, dataEvento, horaEvento,
+    clienteNome, clienteTelefone, clienteEmail, step,
+  ])
 
   // ── Steps ─────────────────────────────────────────────────────────
   const steps = tipo === "cobertura"
@@ -156,6 +242,7 @@ export default function CadastrarDemandaPage() {
         throw new Error(msgs || "Erro ao enviar")
       }
       setCodigoGerado(json.codigo)
+      if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
       setEnviado(true)
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : "Erro desconhecido")
@@ -247,6 +334,28 @@ export default function CadastrarDemandaPage() {
             </div>
           ))}
         </div>
+
+        {/* Banner de rascunho restaurado */}
+        {draftInfo && !draftDismissed && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-6 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400 mt-0.5 shrink-0">💾</span>
+              <div>
+                <p className="text-sm font-medium text-amber-300">Rascunho restaurado</p>
+                <p className="text-xs text-amber-200/70 mt-0.5">
+                  Seus dados foram salvos em {formatDraftDate(draftInfo.savedAt)}. Continue de onde parou ou comece do zero.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="shrink-0 text-xs text-amber-400 hover:text-amber-200 underline whitespace-nowrap mt-0.5 transition-colors"
+            >
+              Começar do zero
+            </button>
+          </div>
+        )}
 
         {erro && (
           <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
