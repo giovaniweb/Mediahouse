@@ -362,6 +362,7 @@ const TOOLS_WHATSAPP_NAMES = [
   "enviar_whatsapp",
   "buscar_metricas",
   "listar_gestores",
+  "buscar_videomakers",
   "salvar_ideia_video",
   "buscar_ideias",
 ]
