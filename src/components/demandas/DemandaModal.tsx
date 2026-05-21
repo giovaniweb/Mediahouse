@@ -414,7 +414,9 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
 
                 {/* Título */}
                 <div>
-                  <h2 className="text-xl font-bold text-zinc-100 leading-snug mb-3">{demanda.titulo}</h2>
+                  <h2 className="text-xl font-bold text-zinc-100 leading-snug mb-3">
+                    {demanda.titulo?.trim() || <span className="italic text-zinc-500">(sem título)</span>}
+                  </h2>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", statusColor)}>
                       {STATUS_LABEL[demanda.statusInterno] ?? demanda.statusInterno}
@@ -443,12 +445,14 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 </div>
 
                 {/* Descrição */}
-                {demanda.descricao && (
+                {demanda.descricao?.trim() ? (
                   <div className="bg-zinc-800/50 rounded-xl p-4">
                     <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">
                       {demanda.descricao}
                     </p>
                   </div>
+                ) : (
+                  <p className="text-sm text-zinc-600 italic">Sem descrição.</p>
                 )}
 
                 {/* Impedimento */}

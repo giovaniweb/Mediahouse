@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
-  Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X,
+  Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
   CalendarRange, ArrowUpRight, FileText, Download,
 } from "lucide-react"
@@ -567,6 +567,46 @@ export default function DemandaDetailPage() {
     } finally { setConfirmandoVM(false) }
   }
 
+  // ── Aprovação de demanda externa ─────────────────────────────────────────
+  const [aprovandoDemanda, setAprovandoDemanda] = useState(false)
+  const [recusando, setRecusando] = useState(false)
+  const [motivoRecusa, setMotivoRecusa] = useState("")
+
+  async function aprovarDemanda() {
+    setAprovandoDemanda(true)
+    try {
+      const res = await fetch(`/api/demandas/${id}/aprovar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "aprovar" }),
+      })
+      const err = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((err as { error?: string }).error ?? "Erro ao aprovar")
+      toast.success("Demanda aprovada! Solicitante notificado.")
+      mutate()
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro") }
+    finally { setAprovandoDemanda(false) }
+  }
+
+  async function recusarDemanda() {
+    if (!motivoRecusa.trim()) return
+    setAprovandoDemanda(true)
+    try {
+      const res = await fetch(`/api/demandas/${id}/aprovar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "recusar", motivo: motivoRecusa }),
+      })
+      const err = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((err as { error?: string }).error ?? "Erro ao recusar")
+      toast.success("Demanda recusada. Solicitante notificado.")
+      setRecusando(false)
+      setMotivoRecusa("")
+      mutate()
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro") }
+    finally { setAprovandoDemanda(false) }
+  }
+
   // ── Quick Brutos (sem editMode) ──────────────────────────────────────────
   const [quickBrutosInput, setQuickBrutosInput] = useState("")
   const [showQuickBrutos, setShowQuickBrutos] = useState(false)
@@ -776,6 +816,67 @@ export default function DemandaDetailPage() {
               )}
             </div>
           </div>
+
+          {/* ── Banner: Demanda externa aguardando aprovação interna ─────── */}
+          {demanda.statusInterno === "aguardando_aprovacao_interna" && !editMode && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                <span className="text-lg">📥</span>
+                Demanda externa aguardando aprovação
+              </p>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Enviada por{" "}
+                <strong className="text-zinc-300">
+                  {demanda.solicitante?.nome ?? "solicitante externo"}
+                </strong>{" "}
+                via formulário público. Revise os dados e aprove para entrar na fila de produção, ou recuse com um motivo.
+              </p>
+              {recusando && (
+                <textarea
+                  value={motivoRecusa}
+                  onChange={e => setMotivoRecusa(e.target.value)}
+                  placeholder="Motivo da recusa (será comunicado ao solicitante via WhatsApp)"
+                  rows={2}
+                  className="w-full text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+              )}
+              <div className="flex gap-2 flex-wrap">
+                {!recusando ? (
+                  <>
+                    <button
+                      onClick={aprovarDemanda}
+                      disabled={aprovandoDemanda}
+                      className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Aprovar demanda
+                    </button>
+                    <button
+                      onClick={() => setRecusando(true)}
+                      className="flex items-center gap-1.5 border border-red-500/50 text-red-400 hover:bg-red-900/20 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" /> Recusar
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={recusarDemanda}
+                      disabled={aprovandoDemanda || !motivoRecusa.trim()}
+                      className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      <XCircle className="w-4 h-4" /> Confirmar Recusa
+                    </button>
+                    <button
+                      onClick={() => { setRecusando(false); setMotivoRecusa("") }}
+                      className="text-sm text-zinc-500 hover:text-zinc-300 px-2 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
