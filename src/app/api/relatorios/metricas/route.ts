@@ -73,14 +73,34 @@ export async function GET(req: NextRequest) {
 
   // ── Demandas finalizadas no período ───────────────────────────────────────
   // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
-  const concluidas = await prisma.demanda.count({
+  const demandasFinalizadas = await prisma.demanda.findMany({
     where: {
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
       ],
     },
+    select: { id: true, linkFinal: true },
   })
+  const concluidas = demandasFinalizadas.length
+
+  // ── Contar vídeos individuais entregues (Arquivo com tipoArquivo="final") ──
+  // Demandas com registros Arquivo final usam a contagem real.
+  // Demandas legacy (linkFinal presente mas sem Arquivo final) contam como 1.
+  const demandaIdsFinalizadas = demandasFinalizadas.map(d => d.id)
+  const arquivosFinaisPeriodo = demandaIdsFinalizadas.length > 0
+    ? await prisma.arquivo.groupBy({
+        by: ["demandaId"],
+        where: { demandaId: { in: demandaIdsFinalizadas }, tipoArquivo: "final" },
+        _count: { id: true },
+      })
+    : []
+  const arquivosMapPeriodo = new Map(arquivosFinaisPeriodo.map(a => [a.demandaId, a._count.id]))
+  let videosEntregues = 0
+  for (const d of demandasFinalizadas) {
+    const count = arquivosMapPeriodo.get(d.id)
+    videosEntregues += count ?? (d.linkFinal ? 1 : 0)
+  }
 
   // ── Tempo médio: só demandas com videomaker E finalizadaEm confiável ────────
   // Não usa updatedAt como fallback — updatedAt muda em qualquer edição posterior,
@@ -101,7 +121,8 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Produção (índice de produtividade) ─────────────────────────────────────
-  const producaoPeriodo = concluidas * VALOR_POR_DEMANDA
+  // Usa contagem de vídeos individuais entregues (Arquivo final), não de demandas
+  const producaoPeriodo = videosEntregues * VALOR_POR_DEMANDA
 
   // ── Volume por tipo de vídeo (criadas no período) ─────────────────────────
   const demandasPeriodo = await prisma.demanda.findMany({
@@ -251,6 +272,8 @@ export async function GET(req: NextRequest) {
       producao30d: producaoPeriodo,
       demandasFinalizadasMes: concluidas,
       demandasFinalizadas30d: concluidas,
+      videosEntreguesMes: videosEntregues,
+      videosEntregues30d: videosEntregues,
     },
     videomakers: {
       total: totalVideomakers,

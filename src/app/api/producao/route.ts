@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       updatedAt: true,
       videomakerId: true,
       editorId: true,
+      linkFinal: true,
       videomaker: { select: { id: true, nome: true, valorDiaria: true } },
       editor: { select: { id: true, nome: true, salario: true } },
     },
@@ -58,25 +59,46 @@ export async function GET(req: NextRequest) {
   })
 
   const totalDemandas = demandas.length
-  const valorTotal = totalDemandas * VALOR_POR_DEMANDA
+
+  // ── Contar vídeos individuais entregues por demanda ──────────────────────
+  // Demandas com registros Arquivo final usam contagem real.
+  // Demandas legacy (linkFinal sem Arquivo) contam como 1.
+  const demandaIdsProd = demandas.map(d => d.id)
+  const arquivosFinaisProd = demandaIdsProd.length > 0
+    ? await prisma.arquivo.groupBy({
+        by: ["demandaId"],
+        where: { demandaId: { in: demandaIdsProd }, tipoArquivo: "final" },
+        _count: { id: true },
+      })
+    : []
+  const arquivosMapProd = new Map(arquivosFinaisProd.map(a => [a.demandaId, a._count.id]))
+
+  function videosNaDemanda(d: { id: string; linkFinal: string | null }): number {
+    const count = arquivosMapProd.get(d.id)
+    return count ?? (d.linkFinal ? 1 : 0)
+  }
+
+  const totalVideos = demandas.reduce((acc, d) => acc + videosNaDemanda(d), 0)
+  const valorTotal = totalVideos * VALOR_POR_DEMANDA
 
   // ── Por mês ──────────────────────────────────────────────────────────────
-  const mesMap = new Map<string, { label: string; demandas: number; valor: number }>()
+  const mesMap = new Map<string, { label: string; demandas: number; videos: number; valor: number }>()
 
   demandas.forEach(d => {
     const dt = d.finalizadaEm ?? d.updatedAt // fallback para demandas antigas sem finalizadaEm
     const key = dt.toISOString().slice(0, 7)
     const label = format(dt, "MMM yyyy", { locale: ptBR })
+    const vids = videosNaDemanda(d)
     const existing = mesMap.get(key)
-    if (existing) { existing.demandas++; existing.valor += VALOR_POR_DEMANDA }
-    else mesMap.set(key, { label, demandas: 1, valor: VALOR_POR_DEMANDA })
+    if (existing) { existing.demandas++; existing.videos += vids; existing.valor += vids * VALOR_POR_DEMANDA }
+    else mesMap.set(key, { label, demandas: 1, videos: vids, valor: vids * VALOR_POR_DEMANDA })
   })
 
   // Preenche meses sem produção (para o gráfico não ter lacunas)
   const cursor = new Date(deDate); cursor.setDate(1)
   while (cursor <= ateDate) {
     const key = cursor.toISOString().slice(0, 7)
-    if (!mesMap.has(key)) mesMap.set(key, { label: format(cursor, "MMM yyyy", { locale: ptBR }), demandas: 0, valor: 0 })
+    if (!mesMap.has(key)) mesMap.set(key, { label: format(cursor, "MMM yyyy", { locale: ptBR }), demandas: 0, videos: 0, valor: 0 })
     cursor.setMonth(cursor.getMonth() + 1)
   }
 
@@ -86,7 +108,7 @@ export async function GET(req: NextRequest) {
 
   const mesAtualKey = new Date().toISOString().slice(0, 7)
   const mesAtual = porMes.find(m => m.mes === mesAtualKey)
-    ?? { mes: mesAtualKey, label: format(new Date(), "MMM yyyy", { locale: ptBR }), demandas: 0, valor: 0 }
+    ?? { mes: mesAtualKey, label: format(new Date(), "MMM yyyy", { locale: ptBR }), demandas: 0, videos: 0, valor: 0 }
 
   // ── Por editor (videomaker interno, tem salário fixo) ─────────────────────
   const editorMap = new Map<string, { id: string; nome: string; demandas: number; valor: number; salario: number | null }>()
@@ -133,7 +155,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     valorPorDemanda: VALOR_POR_DEMANDA,
-    totalDemandas, valorTotal, mesAtual, porMes, porEditor, porVideomaker,
+    totalDemandas, totalVideos, valorTotal, mesAtual, porMes, porEditor, porVideomaker,
     periodo: { de: deDate.toISOString(), ate: ateDate.toISOString() },
   })
 }

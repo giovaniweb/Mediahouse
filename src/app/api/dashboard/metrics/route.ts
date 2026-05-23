@@ -17,6 +17,8 @@ export async function GET() {
   const em7Dias = new Date()
   em7Dias.setDate(em7Dias.getDate() + 7)
 
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+
   const [
     novasHoje,
     urgentesAtivas,
@@ -28,6 +30,7 @@ export async function GET() {
     expiracoesSemana,
     alertasAtivos,
     editores,
+    demandasMesRaw,
   ] = await Promise.all([
     prisma.demanda.count({
       where: { createdAt: { gte: inicioDia, lte: fimDia } },
@@ -73,7 +76,32 @@ export async function GET() {
         },
       },
     }),
+    prisma.demanda.findMany({
+      where: {
+        statusVisivel: "finalizado",
+        OR: [
+          { finalizadaEm: { gte: inicioMes } },
+          { finalizadaEm: null, updatedAt: { gte: inicioMes } },
+        ],
+      },
+      select: { id: true, linkFinal: true },
+    }),
   ])
+
+  // Contar vídeos individuais entregues no mês (Arquivo final + legacy linkFinal)
+  const idsMes = demandasMesRaw.map(d => d.id)
+  const arquivosMes = idsMes.length > 0
+    ? await prisma.arquivo.groupBy({
+        by: ["demandaId"],
+        where: { demandaId: { in: idsMes }, tipoArquivo: "final" },
+        _count: { id: true },
+      })
+    : []
+  const arquivosMapMes = new Map(arquivosMes.map(a => [a.demandaId, a._count.id]))
+  const concluidasMes = demandasMesRaw.reduce(
+    (acc, d) => acc + (arquivosMapMes.get(d.id) ?? (d.linkFinal ? 1 : 0)),
+    0
+  )
 
   const cargaEditores = editores.map((editor) => ({
     id: editor.id,
@@ -87,7 +115,7 @@ export async function GET() {
     metricas: {
       demandasAtivas: emEdicao + aguardandoAprovacao + paraPostar + novasHoje,
       urgentesHoje: urgentesAtivas,
-      concluidasMes: 0, // calculado futuramente com histórico
+      concluidasMes, // vídeos individuais entregues neste mês
       prazoCritico: atrasadas,
       emEdicao,
       aguardandoAprovacao,

@@ -66,6 +66,8 @@ interface Metricas {
     producao30d: number
     demandasFinalizadasMes: number
     demandasFinalizadas30d: number
+    videosEntreguesMes?: number
+    videosEntregues30d?: number
   }
   videomakers: {
     total: number
@@ -715,7 +717,7 @@ export default function RelatoriosPage() {
             {/* Cards de métricas principais */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`${m?.demandas.totalMes ?? 0} criadas no período`} cor="blue" />
-              <MetricCard icon={CheckCircle2} label="Concluídas" value={fmtNum(m?.demandas.concluidas30d ?? 0)} sub={`${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} finalizadas no período`} cor="green" />
+              <MetricCard icon={CheckCircle2} label="Vídeos Entregues" value={fmtNum(m?.producao?.videosEntreguesMes ?? m?.producao?.videosEntregues30d ?? m?.demandas.concluidas30d ?? 0)} sub={`em ${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} demandas`} cor="green" />
               <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização (c/ VM)" cor="zinc" />
               <MetricCard icon={AlertTriangle} label="Em Atraso" value={fmtNum(m?.demandas.emAtraso ?? 0)} sub={`${m?.alertas.criticos ?? 0} alertas críticos`} cor={m && m.demandas.emAtraso > 0 ? "red" : "zinc"} alert={m && m.demandas.emAtraso > 0} />
             </div>

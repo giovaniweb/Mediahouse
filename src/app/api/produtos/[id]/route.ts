@@ -29,6 +29,7 @@ export async function GET(
               createdAt: true,
               finalizadaEm: true,
               updatedAt: true,
+              linkFinal: true,
               videomaker: { select: { id: true, nome: true, valorDiaria: true } },
             },
           },
@@ -65,9 +66,24 @@ export async function GET(
 
   // KPI calculations
   const demandas = produto.demandas.map((dp) => dp.demanda)
-  const totalVideos = demandas.length
   const b2cCount = demandas.filter((d) => d.classificacao === "b2c").length
   const b2bCount = demandas.filter((d) => d.classificacao === "b2b").length
+
+  // Contar vídeos individuais entregues (Arquivo final) — demandas finalizadas com Arquivo real
+  // ou fallback 1 para demandas legadas com linkFinal mas sem registro Arquivo.
+  const demandaIdsProd = demandas.map(d => d.id)
+  const arquivosFinaisProd = demandaIdsProd.length > 0
+    ? await prisma.arquivo.groupBy({
+        by: ["demandaId"],
+        where: { demandaId: { in: demandaIdsProd }, tipoArquivo: "final" },
+        _count: { id: true },
+      })
+    : []
+  const arquivosMapProd = new Map(arquivosFinaisProd.map(a => [a.demandaId, a._count.id]))
+  const totalVideos = demandas.reduce((acc, d) => {
+    const count = arquivosMapProd.get(d.id)
+    return acc + (count ?? (d.linkFinal ? 1 : 0))
+  }, 0)
 
   // Fix 5: Consultar custos por demandaId IN [demandas do produto] — mais preciso que por vmId.
   // Evita incluir custos de outros produtos do mesmo videomaker.
