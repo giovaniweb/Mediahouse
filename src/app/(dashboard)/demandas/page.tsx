@@ -162,6 +162,28 @@ export default function DemandasPage() {
     [mutate] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const handleMarkPosted = useCallback(
+    async (demandaId: string, tipo: string, link?: string) => {
+      const res = await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statusInterno: "postado",
+          postagemTipo: tipo,
+          ...(link ? { linkPostagem: link } : {}),
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Erro ao registrar postagem" }))
+        showToast(err.error || "Erro ao registrar postagem", "erro")
+        throw new Error(err.error)
+      }
+      showToast("Postagem registrada! ✅", "ok")
+      mutate()
+    },
+    [mutate] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   return (
     <>
       <Header
@@ -236,7 +258,7 @@ export default function DemandasPage() {
 
       {/* Kanban */}
       <div className="flex-1 p-4 overflow-auto">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} userTipo={session?.user?.tipo} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
       </div>
 
       {/* Modal Nova Demanda */}

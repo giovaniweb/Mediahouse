@@ -41,13 +41,14 @@ interface KanbanBoardProps {
   onMove: (demandaId: string, novoStatus: StatusVisivel) => void
   onDelete?: (demandaId: string) => void
   onDuplicate?: (demandaId: string) => void
+  onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
   userTipo?: string
 }
 
 // Colunas que videomakers externos NÃO podem mover cards para lá
 const COLUNAS_BLOQUEADAS_VM: StatusVisivel[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, userTipo }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo }: KanbanBoardProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -232,7 +233,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, userTipo 
                             data-card
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
-                            <DemandaCard demanda={demanda} onDelete={onDelete} onDuplicate={onDuplicate} onOpen={setModalDemandaId} />
+                            <DemandaCard demanda={demanda} onDelete={onDelete} onDuplicate={onDuplicate} onOpen={setModalDemandaId} onMarkPosted={onMarkPosted} />
                           </div>
                         )}
                       </Draggable>

@@ -649,7 +649,20 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 hover:underline transition-colors">
                         <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                         <span>🔗 Postagem</span>
+                        {demanda.postagemTipo && (
+                          <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-medium capitalize">
+                            {demanda.postagemTipo}
+                          </span>
+                        )}
                       </a>
+                    )}
+                    {!demanda.linkPostagem && demanda.postagemTipo && (
+                      <div className="flex items-center gap-2 text-sm text-zinc-400">
+                        <span>📱 Postado em</span>
+                        <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-medium capitalize">
+                          {demanda.postagemTipo}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>

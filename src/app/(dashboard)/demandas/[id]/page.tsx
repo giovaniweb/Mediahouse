@@ -1606,6 +1606,32 @@ export default function DemandaDetailPage() {
             )}
           </div>
 
+          {/* Postagem */}
+          {demanda.postagemTipo && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+              <h2 className="font-semibold text-zinc-300 mb-3">Postagem</h2>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-400">Plataforma:</span>
+                  <span className="text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded font-medium capitalize">
+                    {demanda.postagemTipo}
+                  </span>
+                </div>
+                {demanda.dataPostagem && (
+                  <p className="text-xs text-zinc-500">
+                    Postado em {format(new Date(demanda.dataPostagem), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  </p>
+                )}
+                {demanda.linkPostagem && (
+                  <a href={demanda.linkPostagem} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:underline">
+                    <ExternalLink className="w-3 h-3" /> Ver postagem
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Análise IA rápida */}
           <IACard demandaId={id as string} />
 
