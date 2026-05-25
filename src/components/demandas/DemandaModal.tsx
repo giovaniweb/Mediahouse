@@ -633,8 +633,8 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                             )
                           })}
 
-                          {/* Botão + Adicionar vídeo (quando já tem pelo menos 1) */}
-                          {temArquivos && (
+                          {/* Botão + Adicionar vídeo (quando já tem pelo menos 1, incluindo legado) */}
+                          {(temArquivos || temLinkLegado) && (
                             <div className="pt-1">
                               <input
                                 ref={fileRefAddVideo}
@@ -711,6 +711,69 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         </div>
                       )
                     })()}
+
+                    {/* Aprovação — abaixo do vídeo, coluna esquerda */}
+                    {demanda.statusVisivel === "aprovacao" && (
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                        <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {demanda.statusInterno === "aprovado"
+                            ? "Aprovado ✅"
+                            : demanda.statusInterno === "ajuste_solicitado"
+                            ? "Ajuste solicitado — em revisão"
+                            : "Aguardando aprovação do cliente"}
+                        </p>
+                        {demanda.statusInterno !== "aprovado" && demanda.statusInterno !== "ajuste_solicitado" && (
+                          <>
+                            {demanda.aprovacoesVideo?.[0]?.token && (() => {
+                              const linkAprovacao = `${typeof window !== "undefined" ? window.location.origin : "https://nuflow.space"}/aprovar/${demanda.aprovacoesVideo[0].token}`
+                              return (
+                                <div className="flex items-center gap-1.5 bg-zinc-800/60 border border-zinc-700/50 rounded-lg px-2.5 py-1.5">
+                                  <span className="text-[10px] text-zinc-400 truncate flex-1 font-mono">{linkAprovacao}</span>
+                                  <button onClick={() => { navigator.clipboard.writeText(linkAprovacao); toast.success("Link copiado!") }}
+                                    title="Copiar link" className="shrink-0 p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white">
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                  <a href={linkAprovacao} target="_blank" rel="noreferrer"
+                                    className="shrink-0 p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white">
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </div>
+                              )
+                            })()}
+                            {aprovandoAcao === "reprovar" ? (
+                              <div className="space-y-2">
+                                <textarea rows={2} placeholder="Motivo da reprovação..."
+                                  value={motivoReprova} onChange={e => setMotivoReprova(e.target.value)}
+                                  className="w-full bg-zinc-800 border border-red-700/50 text-zinc-200 text-xs px-3 py-2 rounded-lg resize-none focus:outline-none focus:border-red-500" />
+                                <div className="flex gap-2">
+                                  <button onClick={() => executarAprovacao("reprovar")}
+                                    disabled={salvandoAprovacao || !motivoReprova.trim()}
+                                    className="flex-1 bg-red-700 hover:bg-red-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40">
+                                    {salvandoAprovacao ? "Salvando..." : "Confirmar Reprovação"}
+                                  </button>
+                                  <button onClick={() => { setAprovandoAcao(null); setMotivoReprova("") }}
+                                    className="px-3 text-zinc-400 hover:text-white text-xs border border-zinc-700 rounded-lg">
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button onClick={() => executarAprovacao("aprovar")} disabled={salvandoAprovacao}
+                                  className="flex-1 flex items-center justify-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40">
+                                  <ThumbsUp className="w-3.5 h-3.5" /> Aprovar
+                                </button>
+                                <button onClick={() => setAprovandoAcao("reprovar")} disabled={salvandoAprovacao}
+                                  className="flex-1 flex items-center justify-center gap-1.5 bg-red-800/60 hover:bg-red-700 border border-red-700/50 text-red-300 hover:text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40">
+                                  <ThumbsDown className="w-3.5 h-3.5" /> Reprovar
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* Referências */}
                     {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number, arr: string[]) => (
@@ -915,98 +978,6 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     </div>
                   </div>
                 </SidebarSection>
-
-                {/* TDAH: Aprovação — botões visíveis quando na coluna de aprovação */}
-                {demanda.statusVisivel === "aprovacao" && (
-                  <SidebarSection title="Aprovação" icon={<CheckCircle2 className="w-3 h-3" />}>
-                    {demanda.statusInterno === "aprovado" ? (
-                      <div className="flex items-center gap-2 bg-green-950/40 border border-green-700/40 rounded-lg px-3 py-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                        <span className="text-sm text-green-400 font-medium">Aprovado ✅</span>
-                      </div>
-                    ) : demanda.statusInterno === "ajuste_solicitado" ? (
-                      <div className="flex items-center gap-2 bg-red-950/40 border border-red-700/40 rounded-lg px-3 py-2">
-                        <ThumbsDown className="w-4 h-4 text-red-400 shrink-0" />
-                        <span className="text-sm text-red-400 font-medium">Ajuste solicitado — em revisão</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-xs text-zinc-500">Aguardando aprovação do cliente.</p>
-                        {/* Link de aprovação — copiar para enviar manualmente */}
-                        {demanda.aprovacoesVideo?.[0]?.token && (() => {
-                          const linkAprovacao = `${typeof window !== "undefined" ? window.location.origin : "https://nuflow.space"}/aprovar/${demanda.aprovacoesVideo[0].token}`
-                          return (
-                            <div className="flex items-center gap-1.5 bg-zinc-800/60 border border-zinc-700/50 rounded-lg px-2.5 py-1.5">
-                              <span className="text-xs text-zinc-400 truncate flex-1 font-mono">{linkAprovacao}</span>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(linkAprovacao)
-                                  toast.success("Link copiado!")
-                                }}
-                                title="Copiar link de aprovação"
-                                className="shrink-0 p-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                              </button>
-                              <a
-                                href={linkAprovacao}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Abrir link de aprovação"
-                                className="shrink-0 p-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          )
-                        })()}
-                        {aprovandoAcao === "reprovar" ? (
-                          <div className="space-y-2">
-                            <textarea
-                              rows={3}
-                              placeholder="Descreva o motivo da reprovação..."
-                              value={motivoReprova}
-                              onChange={e => setMotivoReprova(e.target.value)}
-                              className="w-full bg-zinc-800 border border-red-700/50 text-zinc-200 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:border-red-500"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => executarAprovacao("reprovar")}
-                                disabled={salvandoAprovacao || !motivoReprova.trim()}
-                                className="flex-1 bg-red-700 hover:bg-red-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
-                              >
-                                {salvandoAprovacao ? "Salvando..." : "Confirmar Reprovação"}
-                              </button>
-                              <button
-                                onClick={() => { setAprovandoAcao(null); setMotivoReprova("") }}
-                                className="px-3 text-zinc-400 hover:text-white text-xs border border-zinc-700 rounded-lg"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => executarAprovacao("aprovar")}
-                              disabled={salvandoAprovacao}
-                              className="flex-1 flex items-center justify-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
-                            >
-                              <ThumbsUp className="w-3.5 h-3.5" /> Aprovar
-                            </button>
-                            <button
-                              onClick={() => setAprovandoAcao("reprovar")}
-                              disabled={salvandoAprovacao}
-                              className="flex-1 flex items-center justify-center gap-1.5 bg-red-800/60 hover:bg-red-700 border border-red-700/50 text-red-300 hover:text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-40"
-                            >
-                              <ThumbsDown className="w-3.5 h-3.5" /> Reprovar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </SidebarSection>
-                )}
 
                 {/* Produto */}
                 {demanda.produtos?.length > 0 && (
