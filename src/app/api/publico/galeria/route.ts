@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     } : {}),
   }
 
-  const [total, demandas] = await Promise.all([
+  const [total, demandas, totalArquivosFinais, totalDemandasComArquivos] = await Promise.all([
     prisma.demanda.count({ where }),
     prisma.demanda.findMany({
       where,
@@ -59,6 +59,20 @@ export async function GET(req: NextRequest) {
       ],
       skip,
       take: limit,
+    }),
+    // Contar registros Arquivo final para demandas que atendem ao filtro
+    prisma.arquivo.count({
+      where: {
+        tipoArquivo: "final",
+        demanda: where,
+      },
+    }),
+    // Contar demandas que já têm pelo menos 1 Arquivo final (modernas)
+    prisma.demanda.count({
+      where: {
+        ...where,
+        arquivos: { some: { tipoArquivo: "final" } },
+      },
     }),
   ])
 
@@ -103,10 +117,10 @@ export async function GET(req: NextRequest) {
     }]
   })
 
-  // total real de vídeos (para exibir "19 vídeos" correto na UI)
-  const totalVideos = videos.length + (total - demandas.length > 0
-    ? (total - demandas.length) // aproximação para páginas não carregadas
-    : 0)
+  // total real de vídeos:
+  //   Arquivo.final registrados  +  demandas legadas (linkFinal sem Arquivo) × 1
+  const totalLegacy = total - totalDemandasComArquivos
+  const totalVideos = totalArquivosFinais + totalLegacy
 
   return NextResponse.json({
     total: totalVideos,
