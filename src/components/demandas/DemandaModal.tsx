@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
-  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy,
+  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy, Plus,
 } from "lucide-react"
 import useSWR from "swr"
 import { format } from "date-fns"
@@ -105,6 +105,10 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const [linkAprovacaoGerado, setLinkAprovacaoGerado] = useState<string | null>(null)
   // Player de vídeo
   const [playerUrl, setPlayerUrl] = useState<string | null>(null)
+  // Adicionar vídeo extra (sem gerar aprovação)
+  const fileRefAddVideo = useRef<HTMLInputElement>(null)
+  const [uploadingAddVideo, setUploadingAddVideo] = useState(false)
+  const [uploadProgressAdd, setUploadProgressAdd] = useState(0)
 
   async function executarAprovacao(acao: "aprovar" | "reprovar") {
     if (!demandaId) return
@@ -302,6 +306,48 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
       return { type: "video", embedUrl: url }
     }
     return { type: "external", embedUrl: url }
+  }
+
+  async function handleAdicionarVideo(file: File) {
+    if (!demandaId) return
+    setUploadingAddVideo(true)
+    setUploadProgressAdd(0)
+    try {
+      const contentType = file.type || "video/mp4"
+      const urlRes = await fetch(
+        `/api/demandas/${demandaId}/upload-url?tipo=final&contentType=${encodeURIComponent(contentType)}`
+      )
+      if (!urlRes.ok) {
+        const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" }))
+        throw new Error((err as { error?: string }).error ?? "Erro ao gerar URL")
+      }
+      const { uploadUrl, publicUrl } = (await urlRes.json()) as { uploadUrl: string; publicUrl: string }
+      // Upload com progresso via XHR
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = e => {
+          if (e.lengthComputable) setUploadProgressAdd(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)))
+        xhr.onerror = () => reject(new Error("Falha no upload"))
+        xhr.open("PUT", uploadUrl)
+        xhr.setRequestHeader("Content-Type", contentType)
+        xhr.send(file)
+      })
+      // Registra como Arquivo final (cria registro com sequencia auto-incremental)
+      await fetch(`/api/demandas/${demandaId}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: publicUrl, tipo: "final" }),
+      })
+      toast.success("Vídeo adicionado!")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao adicionar vídeo")
+    } finally {
+      setUploadingAddVideo(false)
+      setUploadProgressAdd(0)
+    }
   }
 
   async function handleEnviarParaAprovacao(file: File) {
@@ -586,6 +632,36 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                               </div>
                             )
                           })}
+
+                          {/* Botão + Adicionar vídeo (quando já tem pelo menos 1) */}
+                          {temArquivos && (
+                            <div className="pt-1">
+                              <input
+                                ref={fileRefAddVideo}
+                                type="file"
+                                accept="video/*,.zip"
+                                className="hidden"
+                                onChange={e => { const f = e.target.files?.[0]; if (f) handleAdicionarVideo(f); e.target.value = "" }}
+                              />
+                              {uploadingAddVideo ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 text-xs text-zinc-400 justify-center">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    {uploadProgressAdd > 0 ? `Enviando… ${uploadProgressAdd}%` : "Preparando…"}
+                                  </div>
+                                  <div className="w-full bg-zinc-700 rounded-full h-1 overflow-hidden">
+                                    <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${uploadProgressAdd}%` }} />
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => fileRefAddVideo.current?.click()}
+                                  className="w-full flex items-center justify-center gap-1.5 text-xs border border-dashed border-zinc-600 hover:border-purple-500/60 text-zinc-500 hover:text-purple-300 rounded-lg py-2 transition-colors">
+                                  <Plus className="w-3.5 h-3.5" /> Adicionar outro vídeo
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {/* Fallback legado */}
                           {temLinkLegado && (() => {
