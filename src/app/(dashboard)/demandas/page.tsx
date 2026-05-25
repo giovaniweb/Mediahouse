@@ -60,7 +60,7 @@ export default function DemandasPage() {
     if (d.statusVisivel !== "finalizado") return true
     const ref = d.finalizadaEm
       ? new Date(d.finalizadaEm).getTime()
-      : new Date(d.updatedAt ?? 0).getTime()
+      : 0  // sem finalizadaEm = demanda antiga → vai para histórico (não para kanban)
     return agora30 - ref <= TRINTA_DIAS_MS
   })
 

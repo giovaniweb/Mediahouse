@@ -35,6 +35,7 @@ interface DemandaCardProps {
     prioridade: "urgente" | "alta" | "normal" | "baixa"
     statusInterno: string
     statusVisivel?: string
+    linkFinal?: string | null
     dataLimite?: string | null
     videomakerId?: string | null
     editor?: { nome: string } | null
@@ -142,6 +143,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           {semVM && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-orange-500/15 text-orange-400 border-orange-500/30">
               📷 Sem VM
+            </span>
+          )}
+          {demanda.statusVisivel === "finalizado" && !demanda.linkFinal && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-zinc-700/50 text-zinc-500 border-zinc-600/50">
+              🚫 sem vídeo
             </span>
           )}
         </div>
