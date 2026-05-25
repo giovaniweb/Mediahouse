@@ -54,6 +54,7 @@ interface MesProducao {
   mes: string
   label: string
   demandas: number
+  videos?: number
   valor: number
 }
 
@@ -76,6 +77,7 @@ interface PessoaProducao {
 interface RespostaProducao {
   valorPorDemanda: number
   totalDemandas: number
+  totalVideos?: number
   valorTotal: number
   mesAtual: MesProducao
   porMes: MesProducao[]
@@ -305,7 +307,7 @@ export default function CustosPage() {
                     </div>
                     <div className="text-2xl font-bold text-emerald-400">{fmt(producaoData.valorTotal)}</div>
                     <div className="text-xs text-zinc-500 mt-1">
-                      {producaoData.totalDemandas} demandas · {fmt(producaoData.valorPorDemanda)}/demanda
+                      {producaoData.totalVideos ?? producaoData.totalDemandas} vídeos · {fmt(producaoData.valorPorDemanda)}/vídeo
                     </div>
                   </div>
 
@@ -317,7 +319,7 @@ export default function CustosPage() {
                       </div>
                       <div className="text-2xl font-bold text-blue-400">{fmt(producaoData.mesAtual.valor)}</div>
                       <div className="text-xs text-zinc-500 mt-1">
-                        {producaoData.mesAtual.demandas} demanda{producaoData.mesAtual.demandas !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
+                        {(producaoData.mesAtual.videos ?? producaoData.mesAtual.demandas)} vídeo{(producaoData.mesAtual.videos ?? producaoData.mesAtual.demandas) !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
                       </div>
                     </div>
                   ) : (
@@ -329,16 +331,16 @@ export default function CustosPage() {
                       <div className="text-2xl font-bold text-blue-400 capitalize">
                         {producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? mesSelecionado}
                       </div>
-                      <div className="text-xs text-zinc-500 mt-1">{producaoData.totalDemandas} demandas finalizadas</div>
+                      <div className="text-xs text-zinc-500 mt-1">{producaoData.totalVideos ?? producaoData.totalDemandas} vídeos entregues</div>
                     </div>
                   )}
 
                   <div className="bg-purple-950/30 border border-purple-800/30 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Film className="w-4 h-4 text-purple-400" />
-                      <span className="text-xs text-purple-400 font-medium uppercase tracking-wide">Demandas Finalizadas</span>
+                      <span className="text-xs text-purple-400 font-medium uppercase tracking-wide">Vídeos Entregues</span>
                     </div>
-                    <div className="text-2xl font-bold text-purple-400">{producaoData.totalDemandas}</div>
+                    <div className="text-2xl font-bold text-purple-400">{producaoData.totalVideos ?? producaoData.totalDemandas}</div>
                     <div className="text-xs text-zinc-500 mt-1">
                       {modoProducao === "ano" ? "últimos 12 meses" : (producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? "neste mês")}
                     </div>
@@ -352,35 +354,38 @@ export default function CustosPage() {
                       <CalendarDays className="w-4 h-4 text-zinc-400" />
                       <h3 className="text-sm font-semibold text-white">Produção por Mês</h3>
                     </div>
-                    {producaoData.porMes.filter(m => m.demandas > 0).length === 0 ? (
-                      <p className="text-sm text-zinc-600 text-center py-6">Nenhuma demanda finalizada no período</p>
+                    {producaoData.porMes.filter(m => (m.videos ?? m.demandas) > 0).length === 0 ? (
+                      <p className="text-sm text-zinc-600 text-center py-6">Nenhum vídeo entregue no período</p>
                     ) : (
                       <div className="space-y-2">
                         {(() => {
-                          const maxDemandas = Math.max(...producaoData.porMes.map(m => m.demandas), 1)
-                          return producaoData.porMes.map(m => (
-                            <div key={m.mes}>
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className={`font-medium w-24 capitalize ${m.demandas > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
-                                  {m.label}
-                                </span>
-                                <div className="flex items-center gap-4 text-zinc-500">
-                                  <span className={m.demandas > 0 ? "text-zinc-300" : "text-zinc-700"}>
-                                    {m.demandas} demanda{m.demandas !== 1 ? "s" : ""}
+                          const maxVideos = Math.max(...producaoData.porMes.map(m => m.videos ?? m.demandas), 1)
+                          return producaoData.porMes.map(m => {
+                            const vids = m.videos ?? m.demandas
+                            return (
+                              <div key={m.mes}>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className={`font-medium w-24 capitalize ${vids > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
+                                    {m.label}
                                   </span>
-                                  <span className={`font-semibold w-28 text-right ${m.demandas > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
-                                    {fmt(m.valor)}
-                                  </span>
+                                  <div className="flex items-center gap-4 text-zinc-500">
+                                    <span className={vids > 0 ? "text-zinc-300" : "text-zinc-700"}>
+                                      {vids} vídeo{vids !== 1 ? "s" : ""}
+                                    </span>
+                                    <span className={`font-semibold w-28 text-right ${vids > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
+                                      {fmt(m.valor)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="h-1.5 bg-zinc-700/60 rounded-full">
+                                  <div
+                                    className="h-full bg-emerald-500 rounded-full transition-all"
+                                    style={{ width: `${(vids / maxVideos) * 100}%` }}
+                                  />
                                 </div>
                               </div>
-                              <div className="h-1.5 bg-zinc-700/60 rounded-full">
-                                <div
-                                  className="h-full bg-emerald-500 rounded-full transition-all"
-                                  style={{ width: `${(m.demandas / maxDemandas) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))
+                            )
+                          })
                         })()}
                       </div>
                     )}
