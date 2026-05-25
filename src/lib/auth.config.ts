@@ -88,6 +88,15 @@ export const authConfig: NextAuthConfig = {
         return false // next-auth redireciona para signIn page
       }
 
+      // Redirecionar usuários mobile do /dashboard para /campo
+      if (pathname === "/dashboard") {
+        const ua = request.headers.get("user-agent") ?? ""
+        const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua)
+        if (isMobile) {
+          return Response.redirect(new URL("/campo", request.nextUrl))
+        }
+      }
+
       return true
     },
     async jwt({ token, user }) {

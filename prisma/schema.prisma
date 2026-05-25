@@ -298,6 +298,7 @@ model Demanda {
   linkBrutos      String?
   linkFinal       String?
   linkPostagem    String?
+  postagemTipo    String?   // "feed" | "story" | "reels" | "youtube" | "outro"
   linkCliente     String?
   localGravacao   String?
   referencia      String?

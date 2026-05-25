@@ -171,6 +171,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
           ...(body.linkFinal && { linkFinal: body.linkFinal }),
           ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),
+          ...(body.postagemTipo && { postagemTipo: body.postagemTipo }),
+          // Auto-setar dataPostagem ao marcar como postado
+          ...(statusInterno === "postado" ? { dataPostagem: new Date() } : {}),
           ...(observacao && statusInterno === "impedimento" && { motivoImpedimento: observacao }),
         },
       }),

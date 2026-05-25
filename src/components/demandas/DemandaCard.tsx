@@ -5,6 +5,7 @@ import { ptBR } from "date-fns/locale"
 import { AlertTriangle, Calendar, Trash2, User, Video, Pencil, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
+import { useState } from "react"
 
 const prioridadeConfig = {
   urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -43,10 +44,15 @@ interface DemandaCardProps {
   onDelete?: (id: string) => void
   onDuplicate?: (id: string) => void
   onOpen?: (id: string) => void
+  onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
 }
 
-export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, onOpen }: DemandaCardProps) {
+export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, onOpen, onMarkPosted }: DemandaCardProps) {
   const router = useRouter()
+  const [showPostagemForm, setShowPostagemForm] = useState(false)
+  const [postagemTipo, setPostagemTipo] = useState("feed")
+  const [postagemLink, setPostagemLink] = useState("")
+  const [confirmando, setConfirmando] = useState(false)
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
 
@@ -160,6 +166,70 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
             </div>
           )}
         </div>
+
+        {/* ── Botão "Marcar como Postado" (só para coluna Para Postar) ─ */}
+        {demanda.statusVisivel === "para_postar" && onMarkPosted && (
+          <div className="mt-3 border-t border-zinc-700/50 pt-3" onClick={e => e.stopPropagation()}>
+            {!showPostagemForm ? (
+              <button
+                onClick={() => setShowPostagemForm(true)}
+                className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-cyan-300 rounded-lg py-1.5 transition-colors"
+              >
+                📱 Marcar como Postado
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-zinc-300">Onde foi postado?</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {(["feed", "story", "reels", "youtube", "outro"] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setPostagemTipo(t)}
+                      className={cn(
+                        "text-xs py-1 rounded-lg border transition-colors capitalize",
+                        postagemTipo === t
+                          ? "bg-cyan-600 border-cyan-500 text-white"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={postagemLink}
+                  onChange={e => setPostagemLink(e.target.value)}
+                  placeholder="Link da postagem (opcional)"
+                  className="w-full text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    disabled={confirmando}
+                    onClick={async () => {
+                      setConfirmando(true)
+                      try {
+                        await onMarkPosted(demanda.id, postagemTipo, postagemLink || undefined)
+                        setShowPostagemForm(false)
+                        setPostagemLink("")
+                      } finally {
+                        setConfirmando(false)
+                      }
+                    }}
+                    className="flex-1 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg py-1.5 font-semibold disabled:opacity-50 transition-colors"
+                  >
+                    {confirmando ? "Salvando..." : "✓ Confirmar"}
+                  </button>
+                  <button
+                    onClick={() => { setShowPostagemForm(false); setPostagemLink("") }}
+                    className="text-xs text-zinc-500 hover:text-zinc-300 px-2 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

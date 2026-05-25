@@ -5,13 +5,27 @@ import { prisma } from "@/lib/prisma"
 type Params = { params: Promise<{ id: string }> }
 
 const CHECKLIST_BASE = [
-  { texto: "Camera principal carregada", categoria: "equipamento" as const },
-  { texto: "Cartões de memória formatados", categoria: "equipamento" as const },
-  { texto: "Tripé e estabilizador conferidos", categoria: "equipamento" as const },
-  { texto: "Áudio (microfone lapela/boom)", categoria: "equipamento" as const },
-  { texto: "Carregadores e baterias reserva", categoria: "equipamento" as const },
+  // Equipamento (celular como principal)
+  { texto: "Celular carregado (>80%)", categoria: "equipamento" as const },
+  { texto: "Microfone conectado e testado", categoria: "equipamento" as const },
+  { texto: "Iluminação (ring light / LED)", categoria: "equipamento" as const },
+  { texto: "Power Bank carregado", categoria: "equipamento" as const },
+  // Logística
   { texto: "Credenciamento confirmado", categoria: "logistica" as const },
-  { texto: "Briefing do dia enviado à equipe", categoria: "logistica" as const },
+  { texto: "Recurso financeiro disponível", categoria: "logistica" as const },
+  { texto: "Hotel confirmado", categoria: "logistica" as const },
+  { texto: "Passagens conferidas", categoria: "logistica" as const },
+  // Conteúdo
+  { texto: "Vídeo hype do evento", categoria: "conteudo" as const },
+  { texto: "Vídeo convite para o stand", categoria: "conteudo" as const },
+  { texto: "Vídeo explicando onde é o stand", categoria: "conteudo" as const },
+  { texto: "Vídeo depoimentos de equipamentos", categoria: "conteudo" as const },
+  { texto: "Vídeo brand / institucional", categoria: "conteudo" as const },
+  { texto: "Vídeo criativos do evento", categoria: "conteudo" as const },
+  { texto: "Vídeo fechamento do dia", categoria: "conteudo" as const },
+  { texto: "Vídeo some day", categoria: "conteudo" as const },
+  { texto: "Vídeo fechamento do evento", categoria: "conteudo" as const },
+  // Entrega
   { texto: "Pasta Drive criada e compartilhada", categoria: "entrega" as const },
 ]
 
