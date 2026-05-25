@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     } : {}),
   }
 
-  const [total, videos] = await Promise.all([
+  const [total, demandas] = await Promise.all([
     prisma.demanda.count({ where }),
     prisma.demanda.findMany({
       where,
@@ -46,6 +46,12 @@ export async function GET(req: NextRequest) {
           select: { produto: { select: { id: true, nome: true } } },
           take: 1,
         },
+        // Incluir todos os vídeos finais — pode haver N por demanda
+        arquivos: {
+          where: { tipoArquivo: "final" },
+          select: { id: true, url: true, thumbnailUrl: true, sequencia: true, createdAt: true },
+          orderBy: { sequencia: "asc" },
+        },
       },
       orderBy: [
         { finalizadaEm: "desc" },
@@ -56,23 +62,57 @@ export async function GET(req: NextRequest) {
     }),
   ])
 
-  return NextResponse.json({
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-    videos: videos.map((v) => ({
+  // FlatMap: uma entrada por arquivo final; fallback para linkFinal legado (sem registros Arquivo)
+  const videos = demandas.flatMap((v) => {
+    const prodNome = v.produtos[0]?.produto?.nome ?? null
+    const prodId = v.produtos[0]?.produto?.id ?? null
+
+    if (v.arquivos.length > 0) {
+      return v.arquivos.map((arq) => ({
+        id: arq.id,                               // ID único por vídeo
+        demandaId: v.id,
+        codigo: v.codigo,
+        titulo: v.titulo,
+        tipoVideo: v.tipoVideo,
+        departamento: v.departamento,
+        linkFinal: arq.url!,
+        thumbnailUrl: arq.thumbnailUrl ?? v.thumbnailUrl ?? null,
+        finalizadaEm: v.finalizadaEm,
+        updatedAt: v.updatedAt,
+        produto: prodNome,
+        produtoId: prodId,
+        sequencia: arq.sequencia,
+      }))
+    }
+
+    // Demanda legada: só linkFinal, sem registros Arquivo
+    return [{
       id: v.id,
+      demandaId: v.id,
       codigo: v.codigo,
       titulo: v.titulo,
       tipoVideo: v.tipoVideo,
       departamento: v.departamento,
-      linkFinal: v.linkFinal,
+      linkFinal: v.linkFinal!,
       thumbnailUrl: v.thumbnailUrl ?? null,
       finalizadaEm: v.finalizadaEm,
       updatedAt: v.updatedAt,
-      produto: v.produtos[0]?.produto?.nome ?? null,
-      produtoId: v.produtos[0]?.produto?.id ?? null,
-    })),
+      produto: prodNome,
+      produtoId: prodId,
+      sequencia: null,
+    }]
+  })
+
+  // total real de vídeos (para exibir "19 vídeos" correto na UI)
+  const totalVideos = videos.length + (total - demandas.length > 0
+    ? (total - demandas.length) // aproximação para páginas não carregadas
+    : 0)
+
+  return NextResponse.json({
+    total: totalVideos,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    videos,
   })
 }

@@ -5,6 +5,7 @@ import { Search, Play, ExternalLink, Loader2, Download, Sparkles, Film } from "l
 
 interface Video {
   id: string
+  demandaId?: string   // pode diferir de id quando há múltiplos vídeos por demanda
   codigo: string
   titulo: string
   tipoVideo: string
@@ -15,6 +16,7 @@ interface Video {
   updatedAt: string
   produto: string | null
   produtoId: string | null
+  sequencia?: number | null
 }
 
 interface GaleriaData {
