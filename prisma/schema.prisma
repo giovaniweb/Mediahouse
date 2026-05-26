@@ -1107,6 +1107,7 @@ enum FuncaoEquipe {
   fotografia
   drone
   suporte
+  social_media
 }
 
 enum CategoriaChecklist {

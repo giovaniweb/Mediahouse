@@ -90,7 +90,7 @@ const MOMENTO_LABEL: Record<string, string> = {
 }
 const FUNCAO_LABEL: Record<string, string> = {
   captacao: "Captação", edicao: "Edição", fotografia: "Fotografia",
-  drone: "Drone", suporte: "Suporte",
+  drone: "Drone", suporte: "Suporte", social_media: "Social Media",
 }
 const STATUS_STYLE: Record<string, string> = {
   planejamento: "bg-zinc-700 text-zinc-300",
@@ -862,7 +862,7 @@ function EquipeTab({
             <div>
               <label className="block text-xs text-zinc-500 mb-1">Função</label>
               <select value={form.funcao} onChange={(e) => setForm((f) => ({ ...f, funcao: e.target.value }))} className={inputClass}>
-                {Object.entries({ captacao: "Captação", edicao: "Edição", fotografia: "Fotografia", drone: "Drone", suporte: "Suporte" }).map(([v, l]) => (
+                {Object.entries({ captacao: "Captação", edicao: "Edição", fotografia: "Fotografia", drone: "Drone", suporte: "Suporte", social_media: "Social Media" }).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
                 ))}
               </select>
