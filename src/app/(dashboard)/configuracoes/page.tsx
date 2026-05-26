@@ -486,6 +486,8 @@ function TabParametros() {
   const [editLabel, setEditLabel] = useState("")
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
+  const [backfillingArquivos, setBackfillingArquivos] = useState(false)
+  const [backfillArquivosResult, setBackfillArquivosResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
 
   async function criar() {
     if (!newLabel.trim()) return
@@ -661,6 +663,45 @@ function TabParametros() {
             {backfillResult && (
               <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
                 {backfillResult.processados} criado(s) · {backfillResult.pulados} já existiam{backfillResult.erros > 0 ? ` · ${backfillResult.erros} erro(s)` : ""}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Backfill de arquivos de vídeo */}
+        <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-3">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-200 mb-1">🎬 Arquivos de Vídeo Retroativos</h4>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Cria registros <code className="bg-zinc-700 px-1 rounded text-zinc-300">Arquivo</code> para demandas finalizadas que têm <code className="bg-zinc-700 px-1 rounded text-zinc-300">linkFinal</code> mas nenhum Arquivo cadastrado. Necessário para que a galeria suporte múltiplos vídeos por demanda e para consistência do modelo de dados.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={async () => {
+                setBackfillingArquivos(true)
+                setBackfillArquivosResult(null)
+                try {
+                  const res = await fetch("/api/admin/backfill-arquivos", { method: "POST" })
+                  const json = await res.json()
+                  if (!res.ok) throw new Error(json.error ?? "Erro ao executar backfill")
+                  setBackfillArquivosResult({ processados: json.processados, pulados: json.pulados, erros: json.erros })
+                  toast.success(`✅ Backfill: ${json.processados} arquivo(s) criado(s)!`)
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Erro no backfill")
+                } finally {
+                  setBackfillingArquivos(false)
+                }
+              }}
+              disabled={backfillingArquivos}
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              {backfillingArquivos ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+              {backfillingArquivos ? "Processando…" : "🎬 Gerar Arquivos retroativos"}
+            </button>
+            {backfillArquivosResult && (
+              <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillArquivosResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
+                {backfillArquivosResult.processados} criado(s) · {backfillArquivosResult.pulados} já existiam{backfillArquivosResult.erros > 0 ? ` · ${backfillArquivosResult.erros} erro(s)` : ""}
               </span>
             )}
           </div>
