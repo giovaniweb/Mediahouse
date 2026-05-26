@@ -92,11 +92,10 @@ export async function POST(req: NextRequest, { params }: Params) {
       createdById: session.user.id,
       // Criar checklist base para o dia 1
       checklist: {
-        create: CHECKLIST_BASE.map((item, i) => ({
+        create: CHECKLIST_BASE.map((item) => ({
           dia: 1,
           texto: item.texto,
           categoria: item.categoria,
-          ordem: i,
         })),
       },
       // Adicionar videomaker da demanda como membro da equipe
