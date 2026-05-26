@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     } : {}),
   }
 
-  const [total, demandas, totalArquivosFinais, totalDemandasComArquivos] = await Promise.all([
+  // Busca simultânea: contagem total, página atual e todos os IDs (para sub-queries seguras)
+  const [total, demandas, allDemandIdRows] = await Promise.all([
     prisma.demanda.count({ where }),
     prisma.demanda.findMany({
       where,
@@ -60,20 +61,24 @@ export async function GET(req: NextRequest) {
       skip,
       take: limit,
     }),
-    // Contar registros Arquivo final para demandas que atendem ao filtro
-    prisma.arquivo.count({
-      where: {
-        tipoArquivo: "final",
-        demanda: where,
-      },
-    }),
-    // Contar demandas que já têm pelo menos 1 Arquivo final (modernas)
-    prisma.demanda.count({
-      where: {
-        ...where,
-        arquivos: { some: { tipoArquivo: "final" } },
-      },
-    }),
+    // IDs de TODAS as demandas que atendem ao filtro (usado para sub-queries sem relation nesting)
+    prisma.demanda.findMany({ where, select: { id: true } }),
+  ])
+
+  const allDemandIds = allDemandIdRows.map((d) => d.id)
+
+  // Contar Arquivos finais e demandas modernas usando IDs explícitos (evita relation filter aninhado)
+  const [totalArquivosFinais, totalDemandasComArquivos] = await Promise.all([
+    allDemandIds.length > 0
+      ? prisma.arquivo.count({
+          where: { tipoArquivo: "final", demandaId: { in: allDemandIds } },
+        })
+      : Promise.resolve(0),
+    allDemandIds.length > 0
+      ? prisma.demanda.count({
+          where: { id: { in: allDemandIds }, arquivos: { some: { tipoArquivo: "final" } } },
+        })
+      : Promise.resolve(0),
   ])
 
   // FlatMap: uma entrada por arquivo final; fallback para linkFinal legado (sem registros Arquivo)

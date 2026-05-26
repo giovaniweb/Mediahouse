@@ -360,6 +360,10 @@ export default function GaleriaPage() {
       if (t) params.set("tipo", t)
       if (pid) params.set("produtoId", pid)
       const res = await fetch(`/api/publico/galeria?${params}`)
+      if (!res.ok) {
+        console.error("[galeria] API error:", res.status)
+        return
+      }
       const data: GaleriaData = await res.json()
       setTotal(data.total)
       setTotalPages(data.totalPages)
