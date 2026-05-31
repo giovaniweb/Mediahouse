@@ -24,6 +24,9 @@ import {
   FileText,
   Archive,
   PlayCircle,
+  PartyPopper,
+  Truck,
+  Boxes,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -42,7 +45,15 @@ const sections = [
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
-      { href: "/eventos", label: "Eventos", icon: CalendarRange },
+    ],
+  },
+  {
+    label: "Eventos",
+    items: [
+      { href: "/eventos", label: "Eventos", icon: PartyPopper },
+      { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
+      { href: "/fornecedores", label: "Fornecedores", icon: Truck },
+      { href: "/produtos-servico", label: "Produtos & Serviços", icon: Boxes },
     ],
   },
   {

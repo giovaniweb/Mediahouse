@@ -299,7 +299,7 @@ export default function EventoDetailPage() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => router.push("/eventos")} className="text-zinc-500 hover:text-white">
+        <button onClick={() => router.push("/coberturas")} className="text-zinc-500 hover:text-white">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">

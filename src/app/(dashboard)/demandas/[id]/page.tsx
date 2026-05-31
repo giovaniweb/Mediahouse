@@ -622,7 +622,7 @@ export default function DemandaDetailPage() {
       if (!res.ok) throw new Error(json.error ?? "Erro ao converter")
       toast.success("✅ Evento criado! Redirecionando...")
       mutate()
-      setTimeout(() => router.push(`/eventos/${json.cobertura.id}`), 1200)
+      setTimeout(() => router.push(`/coberturas/${json.cobertura.id}`), 1200)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao converter em evento")
       setConvertendoEvento(false)
@@ -1438,7 +1438,7 @@ export default function DemandaDetailPage() {
                     <span className="text-sm text-purple-300 font-medium">Evento criado</span>
                   </div>
                   <Link
-                    href={`/eventos/${demanda.coberturaId}`}
+                    href={`/coberturas/${demanda.coberturaId}`}
                     className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
                   >
                     Abrir Evento <ArrowUpRight className="w-3 h-3" />

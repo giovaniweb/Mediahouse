@@ -659,7 +659,7 @@ export default function EventosPage() {
   const handleBriefingCreated = (id: string) => {
     setShowBriefingModal(false)
     mutate()
-    router.push(`/eventos/${id}`)
+    router.push(`/coberturas/${id}`)
   }
 
   return (
@@ -751,7 +751,7 @@ export default function EventosPage() {
             return (
               <Link
                 key={c.id}
-                href={`/eventos/${c.id}`}
+                href={`/coberturas/${c.id}`}
                 className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors group"
               >
                 <div className="flex items-start justify-between gap-4">

@@ -21,6 +21,9 @@ export type PermissaoKey =
   | "verConfiguracoes"
   | "verIdeias"
   | "verEventos"
+  | "verCoberturas"
+  | "verFinanceiroEvento"
+  | "gerenciarFornecedores"
   | "criarDemanda"
   | "editarDemanda"
   | "excluirDemanda"
@@ -45,7 +48,10 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   verUsuarios: "Ver Usuários",
   verConfiguracoes: "Ver Configurações",
   verIdeias: "Ver Banco de Ideias",
-  verEventos: "Ver Eventos & Coberturas",
+  verEventos: "Ver Eventos (Gestão)",
+  verCoberturas: "Ver Coberturas (Audiovisual)",
+  verFinanceiroEvento: "Ver Financeiro de Eventos",
+  gerenciarFornecedores: "Gerenciar Fornecedores",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
   excluirDemanda: "Excluir Demanda",
@@ -74,7 +80,15 @@ export const PERMISSAO_GRUPOS = [
       "verUsuarios",
       "verConfiguracoes",
       "verIdeias",
+    ] as PermissaoKey[],
+  },
+  {
+    label: "Eventos",
+    keys: [
       "verEventos",
+      "verCoberturas",
+      "verFinanceiroEvento",
+      "gerenciarFornecedores",
     ] as PermissaoKey[],
   },
   {
@@ -113,6 +127,9 @@ const BASE_FALSE: PresetPerms = {
   verConfiguracoes: false,
   verIdeias: false,
   verEventos: false,
+  verCoberturas: false,
+  verFinanceiroEvento: false,
+  gerenciarFornecedores: false,
   criarDemanda: false,
   editarDemanda: false,
   excluirDemanda: false,
@@ -138,6 +155,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDemandas: true,
     verAgenda: true,
     verProdutos: true,
+    verCoberturas: true,
     criarDemanda: true,
     editarDemanda: true,
     excluirDemanda: true,
@@ -152,11 +170,23 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDemandas: true,
     verAgenda: true,
     verProdutos: true,
+    verCoberturas: true,
     criarDemanda: true,
     editarDemanda: true,
     excluirDemanda: true,
     moverKanban: true,
     verKanban: true,
+  },
+
+  // Gestor de Eventos — módulo de gestão de eventos (não vê produção audiovisual interna)
+  gestor_eventos: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verAgenda: true,
+    verEventos: true,
+    verCoberturas: true,
+    verFinanceiroEvento: true,
+    gerenciarFornecedores: true,
   },
 
   // Videomaker externo — dashboard dele, demandas dele, feedbacks, perfil
@@ -175,6 +205,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verAprovacoes: true,
     verAgenda: true,
     verProdutos: true,
+    verCoberturas: true,
     criarDemanda: true,
     editarDemanda: true,
     moverKanban: true,
@@ -208,4 +239,7 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/configuracoes": "verConfiguracoes",
   "/ideias": "verIdeias",
   "/eventos": "verEventos",
+  "/coberturas": "verCoberturas",
+  "/fornecedores": "gerenciarFornecedores",
+  "/produtos-servico": "gerenciarFornecedores",
 }

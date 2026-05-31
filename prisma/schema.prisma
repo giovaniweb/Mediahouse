@@ -19,6 +19,7 @@ enum TipoUsuario {
   editor
   videomaker
   social
+  gestor_eventos
 }
 
 enum StatusUsuario {
@@ -982,6 +983,9 @@ model PermissaoUsuario {
   verConfiguracoes Boolean @default(false)
   verIdeias        Boolean @default(false)
   verEventos       Boolean @default(false)
+  verCoberturas        Boolean @default(false)
+  verFinanceiroEvento  Boolean @default(false)
+  gerenciarFornecedores Boolean @default(false)
 
   // Ações em demandas
   criarDemanda    Boolean @default(false)
