@@ -2,13 +2,13 @@
 
 import { useState } from "react"
 import useSWR from "swr"
-import { Truck, Plus, Search, Loader2, X, Phone, Mail, MapPin, Trash2 } from "lucide-react"
+import { Truck, Plus, Search, Loader2, X, Phone, Mail, MapPin, Trash2, Link2 } from "lucide-react"
 import { toast } from "sonner"
 
 type Fornecedor = {
   id: string; nome: string; contato: string | null; cnpj: string | null
   telefone: string | null; email: string | null; cidade: string | null; estado: string | null
-  categoria: string; status: string; _count: { produtos: number; custos: number }
+  categoria: string; status: string; portalToken: string; _count: { produtos: number; custos: number }
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -82,7 +82,11 @@ export default function FornecedoresPage() {
                   <span>{f._count.custos} lançamento(s)</span>
                 </div>
               </div>
-              <button onClick={() => remover(f.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/fornecedor/${f.portalToken}`); toast.success("Link do portal copiado!") }}
+                  title="Copiar link do portal" className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-purple-400 p-1"><Link2 className="w-4 h-4" /></button>
+                <button onClick={() => remover(f.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+              </div>
             </div>
           ))}
         </div>
