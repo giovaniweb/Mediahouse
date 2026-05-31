@@ -168,6 +168,10 @@ model Usuario {
   ideias          IdeiaVideo[]
   coberturasCriadas EventoCobertura[] @relation("CoberturasCreadas")
   coberturaEquipe EventoCoberturaEquipe[]
+  eventosResponsavel  EventoGestao[]          @relation("EventoGestaoResponsavel")
+  eventosCriados      EventoGestao[]          @relation("EventoGestaoCriador")
+  eventoChecklistResp EventoGestaoChecklist[]
+  eventoDocumentoResp EventoGestaoDocumento[]
 
   @@map("usuarios")
 }
@@ -377,6 +381,10 @@ model Demanda {
   // Evento de cobertura vinculado (quando convertida)
   coberturaId        String?
   coberturaEvento    EventoCobertura?   @relation(fields: [coberturaId], references: [id])
+
+  // Evento mestre (Nuflow Eventos) que gerou esta peça audiovisual
+  eventoGestaoId     String?
+  eventoGestao       EventoGestao?      @relation(fields: [eventoGestaoId], references: [id])
 
   @@map("demandas")
 }
@@ -1162,6 +1170,7 @@ model EventoCobertura {
   album      EventoCoberturaAlbum[]
   log        EventoCoberturaLog[]
   demandas   Demanda[]
+  eventoGestao EventoGestao?
 
   @@map("coberturas")
 }
@@ -1262,4 +1271,319 @@ model EventoCoberturaLog {
   cobertura EventoCobertura @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
 
   @@map("coberturas_log")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NUFLOW EVENTOS — Módulo de Gestão de Eventos (guarda-chuva)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TipoEventoGestao {
+  cafe
+  jantar
+  webinar
+  congresso
+  feira
+  ativacao
+  unyque_experience
+  treinamento
+  lancamento
+  evento_interno
+  evento_medicos
+  evento_fornecedores
+  outro
+}
+
+enum StatusEventoGestao {
+  ideia
+  planejamento
+  orcamento
+  aprovacao
+  producao
+  execucao
+  finalizado
+  cancelado
+}
+
+enum StatusTarefa {
+  pendente
+  em_andamento
+  aguardando_aprovacao
+  concluido
+  atrasado
+  cancelado
+}
+
+enum PrioridadeTarefa {
+  baixa
+  media
+  alta
+  critica
+}
+
+enum CategoriaDocumento {
+  manual_expositor
+  programacao
+  briefing
+  contratos
+  planta
+  projeto_stand
+  layout_identidade
+  material_impresso
+  artes_digitais
+  audiovisual
+  outros
+}
+
+enum StatusDocumento {
+  pendente
+  enviado
+  em_analise
+  aprovado
+  reprovado
+  finalizado
+}
+
+enum CategoriaFornecedor {
+  montadora
+  grafica
+  audiovisual
+  som
+  iluminacao
+  buffet
+  restaurante
+  hotel
+  transporte
+  brindes
+  decoracao
+  agencia
+  designer
+  fotografo
+  videomaker
+  seguranca
+  limpeza
+  internet
+  energia
+  palestrante
+  medico
+  influenciador
+  espaco
+  outros
+}
+
+enum UnidadeMedida {
+  unidade
+  metro_quadrado
+  diaria
+  hora
+  pacote
+  pessoa
+  evento_fechado
+  lote
+  impressao
+  servico
+}
+
+enum CategoriaCusto {
+  stand
+  montagem
+  comunicacao_visual
+  audiovisual
+  buffet
+  jantar
+  brindes
+  impressos
+  trafego
+  hospedagem
+  transporte
+  palestrantes
+  medicos
+  equipe
+  taxas
+  extras
+}
+
+enum TipoAprovacao {
+  orcamento
+  layout
+  material
+  contrato
+  entrega
+}
+
+model EventoGestao {
+  id                 String             @id @default(cuid())
+  codigo             String             @unique
+  nome               String
+  tipo               TipoEventoGestao   @default(outro)
+  status             StatusEventoGestao @default(planejamento)
+  descricao          String?            @db.Text
+  objetivo           String?            @db.Text
+  publicoAlvo        String?
+  observacoes        String?            @db.Text
+  cidade             String?
+  estado             String?
+  local              String?
+  dataInicio         DateTime
+  dataFim            DateTime
+  responsavelId      String?
+  orcamentoPrevisto  Float?
+  orcamentoAprovado  Float?
+  percentualConclusao Int               @default(0)
+  coberturaId        String?            @unique
+  createdById        String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  responsavel  Usuario?         @relation("EventoGestaoResponsavel", fields: [responsavelId], references: [id])
+  createdBy    Usuario          @relation("EventoGestaoCriador", fields: [createdById], references: [id])
+  cobertura    EventoCobertura? @relation(fields: [coberturaId], references: [id])
+  demandas     Demanda[]
+  checklist    EventoGestaoChecklist[]
+  documentos   EventoGestaoDocumento[]
+  custos       CustoEvento[]
+  aprovacoes   EventoGestaoAprovacao[]
+  logs         EventoGestaoLog[]
+
+  @@map("eventos_gestao")
+}
+
+model EventoGestaoChecklist {
+  id               String           @id @default(cuid())
+  eventoId         String
+  titulo           String
+  descricao        String?
+  categoria        String?
+  responsavelId    String?
+  prazo            DateTime?
+  status           StatusTarefa     @default(pendente)
+  prioridade       PrioridadeTarefa @default(media)
+  uploadObrigatorio Boolean         @default(false)
+  custoEventoId    String?
+  concluido        Boolean          @default(false)
+  concluidoEm      DateTime?
+  createdAt        DateTime         @default(now())
+
+  evento      EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  responsavel Usuario?     @relation(fields: [responsavelId], references: [id])
+
+  @@map("eventos_gestao_checklist")
+}
+
+model EventoGestaoDocumento {
+  id            String             @id @default(cuid())
+  eventoId      String
+  categoria     CategoriaDocumento @default(outros)
+  nome          String
+  url           String?
+  linkExterno   String?
+  responsavelId String?
+  prazo         DateTime?
+  status        StatusDocumento    @default(pendente)
+  observacoes   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  evento      EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  responsavel Usuario?     @relation(fields: [responsavelId], references: [id])
+
+  @@map("eventos_gestao_documentos")
+}
+
+model Fornecedor {
+  id             String              @id @default(cuid())
+  nome           String
+  contato        String?
+  cnpj           String?
+  telefone       String?
+  email          String?
+  cidade         String?
+  estado         String?
+  categoria      CategoriaFornecedor @default(outros)
+  dadosBancarios String?
+  pixKey         String?
+  observacoes    String?             @db.Text
+  avaliacao      Float?              @default(5.0)
+  status         StatusUsuario       @default(ativo)
+  portalToken    String              @unique @default(cuid())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  produtos ProdutoServicoEvento[]
+  custos   CustoEvento[]
+
+  @@map("fornecedores")
+}
+
+model ProdutoServicoEvento {
+  id               String        @id @default(cuid())
+  nome             String
+  categoria        String?
+  fornecedorId     String?
+  valorUnitario    Float?
+  unidadeMedida    UnidadeMedida @default(unidade)
+  quantidadeMinima Int?
+  prazoMedioDias   Int?
+  imagemUrl        String?
+  observacoes      String?
+  ativo            Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  fornecedor Fornecedor?   @relation(fields: [fornecedorId], references: [id])
+  custos     CustoEvento[]
+
+  @@map("produtos_servico_evento")
+}
+
+model CustoEvento {
+  id               String          @id @default(cuid())
+  eventoId         String
+  fornecedorId     String?
+  produtoServicoId String?
+  categoria        CategoriaCusto  @default(extras)
+  descricao        String
+  valorPrevisto    Float           @default(0)
+  valorReal        Float?
+  quantidade       Float?
+  pago             Boolean         @default(false)
+  dataPagamento    DateTime?
+  notaFiscalUrl    String?
+  statusPagamento  StatusPagamento @default(pendente_nf)
+  dataVencimento   DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  evento         EventoGestao          @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  fornecedor     Fornecedor?           @relation(fields: [fornecedorId], references: [id])
+  produtoServico ProdutoServicoEvento? @relation(fields: [produtoServicoId], references: [id])
+
+  @@map("custos_evento")
+}
+
+model EventoGestaoAprovacao {
+  id         String        @id @default(cuid())
+  eventoId   String
+  tipo       TipoAprovacao
+  status     String        @default("pendente") // pendente | aprovado | reprovado
+  aprovadoPor String?
+  observacao String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  evento EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("eventos_gestao_aprovacoes")
+}
+
+model EventoGestaoLog {
+  id        String   @id @default(cuid())
+  eventoId  String
+  usuarioId String?
+  acao      String
+  detalhe   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  evento EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("eventos_gestao_log")
 }
