@@ -4,7 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign } from "lucide-react"
+import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign, Clock, AlertTriangle, Activity, CheckCircle2 } from "lucide-react"
 import { PECAS_AUDIOVISUAIS, pecasDefaultPara } from "@/lib/eventos-pecas"
 import { toast } from "sonner"
 
@@ -27,6 +27,20 @@ type EventoLista = {
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
+
+type DashboardEventos = {
+  proximos: number; emProducao: number; atrasados: number; finalizados: number
+  totalPrevisto: number; totalGasto: number; docsPendentes: number; pagamentosPendentes: number
+}
+
+function MiniCard({ icon, label, value, alert }: { icon: React.ReactNode; label: string; value: string; alert?: boolean }) {
+  return (
+    <div className={`rounded-xl border p-3 ${alert ? "bg-red-950/20 border-red-800/40" : "bg-zinc-900 border-zinc-800"}`}>
+      <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 uppercase tracking-wide mb-1">{icon}{label}</div>
+      <div className={`text-lg font-bold ${alert ? "text-red-300" : "text-zinc-100"}`}>{value}</div>
+    </div>
+  )
+}
 
 export const TIPO_EVENTO_LABEL: Record<string, string> = {
   cafe: "Café", jantar: "Jantar", webinar: "Webinar", congresso: "Congresso",
@@ -60,6 +74,9 @@ export default function EventosPage() {
   if (filtroStatus) qs.set("status", filtroStatus)
   const { data, mutate, isLoading } = useSWR<{ eventos: EventoLista[] }>(`/api/eventos?${qs}`, fetcher)
   const eventos = data?.eventos ?? []
+  const { data: dash } = useSWR<DashboardEventos>("/api/eventos/dashboard", fetcher)
+
+  const fmtMoneyShort = (n: number) => n >= 1000 ? `R$ ${(n / 1000).toFixed(1)}k` : `R$ ${n.toFixed(0)}`
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -75,6 +92,20 @@ export default function EventosPage() {
           <Plus className="w-4 h-4" /> Novo Evento
         </button>
       </div>
+
+      {/* Dashboard cards */}
+      {dash && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <MiniCard icon={<Clock className="w-4 h-4 text-blue-400" />} label="Próximos" value={String(dash.proximos)} />
+          <MiniCard icon={<Activity className="w-4 h-4 text-indigo-400" />} label="Em produção" value={String(dash.emProducao)} />
+          <MiniCard icon={<AlertTriangle className="w-4 h-4 text-amber-400" />} label="Atrasados" value={String(dash.atrasados)} alert={dash.atrasados > 0} />
+          <MiniCard icon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />} label="Finalizados" value={String(dash.finalizados)} />
+          <MiniCard icon={<DollarSign className="w-4 h-4 text-zinc-400" />} label="Previsto" value={fmtMoneyShort(dash.totalPrevisto)} />
+          <MiniCard icon={<DollarSign className="w-4 h-4 text-emerald-400" />} label="Gasto" value={fmtMoneyShort(dash.totalGasto)} />
+          <MiniCard icon={<FileText className="w-4 h-4 text-amber-400" />} label="Docs pendentes" value={String(dash.docsPendentes)} alert={dash.docsPendentes > 0} />
+          <MiniCard icon={<DollarSign className="w-4 h-4 text-red-400" />} label="Pagtos pendentes" value={String(dash.pagamentosPendentes)} alert={dash.pagamentosPendentes > 0} />
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
