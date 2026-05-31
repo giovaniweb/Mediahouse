@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Loader2, MapPin, Calendar, DollarSign, Film, CheckSquare, FileText,
-  ClipboardCheck, Plus, ExternalLink, Trash2, Video,
+  ClipboardCheck, Plus, ExternalLink, Trash2, Video, Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
 import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE } from "../page"
@@ -16,7 +16,7 @@ const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2
 const fmtData = (s: string) => new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
 const fmtMoney = (n: number) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
 
-type Tab = "geral" | "audiovisual" | "checklist" | "documentos" | "orcamento" | "aprovacoes"
+type Tab = "geral" | "audiovisual" | "checklist" | "documentos" | "orcamento" | "aprovacoes" | "relatorio"
 
 const TABS: { id: Tab; label: string; icon: typeof Film }[] = [
   { id: "geral", label: "Visão Geral", icon: Calendar },
@@ -25,6 +25,7 @@ const TABS: { id: Tab; label: string; icon: typeof Film }[] = [
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "orcamento", label: "Orçamento", icon: DollarSign },
   { id: "aprovacoes", label: "Aprovações", icon: ClipboardCheck },
+  { id: "relatorio", label: "Relatório", icon: Sparkles },
 ]
 
 const STATUS_DEMANDA_LABEL: Record<string, string> = {
@@ -86,6 +87,38 @@ export default function EventoDetalhePage() {
       {tab === "documentos" && <TabDocumentos eventoId={id} documentos={ev.documentos} onMutate={mutate} />}
       {tab === "orcamento" && <TabOrcamento eventoId={id} custos={ev.custos} financeiro={data.financeiro} onMutate={mutate} />}
       {tab === "aprovacoes" && <TabAprovacoes eventoId={id} aprovacoes={ev.aprovacoes} onMutate={mutate} />}
+      {tab === "relatorio" && <TabRelatorio eventoId={id} />}
+    </div>
+  )
+}
+
+// ─── Relatório Final (IA) ─────────────────────────────────────────────────────
+function TabRelatorio({ eventoId }: { eventoId: string }) {
+  const [relatorio, setRelatorio] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  async function gerar() {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/eventos/${eventoId}/relatorio`, { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar relatório")
+      setRelatorio(json.relatorio)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório")
+    } finally { setLoading(false) }
+  }
+  return (
+    <div className="space-y-4">
+      <button onClick={gerar} disabled={loading}
+        className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        {loading ? "Gerando…" : relatorio ? "Gerar novamente" : "Gerar Relatório Final (IA)"}
+      </button>
+      {relatorio && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <pre className="text-sm text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">{relatorio}</pre>
+        </div>
+      )}
     </div>
   )
 }
