@@ -51,8 +51,7 @@ const STATUS_LABELS: Record<string, string> = {
   expirado: "Expirado",
 }
 
-interface Videomaker { id: string; nome: string; cidade?: string; status: string; podeEditar?: boolean }
-interface Editor { id: string; nome: string; especialidade?: string; status: string; fazCaptacao?: boolean }
+interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
 interface ArquivoVideo { id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null; createdAt: string }
 
 export default function DemandaDetailPage() {
@@ -103,11 +102,11 @@ export default function DemandaDetailPage() {
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
   const demanda = data?.demanda
 
-  const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=100", fetcher)
-  const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=100", fetcher)
+  const { data: dataOpcoesCaptacao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=captacao", fetcher)
+  const { data: dataOpcoesEdicao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=edicao", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos", fetcher)
-  const videomakers = dataVMs?.videomakers ?? []
-  const editores = dataEds?.editores ?? []
+  const opcoesCaptacao = dataOpcoesCaptacao?.opcoes ?? []
+  const opcoesEdicao = dataOpcoesEdicao?.opcoes ?? []
   const produtos = dataProdutos?.produtos ?? []
 
   // ── Sincroniza campos ao carregar demanda ─────────────────────────────────
@@ -118,8 +117,8 @@ export default function DemandaDetailPage() {
       setCidade(demanda.cidade ?? "")
       setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
       setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
-      setVideomakerId(demanda.videomaker?.id ?? "")
-      setEditorId(demanda.editor?.id ?? "")
+      setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
+      setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
       setLinkBrutos(demanda.linkBrutos ?? "")
       setLinkFinal(demanda.linkFinal ?? "")
       setLocalGravacao(demanda.localGravacao ?? "")
@@ -185,8 +184,8 @@ export default function DemandaDetailPage() {
       setCidade(demanda.cidade ?? "")
       setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
       setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
-      setVideomakerId(demanda.videomaker?.id ?? "")
-      setEditorId(demanda.editor?.id ?? "")
+      setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
+      setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
       setLinkBrutos(demanda.linkBrutos ?? "")
       setLinkFinal(demanda.linkFinal ?? "")
       setLocalGravacao(demanda.localGravacao ?? "")
@@ -969,7 +968,7 @@ export default function DemandaDetailPage() {
                   <Clapperboard className="w-3.5 h-3.5" /> Videomaker (Captação)
                 </label>
                 <select
-                  value={editMode ? videomakerId : (demanda.videomaker?.id ?? "")}
+                  value={editMode ? videomakerId : (demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")}
                   onChange={e => {
                     if (editMode) {
                       setVideomakerId(e.target.value)
@@ -980,17 +979,17 @@ export default function DemandaDetailPage() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
                 >
                   <option value="">— Sem videomaker —</option>
-                  {videomakers.filter(v => !v.podeEditar).length > 0 && (
-                    <optgroup label="Apenas captação">
-                      {videomakers.filter(v => !v.podeEditar).map(v => (
-                        <option key={v.id} value={v.id}>{v.nome}{v.cidade ? ` (${v.cidade})` : ""}</option>
+                  {opcoesCaptacao.filter(o => o.tipoContrato === "externo").length > 0 && (
+                    <optgroup label="Externos (freelance)">
+                      {opcoesCaptacao.filter(o => o.tipoContrato === "externo").map(o => (
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}</option>
                       ))}
                     </optgroup>
                   )}
-                  {videomakers.filter(v => v.podeEditar).length > 0 && (
-                    <optgroup label="Captação + Edição">
-                      {videomakers.filter(v => v.podeEditar).map(v => (
-                        <option key={v.id} value={v.id}>{v.nome}{v.cidade ? ` (${v.cidade})` : ""} ✂️</option>
+                  {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").length > 0 && (
+                    <optgroup label="Internos / Social">
+                      {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").map(o => (
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " 📱" : o.origem === "ed" ? " ✂️" : ""}</option>
                       ))}
                     </optgroup>
                   )}
@@ -1017,7 +1016,7 @@ export default function DemandaDetailPage() {
                   <Film className="w-3.5 h-3.5" /> Editor (Pós-produção)
                 </label>
                 <select
-                  value={editMode ? editorId : (demanda.editor?.id ?? "")}
+                  value={editMode ? editorId : (demanda.editor ? `ed:${demanda.editor.id}` : "")}
                   onChange={e => {
                     if (editMode) {
                       setEditorId(e.target.value)
@@ -1028,17 +1027,17 @@ export default function DemandaDetailPage() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
                 >
                   <option value="">— Sem editor —</option>
-                  {editores.filter(e => !e.fazCaptacao).length > 0 && (
-                    <optgroup label="Apenas edição">
-                      {editores.filter(e => !e.fazCaptacao).map(e => (
-                        <option key={e.id} value={e.id}>{e.nome}{e.especialidade ? ` · ${e.especialidade}` : ""}</option>
+                  {opcoesEdicao.filter(o => o.tipoContrato === "interno").length > 0 && (
+                    <optgroup label="Internos (equipe)">
+                      {opcoesEdicao.filter(o => o.tipoContrato === "interno").map(o => (
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " 📱" : ""}</option>
                       ))}
                     </optgroup>
                   )}
-                  {editores.filter(e => e.fazCaptacao).length > 0 && (
-                    <optgroup label="Edição + Captação">
-                      {editores.filter(e => e.fazCaptacao).map(e => (
-                        <option key={e.id} value={e.id}>{e.nome}{e.especialidade ? ` · ${e.especialidade}` : ""} 📷</option>
+                  {opcoesEdicao.filter(o => o.tipoContrato !== "interno").length > 0 && (
+                    <optgroup label="Externos (freelance)">
+                      {opcoesEdicao.filter(o => o.tipoContrato !== "interno").map(o => (
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "vm" ? " 📷" : ""}</option>
                       ))}
                     </optgroup>
                   )}

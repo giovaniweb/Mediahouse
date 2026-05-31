@@ -53,6 +53,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       areasAtuacao: body.areasAtuacao,
       portfolio: body.portfolio,
       podeEditar: body.podeEditar,
+      tipoContrato: body.tipoContrato,
     },
   })
 

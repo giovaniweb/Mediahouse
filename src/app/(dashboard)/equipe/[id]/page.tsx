@@ -161,6 +161,22 @@ export default function EditorDetalhePage() {
     }
   }
 
+  async function handleToggleTipoContrato() {
+    const novo = editor.tipoContrato === "externo" ? "interno" : "externo"
+    try {
+      const res = await fetch(`/api/editores/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipoContrato: novo }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success(novo === "interno" ? "Marcado como Interno (fulltime)" : "Marcado como Externo (freelance)")
+      mutate()
+    } catch (err) {
+      toast.error(String(err))
+    }
+  }
+
   async function aplicarListaNegra() {
     setLoadingNegra(true)
     try {
@@ -587,6 +603,25 @@ export default function EditorDetalhePage() {
               title={editor.fazCaptacao ? "Clique para desabilitar captação" : "Clique para habilitar captação"}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${editor.fazCaptacao ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Tipo de Contrato */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Tipo de Contrato</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {editor.tipoContrato === "externo" ? "Externo — freelance temporário" : "Interno — equipe fixa / fulltime"}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleTipoContrato}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${editor.tipoContrato === "externo" ? "bg-amber-600/20 border-amber-600/40 text-amber-300" : "bg-blue-600/20 border-blue-600/40 text-blue-300"}`}
+              title="Clique para alternar interno/externo"
+            >
+              {editor.tipoContrato === "externo" ? "Externo" : "Interno"}
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -67,6 +68,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const body = await req.json()
+
+  // Resolver tokens de atribuição unificada (vm:/ed:/user:) → id real do slot.
+  // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.
+  try {
+    if (typeof body.videomakerId === "string" && body.videomakerId.includes(":")) {
+      body.videomakerId = await resolveParaVideomaker(body.videomakerId)
+    }
+    if (typeof body.editorId === "string" && body.editorId.includes(":")) {
+      body.editorId = await resolveParaEditor(body.editorId)
+    }
+  } catch (e) {
+    console.error("[Demanda PUT] Erro ao resolver atribuição:", e)
+    return NextResponse.json({ error: "Erro ao resolver a pessoa atribuída" }, { status: 400 })
+  }
 
   if (body.statusVisivel) {
     const novoStatusInterno = STATUS_VISIVEL_TO_INTERNO[body.statusVisivel]

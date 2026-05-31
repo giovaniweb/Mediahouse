@@ -158,6 +158,22 @@ export default function VideomakerDetalhePage() {
     }
   }
 
+  async function handleToggleTipoContrato() {
+    const novo = vm.tipoContrato === "interno" ? "externo" : "interno"
+    try {
+      const res = await fetch(`/api/videomakers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipoContrato: novo }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success(novo === "interno" ? "Marcado como Interno (fulltime)" : "Marcado como Externo (freelance)")
+      mutate()
+    } catch (err) {
+      toast.error(String(err))
+    }
+  }
+
   async function aplicarListaNegra() {
     setLoadingNegra(true)
     try {
@@ -515,6 +531,25 @@ export default function VideomakerDetalhePage() {
               title={vm.podeEditar ? "Clique para remover permissão de edição" : "Clique para permitir edição"}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${vm.podeEditar ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Tipo de Contrato */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Tipo de Contrato</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {vm.tipoContrato === "interno" ? "Interno — equipe fixa / fulltime" : "Externo — freelance temporário"}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleTipoContrato}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${vm.tipoContrato === "interno" ? "bg-blue-600/20 border-blue-600/40 text-blue-300" : "bg-amber-600/20 border-amber-600/40 text-amber-300"}`}
+              title="Clique para alternar interno/externo"
+            >
+              {vm.tipoContrato === "interno" ? "Interno" : "Externo"}
             </button>
           </div>
         </div>

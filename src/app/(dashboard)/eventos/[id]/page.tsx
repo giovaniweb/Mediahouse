@@ -737,14 +737,15 @@ function EquipeTab({
   onMutate: () => void
 }) {
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ nome: "", funcao: "captacao", videomakerId: "", diariasTotal: 1, valorDiaria: "" })
+  const [form, setForm] = useState({ nome: "", funcao: "captacao", token: "", diariasTotal: 1, valorDiaria: "" })
   const [saving, setSaving] = useState(false)
 
-  const { data: vmsData } = useSWR<{ videomakers: { id: string; nome: string; cidade: string | null }[] }>(
-    "/api/videomakers?status=ativo",
+  const papel = form.funcao === "edicao" ? "edicao" : "captacao"
+  const { data: opcoesData } = useSWR<{ opcoes: { value: string; label: string; subtitle: string; tipoContrato: string; origem: string }[] }>(
+    `/api/equipe-disponivel?papel=${papel}`,
     (url: string) => fetch(url).then((r) => r.json())
   )
-  const videomakers = vmsData?.videomakers ?? []
+  const opcoes = opcoesData?.opcoes ?? []
 
   // Produtividade por membro
   const uploadsPorMembro: Record<string, number> = {}
@@ -763,14 +764,14 @@ function EquipeTab({
         body: JSON.stringify({
           nome: form.nome,
           funcao: form.funcao,
-          videomakerId: form.videomakerId || null,
+          token: form.token || null,
           diariasTotal: form.diariasTotal,
           valorDiaria: form.valorDiaria ? parseFloat(form.valorDiaria) : null,
         }),
       })
       if (!res.ok) throw new Error("Erro ao adicionar")
       setAdding(false)
-      setForm({ nome: "", funcao: "captacao", videomakerId: "", diariasTotal: 1, valorDiaria: "" })
+      setForm({ nome: "", funcao: "captacao", token: "", diariasTotal: 1, valorDiaria: "" })
       onMutate()
       toast.success("Membro adicionado!")
     } catch { toast.error("Erro ao adicionar membro") } finally { setSaving(false) }
@@ -839,18 +840,20 @@ function EquipeTab({
           <h4 className="text-sm font-medium text-zinc-200">Novo Membro</h4>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-zinc-500 mb-1">Videomaker cadastrado</label>
+              <label className="block text-xs text-zinc-500 mb-1">Pessoa cadastrada</label>
               <select
-                value={form.videomakerId}
+                value={form.token}
                 onChange={(e) => {
-                  const vm = videomakers.find((v) => v.id === e.target.value)
-                  setForm((f) => ({ ...f, videomakerId: e.target.value, nome: vm?.nome ?? f.nome }))
+                  const op = opcoes.find((o) => o.value === e.target.value)
+                  setForm((f) => ({ ...f, token: e.target.value, nome: op?.label ?? f.nome }))
                 }}
                 className={inputClass}
               >
                 <option value="">Selecionar...</option>
-                {videomakers.map((v) => (
-                  <option key={v.id} value={v.id}>{v.nome}</option>
+                {opcoes.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.tipoContrato === "externo" ? " (externo)" : " (interno)"}
+                  </option>
                 ))}
               </select>
             </div>

@@ -167,6 +167,7 @@ model Usuario {
   editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
   ideias          IdeiaVideo[]
   coberturasCriadas EventoCobertura[] @relation("CoberturasCreadas")
+  coberturaEquipe EventoCoberturaEquipe[]
 
   @@map("usuarios")
 }
@@ -207,6 +208,7 @@ model Videomaker {
   emListaNegra     Boolean          @default(false)
   listaNegraMotivo String?
   podeEditar       Boolean          @default(false)
+  tipoContrato     String           @default("externo")  // "externo" (freelance) | "interno" (fulltime)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -254,6 +256,7 @@ model Editor {
   emListaNegra     Boolean          @default(false)
   listaNegraMotivo String?
   fazCaptacao      Boolean          @default(false)
+  tipoContrato     String           @default("interno")  // "interno" (fulltime) | "externo" (freelance)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -263,6 +266,7 @@ model Editor {
   demandas   Demanda[]
   avaliacoes AvaliacaoEditor[]
   eventos    Evento[]
+  coberturaEquipe  EventoCoberturaEquipe[]
 
   @@map("editores")
 }
@@ -1166,6 +1170,8 @@ model EventoCoberturaEquipe {
   id               String       @id @default(cuid())
   coberturaId      String
   videomakerId     String?
+  editorId         String?
+  usuarioId        String?
   nome             String
   funcao           FuncaoEquipe @default(captacao)
   diariasTotal     Int          @default(0)
@@ -1175,6 +1181,8 @@ model EventoCoberturaEquipe {
 
   cobertura  EventoCobertura       @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
   videomaker Videomaker?           @relation(fields: [videomakerId], references: [id])
+  editor     Editor?               @relation(fields: [editorId], references: [id])
+  usuario    Usuario?              @relation(fields: [usuarioId], references: [id])
   uploads    EventoCoberturaUpload[]
 
   @@map("coberturas_equipe")
