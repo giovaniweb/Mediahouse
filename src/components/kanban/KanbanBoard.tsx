@@ -151,14 +151,14 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
       {/* Botões de navegação */}
       <button
         onClick={() => scrollBy(-320)}
-        className="absolute left-0 top-3 z-10 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        className="fixed left-[228px] top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
         aria-label="Rolar para esquerda"
       >
         <ChevronLeft className="w-5 h-5" />
       </button>
       <button
         onClick={() => scrollBy(320)}
-        className="absolute right-0 top-3 z-10 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        className="fixed right-2 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
         aria-label="Rolar para direita"
       >
         <ChevronRight className="w-5 h-5" />
