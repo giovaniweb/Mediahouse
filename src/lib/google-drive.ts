@@ -244,3 +244,46 @@ async function tornarPublico(fileId: string, token: string): Promise<void> {
     console.error(`[google-drive] Falha ao tornar público fileId=${fileId}:`, err)
   }
 }
+
+/**
+ * Cria uma pasta no Google Drive (sob a pasta raiz configurada) e a torna
+ * pública (leitura por link). Retorna o id e a URL da pasta.
+ * Best-effort: lança erro se o Drive não estiver configurado/conectado.
+ */
+export async function criarPastaDrive(nome: string): Promise<{ folderId: string; folderUrl: string }> {
+  const config = await prisma.configEmpresa.findFirst({
+    select: { googleDriveFolderId: true },
+  })
+  const parentId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
+  if (!parentId) {
+    throw new Error("Pasta raiz do Google Drive não configurada. Acesse Configurações → Google Drive.")
+  }
+
+  const token = await getAccessToken()
+
+  const res = await fetch("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: nome,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentId],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Falha ao criar pasta no Drive: ${err}`)
+  }
+
+  const data = (await res.json().catch(() => ({} as { id?: string }))) as { id?: string }
+  const folderId = data.id ?? ""
+  if (!folderId) throw new Error("Google Drive não retornou ID da pasta criada.")
+
+  await tornarPublico(folderId, token).catch(() => null)
+
+  return { folderId, folderUrl: `https://drive.google.com/drive/folders/${folderId}` }
+}

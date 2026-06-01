@@ -1433,6 +1433,7 @@ model EventoGestao {
   orcamentoPrevisto  Float?
   orcamentoAprovado  Float?
   percentualConclusao Int               @default(0)
+  linkDrive          String?
   coberturaId        String?            @unique
   createdById        String
   createdAt          DateTime           @default(now())

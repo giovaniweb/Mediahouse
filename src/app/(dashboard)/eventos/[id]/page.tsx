@@ -141,11 +141,19 @@ function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financ
         <Card label="Orçamento" value={ev.orcamentoPrevisto ? fmtMoney(ev.orcamentoPrevisto) : "—"} icon={<DollarSign className="w-4 h-4 text-zinc-400" />} />
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <label className="block text-xs text-zinc-500 mb-2">Status do evento</label>
-        <select value={status} onChange={(e) => mudarStatus(e.target.value)} className={inputCls + " max-w-xs"}>
-          {Object.entries(STATUS_EVENTO_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <label className="block text-xs text-zinc-500 mb-2">Status do evento</label>
+          <select value={status} onChange={(e) => mudarStatus(e.target.value)} className={inputCls + " max-w-xs"}>
+            {Object.entries(STATUS_EVENTO_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+        {ev.linkDrive && (
+          <a href={ev.linkDrive} target="_blank" rel="noreferrer"
+            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
+            <ExternalLink className="w-3.5 h-3.5" /> Pasta no Drive
+          </a>
+        )}
       </div>
 
       {ev.descricao && (
@@ -413,6 +421,7 @@ type Evento = {
   descricao: string | null; objetivo: string | null
   cidade: string | null; estado: string | null; local: string | null
   dataInicio: string; dataFim: string; orcamentoPrevisto: number | null; percentualConclusao: number
+  linkDrive: string | null
   cobertura: { id: string; slug: string; titulo: string; status: string } | null
   checklist: TarefaItem[]; documentos: DocItem[]; custos: CustoItem[]; aprovacoes: AprovacaoItem[]
   demandas: { id: string; codigo: string; titulo: string; tipoVideo: string; statusVisivel: string; statusInterno: string; videomaker: { nome: string } | null }[]

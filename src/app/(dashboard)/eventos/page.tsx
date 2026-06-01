@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -172,6 +172,12 @@ export default function EventosPage() {
   )
 }
 
+// Mapeia tipo do briefing (enum de cobertura) → tipo do evento de gestão
+const TIPO_BRIEFING_MAP: Record<string, string> = {
+  congresso: "congresso", feira: "feira", lancamento: "lancamento",
+  evento_corporativo: "evento_interno", show: "outro", outro: "outro",
+}
+
 function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [form, setForm] = useState({
     nome: "", tipo: "congresso", descricao: "", cidade: "", estado: "", local: "",
@@ -179,6 +185,8 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
   })
   const [pecas, setPecas] = useState<string[]>(pecasDefaultPara("congresso"))
   const [saving, setSaving] = useState(false)
+  const [importando, setImportando] = useState(false)
+  const briefingRef = useRef<HTMLInputElement>(null)
 
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const togglePeca = (k: string) => setPecas((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k])
@@ -187,6 +195,37 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
   function onTipo(t: string) {
     upd("tipo", t)
     setPecas(pecasDefaultPara(t))
+  }
+
+  // Importa dados de um briefing PDF via IA (reusa /api/coberturas/briefing)
+  async function importarBriefing(file: File) {
+    setImportando(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/coberturas/briefing", { method: "POST", body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Erro ao ler o briefing")
+      const d = json.dados as {
+        titulo: string; tipo: string; cliente: string | null; local: string | null
+        cidade: string | null; dataInicio: string; dataFim: string; descricao: string | null
+      }
+      const tipoMapeado = TIPO_BRIEFING_MAP[d.tipo] ?? "outro"
+      setForm((f) => ({
+        ...f,
+        nome: d.titulo ?? f.nome,
+        tipo: tipoMapeado,
+        descricao: d.descricao ?? f.descricao,
+        cidade: d.cidade ?? f.cidade,
+        local: d.local ?? f.local,
+        dataInicio: d.dataInicio ?? f.dataInicio,
+        dataFim: d.dataFim ?? f.dataFim,
+      }))
+      setPecas(pecasDefaultPara(tipoMapeado))
+      toast.success("Briefing importado! Revise os dados antes de salvar.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao importar briefing")
+    } finally { setImportando(false) }
   }
 
   async function salvar() {
@@ -214,6 +253,15 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
           <h2 className="text-lg font-bold text-zinc-100">Novo Evento</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
+
+        {/* Importar de briefing PDF */}
+        <input ref={briefingRef} type="file" accept="application/pdf" className="hidden"
+          onChange={(e) => { const file = e.target.files?.[0]; if (file) importarBriefing(file) }} />
+        <button onClick={() => briefingRef.current?.click()} disabled={importando}
+          className="w-full mb-4 flex items-center justify-center gap-2 text-xs border border-dashed border-zinc-700 hover:border-purple-600 text-zinc-400 hover:text-purple-300 py-2.5 rounded-lg transition-colors disabled:opacity-50">
+          {importando ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          {importando ? "Lendo briefing com IA…" : "📄 Importar de briefing PDF (IA preenche os campos)"}
+        </button>
 
         <div className="space-y-3">
           <div>
