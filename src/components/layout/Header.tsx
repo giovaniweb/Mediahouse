@@ -24,6 +24,11 @@ const TIPO_LABEL: Record<string, string> = {
   editor: "Editor",
   videomaker: "Videomaker",
   social: "Social Media",
+  designer: "Designer",
+  gestor_eventos: "Gestor de Eventos",
+  analista_crm: "Analista CRM",
+  gestor_trafego: "Gestor de Tráfego",
+  auxiliar_admin: "Auxiliar Admin",
 }
 
 export function Header({ title, actions }: { title?: string; actions?: React.ReactNode }) {

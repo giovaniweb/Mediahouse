@@ -21,6 +21,9 @@ enum TipoUsuario {
   social
   gestor_eventos
   designer
+  analista_crm
+  gestor_trafego
+  auxiliar_admin
 }
 
 enum StatusUsuario {

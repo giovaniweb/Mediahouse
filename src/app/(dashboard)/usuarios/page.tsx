@@ -18,6 +18,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const TIPO_LABEL: Record<string, string> = {
   admin: "Admin", gestor: "Gestor", operacao: "Operação",
   solicitante: "Solicitante", editor: "Videomaker Int", videomaker: "Videomaker", social: "Social Media",
+  designer: "Designer", gestor_eventos: "Gestor de Eventos",
+  analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego", auxiliar_admin: "Auxiliar Admin",
 }
 
 const TIPO_COLOR: Record<string, string> = {
@@ -28,9 +30,14 @@ const TIPO_COLOR: Record<string, string> = {
   editor: "bg-amber-500/10 text-amber-400 border-amber-800",
   videomaker: "bg-emerald-500/10 text-emerald-400 border-emerald-800",
   social: "bg-pink-500/10 text-pink-400 border-pink-800",
+  designer: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-800",
+  gestor_eventos: "bg-indigo-500/10 text-indigo-400 border-indigo-800",
+  analista_crm: "bg-cyan-500/10 text-cyan-400 border-cyan-800",
+  gestor_trafego: "bg-orange-500/10 text-orange-400 border-orange-800",
+  auxiliar_admin: "bg-teal-500/10 text-teal-400 border-teal-800",
 }
 
-const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "solicitante", "editor", "videomaker"]
+const TIPO_OPTS = ["admin", "gestor", "operacao", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos", "solicitante", "editor", "videomaker"]
 
 type SubTab = "sistema" | "vm_ext" | "vm_int"
 
@@ -332,6 +339,11 @@ function ModalEditarUsuario({
     { value: "operacao", label: "Operação" },
     { value: "solicitante", label: "Solicitante" },
     { value: "social", label: "Social Media" },
+    { value: "designer", label: "Designer" },
+    { value: "analista_crm", label: "Analista CRM" },
+    { value: "gestor_trafego", label: "Gestor de Tráfego" },
+    { value: "auxiliar_admin", label: "Auxiliar Admin" },
+    { value: "gestor_eventos", label: "Gestor de Eventos" },
     { value: "videomaker", label: "Videomaker Ext" },
     { value: "editor", label: "Videomaker Int" },
   ]
@@ -482,7 +494,7 @@ export default function UsuariosPage() {
   const videomakers = data?.videomakers ?? []
   const editores = data?.editores ?? []
 
-  const sistema = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social"].includes(u.tipo))
+  const sistema = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"].includes(u.tipo))
   const vmExt = allUsuarios.filter(u => u.tipo === "videomaker")
   const vmInt = allUsuarios.filter(u => u.tipo === "editor")
 
@@ -1146,6 +1158,11 @@ export default function UsuariosPage() {
               <option value="operacao">Operação</option>
               <option value="gestor">Gestor</option>
               <option value="social">Social Media</option>
+              <option value="designer">Designer</option>
+              <option value="analista_crm">Analista CRM</option>
+              <option value="gestor_trafego">Gestor de Tráfego</option>
+              <option value="auxiliar_admin">Auxiliar Admin</option>
+              <option value="gestor_eventos">Gestor de Eventos</option>
               <option value="admin">Admin</option>
             </select>
             <div className="flex gap-2">

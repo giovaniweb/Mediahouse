@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const body = await req.json()
   const { tipo } = body
 
-  const tiposPermitidos = ["gestor", "operacao", "social", "admin"]
+  const tiposPermitidos = ["gestor", "operacao", "social", "admin", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"]
   if (!tiposPermitidos.includes(tipo)) {
     return NextResponse.json({ error: `Tipo inválido. Use: ${tiposPermitidos.join(", ")}` }, { status: 400 })
   }

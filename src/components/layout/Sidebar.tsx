@@ -62,7 +62,7 @@ const sections = [
     ],
   },
   {
-    label: "Designer",
+    label: "Growth",
     items: [
       { href: "/design", label: "Artes", icon: Palette },
       { href: "/galeria-artes", label: "Galeria de Artes", icon: ImageIcon },

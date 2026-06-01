@@ -176,7 +176,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verKanban: true,
   },
 
-  // Social — dashboard, demandas, agenda, produtos
+  // Social Media (Growth) — conteúdo: demandas, artes, ideias
   social: {
     ...BASE_FALSE,
     verDashboard: true,
@@ -184,11 +184,48 @@ export const PRESETS: Record<string, PresetPerms> = {
     verAgenda: true,
     verProdutos: true,
     verCoberturas: true,
+    verDesign: true,
+    verIdeias: true,
     criarDemanda: true,
     editarDemanda: true,
     excluirDemanda: true,
     moverKanban: true,
     verKanban: true,
+  },
+
+  // Analista CRM (Growth) — análise: relatórios, alertas, ideias
+  analista_crm: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verRelatorios: true,
+    verAlertas: true,
+    verIdeias: true,
+  },
+
+  // Gestor de Tráfego (Growth) — criativos + análise
+  gestor_trafego: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verRelatorios: true,
+    verIdeias: true,
+    verProdutos: true,
+    verDesign: true,
+  },
+
+  // Auxiliar Admin (Growth) — apoio amplo, sem financeiro/usuários/config
+  auxiliar_admin: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verDemandas: true,
+    verAprovacoes: true,
+    verAgenda: true,
+    verProdutos: true,
+    verIdeias: true,
+    verDesign: true,
+    verEventos: true,
+    verCoberturas: true,
+    gerenciarFornecedores: true,
+    verRelatorios: true,
   },
 
   // Gestor de Eventos — módulo de gestão de eventos (não vê produção audiovisual interna)
