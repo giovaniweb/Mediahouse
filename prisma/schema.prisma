@@ -20,6 +20,7 @@ enum TipoUsuario {
   videomaker
   social
   gestor_eventos
+  designer
 }
 
 enum StatusUsuario {
@@ -38,6 +39,11 @@ enum Prioridade {
   normal
   alta
   urgente
+}
+
+enum AreaDemanda {
+  audiovisual
+  design
 }
 
 enum Departamento {
@@ -166,6 +172,7 @@ model Usuario {
   permissoes      PermissaoUsuario?
   videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
   editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
+  designerRef     Designer?         // link para designer (quando tipo=designer)
   ideias          IdeiaVideo[]
   coberturasCriadas EventoCobertura[] @relation("CoberturasCreadas")
   coberturaEquipe EventoCoberturaEquipe[]
@@ -276,12 +283,53 @@ model Editor {
   @@map("editores")
 }
 
+model Designer {
+  id               String        @id @default(cuid())
+  nome             String
+  cidade           String?
+  estado           String?
+  telefone         String?
+  whatsapp         String?
+  email            String?
+  avatarUrl        String?
+  cpfCnpj          String?
+  razaoSocial      String?
+  nomeFantasia     String?
+  representante    String?
+  endereco         String?
+  chavePix         String?
+  redesSociais     String[]
+  valorDiaria      Float?
+  salario          Float?
+  dadosBancarios   String?
+  status           StatusUsuario @default(ativo)
+  avaliacao        Float?        @default(5.0)
+  observacoes      String?
+  especialidade    String[]      // "Social", "Impresso", "Motion", "3D"
+  habilidades      String[]
+  equipamentos     String[]
+  portfolio        String?
+  emListaNegra     Boolean       @default(false)
+  listaNegraMotivo String?
+  tipoContrato     String        @default("externo")  // "interno" | "externo"
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  usuarioId  String?    @unique  // link para Usuario (portal login)
+  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
+
+  demandas   Demanda[]
+
+  @@map("designers")
+}
+
 model Demanda {
   id             String        @id @default(cuid())
   codigo         String        @unique
   titulo         String
   descricao      String
   departamento   Departamento
+  area           AreaDemanda   @default(audiovisual)  // audiovisual | design
   tipoVideo      String
   cidade         String
   prioridade     Prioridade    @default(normal)
@@ -349,6 +397,7 @@ model Demanda {
   videomakerId  String?
   editorId      String?
   socialId      String?
+  designerId    String?   // profissional de design (quando area=design)
 
   // Datas
   dataLimite         DateTime?
@@ -364,6 +413,7 @@ model Demanda {
   gestor             Usuario?           @relation("Gestor", fields: [gestorId], references: [id])
   videomaker         Videomaker?        @relation(fields: [videomakerId], references: [id])
   editor             Editor?            @relation(fields: [editorId], references: [id])
+  designer           Designer?          @relation(fields: [designerId], references: [id])
   arquivos           Arquivo[]
   historicos         HistoricoStatus[]
   comentarios        Comentario[]
@@ -1371,6 +1421,7 @@ enum CategoriaFornecedor {
   medico
   influenciador
   espaco
+  painel_led
   outros
 }
 
