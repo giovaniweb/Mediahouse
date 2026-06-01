@@ -9,6 +9,7 @@ import { AlertasIA } from "@/components/dashboard/AlertasIA"
 import { CargaEquipe } from "@/components/dashboard/CargaEquipe"
 import { HojeEmFoco } from "@/components/dashboard/HojeEmFoco"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
+import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
 import { Header } from "@/components/layout/Header"
 import { Activity, AlertTriangle, CheckCircle, Clock, Film, Users, TrendingUp, TrendingDown, Minus, BarChart3, Lightbulb } from "lucide-react"
 
@@ -228,6 +229,16 @@ export default function DashboardPage() {
       <>
         <Header title="Meu Painel" />
         <VideomakerDashboard />
+      </>
+    )
+  }
+
+  // Designers têm painel próprio (suas artes)
+  if (session?.user?.tipo === "designer") {
+    return (
+      <>
+        <Header title="Meu Painel" />
+        <DesignerDashboard />
       </>
     )
   }
