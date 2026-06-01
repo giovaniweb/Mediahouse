@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { PRESETS } from "@/lib/permissoes"
 
 /**
  * Gera senha padrão: nuflow + últimos 4 dígitos do telefone
@@ -20,8 +21,8 @@ interface CriarUsuarioParams {
   nome: string
   email?: string | null
   telefone?: string | null
-  tipo: "videomaker" | "editor"
-  /** ID do videomaker ou editor para vincular */
+  tipo: "videomaker" | "editor" | "designer"
+  /** ID do videomaker, editor ou designer para vincular */
   referenciaId?: string
 }
 
@@ -64,50 +65,20 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
     },
   })
 
-  // Vincular ao videomaker/editor
+  // Vincular ao videomaker/editor/designer
   if (referenciaId) {
     if (tipo === "videomaker") {
-      await prisma.videomaker.update({
-        where: { id: referenciaId },
-        data: { usuarioId: usuario.id },
-      })
+      await prisma.videomaker.update({ where: { id: referenciaId }, data: { usuarioId: usuario.id } })
     } else if (tipo === "editor") {
-      await prisma.editor.update({
-        where: { id: referenciaId },
-        data: { usuarioId: usuario.id },
-      })
+      await prisma.editor.update({ where: { id: referenciaId }, data: { usuarioId: usuario.id } })
+    } else if (tipo === "designer") {
+      await prisma.designer.update({ where: { id: referenciaId }, data: { usuarioId: usuario.id } })
     }
   }
 
-  // Criar permissões básicas
+  // Criar permissões a partir do preset do tipo
   await prisma.permissaoUsuario.create({
-    data: {
-      usuarioId: usuario.id,
-      // Páginas visíveis
-      verDashboard: true,
-      verDemandas: true,
-      verAgenda: true,
-      verAprovacoes: false,
-      verProdutos: false,
-      verVideomakers: false,
-      verEquipe: false,
-      verCustos: false,
-      verIA: false,
-      verAlertas: false,
-      verRelatorios: false,
-      verUsuarios: false,
-      verConfiguracoes: false,
-      verIdeias: false,
-      // Ações
-      criarDemanda: false,
-      editarDemanda: false,
-      excluirDemanda: false,
-      moverKanban: false,
-      verTodasDemandas: false,
-      verKanban: true,
-      gerenciarUsuarios: false,
-      gerenciarConfig: false,
-    },
+    data: { usuarioId: usuario.id, ...(PRESETS[tipo] ?? {}) },
   })
 
   return { usuario, jáExistia: false, senha: senhaTexto }

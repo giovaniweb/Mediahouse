@@ -43,12 +43,14 @@ interface KanbanBoardProps {
   onDuplicate?: (demandaId: string) => void
   onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
   userTipo?: string
+  /** Sobrescreve os rótulos das colunas (ex.: kanban de Design) */
+  labels?: Partial<Record<StatusVisivel, string>>
 }
 
 // Colunas que videomakers externos NÃO podem mover cards para lá
 const COLUNAS_BLOQUEADAS_VM: StatusVisivel[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels }: KanbanBoardProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -187,7 +189,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
               <div className="flex items-center justify-between px-3 py-3">
                 <div className="flex items-center gap-2">
                   <div className={cn("w-2 h-2 rounded-full", col.dot)} />
-                  <span className="font-semibold text-sm text-zinc-200">{col.label}</span>
+                  <span className="font-semibold text-sm text-zinc-200">{labels?.[col.id] ?? col.label}</span>
                   <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
                     {items.length}
                   </span>
