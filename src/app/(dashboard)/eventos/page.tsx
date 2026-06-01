@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign, Clock, AlertTriangle, Activity, CheckCircle2 } from "lucide-react"
 import { PECAS_AUDIOVISUAIS, pecasDefaultPara } from "@/lib/eventos-pecas"
+import { PECAS_DESIGN, pecasDesignDefaultPara } from "@/lib/design-pecas"
 import { toast } from "sonner"
 
 type EventoLista = {
@@ -31,6 +32,48 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 type DashboardEventos = {
   proximos: number; emProducao: number; atrasados: number; finalizados: number
   totalPrevisto: number; totalGasto: number; docsPendentes: number; pagamentosPendentes: number
+}
+
+// Kanban de eventos por status (drag nativo)
+const COLUNAS_EVENTO = ["planejamento", "orcamento", "aprovacao", "producao", "execucao", "finalizado"]
+function EventosKanban({ eventos, onMutate }: { eventos: EventoLista[]; onMutate: () => void }) {
+  const router = useRouter()
+  async function mover(id: string, status: string) {
+    await fetch(`/api/eventos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
+    onMutate(); toast.success("Status atualizado")
+  }
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-3">
+      {COLUNAS_EVENTO.map((col) => {
+        const items = eventos.filter((e) => e.status === col)
+        const st = STATUS_EVENTO_STYLE[col]
+        return (
+          <div key={col} className="flex-shrink-0 w-64 bg-zinc-900/50 rounded-xl border border-zinc-800"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { const id = e.dataTransfer.getData("text/plain"); if (id) mover(id, col) }}>
+            <div className="px-3 py-2.5 border-b border-zinc-800 flex items-center gap-2">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+              <span className="text-xs text-zinc-500">{items.length}</span>
+            </div>
+            <div className="p-2 space-y-2 min-h-[120px]">
+              {items.map((ev) => (
+                <div key={ev.id} draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", ev.id)}
+                  onClick={() => router.push(`/eventos/${ev.id}`)}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 cursor-pointer hover:border-zinc-700">
+                  <p className="text-xs font-medium text-zinc-200 truncate">{ev.nome}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-zinc-500">{TIPO_EVENTO_LABEL[ev.tipo] ?? ev.tipo}</span>
+                    <span className="text-[10px] text-purple-400 font-bold">{ev.percentualConclusao}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function MiniCard({ icon, label, value, alert }: { icon: React.ReactNode; label: string; value: string; alert?: boolean }) {
@@ -68,6 +111,7 @@ export default function EventosPage() {
   const [search, setSearch] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("")
   const [showCriar, setShowCriar] = useState(false)
+  const [view, setView] = useState<"lista" | "kanban">("lista")
 
   const qs = new URLSearchParams()
   if (search) qs.set("search", search)
@@ -118,6 +162,10 @@ export default function EventosPage() {
           <option value="">Todos os status</option>
           {Object.entries(STATUS_EVENTO_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
+        <div className="flex rounded-lg border border-zinc-700 overflow-hidden">
+          <button onClick={() => setView("lista")} className={`px-3 py-2 text-xs ${view === "lista" ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"}`}>Lista</button>
+          <button onClick={() => setView("kanban")} className={`px-3 py-2 text-xs ${view === "kanban" ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"}`}>Kanban</button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -127,6 +175,8 @@ export default function EventosPage() {
           <PartyPopper className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <p>Nenhum evento ainda. Crie o primeiro!</p>
         </div>
+      ) : view === "kanban" ? (
+        <EventosKanban eventos={eventos} onMutate={mutate} />
       ) : (
         <div className="grid gap-3">
           {eventos.map((ev) => {
@@ -184,17 +234,20 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
     dataInicio: "", dataFim: "", orcamentoPrevisto: "",
   })
   const [pecas, setPecas] = useState<string[]>(pecasDefaultPara("congresso"))
+  const [pecasDesign, setPecasDesign] = useState<string[]>(pecasDesignDefaultPara("congresso"))
   const [saving, setSaving] = useState(false)
   const [importando, setImportando] = useState(false)
   const briefingRef = useRef<HTMLInputElement>(null)
 
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const togglePeca = (k: string) => setPecas((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k])
+  const togglePecaDesign = (k: string) => setPecasDesign((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k])
 
   // Ao trocar o tipo, re-sugere as peças padrão
   function onTipo(t: string) {
     upd("tipo", t)
     setPecas(pecasDefaultPara(t))
+    setPecasDesign(pecasDesignDefaultPara(t))
   }
 
   // Importa dados de um briefing PDF via IA (reusa /api/coberturas/briefing)
@@ -222,6 +275,7 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
         dataFim: d.dataFim ?? f.dataFim,
       }))
       setPecas(pecasDefaultPara(tipoMapeado))
+      setPecasDesign(pecasDesignDefaultPara(tipoMapeado))
       toast.success("Briefing importado! Revise os dados antes de salvar.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao importar briefing")
@@ -235,7 +289,7 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
       const res = await fetch("/api/eventos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, pecas }),
+        body: JSON.stringify({ ...form, pecas, pecasDesign }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Erro ao criar evento")
@@ -324,6 +378,27 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       {on && <span className="text-white text-[10px]">✓</span>}
                     </span>
                     {p.label}{p.criaCobertura ? " 🎥" : ""}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Peças de design → demandas (área design) */}
+          <div className="pt-1">
+            <label className="block text-xs font-medium text-zinc-300 mb-2">
+              🎨 Peças de design a produzir <span className="text-zinc-500 font-normal">(cada uma vira uma demanda para o designer)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {PECAS_DESIGN.map((p) => {
+                const on = pecasDesign.includes(p.key)
+                return (
+                  <button key={p.key} type="button" onClick={() => togglePecaDesign(p.key)}
+                    className={`flex items-center gap-2 text-left px-3 py-2 rounded-lg border text-xs transition-colors ${on ? "bg-pink-600/20 border-pink-600/50 text-pink-200" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"}`}>
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? "bg-pink-500 border-pink-500" : "border-zinc-600"}`}>
+                      {on && <span className="text-white text-[10px]">✓</span>}
+                    </span>
+                    {p.label}
                   </button>
                 )
               })}

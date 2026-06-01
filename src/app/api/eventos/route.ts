@@ -4,6 +4,7 @@ import { requireEventoAccess } from "@/lib/eventos-access"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { getPeca } from "@/lib/eventos-pecas"
+import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
 import { criarPastaDrive } from "@/lib/google-drive"
 import { after } from "next/server"
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
       responsavelId,
       orcamentoPrevisto,
       pecas, // string[] de keys de PECAS_AUDIOVISUAIS
+      pecasDesign, // string[] de keys de PECAS_DESIGN
     } = body
 
     if (!nome || !dataInicio) {
@@ -186,6 +188,7 @@ export async function POST(req: NextRequest) {
             titulo: `${nome.trim()} — ${peca.label}`,
             descricao: peca.descricao,
             departamento: "eventos",
+            area: "audiovisual",
             tipoVideo: peca.tipoVideo,
             cidade: cidade ?? "—",
             prioridade: "normal",
@@ -202,6 +205,37 @@ export async function POST(req: NextRequest) {
         demandasCriadas.push(dem.id)
       } catch (e) {
         console.error(`[Eventos] Erro ao criar demanda da peça ${key}:`, e)
+      }
+    }
+
+    // Gerar demandas de DESIGN (area=design) para cada peça de design selecionada
+    const pecasDesignKeys: string[] = Array.isArray(pecasDesign) ? pecasDesign : []
+    for (const key of pecasDesignKeys) {
+      const peca = getPecaDesign(key)
+      if (!peca) continue
+      try {
+        const dem = await prisma.demanda.create({
+          data: {
+            codigo: gerarCodigoEvento().replace("EVT", "ART"),
+            titulo: `${nome.trim()} — ${peca.label}`,
+            descricao: peca.descricao,
+            departamento: "eventos",
+            area: "design",
+            tipoVideo: peca.key,
+            cidade: cidade ?? "—",
+            prioridade: "normal",
+            statusInterno: "aguardando_aprovacao_interna",
+            statusVisivel: STATUS_PARA_COLUNA["aguardando_aprovacao_interna"],
+            pesoDemanda: 1,
+            solicitanteId: session.user.id,
+            dataEvento: inicio,
+            localEvento: local ?? null,
+            eventoGestaoId: evento.id,
+          },
+        })
+        demandasCriadas.push(dem.id)
+      } catch (e) {
+        console.error(`[Eventos] Erro ao criar demanda de design ${key}:`, e)
       }
     }
 
