@@ -19,7 +19,7 @@ export const CAT_FORNECEDOR: Record<string, string> = {
   buffet: "Buffet", restaurante: "Restaurante", hotel: "Hotel", transporte: "Transporte", brindes: "Brindes",
   decoracao: "Decoração", agencia: "Agência", designer: "Designer", fotografo: "Fotógrafo", videomaker: "Videomaker",
   seguranca: "Segurança", limpeza: "Limpeza", internet: "Internet", energia: "Energia", palestrante: "Palestrante",
-  medico: "Médico", influenciador: "Influenciador", espaco: "Espaço de Evento", outros: "Outros",
+  medico: "Médico", influenciador: "Influenciador", espaco: "Espaço de Evento", painel_led: "Painel de LED", outros: "Outros",
 }
 
 export default function FornecedoresPage() {

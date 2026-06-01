@@ -571,11 +571,13 @@ export default function RelatoriosPage() {
     const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10)
   })
   const [periodoCustomAte, setPeriodoCustomAte] = useState(() => new Date().toISOString().slice(0, 10))
+  const [areaRel, setAreaRel] = useState<"audiovisual" | "design">("audiovisual")
 
   const metricasUrl = (() => {
     const base = "/api/relatorios/metricas"
-    if (periodo === "custom") return `${base}?periodo=custom&de=${periodoCustomDe}&ate=${periodoCustomAte}`
-    return `${base}?periodo=${periodo}`
+    const a = `&area=${areaRel}`
+    if (periodo === "custom") return `${base}?periodo=custom&de=${periodoCustomDe}&ate=${periodoCustomAte}${a}`
+    return `${base}?periodo=${periodo}${a}`
   })()
 
   const { data: metricas, mutate: recarregarMetricas, isLoading: loadingMetricas } = useSWR<Metricas>(
@@ -665,6 +667,19 @@ export default function RelatoriosPage() {
                   <Sparkles className={`w-3.5 h-3.5 ${gerando === "realtime" ? "animate-pulse" : ""}`} />
                   {gerando === "realtime" ? "Analisando..." : "Análise IA"}
                 </button>
+              </div>
+            </div>
+
+            {/* ── Seletor de área ────────────────────────────────────────── */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-zinc-500 font-medium">Área:</span>
+              <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
+                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).map(([a, label]) => (
+                  <button key={a} onClick={() => setAreaRel(a)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
