@@ -1036,6 +1036,8 @@ model PermissaoUsuario {
   verCoberturas        Boolean @default(false)
   verFinanceiroEvento  Boolean @default(false)
   gerenciarFornecedores Boolean @default(false)
+  verDesign            Boolean @default(false)
+  gerenciarDesigners   Boolean @default(false)
 
   // Ações em demandas
   criarDemanda    Boolean @default(false)

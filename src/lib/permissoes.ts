@@ -24,6 +24,8 @@ export type PermissaoKey =
   | "verCoberturas"
   | "verFinanceiroEvento"
   | "gerenciarFornecedores"
+  | "verDesign"
+  | "gerenciarDesigners"
   | "criarDemanda"
   | "editarDemanda"
   | "excluirDemanda"
@@ -52,6 +54,8 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   verCoberturas: "Ver Coberturas (Audiovisual)",
   verFinanceiroEvento: "Ver Financeiro de Eventos",
   gerenciarFornecedores: "Gerenciar Fornecedores",
+  verDesign: "Ver Designer (Artes)",
+  gerenciarDesigners: "Gerenciar Designers",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
   excluirDemanda: "Excluir Demanda",
@@ -80,6 +84,13 @@ export const PERMISSAO_GRUPOS = [
       "verUsuarios",
       "verConfiguracoes",
       "verIdeias",
+    ] as PermissaoKey[],
+  },
+  {
+    label: "Designer",
+    keys: [
+      "verDesign",
+      "gerenciarDesigners",
     ] as PermissaoKey[],
   },
   {
@@ -130,6 +141,8 @@ const BASE_FALSE: PresetPerms = {
   verCoberturas: false,
   verFinanceiroEvento: false,
   gerenciarFornecedores: false,
+  verDesign: false,
+  gerenciarDesigners: false,
   criarDemanda: false,
   editarDemanda: false,
   excluirDemanda: false,
@@ -197,6 +210,14 @@ export const PRESETS: Record<string, PresetPerms> = {
     verKanban: false, // visualização em cards, não kanban
   },
 
+  // Designer — dashboard dele + quadro de artes (área design)
+  designer: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verDesign: true,
+    verKanban: false,
+  },
+
   // Operação
   operacao: {
     ...BASE_FALSE,
@@ -242,4 +263,7 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/coberturas": "verCoberturas",
   "/fornecedores": "gerenciarFornecedores",
   "/produtos-servico": "gerenciarFornecedores",
+  "/design": "verDesign",
+  "/designers": "gerenciarDesigners",
+  "/galeria-artes": "verDesign",
 }

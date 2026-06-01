@@ -27,6 +27,9 @@ import {
   PartyPopper,
   Truck,
   Boxes,
+  Palette,
+  Image as ImageIcon,
+  PenTool,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -36,33 +39,42 @@ import { signOut } from "next-auth/react"
 
 const sections = [
   {
-    label: "Operacional",
+    label: "Geral",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/demandas", label: "Demandas", icon: Film },
-      { href: "/historico", label: "Histórico", icon: Archive },
-      { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
+      { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
+    ],
+  },
+  {
+    label: "Audiovisual",
+    items: [
+      { href: "/demandas", label: "Demandas", icon: Film },
+      { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
+      { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
+      { href: "/galeria", label: "Galeria", icon: PlayCircle },
+      { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
+      { href: "/equipe", label: "Videomakers Int", icon: Users },
+      { href: "/custos", label: "Custos", icon: DollarSign },
+      { href: "/historico", label: "Histórico", icon: Archive },
+    ],
+  },
+  {
+    label: "Designer",
+    items: [
+      { href: "/design", label: "Artes", icon: Palette },
+      { href: "/galeria-artes", label: "Galeria de Artes", icon: ImageIcon },
+      { href: "/designers", label: "Designers", icon: PenTool },
     ],
   },
   {
     label: "Eventos",
     items: [
       { href: "/eventos", label: "Eventos", icon: PartyPopper },
-      { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/fornecedores", label: "Fornecedores", icon: Truck },
       { href: "/produtos-servico", label: "Produtos & Serviços", icon: Boxes },
-    ],
-  },
-  {
-    label: "Equipe",
-    items: [
-      { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
-      { href: "/equipe", label: "Videomakers Int", icon: Users },
-      { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
-      { href: "/custos", label: "Custos", icon: DollarSign },
     ],
   },
   {
@@ -71,7 +83,6 @@ const sections = [
       { href: "/ia", label: "Central IA", icon: BrainCircuit },
       { href: "/alertas", label: "Alertas IA", icon: Bell },
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
-      { href: "/galeria", label: "Galeria", icon: PlayCircle },
     ],
   },
   {
