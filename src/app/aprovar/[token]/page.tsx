@@ -87,6 +87,18 @@ export default function AprovarVideoPage() {
     const isYoutube = url.includes("youtube.com") || url.includes("youtu.be")
     const isVimeo = url.includes("vimeo.com")
     const isDrive = url.includes("drive.google.com")
+    const urlLimpa = url.split("?")[0].toLowerCase()
+    const isImagem = /\.(jpg|jpeg|png|webp|gif|svg)$/.test(urlLimpa)
+    const isPdf = urlLimpa.endsWith(".pdf")
+
+    // Artes: imagem ou PDF
+    if (isImagem) {
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img src={url} alt="Arte para aprovação" className="w-full rounded-xl max-h-[75vh] object-contain bg-zinc-950" />
+    }
+    if (isPdf) {
+      return <iframe className="w-full rounded-xl h-[75vh] bg-zinc-950" src={url} />
+    }
 
     if (isYoutube) {
       const videoId = url.match(/(?:v=|youtu\.be\/|embed\/)([^&?/]+)/)?.[1]
