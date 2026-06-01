@@ -43,6 +43,7 @@ export default function DemandasPage() {
   }
 
   const params = new URLSearchParams()
+  params.set("area", "audiovisual")
   if (search) params.set("search", search)
   if (filtroDepto) params.set("departamento", filtroDepto)
   if (filtroVM) params.set("videomakerId", filtroVM)

@@ -29,9 +29,12 @@ const criarDemandaSchema = z.object({
   referencia: z.string().optional(),
   localGravacao: z.string().optional(),
   linkBrutos: z.string().optional(),
-  // Videomaker + Editor (opcionais na criação)
+  // Área (audiovisual padrão | design)
+  area: z.enum(["audiovisual", "design"]).optional(),
+  // Videomaker + Editor + Designer (opcionais na criação)
   videomakerId: z.string().optional(),
   editorId: z.string().optional(),
+  designerId: z.string().optional(),
   // Cliente final (cobertura/entrega)
   clienteFinalNome: z.string().optional(),
   clienteFinalTelefone: z.string().optional(),
@@ -69,6 +72,8 @@ export async function GET(req: NextRequest) {
   const limit = limitParam ? Math.min(200, parseInt(limitParam)) : undefined
   const offset = offsetParam ? parseInt(offsetParam) : undefined
   let videomakerId = searchParams.get("videomakerId") ?? undefined
+  let designerId = searchParams.get("designerId") ?? undefined
+  let area = searchParams.get("area") ?? undefined
 
   // Auto-filtro: videomakers externos só veem suas próprias demandas
   if (session.user.tipo === "videomaker") {
@@ -79,13 +84,25 @@ export async function GET(req: NextRequest) {
     if (vmRecord) videomakerId = vmRecord.id
   }
 
+  // Auto-filtro: designer só vê suas artes (area=design)
+  if (session.user.tipo === "designer") {
+    const dRecord = await prisma.designer.findFirst({
+      where: { usuarioId: session.user.id },
+      select: { id: true },
+    })
+    if (dRecord) designerId = dRecord.id
+    area = "design"
+  }
+
   const where: Record<string, unknown> = {}
+  if (area) where.area = area
   if (departamento) where.departamento = departamento
   if (prioridade) where.prioridade = prioridade
   if (statusVisivel) where.statusVisivel = statusVisivel
   if (statusInterno) where.statusInterno = statusInterno
   if (editorId) where.editorId = editorId
   if (videomakerId) where.videomakerId = videomakerId
+  if (designerId) where.designerId = designerId
   if (tipoVideo) where.tipoVideo = tipoVideo
 
   // Filtro por data de finalização (usado pela página /historico)
@@ -182,6 +199,7 @@ export async function POST(req: NextRequest) {
       titulo: data.titulo,
       descricao: data.descricao,
       departamento: data.departamento as Departamento,
+      area: (data.area ?? "audiovisual") as "audiovisual" | "design",
       tipoVideo: data.tipoVideo,
       cidade: data.cidade,
       prioridade: data.prioridade as Prioridade,
@@ -204,6 +222,7 @@ export async function POST(req: NextRequest) {
       // Novos campos
       videomakerId: data.videomakerId || undefined,
       editorId: data.editorId || undefined,
+      designerId: data.designerId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
       linkBrutos: data.linkBrutos || undefined,

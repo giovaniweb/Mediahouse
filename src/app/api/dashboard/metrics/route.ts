@@ -33,30 +33,34 @@ export async function GET() {
     demandasMesRaw,
   ] = await Promise.all([
     prisma.demanda.count({
-      where: { createdAt: { gte: inicioDia, lte: fimDia } },
+      where: { area: "audiovisual", createdAt: { gte: inicioDia, lte: fimDia } },
     }),
     prisma.demanda.count({
       where: {
+        area: "audiovisual",
         prioridade: "urgente",
         statusVisivel: { notIn: ["finalizado"] },
       },
     }),
-    prisma.demanda.count({ where: { statusVisivel: "edicao" } }),
-    prisma.demanda.count({ where: { statusVisivel: "aprovacao" } }),
-    prisma.demanda.count({ where: { statusVisivel: "para_postar" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "edicao" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "aprovacao" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "para_postar" } }),
     prisma.demanda.count({
       where: {
+        area: "audiovisual",
         dataLimite: { lt: new Date() },
         statusVisivel: { notIn: ["finalizado", "aprovacao", "para_postar"] },
       },
     }),
     prisma.demanda.count({
       where: {
+        area: "audiovisual",
         dataCaptacao: { gte: inicioSemana, lte: fimSemana },
       },
     }),
     prisma.demanda.count({
       where: {
+        area: "audiovisual",
         dataExpiracao: { gte: new Date(), lte: em7Dias },
         statusVisivel: "finalizado",
       },
@@ -78,6 +82,7 @@ export async function GET() {
     }),
     prisma.demanda.findMany({
       where: {
+        area: "audiovisual",
         statusVisivel: "finalizado",
         OR: [
           { finalizadaEm: { gte: inicioMes } },

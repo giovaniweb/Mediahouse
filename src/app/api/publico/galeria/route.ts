@@ -10,10 +10,13 @@ export async function GET(req: NextRequest) {
   const tipo = sp.get("tipo") ?? ""
   const search = sp.get("search") ?? ""
   const produtoId = sp.get("produtoId") ?? ""
+  // Área: audiovisual (padrão) ou design (galeria de artes)
+  const area = sp.get("area") === "design" ? "design" : "audiovisual"
   const skip = (page - 1) * limit
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
+    area,
     statusVisivel: { in: ["finalizado", "para_postar"] },
     linkFinal: { not: null },
     ...(tipo ? { tipoVideo: tipo } : {}),

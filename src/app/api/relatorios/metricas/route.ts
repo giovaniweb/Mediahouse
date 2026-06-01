@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
   const periodoParam = sp.get("periodo") ?? "mes"
   const deParam = sp.get("de")
   const ateParam = sp.get("ate")
+  // Área do relatório (separa audiovisual de design). Default audiovisual.
+  const area = (sp.get("area") === "design" ? "design" : "audiovisual") as "audiovisual" | "design"
 
   const agora = new Date()
 
@@ -63,18 +65,19 @@ export async function GET(req: NextRequest) {
     aguardandoAprovacao,
     emEdicao,
   ] = await Promise.all([
-    prisma.demanda.count({ where: { statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { createdAt: { gte: deDate, lte: ateDate } } }),
-    prisma.demanda.count({ where: { prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { dataLimite: { lt: agora }, statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { statusInterno: { in: ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] } } }),
-    prisma.demanda.count({ where: { statusInterno: { in: ["editor_atribuido", "fila_edicao", "editando"] } } }),
+    prisma.demanda.count({ where: { area, statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, createdAt: { gte: deDate, lte: ateDate } } }),
+    prisma.demanda.count({ where: { area, prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, dataLimite: { lt: agora }, statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, statusInterno: { in: ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] } } }),
+    prisma.demanda.count({ where: { area, statusInterno: { in: ["editor_atribuido", "fila_edicao", "editando"] } } }),
   ])
 
   // ── Demandas finalizadas no período ───────────────────────────────────────
   // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
   const demandasFinalizadas = await prisma.demanda.findMany({
     where: {
+      area,
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
@@ -107,6 +110,7 @@ export async function GET(req: NextRequest) {
   // inflando artificialmente o tempo. Usamos apenas datas verificadas.
   const demandasComVM = await prisma.demanda.findMany({
     where: {
+      area,
       videomakerId: { not: null },
       finalizadaEm: { not: null, gte: deDate, lte: ateDate },
     },
@@ -126,7 +130,7 @@ export async function GET(req: NextRequest) {
 
   // ── Volume por tipo de vídeo (criadas no período) ─────────────────────────
   const demandasPeriodo = await prisma.demanda.findMany({
-    where: { createdAt: { gte: deDate, lte: ateDate } },
+    where: { area, createdAt: { gte: deDate, lte: ateDate } },
     select: { tipoVideo: true },
   })
   const porTipo: Record<string, number> = {}
@@ -138,7 +142,7 @@ export async function GET(req: NextRequest) {
   const statusCounts = await prisma.demanda.groupBy({
     by: ["statusVisivel"],
     _count: { id: true },
-    where: { statusVisivel: { notIn: ["finalizado"] } },
+    where: { area, statusVisivel: { notIn: ["finalizado"] } },
   })
 
   // ── Custos (CustoVideomaker no período) ───────────────────────────────────
@@ -185,6 +189,7 @@ export async function GET(req: NextRequest) {
   const videomakersComDemandas = await prisma.demanda.groupBy({
     by: ["videomakerId"],
     where: {
+      area,
       videomakerId: { not: null },
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
@@ -224,9 +229,10 @@ export async function GET(req: NextRequest) {
     const inicio = new Date(deDate.getTime() + i * tamanhoFatia)
     const fim = new Date(deDate.getTime() + (i + 1) * tamanhoFatia)
     const [criadas, concluidasFatia] = await Promise.all([
-      prisma.demanda.count({ where: { createdAt: { gte: inicio, lt: fim } } }),
+      prisma.demanda.count({ where: { area, createdAt: { gte: inicio, lt: fim } } }),
       prisma.demanda.count({
         where: {
+          area,
           OR: [
             { finalizadaEm: { gte: inicio, lt: fim } },
             { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: inicio, lt: fim } },

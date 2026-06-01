@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
   // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
   const demandas = await prisma.demanda.findMany({
     where: {
+      area: "audiovisual",
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
