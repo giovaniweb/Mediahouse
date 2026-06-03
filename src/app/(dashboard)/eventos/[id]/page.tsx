@@ -20,7 +20,7 @@ type Tab = "geral" | "audiovisual" | "checklist" | "documentos" | "orcamento" | 
 
 const TABS: { id: Tab; label: string; icon: typeof Film }[] = [
   { id: "geral", label: "Visão Geral", icon: Calendar },
-  { id: "audiovisual", label: "Audiovisual", icon: Film },
+  { id: "audiovisual", label: "Tarefas", icon: Film },
   { id: "checklist", label: "Checklist", icon: CheckSquare },
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "orcamento", label: "Orçamento", icon: DollarSign },
@@ -82,7 +82,7 @@ export default function EventoDetalhePage() {
       </div>
 
       {tab === "geral" && <TabGeral ev={ev} financeiro={data.financeiro} onMutate={mutate} />}
-      {tab === "audiovisual" && <TabAudiovisual ev={ev} />}
+      {tab === "audiovisual" && <TabAudiovisual ev={ev} eventoId={id} onMutate={mutate} />}
       {tab === "checklist" && <TabChecklist eventoId={id} checklist={ev.checklist} onMutate={mutate} />}
       {tab === "documentos" && <TabDocumentos eventoId={id} documentos={ev.documentos} onMutate={mutate} />}
       {tab === "orcamento" && <TabOrcamento eventoId={id} custos={ev.custos} financeiro={data.financeiro} onMutate={mutate} />}
@@ -173,7 +173,8 @@ function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financ
 }
 
 // ─── Audiovisual (demandas + cobertura) ───────────────────────────────────────
-function TabAudiovisual({ ev }: { ev: Evento }) {
+function TabAudiovisual({ ev, eventoId, onMutate }: { ev: Evento; eventoId: string; onMutate: () => void }) {
+  const [showNova, setShowNova] = useState(false)
   return (
     <div className="space-y-4">
       {ev.cobertura && (
@@ -191,11 +192,14 @@ function TabAudiovisual({ ev }: { ev: Evento }) {
       )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-zinc-800">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Demandas geradas ({ev.demandas.length})</h3>
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Tarefas do evento ({ev.demandas.length})</h3>
+          <button onClick={() => setShowNova(true)} className="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg">
+            <Plus className="w-3.5 h-3.5" /> Nova tarefa
+          </button>
         </div>
         {ev.demandas.length === 0 ? (
-          <p className="p-4 text-sm text-zinc-500">Nenhuma demanda audiovisual vinculada.</p>
+          <p className="p-4 text-sm text-zinc-500">Nenhuma tarefa ainda. Crie uma para o time de Audiovisual ou Growth.</p>
         ) : (
           <div className="divide-y divide-zinc-800">
             {ev.demandas.map((d) => (
@@ -203,7 +207,7 @@ function TabAudiovisual({ ev }: { ev: Evento }) {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-zinc-200 truncate">{d.titulo}</p>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {d.codigo} · {d.videomaker?.nome ?? "Sem videomaker"}
+                    {d.codigo} · {d.area === "design" ? "🎨 Growth" : "🎬 Audiovisual"} · {d.videomaker?.nome ?? d.designer?.nome ?? "Sem responsável"}
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 shrink-0">
@@ -213,6 +217,74 @@ function TabAudiovisual({ ev }: { ev: Evento }) {
             ))}
           </div>
         )}
+      </div>
+
+      {showNova && <NovaTarefaEventoModal eventoId={eventoId} nomeEvento={ev.nome} onClose={() => setShowNova(false)} onCreated={() => { setShowNova(false); onMutate() }} />}
+    </div>
+  )
+}
+
+function NovaTarefaEventoModal({ eventoId, nomeEvento, onClose, onCreated }: { eventoId: string; nomeEvento: string; onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ titulo: "", descricao: "", area: "audiovisual", tipo: "reels", prioridade: "normal" })
+  const [saving, setSaving] = useState(false)
+  const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+  // tipos por área
+  const tiposAV = [["reels", "Reels"], ["youtube", "YouTube"], ["institucional", "Institucional (LED)"], ["cobertura_evento", "Cobertura"], ["depoimento", "Depoimento"], ["outro", "Outro"]]
+  const tiposDesign = [["post", "Post"], ["story", "Story"], ["banner_digital", "Banner"], ["arte_led", "Arte LED"], ["folder", "Folder"], ["convite_digital", "Convite digital"], ["credencial", "Credencial"]]
+  const tipos = form.area === "design" ? tiposDesign : tiposAV
+
+  async function salvar() {
+    if (!form.titulo.trim() || form.descricao.trim().length < 10) { toast.error("Título e descrição (mín. 10) obrigatórios"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/demandas", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: form.titulo, descricao: form.descricao, departamento: "eventos",
+          area: form.area, tipoVideo: form.tipo, cidade: "—", prioridade: form.prioridade,
+          eventoGestaoId: eventoId,
+          ...(form.prioridade === "urgente" ? { motivoUrgencia: "Tarefa de evento urgente" } : {}),
+        }),
+      })
+      if (!res.ok) throw new Error("Erro ao criar tarefa")
+      toast.success(`Tarefa criada para ${form.area === "design" ? "Growth" : "Audiovisual"}!`)
+      onCreated()
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro") } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-zinc-100 mb-1">Nova tarefa</h2>
+        <p className="text-xs text-zinc-500 mb-4">Vai para o quadro do time escolhido, vinculada a “{nomeEvento}”.</p>
+        <div className="space-y-3">
+          <div><label className="block text-xs text-zinc-500 mb-1">Título *</label><input value={form.titulo} onChange={(e) => upd("titulo", e.target.value)} className={inputCls} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs text-zinc-500 mb-1">Quadro</label>
+              <select value={form.area} onChange={(e) => { upd("area", e.target.value); upd("tipo", e.target.value === "design" ? "post" : "reels") }} className={inputCls}>
+                <option value="audiovisual">🎬 Audiovisual</option>
+                <option value="design">🎨 Growth</option>
+              </select>
+            </div>
+            <div><label className="block text-xs text-zinc-500 mb-1">Tipo</label>
+              <select value={form.tipo} onChange={(e) => upd("tipo", e.target.value)} className={inputCls}>
+                {tipos.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div><label className="block text-xs text-zinc-500 mb-1">Prioridade</label>
+            <select value={form.prioridade} onChange={(e) => upd("prioridade", e.target.value)} className={inputCls}>
+              <option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option>
+            </select>
+          </div>
+          <div><label className="block text-xs text-zinc-500 mb-1">Descrição *</label><textarea value={form.descricao} onChange={(e) => upd("descricao", e.target.value)} rows={3} className={inputCls} /></div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800">Cancelar</button>
+          <button onClick={salvar} disabled={saving} className="flex-1 py-2 text-sm rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Criar tarefa
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -424,7 +496,7 @@ type Evento = {
   linkDrive: string | null
   cobertura: { id: string; slug: string; titulo: string; status: string } | null
   checklist: TarefaItem[]; documentos: DocItem[]; custos: CustoItem[]; aprovacoes: AprovacaoItem[]
-  demandas: { id: string; codigo: string; titulo: string; tipoVideo: string; statusVisivel: string; statusInterno: string; videomaker: { nome: string } | null }[]
+  demandas: { id: string; codigo: string; titulo: string; tipoVideo: string; area: string; statusVisivel: string; statusInterno: string; videomaker: { nome: string } | null; designer: { nome: string } | null }[]
 }
 type Financeiro = { custoEventoPrevisto: number; custoEventoReal: number; custoAudiovisual: number; custoTotal: number }
 type TarefaItem = { id: string; titulo: string; concluido: boolean; categoria: string | null; status: string }

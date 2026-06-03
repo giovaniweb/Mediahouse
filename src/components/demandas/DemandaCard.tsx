@@ -40,6 +40,7 @@ interface DemandaCardProps {
     videomakerId?: string | null
     editor?: { nome: string } | null
     solicitante?: { nome: string } | null
+    eventoGestao?: { id: string; nome: string } | null
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
@@ -135,6 +136,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           <span className="text-[10px] bg-zinc-700/50 text-zinc-400 px-1.5 py-0.5 rounded">
             {demanda.tipoVideo}
           </span>
+          {demanda.eventoGestao && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-purple-500/15 text-purple-300 border-purple-500/30 max-w-[140px] truncate" title={demanda.eventoGestao.nome}>
+              🎟️ {demanda.eventoGestao.nome}
+            </span>
+          )}
           {aguardandoVM && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30">
               ⏳ Aguardando VM

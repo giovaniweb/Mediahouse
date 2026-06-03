@@ -31,6 +31,8 @@ const criarDemandaSchema = z.object({
   linkBrutos: z.string().optional(),
   // Área (audiovisual padrão | design)
   area: z.enum(["audiovisual", "design"]).optional(),
+  // Evento mestre vinculado (card criado a partir de um evento)
+  eventoGestaoId: z.string().optional(),
   // Videomaker + Editor + Designer (opcionais na criação)
   videomakerId: z.string().optional(),
   editorId: z.string().optional(),
@@ -74,6 +76,7 @@ export async function GET(req: NextRequest) {
   let videomakerId = searchParams.get("videomakerId") ?? undefined
   let designerId = searchParams.get("designerId") ?? undefined
   let area = searchParams.get("area") ?? undefined
+  const eventoGestaoId = searchParams.get("eventoGestaoId") ?? undefined
 
   // Auto-filtro: videomakers externos só veem suas próprias demandas
   if (session.user.tipo === "videomaker") {
@@ -104,6 +107,9 @@ export async function GET(req: NextRequest) {
   if (videomakerId) where.videomakerId = videomakerId
   if (designerId) where.designerId = designerId
   if (tipoVideo) where.tipoVideo = tipoVideo
+  if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
+  // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
+  if (session.user.tipo === "gestor_eventos") where.eventoGestaoId = { not: null }
 
   // Filtro por data de finalização (usado pela página /historico)
   if (deParam || ateParam) {
@@ -149,7 +155,9 @@ export async function GET(req: NextRequest) {
         solicitante: { select: { id: true, nome: true, email: true } },
         videomaker: { select: { id: true, nome: true, cidade: true } },
         editor: { select: { id: true, nome: true } },
+        designer: { select: { id: true, nome: true } },
         produtos: { select: { produto: { select: { nome: true } } } },
+        eventoGestao: { select: { id: true, nome: true } },
         _count: { select: { comentarios: true, arquivos: true } },
       },
       orderBy: [
@@ -223,6 +231,7 @@ export async function POST(req: NextRequest) {
       videomakerId: data.videomakerId || undefined,
       editorId: data.editorId || undefined,
       designerId: data.designerId || undefined,
+      eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
       linkBrutos: data.linkBrutos || undefined,

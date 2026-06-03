@@ -228,7 +228,8 @@ export const PRESETS: Record<string, PresetPerms> = {
     verRelatorios: true,
   },
 
-  // Gestor de Eventos — módulo de gestão de eventos (não vê produção audiovisual interna)
+  // Gestor de Eventos — gestão de eventos + acompanha os cards do evento nos
+  // quadros do departamento (Audiovisual/Growth), só leitura (não move).
   gestor_eventos: {
     ...BASE_FALSE,
     verDashboard: true,
@@ -237,6 +238,8 @@ export const PRESETS: Record<string, PresetPerms> = {
     verCoberturas: true,
     verFinanceiroEvento: true,
     gerenciarFornecedores: true,
+    verDemandas: true,
+    verDesign: true,
   },
 
   // Videomaker externo — dashboard dele, demandas dele, feedbacks, perfil

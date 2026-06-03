@@ -21,6 +21,7 @@ export default function DemandasPage() {
   const [filtroVM, setFiltroVM] = useState("")
   const [filtroEditor, setFiltroEditor] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
+  const [filtroEvento, setFiltroEvento] = useState("")
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
 
@@ -28,18 +29,21 @@ export default function DemandasPage() {
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=200", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
+  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>("/api/eventos", fetcher)
 
   const videomakers = dataVMs?.videomakers ?? []
   const editores = dataEds?.editores ?? []
   const produtos = dataProdutos?.produtos ?? []
+  const eventos = dataEventos?.eventos ?? []
 
-  const temFiltrosAtivos = !!(filtroDepto || filtroVM || filtroEditor || filtroProduto)
+  const temFiltrosAtivos = !!(filtroDepto || filtroVM || filtroEditor || filtroProduto || filtroEvento)
 
   function limparFiltros() {
     setFiltroDepto("")
     setFiltroVM("")
     setFiltroEditor("")
     setFiltroProduto("")
+    setFiltroEvento("")
   }
 
   const params = new URLSearchParams()
@@ -49,6 +53,7 @@ export default function DemandasPage() {
   if (filtroVM) params.set("videomakerId", filtroVM)
   if (filtroEditor) params.set("editorId", filtroEditor)
   if (filtroProduto) params.set("produtoId", filtroProduto)
+  if (filtroEvento) params.set("eventoGestaoId", filtroEvento)
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
@@ -246,6 +251,11 @@ export default function DemandasPage() {
           className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
           <option value="">Todos produtos</option>
           {produtos.map(p => (<option key={p.id} value={p.id}>{p.nome}</option>))}
+        </select>
+        <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
+          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
+          <option value="">Todos eventos</option>
+          {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
         </select>
         {temFiltrosAtivos && (
           <button onClick={limparFiltros}

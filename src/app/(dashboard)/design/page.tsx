@@ -24,7 +24,10 @@ const COLUNA_PARA_STATUS: Record<string, string> = {
 export default function DesignKanbanPage() {
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
-  const { data, mutate } = useSWR("/api/demandas?area=design", fetcher, { refreshInterval: 15000 })
+  const [filtroEvento, setFiltroEvento] = useState("")
+  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>("/api/eventos", fetcher)
+  const eventos = dataEventos?.eventos ?? []
+  const { data, mutate } = useSWR(`/api/demandas?area=design${filtroEvento ? `&eventoGestaoId=${filtroEvento}` : ""}`, fetcher, { refreshInterval: 15000 })
   const demandasAll = data?.demandas ?? []
 
   const TRINTA = 30 * 24 * 60 * 60 * 1000
@@ -63,6 +66,11 @@ export default function DesignKanbanPage() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2"><Palette className="w-5 h-5 text-purple-400" /> Artes</h1>
         <div className="flex items-center gap-3">
+          <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
+            className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
+            <option value="">Todos eventos</option>
+            {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
+          </select>
           <span className="text-xs text-zinc-500">{demandas.length} artes</span>
           <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><Plus className="w-4 h-4" /> Nova Arte</button>
         </div>

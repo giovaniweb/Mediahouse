@@ -34,6 +34,7 @@ interface Demanda {
   videomakerId?: string | null
   editor?: { nome: string } | null
   solicitante?: { nome: string } | null
+  eventoGestao?: { id: string; nome: string } | null
 }
 
 interface KanbanBoardProps {
@@ -89,6 +90,9 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     if (!result.destination) return
     const destinoCol = result.destination.droppableId as StatusVisivel
     const origemCol = result.source.droppableId as StatusVisivel
+
+    // Gestor de eventos é só acompanhamento — não move cards (quem move é o time)
+    if (userTipo === "gestor_eventos") return
 
     // Restrição para videomakers externos: só podem mover até "aprovacao"
     if (userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(destinoCol)) {

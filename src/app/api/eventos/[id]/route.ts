@@ -29,9 +29,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       aprovacoes: { orderBy: { createdAt: "desc" } },
       demandas: {
         select: {
-          id: true, codigo: true, titulo: true, tipoVideo: true,
+          id: true, codigo: true, titulo: true, tipoVideo: true, area: true,
           statusVisivel: true, statusInterno: true,
           videomaker: { select: { nome: true } },
+          designer: { select: { nome: true } },
         },
         orderBy: { createdAt: "asc" },
       },
