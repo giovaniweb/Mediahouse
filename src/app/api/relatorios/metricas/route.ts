@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
       ],
     },
-    select: { id: true, linkFinal: true, finalizadaEm: true, dataLimite: true },
+    select: { id: true, linkFinal: true, finalizadaEm: true, dataLimite: true, createdAt: true },
   })
   const concluidas = demandasFinalizadas.length
 
@@ -110,20 +110,12 @@ export async function GET(req: NextRequest) {
     videosEntregues += count ?? (d.linkFinal ? 1 : 0)
   }
 
-  // ── Tempo médio: só demandas com videomaker E finalizadaEm confiável ────────
-  // Não usa updatedAt como fallback — updatedAt muda em qualquer edição posterior,
-  // inflando artificialmente o tempo. Usamos apenas datas verificadas.
-  const demandasComVM = await prisma.demanda.findMany({
-    where: {
-      area,
-      videomakerId: { not: null },
-      finalizadaEm: { not: null, gte: deDate, lte: ateDate },
-    },
-    select: { createdAt: true, finalizadaEm: true },
-  })
+  // ── Tempo médio (lead time): createdAt → finalizadaEm de TODA demanda
+  // finalizada no período (não exige videomaker; finalizadaEm é confiável). ──
+  const comFinalizada = demandasFinalizadas.filter(d => d.finalizadaEm)
   let tempoMedioConclusao = 0
-  if (demandasComVM.length > 0) {
-    const tempos = demandasComVM.map((d) =>
+  if (comFinalizada.length > 0) {
+    const tempos = comFinalizada.map((d) =>
       (d.finalizadaEm!.getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24)
     )
     tempoMedioConclusao = tempos.reduce((a, b) => a + b, 0) / tempos.length

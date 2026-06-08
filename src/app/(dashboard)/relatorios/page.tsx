@@ -741,7 +741,7 @@ export default function RelatoriosPage() {
                 Resultados — {areaRes === "design" ? "Growth (Artes)" : areaRes === "eventos" ? "Eventos" : "Audiovisual"}
               </h2>
               <p className="text-xs text-zinc-500 print:text-zinc-600">
-                {areaRes === "eventos" ? "Situação atual" : `Período: ${PERIODO_LABELS[periodo]}${mRes?.periodo ? ` (${new Date(mRes.periodo.de).toLocaleDateString("pt-BR")} → ${new Date(mRes.periodo.ate).toLocaleDateString("pt-BR")})` : ""}`}
+                {areaRes === "eventos" ? "Situação atual" : `Período: ${PERIODO_LABELS[periodo]}${mRes?.periodo ? ` (${new Date(mRes.periodo.de).toLocaleDateString("pt-BR", { timeZone: "UTC" })} → ${new Date(mRes.periodo.ate).toLocaleDateString("pt-BR", { timeZone: "UTC" })})` : ""}`}
               </p>
             </div>
 
