@@ -23,6 +23,7 @@ import {
   Target,
   Activity,
   ArrowUpRight,
+  Printer,
 } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -68,6 +69,7 @@ interface Metricas {
     demandasFinalizadas30d: number
     videosEntreguesMes?: number
     videosEntregues30d?: number
+    onTimeRate?: number | null
   }
   videomakers: {
     total: number
@@ -158,6 +160,40 @@ function MetricCard({
       <div className="text-2xl font-bold text-white">{value}</div>
       <div className="text-sm text-zinc-400 mt-0.5">{label}</div>
       {sub && <div className="text-xs text-zinc-500 mt-1">{sub}</div>}
+    </div>
+  )
+}
+
+// KPI grande com comparação vs período anterior (▲▼)
+function KpiCard({
+  label, value, atual, anterior, inverter = false, sub,
+}: {
+  label: string
+  value: string
+  atual?: number | null
+  anterior?: number | null
+  inverter?: boolean // true quando MENOR é melhor (tempo, custo)
+  sub?: string
+}) {
+  let delta: number | null = null
+  if (atual != null && anterior != null && anterior !== 0) {
+    delta = Math.round(((atual - anterior) / Math.abs(anterior)) * 100)
+  }
+  const positivo = delta == null ? null : inverter ? delta < 0 : delta > 0
+  const corDelta = delta == null || delta === 0 ? "text-zinc-500" : positivo ? "text-emerald-400" : "text-red-400"
+  const Seta = delta == null || delta === 0 ? Minus : delta > 0 ? TrendingUp : TrendingDown
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+      <div className="text-xs text-zinc-500 uppercase tracking-wide print:text-zinc-600">{label}</div>
+      <div className="text-3xl font-bold text-white mt-1 print:text-black">{value}</div>
+      <div className="flex items-center gap-2 mt-1.5">
+        {delta != null && (
+          <span className={`flex items-center gap-1 text-xs font-medium ${corDelta}`}>
+            <Seta className="w-3.5 h-3.5" /> {delta > 0 ? "+" : ""}{delta}%
+          </span>
+        )}
+        <span className="text-xs text-zinc-500 print:text-zinc-600">{sub ?? "vs período anterior"}</span>
+      </div>
     </div>
   )
 }
@@ -560,7 +596,7 @@ const PERIODO_LABELS: Record<Periodo, string> = {
 }
 
 export default function RelatoriosPage() {
-  const [abaAtiva, setAbaAtiva] = useState<"realtime" | "historico" | "ia">("realtime")
+  const [abaAtiva, setAbaAtiva] = useState<"resultados" | "realtime" | "historico" | "ia">("resultados")
   const [gerando, setGerando] = useState<string | null>(null)
   const [relatorioAtual, setRelatorioAtual] = useState<RelatorioGerado | null>(null)
   const [tipoSelecionado, setTipoSelecionado] = useState("produtividade_time")
@@ -591,6 +627,29 @@ export default function RelatoriosPage() {
     fetcher
   )
 
+  // ── Aba Resultados (KPIs + comparação vs período anterior) ─────────────────
+  const [areaRes, setAreaRes] = useState<"audiovisual" | "design" | "eventos">("audiovisual")
+  const resAreaParam = areaRes === "design" ? "design" : "audiovisual"
+  const resUrl = areaRes === "eventos"
+    ? null
+    : periodo === "custom"
+      ? `/api/relatorios/metricas?periodo=custom&de=${periodoCustomDe}&ate=${periodoCustomAte}&area=${resAreaParam}`
+      : `/api/relatorios/metricas?periodo=${periodo}&area=${resAreaParam}`
+  const { data: mRes } = useSWR<Metricas>(abaAtiva === "resultados" && resUrl ? resUrl : null, fetcher, { refreshInterval: 60_000 })
+  const prevUrl = (() => {
+    if (!mRes?.periodo) return null
+    const de = new Date(mRes.periodo.de).getTime()
+    const ate = new Date(mRes.periodo.ate).getTime()
+    const len = ate - de
+    const prevDe = new Date(de - len).toISOString().slice(0, 10)
+    const prevAte = new Date(de - 86_400_000).toISOString().slice(0, 10)
+    return `/api/relatorios/metricas?periodo=custom&de=${prevDe}&ate=${prevAte}&area=${resAreaParam}`
+  })()
+  const { data: mPrev } = useSWR<Metricas>(abaAtiva === "resultados" && prevUrl ? prevUrl : null, fetcher)
+  const { data: evDash } = useSWR<{ proximos: number; emProducao: number; atrasados: number; finalizados: number; totalPrevisto: number; totalGasto: number; docsPendentes: number; pagamentosPendentes: number }>(
+    abaAtiva === "resultados" && areaRes === "eventos" ? "/api/eventos/dashboard" : null, fetcher
+  )
+
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
     try {
@@ -614,12 +673,22 @@ export default function RelatoriosPage() {
 
   return (
     <>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #resultados-print, #resultados-print * { visibility: visible !important; }
+          #resultados-print { position: absolute; left: 0; top: 0; width: 100%; padding: 0 12px; }
+          body { background: #fff !important; }
+          @page { margin: 12mm; }
+        }
+      `}</style>
       <Header title="Relatórios IA" />
       <main className="flex-1 p-6 space-y-6">
 
         {/* ── Abas ───────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
           {[
+            { key: "resultados", label: "Resultados", icon: BarChart2 },
             { key: "realtime", label: "Tempo Real", icon: Activity },
             { key: "ia", label: "Análise IA", icon: Sparkles },
             { key: "historico", label: "Histórico", icon: Calendar },
@@ -640,6 +709,105 @@ export default function RelatoriosPage() {
         </div>
 
         {/* ── ABA: Tempo Real ────────────────────────────────────────────── */}
+        {/* ── ABA: Resultados (KPIs pra reunião) ─────────────────────────── */}
+        {abaAtiva === "resultados" && (
+          <div className="space-y-5" id="resultados-print">
+            {/* Controles (área + período + imprimir) */}
+            <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
+              <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
+                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).map(([a, label]) => (
+                  <button key={a} onClick={() => setAreaRes(a)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                {areaRes !== "eventos" && (
+                  <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
+                    {(["semana", "mes", "3meses", "ano"] as Periodo[]).map((p) => (
+                      <button key={p} onClick={() => setPeriodo(p)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md ${periodo === p ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{PERIODO_LABELS[p]}</button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
+                  <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Título de apresentação */}
+            <div>
+              <h2 className="text-xl font-bold text-white print:text-black">
+                Resultados — {areaRes === "design" ? "Growth (Artes)" : areaRes === "eventos" ? "Eventos" : "Audiovisual"}
+              </h2>
+              <p className="text-xs text-zinc-500 print:text-zinc-600">
+                {areaRes === "eventos" ? "Situação atual" : `Período: ${PERIODO_LABELS[periodo]}${mRes?.periodo ? ` (${new Date(mRes.periodo.de).toLocaleDateString("pt-BR")} → ${new Date(mRes.periodo.ate).toLocaleDateString("pt-BR")})` : ""}`}
+              </p>
+            </div>
+
+            {areaRes === "eventos" ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KpiCard label="Eventos próximos" value={fmtNum(evDash?.proximos ?? 0)} sub="agendados" />
+                <KpiCard label="Em produção" value={fmtNum(evDash?.emProducao ?? 0)} sub="em andamento" />
+                <KpiCard label="Atrasados" value={fmtNum(evDash?.atrasados ?? 0)} sub="prazo vencido" />
+                <KpiCard label="Finalizados" value={fmtNum(evDash?.finalizados ?? 0)} sub="concluídos" />
+                <KpiCard label="Orçamento previsto" value={fmt(evDash?.totalPrevisto ?? 0)} sub="soma dos eventos" />
+                <KpiCard label="Gasto real" value={fmt(evDash?.totalGasto ?? 0)} sub="custos + audiovisual" />
+                <KpiCard label="Docs pendentes" value={fmtNum(evDash?.docsPendentes ?? 0)} sub="aguardando" />
+                <KpiCard label="Pagtos pendentes" value={fmtNum(evDash?.pagamentosPendentes ?? 0)} sub="a pagar" />
+              </div>
+            ) : (
+              <>
+                {/* Resumo executivo */}
+                <div className="rounded-xl border border-purple-700/40 bg-purple-950/20 p-4 print:border-zinc-300 print:bg-zinc-50">
+                  <p className="text-sm text-zinc-200 print:text-black">
+                    No período: <strong className="text-white print:text-black">{fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)}</strong> {areaRes === "design" ? "artes entregues" : "vídeos entregues"}
+                    {mRes?.producao?.onTimeRate != null && <> · <strong>{mRes.producao.onTimeRate}%</strong> no prazo</>}
+                    {mRes?.demandas?.tempoMedioConclusao ? <> · tempo médio <strong>{mRes.demandas.tempoMedioConclusao}d</strong></> : null}
+                    {mRes?.custos?.custoPorVideo ? <> · custo/{areaRes === "design" ? "arte" : "vídeo"} <strong>{fmt(mRes.custos.custoPorVideo)}</strong></> : null}.
+                  </p>
+                </div>
+
+                {/* KPIs com comparação */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KpiCard label={areaRes === "design" ? "Artes entregues" : "Vídeos entregues"} value={fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)} atual={mRes?.producao?.videosEntreguesMes} anterior={mPrev?.producao?.videosEntreguesMes} />
+                  <KpiCard label="Concluídas" value={fmtNum(mRes?.producao?.demandasFinalizadasMes ?? 0)} atual={mRes?.producao?.demandasFinalizadasMes} anterior={mPrev?.producao?.demandasFinalizadasMes} />
+                  <KpiCard label="Criadas" value={fmtNum(mRes?.demandas?.totalMes ?? 0)} atual={mRes?.demandas?.totalMes} anterior={mPrev?.demandas?.totalMes} />
+                  <KpiCard label="% no prazo" value={mRes?.producao?.onTimeRate != null ? `${mRes.producao.onTimeRate}%` : "—"} atual={mRes?.producao?.onTimeRate ?? null} anterior={mPrev?.producao?.onTimeRate ?? null} />
+                  <KpiCard label="Tempo médio" value={`${mRes?.demandas?.tempoMedioConclusao ?? 0}d`} atual={mRes?.demandas?.tempoMedioConclusao} anterior={mPrev?.demandas?.tempoMedioConclusao} inverter sub="menor é melhor" />
+                  <KpiCard label="Custo total" value={fmt(mRes?.custos?.total30d ?? 0)} atual={mRes?.custos?.total30d} anterior={mPrev?.custos?.total30d} inverter />
+                  <KpiCard label={areaRes === "design" ? "Custo/arte" : "Custo/vídeo"} value={fmt(mRes?.custos?.custoPorVideo ?? 0)} atual={mRes?.custos?.custoPorVideo} anterior={mPrev?.custos?.custoPorVideo} inverter sub="menor é melhor" />
+                  <KpiCard label="Produção (R$)" value={fmt(mRes?.producao?.producaoMes ?? 0)} atual={mRes?.producao?.producaoMes} anterior={mPrev?.producao?.producaoMes} sub="índice de valor" />
+                </div>
+
+                {/* Tendência + Top produtores */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                    <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3 print:text-zinc-600">Tendência (criadas vs concluídas)</h3>
+                    <div className="flex items-end gap-2 h-32">
+                      {(mRes?.tendencia ?? []).map((t) => (
+                        <TendenciaBar key={t.semana} semana={t.semana} criadas={t.criadas} concluidas={t.concluidas} maxVal={Math.max(1, ...(mRes?.tendencia ?? []).flatMap(x => [x.criadas, x.concluidas]))} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                    <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3 print:text-zinc-600">Top produtores (no período)</h3>
+                    <div className="space-y-2">
+                      {(mRes?.videomakers?.topPorDemandas ?? []).slice(0, 5).map((v, i) => (
+                        <div key={v.id} className="flex items-center justify-between text-sm">
+                          <span className="text-zinc-300 print:text-black truncate">{i + 1}. {v.nome}</span>
+                          <span className="text-zinc-500 print:text-zinc-600">{v.demandasMes} demanda(s)</span>
+                        </div>
+                      ))}
+                      {(mRes?.videomakers?.topPorDemandas ?? []).length === 0 && <p className="text-sm text-zinc-500">Sem dados no período.</p>}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {abaAtiva === "realtime" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">

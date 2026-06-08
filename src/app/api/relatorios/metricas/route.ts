@@ -83,9 +83,14 @@ export async function GET(req: NextRequest) {
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
       ],
     },
-    select: { id: true, linkFinal: true },
+    select: { id: true, linkFinal: true, finalizadaEm: true, dataLimite: true },
   })
   const concluidas = demandasFinalizadas.length
+
+  // ── % no prazo: das finalizadas com prazo, fração entregue até a dataLimite ──
+  const comPrazo = demandasFinalizadas.filter(d => d.finalizadaEm && d.dataLimite)
+  const noPrazo = comPrazo.filter(d => d.finalizadaEm!.getTime() <= d.dataLimite!.getTime()).length
+  const onTimeRate = comPrazo.length > 0 ? Math.round((noPrazo / comPrazo.length) * 100) : null
 
   // ── Contar vídeos individuais entregues (Arquivo com tipoArquivo="final") ──
   // Demandas com registros Arquivo final usam a contagem real.
@@ -280,6 +285,7 @@ export async function GET(req: NextRequest) {
       demandasFinalizadas30d: concluidas,
       videosEntreguesMes: videosEntregues,
       videosEntregues30d: videosEntregues,
+      onTimeRate, // % entregue no prazo (null se sem demandas com prazo)
     },
     videomakers: {
       total: totalVideomakers,
