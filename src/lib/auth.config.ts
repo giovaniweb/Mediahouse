@@ -71,6 +71,7 @@ export const authConfig: NextAuthConfig = {
         "/e",                 // página pública de download de eventos
         "/api/publico/cobertura", // API pública de coberturas
         "/fornecedor",        // portal público do fornecedor (token)
+        "/relatorio-executivo", // relatório executivo público (visualização externa)
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")

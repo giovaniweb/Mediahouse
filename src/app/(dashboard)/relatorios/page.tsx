@@ -862,6 +862,9 @@ export default function RelatoriosPage() {
                     </select>
                   </>
                 )}
+                <a href="/relatorio-executivo" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
+                  <ArrowUpRight className="w-3.5 h-3.5" /> Relatório externo
+                </a>
                 <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
                   <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
                 </button>
@@ -952,55 +955,23 @@ export default function RelatoriosPage() {
                   )
                 })()}
 
-                {/* Resumo (frase) */}
-                <div className="rounded-xl border border-purple-700/40 bg-purple-950/20 p-4 print:border-zinc-300 print:bg-zinc-50">
-                  <p className="text-sm text-zinc-200 print:text-black">
-                    No período: <strong className="text-white print:text-black">{fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)}</strong> {areaRes === "design" ? "artes entregues" : "vídeos entregues"} (NuFlow)
-                    {mRes?.producao?.onTimeRate != null && <> · <strong>{mRes.producao.onTimeRate}%</strong> no prazo</>}
-                    {mRes?.demandas?.tempoMedioConclusao ? <> · tempo médio <strong>{mRes.demandas.tempoMedioConclusao}d</strong></> : null}
-                    {mRes?.custos?.custoPorVideo ? <> · custo/{areaRes === "design" ? "arte" : "vídeo"} <strong>{fmt(mRes.custos.custoPorVideo)}</strong></> : null}.
-                  </p>
-                </div>
-
                 {/* KPIs com comparação */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <KpiCard label={areaRes === "design" ? "Artes entregues" : "Vídeos entregues"} value={fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)} atual={mRes?.producao?.videosEntreguesMes} anterior={mPrev?.producao?.videosEntreguesMes} />
                   <KpiCard label="Concluídas" value={fmtNum(mRes?.producao?.demandasFinalizadasMes ?? 0)} atual={mRes?.producao?.demandasFinalizadasMes} anterior={mPrev?.producao?.demandasFinalizadasMes} />
                   <KpiCard label="Criadas" value={fmtNum(mRes?.demandas?.totalMes ?? 0)} atual={mRes?.demandas?.totalMes} anterior={mPrev?.demandas?.totalMes} />
-                  <KpiCard label="% no prazo" value={mRes?.producao?.onTimeRate != null ? `${mRes.producao.onTimeRate}%` : "—"} atual={mRes?.producao?.onTimeRate ?? null} anterior={mPrev?.producao?.onTimeRate ?? null} />
                   <KpiCard label="Tempo médio" value={`${mRes?.demandas?.tempoMedioConclusao ?? 0}d`} atual={mRes?.demandas?.tempoMedioConclusao} anterior={mPrev?.demandas?.tempoMedioConclusao} inverter sub="menor é melhor" />
-                  <KpiCard label="Custo total" value={fmt(mRes?.custos?.total30d ?? 0)} atual={mRes?.custos?.total30d} anterior={mPrev?.custos?.total30d} inverter />
-                  <KpiCard label={areaRes === "design" ? "Custo/arte" : "Custo/vídeo"} value={fmt(mRes?.custos?.custoPorVideo ?? 0)} atual={mRes?.custos?.custoPorVideo} anterior={mPrev?.custos?.custoPorVideo} inverter sub="menor é melhor" />
                   {(() => {
                     const valor = mRes?.producao?.valorPorDemanda ?? 200
                     const totalAtual = (prodManual?.totalManual ?? 0) + (mRes?.producao?.videosEntreguesMes ?? 0)
                     const totalAnt = (prodManualPrev?.totalManual ?? 0) + (mPrev?.producao?.videosEntreguesMes ?? 0)
-                    return <KpiCard label="Produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
+                    return (
+                      <>
+                        <KpiCard label={`Custo médio/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
+                        <KpiCard label="Produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
+                      </>
+                    )
                   })()}
-                </div>
-
-                {/* Tendência + Top produtores */}
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
-                    <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3 print:text-zinc-600">Tendência (criadas vs concluídas)</h3>
-                    <div className="flex items-end gap-2 h-32">
-                      {(mRes?.tendencia ?? []).map((t) => (
-                        <TendenciaBar key={t.semana} semana={t.semana} criadas={t.criadas} concluidas={t.concluidas} maxVal={Math.max(1, ...(mRes?.tendencia ?? []).flatMap(x => [x.criadas, x.concluidas]))} />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
-                    <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3 print:text-zinc-600">Top produtores (no período)</h3>
-                    <div className="space-y-2">
-                      {(mRes?.videomakers?.topPorDemandas ?? []).slice(0, 5).map((v, i) => (
-                        <div key={v.id} className="flex items-center justify-between text-sm">
-                          <span className="text-zinc-300 print:text-black truncate">{i + 1}. {v.nome}</span>
-                          <span className="text-zinc-500 print:text-zinc-600">{v.demandasMes} demanda(s)</span>
-                        </div>
-                      ))}
-                      {(mRes?.videomakers?.topPorDemandas ?? []).length === 0 && <p className="text-sm text-zinc-500">Sem dados no período.</p>}
-                    </div>
-                  </div>
                 </div>
               </>
             )}
