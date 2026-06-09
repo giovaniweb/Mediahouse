@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
+import { toast } from "sonner"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import {
@@ -193,6 +194,87 @@ function KpiCard({
           </span>
         )}
         <span className="text-xs text-zinc-500 print:text-zinc-600">{sub ?? "vs período anterior"}</span>
+      </div>
+    </div>
+  )
+}
+
+const MESES_LABEL = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+// Modal para lançar/editar produção manual de um mês (vídeos sem card)
+function EditarProducaoManualModal({ area, onClose, onSaved }: { area: string; onClose: () => void; onSaved: () => void }) {
+  const hoje = new Date()
+  const [ano, setAno] = useState(hoje.getFullYear())
+  const [mes, setMes] = useState(hoje.getMonth() + 1)
+  const competencia = ano * 100 + mes
+  const url = `/api/producao-manual?area=${area}&de=${ano}-${String(mes).padStart(2, "0")}-01&ate=${ano}-${String(mes).padStart(2, "0")}-28`
+  const { data, mutate } = useSWR<{ lancamentos: { id: string; categoria: string; quantidade: number }[] }>(url, fetcher)
+  const [linhas, setLinhas] = useState<{ categoria: string; quantidade: string }[]>([])
+  const [saving, setSaving] = useState(false)
+
+  // Carrega os lançamentos do mês selecionado (ou defaults Linha Med/Estética)
+  useEffect(() => {
+    const existentes = data?.lancamentos ?? []
+    if (existentes.length > 0) {
+      setLinhas(existentes.map((l) => ({ categoria: l.categoria, quantidade: String(l.quantidade) })))
+    } else {
+      setLinhas([{ categoria: "Linha Med", quantidade: "" }, { categoria: "Linha Estética", quantidade: "" }])
+    }
+  }, [data, competencia])
+
+  function upd(i: number, campo: "categoria" | "quantidade", v: string) {
+    setLinhas((ls) => ls.map((l, idx) => idx === i ? { ...l, [campo]: v } : l))
+  }
+
+  async function salvar() {
+    setSaving(true)
+    try {
+      for (const l of linhas) {
+        if (!l.categoria.trim()) continue
+        await fetch("/api/producao-manual", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competencia, area, categoria: l.categoria.trim(), quantidade: parseInt(l.quantidade) || 0 }),
+        })
+      }
+      toast.success("Produção lançada!")
+      mutate(); onSaved(); onClose()
+    } catch { toast.error("Erro ao salvar") } finally { setSaving(false) }
+  }
+
+  const inputCls = "bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-zinc-100 mb-1">Lançar produção manual</h2>
+        <p className="text-xs text-zinc-500 mb-4">Vídeos/artes feitos que não viraram card no NuFlow, por categoria.</p>
+
+        <div className="flex items-center gap-2 mb-4">
+          <select value={mes} onChange={(e) => setMes(parseInt(e.target.value))} className={inputCls}>
+            {MESES_LABEL.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={ano} onChange={(e) => setAno(parseInt(e.target.value))} className={inputCls}>
+            {[hoje.getFullYear(), hoje.getFullYear() - 1, hoje.getFullYear() - 2].map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          {linhas.map((l, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={l.categoria} onChange={(e) => upd(i, "categoria", e.target.value)} placeholder="Categoria (ex: Linha Med)" className={inputCls + " flex-1"} />
+              <input type="number" value={l.quantidade} onChange={(e) => upd(i, "quantidade", e.target.value)} placeholder="0" className={inputCls + " w-24"} />
+              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} className="text-zinc-600 hover:text-red-400 p-1">✕</button>
+            </div>
+          ))}
+          <button onClick={() => setLinhas((ls) => [...ls, { categoria: "", quantidade: "" }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar categoria</button>
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800">Cancelar</button>
+          <button onClick={salvar} disabled={saving} className="flex-1 py-2 text-sm rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium disabled:opacity-50">
+            {saving ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -649,6 +731,12 @@ export default function RelatoriosPage() {
   const { data: evDash } = useSWR<{ proximos: number; emProducao: number; atrasados: number; finalizados: number; totalPrevisto: number; totalGasto: number; docsPendentes: number; pagamentosPendentes: number }>(
     abaAtiva === "resultados" && areaRes === "eventos" ? "/api/eventos/dashboard" : null, fetcher
   )
+  // Produção lançada manualmente (vídeos sem card) — por categoria, no período
+  const [showEditarProd, setShowEditarProd] = useState(false)
+  const pmUrl = abaAtiva === "resultados" && areaRes !== "eventos" && mRes?.periodo
+    ? `/api/producao-manual?area=${resAreaParam}&de=${mRes.periodo.de.slice(0, 10)}&ate=${mRes.periodo.ate.slice(0, 10)}`
+    : null
+  const { data: prodManual, mutate: mutateProdManual } = useSWR<{ porCategoria: Record<string, number>; totalManual: number }>(pmUrl, fetcher)
 
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
@@ -758,10 +846,47 @@ export default function RelatoriosPage() {
               </div>
             ) : (
               <>
-                {/* Resumo executivo */}
+                {/* Resumo executivo — produção total (manual + NuFlow) */}
+                {(() => {
+                  const cats = prodManual?.porCategoria ?? {}
+                  const nuflow = mRes?.producao?.videosEntreguesMes ?? 0
+                  const totalManual = prodManual?.totalManual ?? 0
+                  const totalGeral = totalManual + nuflow
+                  const cores = ["text-blue-400", "text-cyan-400", "text-emerald-400", "text-amber-400", "text-pink-400"]
+                  const catEntries = Object.entries(cats)
+                  return (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 print:border-zinc-300 print:bg-white">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-lg font-bold text-white print:text-black">Resumo executivo</h3>
+                        <button onClick={() => setShowEditarProd(true)} className="text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
+                          ✏️ Editar números
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">{areaRes === "design" ? "Artes" : "Vídeos"} produzidos no período (lançados + NuFlow).</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {catEntries.map(([cat, qtd], i) => (
+                          <div key={cat} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                            <div className={`text-3xl font-bold ${cores[i % cores.length]}`}>{fmtNum(qtd)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
+                            <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">{cat}</div>
+                          </div>
+                        ))}
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                          <div className="text-3xl font-bold text-zinc-200 print:text-black">{fmtNum(nuflow)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
+                          <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Demandas NuFlow</div>
+                        </div>
+                        <div className="rounded-xl border border-purple-700/50 bg-purple-950/30 p-4 print:border-zinc-400 print:bg-zinc-50">
+                          <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalGeral)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
+                          <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Total geral</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Resumo (frase) */}
                 <div className="rounded-xl border border-purple-700/40 bg-purple-950/20 p-4 print:border-zinc-300 print:bg-zinc-50">
                   <p className="text-sm text-zinc-200 print:text-black">
-                    No período: <strong className="text-white print:text-black">{fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)}</strong> {areaRes === "design" ? "artes entregues" : "vídeos entregues"}
+                    No período: <strong className="text-white print:text-black">{fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)}</strong> {areaRes === "design" ? "artes entregues" : "vídeos entregues"} (NuFlow)
                     {mRes?.producao?.onTimeRate != null && <> · <strong>{mRes.producao.onTimeRate}%</strong> no prazo</>}
                     {mRes?.demandas?.tempoMedioConclusao ? <> · tempo médio <strong>{mRes.demandas.tempoMedioConclusao}d</strong></> : null}
                     {mRes?.custos?.custoPorVideo ? <> · custo/{areaRes === "design" ? "arte" : "vídeo"} <strong>{fmt(mRes.custos.custoPorVideo)}</strong></> : null}.
@@ -804,6 +929,14 @@ export default function RelatoriosPage() {
                   </div>
                 </div>
               </>
+            )}
+
+            {showEditarProd && (
+              <EditarProducaoManualModal
+                area={resAreaParam}
+                onClose={() => setShowEditarProd(false)}
+                onSaved={() => mutateProdManual()}
+              />
             )}
           </div>
         )}
