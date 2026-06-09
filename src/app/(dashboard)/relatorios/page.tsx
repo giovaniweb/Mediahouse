@@ -723,14 +723,15 @@ export default function RelatoriosPage() {
   // ── Aba Resultados (KPIs + comparação vs período anterior) ─────────────────
   const [areaRes, setAreaRes] = useState<"audiovisual" | "design" | "eventos">("audiovisual")
   const [mesEspecifico, setMesEspecifico] = useState("") // "YYYY-MM" ou "" (usa os botões de período)
-  // Opções dos últimos 12 meses para o filtro de mês específico
+  // Opções de mês: de maio/2026 até o mês atual (descendente)
   const opcoesMes = (() => {
     const out: { value: string; label: string }[] = []
-    const base = new Date()
     const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() - i, 1)
-      out.push({ value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: `${meses[d.getMonth()]} ${d.getFullYear()}` })
+    const now = new Date()
+    let y = now.getFullYear(), mo = now.getMonth() + 1
+    while (y > 2026 || (y === 2026 && mo >= 5)) {
+      out.push({ value: `${y}-${String(mo).padStart(2, "0")}`, label: `${meses[mo - 1]} ${y}` })
+      mo--; if (mo === 0) { mo = 12; y-- }
     }
     return out
   })()
@@ -862,7 +863,7 @@ export default function RelatoriosPage() {
                     </select>
                   </>
                 )}
-                <a href="/relatorio-executivo" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
+                <a href={`/relatorio-executivo/${mesEspecifico || opcoesMes[0]?.value || ""}${areaRes === "design" ? "?area=design" : ""}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
                   <ArrowUpRight className="w-3.5 h-3.5" /> Relatório externo
                 </a>
                 <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
