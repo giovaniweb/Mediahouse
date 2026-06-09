@@ -1655,11 +1655,12 @@ model ProducaoManual {
   id          String   @id @default(cuid())
   competencia Int      // ano*100 + mes (ex: 202606)
   area        String   @default("audiovisual")
+  grupo       String   @default("producao")  // "producao" (vídeos) | "presencial" (frentes)
   categoria   String
   quantidade  Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([competencia, area, categoria])
+  @@unique([competencia, area, grupo, categoria])
   @@map("producao_manual")
 }

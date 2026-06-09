@@ -201,53 +201,70 @@ function KpiCard({
 
 const MESES_LABEL = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
-// Modal para lançar/editar produção manual de um mês (vídeos sem card)
+// Modal para lançar/editar produção manual de um mês (vídeos sem card + frentes presenciais)
+type LinhaManual = { categoria: string; quantidade: string }
 function EditarProducaoManualModal({ area, onClose, onSaved }: { area: string; onClose: () => void; onSaved: () => void }) {
   const hoje = new Date()
   const [ano, setAno] = useState(hoje.getFullYear())
   const [mes, setMes] = useState(hoje.getMonth() + 1)
   const competencia = ano * 100 + mes
   const url = `/api/producao-manual?area=${area}&de=${ano}-${String(mes).padStart(2, "0")}-01&ate=${ano}-${String(mes).padStart(2, "0")}-28`
-  const { data, mutate } = useSWR<{ lancamentos: { id: string; categoria: string; quantidade: number }[] }>(url, fetcher)
-  const [linhas, setLinhas] = useState<{ categoria: string; quantidade: string }[]>([])
+  const { data, mutate } = useSWR<{ lancamentos: { id: string; grupo: string; categoria: string; quantidade: number }[] }>(url, fetcher)
+  const [producao, setProducao] = useState<LinhaManual[]>([])
+  const [presencial, setPresencial] = useState<LinhaManual[]>([])
   const [saving, setSaving] = useState(false)
 
-  // Carrega os lançamentos do mês selecionado (ou defaults Linha Med/Estética)
   useEffect(() => {
-    const existentes = data?.lancamentos ?? []
-    if (existentes.length > 0) {
-      setLinhas(existentes.map((l) => ({ categoria: l.categoria, quantidade: String(l.quantidade) })))
-    } else {
-      setLinhas([{ categoria: "Linha Med", quantidade: "" }, { categoria: "Linha Estética", quantidade: "" }])
-    }
+    const ls = data?.lancamentos ?? []
+    const prod = ls.filter((l) => l.grupo !== "presencial")
+    const pres = ls.filter((l) => l.grupo === "presencial")
+    setProducao(prod.length ? prod.map((l) => ({ categoria: l.categoria, quantidade: String(l.quantidade) })) : [{ categoria: "Linha Med", quantidade: "" }, { categoria: "Linha Estética", quantidade: "" }])
+    setPresencial(pres.length ? pres.map((l) => ({ categoria: l.categoria, quantidade: String(l.quantidade) })) : [{ categoria: "Eventos / jantares", quantidade: "" }, { categoria: "Coberturas de congresso", quantidade: "" }, { categoria: "Treinamento interno", quantidade: "" }, { categoria: "Webinar", quantidade: "" }])
   }, [data, competencia])
-
-  function upd(i: number, campo: "categoria" | "quantidade", v: string) {
-    setLinhas((ls) => ls.map((l, idx) => idx === i ? { ...l, [campo]: v } : l))
-  }
 
   async function salvar() {
     setSaving(true)
     try {
-      for (const l of linhas) {
-        if (!l.categoria.trim()) continue
-        await fetch("/api/producao-manual", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competencia, area, categoria: l.categoria.trim(), quantidade: parseInt(l.quantidade) || 0 }),
-        })
+      const grupos: [LinhaManual[], string][] = [[producao, "producao"], [presencial, "presencial"]]
+      for (const [linhas, grupo] of grupos) {
+        for (const l of linhas) {
+          if (!l.categoria.trim()) continue
+          await fetch("/api/producao-manual", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ competencia, area, grupo, categoria: l.categoria.trim(), quantidade: parseInt(l.quantidade) || 0 }),
+          })
+        }
       }
-      toast.success("Produção lançada!")
+      toast.success("Números lançados!")
       mutate(); onSaved(); onClose()
     } catch { toast.error("Erro ao salvar") } finally { setSaving(false) }
   }
 
   const inputCls = "bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
+  function Secao({ titulo, linhas, setLinhas, placeholder }: { titulo: string; linhas: LinhaManual[]; setLinhas: React.Dispatch<React.SetStateAction<LinhaManual[]>>; placeholder: string }) {
+    return (
+      <div>
+        <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{titulo}</div>
+        <div className="space-y-2">
+          {linhas.map((l, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={l.categoria} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, categoria: e.target.value } : x))} placeholder={placeholder} className={inputCls + " flex-1"} />
+              <input type="number" value={l.quantidade} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, quantidade: e.target.value } : x))} placeholder="0" className={inputCls + " w-20"} />
+              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} className="text-zinc-600 hover:text-red-400 p-1">✕</button>
+            </div>
+          ))}
+          <button onClick={() => setLinhas((ls) => [...ls, { categoria: "", quantidade: "" }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-bold text-zinc-100 mb-1">Lançar produção manual</h2>
-        <p className="text-xs text-zinc-500 mb-4">Vídeos/artes feitos que não viraram card no NuFlow, por categoria.</p>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-zinc-100 mb-1">Lançar números do mês</h2>
+        <p className="text-xs text-zinc-500 mb-4">Produção que não virou card + frentes presenciais.</p>
 
         <div className="flex items-center gap-2 mb-4">
           <select value={mes} onChange={(e) => setMes(parseInt(e.target.value))} className={inputCls}>
@@ -258,15 +275,9 @@ function EditarProducaoManualModal({ area, onClose, onSaved }: { area: string; o
           </select>
         </div>
 
-        <div className="space-y-2">
-          {linhas.map((l, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input value={l.categoria} onChange={(e) => upd(i, "categoria", e.target.value)} placeholder="Categoria (ex: Linha Med)" className={inputCls + " flex-1"} />
-              <input type="number" value={l.quantidade} onChange={(e) => upd(i, "quantidade", e.target.value)} placeholder="0" className={inputCls + " w-24"} />
-              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} className="text-zinc-600 hover:text-red-400 p-1">✕</button>
-            </div>
-          ))}
-          <button onClick={() => setLinhas((ls) => [...ls, { categoria: "", quantidade: "" }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar categoria</button>
+        <div className="space-y-5">
+          <Secao titulo={`${area === "design" ? "Artes" : "Vídeos"} produzidos (sem card)`} linhas={producao} setLinhas={setProducao} placeholder="Categoria (ex: Linha Med)" />
+          <Secao titulo="Frentes presenciais" linhas={presencial} setLinhas={setPresencial} placeholder="Ex: Coberturas de congresso" />
         </div>
 
         <div className="flex gap-2 mt-5">
@@ -711,6 +722,28 @@ export default function RelatoriosPage() {
 
   // ── Aba Resultados (KPIs + comparação vs período anterior) ─────────────────
   const [areaRes, setAreaRes] = useState<"audiovisual" | "design" | "eventos">("audiovisual")
+  const [mesEspecifico, setMesEspecifico] = useState("") // "YYYY-MM" ou "" (usa os botões de período)
+  // Opções dos últimos 12 meses para o filtro de mês específico
+  const opcoesMes = (() => {
+    const out: { value: string; label: string }[] = []
+    const base = new Date()
+    const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1)
+      out.push({ value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: `${meses[d.getMonth()]} ${d.getFullYear()}` })
+    }
+    return out
+  })()
+  function escolherMes(ym: string) {
+    setMesEspecifico(ym)
+    if (!ym) return
+    const [y, mo] = ym.split("-").map(Number)
+    const ultimo = new Date(y, mo, 0).getDate()
+    setPeriodoCustomDe(`${y}-${String(mo).padStart(2, "0")}-01`)
+    setPeriodoCustomAte(`${y}-${String(mo).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`)
+    setPeriodo("custom")
+  }
+  function escolherPeriodo(p: Periodo) { setMesEspecifico(""); setPeriodo(p) }
   const resAreaParam = areaRes === "design" ? "design" : "audiovisual"
   const resUrl = areaRes === "eventos"
     ? null
@@ -736,7 +769,12 @@ export default function RelatoriosPage() {
   const pmUrl = abaAtiva === "resultados" && areaRes !== "eventos" && mRes?.periodo
     ? `/api/producao-manual?area=${resAreaParam}&de=${mRes.periodo.de.slice(0, 10)}&ate=${mRes.periodo.ate.slice(0, 10)}`
     : null
-  const { data: prodManual, mutate: mutateProdManual } = useSWR<{ porCategoria: Record<string, number>; totalManual: number }>(pmUrl, fetcher)
+  const { data: prodManual, mutate: mutateProdManual } = useSWR<{ producaoPorCategoria: Record<string, number>; totalManual: number; presencialPorCategoria: Record<string, number>; totalPresencial: number }>(pmUrl, fetcher)
+  // Produção manual do período anterior (para o delta de produção total)
+  const pmPrevUrl = abaAtiva === "resultados" && areaRes !== "eventos" && prevUrl && mRes?.periodo
+    ? (() => { const u = new URL(prevUrl, "http://x"); return `/api/producao-manual?area=${resAreaParam}&de=${u.searchParams.get("de")}&ate=${u.searchParams.get("ate")}` })()
+    : null
+  const { data: prodManualPrev } = useSWR<{ totalManual: number }>(pmPrevUrl, fetcher)
 
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
@@ -808,14 +846,21 @@ export default function RelatoriosPage() {
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {areaRes !== "eventos" && (
-                  <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                    {(["semana", "mes", "3meses", "ano"] as Periodo[]).map((p) => (
-                      <button key={p} onClick={() => setPeriodo(p)}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-md ${periodo === p ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{PERIODO_LABELS[p]}</button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
+                      {(["semana", "mes", "3meses", "ano"] as Periodo[]).map((p) => (
+                        <button key={p} onClick={() => escolherPeriodo(p)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md ${periodo === p && !mesEspecifico ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{PERIODO_LABELS[p]}</button>
+                      ))}
+                    </div>
+                    <select value={mesEspecifico} onChange={(e) => escolherMes(e.target.value)}
+                      className={`text-xs border rounded-lg px-2.5 py-1.5 bg-zinc-800 ${mesEspecifico ? "border-purple-600 text-white" : "border-zinc-700 text-zinc-400"}`}>
+                      <option value="">Mês específico…</option>
+                      {opcoesMes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </>
                 )}
                 <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
                   <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
@@ -829,7 +874,7 @@ export default function RelatoriosPage() {
                 Resultados — {areaRes === "design" ? "Growth (Artes)" : areaRes === "eventos" ? "Eventos" : "Audiovisual"}
               </h2>
               <p className="text-xs text-zinc-500 print:text-zinc-600">
-                {areaRes === "eventos" ? "Situação atual" : `Período: ${PERIODO_LABELS[periodo]}${mRes?.periodo ? ` (${new Date(mRes.periodo.de).toLocaleDateString("pt-BR", { timeZone: "UTC" })} → ${new Date(mRes.periodo.ate).toLocaleDateString("pt-BR", { timeZone: "UTC" })})` : ""}`}
+                {areaRes === "eventos" ? "Situação atual" : `Período: ${mesEspecifico ? (opcoesMes.find(o => o.value === mesEspecifico)?.label ?? "Mês") : PERIODO_LABELS[periodo]}${mRes?.periodo ? ` (${new Date(mRes.periodo.de).toLocaleDateString("pt-BR", { timeZone: "UTC" })} → ${new Date(mRes.periodo.ate).toLocaleDateString("pt-BR", { timeZone: "UTC" })})` : ""}`}
               </p>
             </div>
 
@@ -846,37 +891,61 @@ export default function RelatoriosPage() {
               </div>
             ) : (
               <>
-                {/* Resumo executivo — produção total (manual + NuFlow) */}
+                {/* Resumo executivo — produção total (manual + NuFlow) + frentes presenciais */}
                 {(() => {
-                  const cats = prodManual?.porCategoria ?? {}
+                  const cats = prodManual?.producaoPorCategoria ?? {}
                   const nuflow = mRes?.producao?.videosEntreguesMes ?? 0
                   const totalManual = prodManual?.totalManual ?? 0
                   const totalGeral = totalManual + nuflow
                   const cores = ["text-blue-400", "text-cyan-400", "text-emerald-400", "text-amber-400", "text-pink-400"]
                   const catEntries = Object.entries(cats)
+                  const presencial = Object.entries(prodManual?.presencialPorCategoria ?? {})
+                  const unidade = areaRes === "design" ? "artes" : "vídeos"
                   return (
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 print:border-zinc-300 print:bg-white">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-lg font-bold text-white print:text-black">Resumo executivo</h3>
+                        <h3 className="text-lg font-bold text-white print:text-black">Produção do período</h3>
                         <button onClick={() => setShowEditarProd(true)} className="text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
                           ✏️ Editar números
                         </button>
                       </div>
-                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">{areaRes === "design" ? "Artes" : "Vídeos"} produzidos no período (lançados + NuFlow).</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {catEntries.map(([cat, qtd], i) => (
-                          <div key={cat} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
-                            <div className={`text-3xl font-bold ${cores[i % cores.length]}`}>{fmtNum(qtd)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
-                            <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">{cat}</div>
+                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Volume de conteúdo (lançados + NuFlow) + frentes presenciais.</p>
+                      <div className="grid lg:grid-cols-3 gap-5">
+                        {/* Vídeos (2/3) */}
+                        <div className="lg:col-span-2">
+                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{unidade} postados/entregues</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {catEntries.map(([cat, qtd], i) => (
+                              <div key={cat} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                                <div className={`text-3xl font-bold ${cores[i % cores.length]}`}>{fmtNum(qtd)}</div>
+                                <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">{cat}</div>
+                              </div>
+                            ))}
+                            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
+                              <div className="text-3xl font-bold text-emerald-400">{fmtNum(nuflow)}</div>
+                              <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Demandas NuFlow</div>
+                            </div>
+                            <div className="rounded-xl border border-purple-700/50 bg-purple-950/30 p-4 print:border-zinc-400 print:bg-zinc-50">
+                              <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalGeral)}</div>
+                              <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Total geral</div>
+                            </div>
                           </div>
-                        ))}
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
-                          <div className="text-3xl font-bold text-zinc-200 print:text-black">{fmtNum(nuflow)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
-                          <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Demandas NuFlow</div>
                         </div>
-                        <div className="rounded-xl border border-purple-700/50 bg-purple-950/30 p-4 print:border-zinc-400 print:bg-zinc-50">
-                          <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalGeral)} <span className="text-base font-medium">{areaRes === "design" ? "artes" : "vídeos"}</span></div>
-                          <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Total geral</div>
+                        {/* Frentes presenciais (1/3) */}
+                        <div>
+                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">Frentes presenciais</div>
+                          {presencial.length === 0 ? (
+                            <p className="text-xs text-zinc-500">Sem frentes lançadas. Use “Editar números”.</p>
+                          ) : (
+                            <div className="divide-y divide-zinc-800 print:divide-zinc-300">
+                              {presencial.map(([cat, qtd]) => (
+                                <div key={cat} className="flex items-center gap-3 py-2.5">
+                                  <span className="text-2xl font-bold text-cyan-400 w-8">{fmtNum(qtd)}</span>
+                                  <span className="text-sm text-zinc-300 print:text-black">{cat}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -902,7 +971,12 @@ export default function RelatoriosPage() {
                   <KpiCard label="Tempo médio" value={`${mRes?.demandas?.tempoMedioConclusao ?? 0}d`} atual={mRes?.demandas?.tempoMedioConclusao} anterior={mPrev?.demandas?.tempoMedioConclusao} inverter sub="menor é melhor" />
                   <KpiCard label="Custo total" value={fmt(mRes?.custos?.total30d ?? 0)} atual={mRes?.custos?.total30d} anterior={mPrev?.custos?.total30d} inverter />
                   <KpiCard label={areaRes === "design" ? "Custo/arte" : "Custo/vídeo"} value={fmt(mRes?.custos?.custoPorVideo ?? 0)} atual={mRes?.custos?.custoPorVideo} anterior={mPrev?.custos?.custoPorVideo} inverter sub="menor é melhor" />
-                  <KpiCard label="Produção (R$)" value={fmt(mRes?.producao?.producaoMes ?? 0)} atual={mRes?.producao?.producaoMes} anterior={mPrev?.producao?.producaoMes} sub="índice de valor" />
+                  {(() => {
+                    const valor = mRes?.producao?.valorPorDemanda ?? 200
+                    const totalAtual = (prodManual?.totalManual ?? 0) + (mRes?.producao?.videosEntreguesMes ?? 0)
+                    const totalAnt = (prodManualPrev?.totalManual ?? 0) + (mPrev?.producao?.videosEntreguesMes ?? 0)
+                    return <KpiCard label="Produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
+                  })()}
                 </div>
 
                 {/* Tendência + Top produtores */}

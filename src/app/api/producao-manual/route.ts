@@ -26,12 +26,25 @@ export async function GET(req: NextRequest) {
     orderBy: [{ competencia: "desc" }, { categoria: "asc" }],
   })
 
-  // Agregado por categoria (soma no período)
-  const porCategoria: Record<string, number> = {}
-  for (const l of lancamentos) porCategoria[l.categoria] = (porCategoria[l.categoria] ?? 0) + l.quantidade
-  const totalManual = Object.values(porCategoria).reduce((a, b) => a + b, 0)
+  // Agregado por categoria, separado por grupo (produção de vídeos x frentes presenciais)
+  const producaoPorCategoria: Record<string, number> = {}
+  const presencialPorCategoria: Record<string, number> = {}
+  for (const l of lancamentos) {
+    const alvo = l.grupo === "presencial" ? presencialPorCategoria : producaoPorCategoria
+    alvo[l.categoria] = (alvo[l.categoria] ?? 0) + l.quantidade
+  }
+  const totalManual = Object.values(producaoPorCategoria).reduce((a, b) => a + b, 0)
+  const totalPresencial = Object.values(presencialPorCategoria).reduce((a, b) => a + b, 0)
 
-  return NextResponse.json({ lancamentos, porCategoria, totalManual })
+  return NextResponse.json({
+    lancamentos,
+    // compat + novos campos
+    porCategoria: producaoPorCategoria,
+    totalManual,
+    producaoPorCategoria,
+    presencialPorCategoria,
+    totalPresencial,
+  })
 }
 
 // POST /api/producao-manual — upsert { competencia, area, categoria, quantidade }
@@ -47,11 +60,12 @@ export async function POST(req: NextRequest) {
   const categoria = (body.categoria ?? "").trim()
   const quantidade = parseInt(body.quantidade) || 0
   const area = body.area === "design" ? "design" : "audiovisual"
+  const grupo = body.grupo === "presencial" ? "presencial" : "producao"
   if (!competencia || !categoria) return NextResponse.json({ error: "competencia e categoria obrigatórios" }, { status: 400 })
 
   const item = await prisma.producaoManual.upsert({
-    where: { competencia_area_categoria: { competencia, area, categoria } },
-    create: { competencia, area, categoria, quantidade },
+    where: { competencia_area_grupo_categoria: { competencia, area, grupo, categoria } },
+    create: { competencia, area, grupo, categoria, quantidade },
     update: { quantidade },
   })
   return NextResponse.json({ item })
