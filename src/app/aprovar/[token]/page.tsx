@@ -141,16 +141,36 @@ export default function AprovarVideoPage() {
       }
     }
 
-    // Vídeo direto (mp4, webm, etc.)
+    // Vídeo direto (mp4, webm, mov, etc.)
+    const isMov = urlLimpa.endsWith(".mov") || urlLimpa.endsWith(".qt")
     return (
-      <video
-        className="w-full rounded-xl max-h-[70vh]"
-        controls
-        preload="metadata"
-        src={url}
-      >
-        Seu navegador não suporta o player de vídeo.
-      </video>
+      <div className="space-y-3">
+        <video
+          className="w-full rounded-xl max-h-[70vh] bg-black"
+          controls
+          playsInline
+          preload="metadata"
+          src={url}
+        >
+          Seu navegador não suporta o player de vídeo.
+        </video>
+        {isMov && (
+          <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+            Este vídeo está em formato <b>.mov</b> (Apple). Em alguns navegadores (ex: Chrome) a imagem pode aparecer preta.
+            Use o botão abaixo para abrir ou baixar e assistir no seu dispositivo.
+          </p>
+        )}
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          download
+          className="flex items-center justify-center gap-2 w-full border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800/60 font-medium py-3 rounded-xl transition-colors text-sm"
+        >
+          <Film className="w-4 h-4" />
+          Abrir / baixar vídeo
+        </a>
+      </div>
     )
   }
 
