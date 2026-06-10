@@ -56,6 +56,7 @@ export const authConfig: NextAuthConfig = {
         "/cadastrar-videomaker", // cadastro público de videomaker
         "/sobre",             // página pública sobre
         "/aprovar",           // aprovação de vídeo pelo cliente
+        "/api/aprovacao-video", // API da aprovação pública (GET token + POST aprovar/feedback)
         "/api/auth",
         "/api/publico",
         "/api/whatsapp",      // webhook e envios — acesso externo (Evolution API)
