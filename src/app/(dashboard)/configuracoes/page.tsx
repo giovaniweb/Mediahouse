@@ -488,6 +488,8 @@ function TabParametros() {
   const [backfillResult, setBackfillResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
   const [backfillingArquivos, setBackfillingArquivos] = useState(false)
   const [backfillArquivosResult, setBackfillArquivosResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
+  const [convertendoHevc, setConvertendoHevc] = useState(false)
+  const [hevcResult, setHevcResult] = useState<number | null>(null)
 
   async function criar() {
     if (!newLabel.trim()) return
@@ -702,6 +704,45 @@ function TabParametros() {
             {backfillArquivosResult && (
               <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillArquivosResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
                 {backfillArquivosResult.processados} criado(s) · {backfillArquivosResult.pulados} já existiam{backfillArquivosResult.erros > 0 ? ` · ${backfillArquivosResult.erros} erro(s)` : ""}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Conversão de vídeos .mov/HEVC → MP4 */}
+        <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-3">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-200 mb-1">🎞️ Converter vídeos .mov para MP4</h4>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Vídeos <code className="bg-zinc-700 px-1 rounded text-zinc-300">.mov</code> de iPhone (codec HEVC) não tocam no Chrome/Android (ficam pretos). Este botão envia todos os vídeos finais <code className="bg-zinc-700 px-1 rounded text-zinc-300">.mov</code> ainda não convertidos para o worker de transcodificação, que os transforma em MP4 (toca em qualquer aparelho). A conversão roda em segundo plano.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={async () => {
+                setConvertendoHevc(true)
+                setHevcResult(null)
+                try {
+                  const res = await fetch("/api/admin/transcode-hevc", { method: "POST" })
+                  const json = await res.json()
+                  if (!res.ok) throw new Error(json.error ?? "Erro ao enfileirar conversão")
+                  setHevcResult(json.enfileirados)
+                  toast.success(`✅ ${json.enfileirados} vídeo(s) enviado(s) para conversão!`)
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Erro na conversão")
+                } finally {
+                  setConvertendoHevc(false)
+                }
+              }}
+              disabled={convertendoHevc}
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              {convertendoHevc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+              {convertendoHevc ? "Enviando…" : "🎞️ Converter .mov para MP4"}
+            </button>
+            {hevcResult !== null && (
+              <span className="text-xs px-3 py-1.5 rounded-lg border bg-emerald-900/30 border-emerald-700/40 text-emerald-400">
+                {hevcResult} vídeo(s) na fila — converte em segundo plano
               </span>
             )}
           </div>

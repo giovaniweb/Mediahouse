@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { precisaTranscode, enqueueTranscode } from "@/lib/transcode"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -87,6 +88,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       where: { demandaId: id, tipoArquivo: "final" },
     })
     const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
+    const ehTranscode = precisaTranscode(url)
     const arq = await prisma.arquivo.create({
       data: {
         demandaId: id,
@@ -95,9 +97,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         url,
         sequencia: existingCount + 1,
         ...(thumbnailUrl ? { thumbnailUrl } : {}),
+        ...(ehTranscode ? { transcodeStatus: "processing" } : {}),
       },
     })
     arqId = arq.id
+
+    // .mov/HEVC → enfileira conversão para MP4 (toca em qualquer dispositivo)
+    if (ehTranscode) {
+      void enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
+    }
   }
 
   // Sempre atualiza o campo linkFinal/linkBrutos (backward compat)

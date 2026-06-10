@@ -1,0 +1,14 @@
+{
+  "name": "nuflow-transcode-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Worker de transcodificação de vídeo (HEVC/.mov → MP4 H.264) do NuFlow",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
