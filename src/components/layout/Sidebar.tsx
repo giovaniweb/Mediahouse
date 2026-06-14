@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
-import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
+import { GROWTH_ATIVO, EVENTOS_ATIVO, IDEIAS_ATIVO, MENSAGENS_ATIVO } from "@/lib/modulos"
 import { signOut } from "next-auth/react"
 
 const sections = [
@@ -103,6 +103,9 @@ export function Sidebar() {
 
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
+    // Itens de módulos congelados — ocultos para todos (ver src/lib/modulos.ts)
+    if (href === "/ideias" && !IDEIAS_ATIVO) return false
+    if (href === "/mensagens" && !MENSAGENS_ATIVO) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
     const key = PERMISSAO_HREF_MAP[href]

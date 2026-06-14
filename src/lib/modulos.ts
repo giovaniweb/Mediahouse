@@ -6,6 +6,8 @@
 
 export const GROWTH_ATIVO = false
 export const EVENTOS_ATIVO = false
+export const IDEIAS_ATIVO = false
+export const MENSAGENS_ATIVO = false
 
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e tudo abaixo dele.
 const ROTAS_GROWTH = [
@@ -22,11 +24,17 @@ const ROTAS_EVENTOS = [
   "/api/fornecedores",
   "/api/produtos-servico",
 ]
+// Banco de Ideias (página + API própria)
+const ROTAS_IDEIAS = ["/ideias", "/api/ideias"]
+// Mensagens — só a página; NÃO bloquear /api/whatsapp (usado pelas notificações automáticas)
+const ROTAS_MENSAGENS = ["/mensagens"]
 
 // Lista das rotas atualmente congeladas (conforme as flags acima).
 export const ROTAS_CONGELADAS: string[] = [
   ...(GROWTH_ATIVO ? [] : ROTAS_GROWTH),
   ...(EVENTOS_ATIVO ? [] : ROTAS_EVENTOS),
+  ...(IDEIAS_ATIVO ? [] : ROTAS_IDEIAS),
+  ...(MENSAGENS_ATIVO ? [] : ROTAS_MENSAGENS),
 ]
 
 // true se o caminho pertence a um módulo congelado.
