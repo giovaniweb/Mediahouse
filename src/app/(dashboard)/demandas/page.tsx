@@ -7,6 +7,7 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { Plus, Search, SlidersHorizontal, XCircle } from "lucide-react"
+import { EVENTOS_ATIVO } from "@/lib/modulos"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -29,7 +30,7 @@ export default function DemandasPage() {
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=200", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
-  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>("/api/eventos", fetcher)
+  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(EVENTOS_ATIVO ? "/api/eventos" : null, fetcher)
 
   const videomakers = dataVMs?.videomakers ?? []
   const editores = dataEds?.editores ?? []
@@ -252,11 +253,13 @@ export default function DemandasPage() {
           <option value="">Todos produtos</option>
           {produtos.map(p => (<option key={p.id} value={p.id}>{p.nome}</option>))}
         </select>
-        <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          <option value="">Todos eventos</option>
-          {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
-        </select>
+        {EVENTOS_ATIVO && (
+          <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
+            className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
+            <option value="">Todos eventos</option>
+            {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
+          </select>
+        )}
         {temFiltrosAtivos && (
           <button onClick={limparFiltros}
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">

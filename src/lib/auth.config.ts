@@ -1,6 +1,7 @@
 import type { NextAuthConfig } from "next-auth"
 import { SignJWT, jwtVerify } from "jose"
 import type { JWT } from "next-auth/jwt"
+import { rotaCongelada } from "@/lib/modulos"
 
 // Gera uma chave de 32 bytes a partir do secret (compatível com HS256)
 function getSecretKey(secret: string | Uint8Array) {
@@ -91,6 +92,18 @@ export const authConfig: NextAuthConfig = {
       // Bloqueia não-logados em todas as outras rotas
       if (!isLoggedIn) {
         return false // next-auth redireciona para signIn page
+      }
+
+      // Módulos congelados (Growth/Design e Eventos) — bloqueados para todos.
+      // Ver src/lib/modulos.ts. Não apaga nada; só desativa o acesso.
+      if (rotaCongelada(pathname)) {
+        if (pathname.startsWith("/api/")) {
+          return new Response(
+            JSON.stringify({ error: "Módulo desativado" }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          )
+        }
+        return Response.redirect(new URL("/dashboard", request.nextUrl))
       }
 
       // Redirecionar usuários mobile do /dashboard para /campo

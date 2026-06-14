@@ -26,6 +26,7 @@ import {
   ArrowUpRight,
   Printer,
 } from "lucide-react"
+import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -842,7 +843,7 @@ export default function RelatoriosPage() {
             {/* Controles (área + período + imprimir) */}
             <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).map(([a, label]) => (
+                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && GROWTH_ATIVO) || (a === "eventos" && EVENTOS_ATIVO)).map(([a, label]) => (
                   <button key={a} onClick={() => setAreaRes(a)}
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
@@ -1021,7 +1022,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-zinc-500 font-medium">Área:</span>
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).map(([a, label]) => (
+                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).filter(([a]) => a === "audiovisual" || GROWTH_ATIVO).map(([a, label]) => (
                   <button key={a} onClick={() => setAreaRel(a)}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
                     {label}

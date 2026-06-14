@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
+import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
 import { signOut } from "next-auth/react"
 
 const sections = [
@@ -161,6 +162,10 @@ export function Sidebar() {
         )}
 
         {me?.tipo !== "videomaker" && sections.map((section) => {
+          // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
+          if (section.label === "Growth" && !GROWTH_ATIVO) return null
+          if (section.label === "Eventos" && !EVENTOS_ATIVO) return null
+
           const visibleItems = section.items.filter((item) => canSee(item.href))
           if (visibleItems.length === 0) return null
 
