@@ -165,7 +165,9 @@ model Usuario {
   avatarUrl String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  superAdmin Boolean      @default(false)  // gestão global de organizações (SaaS)
 
+  organizacoes    UsuarioOrganizacao[]
   demandasCriadas Demanda[]         @relation("Solicitante")
   demandasGeridas Demanda[]         @relation("Gestor")
   historicos      HistoricoStatus[]
@@ -242,6 +244,7 @@ model Videomaker {
 }
 
 model Editor {
+  organizacaoId String?
   id            String        @id @default(cuid())
   nome          String
   telefone      String?
@@ -287,6 +290,7 @@ model Editor {
 }
 
 model Designer {
+  organizacaoId String?
   id               String        @id @default(cuid())
   nome             String
   cidade           String?
@@ -327,6 +331,7 @@ model Designer {
 }
 
 model Demanda {
+  organizacaoId String?
   id             String        @id @default(cuid())
   codigo         String        @unique
   titulo         String
@@ -535,6 +540,7 @@ model Comentario {
 }
 
 model AlertaIA {
+  organizacaoId String?
   id           String           @id @default(cuid())
   demandaId    String?
   usuarioId    String?
@@ -572,18 +578,25 @@ model AprovacaoVideo {
 }
 
 model ConfigWhatsapp {
-  id          String   @id @default(cuid())
-  instanceUrl String
-  apiKey      String
-  instanceId  String
-  ativo       Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String    @id @default(cuid())
+  organizacaoId     String?   @unique  // 1 WhatsApp por empresa
+  instanceUrl       String             // (Bloco 8: virá do env da Evolution gerenciada)
+  apiKey            String             // (Bloco 8: virá do env da Evolution gerenciada)
+  instanceId        String    @unique
+  instanceName      String?            // ex: nuflow_contourline
+  telefoneConectado String?
+  pushName          String?
+  connectedAt       DateTime?
+  lastStatus        String?
+  ativo             Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@map("config_whatsapp")
 }
 
 model MensagemWhatsapp {
+  organizacaoId String?
   id           String          @id @default(cuid())
   demandaId    String?
   telefone     String
@@ -601,6 +614,7 @@ model MensagemWhatsapp {
 }
 
 model ContatoWhatsApp {
+  organizacaoId String?
   id        String   @id @default(cuid())
   telefone  String   @unique
   nome      String
@@ -614,6 +628,7 @@ model ContatoWhatsApp {
 
 // Cache de resolução @lid → JID real (evita atribuição errada de mensagens)
 model MapaLidWhatsApp {
+  organizacaoId String?
   id        String   @id @default(cuid())
   lidJid    String   @unique              // ex: "123456789@lid"
   realJid   String                        // ex: "5531991900114@s.whatsapp.net"
@@ -671,6 +686,7 @@ enum StatusEvento {
 }
 
 model Evento {
+  organizacaoId String?
   id           String         @id @default(cuid())
   titulo       String
   descricao    String?
@@ -726,6 +742,7 @@ enum StatusPagamento {
 }
 
 model CustoVideomaker {
+  organizacaoId String?
   id                String          @id @default(cuid())
   videomakerId      String
   demandaId         String?
@@ -767,6 +784,7 @@ enum TipoRelatorio {
 }
 
 model RelatorioIA {
+  organizacaoId String?
   id         String        @id @default(cuid())
   tipo       TipoRelatorio
   periodo    String        // ex: "2025-W01", "2025-03", "realtime"
@@ -783,6 +801,7 @@ model RelatorioIA {
 // ─────────────────────────────────────────────
 
 model ConfigEmail {
+  organizacaoId String?
   id               String   @id @default(cuid())
   apiKey           String   @default("") // Resend API Key
   senderEmail      String   @default("onboarding@resend.dev")
@@ -841,6 +860,7 @@ model AvaliacaoEditor {
 // ─────────────────────────────────────────────
 
 model ConfigParametro {
+  organizacaoId String?
   id        String   @id @default(cuid())
   grupo     String   // "departamentos" | "tipos_video" | "habilidades" | "areas_atuacao"
   valor     String   // valor interno (ex: "growth")
@@ -917,6 +937,7 @@ model Fabricante {
 }
 
 model Produto {
+  organizacaoId String?
   id              String      @id @default(cuid())
   nome            String
   descricao       String?
@@ -956,6 +977,7 @@ model DemandaProduto {
 // ─────────────────────────────────────────────
 
 model IdeiaVideo {
+  organizacaoId String?
   id              String       @id @default(cuid())
   titulo          String
   descricao       String?      @db.Text
@@ -1112,6 +1134,7 @@ model NotaFiscalUpload {
 // ─────────────────────────────────────────────
 
 model ConfigEmpresa {
+  organizacaoId String?
   id            String   @id @default(cuid())
   cnpj          String?
   razaoSocial   String?
@@ -1202,6 +1225,7 @@ enum TipoMomento {
 }
 
 model EventoCobertura {
+  organizacaoId String?
   id                  String          @id @default(cuid())
   titulo              String
   slug                String          @unique
@@ -1473,6 +1497,7 @@ enum TipoAprovacao {
 }
 
 model EventoGestao {
+  organizacaoId String?
   id                 String             @id @default(cuid())
   codigo             String             @unique
   nome               String
@@ -1553,6 +1578,7 @@ model EventoGestaoDocumento {
 }
 
 model Fornecedor {
+  organizacaoId String?
   id             String              @id @default(cuid())
   nome           String
   contato        String?
@@ -1654,6 +1680,7 @@ model EventoGestaoLog {
 // Produção lançada manualmente (vídeos feitos que não viraram card no NuFlow)
 // Por competência (ano*100+mes), área e categoria (ex: "Linha Med", "Linha Estética").
 model ProducaoManual {
+  organizacaoId String?
   id          String   @id @default(cuid())
   competencia Int      // ano*100 + mes (ex: 202606)
   area        String   @default("audiovisual")
@@ -1665,4 +1692,34 @@ model ProducaoManual {
 
   @@unique([competencia, area, grupo, categoria])
   @@map("producao_manual")
+}
+
+// ─── SaaS multiempresa ────────────────────────────────────────────────────────
+model Organizacao {
+  id        String   @id @default(cuid())
+  nome      String
+  slug      String   @unique  // ex: "contourline" (preparado p/ subdomínio futuro)
+  logoUrl   String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  membros UsuarioOrganizacao[]
+
+  @@map("organizacoes")
+}
+
+model UsuarioOrganizacao {
+  id            String      @id @default(cuid())
+  usuarioId     String
+  organizacaoId String
+  papel         TipoUsuario @default(solicitante)
+  createdAt     DateTime    @default(now())
+
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, organizacaoId])
+  @@index([organizacaoId])
+  @@map("usuario_organizacao")
 }

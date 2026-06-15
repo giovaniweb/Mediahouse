@@ -121,6 +121,8 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.tipo = (user as { tipo: string }).tipo
         token.id = user.id
+        token.organizacaoId = (user as { organizacaoId?: string | null }).organizacaoId ?? null
+        token.papel = (user as { papel?: string | null }).papel ?? null
       }
       // Remove image/picture do token — avatares base64 tornam o JWT enorme (>200KB)
       delete token.picture
@@ -131,6 +133,8 @@ export const authConfig: NextAuthConfig = {
       if (token) {
         session.user.id = token.id as string
         session.user.tipo = token.tipo as string
+        session.user.organizacaoId = (token.organizacaoId as string | null) ?? null
+        session.user.papel = (token.papel as string | null) ?? null
       }
       return session
     },

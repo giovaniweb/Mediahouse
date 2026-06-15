@@ -61,11 +61,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const senhaValida = await bcrypt.compare(password, usuario.senhaHash)
         if (!senhaValida) return null
 
+        // Organização ativa (Fase 1: a primeira/única membership do usuário)
+        const membership = await prisma.usuarioOrganizacao.findFirst({
+          where: { usuarioId: usuario.id },
+          orderBy: { createdAt: "asc" },
+          select: { organizacaoId: true, papel: true },
+        })
+
         return {
           id: usuario.id,
           name: usuario.nome,
           email: usuario.email,
           tipo: usuario.tipo,
+          organizacaoId: membership?.organizacaoId ?? null,
+          papel: membership?.papel ?? usuario.tipo,
           // Não incluir image/avatarUrl — base64 tornaria o JWT cookie enorme
         }
       },
