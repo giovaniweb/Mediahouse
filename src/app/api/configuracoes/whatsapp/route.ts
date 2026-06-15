@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET() {
   const session = await auth()
   if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const config = await prisma.configWhatsapp.findFirst()
+  const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
   // Mascara a apiKey ao retornar
   if (config) {
     return NextResponse.json({
@@ -27,6 +30,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const body = await req.json()
   const { instanceUrl, apiKey, instanceId } = body
 
@@ -34,7 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "instanceUrl e instanceId são obrigatórios" }, { status: 400 })
   }
 
-  const existing = await prisma.configWhatsapp.findFirst()
+  const existing = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
 
   const data = {
     instanceUrl,
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ config: updated })
   } else {
     if (!apiKey) return NextResponse.json({ error: "apiKey obrigatória" }, { status: 400 })
-    const created = await prisma.configWhatsapp.create({ data: { instanceUrl, apiKey, instanceId, ativo: true } })
+    const created = await prisma.configWhatsapp.create({ data: { organizacaoId, instanceUrl, apiKey, instanceId, ativo: true } })
     return NextResponse.json({ config: created })
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getWhatsappConfig } from "@/lib/whatsapp"
 
 // POST /api/convites — criar convite para videomaker
 export async function POST(req: NextRequest) {
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     const link = `${baseUrl}/convite/${convite.token}`
 
     try {
-      const configWpp = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+      const demOrg = await prisma.demanda.findUnique({ where: { id: convite.demandaId }, select: { organizacaoId: true } })
+      const configWpp = await getWhatsappConfig(demOrg?.organizacaoId)
       if (configWpp) {
         const phone = vm.telefone.replace(/\D/g, "")
         await fetch(`${configWpp.instanceUrl}/message/sendText/${configWpp.instanceId}`, {

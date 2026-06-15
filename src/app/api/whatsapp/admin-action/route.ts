@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { getWhatsappConfig } from "@/lib/whatsapp"
 
-// POST /api/whatsapp/admin-action — ações administrativas (temporário)
+// POST /api/whatsapp/admin-action — ações administrativas (temporário, super-admin via env secret)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { secret, action, ...params } = body
 
-    if (secret !== "nfdbg2026") {
+    const dbg = process.env.WHATSAPP_DEBUG_SECRET
+    if (!dbg || secret !== dbg) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 })
     }
 
     if (action === "send_message") {
-      // Busca config direto
-      const config = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+      // Busca config (fallback Contourline — rota administrativa)
+      const config = await getWhatsappConfig()
       if (!config) return NextResponse.json({ error: "no config" })
 
       // Limpa número

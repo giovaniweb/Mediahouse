@@ -1,20 +1,34 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
-// GET /api/configuracoes/whatsapp/qr — busca QR code da Evolution API
-// Fluxo:
-//   1. Verifica connectionState da instância
-//   2a. Se "open" → retorna { conectado: true }
-//   2b. Se instância existe mas desconectada → GET /instance/connect para QR
-//   3. Se 404 (instância não existe) → tenta criar via POST /instance/create
-//   4. Se criação falhar → retorna mensagem clara para criar no painel da Evolution API
+// GET /api/configuracoes/whatsapp/qr — QR da instância Evolution DA ORGANIZAÇÃO logada.
+// Cada empresa tem sua própria instância (instanceName = nuflow_<slug>).
+// Org sem config → auto-provisiona usando a Evolution gerenciada (EVOLUTION_API_URL/KEY).
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const config = await prisma.configWhatsapp.findFirst({ orderBy: { createdAt: "desc" } })
-  if (!config || !config.instanceUrl || !config.apiKey || !config.instanceId) {
+  let config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
+
+  // Org sem config → provisiona via Evolution gerenciada (env) + instância nuflow_<slug>
+  if (!config) {
+    const org = await prisma.organizacao.findUnique({ where: { id: organizacaoId }, select: { slug: true } })
+    const evoUrl = process.env.EVOLUTION_API_URL
+    const evoKey = process.env.EVOLUTION_API_KEY
+    if (!org || !evoUrl || !evoKey) {
+      return NextResponse.json({ error: "Evolution gerenciada não configurada (defina EVOLUTION_API_URL e EVOLUTION_API_KEY)" }, { status: 400 })
+    }
+    const instanceName = `nuflow_${org.slug}`
+    config = await prisma.configWhatsapp.create({
+      data: { organizacaoId, instanceUrl: evoUrl, apiKey: evoKey, instanceId: instanceName, instanceName, ativo: false },
+    })
+  }
+
+  if (!config.instanceUrl || !config.apiKey || !config.instanceId) {
     return NextResponse.json({ error: "WhatsApp não configurado" }, { status: 400 })
   }
 
@@ -31,6 +45,10 @@ export async function GET() {
 
       // Já conectado
       if (state === "open") {
+        await prisma.configWhatsapp.update({
+          where: { id: config.id },
+          data: { ativo: true, lastStatus: "open", connectedAt: new Date() },
+        }).catch(() => null)
         return NextResponse.json({ conectado: true, estado: "open" })
       }
 

@@ -4,7 +4,8 @@ import { getWhatsappConfig } from "@/lib/whatsapp"
 // Endpoint temporário para resolver @lid manualmente
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("s")
-  if (secret !== "nfdbg2026") {
+  const dbg = process.env.WHATSAPP_DEBUG_SECRET
+  if (!dbg || secret !== dbg) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 })
   }
 

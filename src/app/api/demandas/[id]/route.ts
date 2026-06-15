@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
@@ -195,7 +195,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           select: { nome: true, telefone: true },
         })
         if (vm?.telefone) {
-          const configWpp = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+          const configWpp = await getWhatsappConfig(guard.organizacaoId)
           if (configWpp) {
             const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
             const link = `${baseUrl}/nf-upload/${nf.token}`

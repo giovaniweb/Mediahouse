@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { auth } from "@/lib/auth"
+import { getOrgId } from "@/lib/org"
 
-// GET /api/whatsapp/status — retorna estado da conexão WhatsApp (sem auth para sidebar)
+// GET /api/whatsapp/status — estado da conexão WhatsApp da organização do usuário logado
 export async function GET() {
-  const config = await prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+  const session = await auth()
+  const organizacaoId = session ? await getOrgId(session) : null
+  const config = organizacaoId
+    ? await prisma.configWhatsapp.findFirst({ where: { organizacaoId, ativo: true } })
+    : null
   if (!config) {
     return NextResponse.json({ connected: false, reason: "no_config" })
   }

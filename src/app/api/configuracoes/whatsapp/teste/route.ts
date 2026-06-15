@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/configuracoes/whatsapp/teste — testa conexão + opcionalmente envia mensagem de teste
 export async function POST(req: Request) {
@@ -9,8 +10,10 @@ export async function POST(req: Request) {
   if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const config = await prisma.configWhatsapp.findFirst()
+  const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
   if (!config) return NextResponse.json({ ok: false, error: "Nenhuma configuração encontrada" })
 
   // Verifica conexão

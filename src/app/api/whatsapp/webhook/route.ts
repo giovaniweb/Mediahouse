@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { StatusInterno } from "@prisma/client"
-import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
+import { sendWhatsappMessage, getWhatsappConfig, contourlineOrgId } from "@/lib/whatsapp"
 import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, SYSTEM_WHATSAPP } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { downloadEvolutionMedia, uploadMedia } from "@/lib/storage"
@@ -27,7 +27,8 @@ export const maxDuration = 60
 async function resolveReplyJid(
   remoteJid: string,
   pushName?: string,
-  participant?: string
+  participant?: string,
+  organizacaoId?: string | null
 ): Promise<{ replyJid: string; telefone: string }> {
   const lidNumber = remoteJid.replace(/@lid$/, "").split(":")[0]
   const fallback = { replyJid: remoteJid, telefone: lidNumber }
@@ -58,7 +59,7 @@ async function resolveReplyJid(
       const telefone = pClean.startsWith("55") ? pClean : `55${pClean}`
       console.log(`[WH-LID] Resolvido via participant → ${jid}`)
       // Salva no cache
-      await salvarCacheLid(remoteJid, jid, telefone, pushName)
+      await salvarCacheLid(remoteJid, jid, telefone, pushName, organizacaoId)
       return { replyJid: jid, telefone }
     }
   }
@@ -67,6 +68,7 @@ async function resolveReplyJid(
   try {
     const msgSaida = await prisma.mensagemWhatsapp.findFirst({
       where: {
+        ...(organizacaoId && { organizacaoId }),
         direcao: "saida",
         status: "enviado",
         OR: [
@@ -81,7 +83,7 @@ async function resolveReplyJid(
       if (clean.length >= 10 && !clean.includes("@")) {
         const jid = clean.startsWith("55") ? `${clean}@s.whatsapp.net` : `55${clean}@s.whatsapp.net`
         console.log(`[WH-LID] Resolvido via banco (saida) → ${jid}`)
-        await salvarCacheLid(remoteJid, jid, clean, pushName)
+        await salvarCacheLid(remoteJid, jid, clean, pushName, organizacaoId)
         return { replyJid: jid, telefone: clean.replace(/^55/, "") }
       }
     }
@@ -91,7 +93,7 @@ async function resolveReplyJid(
 
   // ── Estratégia 3: Evolution API findContacts ──────────────────────────────
   try {
-    const config = await getWhatsappConfig()
+    const config = await getWhatsappConfig(organizacaoId)
     if (config) {
       const contactRes = await fetch(`${config.instanceUrl}/chat/findContacts/${config.instanceId}`, {
         method: "POST",
@@ -107,7 +109,7 @@ async function resolveReplyJid(
         if (contactId.endsWith("@s.whatsapp.net")) {
           const tel = contactId.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via findContacts → ${contactId}`)
-          await salvarCacheLid(remoteJid, contactId, tel, pushName)
+          await salvarCacheLid(remoteJid, contactId, tel, pushName, organizacaoId)
           return { replyJid: contactId, telefone: tel }
         }
         const cNumber = contact?.number ?? ""
@@ -115,7 +117,7 @@ async function resolveReplyJid(
           const numClean = cNumber.replace(/\D/g, "")
           const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
           console.log(`[WH-LID] Resolvido via findContacts number → ${jid}`)
-          await salvarCacheLid(remoteJid, jid, numClean, pushName)
+          await salvarCacheLid(remoteJid, jid, numClean, pushName, organizacaoId)
           return { replyJid: jid, telefone: numClean }
         }
       }
@@ -160,7 +162,7 @@ async function resolveReplyJid(
           const realJid = sentMsg.key.remoteJid
           const telefone = realJid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via Evolution findMessages → ${realJid}`)
-          await salvarCacheLid(remoteJid, realJid, telefone, pushName)
+          await salvarCacheLid(remoteJid, realJid, telefone, pushName, organizacaoId)
           return { replyJid: realJid, telefone }
         }
       }
@@ -171,7 +173,7 @@ async function resolveReplyJid(
 
   // ── Estratégia 4: Evolution API fetchProfile ──────────────────────────────
   try {
-    const config = await getWhatsappConfig()
+    const config = await getWhatsappConfig(organizacaoId)
     if (config) {
       const profileRes = await fetch(`${config.instanceUrl}/chat/fetchProfile/${config.instanceId}`, {
         method: "POST",
@@ -186,7 +188,7 @@ async function resolveReplyJid(
         if (wuid && wuid.endsWith("@s.whatsapp.net")) {
           const tel = wuid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
           console.log(`[WH-LID] Resolvido via fetchProfile → ${wuid}`)
-          await salvarCacheLid(remoteJid, wuid, tel, pushName)
+          await salvarCacheLid(remoteJid, wuid, tel, pushName, organizacaoId)
           return { replyJid: wuid, telefone: tel }
         }
         const num = profile?.number ?? profile?.numberExists ?? ""
@@ -194,7 +196,7 @@ async function resolveReplyJid(
           const numClean = String(num).replace(/\D/g, "")
           const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
           console.log(`[WH-LID] Resolvido via fetchProfile number → ${jid}`)
-          await salvarCacheLid(remoteJid, jid, numClean, pushName)
+          await salvarCacheLid(remoteJid, jid, numClean, pushName, organizacaoId)
           return { replyJid: jid, telefone: numClean }
         }
       }
@@ -221,11 +223,11 @@ async function resolveReplyJid(
 /**
  * Salva mapeamento @lid → JID real no cache
  */
-async function salvarCacheLid(lidJid: string, realJid: string, telefone: string, pushName?: string) {
+async function salvarCacheLid(lidJid: string, realJid: string, telefone: string, pushName?: string, organizacaoId?: string | null) {
   try {
     await prisma.mapaLidWhatsApp.upsert({
       where: { lidJid },
-      create: { lidJid, realJid, telefone, pushName },
+      create: { lidJid, realJid, telefone, pushName, ...(organizacaoId && { organizacaoId }) },
       update: { realJid, telefone, pushName, updatedAt: new Date() },
     })
   } catch (e) {
@@ -345,8 +347,25 @@ async function processarMensagem(body: unknown) {
   const b = body as any
   const event = b?.event as string | undefined
   const data = b?.data
+  const instanceName = (b?.instance ?? b?.instanceName) as string | undefined
 
   const eventNorm = event?.toLowerCase().replace(/_/g, ".") ?? ""
+
+  // ── Resolve a organização pela instância Evolution (multiempresa) ───────
+  let organizacaoId: string | null = null
+  if (instanceName) {
+    const cfg = await prisma.configWhatsapp.findFirst({
+      where: { OR: [{ instanceId: instanceName }, { instanceName }] },
+      select: { organizacaoId: true },
+    }).catch(() => null)
+    if (!cfg) {
+      console.warn(`[WH] Instância desconhecida "${instanceName}" — ignorando`)
+      return
+    }
+    organizacaoId = cfg.organizacaoId
+  }
+  // Fallback legado/temporário: payload sem instância → Contourline
+  if (!organizacaoId) organizacaoId = await contourlineOrgId()
 
   // ── Evento de conexão ──────────────────────────────────────────────────
   if (eventNorm === "connection.update") {
@@ -361,6 +380,7 @@ async function processarMensagem(body: unknown) {
           severidade: "critico",
           acaoSugerida: "Acessar /configuracoes e reconectar o WhatsApp",
           status: "ativo",
+          ...(organizacaoId && { organizacaoId }),
         },
       }).catch(() => null)
     }
@@ -384,7 +404,7 @@ async function processarMensagem(body: unknown) {
   // ── Deduplicação ──────────────────────────────────────────────────────
   if (messageId) {
     const jaProcessado = await prisma.mensagemWhatsapp.findFirst({
-      where: { conteudo: { startsWith: `[id:${messageId}]` } },
+      where: { conteudo: { startsWith: `[id:${messageId}]` }, ...(organizacaoId && { organizacaoId }) },
     }).catch(() => null)
     if (jaProcessado) {
       console.log(`[WH-DEDUP] ${messageId} já processada`)
@@ -394,7 +414,7 @@ async function processarMensagem(body: unknown) {
 
   // Resolve JID real (passa participant do payload para ajudar na resolução @lid)
   const participant = data.key?.participant ?? data.participant ?? ""
-  const { replyJid, telefone } = await resolveReplyJid(remoteJid, pushName, participant)
+  const { replyJid, telefone } = await resolveReplyJid(remoteJid, pushName, participant, organizacaoId)
 
   // ── Detecta mídia ──────────────────────────────────────────────────────
   const midia = detectarMidia(message)
@@ -431,7 +451,7 @@ async function processarMensagem(body: unknown) {
   // ── Processa mídia (download + upload storage) ────────────────────────
   if (midia) {
     try {
-      const config = await getWhatsappConfig()
+      const config = await getWhatsappConfig(organizacaoId)
       if (config) {
         const downloaded = await downloadEvolutionMedia(
           config.instanceUrl,
@@ -463,6 +483,7 @@ async function processarMensagem(body: unknown) {
   // Busca histórico recente ANTES de salvar
   const historicoRecente = await prisma.mensagemWhatsapp.findMany({
     where: {
+      ...(organizacaoId && { organizacaoId }),
       telefone: { contains: telefone.slice(-8) },
       direcao: { in: ["entrada", "saida"] },
     },
@@ -483,6 +504,7 @@ async function processarMensagem(body: unknown) {
       mediaType: mediaType ?? undefined,
       direcao: "entrada",
       status: "recebido",
+      ...(organizacaoId && { organizacaoId }),
     },
   }).catch(() => null)
 
@@ -539,6 +561,7 @@ async function processarMensagem(body: unknown) {
         nome: ref!.nome,
         tipo: editor ? "editor" : videomaker ? "videomaker" : "usuario",
         referenciaId: ref!.id,
+        ...(organizacaoId && { organizacaoId }),
       },
       update: {},
     }).catch(() => null)
@@ -582,7 +605,7 @@ async function processarMensagem(body: unknown) {
       const nomeContato = textoOriginal.trim()
       await prisma.contatoWhatsApp.upsert({
         where: { telefone: telNorm },
-        create: { telefone: telNorm, nome: nomeContato, tipo: "externo" },
+        create: { telefone: telNorm, nome: nomeContato, tipo: "externo", ...(organizacaoId && { organizacaoId }) },
         update: { nome: nomeContato },
       }).catch(() => null)
 
@@ -927,7 +950,7 @@ REGRAS DE AGENDA:
   try {
     await executarAgenteComTools(
       promptSecretaria,
-      executarFerramenta,
+      (nome, input) => executarFerramenta(nome, input, organizacaoId),
       MODELO_WHATSAPP,
       8,
       TOOLS_WHATSAPP,

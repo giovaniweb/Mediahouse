@@ -10,7 +10,8 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 export async function executarFerramenta(
   nome: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  organizacaoId?: string | null
 ): Promise<string> {
   try {
     switch (nome) {
@@ -32,11 +33,11 @@ export async function executarFerramenta(
       case "buscar_agenda_videomaker":
         return await buscarAgendaVideomaker(input)
       case "criar_evento_agenda":
-        return await criarEventoAgenda(input)
+        return await criarEventoAgenda(input, organizacaoId)
       case "enviar_whatsapp":
-        return await enviarWhatsapp(input)
+        return await enviarWhatsapp(input, organizacaoId)
       case "criar_demanda_rascunho":
-        return await criarDemandaRascunho(input)
+        return await criarDemandaRascunho(input, organizacaoId)
       case "buscar_demanda_por_codigo":
         return await buscarDemandaPorCodigo(input)
       case "listar_gestores":
@@ -567,7 +568,7 @@ async function verificarConflitos(
  * Cria evento com verificação de conflitos.
  * Se conflito encontrado, retorna sugestões ao invés de criar.
  */
-async function criarEventoAgenda(input: Record<string, unknown>): Promise<string> {
+async function criarEventoAgenda(input: Record<string, unknown>, organizacaoId?: string | null): Promise<string> {
   const videomakerId = (input.videomaker_id as string) || undefined
   const editorId = (input.editor_id as string) || undefined
   const usuarioId = (input.usuario_id as string) || undefined
@@ -605,6 +606,7 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
   // ── Cria o evento ─────────────────────────────────────────────────────
   const evento = await prisma.evento.create({
     data: {
+      ...(organizacaoId && { organizacaoId }),
       titulo: input.titulo as string,
       descricao: (input.descricao as string) ?? undefined,
       inicio,
@@ -649,12 +651,12 @@ async function criarEventoAgenda(input: Record<string, unknown>): Promise<string
 /**
  * Envia mensagem WhatsApp (secretária + notificações automáticas)
  */
-async function enviarWhatsapp(input: Record<string, unknown>): Promise<string> {
+async function enviarWhatsapp(input: Record<string, unknown>, organizacaoId?: string | null): Promise<string> {
   const telefone = input.telefone as string
   const mensagem = input.mensagem as string
   if (!telefone || !mensagem) return JSON.stringify({ erro: "telefone e mensagem são obrigatórios" })
 
-  const resultado = await sendWhatsappMessage(telefone, mensagem, (input.demanda_id as string) ?? undefined)
+  const resultado = await sendWhatsappMessage(telefone, mensagem, (input.demanda_id as string) ?? undefined, organizacaoId)
   return JSON.stringify({
     enviado: !!resultado,
     telefone,
@@ -665,7 +667,7 @@ async function enviarWhatsapp(input: Record<string, unknown>): Promise<string> {
 /**
  * Cria rascunho de demanda recebida via WhatsApp
  */
-async function criarDemandaRascunho(input: Record<string, unknown>): Promise<string> {
+async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoId?: string | null): Promise<string> {
   const count = await prisma.demanda.count()
   const codigo = `VID-${String(count + 1).padStart(4, "0")}`
 
@@ -702,6 +704,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>): Promise<str
 
   const demanda = await prisma.demanda.create({
     data: {
+      ...(organizacaoId && { organizacaoId }),
       codigo,
       titulo: input.titulo as string,
       descricao: (input.descricao as string) ?? "Demanda criada via WhatsApp",

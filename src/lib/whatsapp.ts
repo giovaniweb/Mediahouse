@@ -4,14 +4,53 @@
 
 import { prisma } from "@/lib/prisma"
 
-export async function getWhatsappConfig() {
-  return prisma.configWhatsapp.findFirst({ where: { ativo: true } })
+// ─── Resolução de organização (SaaS multiempresa) ────────────────────────────
+// Cache do id da org Contourline — usado APENAS como fallback legado/temporário
+// quando não há contexto de organização (ver resolverOrgEnvio).
+let _contourlineOrgId: string | null = null
+export async function contourlineOrgId(): Promise<string | null> {
+  if (_contourlineOrgId) return _contourlineOrgId
+  const org = await prisma.organizacao.findUnique({ where: { slug: "contourline" }, select: { id: true } })
+  _contourlineOrgId = org?.id ?? null
+  return _contourlineOrgId
 }
 
-export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string) {
-  const config = await getWhatsappConfig()
+// Config de WhatsApp de uma organização. Sem org → fallback Contourline (legado).
+// Nunca mais usa findFirst({ ativo: true }) global.
+export async function getWhatsappConfig(organizacaoId?: string | null) {
+  const orgId = organizacaoId ?? (await contourlineOrgId())
+  if (!orgId) return null
+  if (!organizacaoId) console.warn("[WhatsApp] getWhatsappConfig sem org — fallback Contourline (legado/temporário)")
+  return prisma.configWhatsapp.findFirst({ where: { organizacaoId: orgId, ativo: true } })
+}
+
+// Resolve a org de um envio: organizacaoId explícito → demandaId → fallback Contourline.
+async function resolverOrgEnvio(demandaId?: string, organizacaoId?: string | null): Promise<string | null> {
+  if (organizacaoId) return organizacaoId
+  if (demandaId) {
+    const d = await prisma.demanda.findUnique({ where: { id: demandaId }, select: { organizacaoId: true } }).catch(() => null)
+    if (d?.organizacaoId) return d.organizacaoId
+  }
+  return contourlineOrgId() // fallback legado/temporário
+}
+
+export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null) {
+  const orgId = await resolverOrgEnvio(demandaId, organizacaoId)
+  const config = await getWhatsappConfig(orgId)
   if (!config) {
-    console.warn("[WhatsApp] Nenhuma configuração ativa encontrada")
+    // Org sem WhatsApp conectado — NÃO quebra o fluxo: registra a tentativa e segue.
+    console.warn(`[WhatsApp] Org ${orgId ?? "?"} sem WhatsApp conectado — pulando envio`)
+    await prisma.mensagemWhatsapp.create({
+      data: {
+        telefone: telefone.replace(/\D/g, ""),
+        tipoMensagem: "text",
+        conteudo: mensagem,
+        direcao: "saida",
+        status: "sem_config",
+        ...(orgId && { organizacaoId: orgId }),
+        ...(demandaId && { demandaId }),
+      },
+    }).catch(() => null)
     return null
   }
 
@@ -65,6 +104,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         conteudo: mensagem,
         direcao: "saida",
         status: res.ok ? "enviado" : "falhou",
+        ...(orgId && { organizacaoId: orgId }),
         ...(demandaId && { demandaId }),
       },
     }).catch(e => console.error("[WhatsApp] Erro ao salvar msg:", e))
