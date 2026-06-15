@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { StatusIdeia, OrigemIdeia } from "@prisma/client"
 
 function detectPlataforma(url: string): string | null {
@@ -22,6 +23,8 @@ function detectOrigem(url: string): OrigemIdeia {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const url = new URL(req.url)
   const status = url.searchParams.get("status") as StatusIdeia | null
@@ -34,7 +37,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(url.searchParams.get("limit") || "50")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {}
+  const where: any = { organizacaoId }
   if (status) where.status = status
   if (produtoId) where.produtoId = produtoId
   if (origem) where.origem = origem
@@ -71,6 +74,7 @@ export async function GET(req: NextRequest) {
     prisma.ideiaVideo.count({ where }),
     prisma.ideiaVideo.groupBy({
       by: ["status"],
+      where: { organizacaoId },
       _count: true,
     }),
   ])
@@ -92,6 +96,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const { titulo, descricao, linkReferencia, mediaUrl, mediaType, produtoId, classificacao, tags, enviadoPor, telefoneOrigem, origem } = body
@@ -105,6 +111,7 @@ export async function POST(req: NextRequest) {
 
   const ideia = await prisma.ideiaVideo.create({
     data: {
+      organizacaoId,
       titulo: titulo.trim(),
       descricao: descricao?.trim() || null,
       linkReferencia: linkReferencia?.trim() || null,

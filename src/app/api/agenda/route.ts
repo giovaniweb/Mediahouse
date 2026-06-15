@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/agenda — retorna eventos conforme papel do usuário
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = req.nextUrl
   const inicio = searchParams.get("inicio")
@@ -21,7 +24,7 @@ export async function GET(req: NextRequest) {
   const isVideomaker = session.user.tipo === "videomaker"
   const isGestor = ["admin", "gestor", "operacao"].includes(session.user.tipo)
 
-  let where: Record<string, unknown> = { ...dateFilter }
+  let where: Record<string, unknown> = { ...dateFilter, organizacaoId }
 
   if (contexto) where.contexto = contexto
 
@@ -64,6 +67,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const {
@@ -82,6 +87,7 @@ export async function POST(req: NextRequest) {
 
   const evento = await prisma.evento.create({
     data: {
+      organizacaoId,
       titulo,
       descricao,
       inicio: new Date(inicio),

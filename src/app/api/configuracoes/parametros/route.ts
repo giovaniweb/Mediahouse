@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // Seed inicial com valores hardcoded
 const SEED_PARAMETROS = [
@@ -53,18 +54,23 @@ const SEED_PARAMETROS = [
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = new URL(req.url)
   const grupo = searchParams.get("grupo")
 
-  // Seed se estiver vazio
-  const count = await prisma.configParametro.count()
+  // Seed se estiver vazio (por organização)
+  const count = await prisma.configParametro.count({ where: { organizacaoId } })
   if (count === 0) {
-    await prisma.configParametro.createMany({ data: SEED_PARAMETROS, skipDuplicates: true })
+    await prisma.configParametro.createMany({
+      data: SEED_PARAMETROS.map((p) => ({ ...p, organizacaoId })),
+      skipDuplicates: true,
+    })
   }
 
   const parametros = await prisma.configParametro.findMany({
-    where: { ...(grupo && { grupo }), ativo: true },
+    where: { organizacaoId, ...(grupo && { grupo }), ativo: true },
     orderBy: [{ grupo: "asc" }, { ordem: "asc" }],
   })
 
@@ -90,6 +96,8 @@ export async function POST(req: NextRequest) {
   if (!["admin", "gestor"].includes(papel ?? "")) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const { grupo, valor, label, ordem } = body
@@ -99,7 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   const p = await prisma.configParametro.create({
-    data: { grupo, valor, label, ordem: ordem ?? 0 },
+    data: { grupo, valor, label, ordem: ordem ?? 0, organizacaoId },
   })
   return NextResponse.json({ parametro: p }, { status: 201 })
 }

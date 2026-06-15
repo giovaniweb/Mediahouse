@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailTeste } from "@/lib/email"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/configuracoes/email
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const config = await prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
+  const config = await prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
   if (!config) return NextResponse.json({ config: null })
 
   // Nunca retorna a API key completa — mostra apenas os primeiros 8 chars para confirmar que existe
@@ -32,6 +35,8 @@ export async function POST(req: NextRequest) {
   if (!["admin", "gestor"].includes(papel ?? "")) {
     return NextResponse.json({ error: "Apenas admin ou gestor pode alterar configurações" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 
@@ -44,7 +49,7 @@ export async function POST(req: NextRequest) {
   // Salvar config Resend
   const { apiKey, senderEmail, senderNome, emailsFinanceiro } = body
 
-  const existing = await prisma.configEmail.findFirst()
+  const existing = await prisma.configEmail.findFirst({ where: { organizacaoId } })
 
   const data: Record<string, unknown> = {}
   if (apiKey) data.apiKey = apiKey           // só atualiza se fornecida
@@ -61,6 +66,7 @@ export async function POST(req: NextRequest) {
   } else {
     const config = await prisma.configEmail.create({
       data: {
+        organizacaoId,
         apiKey: apiKey ?? "",
         senderEmail: senderEmail ?? "onboarding@resend.dev",
         senderNome: senderNome ?? "NuFlow",

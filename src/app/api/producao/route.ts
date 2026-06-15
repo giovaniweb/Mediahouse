@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -13,6 +14,8 @@ const VALOR_POR_DEMANDA = 200
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const mesParam = sp.get("mes")
@@ -40,6 +43,7 @@ export async function GET(req: NextRequest) {
   // Usa finalizadaEm quando disponível; cai em updatedAt para demandas antigas (campo nullable)
   const demandas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       area: "audiovisual",
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
@@ -142,7 +146,7 @@ export async function GET(req: NextRequest) {
   const custosVm = await prisma.custoVideomaker.groupBy({
     by: ["videomakerId"],
     _sum: { valor: true },
-    where: { dataReferencia: { gte: deDate, lte: ateDate } },
+    where: { organizacaoId, dataReferencia: { gte: deDate, lte: ateDate } },
   })
   const custoVmMap = new Map(custosVm.map(c => [c.videomakerId, c._sum.valor ?? 0]))
   const maxVmDemandas = Math.max(...Array.from(vmMap.values()).map(v => v.demandas), 1)
