@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/custos-videomaker — listar custos com filtros opcionais
 export async function GET(req: NextRequest) {
@@ -14,8 +15,12 @@ export async function GET(req: NextRequest) {
   const de = searchParams.get("de")
   const ate = searchParams.get("ate")
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const custos = await prisma.custoVideomaker.findMany({
     where: {
+      organizacaoId,
       ...(videomakerId && { videomakerId }),
       ...(demandaId && { demandaId }),
       ...(pago !== null && pago !== undefined && { pago: pago === "true" }),
@@ -59,6 +64,9 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const body = await req.json()
   const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
 
@@ -68,6 +76,7 @@ export async function POST(req: NextRequest) {
 
   const custo = await prisma.custoVideomaker.create({
     data: {
+      organizacaoId,
       videomakerId,
       demandaId: demandaId || null,
       tipo: tipo ?? "diaria",

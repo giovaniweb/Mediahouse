@@ -2,16 +2,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
   const usuarioId = searchParams.get("usuarioId")
 
   const where = {
+    organizacaoId,
     ...(status ? { status: status as "ativo" | "inativo" } : {}),
     ...(usuarioId ? { usuarioId } : {}),
   }
@@ -40,6 +44,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 
@@ -48,6 +54,7 @@ export async function POST(req: NextRequest) {
 
   const editor = await prisma.editor.create({
     data: {
+      organizacaoId,
       nome: body.nome,
       telefone: body.telefone,
       whatsapp: body.whatsapp,

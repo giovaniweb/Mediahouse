@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 function compDe(d: Date): number {
   return d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1)
@@ -15,6 +16,8 @@ function podeEditar(tipo?: string) {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const area = sp.get("area") === "design" ? "design" : "audiovisual"
@@ -22,7 +25,7 @@ export async function GET(req: NextRequest) {
   const ate = sp.get("ate") ? new Date(sp.get("ate")!) : new Date()
 
   const lancamentos = await prisma.producaoManual.findMany({
-    where: { area, competencia: { gte: compDe(de), lte: compDe(ate) } },
+    where: { organizacaoId, area, competencia: { gte: compDe(de), lte: compDe(ate) } },
     orderBy: [{ competencia: "desc" }, { categoria: "asc" }],
   })
 
@@ -54,6 +57,8 @@ export async function POST(req: NextRequest) {
   if (!podeEditar((session.user as { tipo?: string }).tipo)) {
     return NextResponse.json({ error: "Apenas admin/gestor podem lançar produção manual" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const competencia = parseInt(body.competencia)
@@ -63,11 +68,14 @@ export async function POST(req: NextRequest) {
   const grupo = body.grupo === "presencial" ? "presencial" : "producao"
   if (!competencia || !categoria) return NextResponse.json({ error: "competencia e categoria obrigatórios" }, { status: 400 })
 
-  const item = await prisma.producaoManual.upsert({
-    where: { competencia_area_grupo_categoria: { competencia, area, grupo, categoria } },
-    create: { competencia, area, grupo, categoria, quantidade },
-    update: { quantidade },
+  // Upsert por org (a unique composta do schema não inclui org ainda — fazemos manual p/ não colidir entre empresas)
+  const existing = await prisma.producaoManual.findFirst({
+    where: { organizacaoId, competencia, area, grupo, categoria },
+    select: { id: true },
   })
+  const item = existing
+    ? await prisma.producaoManual.update({ where: { id: existing.id }, data: { quantidade } })
+    : await prisma.producaoManual.create({ data: { organizacaoId, competencia, area, grupo, categoria, quantidade } })
   return NextResponse.json({ item })
 }
 
@@ -78,8 +86,12 @@ export async function DELETE(req: NextRequest) {
   if (!podeEditar((session.user as { tipo?: string }).tipo)) {
     return NextResponse.json({ error: "Apenas admin/gestor" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
   const id = req.nextUrl.searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
+  const reg = await prisma.producaoManual.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!pertenceAOrg(reg, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   await prisma.producaoManual.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

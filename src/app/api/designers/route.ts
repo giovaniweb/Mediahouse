@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/designers — lista designers
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
@@ -14,6 +17,7 @@ export async function GET(req: NextRequest) {
 
   const designers = await prisma.designer.findMany({
     where: {
+      organizacaoId,
       ...(status ? { status: status as "ativo" | "inativo" } : {}),
       ...(usuarioId ? { usuarioId } : {}),
     },
@@ -28,12 +32,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   if (!body.nome?.trim()) return NextResponse.json({ error: "Nome obrigatório" }, { status: 400 })
 
   const designer = await prisma.designer.create({
     data: {
+      organizacaoId,
       nome: body.nome.trim(),
       cidade: body.cidade,
       estado: body.estado,

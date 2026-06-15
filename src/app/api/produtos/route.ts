@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = new URL(req.url)
   const includeInactive = searchParams.get("all") === "true"
 
   const [produtos, ultimasFinalizacoes] = await Promise.all([
     prisma.produto.findMany({
-      where: includeInactive ? {} : { ativo: true },
+      where: { organizacaoId, ...(includeInactive ? {} : { ativo: true }) },
       include: {
         fabricante: { select: { id: true, nome: true } },
         _count: { select: { demandas: true } },
@@ -21,7 +24,7 @@ export async function GET(req: NextRequest) {
     // Última demanda FINALIZADA por produto — inclui demandas antigas sem finalizadaEm
     // (usa finalizadaEm se disponível, senão updatedAt como proxy)
     prisma.demandaProduto.findMany({
-      where: { demanda: { statusVisivel: "finalizado" } },
+      where: { demanda: { statusVisivel: "finalizado", organizacaoId } },
       select: {
         produtoId: true,
         demanda: { select: { finalizadaEm: true, updatedAt: true } },
@@ -63,9 +66,10 @@ export async function GET(req: NextRequest) {
   // Sort by priority score DESC (most urgently needs content first)
   produtosComputados.sort((a, b) => b.score - a.score)
 
-  // B2C/B2B counts across all demandas
+  // B2C/B2B counts across all demandas (da organização)
   const classificacaoCounts = await prisma.demanda.groupBy({
     by: ["classificacao"],
+    where: { organizacaoId },
     _count: { id: true },
   })
 
@@ -82,6 +86,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 
@@ -91,6 +97,7 @@ export async function POST(req: NextRequest) {
 
   const produto = await prisma.produto.create({
     data: {
+      organizacaoId,
       nome: body.nome.trim(),
       descricao: body.descricao?.trim() || null,
       categoria: body.categoria?.trim() || null,
