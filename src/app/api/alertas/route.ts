@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const agora = new Date()
 
   const alertas = await prisma.alertaIA.findMany({
     where: {
+      organizacaoId,
       status: "ativo",
       // TDAH: não mostrar alertas em snooze
       OR: [

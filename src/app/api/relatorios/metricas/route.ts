@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 const VALOR_POR_DEMANDA = 200
 
@@ -17,6 +18,8 @@ const VALOR_POR_DEMANDA = 200
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const periodoParam = sp.get("periodo") ?? "mes"
@@ -65,12 +68,12 @@ export async function GET(req: NextRequest) {
     aguardandoAprovacao,
     emEdicao,
   ] = await Promise.all([
-    prisma.demanda.count({ where: { area, statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { area, createdAt: { gte: deDate, lte: ateDate } } }),
-    prisma.demanda.count({ where: { area, prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { area, dataLimite: { lt: agora }, statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { area, statusInterno: { in: ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] } } }),
-    prisma.demanda.count({ where: { area, statusInterno: { in: ["editor_atribuido", "fila_edicao", "editando"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,createdAt: { gte: deDate, lte: ateDate } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,dataLimite: { lt: agora }, statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,statusInterno: { in: ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,statusInterno: { in: ["editor_atribuido", "fila_edicao", "editando"] } } }),
   ])
 
   // ── Demandas finalizadas no período ───────────────────────────────────────
@@ -78,6 +81,7 @@ export async function GET(req: NextRequest) {
   const demandasFinalizadas = await prisma.demanda.findMany({
     where: {
       area,
+      organizacaoId,
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
         { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: deDate, lte: ateDate } },
@@ -127,7 +131,7 @@ export async function GET(req: NextRequest) {
 
   // ── Volume por tipo de vídeo (criadas no período) ─────────────────────────
   const demandasPeriodo = await prisma.demanda.findMany({
-    where: { area, createdAt: { gte: deDate, lte: ateDate } },
+    where: { area, organizacaoId,createdAt: { gte: deDate, lte: ateDate } },
     select: { tipoVideo: true },
   })
   const porTipo: Record<string, number> = {}
@@ -139,19 +143,19 @@ export async function GET(req: NextRequest) {
   const statusCounts = await prisma.demanda.groupBy({
     by: ["statusVisivel"],
     _count: { id: true },
-    where: { area, statusVisivel: { notIn: ["finalizado"] } },
+    where: { area, organizacaoId,statusVisivel: { notIn: ["finalizado"] } },
   })
 
   // ── Custos (CustoVideomaker no período) ───────────────────────────────────
   const [custosAggregate, custosPorVideomaker] = await Promise.all([
     prisma.custoVideomaker.aggregate({
-      where: { dataReferencia: { gte: deDate, lte: ateDate } },
+      where: { organizacaoId, dataReferencia: { gte: deDate, lte: ateDate } },
       _sum: { valor: true },
       _count: true,
     }),
     prisma.custoVideomaker.groupBy({
       by: ["videomakerId"],
-      where: { dataReferencia: { gte: deDate, lte: ateDate } },
+      where: { organizacaoId, dataReferencia: { gte: deDate, lte: ateDate } },
       _sum: { valor: true },
       _count: { id: true },
       orderBy: { _sum: { valor: "desc" } },
@@ -187,6 +191,7 @@ export async function GET(req: NextRequest) {
     by: ["videomakerId"],
     where: {
       area,
+      organizacaoId,
       videomakerId: { not: null },
       OR: [
         { finalizadaEm: { gte: deDate, lte: ateDate } },
@@ -213,8 +218,8 @@ export async function GET(req: NextRequest) {
 
   // ── Alertas ativos ────────────────────────────────────────────────────────
   const [alertasAtivos, alertasCriticos] = await Promise.all([
-    prisma.alertaIA.count({ where: { status: "ativo" } }),
-    prisma.alertaIA.count({ where: { status: "ativo", severidade: "critico" } }),
+    prisma.alertaIA.count({ where: { status: "ativo", organizacaoId } }),
+    prisma.alertaIA.count({ where: { status: "ativo", severidade: "critico", organizacaoId } }),
   ])
 
   // ── Tendência: semanas dentro do período selecionado ─────────────────────
@@ -226,10 +231,11 @@ export async function GET(req: NextRequest) {
     const inicio = new Date(deDate.getTime() + i * tamanhoFatia)
     const fim = new Date(deDate.getTime() + (i + 1) * tamanhoFatia)
     const [criadas, concluidasFatia] = await Promise.all([
-      prisma.demanda.count({ where: { area, createdAt: { gte: inicio, lt: fim } } }),
+      prisma.demanda.count({ where: { area, organizacaoId,createdAt: { gte: inicio, lt: fim } } }),
       prisma.demanda.count({
         where: {
           area,
+          organizacaoId,
           OR: [
             { finalizadaEm: { gte: inicio, lt: fim } },
             { statusVisivel: "finalizado", finalizadaEm: null, updatedAt: { gte: inicio, lt: fim } },

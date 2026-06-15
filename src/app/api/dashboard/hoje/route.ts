@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/dashboard/hoje — dados para o painel "Hoje em Foco" (TDAH)
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const agora = new Date()
   const inicioDia = new Date(agora)
@@ -31,6 +34,7 @@ export async function GET() {
     // Eventos de hoje ordenados por horário
     prisma.evento.findMany({
       where: {
+        organizacaoId,
         inicio: { gte: inicioDia, lte: fimDia },
         status: { in: ["agendado", "confirmado", "em_andamento"] },
         // Filtrar por videomaker se for videomaker externo
@@ -47,6 +51,7 @@ export async function GET() {
     // Demandas com prazo hoje ou amanhã
     prisma.demanda.findMany({
       where: {
+        organizacaoId,
         dataLimite: { gte: inicioDia, lte: fimAmanha },
         statusVisivel: { notIn: ["finalizado"] },
         // Filtrar por videomaker se for videomaker externo
@@ -69,6 +74,7 @@ export async function GET() {
       ? Promise.resolve([])
       : prisma.custoVideomaker.findMany({
           where: {
+            organizacaoId,
             pago: false,
             dataVencimento: { not: null, lte: fimDia },
           },
@@ -84,6 +90,7 @@ export async function GET() {
       ? Promise.resolve([])
       : prisma.alertaIA.findMany({
           where: {
+            organizacaoId,
             status: "ativo",
             severidade: "critico",
             OR: [{ snoozeAte: null }, { snoozeAte: { lt: agora } }],

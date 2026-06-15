@@ -2,10 +2,13 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { calcularCargaTotal, avaliarSobrecarga } from "@/lib/peso-demanda"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const hoje = new Date()
   const inicioDia = new Date(hoje.setHours(0, 0, 0, 0))
@@ -33,46 +36,46 @@ export async function GET() {
     demandasMesRaw,
   ] = await Promise.all([
     prisma.demanda.count({
-      where: { area: "audiovisual", createdAt: { gte: inicioDia, lte: fimDia } },
+      where: { area: "audiovisual", organizacaoId, createdAt: { gte: inicioDia, lte: fimDia } },
     }),
     prisma.demanda.count({
       where: {
-        area: "audiovisual",
+        area: "audiovisual", organizacaoId,
         prioridade: "urgente",
         statusVisivel: { notIn: ["finalizado"] },
       },
     }),
-    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "edicao" } }),
-    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "aprovacao" } }),
-    prisma.demanda.count({ where: { area: "audiovisual", statusVisivel: "para_postar" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "edicao" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "aprovacao" } }),
+    prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "para_postar" } }),
     prisma.demanda.count({
       where: {
-        area: "audiovisual",
+        area: "audiovisual", organizacaoId,
         dataLimite: { lt: new Date() },
         statusVisivel: { notIn: ["finalizado", "aprovacao", "para_postar"] },
       },
     }),
     prisma.demanda.count({
       where: {
-        area: "audiovisual",
+        area: "audiovisual", organizacaoId,
         dataCaptacao: { gte: inicioSemana, lte: fimSemana },
       },
     }),
     prisma.demanda.count({
       where: {
-        area: "audiovisual",
+        area: "audiovisual", organizacaoId,
         dataExpiracao: { gte: new Date(), lte: em7Dias },
         statusVisivel: "finalizado",
       },
     }),
     prisma.alertaIA.findMany({
-      where: { status: "ativo" },
+      where: { status: "ativo", organizacaoId },
       include: { demanda: { select: { id: true, titulo: true, codigo: true } } },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
     prisma.editor.findMany({
-      where: { status: "ativo" },
+      where: { status: "ativo", organizacaoId },
       include: {
         demandas: {
           where: { statusVisivel: { notIn: ["finalizado"] } },
@@ -82,7 +85,7 @@ export async function GET() {
     }),
     prisma.demanda.findMany({
       where: {
-        area: "audiovisual",
+        area: "audiovisual", organizacaoId,
         statusVisivel: "finalizado",
         OR: [
           { finalizadaEm: { gte: inicioMes } },
