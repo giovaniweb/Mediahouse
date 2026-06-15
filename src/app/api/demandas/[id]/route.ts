@@ -4,14 +4,27 @@ import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
+
+// Garante que a demanda pertence à org da sessão (404 se não). Retorna a org ativa.
+async function assertDemandaOrg(session: Session | null, id: string): Promise<{ organizacaoId: string } | NextResponse> {
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+  const dem = await prisma.demanda.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!pertenceAOrg(dem, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  return { organizacaoId }
+}
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
@@ -67,6 +80,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
 
   // Resolver tokens de atribuição unificada (vm:/ed:/user:) → id real do slot.
@@ -497,6 +512,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   await prisma.demanda.delete({ where: { id } })
 

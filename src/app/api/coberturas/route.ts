@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 async function requireAuth() {
   const session = await auth()
@@ -51,6 +52,8 @@ const CHECKLIST_BASE = [
 export async function GET(req: NextRequest) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const status = sp.get("status")
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
   const search = sp.get("search") ?? ""
   const produtoId = sp.get("produtoId")
 
-  const where: Record<string, unknown> = {}
+  const where: Record<string, unknown> = { organizacaoId }
   if (status) where.status = status
   if (tipo) where.tipo = tipo
   if (produtoId) where.produtoId = produtoId
@@ -86,6 +89,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   try {
     const body = await req.json()
@@ -123,6 +128,7 @@ export async function POST(req: NextRequest) {
 
     const cobertura = await prisma.eventoCobertura.create({
       data: {
+        organizacaoId,
         titulo: titulo.trim(),
         slug,
         tipo: tipo ?? "outro",

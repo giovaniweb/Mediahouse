@@ -5,6 +5,7 @@ import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { getOrgId, semOrg } from "@/lib/org"
 import type { Prioridade, Departamento } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
@@ -58,6 +59,8 @@ function gerarCodigo(): string {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = req.nextUrl
   const departamento = searchParams.get("departamento")
@@ -97,7 +100,7 @@ export async function GET(req: NextRequest) {
     area = "design"
   }
 
-  const where: Record<string, unknown> = {}
+  const where: Record<string, unknown> = { organizacaoId }
   if (area) where.area = area
   if (departamento) where.departamento = departamento
   if (prioridade) where.prioridade = prioridade
@@ -176,6 +179,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const parsed = criarDemandaSchema.safeParse(body)
@@ -203,6 +208,7 @@ export async function POST(req: NextRequest) {
 
   const demanda = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: gerarCodigo(),
       titulo: data.titulo,
       descricao: data.descricao,

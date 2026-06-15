@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
+
+// Garante que a cobertura pertence à org da sessão (404 se não).
+async function assertCoberturaOrg(session: Session | null, id: string): Promise<NextResponse | null> {
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+  const c = await prisma.eventoCobertura.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!pertenceAOrg(c, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  return null
+}
 
 async function requireAuth() {
   const session = await auth()
@@ -16,6 +27,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertCoberturaOrg(session, id)
+  if (guard) return guard
 
   const cobertura = await prisma.eventoCobertura.findUnique({
     where: { id },
@@ -54,6 +67,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertCoberturaOrg(session, id)
+  if (guard) return guard
 
   try {
     const body = await req.json()
@@ -108,6 +123,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await assertCoberturaOrg(session, id)
+  if (guard) return guard
 
   try {
     const count = await prisma.eventoCoberturaUpload.count({ where: { coberturaId: id } })
