@@ -40,8 +40,8 @@ async function resolveReplyJid(
 
   // ── Estratégia 0: Cache local (MapaLidWhatsApp) ──────────────────────────
   try {
-    const cached = await prisma.mapaLidWhatsApp.findUnique({
-      where: { lidJid: remoteJid },
+    const cached = await prisma.mapaLidWhatsApp.findFirst({
+      where: { lidJid: remoteJid, ...(organizacaoId && { organizacaoId }) },
     })
     if (cached) {
       console.log(`[WH-LID] Resolvido via cache → ${cached.realJid}`)
@@ -215,7 +215,7 @@ async function resolveReplyJid(
   console.error(`[WH-LID] ⚠️ CRÍTICO: @lid ${remoteJid} NÃO resolvido para "${pushName}" — usando lidNumber: ${lidNumber}`)
 
   // Notifica admin sobre @lid não resolvido
-  await notificarAdminLidNaoResolvido(remoteJid, pushName ?? "desconhecido", lidNumber)
+  await notificarAdminLidNaoResolvido(remoteJid, pushName ?? "desconhecido", lidNumber, organizacaoId)
 
   return fallback
 }
@@ -224,10 +224,11 @@ async function resolveReplyJid(
  * Salva mapeamento @lid → JID real no cache
  */
 async function salvarCacheLid(lidJid: string, realJid: string, telefone: string, pushName?: string, organizacaoId?: string | null) {
+  if (!organizacaoId) return // cache de lid é por organização (não-crítico se faltar)
   try {
     await prisma.mapaLidWhatsApp.upsert({
-      where: { lidJid },
-      create: { lidJid, realJid, telefone, pushName, ...(organizacaoId && { organizacaoId }) },
+      where: { organizacaoId_lidJid: { organizacaoId, lidJid } },
+      create: { lidJid, realJid, telefone, pushName, organizacaoId },
       update: { realJid, telefone, pushName, updatedAt: new Date() },
     })
   } catch (e) {
@@ -238,17 +239,18 @@ async function salvarCacheLid(lidJid: string, realJid: string, telefone: string,
 /**
  * Notifica admin quando um @lid não pode ser resolvido
  */
-async function notificarAdminLidNaoResolvido(lidJid: string, pushName: string, lidNumber: string) {
+async function notificarAdminLidNaoResolvido(lidJid: string, pushName: string, lidNumber: string, organizacaoId?: string | null) {
   try {
     const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(
           admin.telefone,
-          `⚠️ *NuFlow — Alerta*\n\nRecebemos uma mensagem de *${pushName}* mas não conseguimos identificar o número real (JID: ${lidJid}).\n\nPeça à pessoa para enviar o número dela por mensagem ou adicione o contato manualmente.`
+          `⚠️ *NuFlow — Alerta*\n\nRecebemos uma mensagem de *${pushName}* mas não conseguimos identificar o número real (JID: ${lidJid}).\n\nPeça à pessoa para enviar o número dela por mensagem ou adicione o contato manualmente.`,
+          undefined, organizacaoId
         ).catch(() => null)
       }
     }
@@ -316,11 +318,12 @@ async function notificarAdminNovaDemanda(
   titulo: string,
   nomeSolicitante: string,
   telefone: string,
-  identidadeTipo: string
+  identidadeTipo: string,
+  organizacaoId?: string | null
 ) {
   try {
     const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true, nome: true },
     })
     const origem = identidadeTipo === "desconhecido" || identidadeTipo === "externo"
@@ -331,7 +334,8 @@ async function notificarAdminNovaDemanda(
       if (admin.telefone) {
         await sendWhatsappMessage(
           admin.telefone,
-          `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeSolicitante} (${telefone})\n${origem}\n\nAcesse o sistema para aprovar.`
+          `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeSolicitante} (${telefone})\n${origem}\n\nAcesse o sistema para aprovar.`,
+          undefined, organizacaoId
         ).catch(() => null)
       }
     }
@@ -366,6 +370,12 @@ async function processarMensagem(body: unknown) {
   }
   // Fallback legado/temporário: payload sem instância → Contourline
   if (!organizacaoId) organizacaoId = await contourlineOrgId()
+  // Sem organização resolvível não há como processar com isolamento — aborta.
+  if (!organizacaoId) {
+    console.error("[WH] Nenhuma organização resolvível — abortando processamento")
+    return
+  }
+  const orgId: string = organizacaoId  // garantido não-nulo daqui pra frente
 
   // ── Evento de conexão ──────────────────────────────────────────────────
   if (eventNorm === "connection.update") {
@@ -415,6 +425,8 @@ async function processarMensagem(body: unknown) {
   // Resolve JID real (passa participant do payload para ajudar na resolução @lid)
   const participant = data.key?.participant ?? data.participant ?? ""
   const { replyJid, telefone } = await resolveReplyJid(remoteJid, pushName, participant, organizacaoId)
+  // Atalho de resposta — sempre injeta a organização resolvida pela instância.
+  const responder = (msg: string, demandaId?: string) => sendWhatsappMessage(replyJid, msg, demandaId, orgId)
 
   // ── Detecta mídia ──────────────────────────────────────────────────────
   const midia = detectarMidia(message)
@@ -513,14 +525,14 @@ async function processarMensagem(body: unknown) {
     if (midia.tipo === "audio") {
       // Áudio que falhou transcrição — avisa e pede para mandar de novo ou digitar
       const msg = `Hey ${pushName?.split(" ")[0] || ""}! Recebi seu áudio, mas não consegui entender. 🎙️\n\nPode tentar mandar de novo ou digitar o que precisa? 😊`
-      await sendWhatsappMessage(replyJid, msg)
+      await responder(msg)
       return
     }
     const tipoLabel = midia.tipo === "image" ? "imagem" : midia.tipo === "video" ? "vídeo" : midia.tipo === "document" ? "documento" : "arquivo"
     const msg = mediaUrl
       ? `Hey ${pushName?.split(" ")[0] || ""}! Recebi sua ${tipoLabel}! 📎\n\nSe quiser vincular a uma demanda, me diga o código (ex: VID-0023). Ou me conta o que precisa!`
       : `Recebi sua ${tipoLabel}, mas tive um problema ao processar. Pode tentar novamente? 🙏`
-    await sendWhatsappMessage(replyJid, msg)
+    await responder(msg)
     return
   }
 
@@ -529,12 +541,15 @@ async function processarMensagem(body: unknown) {
   const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
 
   const [videomaker, editor, usuario, contatoExistente] = await Promise.all([
+    // Videomaker externo é GLOBAL (rede compartilhada) — não escopar por org
     prisma.videomaker.findFirst({
       where: { telefone: { contains: tel8 } },
       select: { id: true, nome: true, telefone: true, cidade: true },
     }),
+    // Editor interno é privado da organização
     prisma.editor.findFirst({
       where: {
+        organizacaoId: orgId,
         OR: [
           { telefone: { contains: tel8 } },
           { whatsapp: { contains: tel8 } },
@@ -542,12 +557,13 @@ async function processarMensagem(body: unknown) {
       },
       select: { id: true, nome: true, telefone: true },
     }),
+    // Usuário só conta se for membro desta organização
     prisma.usuario.findFirst({
-      where: { telefone: { contains: tel8 } },
+      where: { telefone: { contains: tel8 }, organizacoes: { some: { organizacaoId: orgId } } },
       select: { id: true, nome: true, tipo: true, telefone: true },
     }),
     prisma.contatoWhatsApp.findFirst({
-      where: { telefone: { contains: tel8 } },
+      where: { telefone: { contains: tel8 }, organizacaoId: orgId },
     }),
   ])
 
@@ -555,13 +571,13 @@ async function processarMensagem(body: unknown) {
   if (!contatoExistente && (videomaker || editor || usuario)) {
     const ref = editor ?? videomaker ?? usuario
     await prisma.contatoWhatsApp.upsert({
-      where: { telefone: telNorm },
+      where: { organizacaoId_telefone: { organizacaoId: orgId, telefone: telNorm } },
       create: {
         telefone: telNorm,
         nome: ref!.nome,
         tipo: editor ? "editor" : videomaker ? "videomaker" : "usuario",
         referenciaId: ref!.id,
-        ...(organizacaoId && { organizacaoId }),
+        organizacaoId: orgId,
       },
       update: {},
     }).catch(() => null)
@@ -591,10 +607,10 @@ async function processarMensagem(body: unknown) {
     if (!jaPerguntouNome) {
       // Primeira mensagem de contato desconhecido — pedir nome
       const msg = `Hey! Aqui é a *NuFlow* 🤖\n\nAinda não nos conhecemos! Como posso te chamar?`
-      await sendWhatsappMessage(replyJid, msg)
+      await responder(msg)
 
       // Notifica admin sobre novo contato
-      await notificarAdminNovoContato(pushName || "Desconhecido", telefone, textoOriginal)
+      await notificarAdminNovoContato(pushName || "Desconhecido", telefone, textoOriginal, orgId)
       return
     }
 
@@ -604,13 +620,13 @@ async function processarMensagem(body: unknown) {
       // Salva o contato com o nome informado
       const nomeContato = textoOriginal.trim()
       await prisma.contatoWhatsApp.upsert({
-        where: { telefone: telNorm },
-        create: { telefone: telNorm, nome: nomeContato, tipo: "externo", ...(organizacaoId && { organizacaoId }) },
+        where: { organizacaoId_telefone: { organizacaoId: orgId, telefone: telNorm } },
+        create: { telefone: telNorm, nome: nomeContato, tipo: "externo", organizacaoId: orgId },
         update: { nome: nomeContato },
       }).catch(() => null)
 
       const msg = `Prazer, *${nomeContato.split(" ")[0]}*! 😊\n\nComo posso te ajudar? Pode me pedir um vídeo, conteúdo, cobertura, ou qualquer coisa!`
-      await sendWhatsappMessage(replyJid, msg)
+      await responder(msg)
       return
     }
   }
@@ -643,7 +659,7 @@ async function processarMensagem(body: unknown) {
     if (vmId) {
       // Tentativa 1: status explícito de notificação
       const d = await prisma.demanda.findFirst({
-        where: { videomakerId: vmId, statusInterno: { in: statusPendentes } },
+        where: { organizacaoId: orgId, videomakerId: vmId, statusInterno: { in: statusPendentes } },
         orderBy: { updatedAt: "desc" },
       })
       if (d) return d
@@ -652,6 +668,7 @@ async function processarMensagem(body: unknown) {
       // (cobre casos onde o status não foi mudado para videomaker_notificado)
       const d2 = await prisma.demanda.findFirst({
         where: {
+          organizacaoId: orgId,
           videomakerId: vmId,
           statusInterno: { notIn: statusFechados },
         },
@@ -665,6 +682,7 @@ async function processarMensagem(body: unknown) {
     // Busca nas últimas 5 mensagens saídas para este número (mais robusto que pegar só a última)
     const msgsSaida = await prisma.mensagemWhatsapp.findMany({
       where: {
+        organizacaoId: orgId,
         direcao: "saida",
         telefone: { contains: tel8 },
         demandaId: { not: null },
@@ -678,6 +696,7 @@ async function processarMensagem(body: unknown) {
       if (!msg.demandaId) continue
       const demanda = await prisma.demanda.findFirst({
         where: {
+          organizacaoId: orgId,
           id: msg.demandaId,
           statusInterno: { notIn: statusFechados },
         },
@@ -706,17 +725,15 @@ async function processarMensagem(body: unknown) {
           },
         }),
       ])
-      await sendWhatsappMessage(
-        replyJid,
+      await responder(
         `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`,
         demanda.id
       )
-      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker ACEITOU captação")
+      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker ACEITOU captação", orgId)
       return
     }
     // SIM sem demanda pendente — responde para não cair na IA
-    await sendWhatsappMessage(
-      replyJid,
+    await responder(
       `Hey ${primeiroNome}! 👋 Não encontrei uma captação pendente de confirmação para você.\n\nSe você recebeu uma solicitação recentemente, verifique com a equipe. Qualquer dúvida, é só falar! 😊`
     )
     return
@@ -740,17 +757,15 @@ async function processarMensagem(body: unknown) {
           },
         }),
       ])
-      await sendWhatsappMessage(
-        replyJid,
+      await responder(
         `Entendido, ${primeiroNome}. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`,
         demanda.id
       )
-      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker RECUSOU captação — precisa escalar outro")
+      await notificarAdminMovimentacao(demanda.codigo, demanda.titulo, identidade.nome || pushName, "Videomaker RECUSOU captação — precisa escalar outro", orgId)
       return
     }
     // NÃO sem demanda pendente — responde para não cair na IA
-    await sendWhatsappMessage(
-      replyJid,
+    await responder(
       `Hey ${primeiroNome}! 👋 Não encontrei uma captação pendente de confirmação para você. Se precisar de ajuda, é só falar!`
     )
     return
@@ -762,6 +777,7 @@ async function processarMensagem(body: unknown) {
     if (vmId || edId) {
       const demandas = await prisma.demanda.findMany({
         where: {
+          organizacaoId: orgId,
           ...(vmId ? { videomakerId: vmId } : { editorId: edId }),
           statusInterno: { notIn: ["encerrado", "postado", "entregue_cliente", "expirado"] },
         },
@@ -769,9 +785,9 @@ async function processarMensagem(body: unknown) {
       })
       if (demandas.length > 0) {
         const lista = demandas.map(d => `• *${d.codigo}* — ${d.titulo}\n  ↳ ${d.statusInterno}`).join("\n")
-        await sendWhatsappMessage(replyJid, `📋 *Suas demandas ativas:*\n\n${lista}\n\nDigite o *código* para mais detalhes.`)
+        await responder(`📋 *Suas demandas ativas:*\n\n${lista}\n\nDigite o *código* para mais detalhes.`)
       } else {
-        await sendWhatsappMessage(replyJid, `Hey ${primeiroNome}! Você não tem demandas ativas no momento. ✅`)
+        await responder(`Hey ${primeiroNome}! Você não tem demandas ativas no momento. ✅`)
       }
       return
     }
@@ -788,8 +804,8 @@ async function processarMensagem(body: unknown) {
       const fimPeriodo = new Date(inicio.getTime() + diasFuturos * 86400000)
 
       const eventoWhere = editor
-        ? { editorId: editor.id, inicio: { gte: inicio, lte: fimPeriodo } }
-        : { videomakerId: videomaker!.id, inicio: { gte: inicio, lte: fimPeriodo } }
+        ? { organizacaoId: orgId, editorId: editor.id, inicio: { gte: inicio, lte: fimPeriodo } }
+        : { organizacaoId: orgId, videomakerId: videomaker!.id, inicio: { gte: inicio, lte: fimPeriodo } }
 
       const [eventos, captacoes] = await Promise.all([
         prisma.evento.findMany({
@@ -799,6 +815,7 @@ async function processarMensagem(body: unknown) {
         }),
         videomaker ? prisma.demanda.findMany({
           where: {
+            organizacaoId: orgId,
             videomakerId: videomaker.id,
             dataCaptacao: { gte: inicio, lte: fimPeriodo },
             statusInterno: { notIn: ["encerrado", "postado", "entregue_cliente"] },
@@ -808,7 +825,7 @@ async function processarMensagem(body: unknown) {
       ])
 
       if (eventos.length === 0 && captacoes.length === 0) {
-        await sendWhatsappMessage(replyJid, `📅 Hey ${primeiroNome}! Nenhum compromisso nos próximos ${diasFuturos} dias. ✅`)
+        await responder(`📅 Hey ${primeiroNome}! Nenhum compromisso nos próximos ${diasFuturos} dias. ✅`)
       } else {
         const linhasEventos = eventos.map(e =>
           `📌 *${e.titulo}*\n   ${e.inicio.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${e.local ? `\n   📍 ${e.local}` : ""}`
@@ -817,11 +834,11 @@ async function processarMensagem(body: unknown) {
           `🎬 *${c.codigo}* — ${c.titulo}\n   ${c.dataCaptacao?.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) ?? "Horário a definir"}${c.cidade ? `\n   📍 ${c.cidade}` : ""}`
         )
         const tudo = [...linhasCaptacoes, ...linhasEventos].join("\n\n")
-        await sendWhatsappMessage(replyJid, `📅 *Sua agenda, ${primeiroNome}:*\n\n${tudo}`)
+        await responder(`📅 *Sua agenda, ${primeiroNome}:*\n\n${tudo}`)
       }
       return
     } else {
-      await sendWhatsappMessage(replyJid, `Hey ${primeiroNome}! Agenda é exclusiva para videomakers internos da equipe. 📋`)
+      await responder(`Hey ${primeiroNome}! Agenda é exclusiva para videomakers internos da equipe. 📋`)
       return
     }
   }
@@ -831,7 +848,7 @@ async function processarMensagem(body: unknown) {
       ? `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\nO que posso fazer por você:\n\n*STATUS* — Suas demandas ativas\n*AGENDA* — Sua agenda\n*SIM / NÃO* — Confirmar/recusar captação\n\n💬 Ou manda uma mensagem livre, áudio ou arquivo!`
       : `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\nMe manda o que precisa:\n\n💬 Texto, áudio ou arquivo\n📋 "nova demanda: [descrição]"\n🔍 "status da VID-0023"`
 
-    await sendWhatsappMessage(replyJid, menu)
+    await responder(menu)
     return
   }
 
@@ -858,7 +875,7 @@ async function processarMensagem(body: unknown) {
   const saudacoes = ["oi", "olá", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oi!", "olá!", "oii", "oiii", "eae", "eai", "fala", "salve"]
   if (saudacoes.includes(textoOriginal.toLowerCase())) {
     const saudacao = `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\nComo posso te ajudar? Manda aí!`
-    await sendWhatsappMessage(replyJid, saudacao)
+    await responder(saudacao)
     return
   }
 
@@ -958,27 +975,25 @@ REGRAS DE AGENDA:
     )
   } catch (e) {
     console.error("[WhatsApp Secretária] Erro:", e)
-    await sendWhatsappMessage(
-      replyJid,
-      `Hey ${primeiroNome}! Tive um probleminha técnico. Pode mandar de novo? 🙏`
-    )
+    await responder(`Hey ${primeiroNome}! Tive um probleminha técnico. Pode mandar de novo? 🙏`)
   }
 }
 
 /**
  * Notifica admin sobre novo contato tentando falar
  */
-async function notificarAdminNovoContato(nome: string, telefone: string, mensagem: string) {
+async function notificarAdminNovoContato(nome: string, telefone: string, mensagem: string, organizacaoId?: string | null) {
   try {
     const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(
           admin.telefone,
-          `👤 *Novo contato via WhatsApp!*\n\n📱 ${telefone}\n👤 ${nome}\n💬 "${mensagem.slice(0, 100)}"\n\nO sistema está coletando o nome da pessoa.`
+          `👤 *Novo contato via WhatsApp!*\n\n📱 ${telefone}\n👤 ${nome}\n💬 "${mensagem.slice(0, 100)}"\n\nO sistema está coletando o nome da pessoa.`,
+          undefined, organizacaoId
         ).catch(() => null)
       }
     }
@@ -990,17 +1005,18 @@ async function notificarAdminNovoContato(nome: string, telefone: string, mensage
 /**
  * Notifica admin sobre movimentação em demanda
  */
-async function notificarAdminMovimentacao(codigo: string, titulo: string, nome: string, acao: string) {
+async function notificarAdminMovimentacao(codigo: string, titulo: string, nome: string, acao: string, organizacaoId?: string | null) {
   try {
     const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(
           admin.telefone,
-          `🔔 *NuFlow — Movimentação*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nome}\n📌 ${acao}`
+          `🔔 *NuFlow — Movimentação*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nome}\n📌 ${acao}`,
+          undefined, organizacaoId
         ).catch(() => null)
       }
     }

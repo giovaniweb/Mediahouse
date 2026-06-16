@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { getOrgId, semOrg } from "@/lib/org"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
@@ -11,6 +12,8 @@ const schema = z.object({
 export async function POST(req: Request) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const parsed = schema.safeParse(body)
@@ -20,7 +23,7 @@ export async function POST(req: Request) {
 
   const { telefone, mensagem } = parsed.data
 
-  const result = await sendWhatsappMessage(telefone, mensagem)
+  const result = await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
   if (!result) {
     return NextResponse.json({ error: "Falha ao enviar. Verifique se o WhatsApp está conectado." }, { status: 500 })
   }
