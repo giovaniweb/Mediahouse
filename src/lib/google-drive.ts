@@ -11,6 +11,7 @@
 
 import crypto from "crypto"
 import { prisma } from "@/lib/prisma"
+import { contourlineOrgId } from "@/lib/whatsapp"
 
 // ── Cache do access_token (válido por ~1 hora) ──────────────────────────────
 let cachedToken: { token: string; expiresAt: number } | null = null
@@ -21,12 +22,14 @@ let cachedToken: { token: string; expiresAt: number } | null = null
  * Tenta obter access_token usando o refresh_token OAuth2 salvo em ConfigEmpresa.
  * Retorna null se não houver refresh_token configurado.
  */
-async function getAccessTokenFromOAuth(): Promise<string | null> {
+async function getAccessTokenFromOAuth(organizacaoId?: string | null): Promise<string | null> {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
   if (!clientId || !clientSecret) return null
 
+  const orgId = organizacaoId ?? (await contourlineOrgId())
   const config = await prisma.configEmpresa.findFirst({
+    where: orgId ? { organizacaoId: orgId } : {},
     select: { googleRefreshToken: true },
   })
   if (!config?.googleRefreshToken) return null
@@ -98,8 +101,8 @@ async function getAccessTokenFromServiceAccount(): Promise<string> {
 }
 
 /** Tenta OAuth2 primeiro; cai para service account se necessário. */
-export async function getAccessToken(): Promise<string> {
-  const oauthToken = await getAccessTokenFromOAuth()
+export async function getAccessToken(organizacaoId?: string | null): Promise<string> {
+  const oauthToken = await getAccessTokenFromOAuth(organizacaoId)
   if (oauthToken) return oauthToken
   return getAccessTokenFromServiceAccount()
 }
@@ -148,9 +151,11 @@ export async function criarSessaoUploadDrive(opts: {
   fileName: string
   fileSize: number
   contentType: string
-}): Promise<DriveUploadSession> {
-  // Prioridade: banco (configurado pelo admin) > variável de ambiente
+}, organizacaoId?: string | null): Promise<DriveUploadSession> {
+  const orgId = organizacaoId ?? (await contourlineOrgId())
+  // Prioridade: banco (configurado pelo admin, por org) > variável de ambiente
   const config = await prisma.configEmpresa.findFirst({
+    where: orgId ? { organizacaoId: orgId } : {},
     select: { googleDriveFolderId: true },
   })
   const folderId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -158,7 +163,7 @@ export async function criarSessaoUploadDrive(opts: {
     throw new Error("Pasta do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }
 
-  const token = await getAccessToken()
+  const token = await getAccessToken(orgId)
 
   // ── Passo 1: Cria o arquivo com metadata (sem conteúdo) → garante fileId ──
   // O endpoint de upload resumável nem sempre devolve o id no body; criar
@@ -250,8 +255,10 @@ async function tornarPublico(fileId: string, token: string): Promise<void> {
  * pública (leitura por link). Retorna o id e a URL da pasta.
  * Best-effort: lança erro se o Drive não estiver configurado/conectado.
  */
-export async function criarPastaDrive(nome: string): Promise<{ folderId: string; folderUrl: string }> {
+export async function criarPastaDrive(nome: string, organizacaoId?: string | null): Promise<{ folderId: string; folderUrl: string }> {
+  const orgId = organizacaoId ?? (await contourlineOrgId())
   const config = await prisma.configEmpresa.findFirst({
+    where: orgId ? { organizacaoId: orgId } : {},
     select: { googleDriveFolderId: true },
   })
   const parentId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -259,7 +266,7 @@ export async function criarPastaDrive(nome: string): Promise<{ folderId: string;
     throw new Error("Pasta raiz do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }
 
-  const token = await getAccessToken()
+  const token = await getAccessToken(orgId)
 
   const res = await fetch("https://www.googleapis.com/drive/v3/files", {
     method: "POST",

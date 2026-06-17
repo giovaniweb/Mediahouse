@@ -59,12 +59,13 @@ export async function POST(req: NextRequest) {
     if (telefoneSolicitante) {
       const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n\n🔗 Acesse pelo link abaixo:\n${link}\n\n_Válido por ${(expiresInDays as number | undefined) || 30} dias._`
 
-      void sendWhatsappMessage(telefoneSolicitante, msg, demandaId as string).catch(() => null)
+      void sendWhatsappMessage(telefoneSolicitante, msg, demandaId as string, demanda.organizacaoId).catch(() => null)
     }
 
     // Notifica admin/gestor que link foi gerado
     void notificarGestores(
-      `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`
+      `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`,
+      demanda.organizacaoId
     )
 
     return NextResponse.json({ ok: true, token: aprovacao.token, link })
@@ -77,15 +78,15 @@ export async function POST(req: NextRequest) {
 /**
  * Notifica gestores/admins via WhatsApp
  */
-async function notificarGestores(mensagem: string) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
   try {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
       }
     }
   } catch (e) {

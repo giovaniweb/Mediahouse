@@ -13,7 +13,7 @@ export async function GET(
     where: { token },
     include: {
       videomaker: { select: { nome: true } },
-      demanda: { select: { codigo: true, titulo: true } },
+      demanda: { select: { codigo: true, titulo: true, organizacaoId: true } },
     },
   })
 
@@ -33,7 +33,7 @@ export async function POST(
     where: { token },
     include: {
       videomaker: { select: { nome: true, telefone: true } },
-      demanda: { select: { codigo: true, titulo: true } },
+      demanda: { select: { codigo: true, titulo: true, organizacaoId: true } },
     },
   })
   if (!nf) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
@@ -117,7 +117,8 @@ export async function POST(
   void notificarGestoresNF(
     nf.demanda.codigo,
     nf.demanda.titulo,
-    nf.videomaker.nome
+    nf.videomaker.nome,
+    nf.demanda.organizacaoId
   )
 
   return NextResponse.json({ success: true })
@@ -126,10 +127,10 @@ export async function POST(
 /**
  * Notifica gestores/admins que uma NF foi enviada pelo videomaker
  */
-async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string) {
+async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string, organizacaoId?: string | null) {
   try {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
 
@@ -137,18 +138,19 @@ async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomake
 
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg).catch(() => null)
+        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId).catch(() => null)
       }
     }
 
     // Cria alerta in-app também
     const demanda = await prisma.demanda.findFirst({
-      where: { codigo },
+      where: { codigo, ...(organizacaoId && { organizacaoId }) },
       select: { id: true },
     })
     if (demanda) {
       await prisma.alertaIA.create({
         data: {
+          ...(organizacaoId && { organizacaoId }),
           demandaId: demanda.id,
           tipoAlerta: "nf_recebida",
           mensagem: `📄 Nota fiscal recebida de ${nomeVideomaker} para ${codigo}. Aguardando aprovação do pagamento.`,

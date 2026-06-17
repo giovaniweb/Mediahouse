@@ -98,7 +98,8 @@ export async function POST(
 
     // NOVO: Notifica admin/gestor via WhatsApp
     void notificarGestores(
-      `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`
+      `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`,
+      convite.demanda.organizacaoId
     )
   } else {
     // Recusou → atualizar demanda + registrar histórico
@@ -121,7 +122,8 @@ export async function POST(
     })
 
     void notificarGestores(
-      `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`
+      `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`,
+      convite.demanda.organizacaoId
     )
   }
 
@@ -131,15 +133,15 @@ export async function POST(
 /**
  * Envia notificação WhatsApp para todos os gestores/admins ativos
  */
-async function notificarGestores(mensagem: string) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
   try {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
       }
     }
   } catch (e) {

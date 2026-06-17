@@ -198,13 +198,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       : `🔄 *Cliente Pediu Ajustes!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
 
     // Notifica gestores
-    void notificarGestoresAprovacao(msgBase)
+    void notificarGestoresAprovacao(msgBase, demanda.organizacaoId)
 
     // Notifica editor (quem edita precisa saber de ajustes)
     if (demanda.editor) {
       const telEditor = demanda.editor.whatsapp || demanda.editor.telefone
       if (telEditor) {
-        void sendWhatsappMessage(telEditor, msgBase, demanda.id).catch(() => null)
+        void sendWhatsappMessage(telEditor, msgBase, demanda.id, demanda.organizacaoId).catch(() => null)
       }
     }
 
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       void sendWhatsappMessage(
         demanda.videomaker.telefone,
         `✅ *Vídeo Aprovado!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nParabéns! O cliente aprovou o vídeo. 🎬`,
-        demanda.id
+        demanda.id, demanda.organizacaoId
       ).catch(() => null)
     }
   }
@@ -221,15 +221,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   return NextResponse.json({ ok: true, status: updated.status })
 }
 
-async function notificarGestoresAprovacao(mensagem: string) {
+async function notificarGestoresAprovacao(mensagem: string, organizacaoId?: string | null) {
   try {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
       }
     }
   } catch (e) {

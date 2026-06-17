@@ -5,16 +5,21 @@
 
 import { Resend } from "resend"
 import { prisma } from "@/lib/prisma"
+import { contourlineOrgId } from "@/lib/whatsapp"
 
-async function getConfig() {
-  return prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
+// Config de e-mail da organização. Sem org → fallback Contourline (legado/temporário).
+async function getConfig(organizacaoId?: string | null) {
+  const orgId = organizacaoId ?? (await contourlineOrgId())
+  if (!orgId) return prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
+  if (!organizacaoId) console.warn("[Email] getConfig sem org — fallback Contourline (legado)")
+  return prisma.configEmail.findFirst({ where: { organizacaoId: orgId }, orderBy: { createdAt: "desc" } })
 }
 
-async function createClient() {
+async function createClient(organizacaoId?: string | null) {
   // Prioridade: variável de ambiente > configuração no banco
   const envKey = process.env.RESEND_API_KEY
   if (envKey) {
-    const config = await getConfig().catch(() => null)
+    const config = await getConfig(organizacaoId).catch(() => null)
     const senderEmail = config?.senderEmail || "onboarding@resend.dev"
     const senderNome = config?.senderNome || "NuFlow"
     return {
@@ -25,7 +30,7 @@ async function createClient() {
   }
 
   // Fallback: configuração salva no banco
-  const config = await getConfig()
+  const config = await getConfig(organizacaoId)
   if (!config || !config.ativo || !config.apiKey) return null
   return {
     resend: new Resend(config.apiKey),
@@ -102,9 +107,9 @@ export interface PagamentoEmailData {
   tituloDemanda: string; custoId: string
 }
 
-export async function sendEmailFinanceiro(dados: PagamentoEmailData): Promise<{ ok: boolean; error?: string }> {
+export async function sendEmailFinanceiro(dados: PagamentoEmailData, organizacaoId?: string | null): Promise<{ ok: boolean; error?: string }> {
   try {
-    const client = await createClient()
+    const client = await createClient(organizacaoId)
     if (!client) return { ok: false, error: "E-mail não configurado ou inativo" }
     if (!client.emailsFinanceiro.length) return { ok: false, error: "Nenhum e-mail do financeiro configurado" }
     const linkConfirmacao = `${process.env.NEXTAUTH_URL}/custos?aprovar=${dados.custoId}`
@@ -120,10 +125,10 @@ export async function sendEmailFinanceiro(dados: PagamentoEmailData): Promise<{ 
 }
 
 export async function sendEmailVideomakerNFRecebida(
-  email: string, nomeVideomaker: string, diasPrazo = 15
+  email: string, nomeVideomaker: string, diasPrazo = 15, organizacaoId?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const client = await createClient()
+    const client = await createClient(organizacaoId)
     if (!client) return { ok: false, error: "E-mail não configurado" }
     const { error } = await client.resend.emails.send({
       from: client.from,
@@ -137,10 +142,10 @@ export async function sendEmailVideomakerNFRecebida(
 }
 
 export async function sendEmailResetSenha(
-  destinatario: string, nome: string, token: string
+  destinatario: string, nome: string, token: string, organizacaoId?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const client = await createClient()
+    const client = await createClient(organizacaoId)
     if (!client) return { ok: false, error: "E-mail não configurado" }
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
     const linkReset = `${baseUrl}/redefinir-senha/${token}`
@@ -155,9 +160,9 @@ export async function sendEmailResetSenha(
   } catch (err) { return { ok: false, error: String(err) } }
 }
 
-export async function sendEmailTeste(destinatario: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendEmailTeste(destinatario: string, organizacaoId?: string | null): Promise<{ ok: boolean; error?: string }> {
   try {
-    const client = await createClient()
+    const client = await createClient(organizacaoId)
     if (!client) return { ok: false, error: "Resend não configurado ou inativo" }
     const { error } = await client.resend.emails.send({
       from: client.from,

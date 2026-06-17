@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { token } = await params
   const fornecedor = await prisma.fornecedor.findUnique({
     where: { portalToken: token },
-    select: { id: true, nome: true },
+    select: { id: true, nome: true, organizacaoId: true },
   })
   if (!fornecedor) return NextResponse.json({ error: "Portal não encontrado" }, { status: 404 })
 
@@ -70,14 +70,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     data: { notaFiscalUrl: url, statusPagamento: "nf_enviada" },
   })
 
-  // Notifica admins/gestores
+  // Notifica admins/gestores da organização dona do fornecedor
+  const orgId = fornecedor.organizacaoId
   const gestores = await prisma.usuario.findMany({
-    where: { tipo: { in: ["admin", "gestor", "gestor_eventos"] }, telefone: { not: null } },
+    where: { tipo: { in: ["admin", "gestor", "gestor_eventos"] }, telefone: { not: null }, ...(orgId ? { organizacoes: { some: { organizacaoId: orgId } } } : {}) },
     select: { telefone: true },
   })
   const msg = `🧾 *NuFlow Eventos* — ${fornecedor.nome} enviou documento para "${custo.descricao}" (evento ${custo.evento.nome}).`
   for (const g of gestores) {
-    if (g.telefone) await sendWhatsappMessage(g.telefone, msg).catch(() => null)
+    if (g.telefone) await sendWhatsappMessage(g.telefone, msg, undefined, orgId).catch(() => null)
   }
 
   return NextResponse.json({ ok: true, url })

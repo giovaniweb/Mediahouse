@@ -315,7 +315,8 @@ export async function POST(req: NextRequest) {
     demanda.codigo,
     data.titulo,
     session.user.name ?? "Usuário",
-    data.prioridade as string
+    data.prioridade as string,
+    organizacaoId
   )
 
   return NextResponse.json(demanda, { status: 201 })
@@ -328,11 +329,12 @@ async function notificarGestoresNovaDemanda(
   codigo: string,
   titulo: string,
   nomeSolicitante: string,
-  prioridade: string
+  prioridade: string,
+  organizacaoId?: string | null
 ) {
   try {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null } },
+      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
       select: { telefone: true },
     })
 
@@ -343,7 +345,7 @@ async function notificarGestoresNovaDemanda(
 
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg).catch(() => null)
+        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId).catch(() => null)
       }
     }
   } catch (e) {

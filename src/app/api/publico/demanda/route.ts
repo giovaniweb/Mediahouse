@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { sendWhatsappMessage, contourlineOrgId } from "@/lib/whatsapp"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -89,8 +89,14 @@ export async function POST(req: NextRequest) {
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
 
+  // TEMPORÁRIO (Fase 1): o formulário público é fixado na organização Contourline.
+  // Futuro: o formulário deve receber slug/token da empresa para multiempresa real.
+  const organizacaoId = await contourlineOrgId()
+  if (!organizacaoId) return NextResponse.json({ error: "Organização padrão não configurada" }, { status: 500 })
+
   const demanda = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: gerarCodigo(),
       titulo: data.titulo,
       descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : ""),
@@ -126,6 +132,7 @@ export async function POST(req: NextRequest) {
 
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       demandaId: demanda.id,
       tipoAlerta: "demanda_externa",
       mensagem: `📥 Demanda externa de ${data.nomeCliente} (${data.email}): "${data.titulo}" aguarda aprovação.`,
@@ -140,13 +147,13 @@ export async function POST(req: NextRequest) {
     await sendWhatsappMessage(
       telSolicitante,
       `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`,
-      demanda.id
+      demanda.id, organizacaoId
     ).catch(() => null)
   }
 
-  // Notifica gestores via WhatsApp
+  // Notifica gestores via WhatsApp (da organização da demanda)
   const gestores = await prisma.usuario.findMany({
-    where: { tipo: { in: ["admin", "gestor"] }, status: "ativo" },
+    where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", organizacoes: { some: { organizacaoId } } },
     select: { telefone: true, nome: true },
   })
   for (const g of gestores) {
@@ -154,7 +161,7 @@ export async function POST(req: NextRequest) {
       sendWhatsappMessage(
         g.telefone,
         `📥 *Nova solicitação externa*\n\n📋 *${demanda.codigo}* — ${data.titulo}\n👤 De: ${data.nomeCliente} (${data.telefone})\n${isCobertura ? `📸 Cobertura em ${data.cidade}` : `🎬 Vídeo: ${data.tipoVideo}`}\n\nAguarda aprovação no sistema.`,
-        demanda.id
+        demanda.id, organizacaoId
       ).catch(() => null)
     }
   }

@@ -20,32 +20,34 @@ export async function GET(req: NextRequest) {
 
   const agente = req.nextUrl.searchParams.get("agente") ?? "alertas"
 
-  try {
-    if (agente === "prazos") {
-      return await rodarAgentePrazos()
-    } else if (agente === "vistoria") {
-      return await rodarAgenteVistoria()
-    } else if (agente === "cobranca") {
-      return await rodarAgenteCobranca()
-    } else if (agente === "lembretes") {
-      return await rodarAgenteLembretes()
-    } else if (agente === "briefing") {
-      return await rodarAgenteBriefing()
-    } else if (agente === "limpeza") {
-      return await rodarAgenteLimpeza()
-    } else {
-      return await rodarAgenteAlertas()
+  // Roda o agente solicitado para CADA organização ativa (isolamento multiempresa).
+  const orgs = await prisma.organizacao.findMany({ where: { ativo: true }, select: { id: true } })
+  const resultados: Array<Record<string, unknown>> = []
+
+  for (const org of orgs) {
+    try {
+      let r: Record<string, unknown>
+      if (agente === "prazos") r = await rodarAgentePrazos(org.id)
+      else if (agente === "vistoria") r = await rodarAgenteVistoria(org.id)
+      else if (agente === "cobranca") r = await rodarAgenteCobranca(org.id)
+      else if (agente === "lembretes") r = await rodarAgenteLembretes(org.id)
+      else if (agente === "briefing") r = await rodarAgenteBriefing(org.id)
+      else if (agente === "limpeza") r = await rodarAgenteLimpeza(org.id)
+      else r = await rodarAgenteAlertas(org.id)
+      resultados.push({ organizacaoId: org.id, ...r })
+    } catch (e) {
+      console.error(`[Cron] Erro org ${org.id}:`, e)
+      resultados.push({ organizacaoId: org.id, erro: String(e) })
     }
-  } catch (e) {
-    console.error("[Cron] Erro:", e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
+
+  return NextResponse.json({ ok: true, agente, organizacoes: resultados.length, resultados })
 }
 
-async function rodarAgenteAlertas() {
+async function rodarAgenteAlertas(organizacaoId: string) {
   // Limpar snoozes expirados antes de rodar
   await prisma.alertaIA.updateMany({
-    where: { status: "ativo", snoozeAte: { lt: new Date(), not: null } },
+    where: { organizacaoId, status: "ativo", snoozeAte: { lt: new Date(), not: null } },
     data: { snoozeAte: null },
   })
 
@@ -63,7 +65,7 @@ async function rodarAgenteAlertas() {
 Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das ações.`
 
   const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, executarFerramenta, MODELO_RAPIDO, 8
+    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_RAPIDO, 8
   )
 
   await prisma.agenteExecucao.update({
@@ -77,15 +79,15 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
     },
   })
 
-  // Rodar cobrança, briefing e lembretes no mesmo cron (economiza slots do Vercel)
-  void rodarAgenteCobranca().catch(e => console.error("[alertas] cobrança inline:", e))
-  void rodarAgenteBriefing().catch(e => console.error("[alertas] briefing inline:", e))
-  void rodarAgenteLembretes().catch(e => console.error("[alertas] lembretes inline:", e))
+  // Rodar cobrança, briefing e lembretes no mesmo cron (economiza slots do Vercel) — por org
+  void rodarAgenteCobranca(organizacaoId).catch(e => console.error("[alertas] cobrança inline:", e))
+  void rodarAgenteBriefing(organizacaoId).catch(e => console.error("[alertas] briefing inline:", e))
+  void rodarAgenteLembretes(organizacaoId).catch(e => console.error("[alertas] lembretes inline:", e))
 
-  return NextResponse.json({ ok: true, agente: "alertas", tokens })
+  return { agente: "alertas", tokens }
 }
 
-async function rodarAgentePrazos() {
+async function rodarAgentePrazos(organizacaoId: string) {
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "prazos-cron", status: "executando" },
   })
@@ -100,7 +102,7 @@ async function rodarAgentePrazos() {
 Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissional.`
 
   const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, executarFerramenta, MODELO_POTENTE, 15
+    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15
   )
 
   await prisma.agenteExecucao.update({
@@ -114,10 +116,10 @@ Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissi
     },
   })
 
-  return NextResponse.json({ ok: true, agente: "prazos", tokens })
+  return { agente: "prazos", tokens }
 }
 
-async function rodarAgenteVistoria() {
+async function rodarAgenteVistoria(organizacaoId: string) {
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "vistoria-cron", status: "executando" },
   })
@@ -134,13 +136,14 @@ Envie um resumo executivo completo para cada gestor usando enviar_whatsapp.
 Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomakers.`
 
   const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, executarFerramenta, MODELO_POTENTE, 15
+    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15
   )
 
   // Salva como RelatorioIA
   try {
     await prisma.relatorioIA.create({
       data: {
+        organizacaoId,
         tipo: "semanal",
         periodo: new Date().toLocaleDateString("pt-BR"),
         conteudo: { analise: resposta, auto: true },
@@ -161,17 +164,17 @@ Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomak
     },
   })
 
-  return NextResponse.json({ ok: true, agente: "vistoria", tokens })
+  return { agente: "vistoria", tokens }
 }
 
 // ── TDAH: Cobrança Automática com Escalada ────────────────────────────────
-async function rodarAgenteCobranca() {
+async function rodarAgenteCobranca(organizacaoId: string) {
   const agora = new Date()
   const inicioDia = new Date(agora)
   inicioDia.setHours(0, 0, 0, 0)
 
   const custos = await prisma.custoVideomaker.findMany({
-    where: { pago: false, dataVencimento: { not: null } },
+    where: { organizacaoId, pago: false, dataVencimento: { not: null } },
     include: { videomaker: { select: { nome: true, telefone: true } } },
   })
 
@@ -213,7 +216,7 @@ async function rodarAgenteCobranca() {
     }
 
     if (mensagem) {
-      await sendWhatsappMessage(telefone, mensagem, undefined)
+      await sendWhatsappMessage(telefone, mensagem, custo.demandaId ?? undefined, organizacaoId)
       await prisma.custoVideomaker.update({
         where: { id: custo.id },
         data: {
@@ -225,16 +228,17 @@ async function rodarAgenteCobranca() {
     }
   }
 
-  return NextResponse.json({ ok: true, agente: "cobranca", enviados })
+  return { agente: "cobranca", enviados }
 }
 
 // ── TDAH: Lembretes de Eventos via WhatsApp ───────────────────────────────
-async function rodarAgenteLembretes() {
+async function rodarAgenteLembretes(organizacaoId: string) {
   const agora = new Date()
   const em2h = new Date(agora.getTime() + 2 * 60 * 60 * 1000)
 
   const eventos = await prisma.evento.findMany({
     where: {
+      organizacaoId,
       lembreteEnviado: false,
       inicio: { gte: agora, lte: em2h },
       status: { in: ["agendado", "confirmado"] },
@@ -262,16 +266,16 @@ async function rodarAgenteLembretes() {
     }
 
     const mensagem = templates.lembreteEvento(evento.titulo, minutosParaInicio, evento.local ?? null)
-    await sendWhatsappMessage(telefone, mensagem, evento.demandaId ?? undefined)
+    await sendWhatsappMessage(telefone, mensagem, evento.demandaId ?? undefined, organizacaoId)
     await prisma.evento.update({ where: { id: evento.id }, data: { lembreteEnviado: true } })
     enviados++
   }
 
-  return NextResponse.json({ ok: true, agente: "lembretes", enviados })
+  return { agente: "lembretes", enviados }
 }
 
 // ── TDAH: Morning Briefing para Gestores ─────────────────────────────────
-async function rodarAgenteBriefing() {
+async function rodarAgenteBriefing(organizacaoId: string) {
   const agora = new Date()
   const inicioDia = new Date(agora)
   inicioDia.setHours(0, 0, 0, 0)
@@ -281,34 +285,37 @@ async function rodarAgenteBriefing() {
   fimAmanha.setDate(fimAmanha.getDate() + 1)
   fimAmanha.setHours(23, 59, 59, 999)
 
-  // Buscar gestores com telefone
+  // Buscar gestores com telefone (membros desta organização)
   const gestores = await prisma.usuario.findMany({
     where: {
       tipo: { in: ["admin", "gestor"] },
       status: "ativo",
       telefone: { not: null },
+      organizacoes: { some: { organizacaoId } },
     },
     select: { id: true, nome: true, telefone: true },
   })
 
-  if (gestores.length === 0) return NextResponse.json({ ok: true, agente: "briefing", enviados: 0 })
+  if (gestores.length === 0) return { agente: "briefing", enviados: 0 }
 
   // Buscar dados em paralelo
   const [qtdEventos, qtdDemandas, qtdCobrancias] = await Promise.all([
     prisma.evento.count({
       where: {
+        organizacaoId,
         inicio: { gte: inicioDia, lte: fimDia },
         status: { in: ["agendado", "confirmado", "em_andamento"] },
       },
     }),
     prisma.demanda.count({
       where: {
+        organizacaoId,
         dataLimite: { gte: inicioDia, lte: fimAmanha },
         statusVisivel: { notIn: ["finalizado"] },
       },
     }),
     prisma.custoVideomaker.count({
-      where: { pago: false, dataVencimento: { not: null, lte: fimDia } },
+      where: { organizacaoId, pago: false, dataVencimento: { not: null, lte: fimDia } },
     }),
   ])
 
@@ -327,27 +334,31 @@ async function rodarAgenteBriefing() {
       qtdDemandas,
       qtdCobrancias
     )
-    await sendWhatsappMessage(telefone, mensagem, undefined)
+    await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
     enviados++
   }
 
-  return NextResponse.json({ ok: true, agente: "briefing", enviados })
+  return { agente: "briefing", enviados }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AGENTE LIMPEZA — 20 dias pós-finalização: avisa Luana + Giovani sobre brutos
 // ─────────────────────────────────────────────────────────────────────────────
-async function rodarAgenteLimpeza() {
+async function rodarAgenteLimpeza(organizacaoId: string) {
   const agora = new Date()
   const limite20dias = new Date(agora.getTime() - 20 * 24 * 60 * 60 * 1000)
   const limite5diasDepoisAviso = new Date(agora.getTime() - 5 * 24 * 60 * 60 * 1000)
 
-  // Telefones fixos dos responsáveis (Luana e Giovani)
-  const TELEFONES_LIMPEZA = ["5531957224989", "5531992271043"]
+  // Notifica os gestores/admins DA ORGANIZAÇÃO (antes era número fixo)
+  const telefonesLimpeza = (await prisma.usuario.findMany({
+    where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, organizacoes: { some: { organizacaoId } } },
+    select: { telefone: true },
+  })).map(g => g.telefone).filter((t): t is string => !!t)
 
   // 1. Demandas finalizadas há 20+ dias, com pasta brutos, sem aviso enviado
   const paraAvisar = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       statusVisivel: "finalizado",
       linkFolderBrutos: { not: null },
       limpezaNotificadaEm: null,
@@ -359,8 +370,8 @@ async function rodarAgenteLimpeza() {
   let avisados = 0
   for (const d of paraAvisar) {
     const msg = `⚠️ *NuFlow — Aviso de Limpeza de Brutos*\n\nA demanda *${d.codigo} — ${d.titulo}* foi finalizada há 20 dias.\n\n📂 A pasta *[Material Bruto]* será removida do sistema em *5 dias*.\nLink atual: ${d.linkFolderBrutos}\n\nSe precisar manter os arquivos, faça backup antes!`
-    for (const tel of TELEFONES_LIMPEZA) {
-      await sendWhatsappMessage(tel, msg, d.id).catch(() => null)
+    for (const tel of telefonesLimpeza) {
+      await sendWhatsappMessage(tel, msg, d.id, organizacaoId).catch(() => null)
     }
     await prisma.demanda.update({ where: { id: d.id }, data: { limpezaNotificadaEm: agora } })
     avisados++
@@ -369,6 +380,7 @@ async function rodarAgenteLimpeza() {
   // 2. Demandas avisadas há 5+ dias → remover referência de brutos
   const paraLimpar = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       statusVisivel: "finalizado",
       limpezaNotificadaEm: { lte: limite5diasDepoisAviso },
       limpezaExecutadaEm: null,
@@ -383,11 +395,11 @@ async function rodarAgenteLimpeza() {
       data: { linkFolderBrutos: null, limpezaExecutadaEm: agora },
     })
     const msg = `🗑️ *NuFlow — Brutos Removidos*\n\nO link da pasta *[Material Bruto]* da demanda *${d.codigo} — ${d.titulo}* foi removido do sistema conforme aviso enviado há 5 dias.`
-    for (const tel of TELEFONES_LIMPEZA) {
-      await sendWhatsappMessage(tel, msg, d.id).catch(() => null)
+    for (const tel of telefonesLimpeza) {
+      await sendWhatsappMessage(tel, msg, d.id, organizacaoId).catch(() => null)
     }
     limpos++
   }
 
-  return NextResponse.json({ ok: true, agente: "limpeza", avisados, limpos })
+  return { agente: "limpeza", avisados, limpos }
 }
