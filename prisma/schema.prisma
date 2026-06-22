@@ -436,6 +436,7 @@ model Demanda {
   convites           ConviteVideomaker[]
   notasFiscais       NotaFiscalUpload[]
   ideia              IdeiaVideo?
+  emailsEntrada      EmailEntrada[]
 
   // Evento de cobertura vinculado (quando convertida)
   coberturaId        String?
@@ -814,6 +815,67 @@ model ConfigEmail {
   updatedAt        DateTime @updatedAt
 
   @@map("config_email")
+}
+
+// Caixa de entrada conectada diretamente ao provedor de e-mail.
+// A mensagem e salva antes do parsing para permitir retomada e auditoria.
+model ConfigEmailEntrada {
+  id                           String   @id @default(cuid())
+  organizacaoId                String   @unique
+  provedor                     String   @default("microsoft365")
+  emailCaixa                   String?
+  tenantId                     String?
+  refreshTokenCriptografado    String?  @db.Text
+  remetenteFiltro              String?
+  assuntoFiltro                String?
+  criarDemandaAutomaticamente Boolean  @default(false)
+  solicitantePadraoId          String?
+  ativo                        Boolean  @default(false)
+  conectadoEm                  DateTime?
+  ultimaSincronizacaoEm        DateTime?
+  ultimoErro                   String?  @db.Text
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  organizacao Organizacao  @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  emails      EmailEntrada[]
+
+  @@map("config_email_entrada")
+}
+
+model EmailEntrada {
+  id                 String   @id @default(cuid())
+  organizacaoId      String
+  configId           String
+  mensagemProvedorId String
+  internetMessageId  String?
+  conversationId     String?
+  remetenteNome      String?
+  remetenteEmail     String
+  destinatarios      String[]
+  assunto            String
+  recebidoEm         DateTime
+  corpoTexto         String   @db.Text
+  corpoHtml          String?  @db.Text
+  possuiAnexos       Boolean  @default(false)
+  anexos              Json?
+  dadosExtraidos      Json?
+  status              String   @default("pendente") // pendente | pronto | processando | criado | revisao | ignorado | erro
+  erro                String?  @db.Text
+  tentativas          Int      @default(0)
+  demandaId           String?
+  processadoEm        DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organizacao Organizacao       @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  config      ConfigEmailEntrada @relation(fields: [configId], references: [id], onDelete: Cascade)
+  demanda     Demanda?           @relation(fields: [demandaId], references: [id], onDelete: SetNull)
+
+  @@unique([organizacaoId, mensagemProvedorId])
+  @@index([organizacaoId, status, recebidoEm])
+  @@index([demandaId])
+  @@map("emails_entrada")
 }
 
 // ─────────────────────────────────────────────
@@ -1707,6 +1769,8 @@ model Organizacao {
   updatedAt DateTime @updatedAt
 
   membros UsuarioOrganizacao[]
+  configEmailEntrada ConfigEmailEntrada?
+  emailsEntrada      EmailEntrada[]
 
   @@map("organizacoes")
 }

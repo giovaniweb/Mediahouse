@@ -2,16 +2,17 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, Eye, EyeOff, AlertCircle, AlertTriangle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, Eye, EyeOff, AlertCircle, AlertTriangle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play, Inbox } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSearchParams } from "next/navigation"
+import { EmailInboxSettings } from "@/components/configuracoes/EmailInboxSettings"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
+type Tab = "whatsapp" | "email" | "caixa_entrada" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
@@ -1868,6 +1869,7 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
     const tabParam = searchParams?.get("tab")
     if (tabParam === "empresa") onSetTab("empresa")
     if (tabParam === "drive") onSetTab("drive")
+    if (tabParam === "caixa_entrada") onSetTab("caixa_entrada")
     if (driveStatus === "conectado" && driveEmail) {
       toast.success(`Google Drive conectado como ${driveEmail}!`)
     } else if (driveStatus === "recusado") {
@@ -1876,6 +1878,11 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
       toast.error("Falha ao conectar Google Drive. Verifique as credenciais.")
     } else if (driveStatus === "sem_credenciais") {
       toast.error("GOOGLE_CLIENT_ID ou GOOGLE_CLIENT_SECRET não configurados.")
+    }
+    const inboxError = searchParams?.get("erro")
+    if (inboxError) toast.error(inboxError)
+    if (searchParams?.get("conectado") === "1") {
+      toast.success("Caixa Microsoft 365 conectada!")
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1891,7 +1898,8 @@ export default function ConfiguracoesPage() {
     { id: "empresa", label: "Dados da Empresa", icon: Building2 },
     { id: "drive", label: "Google Drive", icon: HardDrive },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-    { id: "email", label: "E-mail", icon: Mail },
+    { id: "email", label: "E-mail de saída", icon: Mail },
+    { id: "caixa_entrada", label: "E-mail de entrada", icon: Inbox },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
     { id: "depoimentos", label: "Depoimentos", icon: Video },
   ]
@@ -1961,6 +1969,7 @@ export default function ConfiguracoesPage() {
                 </div>
               )}
               {tab === "email" && <TabEmail />}
+              {tab === "caixa_entrada" && <EmailInboxSettings />}
               {tab === "parametros" && <TabParametros />}
               {tab === "empresa" && <TabEmpresa />}
               {tab === "drive" && <TabGoogleDrive />}

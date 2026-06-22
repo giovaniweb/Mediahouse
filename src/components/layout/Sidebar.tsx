@@ -30,6 +30,7 @@ import {
   Palette,
   Image as ImageIcon,
   PenTool,
+  Inbox,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -47,6 +48,7 @@ const sections = [
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
       { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
+      { href: "/caixa-entrada", label: "Caixa de Entrada", icon: Inbox },
     ],
   },
   {
