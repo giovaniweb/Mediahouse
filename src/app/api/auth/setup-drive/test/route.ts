@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+import { getOrgId, semOrg } from "@/lib/org"
 
 /**
  * GET /api/auth/setup-drive/test
@@ -12,16 +13,18 @@ export async function GET() {
   if (!session || !["admin", "gestor"].includes(session.user?.tipo ?? "")) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   try {
     const fileName = `nuflow_teste_conexao_${Date.now()}.txt`
 
-    // Cria uma sessão de upload para um arquivo txt de 13 bytes
+    // Cria uma sessão de upload para um arquivo txt de 13 bytes (Drive da org da sessão)
     const { sessionUri, fileId, publicUrl } = await criarSessaoUploadDrive({
       fileName,
       fileSize: 13,
       contentType: "text/plain",
-    })
+    }, organizacaoId)
 
     // Faz o upload do conteúdo do arquivo teste diretamente do servidor
     const uploadRes = await fetch(sessionUri, {

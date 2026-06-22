@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { precisaTranscode, enqueueTranscode } from "@/lib/transcode"
+import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -37,6 +38,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
   // url pode ser null para excluir — apenas undefined é inválido
   const url: string | null = body.url ?? null
@@ -51,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // ── Documento: cria/deleta Arquivo, sem tocar em linkFinal/linkBrutos ─────
   if (tipo === "documento") {
     if (url === null && arquivoId) {
-      await prisma.arquivo.delete({ where: { id: arquivoId } })
+      await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id } })
       return NextResponse.json({ ok: true, deleted: true })
     }
     if (url) {
@@ -70,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // ── Delete por arquivoId específico (multi-vídeo) ─────────────────────────
   if (url === null && arquivoId) {
-    await prisma.arquivo.delete({ where: { id: arquivoId } })
+    await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id } })
     // Atualiza linkFinal/linkBrutos para o vídeo mais recente restante (ou null)
     const ultimo = await prisma.arquivo.findFirst({
       where: { demandaId: id, tipoArquivo: tipo === "final" ? "final" : "bruto" },
@@ -126,9 +129,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
-
-  const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
-  if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   const formData = await req.formData()
   const file = formData.get("file") as File | null

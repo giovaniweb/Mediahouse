@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import type { Departamento, Prioridade, StatusVisivel, StatusInterno } from "@prisma/client"
 
 // ─── List name → StatusVisivel mapping (fuzzy, case-insensitive) ─────────────
@@ -191,6 +192,8 @@ export async function POST(req: NextRequest) {
   if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   let body: TrelloExport
   try {
@@ -225,9 +228,9 @@ export async function POST(req: NextRequest) {
     checklistMap.set(cl.idCard, existing)
   }
 
-  // Find already-imported card IDs (deduplication)
+  // Find already-imported card IDs (deduplication) — apenas da org da sessão
   const existingCardIds = await prisma.demanda.findMany({
-    where: { trelloCardId: { not: null } },
+    where: { organizacaoId, trelloCardId: { not: null } },
     select: { trelloCardId: true },
   })
   const importedSet = new Set(existingCardIds.map((d) => d.trelloCardId))
@@ -300,6 +303,7 @@ export async function POST(req: NextRequest) {
       // Create demand
       const demanda = await prisma.demanda.create({
         data: {
+          organizacaoId,
           codigo,
           titulo: card.name.slice(0, 200),
           descricao,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/admin/backfill-custos
 // Cria CustoVideomaker retroativamente para demandas finalizadas sem custo vinculado.
@@ -10,10 +11,13 @@ export async function POST(req: NextRequest) {
   if (!session || session.user.tipo !== "admin") {
     return NextResponse.json({ error: "Apenas admins podem executar o backfill" }, { status: 401 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  // Busca demandas finalizadas com videomakerId, sem custo com demandaId
+  // Busca demandas finalizadas com videomakerId, sem custo com demandaId (apenas da org do admin)
   const demandasFinalizadas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       statusVisivel: "finalizado",
       videomakerId: { not: null },
     },
@@ -51,6 +55,7 @@ export async function POST(req: NextRequest) {
 
       await prisma.custoVideomaker.create({
         data: {
+          organizacaoId,
           videomakerId: demanda.videomakerId!,
           demandaId: demanda.id,
           tipo: "projeto",

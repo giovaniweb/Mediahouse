@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO, extrairJSON } from "@/lib/claude"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/relatorios/gerar — gera relatório IA para um tipo e período
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   const { tipo, periodo } = body as { tipo: string; periodo: string }
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const [demandas, custos, videomakers, alertas, ideiasStats] = await Promise.all([
       prisma.demanda.findMany({
-        where: { createdAt: { gte: dataInicio } },
+        where: { organizacaoId, createdAt: { gte: dataInicio } },
         select: {
           id: true,
           codigo: true,
@@ -46,30 +49,31 @@ export async function POST(req: NextRequest) {
         },
       }),
       prisma.custoVideomaker.findMany({
-        where: { dataReferencia: { gte: dataInicio } },
+        where: { organizacaoId, dataReferencia: { gte: dataInicio } },
         include: { videomaker: { select: { id: true, nome: true, valorDiaria: true } } },
       }),
+      // Videomaker é GLOBAL; mas as demandas aninhadas são escopadas à org do relatório.
       prisma.videomaker.findMany({
         where: { status: { in: ["ativo", "preferencial"] } },
         select: {
           id: true, nome: true, valorDiaria: true, avaliacao: true, areasAtuacao: true,
           demandas: {
-            where: { createdAt: { gte: dataInicio } },
+            where: { organizacaoId, createdAt: { gte: dataInicio } },
             select: { id: true, tipoVideo: true, statusInterno: true },
           },
         },
       }),
       prisma.alertaIA.findMany({
-        where: { status: "ativo" },
+        where: { organizacaoId, status: "ativo" },
         select: { tipoAlerta: true, mensagem: true, severidade: true, createdAt: true },
         take: 20,
       }),
       Promise.all([
-        prisma.ideiaVideo.count(),
-        prisma.ideiaVideo.count({ where: { status: "nova" } }),
-        prisma.ideiaVideo.count({ where: { status: "realizada" } }),
-        prisma.ideiaVideo.count({ where: { createdAt: { gte: dataInicio } } }),
-        prisma.ideiaVideo.groupBy({ by: ["origem"], _count: true }),
+        prisma.ideiaVideo.count({ where: { organizacaoId } }),
+        prisma.ideiaVideo.count({ where: { organizacaoId, status: "nova" } }),
+        prisma.ideiaVideo.count({ where: { organizacaoId, status: "realizada" } }),
+        prisma.ideiaVideo.count({ where: { organizacaoId, createdAt: { gte: dataInicio } } }),
+        prisma.ideiaVideo.groupBy({ by: ["origem"], where: { organizacaoId }, _count: true }),
       ]).then(([total, novas, realizadas, periodo, porOrigem]) => ({
         total, novas, realizadas, periodo,
         taxaConversao: total > 0 ? Math.round((realizadas / total) * 100) : 0,
@@ -78,7 +82,7 @@ export async function POST(req: NextRequest) {
     ])
 
     const historicosSemana = await prisma.historicoStatus.findMany({
-      where: { createdAt: { gte: dataInicio } },
+      where: { createdAt: { gte: dataInicio }, demanda: { organizacaoId } },
       select: { statusAnterior: true, statusNovo: true, origem: true, createdAt: true, demandaId: true },
       take: 200,
     })
@@ -338,6 +342,7 @@ RETORNE JSON com esta estrutura:
 
     const relatorio = await prisma.relatorioIA.create({
       data: {
+        organizacaoId,
         tipo: tipo as never,
         periodo: periodoStr,
         conteudo: conteudo as never,

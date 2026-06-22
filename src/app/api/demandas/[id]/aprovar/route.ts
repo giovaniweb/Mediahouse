@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { Resend } from "resend"
 
 // POST /api/demandas/[id]/aprovar
@@ -13,6 +14,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
@@ -29,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   })
 
-  if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
+  if (!demanda || !pertenceAOrg(demanda, organizacaoId)) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
   // ── Reverter demanda recusada ──────────────────────────────────────────────
   if (acao === "reverter") {
@@ -59,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       demanda,
       solicitante: demanda.solicitante,
       telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
+      organizacaoId,
     })
 
     return NextResponse.json({ ok: true, statusInterno: "aguardando_aprovacao_interna" })
@@ -102,6 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     solicitante: demanda.solicitante,
     telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
     motivo,
+    organizacaoId,
   })
 
   return NextResponse.json({ ok: true, statusInterno: novoStatus })
@@ -115,12 +120,14 @@ async function notificarSolicitante({
   solicitante,
   telefoneSolicitanteWhatsapp,
   motivo,
+  organizacaoId,
 }: {
   tipo: "aprovada" | "recusada" | "reaberta"
   demanda: { id: string; codigo: string; titulo: string }
   solicitante: { id: string; nome: string; email: string | null; telefone: string | null } | null
   telefoneSolicitanteWhatsapp?: string | null
   motivo?: string
+  organizacaoId?: string | null
 }) {
 
   const assuntos: Record<string, string> = {
@@ -162,7 +169,7 @@ async function notificarSolicitante({
     await sendWhatsappMessage(
       solicitante.telefone,
       mensagensWpp[tipo],
-      demanda.id
+      demanda.id, organizacaoId
     ).catch(() => {})
   }
 
@@ -176,14 +183,17 @@ async function notificarSolicitante({
       await sendWhatsappMessage(
         telefoneSolicitanteWhatsapp,
         mensagensWpp[tipo],
-        demanda.id
+        demanda.id, organizacaoId
       ).catch(() => {})
     }
   }
 
-  // E-mail via Resend
+  // E-mail via Resend — config estritamente escopada por organização (sem findFirst global).
+  // Sem org resolvível, não busca config nenhuma (evita usar credenciais de outra empresa).
   try {
-    const config = await prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
+    const config = organizacaoId
+      ? await prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
+      : null
     const apiKey = config?.apiKey || process.env.RESEND_API_KEY
     if (apiKey && solicitante?.email) {
       const resend = new Resend(apiKey)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 export async function POST(
   req: NextRequest,
@@ -8,6 +9,8 @@ export async function POST(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
@@ -17,7 +20,7 @@ export async function POST(
     include: { produto: { select: { id: true, nome: true } } },
   })
 
-  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
   if (ideia.demandaId) return NextResponse.json({ error: "Ideia já foi convertida em demanda" }, { status: 400 })
 
   // Generate next codigo
@@ -38,6 +41,7 @@ export async function POST(
 
   const demanda = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo,
       titulo: body.titulo || ideia.titulo,
       descricao,

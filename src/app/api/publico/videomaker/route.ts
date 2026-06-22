@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { contourlineOrgId } from "@/lib/whatsapp"
 import { z } from "zod"
 
 // Rota pública — não requer autenticação
@@ -64,9 +65,13 @@ export async function POST(req: NextRequest) {
     select: { id: true, nome: true, email: true },
   })
 
-  // Cria alerta interno para a equipe revisar
+  // Cria alerta interno para a equipe revisar.
+  // Videomaker é GLOBAL; o cadastro público não tem org. FALLBACK LEGADO (Fase 1):
+  // o alerta de aprovação vai para a Contourline, que gerencia a rede de videomakers.
+  const orgAlerta = await contourlineOrgId()
   await prisma.alertaIA.create({
     data: {
+      ...(orgAlerta ? { organizacaoId: orgAlerta } : {}),
       tipoAlerta: "novo_videomaker_pendente",
       mensagem: `Novo videomaker cadastrado: ${data.nome} — aguarda análise e aprovação.`,
       severidade: "info",

@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       body.videomakerId = await resolveParaVideomaker(body.videomakerId)
     }
     if (typeof body.editorId === "string" && body.editorId.includes(":")) {
-      body.editorId = await resolveParaEditor(body.editorId)
+      body.editorId = await resolveParaEditor(body.editorId, guard.organizacaoId)
     }
   } catch (e) {
     console.error("[Demanda PUT] Erro ao resolver atribuição:", e)
@@ -144,6 +144,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
           await prisma.custoVideomaker.create({
             data: {
+              organizacaoId: guard.organizacaoId,
               videomakerId: demandaAtual.videomakerId,
               demandaId: id,
               tipo: "projeto",
@@ -234,6 +235,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           // Criar alerta para a equipe
           await prisma.alertaIA.create({
             data: {
+              organizacaoId: guard.organizacaoId,
               demandaId: id,
               tipoAlerta: "video_aprovado",
               mensagem: `✅ ${aprovacoesPendentes.length} vídeo(s) aprovado(s) automaticamente ao mover para Para Postar!`,
@@ -244,6 +246,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           // Para cada aprovação com vídeo no Supabase → transferir para o Drive em background
           const demandaSnap = demandaAtual
           const aprovacoesCopy = aprovacoesPendentes
+          const orgIdDrive = guard.organizacaoId
           after(async () => {
             for (const aprovacao of aprovacoesCopy) {
               try {
@@ -287,7 +290,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
                 }
                 const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
 
-                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, orgIdDrive)
 
                 const driveRes = await fetch(sessionUri, {
                   method: "PUT",

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { requireDemandaOrg } from "@/lib/org"
 import type { Prioridade, Departamento } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -20,6 +21,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
 
   // Busca demanda original com produtos e checklist
   const original = await prisma.demanda.findUnique({
@@ -44,6 +48,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   const nova = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: gerarCodigo(),
       titulo: `${original.titulo} (Cópia)`,
       descricao: original.descricao,

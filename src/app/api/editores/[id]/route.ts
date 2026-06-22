@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
@@ -24,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     },
   })
 
-  if (!editor) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  if (!editor || !pertenceAOrg(editor, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   const userTipo = (session.user as { tipo?: string }).tipo
   const isPrivileged = userTipo === "admin" || userTipo === "gestor"
@@ -40,9 +43,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
+
+  const alvo = await prisma.editor.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!alvo || !pertenceAOrg(alvo, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   const userTipo = (session.user as { tipo?: string }).tipo
   const isPrivileged = userTipo === "admin" || userTipo === "gestor"
@@ -85,9 +93,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
-  await prisma.editor.delete({ where: { id } })
+  const r = await prisma.editor.deleteMany({ where: { id, organizacaoId } })
+  if (r.count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   return NextResponse.json({ ok: true })
 }

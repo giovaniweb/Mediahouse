@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -48,6 +49,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   // Criar o EventoCobertura com dados da demanda
   const cobertura = await prisma.eventoCobertura.create({
     data: {
+      organizacaoId,
       titulo: demanda.titulo,
       slug: gerarSlug(demanda.titulo),
       tipo: "outro",

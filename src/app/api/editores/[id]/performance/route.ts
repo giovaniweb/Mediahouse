@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 export async function GET(
   _req: NextRequest,
@@ -8,18 +9,20 @@ export async function GET(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
   const editor = await prisma.editor.findUnique({
     where: { id },
-    select: { id: true, nome: true, salario: true },
+    select: { id: true, nome: true, salario: true, organizacaoId: true },
   })
-  if (!editor) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
+  if (!editor || !pertenceAOrg(editor, organizacaoId)) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
 
   // All demands assigned to this editor
   const demandas = await prisma.demanda.findMany({
-    where: { editorId: id },
+    where: { editorId: id, organizacaoId },
     select: {
       id: true,
       statusVisivel: true,

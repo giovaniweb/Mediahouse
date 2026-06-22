@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -10,6 +11,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const itens = await prisma.checklistItem.findMany({
     where: { demandaId: id },
     orderBy: [{ grupo: "asc" }, { ordem: "asc" }],
@@ -35,6 +38,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
   const { texto, grupo } = body
 
@@ -66,11 +71,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  await params // consume params
+  const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
   const { itemId, concluido, texto } = body
 
   if (!itemId) return NextResponse.json({ error: "itemId obrigatório" }, { status: 400 })
+
+  // Garante que o item pertence a esta demanda (que já é da org da sessão)
+  const itemDono = await prisma.checklistItem.findUnique({ where: { id: itemId }, select: { demandaId: true } })
+  if (itemDono?.demandaId !== id) return NextResponse.json({ error: "Item não encontrado" }, { status: 404 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {}
@@ -94,11 +105,17 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  await params
+  const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
   const { itemId } = body
 
   if (!itemId) return NextResponse.json({ error: "itemId obrigatório" }, { status: 400 })
+
+  // Garante que o item pertence a esta demanda
+  const itemDono = await prisma.checklistItem.findUnique({ where: { id: itemId }, select: { demandaId: true } })
+  if (itemDono?.demandaId !== id) return NextResponse.json({ error: "Item não encontrado" }, { status: 404 })
 
   await prisma.checklistItem.delete({ where: { id: itemId } })
 

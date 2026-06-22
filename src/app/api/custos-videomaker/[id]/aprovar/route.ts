@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailFinanceiro } from "@/lib/email"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 // POST /api/custos-videomaker/[id]/aprovar
 // Aprova ou contesta um custo diretamente pelo custoId (sem precisar do demandaId)
@@ -17,6 +18,9 @@ export async function POST(
     return NextResponse.json({ error: "Apenas admin ou gestor pode aprovar pagamentos" }, { status: 403 })
   }
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const { id: custoId } = await params
   const body = await req.json()
   const { acao } = body // "aprovar_pagamento" | "contestar"
@@ -29,7 +33,7 @@ export async function POST(
     },
   })
 
-  if (!custo) return NextResponse.json({ error: "Custo não encontrado" }, { status: 404 })
+  if (!custo || !pertenceAOrg(custo, organizacaoId)) return NextResponse.json({ error: "Custo não encontrado" }, { status: 404 })
 
   // ── Aprovar pagamento ──────────────────────────────────────────────────────
   if (acao === "aprovar_pagamento") {
@@ -47,7 +51,7 @@ export async function POST(
       codigoDemanda: custo.demanda?.codigo ?? "S/D",
       tituloDemanda: custo.demanda?.titulo ?? "Sem demanda",
       custoId: custo.id,
-    })
+    }, organizacaoId)
 
     return NextResponse.json({
       ok: true,

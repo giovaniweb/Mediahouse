@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -20,6 +20,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
   const sp = req.nextUrl.searchParams
 
   const fileName = sp.get("fileName") ?? "video.mp4"
@@ -32,17 +35,8 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const fileSize = Number(fileSizeStr)
 
-  // Verifica se a demanda existe
-  const demanda = await prisma.demanda.findUnique({
-    where: { id },
-    select: { id: true, codigo: true },
-  })
-  if (!demanda) {
-    return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
-  }
-
   try {
-    const result = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+    const result = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, organizacaoId)
     return NextResponse.json(result)
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao criar sessão Drive"

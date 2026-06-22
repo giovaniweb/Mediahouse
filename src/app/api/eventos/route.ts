@@ -7,6 +7,7 @@ import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
 import { criarPastaDrive } from "@/lib/google-drive"
+import { getOrgId, semOrg } from "@/lib/org"
 import { after } from "next/server"
 import type { Prioridade } from "@prisma/client"
 
@@ -35,6 +36,8 @@ function gerarSlug(titulo: string): string {
 export async function GET(req: NextRequest) {
   const session = await requireEventoAccess()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const status = sp.get("status")
@@ -43,6 +46,7 @@ export async function GET(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
+    organizacaoId,
     ...(status ? { status } : {}),
     ...(tipo ? { tipo } : {}),
     ...(search
@@ -86,6 +90,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await requireEventoAccess()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   try {
     const body = await req.json()
@@ -116,6 +122,7 @@ export async function POST(req: NextRequest) {
 
     const evento = await prisma.eventoGestao.create({
       data: {
+        organizacaoId,
         codigo: gerarCodigoEvento(),
         nome: nome.trim(),
         tipo: tipo ?? "outro",
@@ -161,6 +168,7 @@ export async function POST(req: NextRequest) {
         try {
           const cobertura = await prisma.eventoCobertura.create({
             data: {
+              organizacaoId,
               titulo: nome.trim(),
               slug: gerarSlug(nome),
               tipo: "outro",
@@ -184,6 +192,7 @@ export async function POST(req: NextRequest) {
         const peso = calcularPeso(peca.tipoVideo, "normal" as Prioridade)
         const dem = await prisma.demanda.create({
           data: {
+            organizacaoId,
             codigo: gerarCodigoEvento().replace("EVT", "DEM"),
             titulo: `${nome.trim()} — ${peca.label}`,
             descricao: peca.descricao,
@@ -216,6 +225,7 @@ export async function POST(req: NextRequest) {
       try {
         const dem = await prisma.demanda.create({
           data: {
+            organizacaoId,
             codigo: gerarCodigoEvento().replace("EVT", "ART"),
             titulo: `${nome.trim()} — ${peca.label}`,
             descricao: peca.descricao,
@@ -257,9 +267,10 @@ export async function POST(req: NextRequest) {
     }).catch(() => null)
 
     // Pasta no Drive (best-effort, em background; não bloqueia a resposta)
+    const orgIdDrive = organizacaoId
     after(async () => {
       try {
-        const { folderUrl } = await criarPastaDrive(`${evento.codigo} — ${evento.nome}`)
+        const { folderUrl } = await criarPastaDrive(`${evento.codigo} — ${evento.nome}`, orgIdDrive)
         await prisma.eventoGestao.update({ where: { id: evento.id }, data: { linkDrive: folderUrl } })
       } catch (e) {
         console.error("[Eventos] Drive não configurado ou falha ao criar pasta:", e instanceof Error ? e.message : e)

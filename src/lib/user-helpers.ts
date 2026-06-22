@@ -93,6 +93,7 @@ export async function notificarCredenciaisWhatsapp(
   nome: string,
   emailLogin: string | null,
   senha: string,
+  organizacaoId?: string | null,
 ) {
   const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
 
@@ -110,7 +111,7 @@ export async function notificarCredenciaisWhatsapp(
     `Recomendamos alterar sua senha no primeiro acesso. 🔒`
 
   try {
-    await sendWhatsappMessage(telefone, mensagem)
+    await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
     return true
   } catch (e) {
     console.error("[WhatsApp] Erro ao enviar credenciais:", e)

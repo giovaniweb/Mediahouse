@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { analisarComClaude, extrairJSON, MODELO_RAPIDO } from "@/lib/claude"
 
 export async function POST(
@@ -9,6 +10,8 @@ export async function POST(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
@@ -19,7 +22,7 @@ export async function POST(
     },
   })
 
-  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
 
   // Build context about the product
   let contextoProduto = "Nenhum produto associado."

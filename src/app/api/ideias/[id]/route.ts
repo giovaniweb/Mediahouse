@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 export async function GET(
   _req: NextRequest,
@@ -8,6 +9,8 @@ export async function GET(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
@@ -20,7 +23,7 @@ export async function GET(
     },
   })
 
-  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
 
   return NextResponse.json(ideia)
 }
@@ -31,13 +34,15 @@ export async function PUT(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
   const { titulo, descricao, status, classificacao, produtoId, tags, linkReferencia } = body
 
   const ideia = await prisma.ideiaVideo.findUnique({ where: { id } })
-  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {}
@@ -66,13 +71,16 @@ export async function DELETE(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
-  await prisma.ideiaVideo.update({
-    where: { id },
+  const r = await prisma.ideiaVideo.updateMany({
+    where: { id, organizacaoId },
     data: { status: "descartada" },
   })
+  if (r.count === 0) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
 
   return NextResponse.json({ ok: true })
 }

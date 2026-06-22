@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/admin/sync-drive
 // Faz upload em lote para o Google Drive de todos os vídeos finais que ainda estão no Supabase.
@@ -11,10 +12,13 @@ export async function POST(req: NextRequest) {
   if (!session || session.user.tipo !== "admin") {
     return NextResponse.json({ error: "Apenas admins podem sincronizar" }, { status: 401 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  // Buscar demandas finalizadas/para_postar com linkFinal no Supabase
+  // Buscar demandas finalizadas/para_postar com linkFinal no Supabase (apenas da org do admin)
   const demandas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       statusVisivel: { in: ["finalizado", "para_postar"] },
       linkFinal: { contains: "supabase" },
     },
@@ -77,7 +81,7 @@ export async function POST(req: NextRequest) {
         const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
 
         // Upload para Drive
-        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, organizacaoId)
 
         const driveRes = await fetch(sessionUri, {
           method: "PUT",

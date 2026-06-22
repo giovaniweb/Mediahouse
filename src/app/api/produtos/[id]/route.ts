@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 export async function GET(
   req: NextRequest,
@@ -8,6 +9,8 @@ export async function GET(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
@@ -40,7 +43,7 @@ export async function GET(
     },
   })
 
-  if (!produto) {
+  if (!produto || !pertenceAOrg(produto, organizacaoId)) {
     return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
   }
 
@@ -214,12 +217,14 @@ export async function PUT(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
 
   const existing = await prisma.produto.findUnique({ where: { id } })
-  if (!existing) {
+  if (!existing || !pertenceAOrg(existing, organizacaoId)) {
     return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
   }
 
@@ -245,11 +250,13 @@ export async function DELETE(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
   const existing = await prisma.produto.findUnique({ where: { id } })
-  if (!existing) {
+  if (!existing || !pertenceAOrg(existing, organizacaoId)) {
     return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
   }
 

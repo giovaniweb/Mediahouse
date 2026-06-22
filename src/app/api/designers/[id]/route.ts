@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
   const { id } = await params
   const designer = await prisma.designer.findUnique({
     where: { id },
@@ -19,15 +22,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
       },
     },
   })
-  if (!designer) return NextResponse.json({ error: "Designer não encontrado" }, { status: 404 })
+  if (!designer || !pertenceAOrg(designer, organizacaoId)) return NextResponse.json({ error: "Designer não encontrado" }, { status: 404 })
   return NextResponse.json({ designer })
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
   const { id } = await params
   const body = await req.json()
+  const alvo = await prisma.designer.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!alvo || !pertenceAOrg(alvo, organizacaoId)) return NextResponse.json({ error: "Designer não encontrado" }, { status: 404 })
   const designer = await prisma.designer.update({
     where: { id },
     data: {
@@ -57,8 +64,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
   const { id } = await params
-  const count = await prisma.demanda.count({ where: { designerId: id } })
+  const alvo = await prisma.designer.findUnique({ where: { id }, select: { organizacaoId: true } })
+  if (!alvo || !pertenceAOrg(alvo, organizacaoId)) return NextResponse.json({ error: "Designer não encontrado" }, { status: 404 })
+  const count = await prisma.demanda.count({ where: { designerId: id, organizacaoId } })
   if (count > 0) {
     await prisma.designer.update({ where: { id }, data: { status: "inativo" } })
     return NextResponse.json({ ok: true, softDelete: true })

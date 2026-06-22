@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
 
   const evento = await prisma.evento.findUnique({ where: { id } })
-  if (!evento) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  if (!evento || !pertenceAOrg(evento, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
 
   // Só admin pode editar eventos privados de outros
   if (evento.privado && evento.usuarioId !== session.user.id && session.user.tipo !== "admin") {
@@ -36,10 +39,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const evento = await prisma.evento.findUnique({ where: { id } })
-  if (!evento) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  if (!evento || !pertenceAOrg(evento, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
 
   if (evento.usuarioId !== session.user.id && session.user.tipo !== "admin") {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { precisaTranscode, enqueueTranscode } from "@/lib/transcode"
+import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   // Pega o Arquivo final ativo (maior sequência) que ainda seja .mov
   const arq = await prisma.arquivo.findFirst({

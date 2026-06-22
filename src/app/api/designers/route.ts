@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       referenciaId: designer.id,
     })
     if (!jáExistia && senha && body.telefone) {
-      await notificarCredenciaisWhatsapp(body.telefone, body.nome, body.email ?? null, senha)
+      await notificarCredenciaisWhatsapp(body.telefone, body.nome, body.email ?? null, senha, organizacaoId)
     }
   } catch (e) {
     console.error("[Designer] Erro ao criar conta de acesso:", e)

@@ -54,7 +54,8 @@ export async function POST(req: Request) {
     const agora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
     const result = await sendWhatsappMessage(
       numero,
-      `*NuFlow — Teste de Conexao*\n\nEsta mensagem confirma que o WhatsApp esta funcionando corretamente.\n\nData/hora: ${agora}`
+      `*NuFlow — Teste de Conexao*\n\nEsta mensagem confirma que o WhatsApp esta funcionando corretamente.\n\nData/hora: ${agora}`,
+      undefined, organizacaoId
     )
 
     if (result?.key?.id) {

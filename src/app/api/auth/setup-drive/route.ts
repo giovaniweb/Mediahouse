@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { getOrgId, semOrg } from "@/lib/org"
 
 /**
  * GET /api/auth/setup-drive
@@ -11,6 +12,8 @@ export async function GET(req: NextRequest) {
   if (!session || !["admin", "gestor"].includes(session.user?.tipo ?? "")) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId) {
@@ -30,7 +33,9 @@ export async function GET(req: NextRequest) {
     scope: "https://www.googleapis.com/auth/drive",
     access_type: "offline",
     prompt: "consent", // forçar novo refresh_token
-    state: "setup-drive", // proteção CSRF básica
+    // state carrega a org que iniciou o OAuth → o callback salva o token na
+    // ConfigEmpresa correta (sem findFirst global). Prefixo serve de CSRF básico.
+    state: `setup-drive:${organizacaoId}`,
   })
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`

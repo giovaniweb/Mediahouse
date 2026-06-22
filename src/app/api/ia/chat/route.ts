@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { claude, MODELO_RAPIDO, SYSTEM_VIDEOOPS, TOOLS_VIDEOOPS } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
+import { getOrgId } from "@/lib/org"
 import Anthropic from "@anthropic-ai/sdk"
 
 export const maxDuration = 60
@@ -11,6 +12,10 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) {
     return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401 })
+  }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) {
+    return new Response(JSON.stringify({ error: "Organização não encontrada na sessão" }), { status: 403 })
   }
 
   const { messages } = await req.json() as {
@@ -76,7 +81,8 @@ export async function POST(req: NextRequest) {
 
                 const resultado = await executarFerramenta(
                   block.name,
-                  block.input as Record<string, unknown>
+                  block.input as Record<string, unknown>,
+                  organizacaoId
                 )
 
                 toolResults.push({

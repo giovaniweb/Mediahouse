@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
+import { requireEventoGestaoOrg } from "@/lib/org"
 import { analisarComClaude, MODELO_POTENTE } from "@/lib/claude"
 
 type Params = { params: Promise<{ id: string }> }
@@ -11,6 +12,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireEventoGestaoOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const evento = await prisma.eventoGestao.findUnique({
     where: { id },
     include: {

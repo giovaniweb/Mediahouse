@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
+import { getOrgId, semOrg } from "@/lib/org"
 import type { CategoriaFornecedor } from "@prisma/client"
 
 // GET /api/fornecedores — lista
 export async function GET(req: NextRequest) {
   const session = await requireEventoAccess("gerenciarFornecedores")
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
   const categoria = sp.get("categoria")
@@ -14,6 +17,7 @@ export async function GET(req: NextRequest) {
 
   const fornecedores = await prisma.fornecedor.findMany({
     where: {
+      organizacaoId,
       ...(categoria ? { categoria: categoria as CategoriaFornecedor } : {}),
       ...(search
         ? { OR: [{ nome: { contains: search, mode: "insensitive" } }, { cnpj: { contains: search } }] }
@@ -29,12 +33,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await requireEventoAccess("gerenciarFornecedores")
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
   if (!body.nome?.trim()) return NextResponse.json({ error: "Nome obrigatório" }, { status: 400 })
 
   const fornecedor = await prisma.fornecedor.create({
     data: {
+      organizacaoId,
       nome: body.nome.trim(),
       contato: body.contato ?? null,
       cnpj: body.cnpj ?? null,

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailFinanceiro, sendEmailVideomakerNFRecebida } from "@/lib/email"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { requireDemandaOrg } from "@/lib/org"
 
 // Validação de chave PIX
 function validarChavePix(chave: string): boolean {
@@ -20,6 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   const custo = await prisma.custoVideomaker.findFirst({
     where: { demandaId: id },
@@ -41,6 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
   const body = await req.json()
   const { acao, notaFiscalUrl, chavePix } = body
 
@@ -75,6 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const vm = demanda.videomaker
       custo = await prisma.custoVideomaker.create({
         data: {
+          organizacaoId,
           videomakerId: demanda.videomakerId!,
           demandaId: id,
           tipo: "diaria",
@@ -97,6 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Criar alerta de aprovação de pagamento
     await prisma.alertaIA.create({
       data: {
+        organizacaoId,
         demandaId: id,
         tipoAlerta: "pagamento_pendente",
         mensagem: `Nota fiscal recebida de ${demanda.videomaker?.nome ?? "videomaker"} para a demanda ${demanda.codigo}. Aguardando aprovação do pagamento.`,
@@ -110,13 +118,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await sendWhatsappMessage(
         demanda.videomaker.telefone,
         `🎬 *NuFlow*\n\nOlá, *${demanda.videomaker.nome}*! Recebemos sua nota fiscal com sucesso. ✅\n\nNosso time irá analisá-la e o pagamento será efetuado em até *15 dias úteis* via PIX.\n\nObrigado pelo ótimo trabalho! 🙏`,
-        id
+        id, organizacaoId
       ).catch(() => {})
     }
 
     // E-mail para o videomaker (se tiver e-mail)
     if (demanda.videomaker?.email) {
-      await sendEmailVideomakerNFRecebida(demanda.videomaker.email, demanda.videomaker.nome).catch(() => {})
+      await sendEmailVideomakerNFRecebida(demanda.videomaker.email, demanda.videomaker.nome, 15, organizacaoId).catch(() => {})
     }
 
     return NextResponse.json({ ok: true, custo, mensagem: "Nota fiscal recebida! Você receberá o pagamento em até 15 dias úteis." })
@@ -150,7 +158,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       codigoDemanda: custo.demanda?.codigo ?? demanda.codigo,
       tituloDemanda: custo.demanda?.titulo ?? demanda.titulo,
       custoId: custo.id,
-    })
+    }, organizacaoId)
 
     return NextResponse.json({
       ok: true,

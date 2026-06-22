@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export const maxDuration = 120
 
@@ -11,6 +12,8 @@ export const maxDuration = 120
 export async function POST() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "monitor", status: "executando", criadoPor: session.user?.id },
@@ -45,7 +48,7 @@ Seja específico com dados reais (nomes de demandas, videomakers, valores).`
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      executarFerramenta,
+      (n, i) => executarFerramenta(n, i, organizacaoId),
       MODELO_POTENTE,
       10
     )

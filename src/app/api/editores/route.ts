@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
         body.nome,
         usuario.email,
         senha,
+        organizacaoId,
       )
     }
   } catch (e) {

@@ -300,6 +300,7 @@ export async function POST(req: NextRequest) {
   // Criar alerta para gestor
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       demandaId: demanda.id,
       tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
       mensagem: data.prioridade === "urgente"

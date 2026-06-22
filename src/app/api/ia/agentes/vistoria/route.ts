@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export const maxDuration = 180
 
@@ -14,6 +15,8 @@ export const maxDuration = 180
 export async function POST() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "vistoria", status: "executando", criadoPor: session.user?.id },
@@ -99,7 +102,7 @@ Inclua um "Score de Saúde Geral" de 0-100 com justificativa.`
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      executarFerramenta,
+      (n, i) => executarFerramenta(n, i, organizacaoId),
       MODELO_POTENTE,
       20
     )
@@ -108,6 +111,7 @@ Inclua um "Score de Saúde Geral" de 0-100 com justificativa.`
     try {
       await prisma.relatorioIA.create({
         data: {
+          organizacaoId,
           tipo: "semanal",
           periodo: new Date().toLocaleDateString("pt-BR"),
           conteudo: { analise: resposta, ferramentas: ferramentasUsadas },

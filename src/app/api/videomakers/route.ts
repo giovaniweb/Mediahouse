@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { getOrgId } from "@/lib/org"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -28,6 +29,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Videomaker é GLOBAL (sem organizacaoId). A org só identifica quem está cadastrando,
+  // usada para enviar as credenciais pelo WhatsApp da empresa responsável.
+  const organizacaoId = await getOrgId(session)
 
   const body = await req.json()
 
@@ -72,6 +76,7 @@ export async function POST(req: NextRequest) {
         body.nome,
         usuario.email,
         senha,
+        organizacaoId,
       )
     }
   } catch (e) {

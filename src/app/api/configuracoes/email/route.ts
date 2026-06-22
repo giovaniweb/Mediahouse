@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   // Testar e-mail
   if (body.acao === "testar") {
-    const resultado = await sendEmailTeste(body.destinatario)
+    const resultado = await sendEmailTeste(body.destinatario, organizacaoId)
     return NextResponse.json(resultado)
   }
 

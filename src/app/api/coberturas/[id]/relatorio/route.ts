@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, extrairJSON } from "@/lib/claude"
+import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -18,6 +19,8 @@ const TIPO_LABEL: Record<string, string> = {
 export async function POST(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
@@ -34,7 +37,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     },
   })
 
-  if (!cobertura) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  if (!cobertura || !pertenceAOrg(cobertura, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
 
   // Calcular stats
   const totalUploads = cobertura.uploads.length
@@ -102,6 +105,7 @@ Responda SOMENTE com JSON válido neste formato:
 
     const relatorio = await prisma.relatorioIA.create({
       data: {
+        organizacaoId,
         tipo: "semanal", // closest available enum value for event coverage reports
         periodo: `cobertura-${id}`,
         conteudo: (conteudo ?? { texto_bruto: texto }) as object,

@@ -46,7 +46,15 @@ export async function POST(req: NextRequest) {
       data: { email: usuario.email, token, expiresAt },
     })
 
-    const resultado = await sendEmailResetSenha(usuario.email, usuario.nome, token)
+    // Resolve a organização do usuário de forma determinística (primeira membership)
+    // para usar a config de e-mail correta — sem cair em config global aleatória.
+    const membership = await prisma.usuarioOrganizacao.findFirst({
+      where: { usuarioId: usuario.id },
+      orderBy: { createdAt: "asc" },
+      select: { organizacaoId: true },
+    })
+
+    const resultado = await sendEmailResetSenha(usuario.email, usuario.nome, token, membership?.organizacaoId ?? null)
 
     if (resultado.ok) {
       return NextResponse.json({ ok: true, enviado: true })

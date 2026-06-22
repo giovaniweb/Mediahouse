@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+import { requireDemandaOrg } from "@/lib/org"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -119,6 +120,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireDemandaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
   const body = await req.json()
   const { statusInterno, observacao } = body
   // Sanitiza origem para valores válidos do enum OrigemHistorico
@@ -204,6 +208,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           })
           await prisma.alertaIA.create({
             data: {
+              organizacaoId,
               demandaId: id,
               tipoAlerta: "video_aprovado",
               mensagem: `✅ ${aprovacoesPendentes.length} vídeo(s) aprovado(s) automaticamente ao mover para Para Postar`,
@@ -240,7 +245,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
                 if (fileSize <= 0) continue
                 const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
-                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, organizacaoId)
                 const driveRes = await fetch(sessionUri, {
                   method: "PUT",
                   headers: {
@@ -292,7 +297,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
               `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +
               `_O pagamento é processado em até 15 dias após o recebimento da NF._`
-            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id)
+            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId)
           }
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)
@@ -334,6 +339,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             })
             await prisma.custoVideomaker.create({
               data: {
+                organizacaoId,
                 videomakerId: demandaAtual.videomakerId!,
                 demandaId: id,
                 tipo: "projeto",
@@ -362,6 +368,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       demandaAtual.telefoneSolicitante ?? null,
       demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
       id,
+      organizacaoId,
       observacao ?? demandaAtual.motivoImpedimento,
       body.linkFinal ?? demandaAtual.linkFinal
     )
@@ -383,13 +390,18 @@ async function notificarMudancaKanban(
   telefoneSolicitanteWhatsapp: string | null,
   telefoneEditor: string | null,
   demandaId: string,
+  organizacaoId: string,
   observacao?: string | null,
   linkFinal?: string | null
 ) {
   try {
     const extra = observacao ?? linkFinal ?? undefined
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] }, status: "ativo" },
+      where: {
+        tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] },
+        status: "ativo",
+        organizacoes: { some: { organizacaoId } },
+      },
       select: { telefone: true },
     })
 
@@ -398,7 +410,7 @@ async function notificarMudancaKanban(
     // Notificar videomaker
     if (telefoneVideomaker) {
       const msg = mensagemKanban(statusNovo, codigo, titulo, "videomaker", extra)
-      if (msg) envios.push(sendWhatsappMessage(telefoneVideomaker, msg, demandaId))
+      if (msg) envios.push(sendWhatsappMessage(telefoneVideomaker, msg, demandaId, organizacaoId))
     }
 
     // TDAH: Notificar editor (diferente do videomaker — edita o vídeo)
@@ -408,14 +420,14 @@ async function notificarMudancaKanban(
       const telEd = telefoneEditor.replace(/\D/g, "")
       if (!telVm || telVm.slice(-8) !== telEd.slice(-8)) {
         const msg = mensagemKanban(statusNovo, codigo, titulo, "editor", extra)
-        if (msg) envios.push(sendWhatsappMessage(telefoneEditor, msg, demandaId))
+        if (msg) envios.push(sendWhatsappMessage(telefoneEditor, msg, demandaId, organizacaoId))
       }
     }
 
     // Notificar solicitante do sistema (usuario cadastrado)
     if (telefoneSolicitanteSistema) {
       const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
-      if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteSistema, msg, demandaId))
+      if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteSistema, msg, demandaId, organizacaoId))
     }
 
     // Notificar quem solicitou via WhatsApp (se for telefone diferente do solicitante do sistema)
@@ -425,7 +437,7 @@ async function notificarMudancaKanban(
       // Compara últimos 8 dígitos para evitar mandar duas vezes para a mesma pessoa
       if (telSistema.slice(-8) !== telWhatsapp.slice(-8)) {
         const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
-        if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteWhatsapp, msg, demandaId))
+        if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteWhatsapp, msg, demandaId, organizacaoId))
       }
     }
 
@@ -433,14 +445,14 @@ async function notificarMudancaKanban(
     for (const g of gestores) {
       if (g.telefone) {
         const msg = mensagemKanban(statusNovo, codigo, titulo, "gestor", extra)
-        if (msg) envios.push(sendWhatsappMessage(g.telefone, msg, demandaId))
+        if (msg) envios.push(sendWhatsappMessage(g.telefone, msg, demandaId, organizacaoId))
       }
     }
 
     // Notificar Social Media quando pronto para postar
     if (statusNovo === "postagem_pendente") {
       const socialUsers = await prisma.usuario.findMany({
-        where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo" },
+        where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo", organizacoes: { some: { organizacaoId } } },
         select: { telefone: true },
       })
       const baseSocial = `📋 *${codigo}* — ${titulo}`
@@ -449,7 +461,7 @@ async function notificarMudancaKanban(
           envios.push(sendWhatsappMessage(
             u.telefone,
             `📱 *NuFlow — Pronto para Postar!*\n\n${baseSocial}\n\nVídeo aprovado e disponível para postagem. 🚀`,
-            demandaId
+            demandaId, organizacaoId
           ))
         }
       }

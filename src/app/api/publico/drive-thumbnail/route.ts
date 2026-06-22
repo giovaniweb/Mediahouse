@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAccessToken } from "@/lib/google-drive"
+import { prisma } from "@/lib/prisma"
 
 // GET /api/publico/drive-thumbnail?fileId={id}
 // Rota pública: retorna thumbnail de arquivo do Drive usando service account.
 // A galeria pública usa este proxy para contornar a exigência de autenticação
 // da URL https://drive.google.com/thumbnail?id=X (que requer cookies de sessão Google).
+// Rota pública resolve a org pelo registro (Arquivo que contém o fileId) → usa o
+// Drive da empresa dona. Sem match, cai no fallback Contourline do helper (legado).
 export async function GET(req: NextRequest) {
   const fileId = req.nextUrl.searchParams.get("fileId")
   if (!fileId || !/^[a-zA-Z0-9_-]{10,}$/.test(fileId)) {
@@ -12,7 +15,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const token = await getAccessToken()
+    const arq = await prisma.arquivo.findFirst({
+      where: { url: { contains: fileId } },
+      select: { demanda: { select: { organizacaoId: true } } },
+    })
+    const token = await getAccessToken(arq?.demanda?.organizacaoId ?? undefined)
 
     // Busca metadados do arquivo incluindo thumbnailLink
     const metaRes = await fetch(

@@ -40,6 +40,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const aprovacao = await prisma.aprovacaoVideo.findUnique({ where: { token } })
   if (!aprovacao) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
 
+  // Rota pública resolve a org pelo registro (demanda do token)
+  const demandaOrg = await prisma.demanda.findUnique({
+    where: { id: aprovacao.demandaId },
+    select: { organizacaoId: true },
+  })
+  const organizacaoId = demandaOrg?.organizacaoId ?? null
+
   if (aprovacao.expiresAt && aprovacao.expiresAt < new Date()) {
     return NextResponse.json({ error: "Link expirado" }, { status: 410 })
   }
@@ -120,7 +127,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         }
         const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
 
-        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType })
+        // Drive da organização dona da demanda (rota pública resolve org pelo registro)
+        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, dem.organizacaoId)
 
         // PUT streaming (sem carregar o arquivo inteiro na memória)
         const driveRes = await fetch(sessionUri, {
@@ -174,6 +182,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // Cria alerta para a equipe
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       demandaId: aprovacao.demandaId,
       tipoAlerta: acao === "aprovar" ? "video_aprovado" : "ajuste_solicitado",
       mensagem: acao === "aprovar"

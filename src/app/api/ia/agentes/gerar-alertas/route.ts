@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export const maxDuration = 120
 
@@ -11,6 +12,8 @@ export const maxDuration = 120
 export async function POST() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   // Registra execução
   const execucao = await prisma.agenteExecucao.create({
@@ -44,15 +47,15 @@ Seja sistemático e crie alertas para TODOS os problemas encontrados. No final, 
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      executarFerramenta,
+      (n, i) => executarFerramenta(n, i, organizacaoId),
       MODELO_POTENTE,
       12
     )
 
-    // Conta alertas gerados nesta execução (últimos 2 min)
+    // Conta alertas gerados nesta execução (últimos 2 min) — escopado à org
     const doisminsAtras = new Date(Date.now() - 2 * 60000)
     const alertasGerados = await prisma.alertaIA.count({
-      where: { createdAt: { gte: doisminsAtras } },
+      where: { organizacaoId, createdAt: { gte: doisminsAtras } },
     })
 
     await prisma.agenteExecucao.update({

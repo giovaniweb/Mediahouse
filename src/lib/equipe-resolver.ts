@@ -77,6 +77,7 @@ async function findOrCreateEditor(opts: {
   cidade?: string | null
   estado?: string | null
   tipoContrato: string
+  organizacaoId?: string | null
 }): Promise<string> {
   if (opts.usuarioId) {
     const existente = await prisma.editor.findUnique({
@@ -85,14 +86,19 @@ async function findOrCreateEditor(opts: {
     })
     if (existente) return existente.id
   }
+  // Reaproveita espelho por nome apenas dentro da mesma organização
   const porNome = await prisma.editor.findFirst({
-    where: { nome: { equals: opts.nome, mode: "insensitive" } },
+    where: {
+      nome: { equals: opts.nome, mode: "insensitive" },
+      ...(opts.organizacaoId ? { organizacaoId: opts.organizacaoId } : {}),
+    },
     select: { id: true },
   })
   if (porNome) return porNome.id
   try {
     const novo = await prisma.editor.create({
       data: {
+        organizacaoId: opts.organizacaoId ?? undefined,
         nome: opts.nome,
         usuarioId: opts.usuarioId ?? undefined,
         telefone: opts.telefone ?? undefined,
@@ -154,7 +160,7 @@ export async function resolveParaVideomaker(token: string): Promise<string> {
 }
 
 // ─── Resolver token → Editor.id (slot de edição) ──────────────────────────────
-export async function resolveParaEditor(token: string): Promise<string> {
+export async function resolveParaEditor(token: string, organizacaoId?: string | null): Promise<string> {
   const { origem, id } = parseToken(token)
 
   if (origem === "ed") return id
@@ -172,6 +178,7 @@ export async function resolveParaEditor(token: string): Promise<string> {
       cidade: vm.cidade,
       estado: vm.estado,
       tipoContrato: "externo", // videomaker mirrorado → pessoa externa
+      organizacaoId,
     })
   }
 
@@ -186,5 +193,6 @@ export async function resolveParaEditor(token: string): Promise<string> {
     nome: user.nome,
     telefone: user.telefone,
     tipoContrato: "interno",
+    organizacaoId,
   })
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
 import { recalcularConclusao } from "@/lib/eventos-conclusao"
+import { requireEventoGestaoOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,6 +12,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireEventoGestaoOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   const evento = await prisma.eventoGestao.findUnique({
     where: { id },
@@ -74,6 +77,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireEventoGestaoOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const body = await req.json()
 
   const evento = await prisma.eventoGestao.update({
@@ -110,6 +115,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const guard = await requireEventoGestaoOrg(session, id)
+  if (guard instanceof NextResponse) return guard
   const count = await prisma.demanda.count({ where: { eventoGestaoId: id } })
 
   if (count > 0) {

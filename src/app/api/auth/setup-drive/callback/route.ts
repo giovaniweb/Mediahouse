@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { auth } from "@/lib/auth"
+import { getOrgId } from "@/lib/org"
 
 /**
- * GET /api/auth/setup-drive/callback?code=...&state=setup-drive
+ * GET /api/auth/setup-drive/callback?code=...&state=setup-drive:<organizacaoId>
  * Callback OAuth2 do Google Drive. Troca o authorization code por tokens,
- * busca o email da conta, e salva o refresh_token em ConfigEmpresa.
+ * busca o email da conta, e salva o refresh_token na ConfigEmpresa da org
+ * que iniciou o fluxo (org vem do state; revalidada pela sessão quando possível).
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -19,9 +22,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=recusado`)
   }
 
-  if (!code || state !== "setup-drive") {
+  // Aceita "setup-drive" (legado) e "setup-drive:<org>" (atual)
+  if (!code || !state || !state.startsWith("setup-drive")) {
     return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=erro`)
   }
+  const orgFromState = state.includes(":") ? state.split(":")[1] : null
 
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -71,20 +76,27 @@ export async function GET(req: NextRequest) {
     email = userInfo.email ?? email
   }
 
-  // Salvar no banco (upsert — cria ConfigEmpresa se não existir)
-  await prisma.configEmpresa.upsert({
-    where: { id: (await prisma.configEmpresa.findFirst({ select: { id: true } }))?.id ?? "singleton" },
-    update: {
-      googleRefreshToken: refresh_token,
-      googleDriveEmail: email,
-      googleDriveConnectedAt: new Date(),
-    },
-    create: {
-      googleRefreshToken: refresh_token,
-      googleDriveEmail: email,
-      googleDriveConnectedAt: new Date(),
-    },
-  })
+  // Resolve a org dona deste token: prioridade para a sessão atual (mais segura),
+  // com fallback para a org embutida no state. Nunca usa findFirst global.
+  const session = await auth().catch(() => null)
+  const orgFromSession = await getOrgId(session)
+  const organizacaoId = orgFromSession ?? orgFromState
+  if (!organizacaoId) {
+    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=erro_org`)
+  }
+
+  // Salvar na ConfigEmpresa da organização correta (sem findFirst global)
+  const existing = await prisma.configEmpresa.findFirst({ where: { organizacaoId }, select: { id: true } })
+  if (existing) {
+    await prisma.configEmpresa.update({
+      where: { id: existing.id },
+      data: { googleRefreshToken: refresh_token, googleDriveEmail: email, googleDriveConnectedAt: new Date() },
+    })
+  } else {
+    await prisma.configEmpresa.create({
+      data: { organizacaoId, googleRefreshToken: refresh_token, googleDriveEmail: email, googleDriveConnectedAt: new Date() },
+    })
+  }
 
   return NextResponse.redirect(
     `${baseUrl}/configuracoes?tab=drive&drive=conectado&email=${encodeURIComponent(email)}`

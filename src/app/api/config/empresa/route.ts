@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { contourlineOrgId } from "@/lib/whatsapp"
 
 // GET /api/config/empresa — retorna dados da empresa (público para videomakers)
-// NOTA: consumo público — resolução por org fica no pacote de consumo (junto do S8/e-mail).
+// FALLBACK LEGADO (Fase 1): rota pública sem contexto de org. Para não devolver
+// dados de outra empresa de forma aleatória, fixa em Contourline de forma
+// determinística. Multiempresa real: o consumo público deve resolver a org por
+// token/demanda (NF upload, portal) — débito técnico documentado.
 export async function GET() {
-  const empresa = await prisma.configEmpresa.findFirst()
+  const orgId = await contourlineOrgId()
+  const empresa = orgId
+    ? await prisma.configEmpresa.findFirst({ where: { organizacaoId: orgId } })
+    : await prisma.configEmpresa.findFirst()
   return NextResponse.json({ empresa })
 }
 

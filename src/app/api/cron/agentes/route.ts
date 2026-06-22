@@ -5,10 +5,10 @@ import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 
 // GET /api/cron/agentes — automação periódica de agentes IA
-// Protegido por CRON_SECRET. Configurado no vercel.json com 3 schedules:
-// - alertas: diário 12h UTC (tb roda cobranca + briefing + vistoria toda segunda)
-// - prazos: seg/qua/sex 12h UTC
-// - lembretes: a cada 30 min
+// Protegido por CRON_SECRET. Cada agente tem seu próprio schedule no vercel.json
+// (alertas, prazos, vistoria, limpeza, cobranca, lembretes, briefing). Cada execução
+// itera todas as organizações ativas (isolamento multiempresa) e uma falha numa org
+// não interrompe as demais. Agentes NÃO se chamam entre si — sem execução dupla.
 export async function GET(req: NextRequest) {
   // Verifica segredo do cron
   const cronSecret = process.env.CRON_SECRET
@@ -79,10 +79,9 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
     },
   })
 
-  // Rodar cobrança, briefing e lembretes no mesmo cron (economiza slots do Vercel) — por org
-  void rodarAgenteCobranca(organizacaoId).catch(e => console.error("[alertas] cobrança inline:", e))
-  void rodarAgenteBriefing(organizacaoId).catch(e => console.error("[alertas] briefing inline:", e))
-  void rodarAgenteLembretes(organizacaoId).catch(e => console.error("[alertas] lembretes inline:", e))
+  // NOTA: cobrança, briefing e lembretes têm crons dedicados próprios no vercel.json
+  // (agente=cobranca/briefing/lembretes). Não rodar inline aqui — evita execução dupla
+  // diária (e WhatsApp duplicado) que ocorria quando este piggyback existia.
 
   return { agente: "alertas", tokens }
 }

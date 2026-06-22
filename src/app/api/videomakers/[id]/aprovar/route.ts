@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { getOrgId } from "@/lib/org"
 
 // POST /api/videomakers/[id]/aprovar
 // Aprova um videomaker pendente: ativa, cria conta de acesso e notifica via WhatsApp
@@ -15,6 +16,8 @@ export async function POST(
   if (!["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  // Videomaker é GLOBAL; a org da sessão é usada para o WhatsApp e para escopar o alerta.
+  const organizacaoId = await getOrgId(session)
 
   const { id } = await params
 
@@ -53,16 +56,18 @@ export async function POST(
           vm.nome,
           resultado.usuario.email,
           senha,
+          organizacaoId,
         )
       }
     }
   }
 
-  // 4. Alerta de aprovação (resolve o alerta pendente)
+  // 4. Alerta de aprovação (resolve o alerta pendente — escopado à org da sessão)
   await prisma.alertaIA.updateMany({
     where: {
       tipoAlerta: "novo_videomaker_pendente",
       status: "ativo",
+      ...(organizacaoId ? { organizacaoId } : {}),
     },
     data: { status: "resolvido" },
   })
