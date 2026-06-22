@@ -36,5 +36,7 @@ EMAIL_ENCRYPTION_KEY=
 CRON_SECRET=
 ```
 
-O cron `/api/cron/email-inbox` consulta as caixas ativas a cada cinco minutos.
-Cada organização conecta sua própria conta na página **Caixa de Entrada**.
+No plano Hobby da Vercel, o cron `/api/cron/email-inbox` consulta as caixas
+ativas uma vez por dia; a sincronização manual continua disponível em
+**Configurações > E-mail de entrada**. Em planos Pro ou Enterprise, o cron pode
+ser alterado para `*/5 * * * *`.
