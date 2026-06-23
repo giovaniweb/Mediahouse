@@ -44,6 +44,7 @@ export async function POST(
       telefone: vm.telefone,
       tipo: "videomaker",
       referenciaId: id,
+      organizacaoId,
     })
 
     if (!resultado.jáExistia && resultado.senha) {

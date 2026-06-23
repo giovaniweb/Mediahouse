@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
       telefone: body.telefone,
       tipo: "designer",
       referenciaId: designer.id,
+      organizacaoId,
     })
     if (!jáExistia && senha && body.telefone) {
       await notificarCredenciaisWhatsapp(body.telefone, body.nome, body.email ?? null, senha, organizacaoId)

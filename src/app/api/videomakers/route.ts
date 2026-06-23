@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       telefone: body.telefone,
       tipo: "videomaker",
       referenciaId: videomaker.id,
+      organizacaoId,
     })
 
     // Notificar via WhatsApp com credenciais

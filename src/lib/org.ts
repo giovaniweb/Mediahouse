@@ -34,6 +34,19 @@ export function semOrg() {
   return NextResponse.json({ error: "Organização não encontrada na sessão" }, { status: 403 })
 }
 
+// Gate de super-admin (gestão global de organizações). Resolve via DB (a flag não
+// vive no token), então funciona mesmo com tokens antigos. Retorna o userId se for
+// super-admin, ou um NextResponse 401/403 para a rota devolver direto.
+export async function requireSuperAdmin(
+  session: SessionShape
+): Promise<{ usuarioId: string } | NextResponse> {
+  const u = session?.user as SessionUser | undefined
+  if (!u?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const usuario = await prisma.usuario.findUnique({ where: { id: u.id }, select: { superAdmin: true } })
+  if (!usuario?.superAdmin) return NextResponse.json({ error: "Requer super-admin" }, { status: 403 })
+  return { usuarioId: u.id }
+}
+
 // Verifica se um registro pertence à organização ativa (defesa contra acesso por ID direto).
 export function pertenceAOrg(
   record: { organizacaoId?: string | null } | null | undefined,

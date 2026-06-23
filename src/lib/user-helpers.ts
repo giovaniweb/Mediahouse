@@ -24,6 +24,18 @@ interface CriarUsuarioParams {
   tipo: "videomaker" | "editor" | "designer"
   /** ID do videomaker, editor ou designer para vincular */
   referenciaId?: string
+  /** Org que está cadastrando — cria a membership (UsuarioOrganizacao) explícita */
+  organizacaoId?: string | null
+}
+
+// Garante a membership do usuário na org (papel = tipo). Idempotente.
+async function garantirMembership(usuarioId: string, organizacaoId: string | null | undefined, papel: CriarUsuarioParams["tipo"]) {
+  if (!organizacaoId) return
+  await prisma.usuarioOrganizacao.upsert({
+    where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
+    update: {},
+    create: { usuarioId, organizacaoId, papel },
+  })
 }
 
 /**
@@ -31,7 +43,7 @@ interface CriarUsuarioParams {
  * Email é opcional — o login pode ser feito apenas pelo telefone.
  */
 export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
-  const { nome, email, telefone, tipo, referenciaId } = params
+  const { nome, email, telefone, tipo, referenciaId, organizacaoId } = params
 
   // Email real se fornecido, senão null (login será feito pelo telefone)
   const emailLogin = email?.trim() || null
@@ -48,7 +60,11 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
       },
     })
   }
-  if (existe) return { usuario: existe, jáExistia: true, senha: null }
+  if (existe) {
+    // Mesmo já existindo, garante a membership na org que está cadastrando.
+    await garantirMembership(existe.id, organizacaoId, tipo)
+    return { usuario: existe, jáExistia: true, senha: null }
+  }
 
   // Gerar senha
   const senhaTexto = gerarSenhaPadrao(telefone)
@@ -80,6 +96,9 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
   await prisma.permissaoUsuario.create({
     data: { usuarioId: usuario.id, ...(PRESETS[tipo] ?? {}) },
   })
+
+  // Membership explícita na org que está cadastrando (multiempresa)
+  await garantirMembership(usuario.id, organizacaoId, tipo)
 
   return { usuario, jáExistia: false, senha: senhaTexto }
 }

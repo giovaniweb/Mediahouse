@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
       telefone,
       tipo: "editor",
       referenciaId: editor.id,
+      organizacaoId,
     })
 
     // Notificar via WhatsApp com credenciais
