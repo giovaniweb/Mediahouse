@@ -4,6 +4,7 @@
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
 import dotenv from "dotenv"
 dotenv.config({ path: ".env.local" })
 
@@ -22,16 +23,29 @@ async function main() {
     console.log("• Org de teste já existe:", org.id)
   }
 
-  // 2. Usuário admin da org de teste (NÃO super-admin) + membership papel=admin
+  // 2. Usuário admin da org de teste (NÃO super-admin) + membership papel=admin.
+  // Senha vem de TEST_ORG_ADMIN_PASSWORD; se ausente, gera aleatória forte.
+  // A senha NUNCA é impressa nem persistida — só o hash bcrypt vai ao banco.
+  const senhaEnv = process.env.TEST_ORG_ADMIN_PASSWORD
+  const origemSenha = senhaEnv ? "TEST_ORG_ADMIN_PASSWORD" : "aleatória forte (não exibida)"
   let admin = await prisma.usuario.findUnique({ where: { email: EMAIL_ADMIN } })
   if (!admin) {
-    const senhaHash = await bcrypt.hash("teste1234", 10)
+    let senha = senhaEnv || crypto.randomBytes(32).toString("base64url")
+    const senhaHash = await bcrypt.hash(senha, 12)
+    senha = ""
     admin = await prisma.usuario.create({
       data: { nome: "Admin Teste", email: EMAIL_ADMIN, tipo: "admin", senhaHash, superAdmin: false },
     })
-    console.log("✅ Usuário admin de teste criado:", admin.id, "(senha: teste1234)")
+    console.log(`✅ Usuário admin de teste criado: ${admin.id} (senha: ${origemSenha})`)
   } else {
-    console.log("• Usuário admin de teste já existe:", admin.id)
+    // Se a senha foi fornecida via env, atualiza o hash (rotação controlada).
+    if (senhaEnv) {
+      const senhaHash = await bcrypt.hash(senhaEnv, 12)
+      await prisma.usuario.update({ where: { id: admin.id }, data: { senhaHash } })
+      console.log(`• Usuário admin de teste já existe: ${admin.id} — senha atualizada via TEST_ORG_ADMIN_PASSWORD`)
+    } else {
+      console.log(`• Usuário admin de teste já existe: ${admin.id} — senha mantida (defina TEST_ORG_ADMIN_PASSWORD para rotacionar)`)
+    }
   }
   await prisma.usuarioOrganizacao.upsert({
     where: { usuarioId_organizacaoId: { usuarioId: admin.id, organizacaoId: org.id } },
