@@ -2,9 +2,11 @@
 // código nem dados. Para reativar um módulo no futuro, basta mudar a flag para `true`.
 //
 // Decisão estratégica (jun/2026): NuFlow focado em operação audiovisual e gestão de
-// videomakers. Growth/Design e Eventos ficam congelados para uma etapa futura.
+// videomakers. Eventos fica congelado.
+// Atualização: Growth liberado como MVP de gestão de conteúdos (área própria de
+// demanda, kanban próprio, sem dependência de Eventos). Eventos permanece desativado.
 
-export const GROWTH_ATIVO = false
+export const GROWTH_ATIVO = true
 export const EVENTOS_ATIVO = false
 export const IDEIAS_ATIVO = false
 export const MENSAGENS_ATIVO = false

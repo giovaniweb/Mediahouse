@@ -27,10 +27,10 @@ import {
   PartyPopper,
   Truck,
   Boxes,
-  Palette,
   Image as ImageIcon,
   PenTool,
   Inbox,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -67,9 +67,9 @@ const sections = [
   {
     label: "Growth",
     items: [
-      { href: "/design", label: "Artes", icon: Palette },
-      { href: "/galeria-artes", label: "Galeria de Artes", icon: ImageIcon },
-      { href: "/designers", label: "Designers", icon: PenTool },
+      { href: "/design", label: "Conteúdos", icon: Sparkles },
+      { href: "/galeria-artes", label: "Galeria", icon: ImageIcon },
+      { href: "/designers", label: "Responsáveis", icon: PenTool },
     ],
   },
   {

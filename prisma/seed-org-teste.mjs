@@ -88,6 +88,30 @@ async function main() {
     console.log("• Demanda de teste já existe:", demanda.id)
   }
 
+  // 4b. Conteúdo de GROWTH (area="design" interno, departamento="growth") — org-scoped
+  let growth = await prisma.demanda.findFirst({ where: { organizacaoId: org.id, codigo: "TST-GRW-001" } })
+  if (!growth) {
+    growth = await prisma.demanda.create({
+      data: {
+        organizacaoId: org.id,
+        codigo: "TST-GRW-001",
+        titulo: "[TESTE] Conteúdo Growth da Empresa Teste",
+        descricao: "Conteúdo de Growth isolado para validar o módulo Growth multiempresa.",
+        departamento: "growth",
+        area: "design",
+        tipoVideo: "post",
+        cidade: "N/A",
+        prioridade: "normal",
+        statusInterno: "aguardando_triagem",
+        statusVisivel: "entrada",
+        solicitanteId: admin.id,
+      },
+    })
+    console.log("✅ Conteúdo Growth de teste criado:", growth.id)
+  } else {
+    console.log("• Conteúdo Growth de teste já existe:", growth.id)
+  }
+
   // 5. Cobertura (org-scoped)
   let cobertura = await prisma.eventoCobertura.findFirst({ where: { organizacaoId: org.id, titulo: "[TESTE] Cobertura Empresa Teste" } })
   if (!cobertura) {

@@ -29,6 +29,12 @@ async function main() {
   const demSemOrg = await prisma.demanda.count({ where: { organizacaoId: null } })
   check("Demandas: nenhuma sem organizacaoId (sem órfãs)", demSemOrg === 0, `órfãs=${demSemOrg}`)
 
+  // ── 1b. GROWTH (área de conteúdos, area="design") ──────────────────────────
+  const growthTesteEmContour = await prisma.demanda.count({ where: { organizacaoId: C, area: "design", codigo: "TST-GRW-001" } })
+  check("Growth: conteúdo da Empresa Teste NÃO aparece no escopo Growth da Contourline", growthTesteEmContour === 0)
+  const growthTeste = await prisma.demanda.count({ where: { organizacaoId: T, area: "design" } })
+  check("Growth: org de teste vê o próprio conteúdo de Growth (isolado)", growthTeste >= 1, `growth org teste=${growthTeste}`)
+
   // ── 2. COBERTURAS ──────────────────────────────────────────────────────────
   const cobTesteEmContour = await prisma.eventoCobertura.count({ where: { organizacaoId: C, titulo: { contains: "[TESTE]" } } })
   check("Coberturas: cobertura de teste NÃO aparece em Contourline", cobTesteEmContour === 0)

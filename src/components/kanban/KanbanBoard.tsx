@@ -9,16 +9,16 @@ import { cn } from "@/lib/utils"
 import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
 
-export const COLUNAS = [
+export type ColunaDef = { id: string; label: string; color: string; dot: string }
+
+export const COLUNAS: ColunaDef[] = [
   { id: "entrada", label: "Entrada", color: "border-t-zinc-500", dot: "bg-zinc-400" },
   { id: "producao", label: "Produção", color: "border-t-blue-500", dot: "bg-blue-500" },
   { id: "edicao", label: "Edição", color: "border-t-purple-500", dot: "bg-purple-500" },
   { id: "aprovacao", label: "Aprovação", color: "border-t-amber-500", dot: "bg-amber-500" },
   { id: "para_postar", label: "Para Postar", color: "border-t-cyan-500", dot: "bg-cyan-500" },
   { id: "finalizado", label: "Concluído", color: "border-t-emerald-500", dot: "bg-emerald-500" },
-] as const
-
-type StatusVisivel = (typeof COLUNAS)[number]["id"]
+]
 
 interface Demanda {
   id: string
@@ -27,7 +27,7 @@ interface Demanda {
   departamento: string
   tipoVideo: string
   prioridade: "urgente" | "alta" | "normal" | "baixa"
-  statusVisivel: StatusVisivel
+  statusVisivel: string
   statusInterno: string
   dataLimite?: string | null
   posicaoKanban?: number | null
@@ -39,19 +39,25 @@ interface Demanda {
 
 interface KanbanBoardProps {
   demandas: Demanda[]
-  onMove: (demandaId: string, novoStatus: StatusVisivel) => void
+  onMove: (demandaId: string, novoStatus: string) => void
   onDelete?: (demandaId: string) => void
   onDuplicate?: (demandaId: string) => void
   onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
   userTipo?: string
   /** Sobrescreve os rótulos das colunas (ex.: kanban de Design) */
-  labels?: Partial<Record<StatusVisivel, string>>
+  labels?: Record<string, string>
+  /** Colunas customizadas (ex.: kanban do Growth). Default: COLUNAS (audiovisual). */
+  colunas?: ColunaDef[]
+  /** Mapeia uma demanda → id da coluna. Default: por statusVisivel (audiovisual). */
+  getColuna?: (demanda: Demanda) => string
 }
 
-// Colunas que videomakers externos NÃO podem mover cards para lá
-const COLUNAS_BLOQUEADAS_VM: StatusVisivel[] = ["para_postar", "finalizado"]
+// Colunas que videomakers externos NÃO podem mover cards para lá (audiovisual)
+const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna }: KanbanBoardProps) {
+  const COLS = colunas ?? COLUNAS
+  const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -88,8 +94,8 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
 
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return
-    const destinoCol = result.destination.droppableId as StatusVisivel
-    const origemCol = result.source.droppableId as StatusVisivel
+    const destinoCol = result.destination.droppableId
+    const origemCol = result.source.droppableId
 
     // Gestor de eventos é só acompanhamento — não move cards (quem move é o time)
     if (userTipo === "gestor_eventos") return
@@ -129,8 +135,8 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     onMove(result.draggableId, destinoCol)
   }
 
-  const byCol = (colId: StatusVisivel) => {
-    const items = demandas.filter((d) => d.statusVisivel === colId)
+  const byCol = (colId: string) => {
+    const items = demandas.filter((d) => colDe(d) === colId)
     const order = localOrder[colId]
     if (!order) {
       // Sort by posicaoKanban if available, urgentes first
@@ -177,7 +183,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
       >
-        {COLUNAS.map((col) => {
+        {COLS.map((col) => {
           const items = byCol(col.id)
           const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
           return (
