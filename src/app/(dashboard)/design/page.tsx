@@ -84,7 +84,8 @@ type Responsavel = { id: string; nome: string; email: string | null; tipo: strin
 function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
   const responsaveis = rData?.responsaveis ?? []
-  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "—", responsavelId: "", linhaProjeto: "" })
+  // Growth não tem cidade física; usa "Remoto" (o schema de demanda exige cidade >= 2 chars).
+  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "Remoto", responsavelId: "", linhaProjeto: "" })
   const [saving, setSaving] = useState(false)
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 

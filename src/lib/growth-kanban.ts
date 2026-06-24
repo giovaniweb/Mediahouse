@@ -13,7 +13,7 @@ export type GrowthColunaId =
 // Colunas do kanban de Growth (na ordem de exibição).
 export const GROWTH_COLUNAS: { id: GrowthColunaId; label: string; color: string; dot: string }[] = [
   { id: "backlog",        label: "Backlog",        color: "border-t-zinc-500",    dot: "bg-zinc-400" },
-  { id: "conteudos",      label: "Conteúdos",      color: "border-t-sky-500",     dot: "bg-sky-500" },
+  { id: "conteudos",      label: "Briefing",       color: "border-t-sky-500",     dot: "bg-sky-500" },
   { id: "para_fazer",     label: "Para fazer",     color: "border-t-indigo-500",  dot: "bg-indigo-500" },
   { id: "fazendo",        label: "Fazendo",        color: "border-t-violet-500",  dot: "bg-violet-500" },
   { id: "para_aprovacao", label: "Para aprovação", color: "border-t-amber-500",   dot: "bg-amber-500" },

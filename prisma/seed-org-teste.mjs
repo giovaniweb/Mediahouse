@@ -88,6 +88,34 @@ async function main() {
     console.log("• Demanda de teste já existe:", demanda.id)
   }
 
+  // 3b. Equipe Growth de teste: 1 designer (Usuario + Designer) e 1 social media.
+  // Permite validar o select de Responsável com múltiplos tipos, isolado por org.
+  async function garantirMembroGrowth(email, nome, tipo) {
+    let u = await prisma.usuario.findUnique({ where: { email } })
+    if (!u) {
+      const senhaHash = await bcrypt.hash(crypto.randomBytes(24).toString("base64url"), 10)
+      u = await prisma.usuario.create({ data: { nome, email, tipo, status: "ativo", senhaHash, superAdmin: false } })
+      console.log(`✅ Usuário ${tipo} de teste criado:`, u.id)
+    } else {
+      console.log(`• Usuário ${tipo} de teste já existe:`, u.id)
+    }
+    await prisma.usuarioOrganizacao.upsert({
+      where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: org.id } },
+      update: { papel: tipo }, create: { usuarioId: u.id, organizacaoId: org.id, papel: tipo },
+    })
+    return u
+  }
+  const uDesigner = await garantirMembroGrowth("teste-designer@nuflow.local", "Marcos Designer Teste", "designer")
+  await garantirMembroGrowth("teste-social@nuflow.local", "Isabela Social Teste", "social")
+  // Espelho Designer (org-scoped) ligado ao usuário designer
+  const designerMirror = await prisma.designer.findFirst({ where: { organizacaoId: org.id, usuarioId: uDesigner.id } })
+  if (!designerMirror) {
+    await prisma.designer.create({
+      data: { organizacaoId: org.id, usuarioId: uDesigner.id, nome: "Marcos Designer Teste", status: "ativo", tipoContrato: "interno" },
+    })
+    console.log("✅ Espelho Designer de teste criado")
+  }
+
   // 4b. Conteúdo de GROWTH (area="design" interno, departamento="growth") — org-scoped
   let growth = await prisma.demanda.findFirst({ where: { organizacaoId: org.id, codigo: "TST-GRW-001" } })
   if (!growth) {
