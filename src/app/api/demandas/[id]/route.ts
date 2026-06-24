@@ -35,6 +35,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
       designer: { select: { id: true, nome: true } },
       responsavel: { select: { id: true, nome: true, tipo: true } },
+      linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
         select: { id: true, tipoArquivo: true, url: true, nomeArquivo: true, sequencia: true, createdAt: true },

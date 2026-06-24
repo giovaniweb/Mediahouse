@@ -410,7 +410,9 @@ model Demanda {
   responsavelId String?   // responsável/executor interno (Growth) — Usuario da org
   // Segmentação genérica multiempresa (linha de conteúdo / projeto / marca / cliente /
   // unidade / produto). NUNCA hardcoded por empresa. Usado p/ filtrar e, no futuro, permissões.
-  linhaProjeto  String?
+  // `linhaProjeto` (texto) mantido p/ compat/backfill; a referência principal é linhaProjetoId.
+  linhaProjeto   String?
+  linhaProjetoId String?
 
   // Datas
   dataLimite         DateTime?
@@ -428,6 +430,7 @@ model Demanda {
   editor             Editor?            @relation(fields: [editorId], references: [id])
   designer           Designer?          @relation(fields: [designerId], references: [id])
   responsavel        Usuario?           @relation("Responsavel", fields: [responsavelId], references: [id])
+  linhaProjetoRef    LinhaProjeto?      @relation(fields: [linhaProjetoId], references: [id])
   arquivos           Arquivo[]
   historicos         HistoricoStatus[]
   comentarios        Comentario[]
@@ -1777,8 +1780,28 @@ model Organizacao {
   membros UsuarioOrganizacao[]
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
+  linhasProjeto      LinhaProjeto[]
 
   @@map("organizacoes")
+}
+
+// Linha/Projeto (segmentação do Growth) — por organização. Substitui o texto livre.
+// Nomes iguais podem coexistir entre empresas (unique por org, nunca global).
+model LinhaProjeto {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  nome          String
+  descricao     String?
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  demandas    Demanda[]
+
+  @@unique([organizacaoId, nome])
+  @@index([organizacaoId])
+  @@map("linhas_projeto")
 }
 
 model UsuarioOrganizacao {

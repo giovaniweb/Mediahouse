@@ -40,7 +40,8 @@ const criarDemandaSchema = z.object({
   designerId: z.string().optional(),
   // Growth: responsável (Usuario interno da org) + segmentação genérica
   responsavelId: z.string().optional(),
-  linhaProjeto: z.string().optional(),
+  linhaProjeto: z.string().optional(),     // texto legado (compat)
+  linhaProjetoId: z.string().optional(),   // referência principal (LinhaProjeto da org)
   // Cliente final (cobertura/entrega)
   clienteFinalNome: z.string().optional(),
   clienteFinalTelefone: z.string().optional(),
@@ -163,6 +164,7 @@ export async function GET(req: NextRequest) {
         editor: { select: { id: true, nome: true } },
         designer: { select: { id: true, nome: true } },
         responsavel: { select: { id: true, nome: true, tipo: true } },
+        linhaProjetoRef: { select: { id: true, nome: true } },
         produtos: { select: { produto: { select: { nome: true } } } },
         eventoGestao: { select: { id: true, nome: true } },
         _count: { select: { comentarios: true, arquivos: true } },
@@ -233,6 +235,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Growth: resolve a linha/projeto. Valida que pertence à org logada (404 se de outra
+  // org). Mantém também o texto `linhaProjeto` (nome) para compatibilidade.
+  let linhaProjetoId: string | undefined
+  let linhaProjetoTexto = data.linhaProjeto?.trim() || undefined
+  if (data.linhaProjetoId) {
+    const linha = await prisma.linhaProjeto.findFirst({
+      where: { id: data.linhaProjetoId, organizacaoId },
+      select: { id: true, nome: true },
+    })
+    if (!linha) {
+      return NextResponse.json({ error: "Linha/projeto inválida para esta organização" }, { status: 404 })
+    }
+    linhaProjetoId = linha.id
+    linhaProjetoTexto = linha.nome
+  }
+
   const demanda = await prisma.demanda.create({
     data: {
       organizacaoId,
@@ -265,7 +283,8 @@ export async function POST(req: NextRequest) {
       editorId: data.editorId || undefined,
       designerId: designerIdResolvido || undefined,
       responsavelId: responsavelId || undefined,
-      linhaProjeto: data.linhaProjeto?.trim() || undefined,
+      linhaProjeto: linhaProjetoTexto,
+      linhaProjetoId: linhaProjetoId || undefined,
       eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,

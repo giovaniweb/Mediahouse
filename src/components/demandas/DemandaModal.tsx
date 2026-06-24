@@ -955,10 +955,10 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         <p className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome}</p>
                       </div>
                     )}
-                    {demanda.linhaProjeto && (
+                    {(demanda.linhaProjetoRef?.nome || demanda.linhaProjeto) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5">Linha / Projeto</p>
-                        <p className="text-sm text-zinc-300 font-medium">{demanda.linhaProjeto}</p>
+                        <p className="text-sm text-zinc-300 font-medium">{demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto}</p>
                       </div>
                     )}
                   </div>

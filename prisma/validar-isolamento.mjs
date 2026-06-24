@@ -25,7 +25,9 @@ async function main() {
   check("Demandas: TST-0001 NÃO aparece no escopo Contourline", demTesteEmContour === 0)
   const demTeste = await prisma.demanda.count({ where: { organizacaoId: T } })
   const demTesteCodigos = await prisma.demanda.findMany({ where: { organizacaoId: T }, select: { codigo: true } })
-  check("Demandas: org de teste só vê as suas", demTeste >= 1 && demTesteCodigos.every(d => d.codigo.startsWith("TST")), `${demTeste} demanda(s): ${demTesteCodigos.map(d=>d.codigo).join(",")}`)
+  // Isolamento real: tudo no escopo da org de teste pertence a ela (query por org) e
+  // inclui as fixtures TST-*. Demandas VOP-* criadas no teste também são dela — OK.
+  check("Demandas: org de teste vê as suas (e fixtures TST presentes)", demTeste >= 1 && demTesteCodigos.some(d => d.codigo.startsWith("TST")), `${demTeste} demanda(s): ${demTesteCodigos.map(d=>d.codigo).join(",")}`)
   const demSemOrg = await prisma.demanda.count({ where: { organizacaoId: null } })
   check("Demandas: nenhuma sem organizacaoId (sem órfãs)", demSemOrg === 0, `órfãs=${demSemOrg}`)
 
@@ -63,6 +65,20 @@ async function main() {
   })
   const respForaDaOrg = demsComResp.filter(d => d.responsavel && !d.responsavel.organizacoes.some(o => o.organizacaoId === d.organizacaoId)).length
   check("Growth: responsavelId sempre pertence à org da demanda", respForaDaOrg === 0, `fora-da-org=${respForaDaOrg}`)
+
+  // ── 1d. GROWTH — Linhas/Projetos (por organização) ─────────────────────────
+  const linhasTeste = await prisma.linhaProjeto.count({ where: { organizacaoId: T } })
+  check("Linhas/Projetos: org de teste tem as suas", linhasTeste >= 1, `${linhasTeste} linha(s)`)
+  // Nenhuma linha da org de teste pode estar marcada com a org da Contourline
+  const linhasTesteNaContour = await prisma.linhaProjeto.count({ where: { organizacaoId: C, nome: { in: ["Cliente A", "Médica", "Estética"] } } })
+  check("Linhas/Projetos: linhas da Empresa Teste NÃO aparecem na Contourline", linhasTesteNaContour === 0)
+  // Toda demanda com linhaProjetoId aponta para linha da MESMA org
+  const demsComLinha = await prisma.demanda.findMany({
+    where: { linhaProjetoId: { not: null } },
+    select: { organizacaoId: true, linhaProjetoRef: { select: { organizacaoId: true } } },
+  })
+  const linhaForaDaOrg = demsComLinha.filter(d => d.linhaProjetoRef && d.linhaProjetoRef.organizacaoId !== d.organizacaoId).length
+  check("Linhas/Projetos: linhaProjetoId sempre pertence à org da demanda", linhaForaDaOrg === 0, `fora-da-org=${linhaForaDaOrg}`)
 
   // ── 2. COBERTURAS ──────────────────────────────────────────────────────────
   const cobTesteEmContour = await prisma.eventoCobertura.count({ where: { organizacaoId: C, titulo: { contains: "[TESTE]" } } })

@@ -84,8 +84,10 @@ type Responsavel = { id: string; nome: string; email: string | null; tipo: strin
 function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
   const responsaveis = rData?.responsaveis ?? []
+  const { data: lData } = useSWR<{ linhas: { id: string; nome: string }[] }>("/api/growth/linhas-projetos", fetcher)
+  const linhas = lData?.linhas ?? []
   // Growth não tem cidade física; usa "Remoto" (o schema de demanda exige cidade >= 2 chars).
-  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "Remoto", responsavelId: "", linhaProjeto: "" })
+  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "Remoto", responsavelId: "", linhaProjetoId: "" })
   const [saving, setSaving] = useState(false)
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -98,7 +100,7 @@ function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCrea
         body: JSON.stringify({
           ...form, area: "design", departamento: "growth",
           responsavelId: form.responsavelId || undefined,
-          linhaProjeto: form.linhaProjeto.trim() || undefined,
+          linhaProjetoId: form.linhaProjetoId || undefined,
           ...(form.prioridade === "urgente" ? { motivoUrgencia: "Conteúdo urgente" } : {}),
         }),
       })
@@ -135,7 +137,13 @@ function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCrea
             </select>
           </div>
           <div><label className="block text-xs text-zinc-500 mb-1">Linha / Projeto</label>
-            <input value={form.linhaProjeto} onChange={(e) => upd("linhaProjeto", e.target.value)} placeholder="ex.: Médica, Estética, Cliente A, Produto X…" className={inputCls} />
+            <select value={form.linhaProjetoId} onChange={(e) => upd("linhaProjetoId", e.target.value)} className={inputCls}>
+              <option value="">— Sem linha/projeto —</option>
+              {linhas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+            {linhas.length === 0 && (
+              <p className="text-[11px] text-zinc-600 mt-1">Nenhuma linha/projeto cadastrada. Cadastre em Configurações → Linhas / Projetos.</p>
+            )}
           </div>
           <div><label className="block text-xs text-zinc-500 mb-1">Descrição *</label><textarea value={form.descricao} onChange={(e) => upd("descricao", e.target.value)} rows={3} className={inputCls} /></div>
         </div>

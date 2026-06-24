@@ -30,6 +30,7 @@ import {
   Image as ImageIcon,
   Inbox,
   Sparkles,
+  Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -69,6 +70,7 @@ const sections = [
       { href: "/design", label: "Conteúdos", icon: Sparkles },
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
       { href: "/designers", label: "Equipe Growth", icon: Users },
+      { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
     ],
   },
   {
