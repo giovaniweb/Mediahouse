@@ -38,6 +38,9 @@ const criarDemandaSchema = z.object({
   videomakerId: z.string().optional(),
   editorId: z.string().optional(),
   designerId: z.string().optional(),
+  // Growth: responsável (Usuario interno da org) + segmentação genérica
+  responsavelId: z.string().optional(),
+  linhaProjeto: z.string().optional(),
   // Cliente final (cobertura/entrega)
   clienteFinalNome: z.string().optional(),
   clienteFinalTelefone: z.string().optional(),
@@ -159,6 +162,7 @@ export async function GET(req: NextRequest) {
         videomaker: { select: { id: true, nome: true, cidade: true } },
         editor: { select: { id: true, nome: true } },
         designer: { select: { id: true, nome: true } },
+        responsavel: { select: { id: true, nome: true, tipo: true } },
         produtos: { select: { produto: { select: { nome: true } } } },
         eventoGestao: { select: { id: true, nome: true } },
         _count: { select: { comentarios: true, arquivos: true } },
@@ -206,6 +210,29 @@ export async function POST(req: NextRequest) {
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(data.tipoVideo, data.prioridade as Prioridade)
 
+  // Growth: resolve o responsável (Usuario interno da org). Valida que pertence à
+  // organização logada (isolamento) e, se for designer com espelho Designer, também
+  // preenche designerId para manter a visão/portal do designer funcionando.
+  let responsavelId: string | undefined
+  let designerIdResolvido = data.designerId
+  if (data.responsavelId) {
+    const membro = await prisma.usuario.findFirst({
+      where: { id: data.responsavelId, organizacoes: { some: { organizacaoId } } },
+      select: { id: true, tipo: true },
+    })
+    if (!membro) {
+      return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
+    }
+    responsavelId = membro.id
+    if (membro.tipo === "designer" && !designerIdResolvido) {
+      const designer = await prisma.designer.findFirst({
+        where: { usuarioId: membro.id, organizacaoId },
+        select: { id: true },
+      })
+      if (designer) designerIdResolvido = designer.id
+    }
+  }
+
   const demanda = await prisma.demanda.create({
     data: {
       organizacaoId,
@@ -236,7 +263,9 @@ export async function POST(req: NextRequest) {
       // Novos campos
       videomakerId: data.videomakerId || undefined,
       editorId: data.editorId || undefined,
-      designerId: data.designerId || undefined,
+      designerId: designerIdResolvido || undefined,
+      responsavelId: responsavelId || undefined,
+      linhaProjeto: data.linhaProjeto?.trim() || undefined,
       eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,

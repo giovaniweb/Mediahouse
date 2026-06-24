@@ -39,6 +39,8 @@ interface DemandaCardProps {
     dataLimite?: string | null
     videomakerId?: string | null
     editor?: { nome: string } | null
+    designer?: { nome: string } | null
+    responsavel?: { nome: string } | null
     solicitante?: { nome: string } | null
     eventoGestao?: { id: string; nome: string } | null
   }
@@ -162,10 +164,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           <div className="flex items-center gap-1">
             {demanda.statusVisivel === "finalizado" ? (
               <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 font-medium">✅ Concluído</span>
-            ) : demanda.editor ? (
-              <><User className="w-3 h-3" /><span className="text-zinc-400">{demanda.editor.nome.split(" ")[0]}</span></>
+            ) : (demanda.responsavel || demanda.designer || demanda.editor) ? (
+              <><User className="w-3 h-3" /><span className="text-zinc-400">{(demanda.responsavel?.nome ?? demanda.designer?.nome ?? demanda.editor?.nome ?? "").split(" ")[0]}</span></>
             ) : (
-              <><Video className="w-3 h-3 text-zinc-600" /><span className="text-zinc-600">sem editor</span></>
+              <><Video className="w-3 h-3 text-zinc-600" /><span className="text-zinc-600">sem responsável</span></>
             )}
           </div>
           {demanda.dataLimite && demanda.statusVisivel !== "finalizado" && (

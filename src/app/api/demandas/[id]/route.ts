@@ -33,6 +33,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       gestor: { select: { id: true, nome: true } },
       videomaker: { select: { id: true, nome: true, cidade: true, telefone: true } },
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
+      designer: { select: { id: true, nome: true } },
+      responsavel: { select: { id: true, nome: true, tipo: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
         select: { id: true, tipoArquivo: true, url: true, nomeArquivo: true, sequencia: true, createdAt: true },

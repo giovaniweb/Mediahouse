@@ -28,7 +28,6 @@ import {
   Truck,
   Boxes,
   Image as ImageIcon,
-  PenTool,
   Inbox,
   Sparkles,
 } from "lucide-react"
@@ -68,8 +67,8 @@ const sections = [
     label: "Growth",
     items: [
       { href: "/design", label: "Conteúdos", icon: Sparkles },
-      { href: "/galeria-artes", label: "Galeria", icon: ImageIcon },
-      { href: "/designers", label: "Responsáveis", icon: PenTool },
+      { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
+      { href: "/designers", label: "Equipe Growth", icon: Users },
     ],
   },
   {

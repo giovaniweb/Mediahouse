@@ -947,6 +947,20 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         )}
                       </div>
                     )}
+                    {(demanda.responsavel || demanda.designer) && (
+                      <div>
+                        <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
+                          <User className="w-3 h-3" /> Responsável
+                        </p>
+                        <p className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome}</p>
+                      </div>
+                    )}
+                    {demanda.linhaProjeto && (
+                      <div>
+                        <p className="text-[11px] text-zinc-600 mb-0.5">Linha / Projeto</p>
+                        <p className="text-sm text-zinc-300 font-medium">{demanda.linhaProjeto}</p>
+                      </div>
+                    )}
                   </div>
                 </SidebarSection>
 

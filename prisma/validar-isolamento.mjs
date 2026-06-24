@@ -35,6 +35,35 @@ async function main() {
   const growthTeste = await prisma.demanda.count({ where: { organizacaoId: T, area: "design" } })
   check("Growth: org de teste vê o próprio conteúdo de Growth (isolado)", growthTeste >= 1, `growth org teste=${growthTeste}`)
 
+  // ── 1c. GROWTH — responsáveis (equipe interna por org) ─────────────────────
+  const TIPOS_GROWTH = ["designer", "social", "gestor", "admin", "operacao", "analista_crm", "gestor_trafego", "auxiliar_admin"]
+  // Responsáveis elegíveis da org de teste = só membros dela (mesma query da rota)
+  const respTeste = await prisma.usuario.findMany({
+    where: { status: "ativo", tipo: { in: TIPOS_GROWTH }, organizacoes: { some: { organizacaoId: T } } },
+    select: { id: true },
+  })
+  const respTesteIds = new Set(respTeste.map(u => u.id))
+  check("Growth responsáveis: org de teste lista só a própria equipe", respTeste.length >= 1, `${respTeste.length} responsável(is)`)
+  // Nenhum responsável elegível exclusivo da Contourline pode aparecer para a org de teste
+  const respContourExclusivos = await prisma.usuario.findMany({
+    where: {
+      status: "ativo", tipo: { in: TIPOS_GROWTH },
+      organizacoes: { some: { organizacaoId: C } },
+      NOT: { organizacoes: { some: { organizacaoId: T } } },
+    },
+    select: { id: true },
+  })
+  const vazou = respContourExclusivos.some(u => respTesteIds.has(u.id))
+  check("Growth responsáveis: NENHUM responsável exclusivo da Contourline aparece para a org de teste", !vazou, `contourline-exclusivos=${respContourExclusivos.length}`)
+
+  // responsavelId nunca aponta p/ usuário de outra org (isolamento na atribuição)
+  const demsComResp = await prisma.demanda.findMany({
+    where: { responsavelId: { not: null } },
+    select: { organizacaoId: true, responsavel: { select: { organizacoes: { select: { organizacaoId: true } } } } },
+  })
+  const respForaDaOrg = demsComResp.filter(d => d.responsavel && !d.responsavel.organizacoes.some(o => o.organizacaoId === d.organizacaoId)).length
+  check("Growth: responsavelId sempre pertence à org da demanda", respForaDaOrg === 0, `fora-da-org=${respForaDaOrg}`)
+
   // ── 2. COBERTURAS ──────────────────────────────────────────────────────────
   const cobTesteEmContour = await prisma.eventoCobertura.count({ where: { organizacaoId: C, titulo: { contains: "[TESTE]" } } })
   check("Coberturas: cobertura de teste NÃO aparece em Contourline", cobTesteEmContour === 0)

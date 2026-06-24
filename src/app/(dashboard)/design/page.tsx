@@ -79,10 +79,12 @@ export default function GrowthKanbanPage() {
   )
 }
 
+type Responsavel = { id: string; nome: string; email: string | null; tipo: string; label: string }
+
 function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const { data: dData } = useSWR<{ designers: { id: string; nome: string }[] }>("/api/designers?status=ativo", fetcher)
-  const responsaveis = dData?.designers ?? []
-  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "—", designerId: "" })
+  const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
+  const responsaveis = rData?.responsaveis ?? []
+  const [form, setForm] = useState({ titulo: "", tipoVideo: "post", descricao: "", prioridade: "normal", cidade: "—", responsavelId: "", linhaProjeto: "" })
   const [saving, setSaving] = useState(false)
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -94,7 +96,8 @@ function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCrea
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form, area: "design", departamento: "growth",
-          designerId: form.designerId || undefined,
+          responsavelId: form.responsavelId || undefined,
+          linhaProjeto: form.linhaProjeto.trim() || undefined,
           ...(form.prioridade === "urgente" ? { motivoUrgencia: "Conteúdo urgente" } : {}),
         }),
       })
@@ -125,10 +128,13 @@ function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCrea
             </div>
           </div>
           <div><label className="block text-xs text-zinc-500 mb-1">Responsável</label>
-            <select value={form.designerId} onChange={(e) => upd("designerId", e.target.value)} className={inputCls}>
+            <select value={form.responsavelId} onChange={(e) => upd("responsavelId", e.target.value)} className={inputCls}>
               <option value="">— Sem responsável —</option>
-              {responsaveis.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+              {responsaveis.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
+          </div>
+          <div><label className="block text-xs text-zinc-500 mb-1">Linha / Projeto</label>
+            <input value={form.linhaProjeto} onChange={(e) => upd("linhaProjeto", e.target.value)} placeholder="ex.: Médica, Estética, Cliente A, Produto X…" className={inputCls} />
           </div>
           <div><label className="block text-xs text-zinc-500 mb-1">Descrição *</label><textarea value={form.descricao} onChange={(e) => upd("descricao", e.target.value)} rows={3} className={inputCls} /></div>
         </div>

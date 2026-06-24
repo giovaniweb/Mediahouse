@@ -170,6 +170,7 @@ model Usuario {
   organizacoes    UsuarioOrganizacao[]
   demandasCriadas Demanda[]         @relation("Solicitante")
   demandasGeridas Demanda[]         @relation("Gestor")
+  demandasResponsavel Demanda[]     @relation("Responsavel")
   historicos      HistoricoStatus[]
   comentarios     Comentario[]
   sessions        Session[]
@@ -406,6 +407,10 @@ model Demanda {
   editorId      String?
   socialId      String?
   designerId    String?   // profissional de design (quando area=design)
+  responsavelId String?   // responsável/executor interno (Growth) — Usuario da org
+  // Segmentação genérica multiempresa (linha de conteúdo / projeto / marca / cliente /
+  // unidade / produto). NUNCA hardcoded por empresa. Usado p/ filtrar e, no futuro, permissões.
+  linhaProjeto  String?
 
   // Datas
   dataLimite         DateTime?
@@ -422,6 +427,7 @@ model Demanda {
   videomaker         Videomaker?        @relation(fields: [videomakerId], references: [id])
   editor             Editor?            @relation(fields: [editorId], references: [id])
   designer           Designer?          @relation(fields: [designerId], references: [id])
+  responsavel        Usuario?           @relation("Responsavel", fields: [responsavelId], references: [id])
   arquivos           Arquivo[]
   historicos         HistoricoStatus[]
   comentarios        Comentario[]
