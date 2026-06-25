@@ -78,6 +78,31 @@ const STATUS_VISIVEL_TO_INTERNO: Record<string, string> = {
   finalizado: "encerrado",
 }
 
+function normalizarTextoObrigatorio(
+  body: Record<string, unknown>,
+  campo: "titulo" | "descricao",
+  label: string,
+  min: number
+): NextResponse | null {
+  if (!Object.prototype.hasOwnProperty.call(body, campo)) return null
+
+  const valor = body[campo]
+  if (typeof valor !== "string") {
+    return NextResponse.json({ error: `${label} inválido.` }, { status: 400 })
+  }
+
+  const texto = valor.trim()
+  if (texto.length < min) {
+    return NextResponse.json(
+      { error: `${label} deve ter pelo menos ${min} caracteres.` },
+      { status: 400 }
+    )
+  }
+
+  body[campo] = texto
+  return null
+}
+
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -86,6 +111,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
   const body = await req.json()
+
+  const erroTitulo = normalizarTextoObrigatorio(body, "titulo", "Título", 3)
+  if (erroTitulo) return erroTitulo
+  const erroDescricao = normalizarTextoObrigatorio(body, "descricao", "Descrição", 10)
+  if (erroDescricao) return erroDescricao
 
   // Resolver tokens de atribuição unificada (vm:/ed:/user:) → id real do slot.
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.

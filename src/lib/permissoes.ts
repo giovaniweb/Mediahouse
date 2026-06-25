@@ -54,8 +54,8 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   verCoberturas: "Ver Coberturas (Audiovisual)",
   verFinanceiroEvento: "Ver Financeiro de Eventos",
   gerenciarFornecedores: "Gerenciar Fornecedores",
-  verDesign: "Ver Designer (Artes)",
-  gerenciarDesigners: "Gerenciar Designers",
+  verDesign: "Ver Growth / Conteúdos",
+  gerenciarDesigners: "Gerenciar equipe criativa",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
   excluirDemanda: "Excluir Demanda",
@@ -87,7 +87,7 @@ export const PERMISSAO_GRUPOS = [
     ] as PermissaoKey[],
   },
   {
-    label: "Designer",
+    label: "Growth / Criativos",
     keys: [
       "verDesign",
       "gerenciarDesigners",

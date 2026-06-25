@@ -15,6 +15,13 @@ export interface MeData {
   status: string
   avatarUrl: string | null
   videomakerRef: { id: string; nome: string; avaliacao: number } | null
+  membership: {
+    organizacaoId: string
+    papel: string
+    categoria: string
+    funcaoProfissional: string | null
+    areas: string[]
+  } | null
   permissoes: Record<string, boolean> & { id: string; usuarioId: string }
 }
 

@@ -9,11 +9,11 @@ import { getOrgId, semOrg } from "@/lib/org"
 import type { Prioridade, Departamento } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
-  titulo: z.string().min(3),
-  descricao: z.string().min(10),
+  titulo: z.string().trim().min(3),
+  descricao: z.string().trim().min(10),
   departamento: z.enum(["growth", "eventos", "institucional", "rh", "audiovisual", "outros"]),
-  tipoVideo: z.string().min(1),
-  cidade: z.string().min(2),
+  tipoVideo: z.string().trim().min(1),
+  cidade: z.string().trim().min(2),
   prioridade: z.enum(["normal", "alta", "urgente"]).default("normal"),
   motivoUrgencia: z.string().optional(),
   dataLimite: z.string().optional(),
