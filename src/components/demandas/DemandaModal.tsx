@@ -993,12 +993,33 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                   </div>
                 </SidebarSection>
 
-                {/* Produto */}
+                {/* Produtos (multi) */}
                 {demanda.produtos?.length > 0 && (
-                  <SidebarSection title="Produto" icon={<Package className="w-3 h-3" />}>
-                    <span className="inline-block text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
-                      {demanda.produtos[0].produto?.nome ?? "—"}
-                    </span>
+                  <SidebarSection title={demanda.produtos.length > 1 ? "Produtos" : "Produto"} icon={<Package className="w-3 h-3" />}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {demanda.produtos.map((dp: any, i: number) => (
+                        <span key={dp.produto?.id ?? i} className="inline-block text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
+                          {dp.produto?.nome ?? "—"}
+                        </span>
+                      ))}
+                    </div>
+                  </SidebarSection>
+                )}
+
+                {/* Detalhes da entrega (campos condicionais — Growth) */}
+                {demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
+                  <SidebarSection title="Detalhes da entrega" icon={<Tag className="w-3 h-3" />}>
+                    <div className="space-y-1.5">
+                      {Object.entries(demanda.detalhesEntrega as Record<string, unknown>)
+                        .filter(([, v]) => v !== "" && v !== null && v !== undefined)
+                        .map(([k, v]) => (
+                          <div key={k} className="text-xs">
+                            <span className="text-zinc-500">{k}: </span>
+                            <span className="text-zinc-300">{typeof v === "boolean" ? (v ? "Sim" : "Não") : String(v)}</span>
+                          </div>
+                        ))}
+                    </div>
                   </SidebarSection>
                 )}
 

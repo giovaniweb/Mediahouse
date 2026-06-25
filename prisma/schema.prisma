@@ -375,6 +375,9 @@ model Demanda {
   cobertura         Boolean?
   publico           String?
   mensagemPrincipal String?
+  // Campos condicionais por tipo de entrega (ex.: Growth carrossel/e-mail/criativo).
+  // Estrutura flexível (chave→valor) que não exige migração por novo tipo de conteúdo.
+  detalhesEntrega   Json?
 
   // Links operacionais
   linkBrutos      String?

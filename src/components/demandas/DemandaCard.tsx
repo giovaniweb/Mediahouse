@@ -43,6 +43,7 @@ interface DemandaCardProps {
     responsavel?: { nome: string } | null
     solicitante?: { nome: string } | null
     eventoGestao?: { id: string; nome: string } | null
+    produtos?: { produto?: { nome: string } | null }[]
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
@@ -143,6 +144,15 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
               🎟️ {demanda.eventoGestao.nome}
             </span>
           )}
+          {(demanda.produtos?.length ?? 0) > 0 && (() => {
+            const nomes = (demanda.produtos ?? []).map(p => p.produto?.nome).filter(Boolean) as string[]
+            if (nomes.length === 0) return null
+            return (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-sky-500/15 text-sky-300 border-sky-500/30 max-w-[150px] truncate" title={nomes.join(", ")}>
+                📦 {nomes[0]}{nomes.length > 1 ? ` +${nomes.length - 1}` : ""}
+              </span>
+            )
+          })()}
           {aguardandoVM && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30">
               ⏳ Aguardando VM

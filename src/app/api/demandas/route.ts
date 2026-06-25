@@ -46,12 +46,15 @@ const criarDemandaSchema = z.object({
   clienteFinalNome: z.string().optional(),
   clienteFinalTelefone: z.string().optional(),
   clienteFinalEmail: z.string().optional(),
-  // Produto vinculado
+  // Produto(s) vinculado(s) — multi-seleção (produtoId legado mantido p/ compat)
   produtoId: z.string().optional(),
+  produtoIds: z.array(z.string()).optional(),
   // Telefone solicitante
   telefoneSolicitante: z.string().optional(),
   // Classificação B2C/B2B
   classificacao: z.enum(["b2c", "b2b"]).optional(),
+  // Campos condicionais por tipo de entrega (Growth)
+  detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
 })
 
 function gerarCodigo(): string {
@@ -289,14 +292,26 @@ export async function POST(req: NextRequest) {
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
       linkBrutos: data.linkBrutos || undefined,
+      detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
     },
   })
 
-  // Vincular produto se fornecido
-  if (data.produtoId) {
-    await prisma.demandaProduto.create({
-      data: { demandaId: demanda.id, produtoId: data.produtoId },
-    }).catch(e => console.error("[Demanda] Erro ao vincular produto:", e))
+  // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
+  const produtoIds = Array.from(new Set([
+    ...(data.produtoIds ?? []),
+    ...(data.produtoId ? [data.produtoId] : []),
+  ]))
+  if (produtoIds.length > 0) {
+    const validos = await prisma.produto.findMany({
+      where: { id: { in: produtoIds }, organizacaoId },
+      select: { id: true },
+    })
+    if (validos.length > 0) {
+      await prisma.demandaProduto.createMany({
+        data: validos.map((p) => ({ demandaId: demanda.id, produtoId: p.id })),
+        skipDuplicates: true,
+      }).catch(e => console.error("[Demanda] Erro ao vincular produtos:", e))
+    }
   }
 
   // Auto-populate checklist a partir de templates

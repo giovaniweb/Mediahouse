@@ -78,7 +78,8 @@ export default function NovaDemandaPage() {
   const [dataLimite, setDataLimite] = useState("")
   const [referencia, setReferencia] = useState("")
   const [observacoes, setObservacoes] = useState("")
-  const [produtoId, setProdutoId] = useState("")
+  const [produtoIds, setProdutoIds] = useState<string[]>([])
+  const toggleProduto = (id: string) => setProdutoIds(cur => cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id])
   const [classificacao, setClassificacao] = useState<"b2c" | "b2b">("b2c")
 
   // ── Campos Vídeo ────────────────────────────────────────────────────
@@ -220,7 +221,7 @@ export default function NovaDemandaPage() {
         // Videomaker
         videomakerId: vmSelecionado?.id || undefined,
         // Produto
-        produtoId: produtoId || undefined,
+        produtoIds,
         // Classificação B2C/B2B
         classificacao,
       }
@@ -387,13 +388,15 @@ export default function NovaDemandaPage() {
                 </Field>
 
                 {produtos.length > 0 && (
-                  <Field label="Produto / Equipamento" hint="Relacionar a um produto">
-                    <select value={produtoId} onChange={e => setProdutoId(e.target.value)} className={selectClass}>
-                      <option value="">— Nenhum —</option>
+                  <Field label="Produtos / Equipamentos" hint="Selecione um ou mais">
+                    <div className="flex flex-wrap gap-1.5">
                       {produtos.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome}</option>
+                        <button key={p.id} type="button" onClick={() => toggleProduto(p.id)}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${produtoIds.includes(p.id) ? "bg-sky-500/15 text-sky-300 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"}`}>
+                          {p.nome}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </Field>
                 )}
               </div>
@@ -845,11 +848,11 @@ export default function NovaDemandaPage() {
                 </div>
               )}
 
-              {/* Produto */}
-              {produtoId && (
+              {/* Produtos */}
+              {produtoIds.length > 0 && (
                 <div className="border-t border-zinc-700 pt-3">
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide">Produto</span>
-                  <p className="text-sm text-zinc-200 mt-1">{produtos.find(p => p.id === produtoId)?.nome ?? produtoId}</p>
+                  <span className="text-xs text-zinc-500 uppercase tracking-wide">{produtoIds.length > 1 ? "Produtos" : "Produto"}</span>
+                  <p className="text-sm text-zinc-200 mt-1">{produtoIds.map(id => produtos.find(p => p.id === id)?.nome ?? id).join(", ")}</p>
                 </div>
               )}
             </div>
