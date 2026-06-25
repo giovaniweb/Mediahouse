@@ -69,7 +69,7 @@ const sections = [
     items: [
       { href: "/design", label: "Conteúdos", icon: Sparkles },
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
-      { href: "/designers", label: "Equipe Growth", icon: Users },
+      { href: "/growth/equipe", label: "Equipe Growth", icon: Users },
       { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
     ],
   },

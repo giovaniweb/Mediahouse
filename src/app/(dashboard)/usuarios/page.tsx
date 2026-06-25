@@ -49,6 +49,9 @@ interface Usuario {
   tipo: string
   status: string
   createdAt: string
+  categoria?: string
+  funcaoProfissional?: string | null
+  areas?: string[]
 }
 
 interface Videomaker {
@@ -317,10 +320,32 @@ function ModalResetSenha({
 }
 
 // ─── Modal Editar Usuário ─────────────────────────────────────────────────────
+const CATEGORIAS = [
+  { value: "interna", label: "Equipe interna" },
+  { value: "solicitante", label: "Solicitante" },
+  { value: "externo", label: "Profissional externo" },
+  { value: "sistema", label: "Sistema / Teste" },
+]
+const FUNCOES = [
+  "social", "designer", "analista_crm", "gestor_trafego", "videomaker", "editor",
+  "fotografo", "atendimento", "copywriter", "produtor", "coordenador", "gestor", "admin", "operacao", "outro",
+]
+const FUNCAO_LABEL: Record<string, string> = {
+  social: "Social Media", designer: "Designer", analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego",
+  videomaker: "Videomaker", editor: "Editor", fotografo: "Fotógrafo", atendimento: "Atendimento",
+  copywriter: "Copywriter", produtor: "Produtor", coordenador: "Coordenador", gestor: "Gestor", admin: "Admin",
+  operacao: "Operação", outro: "Outro",
+}
+const AREAS = [
+  { value: "audiovisual", label: "Audiovisual" },
+  { value: "growth", label: "Growth / Conteúdos" },
+  { value: "eventos", label: "Coberturas de Eventos" },
+]
+
 function ModalEditarUsuario({
   usuario, onClose, onSave,
 }: {
-  usuario: { id: string; nome: string; email: string; telefone?: string; tipo: string }
+  usuario: { id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[] }
   onClose: () => void
   onSave: () => void
 }) {
@@ -328,10 +353,14 @@ function ModalEditarUsuario({
   const [email, setEmail] = useState(usuario.email ?? "")
   const [telefone, setTelefone] = useState(usuario.telefone ?? "")
   const [tipo, setTipo] = useState(usuario.tipo)
+  const [categoria, setCategoria] = useState(usuario.categoria ?? "interna")
+  const [funcao, setFuncao] = useState(usuario.funcaoProfissional ?? "")
+  const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
   const [novaSenha, setNovaSenha] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [mostrar, setMostrar] = useState(false)
   const [loading, setLoading] = useState(false)
+  const toggleArea = (a: string) => setAreas((cur) => cur.includes(a) ? cur.filter(x => x !== a) : [...cur, a])
 
   const TIPOS = [
     { value: "admin", label: "Admin" },
@@ -356,7 +385,7 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, string> = { nome, email, telefone, tipo }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas }
       if (novaSenha) body.novaSenha = novaSenha
       const res = await fetch(`/api/usuarios/${usuario.id}`, {
         method: "PATCH",
@@ -398,10 +427,37 @@ function ModalEditarUsuario({
             <input className={inp} type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="+55 11 99999-9999" />
           </div>
           <div>
-            <label className="text-xs text-zinc-400 block mb-1">Tipo</label>
+            <label className="text-xs text-zinc-400 block mb-1">Papel no sistema (acesso)</label>
             <select className={inp} value={tipo} onChange={e => setTipo(e.target.value)}>
               {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
+          </div>
+          <div className="border-t border-zinc-800 pt-3 space-y-3">
+            <p className="text-xs text-zinc-500">👤 Pessoas &amp; Acessos (nesta organização)</p>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Categoria</label>
+              <select className={inp} value={categoria} onChange={e => setCategoria(e.target.value)}>
+                {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
+              <select className={inp} value={funcao} onChange={e => setFuncao(e.target.value)}>
+                <option value="">— Não definida —</option>
+                {FUNCOES.map(f => <option key={f} value={f}>{FUNCAO_LABEL[f] ?? f}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Áreas de atuação</label>
+              <div className="flex flex-wrap gap-2">
+                {AREAS.map(a => (
+                  <button key={a.value} type="button" onClick={() => toggleArea(a.value)}
+                    className={`text-xs px-2.5 py-1 rounded-full border ${areas.includes(a.value) ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="border-t border-zinc-800 pt-3">
             <p className="text-xs text-zinc-500 mb-3">🔑 Nova senha — deixe em branco para não alterar</p>
@@ -460,9 +516,10 @@ function ModalEditarUsuario({
 export default function UsuariosPage() {
   const [subTab, setSubTab] = useState<SubTab>("sistema")
   const [search, setSearch] = useState("")
+  const [catFiltro, setCatFiltro] = useState("todos")  // Pessoas & Acessos: filtro por categoria
 
   // Modals
-  const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string } | null>(null)
+  const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[] } | null>(null)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
   const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
   const [profModal, setProfModal] = useState<{
@@ -494,7 +551,10 @@ export default function UsuariosPage() {
   const videomakers = data?.videomakers ?? []
   const editores = data?.editores ?? []
 
-  const sistema = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"].includes(u.tipo))
+  const sistemaBase = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"].includes(u.tipo))
+  const sistema = catFiltro === "todos" ? sistemaBase
+    : catFiltro === "inativos" ? sistemaBase.filter(u => u.status === "inativo")
+    : sistemaBase.filter(u => (u.categoria ?? "interna") === catFiltro)
   const vmExt = allUsuarios.filter(u => u.tipo === "videomaker")
   const vmInt = allUsuarios.filter(u => u.tipo === "editor")
 
@@ -664,7 +724,7 @@ export default function UsuariosPage() {
   return (
     <>
       <Header
-        title="Usuários"
+        title="Pessoas & Acessos"
         actions={
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -711,13 +771,26 @@ export default function UsuariosPage() {
 
         {/* ── Toolbar ── */}
         <div className="flex items-center justify-between">
-          <p className="text-sm text-zinc-500">{currentList.length} usuário(s)</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-zinc-500">{currentList.length} pessoa(s)</p>
+            {subTab === "sistema" && (
+              <select value={catFiltro} onChange={e => setCatFiltro(e.target.value)}
+                className="text-xs border border-zinc-700 rounded-lg px-2.5 py-1.5 bg-zinc-800 text-zinc-300 outline-none focus:ring-1 focus:ring-purple-500">
+                <option value="todos">Todas as categorias</option>
+                <option value="interna">Equipe interna</option>
+                <option value="solicitante">Solicitantes</option>
+                <option value="externo">Profissionais externos</option>
+                <option value="sistema">Sistema / Teste</option>
+                <option value="inativos">Inativos</option>
+              </select>
+            )}
+          </div>
           {subTab === "sistema" ? (
             <button
               onClick={() => setShowForm(v => !v)}
               className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
-              <Plus className="w-3.5 h-3.5" /> Novo Usuário
+              <Plus className="w-3.5 h-3.5" /> Nova Pessoa
             </button>
           ) : subTab === "vm_ext" ? (
             <Link href="/videomakers">
@@ -837,7 +910,7 @@ export default function UsuariosPage() {
                   <tr
                     key={u.id}
                     className="hover:bg-zinc-800/40 cursor-pointer group transition-colors"
-                    onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
+                    onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas })}
                   >
                     <td className="px-4 py-3 font-medium text-zinc-100">
                       <div className="flex items-center gap-2">
@@ -873,7 +946,7 @@ export default function UsuariosPage() {
                         </button>
                         {/* Editar */}
                         <button
-                          onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo })}
+                          onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas })}
                           className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                           title="Editar"
                         >

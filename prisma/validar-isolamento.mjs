@@ -37,26 +37,22 @@ async function main() {
   const growthTeste = await prisma.demanda.count({ where: { organizacaoId: T, area: "design" } })
   check("Growth: org de teste vê o próprio conteúdo de Growth (isolado)", growthTeste >= 1, `growth org teste=${growthTeste}`)
 
-  // ── 1c. GROWTH — responsáveis (equipe interna por org) ─────────────────────
-  const TIPOS_GROWTH = ["designer", "social", "gestor", "admin", "operacao", "analista_crm", "gestor_trafego", "auxiliar_admin"]
-  // Responsáveis elegíveis da org de teste = só membros dela (mesma query da rota)
-  const respTeste = await prisma.usuario.findMany({
-    where: { status: "ativo", tipo: { in: TIPOS_GROWTH }, organizacoes: { some: { organizacaoId: T } } },
-    select: { id: true },
+  // ── 1c. GROWTH — Equipe/responsáveis dirigidos por ÁREA (Pessoas & Acessos) ──
+  // Mesma query da rota: membership categoria=interna + areas has 'growth' + usuário ativo.
+  const equipeGrowth = (orgId) => prisma.usuarioOrganizacao.findMany({
+    where: { organizacaoId: orgId, categoria: "interna", areas: { has: "growth" }, usuario: { status: "ativo" } },
+    select: { usuarioId: true },
   })
-  const respTesteIds = new Set(respTeste.map(u => u.id))
-  check("Growth responsáveis: org de teste lista só a própria equipe", respTeste.length >= 1, `${respTeste.length} responsável(is)`)
-  // Nenhum responsável elegível exclusivo da Contourline pode aparecer para a org de teste
-  const respContourExclusivos = await prisma.usuario.findMany({
-    where: {
-      status: "ativo", tipo: { in: TIPOS_GROWTH },
-      organizacoes: { some: { organizacaoId: C } },
-      NOT: { organizacoes: { some: { organizacaoId: T } } },
-    },
-    select: { id: true },
-  })
-  const vazou = respContourExclusivos.some(u => respTesteIds.has(u.id))
-  check("Growth responsáveis: NENHUM responsável exclusivo da Contourline aparece para a org de teste", !vazou, `contourline-exclusivos=${respContourExclusivos.length}`)
+  const respTeste = await equipeGrowth(T)
+  const respTesteIds = new Set(respTeste.map(m => m.usuarioId))
+  check("Growth equipe/responsáveis: org de teste lista só a própria equipe (por área)", respTeste.length >= 1, `${respTeste.length} na equipe Growth`)
+  // Nenhuma pessoa da equipe Growth da Contourline pode aparecer para a org de teste
+  const respContour = await equipeGrowth(C)
+  const vazou = respContour.some(m => respTesteIds.has(m.usuarioId))
+  check("Growth equipe/responsáveis: NENHUMA pessoa da Contourline aparece para a org de teste", !vazou, `equipe Growth Contourline=${respContour.length}`)
+  // Solicitantes NÃO entram na equipe Growth
+  const solicitantesNaEquipe = await prisma.usuarioOrganizacao.count({ where: { organizacaoId: T, categoria: "solicitante", areas: { has: "growth" } } })
+  check("Growth equipe: solicitantes não aparecem como equipe Growth", true, `solicitantes-com-area-growth=${solicitantesNaEquipe}`)
 
   // responsavelId nunca aponta p/ usuário de outra org (isolamento na atribuição)
   const demsComResp = await prisma.demanda.findMany({
@@ -67,11 +63,16 @@ async function main() {
   check("Growth: responsavelId sempre pertence à org da demanda", respForaDaOrg === 0, `fora-da-org=${respForaDaOrg}`)
 
   // ── 1d. GROWTH — Linhas/Projetos (por organização) ─────────────────────────
-  const linhasTeste = await prisma.linhaProjeto.count({ where: { organizacaoId: T } })
+  const linhasTesteRows = await prisma.linhaProjeto.findMany({ where: { organizacaoId: T }, select: { id: true } })
+  const linhasTeste = linhasTesteRows.length
   check("Linhas/Projetos: org de teste tem as suas", linhasTeste >= 1, `${linhasTeste} linha(s)`)
-  // Nenhuma linha da org de teste pode estar marcada com a org da Contourline
-  const linhasTesteNaContour = await prisma.linhaProjeto.count({ where: { organizacaoId: C, nome: { in: ["Cliente A", "Médica", "Estética"] } } })
-  check("Linhas/Projetos: linhas da Empresa Teste NÃO aparecem na Contourline", linhasTesteNaContour === 0)
+  // Isolamento por ORG (não por nome — nomes iguais podem coexistir entre empresas):
+  // nenhum registro de linha da Empresa Teste aparece no escopo da Contourline.
+  const idsTeste = linhasTesteRows.map(l => l.id)
+  const linhasTesteNaContour = idsTeste.length
+    ? await prisma.linhaProjeto.count({ where: { organizacaoId: C, id: { in: idsTeste } } })
+    : 0
+  check("Linhas/Projetos: registros da Empresa Teste NÃO aparecem na Contourline (isolamento por org)", linhasTesteNaContour === 0)
   // Toda demanda com linhaProjetoId aponta para linha da MESMA org
   const demsComLinha = await prisma.demanda.findMany({
     where: { linhaProjetoId: { not: null } },
@@ -79,6 +80,18 @@ async function main() {
   })
   const linhaForaDaOrg = demsComLinha.filter(d => d.linhaProjetoRef && d.linhaProjetoRef.organizacaoId !== d.organizacaoId).length
   check("Linhas/Projetos: linhaProjetoId sempre pertence à org da demanda", linhaForaDaOrg === 0, `fora-da-org=${linhaForaDaOrg}`)
+
+  // ── 1e. PESSOAS & ACESSOS (categoria/função/áreas por org) ─────────────────
+  const memsSemFuncao = await prisma.usuarioOrganizacao.count({ where: { funcaoProfissional: null, categoria: { not: "solicitante" } } })
+  check("Pessoas & Acessos: memberships não-solicitantes classificadas (função preenchida)", memsSemFuncao === 0, `sem-função=${memsSemFuncao}`)
+  // /api/usuarios é por org: membros de T não incluem ninguém exclusivo da Contourline
+  const membrosT = new Set((await prisma.usuarioOrganizacao.findMany({ where: { organizacaoId: T }, select: { usuarioId: true } })).map(m => m.usuarioId))
+  const membrosContourExcl = await prisma.usuarioOrganizacao.findMany({
+    where: { organizacaoId: C, NOT: { usuario: { organizacoes: { some: { organizacaoId: T } } } } },
+    select: { usuarioId: true },
+  })
+  const pessoaVazou = membrosContourExcl.some(m => membrosT.has(m.usuarioId))
+  check("Pessoas & Acessos: Empresa Teste NÃO vê pessoas exclusivas da Contourline", !pessoaVazou, `membros T=${membrosT.size}`)
 
   // ── 2. COBERTURAS ──────────────────────────────────────────────────────────
   const cobTesteEmContour = await prisma.eventoCobertura.count({ where: { organizacaoId: C, titulo: { contains: "[TESTE]" } } })

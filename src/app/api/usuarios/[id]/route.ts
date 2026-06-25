@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId } from "@/lib/org"
 import bcrypt from "bcryptjs"
+import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
-// PATCH /api/usuarios/[id] — atualiza status/tipo/senha (admin/gestor)
+// PATCH /api/usuarios/[id] — atualiza dados + Pessoas & Acessos (categoria/função/áreas/papel)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -15,6 +17,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (!isOwn && !isPrivileged) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
+
+  const organizacaoId = await getOrgId(session)
+
+  // Isolamento: privilegiado só edita pessoas da própria organização
+  if (isPrivileged && !isOwn && organizacaoId) {
+    const membro = await prisma.usuarioOrganizacao.findUnique({
+      where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } },
+      select: { id: true },
+    })
+    if (!membro) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
   }
 
   const body = await req.json()
@@ -37,6 +50,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data,
     select: { id: true, nome: true, email: true, tipo: true, status: true },
   })
+
+  // Pessoas & Acessos: atualiza as dimensões por organização na membership.
+  if (isPrivileged && organizacaoId) {
+    const memData: Record<string, unknown> = {}
+    if (body.papel) memData.papel = body.papel as TipoUsuario
+    else if (tipo) memData.papel = tipo as TipoUsuario
+    if (body.categoria) memData.categoria = body.categoria as CategoriaPessoa
+    if (body.funcaoProfissional !== undefined) memData.funcaoProfissional = (body.funcaoProfissional as string)?.trim() || null
+    if (Array.isArray(body.areas)) {
+      const validas: AreaAtuacao[] = ["audiovisual", "growth", "eventos"]
+      memData.areas = (body.areas as string[]).filter((a) => validas.includes(a as AreaAtuacao))
+    }
+    if (Object.keys(memData).length > 0) {
+      await prisma.usuarioOrganizacao.updateMany({ where: { usuarioId: id, organizacaoId }, data: memData })
+    }
+  }
 
   return NextResponse.json({ usuario })
 }

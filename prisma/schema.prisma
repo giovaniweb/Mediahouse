@@ -31,6 +31,22 @@ enum StatusUsuario {
   inativo
 }
 
+// Pessoas & Acessos (SaaS): dimensões separadas do `tipo` legado, por organização
+// (vivem em UsuarioOrganizacao). categoria = quem é a pessoa; funcaoProfissional = o
+// que faz; areas = onde atua. Papel/acesso continua em UsuarioOrganizacao.papel.
+enum CategoriaPessoa {
+  interna      // equipe interna que opera a empresa
+  solicitante  // pede/acompanha demandas
+  externo      // videomaker/editor/freelancer externo
+  sistema      // usuários de teste/automação/registros técnicos
+}
+
+enum AreaAtuacao {
+  audiovisual
+  growth
+  eventos
+}
+
 enum StatusVideomaker {
   ativo
   inativo
@@ -1808,7 +1824,11 @@ model UsuarioOrganizacao {
   id            String      @id @default(cuid())
   usuarioId     String
   organizacaoId String
-  papel         TipoUsuario @default(solicitante)
+  papel         TipoUsuario @default(solicitante)  // nível de acesso/autoridade na org
+  // Pessoas & Acessos — dimensões por organização (aditivas, compat com `tipo` legado)
+  categoria          CategoriaPessoa @default(interna)
+  funcaoProfissional String?         // o que a pessoa faz (Social Media, Designer, etc.)
+  areas              AreaAtuacao[]   // onde atua (audiovisual, growth, eventos)
   createdAt     DateTime    @default(now())
 
   usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
