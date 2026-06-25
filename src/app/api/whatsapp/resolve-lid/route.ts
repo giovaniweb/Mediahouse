@@ -3,6 +3,8 @@ import { getWhatsappConfig } from "@/lib/whatsapp"
 
 // Endpoint temporário para resolver @lid manualmente
 export async function GET(req: NextRequest) {
+  // Rota de debug — desativada em produção (evita fallback Contourline e exposição).
+  if (process.env.NODE_ENV === "production") return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   const secret = req.nextUrl.searchParams.get("s")
   const dbg = process.env.WHATSAPP_DEBUG_SECRET
   if (!dbg || secret !== dbg) {

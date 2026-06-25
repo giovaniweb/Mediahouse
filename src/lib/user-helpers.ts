@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { PRESETS } from "@/lib/permissoes"
+import { dimensoesParaTipo } from "@/lib/pessoas"
 
 /**
  * Gera senha padrão: nuflow + últimos 4 dígitos do telefone
@@ -28,14 +29,29 @@ interface CriarUsuarioParams {
   organizacaoId?: string | null
 }
 
-// Garante a membership do usuário na org (papel = tipo). Idempotente.
+// Garante a membership do usuário na org com papel + dimensões (categoria/função/áreas)
+// derivadas do tipo. Idempotente: ao já existir, só preenche campos vazios — não
+// sobrescreve edições manuais (categoria já definida ou áreas já preenchidas).
 async function garantirMembership(usuarioId: string, organizacaoId: string | null | undefined, papel: CriarUsuarioParams["tipo"]) {
   if (!organizacaoId) return
-  await prisma.usuarioOrganizacao.upsert({
+  const dim = dimensoesParaTipo(papel)
+  const existente = await prisma.usuarioOrganizacao.findUnique({
     where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
-    update: {},
-    create: { usuarioId, organizacaoId, papel },
+    select: { id: true, funcaoProfissional: true, areas: true },
   })
+  if (!existente) {
+    await prisma.usuarioOrganizacao.create({
+      data: { usuarioId, organizacaoId, papel, categoria: dim.categoria, funcaoProfissional: dim.funcaoProfissional, areas: dim.areas },
+    })
+    return
+  }
+  // Preenche só o que estiver vazio (preserva classificação manual prévia)
+  const update: Record<string, unknown> = {}
+  if (!existente.funcaoProfissional) update.funcaoProfissional = dim.funcaoProfissional
+  if (!existente.areas || existente.areas.length === 0) update.areas = dim.areas
+  if (Object.keys(update).length > 0) {
+    await prisma.usuarioOrganizacao.update({ where: { id: existente.id }, data: update })
+  }
 }
 
 /**

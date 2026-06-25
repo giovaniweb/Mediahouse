@@ -94,6 +94,14 @@ export async function POST(req: NextRequest) {
   const organizacaoId = await contourlineOrgId()
   if (!organizacaoId) return NextResponse.json({ error: "Organização padrão não configurada" }, { status: 500 })
 
+  // Garante a membership do solicitante na organização (categoria=solicitante).
+  // Sem isso, a pessoa nasceria sem vínculo org e não apareceria em Pessoas & Acessos.
+  await prisma.usuarioOrganizacao.upsert({
+    where: { usuarioId_organizacaoId: { usuarioId: solicitante.id, organizacaoId } },
+    update: {},
+    create: { usuarioId: solicitante.id, organizacaoId, papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
+  })
+
   const demanda = await prisma.demanda.create({
     data: {
       organizacaoId,

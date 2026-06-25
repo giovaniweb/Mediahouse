@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
 
-const inter = Inter({ subsets: ["latin"] })
+// Fonte via stack CSS (globals.css) — sem next/font/google, p/ o build NÃO depender
+// de rede externa (Google Fonts). Mantém aparência próxima ao Inter.
 
 export const metadata: Metadata = {
   title: "NuFlow",
@@ -33,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   )
 }

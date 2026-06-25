@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
+import { dimensoesParaTipo } from "@/lib/pessoas"
+import type { TipoUsuario } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
 
 // POST /api/usuarios/[id]/promover
-// Body: { tipo: "gestor" | "operacao" | "social" }
-// Promove um solicitante para um tipo de usuário com mais permissões
+// Body: { tipo }
+// Promove um solicitante na ORGANIZAÇÃO ATIVA: atualiza Usuario.tipo (compat) e a
+// membership (papel/categoria/funcaoProfissional/areas). Só promove pessoa da org.
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -15,6 +19,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (userTipo !== "admin" && userTipo !== "gestor") {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
@@ -25,17 +31,24 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `Tipo inválido. Use: ${tiposPermitidos.join(", ")}` }, { status: 400 })
   }
 
-  const usuario = await prisma.usuario.findUnique({ where: { id } })
-  if (!usuario) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
-
-  if (usuario.tipo !== "solicitante") {
-    return NextResponse.json({ error: `Usuário já é "${usuario.tipo}", não é um solicitante` }, { status: 400 })
-  }
-
-  const atualizado = await prisma.usuario.update({
-    where: { id },
-    data: { tipo: tipo as import("@prisma/client").TipoUsuario },
+  // Só promove pessoa que pertence à organização ativa (membership)
+  const membership = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } },
+    select: { id: true, usuario: { select: { tipo: true } } },
   })
+  if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
+
+  const dim = dimensoesParaTipo(tipo)
+
+  const [, atualizado] = await prisma.$transaction([
+    // Membership da org ativa: papel + dimensões conforme o tipo escolhido
+    prisma.usuarioOrganizacao.update({
+      where: { id: membership.id },
+      data: { papel: tipo as TipoUsuario, categoria: dim.categoria, funcaoProfissional: dim.funcaoProfissional, areas: dim.areas },
+    }),
+    // Usuario.tipo por compatibilidade legada
+    prisma.usuario.update({ where: { id }, data: { tipo: tipo as TipoUsuario } }),
+  ])
 
   return NextResponse.json({ ok: true, usuario: { id: atualizado.id, nome: atualizado.nome, tipo: atualizado.tipo } })
 }

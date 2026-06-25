@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { normalizarNome } from "@/lib/pessoas"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -22,12 +23,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.nome !== undefined) {
     const nome = (body.nome as string).trim().replace(/\s+/g, " ")
     if (!nome) return NextResponse.json({ error: "Nome inválido" }, { status: 400 })
-    // Evita colisão com outra linha da mesma org
-    const colisao = await prisma.linhaProjeto.findFirst({
-      where: { organizacaoId, nome, NOT: { id } },
-      select: { id: true },
+    // Evita colisão normalizada (caixa/espaços/acentos) com OUTRA linha da mesma org
+    const outras = await prisma.linhaProjeto.findMany({
+      where: { organizacaoId, NOT: { id } },
+      select: { nome: true },
     })
-    if (colisao) return NextResponse.json({ error: "Já existe uma linha/projeto com esse nome" }, { status: 409 })
+    const alvo = normalizarNome(nome)
+    if (outras.some((l) => normalizarNome(l.nome) === alvo)) {
+      return NextResponse.json({ error: "Já existe uma linha/projeto com esse nome" }, { status: 409 })
+    }
     data.nome = nome
   }
   if (body.descricao !== undefined) data.descricao = (body.descricao as string)?.trim() || null

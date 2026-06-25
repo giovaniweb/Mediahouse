@@ -4,6 +4,8 @@ import { getWhatsappConfig } from "@/lib/whatsapp"
 
 // POST /api/whatsapp/admin-action — ações administrativas (temporário, super-admin via env secret)
 export async function POST(req: NextRequest) {
+  // Rota administrativa de debug — desativada em produção (evita fallback Contourline).
+  if (process.env.NODE_ENV === "production") return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   try {
     const body = await req.json()
     const { secret, action, ...params } = body

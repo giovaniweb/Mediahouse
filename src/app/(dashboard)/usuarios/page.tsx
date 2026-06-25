@@ -21,6 +21,12 @@ const TIPO_LABEL: Record<string, string> = {
   designer: "Designer", gestor_eventos: "Gestor de Eventos",
   analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego", auxiliar_admin: "Auxiliar Admin",
 }
+const CATEGORIA_LABEL: Record<string, string> = {
+  interna: "Equipe interna", solicitante: "Solicitante", externo: "Profissional externo", sistema: "Sistema / Teste",
+}
+const AREA_LABEL: Record<string, string> = {
+  audiovisual: "Audiovisual", growth: "Growth", eventos: "Eventos",
+}
 
 const TIPO_COLOR: Record<string, string> = {
   admin: "bg-purple-500/10 text-purple-400 border-purple-800",
@@ -538,9 +544,10 @@ export default function UsuariosPage() {
   const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string } | null>(null)
   const [mesclarModal, setMesclarModal] = useState<MesclarModal | null>(null)
 
-  // Novo Usuário form
+  // Nova Pessoa form (categoria/função/áreas além do básico)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
+  const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "", categoria: "interna", funcaoProfissional: "", areas: [] as string[] })
+  const toggleFormArea = (a: string) => setForm(f => ({ ...f, areas: f.areas.includes(a) ? f.areas.filter(x => x !== a) : [...f.areas, a] }))
   const [loading, setLoading] = useState(false)
   const [conflito, setConflito] = useState<{ id: string; nome: string; email: string | null; telefone: string | null } | null>(null)
   const [adicionandoEmail, setAdicionandoEmail] = useState(false)
@@ -586,10 +593,10 @@ export default function UsuariosPage() {
         return
       }
       if (!res.ok) throw new Error(json.error)
-      toast.success("Usuário criado!")
+      toast.success("Pessoa criada!")
       setShowForm(false)
       setConflito(null)
-      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
+      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "", categoria: "interna", funcaoProfissional: "", areas: [] })
       mutate()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar usuário")
@@ -609,7 +616,7 @@ export default function UsuariosPage() {
       toast.success("E-mail adicionado ao cadastro existente!")
       setShowForm(false)
       setConflito(null)
-      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "" })
+      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "", categoria: "interna", funcaoProfissional: "", areas: [] })
       mutate()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao adicionar e-mail")
@@ -811,7 +818,7 @@ export default function UsuariosPage() {
         {showForm && subTab === "sistema" && (
           <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-zinc-100">Novo Usuário</p>
+              <p className="text-sm font-semibold text-zinc-100">Nova Pessoa</p>
               <button onClick={() => { setShowForm(false); setConflito(null) }} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
               </button>
@@ -833,7 +840,7 @@ export default function UsuariosPage() {
                   type="password" value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Tipo *</label>
+                <label className="text-xs text-zinc-400 block mb-1">Papel / acesso *</label>
                 <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
                   {TIPO_OPTS.map(t => <option key={t} value={t}>{TIPO_LABEL[t] ?? t}</option>)}
@@ -843,6 +850,32 @@ export default function UsuariosPage() {
                 <label className="text-xs text-zinc-400 block mb-1">Telefone / WhatsApp</label>
                 <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} placeholder="+55 11 99999-9999" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Categoria</label>
+                <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                  value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}>
+                  {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
+                <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                  value={form.funcaoProfissional} onChange={e => setForm(f => ({ ...f, funcaoProfissional: e.target.value }))}>
+                  <option value="">— Não definida —</option>
+                  {FUNCOES.map(fn => <option key={fn} value={fn}>{FUNCAO_LABEL[fn] ?? fn}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-zinc-400 block mb-1">Áreas de atuação</label>
+                <div className="flex flex-wrap gap-2">
+                  {AREAS.map(a => (
+                    <button key={a.value} type="button" onClick={() => toggleFormArea(a.value)}
+                      className={`text-xs px-2.5 py-1 rounded-full border ${form.areas.includes(a.value) ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -883,7 +916,7 @@ export default function UsuariosPage() {
                 disabled={loading || !form.nome.trim() || !form.senha || !form.email}
                 className="bg-purple-600 hover:bg-purple-700 text-white text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-colors"
               >
-                {loading ? "Criando..." : "Criar Usuário"}
+                {loading ? "Criando..." : "Criar Pessoa"}
               </button>
               <button onClick={() => { setShowForm(false); setConflito(null) }} className="text-sm px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors">
                 Cancelar
@@ -900,7 +933,8 @@ export default function UsuariosPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">NOME</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">E-MAIL / WHATSAPP</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">TIPO</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">CATEGORIA / ÁREAS</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">PAPEL</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500">STATUS</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-zinc-500">AÇÕES</th>
                 </tr>
@@ -921,6 +955,14 @@ export default function UsuariosPage() {
                     <td className="px-4 py-3">
                       <p className="text-xs text-zinc-400">{u.email || <span className="text-zinc-600 italic">sem e-mail</span>}</p>
                       {u.telefone && <p className="text-xs text-zinc-600 mt-0.5">{u.telefone}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border bg-zinc-800 text-zinc-300 border-zinc-700">
+                        {CATEGORIA_LABEL[u.categoria ?? "interna"] ?? u.categoria}
+                      </span>
+                      {(u.areas?.length ?? 0) > 0 && (
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{(u.areas ?? []).map(a => AREA_LABEL[a] ?? a).join(" · ")}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", TIPO_COLOR[u.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>

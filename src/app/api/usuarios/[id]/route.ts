@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId } from "@/lib/org"
+import { getOrgId, semOrg } from "@/lib/org"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
@@ -70,7 +70,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ usuario })
 }
 
-// DELETE /api/usuarios/[id] — desativa usuário (admin/gestor); não apaga do banco
+// DELETE /api/usuarios/[id] — desativa pessoa na ORGANIZAÇÃO ATIVA (admin/gestor).
+// Se a pessoa pertence só a esta org: inativa a conta global. Se pertence a mais de
+// uma org: remove apenas o vínculo desta org (não afeta outras empresas).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -80,16 +82,32 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!["admin", "gestor"].includes(session.user.tipo)) {
     return NextResponse.json({ error: "Sem permissão para desativar usuários" }, { status: 403 })
   }
-
   if (session.user.id === id) {
     return NextResponse.json({ error: "Não é possível desativar sua própria conta aqui" }, { status: 400 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const usuario = await prisma.usuario.update({
-    where: { id },
-    data: { status: "inativo" },
-    select: { id: true, nome: true, status: true },
+  // Só desativa quem pertence à organização ativa
+  const membership = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } },
+    select: { id: true },
   })
+  if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
-  return NextResponse.json({ usuario })
+  const totalOrgs = await prisma.usuarioOrganizacao.count({ where: { usuarioId: id } })
+
+  if (totalOrgs <= 1) {
+    const usuario = await prisma.usuario.update({
+      where: { id },
+      data: { status: "inativo" },
+      select: { id: true, nome: true, status: true },
+    })
+    return NextResponse.json({ usuario, escopo: "global" })
+  }
+
+  // Pertence a outras empresas → remove só o vínculo desta org
+  await prisma.usuarioOrganizacao.delete({ where: { id: membership.id } })
+  const usuario = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, status: true } })
+  return NextResponse.json({ usuario, escopo: "organizacao" })
 }
