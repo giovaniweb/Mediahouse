@@ -22,6 +22,10 @@ const schema = z.object({
   clienteFinalNome: z.string().optional(),
   clienteFinalTelefone: z.string().optional(),
   clienteFinalEmail: z.string().optional(),
+  // O que o cliente precisa → roteia a área correta (sem linguagem interna)
+  tipoSolicitacao: z.enum(["video", "conteudo", "cobertura"]).optional(),
+  objetivo: z.string().optional(),
+  detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
 })
 
 function gerarCodigo(): string {
@@ -82,8 +86,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const isCobertura = data.tipoVideo === "cobertura_evento"
-  const departamento = isCobertura ? "eventos" : "outros"
+  // Roteia a área/departamento conforme o que o cliente escolheu ("O que você precisa?")
+  const isCobertura = data.tipoSolicitacao === "cobertura" || data.tipoVideo === "cobertura_evento"
+  const isConteudo = data.tipoSolicitacao === "conteudo"
+  const area: "audiovisual" | "design" = isConteudo ? "design" : "audiovisual"
+  const departamento = isConteudo ? "growth" : isCobertura ? "eventos" : "outros"
   const peso = calcularPeso(data.tipoVideo, "normal")
 
   // Normaliza telefone do solicitante para WhatsApp
@@ -109,6 +116,9 @@ export async function POST(req: NextRequest) {
       titulo: data.titulo,
       descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : ""),
       departamento,
+      area,
+      objetivo: data.objetivo || undefined,
+      detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
       tipoVideo: data.tipoVideo,
       cidade: data.cidade || "N/A",
       prioridade: "normal",

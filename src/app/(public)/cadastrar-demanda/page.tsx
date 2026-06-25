@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Film, Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
-  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check,
+  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles,
 } from "lucide-react"
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -73,7 +73,9 @@ export default function CadastrarDemandaPage() {
   const [empresa, setEmpresa] = useState("")
 
   // ── Tipo ──────────────────────────────────────────────────────────
-  const [tipo, setTipo] = useState<"video" | "cobertura" | null>(null)
+  const [tipo, setTipo] = useState<"video" | "conteudo" | "cobertura" | null>(null)
+  const [tipoConteudo, setTipoConteudo] = useState("post")
+  const [objetivo, setObjetivo] = useState("")
 
   // ── Campos comuns ─────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
@@ -178,6 +180,7 @@ export default function CadastrarDemandaPage() {
     if (step === 1) return !!tipo
     if (step === 2) {
       if (tipo === "video") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!tipoVideo
+      if (tipo === "conteudo") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!tipoConteudo
       if (tipo === "cobertura") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!cidade.trim() && !!localEvento.trim() && !!dataEvento
     }
     return true
@@ -218,7 +221,10 @@ export default function CadastrarDemandaPage() {
         empresa: empresa || undefined,
         titulo,
         descricao,
-        tipoVideo: tipo === "cobertura" ? "cobertura_evento" : tipoVideo,
+        tipoSolicitacao: tipo ?? undefined,
+        tipoVideo: tipo === "cobertura" ? "cobertura_evento" : tipo === "conteudo" ? tipoConteudo : tipoVideo,
+        objetivo: objetivo || undefined,
+        ...(tipo === "conteudo" && objetivo ? { detalhesEntrega: { "Objetivo": objetivo } } : {}),
         cidade: cidade || "N/A",
         dataLimite: dataLimite || undefined,
         dataEvento: dataEvento ? `${dataEvento}T${horaEvento || "09:00"}` : undefined,
@@ -402,7 +408,7 @@ export default function CadastrarDemandaPage() {
         {step === 1 && (
           <div className="space-y-5">
             <h2 className="text-lg font-semibold text-white text-center">O que você precisa?</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
                 type="button"
                 onClick={() => setTipo("video")}
@@ -422,6 +428,28 @@ export default function CadastrarDemandaPage() {
                 <h3 className="text-base font-semibold text-white mb-1">Vídeo</h3>
                 <p className="text-sm text-zinc-400">
                   Reels, YouTube, treinamento, institucional, apresentação de equipamento...
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipo("conteudo")}
+                className={cn(
+                  "p-6 rounded-2xl border-2 text-left transition-all group",
+                  tipo === "conteudo"
+                    ? "border-indigo-500 bg-indigo-500/10"
+                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+                )}
+              >
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
+                  tipo === "conteudo" ? "bg-indigo-500/20 text-indigo-400" : "bg-zinc-800 text-zinc-400"
+                )}>
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-semibold text-white mb-1">Conteúdo</h3>
+                <p className="text-sm text-zinc-400">
+                  Post, story, reels, carrossel, e-mail, criativo de tráfego, arte gráfica...
                 </p>
               </button>
 
@@ -481,6 +509,57 @@ export default function CadastrarDemandaPage() {
                 <option value="tutorial">📝 Tutorial</option>
                 <option value="outro">📦 Outro</option>
               </select>
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Prazo desejado">
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-3.5 w-4 h-4 text-zinc-500" />
+                  <input type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)} className={cn(inputClass, "pl-10")} />
+                </div>
+              </Field>
+              <Field label="Referência (link)">
+                <div className="relative">
+                  <Link2 className="absolute left-3 top-3.5 w-4 h-4 text-zinc-500" />
+                  <input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="https://..." className={cn(inputClass, "pl-10")} />
+                </div>
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+           STEP 2 — Detalhes (Conteúdo / Growth)
+           ═══════════════════════════════════════════════════════════ */}
+        {step === 2 && tipo === "conteudo" && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h2 className="font-semibold text-white">Detalhes do Conteúdo</h2>
+
+            <Field label="Título" required error={errors.titulo}>
+              <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Carrossel de lançamento" className={inputClass} />
+            </Field>
+
+            <Field label="Tipo de conteúdo" required>
+              <select value={tipoConteudo} onChange={e => setTipoConteudo(e.target.value)} className={selectClass}>
+                <option value="post">Post feed</option>
+                <option value="story">Story</option>
+                <option value="reels">Reels</option>
+                <option value="carrossel">Carrossel</option>
+                <option value="email_marketing">E-mail marketing</option>
+                <option value="criativo_trafego">Criativo para tráfego</option>
+                <option value="landing_copy">Landing page / copy</option>
+                <option value="material_grafico">Material gráfico</option>
+              </select>
+            </Field>
+
+            <Field label="Objetivo">
+              <input value={objetivo} onChange={e => setObjetivo(e.target.value)} placeholder="Ex: gerar leads, engajamento, vendas..." className={inputClass} />
+            </Field>
+
+            <Field label="Briefing / copy" required error={errors.descricao}>
+              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={4}
+                placeholder="Mensagem principal, tom, público, o que não pode faltar, copy pronta (se houver)..."
+                className={inputClass} />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
