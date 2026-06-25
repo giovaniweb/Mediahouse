@@ -49,6 +49,88 @@ const STATUS_LABEL: Record<string, string> = {
   expirado: "Expirado",
 }
 
+const GROWTH_STATUS_LABEL: Record<string, string> = {
+  videomaker_notificado: "Responsável Notificado",
+  videomaker_aceitou: "Responsável Aceitou",
+  videomaker_recusou: "Responsável Recusou",
+  captacao_agendada: "Briefing Agendado",
+  captacao_realizada: "Briefing Concluído",
+  brutos_enviados: "Materiais Enviados",
+  editor_atribuido: "Responsável Atribuído",
+  fila_edicao: "Fila de Criação",
+  editando: "Em Criação",
+  edicao_finalizada: "Criativo Finalizado",
+  revisao_pendente: "Revisão Pendente",
+  aguardando_aprovacao_cliente: "Aguardando Aprovação",
+  aprovado_cliente: "Aprovado pelo Cliente",
+  reprovado_cliente: "Ajuste Solicitado",
+  postagem_pendente: "Programado",
+  postado: "Publicado",
+  entregue_cliente: "Finalizado",
+}
+
+function isGrowthDemand(d?: { area?: string | null; departamento?: string | null }) {
+  const area = String(d?.area ?? "").toLowerCase()
+  const departamento = String(d?.departamento ?? "").toLowerCase()
+  return area === "design" || departamento === "growth"
+}
+
+function statusLabel(status: string, growth: boolean) {
+  return (growth ? GROWTH_STATUS_LABEL[status] : undefined) ?? STATUS_LABEL[status] ?? status
+}
+
+function isImageUrl(url: string) {
+  return /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
+}
+
+function getDemandCopy(growth: boolean) {
+  return growth
+    ? {
+        teamTitle: "Equipe Growth",
+        finalTitle: "Arquivos finais",
+        finalSingle: "Arquivo final",
+        rawTitle: "Materiais / Referências",
+        rawAction: "+ URL dos materiais (Drive)",
+        rawSaved: "✅ URL dos materiais salva!",
+        removeFinal: "este arquivo final",
+        uploadTitle: "Entrega",
+        uploadButton: "🚀 ✨ Enviar Arte/Criativo para Aprovação",
+        addAnother: "Adicionar outro arquivo",
+        sentToast: "✅ Criativo enviado! Link de aprovação (30 dias) enviado ao solicitante.",
+        addedToast: "Arquivo adicionado!",
+        missingFinal: "Nenhum arquivo final encontrado. Faça upload primeiro.",
+        progressHint: "Upload → gera link 30 dias → WhatsApp ao solicitante",
+        viewAction: "Visualizar",
+        downloadTitle: "Baixar arquivo",
+        removeTitle: "Remover arquivo",
+        fileAccept: "image/*,.pdf,.zip,.psd,.ai,.fig,.svg,.webp,.png,.jpg,.jpeg,.mp4,.mov",
+        contentTypeFallback: "application/octet-stream",
+        noInline: "Não é possível visualizar inline.",
+      }
+    : {
+        teamTitle: "Equipe",
+        finalTitle: "Vídeos Finais",
+        finalSingle: "Vídeo Final",
+        rawTitle: "Brutos",
+        rawAction: "+ URL dos Brutos (Drive)",
+        rawSaved: "✅ URL dos brutos salva!",
+        removeFinal: "este vídeo final",
+        uploadTitle: "Upload",
+        uploadButton: "🚀 ✨ Enviar Vídeo para Aprovação",
+        addAnother: "Adicionar outro vídeo",
+        sentToast: "✅ Vídeo enviado! Link de aprovação (30 dias) enviado ao solicitante.",
+        addedToast: "Vídeo adicionado!",
+        missingFinal: "Nenhum vídeo final encontrado. Faça upload primeiro.",
+        progressHint: "Drive → gera link 30 dias → WhatsApp ao solicitante",
+        viewAction: "Assistir",
+        downloadTitle: "Baixar vídeo",
+        removeTitle: "Remover vídeo",
+        fileAccept: "video/*,.zip",
+        contentTypeFallback: "video/mp4",
+        noInline: "Não é possível reproduzir inline.",
+      }
+}
+
 const STATUS_COLOR: Record<string, string> = {
   editando: "bg-purple-500/20 text-purple-300 border-purple-500/30",
   edicao_finalizada: "bg-blue-500/20 text-blue-300 border-blue-500/30",
@@ -89,6 +171,8 @@ function SidebarSection({ title, icon, children }: { title: string; icon: React.
 export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const { data, mutate } = useSWR(demandaId ? `/api/demandas/${demandaId}` : null, fetcher)
   const demanda = data?.demanda
+  const isGrowth = isGrowthDemand(demanda)
+  const copy = getDemandCopy(isGrowth)
 
   // ── Edição inline ─────────────────────────────────────────────────────────
   const { data: session } = useSession()
@@ -182,7 +266,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   // o servidor transfere automaticamente para o Google Drive (fluxo no [token]/route.ts).
   async function uploadPresigned(file: File): Promise<string> {
     if (!demandaId) throw new Error("demandaId ausente")
-    const contentType = file.type || "video/mp4"
+    const contentType = file.type || copy.contentTypeFallback
 
     // 1. Busca URL presigned do Supabase
     const urlRes = await fetch(
@@ -229,7 +313,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
       })
       setBrutosUrlInput("")
       setShowBrutosInput(false)
-      toast.success("✅ URL dos brutos salva!")
+      toast.success(copy.rawSaved)
       mutate()
     } catch {
       toast.error("Erro ao salvar URL")
@@ -239,7 +323,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   }
 
   async function deleteLink(tipo: "brutos" | "final", arquivoId?: string) {
-    if (!confirm(`Remover o link de ${tipo === "brutos" ? "brutos" : "vídeo final"}?`)) return
+    if (!confirm(`Remover o link de ${tipo === "brutos" ? copy.rawTitle.toLowerCase() : copy.removeFinal}?`)) return
     setDeletingLink(tipo)
     try {
       await fetch(`/api/demandas/${demandaId}/upload-video`, {
@@ -261,7 +345,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     const videoUrl = ((demanda.arquivos ?? []) as Array<{ tipoArquivo: string; url: string }>)
       .find(a => a.tipoArquivo === "final")?.url ?? demanda.linkFinal
     if (!videoUrl) {
-      toast.error("Nenhum vídeo final encontrado. Faça upload primeiro.")
+      toast.error(copy.missingFinal)
       return
     }
     setGerandoLink(true)
@@ -323,7 +407,8 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     return null // for direct mp4 we use <video> element
   }
 
-  function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "external"; embedUrl: string } {
+  function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "image" | "external"; embedUrl: string } {
+    if (isImageUrl(url)) return { type: "image", embedUrl: url }
     if (url.includes("youtu.be/")) {
       const id = url.split("youtu.be/")[1]?.split("?")[0]
       return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
@@ -348,7 +433,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     setUploadingAddVideo(true)
     setUploadProgressAdd(0)
     try {
-      const contentType = file.type || "video/mp4"
+      const contentType = file.type || copy.contentTypeFallback
       const urlRes = await fetch(
         `/api/demandas/${demandaId}/upload-url?tipo=final&contentType=${encodeURIComponent(contentType)}`
       )
@@ -375,10 +460,10 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: publicUrl, tipo: "final" }),
       })
-      toast.success("Vídeo adicionado!")
+      toast.success(copy.addedToast)
       mutate()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao adicionar vídeo")
+      toast.error(e instanceof Error ? e.message : "Erro ao adicionar arquivo")
     } finally {
       setUploadingAddVideo(false)
       setUploadProgressAdd(0)
@@ -406,7 +491,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ statusInterno: "revisao_pendente", origem: "manual" }),
       })
-      toast.success("✅ Vídeo enviado! Link de aprovação (30 dias) enviado ao solicitante.")
+      toast.success(copy.sentToast)
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -501,7 +586,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                   </h2>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", statusColor)}>
-                      {STATUS_LABEL[demanda.statusInterno] ?? demanda.statusInterno}
+                      {statusLabel(demanda.statusInterno, isGrowth)}
                     </span>
                     {canEdit ? (
                       <span className="text-xs">
@@ -572,13 +657,13 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     <Link2 className="w-3 h-3" /> Links
                   </p>
                   <div className="space-y-2">
-                    {/* Brutos — apenas URL (Drive) */}
+                    {/* Materiais/Brutos — apenas URL (Drive) */}
                     {demanda.linkBrutos ? (
                       <div className="flex items-center gap-2">
                         <a href={demanda.linkBrutos} target="_blank" rel="noreferrer"
                           className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 hover:underline flex-1 min-w-0">
                           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">📁 Brutos</span>
+                          <span className="truncate">📁 {copy.rawTitle}</span>
                         </a>
                         <button onClick={() => deleteLink("brutos")} disabled={!!deletingLink}
                           title="Remover link" className="text-zinc-600 hover:text-red-400 transition-colors shrink-0 disabled:opacity-40">
@@ -606,11 +691,11 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     ) : (
                       <button onClick={() => setShowBrutosInput(true)}
                         className="text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-1 transition-colors">
-                        + URL dos Brutos (Drive)
+                        {copy.rawAction}
                       </button>
                     )}
 
-                    {/* Vídeos Finais — lista multi-vídeo */}
+                    {/* Arquivos finais — lista multi-arquivo */}
                     {(() => {
                       const videosFinais = ((demanda.arquivos ?? []) as Array<{ id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null }>)
                         .filter(a => a.tipoArquivo === "final")
@@ -623,7 +708,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         <div className="space-y-1.5">
                           {/* Título com contador */}
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-zinc-400">🎬 Vídeos Finais</span>
+                            <span className="text-xs font-medium text-zinc-400">{isGrowth ? "🎨" : "🎬"} {copy.finalTitle}</span>
                             {videosFinais.length > 0 && (
                               <span className="bg-purple-600/20 text-purple-300 border border-purple-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                                 {videosFinais.length}
@@ -634,12 +719,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                           {/* Lista de arquivos */}
                           {temArquivos && videosFinais.map(arq => {
                             const thumbUrl = getThumbUrl(arq.url)
+                            const imageUrl = isImageUrl(arq.url)
                             return (
                               <div key={arq.id} className="space-y-1.5">
                                 {/* Thumbnail clicável para player */}
                                 <div className="relative rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
                                   onClick={() => setPlayerUrl(arq.url)}>
-                                  {thumbUrl ? (
+                                  {imageUrl ? (
+                                    <img src={arq.url} alt={copy.finalSingle} className="w-full h-full object-cover" />
+                                  ) : thumbUrl ? (
                                     <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
                                   ) : (
                                     <video src={arq.url} preload="metadata" muted className="w-full h-full object-cover"
@@ -670,15 +758,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                                 <div className="flex items-center gap-1.5">
                                   <button onClick={() => setPlayerUrl(arq.url)}
                                     className="flex-1 flex items-center justify-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white py-1.5 rounded-lg transition-colors">
-                                    <Play className="w-3 h-3" /> Assistir
+                                    <Play className="w-3 h-3" /> {copy.viewAction}
                                   </button>
                                   <a href={getDownloadUrl(arq.url)} target="_blank" rel="noreferrer"
-                                    onClick={e => e.stopPropagation()} title="Baixar vídeo"
+                                    onClick={e => e.stopPropagation()} title={copy.downloadTitle}
                                     className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-blue-900/60 border border-zinc-700 hover:border-blue-700 text-zinc-400 hover:text-blue-400 py-1.5 px-2.5 rounded-lg transition-colors">
                                     <Download className="w-3 h-3" />
                                   </a>
                                   <button onClick={e => { e.stopPropagation(); deleteLink("final", arq.id) }}
-                                    disabled={!!deletingLink} title="Remover vídeo"
+                                    disabled={!!deletingLink} title={copy.removeTitle}
                                     className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-red-900/60 border border-zinc-700 hover:border-red-700 text-zinc-400 hover:text-red-400 py-1.5 px-2.5 rounded-lg transition-colors disabled:opacity-30">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
@@ -693,7 +781,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                               <input
                                 ref={fileRefAddVideo}
                                 type="file"
-                                accept="video/*,.zip"
+                                accept={copy.fileAccept}
                                 className="hidden"
                                 onChange={e => { const f = e.target.files?.[0]; if (f) handleAdicionarVideo(f); e.target.value = "" }}
                               />
@@ -711,7 +799,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                                 <button
                                   onClick={() => fileRefAddVideo.current?.click()}
                                   className="w-full flex items-center justify-center gap-1.5 text-xs border border-dashed border-zinc-600 hover:border-purple-500/60 text-zinc-500 hover:text-purple-300 rounded-lg py-2 transition-colors">
-                                  <Plus className="w-3.5 h-3.5" /> Adicionar outro vídeo
+                                  <Plus className="w-3.5 h-3.5" /> {copy.addAnother}
                                 </button>
                               )}
                             </div>
@@ -720,12 +808,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                           {/* Fallback legado */}
                           {temLinkLegado && (() => {
                             const thumbUrl = getThumbUrl(demanda.linkFinal!)
+                            const imageUrl = isImageUrl(demanda.linkFinal!)
                             return (
                               <div className="space-y-1.5">
                                 {/* Thumbnail clicável para player */}
                                 <div className="relative rounded-xl overflow-hidden cursor-pointer aspect-video bg-zinc-800 border border-zinc-700/60 hover:border-purple-500/60 transition-colors"
                                   onClick={() => setPlayerUrl(demanda.linkFinal!)}>
-                                  {thumbUrl ? (
+                                  {imageUrl ? (
+                                    <img src={demanda.linkFinal!} alt={copy.finalSingle} className="w-full h-full object-cover" />
+                                  ) : thumbUrl ? (
                                     <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />
                                   ) : (
                                     <video src={demanda.linkFinal!} preload="metadata" muted className="w-full h-full object-cover"
@@ -738,7 +829,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                                     </div>
                                   </div>
                                   <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                                    <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">🎬 Vídeo Final</span>
+                                    <span className="text-[11px] text-white/80 font-medium bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded">{isGrowth ? "🎨" : "🎬"} {copy.finalSingle}</span>
                                     {(() => { const badge = getStorageBadge(demanda.linkFinal!); return badge ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded backdrop-blur-sm ${badge.cls}`}>{badge.icon} {badge.label}</span> : null })()}
                                   </div>
                                 </div>
@@ -746,15 +837,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                                 <div className="flex items-center gap-1.5">
                                   <button onClick={() => setPlayerUrl(demanda.linkFinal!)}
                                     className="flex-1 flex items-center justify-center gap-1 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white py-1.5 rounded-lg transition-colors">
-                                    <Play className="w-3 h-3" /> Assistir
+                                    <Play className="w-3 h-3" /> {copy.viewAction}
                                   </button>
                                   <a href={getDownloadUrl(demanda.linkFinal!)} target="_blank" rel="noreferrer"
-                                    onClick={e => e.stopPropagation()} title="Baixar vídeo"
+                                    onClick={e => e.stopPropagation()} title={copy.downloadTitle}
                                     className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-blue-900/60 border border-zinc-700 hover:border-blue-700 text-zinc-400 hover:text-blue-400 py-1.5 px-2.5 rounded-lg transition-colors">
                                     <Download className="w-3 h-3" />
                                   </a>
                                   <button onClick={e => { e.stopPropagation(); deleteLink("final") }} disabled={!!deletingLink}
-                                    title="Remover vídeo"
+                                    title={copy.removeTitle}
                                     className="flex items-center justify-center text-xs bg-zinc-800 hover:bg-red-900/60 border border-zinc-700 hover:border-red-700 text-zinc-400 hover:text-red-400 py-1.5 px-2.5 rounded-lg transition-colors disabled:opacity-30">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
@@ -860,15 +951,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                   </div>
                 </div>
 
-                {/* Upload — apenas vídeo final (brutos = Drive URL acima) */}
+                {/* Upload — arquivo final (materiais/brutos = Drive URL acima) */}
                 <div>
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
-                    <Upload className="w-3 h-3" /> Upload
+                    <Upload className="w-3 h-3" /> {copy.uploadTitle}
                   </p>
                   <input
                     ref={fileRefAprovacao}
                     type="file"
-                    accept="video/*,.zip"
+                    accept={copy.fileAccept}
                     className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleEnviarParaAprovacao(f); e.target.value = "" }}
                   />
@@ -882,7 +973,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                       ? uploadProgress > 0 && uploadProgress < 100
                         ? `Enviando… ${uploadProgress}%`
                         : "Finalizando…"
-                      : "🚀 ✨ Enviar Vídeo para Aprovação"}
+                      : copy.uploadButton}
                   </button>
                   {enviandoAprovacao && uploadProgress > 0 && (
                     <div className="mt-1.5 w-full bg-zinc-700 rounded-full h-1.5 overflow-hidden">
@@ -892,7 +983,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                       />
                     </div>
                   )}
-                  <p className="text-[10px] text-zinc-600 text-center mt-1">Drive → gera link 30 dias → WhatsApp ao solicitante</p>
+                  <p className="text-[10px] text-zinc-600 text-center mt-1">{copy.progressHint}</p>
 
                   {/* Gerar link de aprovação para vídeo já existente (sem re-upload) */}
                   {((demanda.linkFinal || ((demanda.arquivos ?? []) as Array<{ tipoArquivo: string }>).some(a => a.tipoArquivo === "final")) &&
@@ -962,7 +1053,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
               <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
 
                 {/* Equipe */}
-                <SidebarSection title="Equipe" icon={<User className="w-3 h-3" />}>
+                <SidebarSection title={copy.teamTitle} icon={<User className="w-3 h-3" />}>
                   <div className="space-y-3">
                     {demanda.solicitante && (
                       <div>
@@ -979,7 +1070,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         <p className="text-sm text-zinc-300 font-medium">{demanda.nomeSolicitante}</p>
                       </div>
                     )}
-                    {demanda.videomaker && (
+                    {!isGrowth && demanda.videomaker && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
                           <Clapperboard className="w-3 h-3" /> Videomaker
@@ -990,7 +1081,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         )}
                       </div>
                     )}
-                    {demanda.editor && (
+                    {!isGrowth && demanda.editor && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
                           <Film className="w-3 h-3" /> Editor
@@ -1075,21 +1166,26 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                   }
                   return (
                     <SidebarSection title={(demanda.produtos?.length ?? 0) > 1 ? "Produtos" : "Produto"} icon={<Package className="w-3 h-3" />}>
+                      {/* Selecionados como chips removíveis */}
                       <div className="flex flex-wrap gap-1.5">
-                        {canEdit
-                          ? produtosLista.map((p) => (
-                              <button key={p.id} type="button" onClick={() => toggle(p.id)}
-                                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${vinculados.includes(p.id) ? "bg-sky-500/15 text-sky-300 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"}`}>
-                                {p.nome}
-                              </button>
-                            ))
-                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-                          : (demanda.produtos ?? []).map((dp: any, i: number) => (
-                              <span key={dp.produto?.id ?? i} className="inline-block text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
-                                {dp.produto?.nome ?? "—"}
-                              </span>
-                            ))}
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {(demanda.produtos ?? []).map((dp: any, i: number) => (
+                          <span key={dp.produto?.id ?? i} className="inline-flex items-center gap-1 text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
+                            {dp.produto?.nome ?? "—"}
+                            {canEdit && dp.produto?.id && (
+                              <button type="button" onClick={() => toggle(dp.produto.id)} className="text-zinc-500 hover:text-white leading-none">×</button>
+                            )}
+                          </span>
+                        ))}
                       </div>
+                      {/* Adicionar via lista (compacto) */}
+                      {canEdit && (
+                        <select value="" onChange={(e) => { if (e.target.value) toggle(e.target.value) }}
+                          className="mt-2 w-full bg-zinc-800 border border-zinc-700 rounded-md px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                          <option value="">+ Adicionar produto…</option>
+                          {produtosLista.filter((p) => !vinculados.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                        </select>
+                      )}
                     </SidebarSection>
                   )
                 })()}
@@ -1136,7 +1232,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                             {/* dot */}
                             <div className="absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full bg-zinc-700 border-2 border-zinc-600" />
                             <p className="text-xs text-zinc-300 font-medium leading-tight">
-                              {STATUS_LABEL[h.statusNovo] ?? h.statusNovo}
+                              {statusLabel(h.statusNovo, isGrowth)}
                             </p>
                             <p className="text-[11px] text-zinc-600 mt-0.5">
                               {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}

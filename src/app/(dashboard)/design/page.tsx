@@ -185,17 +185,26 @@ function NovoConteudoModal({ onClose, onCreated }: { onClose: () => void; onCrea
             )}
           </div>
 
-          {/* Produtos — multi-seleção em chips */}
+          {/* Produtos — adicionar por lista; selecionados viram chips removíveis */}
           {produtos.length > 0 && (
             <div><label className="block text-xs text-zinc-500 mb-1">Produtos vinculados</label>
-              <div className="flex flex-wrap gap-1.5">
-                {produtos.map((p) => (
-                  <button key={p.id} type="button" onClick={() => toggleProduto(p.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full border ${produtoIds.includes(p.id) ? "bg-sky-500/15 text-sky-300 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
-                    {p.nome}
-                  </button>
-                ))}
-              </div>
+              {produtoIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {produtoIds.map((id) => {
+                    const p = produtos.find((x) => x.id === id)
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-sky-500/15 text-sky-300 border-sky-500/30">
+                        {p?.nome ?? id}
+                        <button type="button" onClick={() => toggleProduto(id)} className="text-sky-300/70 hover:text-white leading-none">×</button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              <select value="" onChange={(e) => { if (e.target.value) toggleProduto(e.target.value) }} className={inputCls}>
+                <option value="">+ Adicionar produto…</option>
+                {produtos.filter((p) => !produtoIds.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
             </div>
           )}
 

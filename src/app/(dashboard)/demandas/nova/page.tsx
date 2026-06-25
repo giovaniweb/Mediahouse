@@ -388,15 +388,24 @@ export default function NovaDemandaPage() {
                 </Field>
 
                 {produtos.length > 0 && (
-                  <Field label="Produtos / Equipamentos" hint="Selecione um ou mais">
-                    <div className="flex flex-wrap gap-1.5">
-                      {produtos.map(p => (
-                        <button key={p.id} type="button" onClick={() => toggleProduto(p.id)}
-                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${produtoIds.includes(p.id) ? "bg-sky-500/15 text-sky-300 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"}`}>
-                          {p.nome}
-                        </button>
-                      ))}
-                    </div>
+                  <Field label="Produtos / Equipamentos" hint="Adicione um ou mais">
+                    {produtoIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {produtoIds.map(id => {
+                          const p = produtos.find(x => x.id === id)
+                          return (
+                            <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-sky-500/15 text-sky-300 border-sky-500/30">
+                              {p?.nome ?? id}
+                              <button type="button" onClick={() => toggleProduto(id)} className="text-sky-300/70 hover:text-white leading-none">×</button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <select value="" onChange={e => { if (e.target.value) toggleProduto(e.target.value) }} className={selectClass}>
+                      <option value="">+ Adicionar produto…</option>
+                      {produtos.filter(p => !produtoIds.includes(p.id)).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    </select>
                   </Field>
                 )}
               </div>
