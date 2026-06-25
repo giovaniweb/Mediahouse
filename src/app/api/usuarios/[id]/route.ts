@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { contarVinculos } from "@/lib/usuario-vinculos"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
@@ -88,7 +89,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  // Só desativa quem pertence à organização ativa
+  // Só desativa/remove quem pertence à organização ativa
   const membership = await prisma.usuarioOrganizacao.findUnique({
     where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } },
     select: { id: true },
@@ -96,7 +97,33 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
   const totalOrgs = await prisma.usuarioOrganizacao.count({ where: { usuarioId: id } })
+  const modo = req.nextUrl.searchParams.get("modo")
 
+  // ── HARD DELETE controlado: só para cadastro VAZIO (sem vínculos) ──────────
+  if (modo === "hard") {
+    const vinculos = await contarVinculos(id)
+    if (!vinculos.podeExcluir) {
+      return NextResponse.json(
+        { error: "Este usuário tem vínculos. Mescle com outro usuário antes de excluir.", vinculos, podeExcluir: false },
+        { status: 409 }
+      )
+    }
+    // Regra SaaS: pertence a mais de uma org → só super-admin pode apagar globalmente
+    if (totalOrgs > 1) {
+      const eu = await prisma.usuario.findUnique({ where: { id: session.user.id }, select: { superAdmin: true } })
+      if (!eu?.superAdmin) {
+        return NextResponse.json(
+          { error: "Usuário pertence a outras organizações. Exclusão global requer super-admin; aqui você pode apenas remover o vínculo desta empresa.", multiOrg: true },
+          { status: 403 }
+        )
+      }
+    }
+    // Sem vínculos → apaga Usuario; cascades cuidam de membership/permissões/sessões.
+    await prisma.usuario.delete({ where: { id } })
+    return NextResponse.json({ ok: true, hardDelete: true })
+  }
+
+  // ── SOFT (padrão): desativa global se só nesta org; senão remove só o vínculo ─
   if (totalOrgs <= 1) {
     const usuario = await prisma.usuario.update({
       where: { id },
@@ -105,8 +132,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     })
     return NextResponse.json({ usuario, escopo: "global" })
   }
-
-  // Pertence a outras empresas → remove só o vínculo desta org
   await prisma.usuarioOrganizacao.delete({ where: { id: membership.id } })
   const usuario = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, status: true } })
   return NextResponse.json({ usuario, escopo: "organizacao" })

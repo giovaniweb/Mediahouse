@@ -537,7 +537,8 @@ export default function UsuariosPage() {
     telefone?: string
     status: string
   } | null>(null)
-  const [deleteSistemaTarget, setDeleteSistemaTarget] = useState<{ id: string; nome: string } | null>(null)
+  type Vinculos = { demandas: number; historicos: number; comentarios: number; coberturas: number; eventos: number; profissional: number; memberships: number; total: number; podeExcluir: boolean }
+  const [deleteSistemaTarget, setDeleteSistemaTarget] = useState<{ id: string; nome: string; vinculos: Vinculos | null; carregando: boolean } | null>(null)
   const [deletingSistema, setDeletingSistema] = useState(false)
   const [promoverTipo, setPromoverTipo] = useState("operacao")
   const [loadingPromover, setLoadingPromover] = useState(false)
@@ -651,16 +652,27 @@ export default function UsuariosPage() {
     mutate()
   }
 
+  async function abrirExcluir(u: Usuario) {
+    setDeleteSistemaTarget({ id: u.id, nome: u.nome, vinculos: null, carregando: true })
+    try {
+      const r = await fetch(`/api/usuarios/${u.id}/vinculos`).then(x => x.json())
+      setDeleteSistemaTarget(t => t && t.id === u.id ? { ...t, vinculos: r.vinculos ?? null, carregando: false } : t)
+    } catch {
+      setDeleteSistemaTarget(t => t ? { ...t, carregando: false } : t)
+    }
+  }
+
+  // Hard delete só para cadastro vazio (a API revalida via ?modo=hard).
   async function excluirSistema() {
     if (!deleteSistemaTarget) return
     setDeletingSistema(true)
     try {
-      const res = await fetch(`/api/usuarios/${deleteSistemaTarget.id}`, { method: "DELETE" })
+      const res = await fetch(`/api/usuarios/${deleteSistemaTarget.id}?modo=hard`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => ({} as { error?: string }))
         throw new Error(err.error ?? "Erro ao excluir")
       }
-      toast.success(`${deleteSistemaTarget.nome} foi desativado!`)
+      toast.success(`${deleteSistemaTarget.nome} foi excluído definitivamente.`)
       setDeleteSistemaTarget(null)
       mutate()
     } catch (e: unknown) {
@@ -1033,11 +1045,11 @@ export default function UsuariosPage() {
                         >
                           {u.status === "ativo" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                         </button>
-                        {/* Excluir */}
+                        {/* Excluir cadastro vazio (checa vínculos) */}
                         <button
-                          onClick={() => setDeleteSistemaTarget({ id: u.id, nome: u.nome })}
+                          onClick={() => abrirExcluir(u)}
                           className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Excluir usuário"
+                          title="Excluir cadastro vazio"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1308,8 +1320,12 @@ export default function UsuariosPage() {
         />
       )}
 
-      {/* Modal confirmar exclusão (sistema) */}
-      {deleteSistemaTarget && (
+      {/* Modal excluir cadastro vazio / mesclar se tiver vínculos */}
+      {deleteSistemaTarget && (() => {
+        const v = deleteSistemaTarget.vinculos
+        const carregando = deleteSistemaTarget.carregando
+        const podeExcluir = !!v?.podeExcluir
+        return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => !deletingSistema && setDeleteSistemaTarget(null)}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4" onClick={ev => ev.stopPropagation()}>
             <div className="flex items-center gap-3">
@@ -1317,33 +1333,62 @@ export default function UsuariosPage() {
                 <Trash2 className="w-4 h-4 text-red-400" />
               </div>
               <div>
-                <p className="font-semibold text-white text-sm">Excluir usuário</p>
+                <p className="font-semibold text-white text-sm">Excluir cadastro vazio</p>
                 <p className="text-xs text-zinc-400">{deleteSistemaTarget.nome}</p>
               </div>
             </div>
-            <p className="text-sm text-zinc-300">
-              Isso desativa a conta de <strong>{deleteSistemaTarget.nome}</strong>. O usuário não poderá mais fazer login.
-            </p>
-            <p className="text-xs text-zinc-500">O histórico de demandas e registros são mantidos no sistema.</p>
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={excluirSistema}
-                disabled={deletingSistema}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {deletingSistema ? "Excluindo..." : "Sim, excluir"}
-              </button>
-              <button
-                onClick={() => setDeleteSistemaTarget(null)}
-                disabled={deletingSistema}
-                className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
+
+            {carregando ? (
+              <p className="text-sm text-zinc-400">Verificando vínculos…</p>
+            ) : podeExcluir ? (
+              <>
+                <p className="text-sm text-zinc-300">
+                  <strong>{deleteSistemaTarget.nome}</strong> não tem vínculos. A conta será <strong>excluída definitivamente</strong> (não é só desativar).
+                </p>
+                {(v?.memberships ?? 0) > 1 && (
+                  <p className="text-xs text-amber-400">Pertence a {v?.memberships} organizações — a exclusão global requer super-admin.</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={excluirSistema} disabled={deletingSistema}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
+                    {deletingSistema ? "Excluindo..." : "Excluir definitivamente"}
+                  </button>
+                  <button onClick={() => setDeleteSistemaTarget(null)} disabled={deletingSistema}
+                    className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+                  <p className="text-xs font-semibold text-amber-400 mb-1">Este usuário tem vínculos. Mescle com outro usuário antes de excluir.</p>
+                  <ul className="text-[11px] text-zinc-400 space-y-0.5">
+                    {!!v?.demandas && <li>• {v.demandas} demanda(s)</li>}
+                    {!!v?.comentarios && <li>• {v.comentarios} comentário(s)</li>}
+                    {!!v?.historicos && <li>• {v.historicos} registro(s) de histórico</li>}
+                    {!!v?.coberturas && <li>• {v.coberturas} vínculo(s) em coberturas</li>}
+                    {!!v?.eventos && <li>• {v.eventos} vínculo(s) em eventos</li>}
+                    {!!v?.profissional && <li>• {v.profissional} perfil profissional vinculado</li>}
+                  </ul>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => { const alvo = allUsuarios.find(x => x.id === deleteSistemaTarget.id); setDeleteSistemaTarget(null); if (alvo) abrirMesclar(alvo) }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                    <GitMerge className="w-4 h-4" /> Mesclar duplicado
+                  </button>
+                  <button onClick={() => setDeleteSistemaTarget(null)}
+                    className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {permUser && (
         <PermissoesModal
