@@ -7,11 +7,13 @@ import {
   ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy, Plus,
 } from "lucide-react"
 import useSWR from "swr"
+import { useSession } from "next-auth/react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { InlineEdit } from "@/components/demandas/InlineEdit"
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -87,6 +89,39 @@ function SidebarSection({ title, icon, children }: { title: string; icon: React.
 export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const { data, mutate } = useSWR(demandaId ? `/api/demandas/${demandaId}` : null, fetcher)
   const demanda = data?.demanda
+
+  // ── Edição inline ─────────────────────────────────────────────────────────
+  const { data: session } = useSession()
+  const meTipo = (session?.user as { tipo?: string } | undefined)?.tipo
+  const meId = (session?.user as { id?: string } | undefined)?.id
+  // Admin/gestor edita tudo; responsável/gestor da própria demanda edita campos operacionais.
+  const canEdit = !!demanda && (
+    meTipo === "admin" || meTipo === "gestor" ||
+    demanda.responsavel?.id === meId || demanda.gestor?.id === meId
+  )
+  // Listas para os selects (org-scoped). Carregadas só quando há demanda aberta + permissão.
+  const { data: respData } = useSWR(canEdit ? "/api/growth/responsaveis" : null, fetcher)
+  const { data: linhasData } = useSWR(canEdit ? "/api/growth/linhas-projetos" : null, fetcher)
+  const { data: produtosData } = useSWR(canEdit ? "/api/produtos" : null, fetcher)
+  const responsaveisOpts = [{ value: "", label: "— Sem responsável —" }, ...((respData?.responsaveis ?? []).map((r: { id: string; label: string }) => ({ value: r.id, label: r.label })))]
+  const linhasOpts = [{ value: "", label: "— Sem linha/projeto —" }, ...((linhasData?.linhas ?? []).map((l: { id: string; nome: string }) => ({ value: l.id, label: l.nome })))]
+  const produtosLista: { id: string; nome: string }[] = produtosData?.produtos ?? []
+
+  // PATCH parcial da demanda + revalida o SWR. Lança em erro (InlineEdit mostra "Erro").
+  async function salvarCampo(patch: Record<string, unknown>) {
+    const res = await fetch(`/api/demandas/${demandaId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Erro ao salvar") }
+    await mutate()
+  }
+  async function salvarProdutos(ids: string[]) {
+    const res = await fetch(`/api/demandas/${demandaId}/produto`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ produtoIds: ids }),
+    })
+    if (!res.ok) throw new Error("Erro ao salvar produtos")
+    await mutate()
+  }
 
   const [aprovandoAcao, setAprovandoAcao] = useState<"aprovar" | "reprovar" | null>(null)
   const [motivoReprova, setMotivoReprova] = useState("")
@@ -461,12 +496,23 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 {/* Título */}
                 <div>
                   <h2 className="text-xl font-bold text-zinc-100 leading-snug mb-3">
-                    {demanda.titulo?.trim() || <span className="italic text-zinc-500">(sem título)</span>}
+                    <InlineEdit value={demanda.titulo ?? ""} canEdit={canEdit} placeholder="(sem título)"
+                      onSave={(v) => salvarCampo({ titulo: v })} />
                   </h2>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", statusColor)}>
                       {STATUS_LABEL[demanda.statusInterno] ?? demanda.statusInterno}
                     </span>
+                    {canEdit ? (
+                      <span className="text-xs">
+                        <InlineEdit value={demanda.prioridade ?? "normal"} canEdit tipo="select"
+                          options={[{ value: "normal", label: "Normal" }, { value: "alta", label: "Alta" }, { value: "urgente", label: "Urgente" }]}
+                          display={<span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", prio.class)}>{prio.label}</span>}
+                          onSave={(v) => salvarCampo({ prioridade: v })} />
+                      </span>
+                    ) : (
+                      <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border", prio.class)}>{prio.label}</span>
+                    )}
                     {demanda.tipoVideo && (
                       <span className="text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 px-2.5 py-1 rounded-full">
                         {demanda.tipoVideo}
@@ -491,7 +537,15 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 </div>
 
                 {/* Descrição */}
-                {demanda.descricao?.trim() ? (
+                {canEdit ? (
+                  <div className="bg-zinc-800/50 rounded-xl p-4">
+                    <p className="text-[11px] text-zinc-500 mb-1">Descrição</p>
+                    <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">
+                      <InlineEdit value={demanda.descricao ?? ""} canEdit tipo="textarea" placeholder="Sem descrição — clique para adicionar"
+                        onSave={(v) => salvarCampo({ descricao: v })} />
+                    </div>
+                  </div>
+                ) : demanda.descricao?.trim() ? (
                   <div className="bg-zinc-800/50 rounded-xl p-4">
                     <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">
                       {demanda.descricao}
@@ -947,18 +1001,30 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         )}
                       </div>
                     )}
-                    {(demanda.responsavel || demanda.designer) && (
+                    {(canEdit || demanda.responsavel || demanda.designer) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
                           <User className="w-3 h-3" /> Responsável
                         </p>
-                        <p className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome}</p>
+                        {canEdit ? (
+                          <InlineEdit value={demanda.responsavel?.id ?? ""} canEdit tipo="select" options={responsaveisOpts}
+                            display={<span className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome ?? "— Sem responsável —"}</span>}
+                            onSave={(v) => salvarCampo({ responsavelId: v })} />
+                        ) : (
+                          <p className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome}</p>
+                        )}
                       </div>
                     )}
-                    {(demanda.linhaProjetoRef?.nome || demanda.linhaProjeto) && (
+                    {(canEdit || demanda.linhaProjetoRef?.nome || demanda.linhaProjeto) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5">Linha / Projeto</p>
-                        <p className="text-sm text-zinc-300 font-medium">{demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto}</p>
+                        {canEdit ? (
+                          <InlineEdit value={demanda.linhaProjetoRef?.id ?? ""} canEdit tipo="select" options={linhasOpts}
+                            display={<span className="text-sm text-zinc-300 font-medium">{demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto ?? "— Sem linha/projeto —"}</span>}
+                            onSave={(v) => salvarCampo({ linhaProjetoId: v })} />
+                        ) : (
+                          <p className="text-sm text-zinc-300 font-medium">{demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -967,13 +1033,19 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 {/* Datas */}
                 <SidebarSection title="Datas" icon={<Calendar className="w-3 h-3" />}>
                   <div className="space-y-2">
-                    {demanda.dataLimite && (
-                      <div className="flex items-center justify-between">
+                    {(canEdit || demanda.dataLimite) && (
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-zinc-500">Prazo</span>
-                        <span className={cn("text-xs font-semibold", isVencida ? "text-red-400" : "text-zinc-300")}>
-                          {format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR })}
-                          {isVencida && " ⚠️"}
-                        </span>
+                        {canEdit ? (
+                          <InlineEdit value={demanda.dataLimite ? new Date(demanda.dataLimite).toISOString().slice(0, 10) : ""} canEdit tipo="date"
+                            display={<span className={cn("text-xs font-semibold", isVencida ? "text-red-400" : "text-zinc-300")}>{demanda.dataLimite ? format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR }) : "definir"}{isVencida && " ⚠️"}</span>}
+                            onSave={(v) => salvarCampo({ dataLimite: v || null })} />
+                        ) : (
+                          <span className={cn("text-xs font-semibold", isVencida ? "text-red-400" : "text-zinc-300")}>
+                            {format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR })}
+                            {isVencida && " ⚠️"}
+                          </span>
+                        )}
                       </div>
                     )}
                     {demanda.dataCaptacao && (
@@ -993,19 +1065,34 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                   </div>
                 </SidebarSection>
 
-                {/* Produtos (multi) */}
-                {demanda.produtos?.length > 0 && (
-                  <SidebarSection title={demanda.produtos.length > 1 ? "Produtos" : "Produto"} icon={<Package className="w-3 h-3" />}>
-                    <div className="flex flex-wrap gap-1.5">
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {demanda.produtos.map((dp: any, i: number) => (
-                        <span key={dp.produto?.id ?? i} className="inline-block text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
-                          {dp.produto?.nome ?? "—"}
-                        </span>
-                      ))}
-                    </div>
-                  </SidebarSection>
-                )}
+                {/* Produtos (multi) — editável em chips quando há permissão */}
+                {(canEdit ? produtosLista.length > 0 : demanda.produtos?.length > 0) && (() => {
+                  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                  const vinculados: string[] = (demanda.produtos ?? []).map((dp: any) => dp.produto?.id).filter(Boolean)
+                  const toggle = (pid: string) => {
+                    const novos = vinculados.includes(pid) ? vinculados.filter(x => x !== pid) : [...vinculados, pid]
+                    salvarProdutos(novos).catch(() => toast.error("Erro ao salvar produtos"))
+                  }
+                  return (
+                    <SidebarSection title={(demanda.produtos?.length ?? 0) > 1 ? "Produtos" : "Produto"} icon={<Package className="w-3 h-3" />}>
+                      <div className="flex flex-wrap gap-1.5">
+                        {canEdit
+                          ? produtosLista.map((p) => (
+                              <button key={p.id} type="button" onClick={() => toggle(p.id)}
+                                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${vinculados.includes(p.id) ? "bg-sky-500/15 text-sky-300 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"}`}>
+                                {p.nome}
+                              </button>
+                            ))
+                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                          : (demanda.produtos ?? []).map((dp: any, i: number) => (
+                              <span key={dp.produto?.id ?? i} className="inline-block text-sm text-zinc-300 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
+                                {dp.produto?.nome ?? "—"}
+                              </span>
+                            ))}
+                      </div>
+                    </SidebarSection>
+                  )
+                })()}
 
                 {/* Detalhes da entrega (campos condicionais — Growth) */}
                 {demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (

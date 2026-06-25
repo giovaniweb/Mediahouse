@@ -499,11 +499,30 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Edição inline de responsável / linha-projeto: valida ownership por org (sem cross-org)
+  if (body.responsavelId) {
+    const membro = await prisma.usuario.findFirst({
+      where: { id: body.responsavelId, organizacoes: { some: { organizacaoId: guard.organizacaoId } } },
+      select: { id: true },
+    })
+    if (!membro) return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
+  }
+  if (body.linhaProjetoId) {
+    const linha = await prisma.linhaProjeto.findFirst({
+      where: { id: body.linhaProjetoId, organizacaoId: guard.organizacaoId },
+      select: { id: true },
+    })
+    if (!linha) return NextResponse.json({ error: "Linha/projeto inválida para esta organização" }, { status: 404 })
+  }
+
   const updateData: Record<string, any> = {
     titulo: body.titulo,
     descricao: body.descricao,
     cidade: body.cidade,
+    prioridade: body.prioridade,
     dataLimite: body.dataLimite ? new Date(body.dataLimite) : undefined,
+    ...(body.responsavelId !== undefined ? { responsavelId: body.responsavelId || null } : {}),
+    ...(body.linhaProjetoId !== undefined ? { linhaProjetoId: body.linhaProjetoId || null } : {}),
     dataCaptacao: body.dataCaptacao ? new Date(body.dataCaptacao) : undefined,
     videomakerId: body.videomakerId,
     editorId: body.editorId,
