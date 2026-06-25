@@ -187,6 +187,7 @@ model Usuario {
   demandasCriadas Demanda[]         @relation("Solicitante")
   demandasGeridas Demanda[]         @relation("Gestor")
   demandasResponsavel Demanda[]     @relation("Responsavel")
+  responsavelEm   DemandaResponsavel[]
   historicos      HistoricoStatus[]
   comentarios     Comentario[]
   sessions        Session[]
@@ -460,6 +461,7 @@ model Demanda {
   eventos            Evento[]
   custos             CustoVideomaker[]
   produtos           DemandaProduto[]
+  responsaveis       DemandaResponsavel[]
   checklistItens     ChecklistItem[]
   convites           ConviteVideomaker[]
   notasFiscais       NotaFiscalUpload[]
@@ -1062,6 +1064,20 @@ model DemandaProduto {
 
   @@unique([demandaId, produtoId])
   @@map("demanda_produto")
+}
+
+// Growth: múltiplos responsáveis por demanda (Usuario interno da org).
+model DemandaResponsavel {
+  id         String   @id @default(cuid())
+  demandaId  String
+  usuarioId  String
+  createdAt  DateTime @default(now())
+
+  demanda    Demanda  @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([demandaId, usuarioId])
+  @@map("demanda_responsavel")
 }
 
 // ─────────────────────────────────────────────
