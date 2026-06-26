@@ -38,8 +38,9 @@ const criarDemandaSchema = z.object({
   videomakerId: z.string().optional(),
   editorId: z.string().optional(),
   designerId: z.string().optional(),
-  // Growth: responsável (Usuario interno da org) + segmentação genérica
-  responsavelId: z.string().optional(),
+  // Growth: responsável(eis) interno(s) da org + segmentação genérica
+  responsavelId: z.string().optional(),            // legado (1 responsável)
+  responsavelIds: z.array(z.string()).optional(),  // múltiplos responsáveis (Growth)
   linhaProjeto: z.string().optional(),     // texto legado (compat)
   linhaProjetoId: z.string().optional(),   // referência principal (LinhaProjeto da org)
   // Cliente final (cobertura/entrega)
@@ -87,6 +88,9 @@ export async function GET(req: NextRequest) {
   let designerId = searchParams.get("designerId") ?? undefined
   let area = searchParams.get("area") ?? undefined
   const eventoGestaoId = searchParams.get("eventoGestaoId") ?? undefined
+  // Growth: filtro por responsável (Usuario interno) e por linha/projeto
+  const responsavelId = searchParams.get("responsavelId") ?? undefined
+  const linhaProjetoId = searchParams.get("linhaProjetoId") ?? undefined
 
   // Auto-filtro: videomakers externos só veem suas próprias demandas
   if (session.user.tipo === "videomaker") {
@@ -117,6 +121,8 @@ export async function GET(req: NextRequest) {
   if (videomakerId) where.videomakerId = videomakerId
   if (designerId) where.designerId = designerId
   if (tipoVideo) where.tipoVideo = tipoVideo
+  if (responsavelId) where.responsaveis = { some: { usuarioId: responsavelId } }
+  if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
   // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
   if (session.user.tipo === "gestor_eventos") where.eventoGestaoId = { not: null }
@@ -167,6 +173,7 @@ export async function GET(req: NextRequest) {
         editor: { select: { id: true, nome: true } },
         designer: { select: { id: true, nome: true } },
         responsavel: { select: { id: true, nome: true, tipo: true } },
+        responsaveis: { select: { usuario: { select: { id: true, nome: true, tipo: true } } } },
         linhaProjetoRef: { select: { id: true, nome: true } },
         produtos: { select: { produto: { select: { nome: true } } } },
         eventoGestao: { select: { id: true, nome: true } },
@@ -218,20 +225,30 @@ export async function POST(req: NextRequest) {
   // Growth: resolve o responsável (Usuario interno da org). Valida que pertence à
   // organização logada (isolamento) e, se for designer com espelho Designer, também
   // preenche designerId para manter a visão/portal do designer funcionando.
+  // Aceita responsavelIds[] (novo, múltiplos) e responsavelId (legado, 1). O primeiro
+  // válido vira o responsável "primário" (compat com card/modal/relatórios).
+  const idsResp = Array.from(new Set([
+    ...(data.responsavelIds ?? []),
+    ...(data.responsavelId ? [data.responsavelId] : []),
+  ]))
   let responsavelId: string | undefined
   let designerIdResolvido = data.designerId
-  if (data.responsavelId) {
-    const membro = await prisma.usuario.findFirst({
-      where: { id: data.responsavelId, organizacoes: { some: { organizacaoId } } },
+  let responsaveisValidos: string[] = []
+  if (idsResp.length > 0) {
+    const membros = await prisma.usuario.findMany({
+      where: { id: { in: idsResp }, organizacoes: { some: { organizacaoId } } },
       select: { id: true, tipo: true },
     })
-    if (!membro) {
+    if (membros.length === 0) {
       return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
     }
-    responsavelId = membro.id
-    if (membro.tipo === "designer" && !designerIdResolvido) {
+    // Mantém a ordem enviada e descarta IDs de outra org
+    responsaveisValidos = idsResp.filter((id) => membros.some((m) => m.id === id))
+    responsavelId = responsaveisValidos[0]
+    const primeiro = membros.find((m) => m.id === responsavelId)
+    if (primeiro?.tipo === "designer" && !designerIdResolvido) {
       const designer = await prisma.designer.findFirst({
-        where: { usuarioId: membro.id, organizacaoId },
+        where: { usuarioId: primeiro.id, organizacaoId },
         select: { id: true },
       })
       if (designer) designerIdResolvido = designer.id
@@ -312,6 +329,14 @@ export async function POST(req: NextRequest) {
         skipDuplicates: true,
       }).catch(e => console.error("[Demanda] Erro ao vincular produtos:", e))
     }
+  }
+
+  // Vincular responsável(eis) — múltiplos (Growth), já validados como membros da org.
+  if (responsaveisValidos.length > 0) {
+    await prisma.demandaResponsavel.createMany({
+      data: responsaveisValidos.map((usuarioId) => ({ demandaId: demanda.id, usuarioId })),
+      skipDuplicates: true,
+    }).catch(e => console.error("[Demanda] Erro ao vincular responsáveis:", e))
   }
 
   // Auto-populate checklist a partir de templates

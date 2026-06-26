@@ -187,7 +187,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const { data: respData } = useSWR(canEdit ? "/api/growth/responsaveis" : null, fetcher)
   const { data: linhasData } = useSWR(canEdit ? "/api/growth/linhas-projetos" : null, fetcher)
   const { data: produtosData } = useSWR(canEdit ? "/api/produtos" : null, fetcher)
-  const responsaveisOpts = [{ value: "", label: "— Sem responsável —" }, ...((respData?.responsaveis ?? []).map((r: { id: string; label: string }) => ({ value: r.id, label: r.label })))]
+  const responsaveisLista: { id: string; label: string }[] = respData?.responsaveis ?? []
   const linhasOpts = [{ value: "", label: "— Sem linha/projeto —" }, ...((linhasData?.linhas ?? []).map((l: { id: string; nome: string }) => ({ value: l.id, label: l.nome })))]
   const produtosLista: { id: string; nome: string }[] = produtosData?.produtos ?? []
 
@@ -624,9 +624,9 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                 {/* Descrição */}
                 {canEdit ? (
                   <div className="bg-zinc-800/50 rounded-xl p-4">
-                    <p className="text-[11px] text-zinc-500 mb-1">Descrição</p>
+                    <p className="text-[11px] text-zinc-500 mb-1">{isGrowth ? "Observação" : "Descrição"}</p>
                     <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">
-                      <InlineEdit value={demanda.descricao ?? ""} canEdit tipo="textarea" placeholder="Sem descrição — clique para adicionar"
+                      <InlineEdit value={demanda.descricao ?? ""} canEdit tipo="textarea" placeholder={isGrowth ? "Sem observação — clique para adicionar" : "Sem descrição — clique para adicionar"}
                         onSave={(v) => salvarCampo({ descricao: v })} />
                     </div>
                   </div>
@@ -1092,18 +1092,40 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         )}
                       </div>
                     )}
-                    {(canEdit || demanda.responsavel || demanda.designer) && (
+                    {(canEdit || (demanda.responsaveis?.length ?? 0) > 0 || demanda.responsavel || demanda.designer) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
-                          <User className="w-3 h-3" /> Responsável
+                          <User className="w-3 h-3" /> {(demanda.responsaveis?.length ?? 0) > 1 ? "Responsáveis" : "Responsável"}
                         </p>
-                        {canEdit ? (
-                          <InlineEdit value={demanda.responsavel?.id ?? ""} canEdit tipo="select" options={responsaveisOpts}
-                            display={<span className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome ?? "— Sem responsável —"}</span>}
-                            onSave={(v) => salvarCampo({ responsavelId: v })} />
-                        ) : (
-                          <p className="text-sm text-zinc-300 font-medium">{demanda.responsavel?.nome ?? demanda.designer?.nome}</p>
-                        )}
+                        {(() => {
+                          const atuais: { id: string; nome: string }[] =
+                            demanda.responsaveis?.map((r: { usuario: { id: string; nome: string } }) => r.usuario)
+                            ?? (demanda.responsavel ? [demanda.responsavel] : [])
+                          const atuaisIds = atuais.map((u) => u.id)
+                          if (!canEdit) {
+                            return <p className="text-sm text-zinc-300 font-medium">{atuais.length ? atuais.map((u) => u.nome).join(", ") : (demanda.designer?.nome ?? "—")}</p>
+                          }
+                          const salvarResp = (ids: string[]) => salvarCampo({ responsavelIds: ids }).catch(() => {})
+                          return (
+                            <div>
+                              {atuais.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                  {atuais.map((u) => (
+                                    <span key={u.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-indigo-500/15 text-indigo-300 border-indigo-500/30">
+                                      {u.nome}
+                                      <button type="button" onClick={() => salvarResp(atuaisIds.filter((x) => x !== u.id))} className="text-indigo-300/70 hover:text-white leading-none">×</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <select value="" onChange={(e) => { if (e.target.value) salvarResp([...atuaisIds, e.target.value]) }}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-200">
+                                <option value="">+ Adicionar responsável…</option>
+                                {responsaveisLista.filter((o) => !atuaisIds.includes(o.id)).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                              </select>
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                     {(canEdit || demanda.linhaProjetoRef?.nome || demanda.linhaProjeto) && (

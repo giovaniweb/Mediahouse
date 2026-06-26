@@ -35,6 +35,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
       designer: { select: { id: true, nome: true } },
       responsavel: { select: { id: true, nome: true, tipo: true } },
+      responsaveis: { select: { usuario: { select: { id: true, nome: true, tipo: true } } } },
       linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
@@ -499,8 +500,23 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // Edição inline de responsável / linha-projeto: valida ownership por org (sem cross-org)
-  if (body.responsavelId) {
+  // Edição de responsável(eis) / linha-projeto: valida ownership por org (sem cross-org)
+  let responsaveisValidosPut: string[] | undefined
+  if (Array.isArray(body.responsavelIds)) {
+    const ids = Array.from(new Set(body.responsavelIds as string[]))
+    if (ids.length > 0) {
+      const membros = await prisma.usuario.findMany({
+        where: { id: { in: ids }, organizacoes: { some: { organizacaoId: guard.organizacaoId } } },
+        select: { id: true },
+      })
+      responsaveisValidosPut = ids.filter((id) => membros.some((m) => m.id === id))
+      if (responsaveisValidosPut.length !== ids.length) {
+        return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
+      }
+    } else {
+      responsaveisValidosPut = []
+    }
+  } else if (body.responsavelId) {
     const membro = await prisma.usuario.findFirst({
       where: { id: body.responsavelId, organizacoes: { some: { organizacaoId: guard.organizacaoId } } },
       select: { id: true },
@@ -521,7 +537,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
     cidade: body.cidade,
     prioridade: body.prioridade,
     dataLimite: body.dataLimite ? new Date(body.dataLimite) : undefined,
-    ...(body.responsavelId !== undefined ? { responsavelId: body.responsavelId || null } : {}),
+    ...(responsaveisValidosPut !== undefined
+      ? { responsavelId: responsaveisValidosPut[0] ?? null }
+      : (body.responsavelId !== undefined ? { responsavelId: body.responsavelId || null } : {})),
     ...(body.linhaProjetoId !== undefined ? { linhaProjetoId: body.linhaProjetoId || null } : {}),
     dataCaptacao: body.dataCaptacao ? new Date(body.dataCaptacao) : undefined,
     videomakerId: body.videomakerId,
@@ -545,6 +563,17 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
+
+  // Rebuild da lista de responsáveis (Growth) quando enviada via responsavelIds[]
+  if (responsaveisValidosPut !== undefined) {
+    await prisma.demandaResponsavel.deleteMany({ where: { demandaId: id } })
+    if (responsaveisValidosPut.length > 0) {
+      await prisma.demandaResponsavel.createMany({
+        data: responsaveisValidosPut.map((usuarioId) => ({ demandaId: id, usuarioId })),
+        skipDuplicates: true,
+      })
+    }
+  }
 
   // Registrar histórico se mudou para videomaker_notificado
   if (autoStatusVideomakerNotificado) {
