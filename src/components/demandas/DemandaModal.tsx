@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   X, ExternalLink, Calendar, MapPin, User, Film, Tag,
   AlertTriangle, Clock, MessageSquare, Link2, Package, Clapperboard,
-  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy, Plus,
+  ThumbsUp, ThumbsDown, CheckCircle2, Upload, Send, Loader2, Play, Trash2, Download, Copy, Plus, FileText,
 } from "lucide-react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
@@ -671,6 +671,35 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Documentos anexados (leitura; upload continua em "Ver completo") */}
+                {(() => {
+                  const docs = ((demanda.arquivos ?? []) as Array<{ id: string; tipoArquivo: string; url: string; nomeArquivo: string }>)
+                    .filter(a => a.tipoArquivo === "documento")
+                  if (docs.length === 0) return null
+                  return (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5">
+                        <FileText className="w-3 h-3" /> Documentos
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-600/20 text-sky-300 border border-sky-600/30">{docs.length}</span>
+                      </p>
+                      <div className="space-y-2">
+                        {docs.map((arq) => {
+                          const ext = arq.nomeArquivo.split(".").pop()?.toUpperCase() ?? "?"
+                          return (
+                            <div key={arq.id} className="flex items-center gap-2.5 bg-zinc-800/50 rounded-lg px-3 py-2 border border-zinc-700/40">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 text-zinc-400 bg-zinc-800/60 border-zinc-600/40">{ext}</span>
+                              <span className="text-sm text-zinc-300 truncate flex-1 min-w-0" title={arq.nomeArquivo}>{arq.nomeArquivo}</span>
+                              <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar" className="p-1 text-zinc-500 hover:text-sky-400 transition-colors shrink-0">
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Links */}
                 <div>
