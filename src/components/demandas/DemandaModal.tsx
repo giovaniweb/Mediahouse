@@ -168,6 +168,13 @@ function SidebarSection({ title, icon, children }: { title: string; icon: React.
   )
 }
 
+type EquipeOpcao = {
+  value: string
+  label: string
+  subtitle?: string
+  origem?: "vm" | "ed" | "user"
+}
+
 export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
   const { data, mutate } = useSWR(demandaId ? `/api/demandas/${demandaId}` : null, fetcher)
   const demanda = data?.demanda
@@ -184,10 +191,24 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
     demanda.responsavel?.id === meId || demanda.gestor?.id === meId
   )
   // Listas para os selects (org-scoped). Carregadas só quando há demanda aberta + permissão.
-  const { data: respData } = useSWR(canEdit ? "/api/growth/responsaveis" : null, fetcher)
+  const { data: respData } = useSWR(canEdit && isGrowth ? "/api/growth/responsaveis" : null, fetcher)
+  const { data: captacaoData } = useSWR(canEdit && !isGrowth ? "/api/equipe-disponivel?papel=captacao" : null, fetcher)
+  const { data: edicaoData } = useSWR(canEdit && !isGrowth ? "/api/equipe-disponivel?papel=edicao" : null, fetcher)
   const { data: linhasData } = useSWR(canEdit ? "/api/growth/linhas-projetos" : null, fetcher)
   const { data: produtosData } = useSWR(canEdit ? "/api/produtos" : null, fetcher)
   const responsaveisOpts = [{ value: "", label: "— Sem responsável —" }, ...((respData?.responsaveis ?? []).map((r: { id: string; label: string }) => ({ value: r.id, label: r.label })))]
+  const captacaoOpts = [
+    { value: "", label: "— Sem videomaker —" },
+    ...(((captacaoData?.opcoes ?? []) as EquipeOpcao[])
+      .filter((o) => o.origem === "vm")
+      .map((o) => ({ value: o.value, label: o.subtitle ? `${o.label} · ${o.subtitle}` : o.label }))),
+  ]
+  const edicaoOpts = [
+    { value: "", label: "— Sem editor —" },
+    ...(((edicaoData?.opcoes ?? []) as EquipeOpcao[])
+      .filter((o) => o.origem === "ed" || o.origem === "vm")
+      .map((o) => ({ value: o.value, label: o.subtitle ? `${o.label} · ${o.subtitle}` : o.label }))),
+  ]
   const linhasOpts = [{ value: "", label: "— Sem linha/projeto —" }, ...((linhasData?.linhas ?? []).map((l: { id: string; nome: string }) => ({ value: l.id, label: l.nome })))]
   const produtosLista: { id: string; nome: string }[] = produtosData?.produtos ?? []
 
@@ -1070,29 +1091,55 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                         <p className="text-sm text-zinc-300 font-medium">{demanda.nomeSolicitante}</p>
                       </div>
                     )}
-                    {!isGrowth && demanda.videomaker && (
+                    {!isGrowth && (canEdit || demanda.videomaker) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
-                          <Clapperboard className="w-3 h-3" /> Videomaker
+                          <Clapperboard className="w-3 h-3" /> Videomaker (Captação)
                         </p>
-                        <p className="text-sm text-zinc-300 font-medium">{demanda.videomaker.nome}</p>
-                        {demanda.videomaker.cidade && (
-                          <p className="text-xs text-zinc-500">{demanda.videomaker.cidade}</p>
+                        {canEdit ? (
+                          <InlineEdit
+                            value={demanda.videomaker?.id ? `vm:${demanda.videomaker.id}` : ""}
+                            canEdit
+                            tipo="select"
+                            options={captacaoOpts}
+                            display={<span className="text-sm text-zinc-300 font-medium">{demanda.videomaker?.nome ?? "— Sem videomaker —"}</span>}
+                            onSave={(v) => salvarCampo({ videomakerId: v || null })}
+                          />
+                        ) : (
+                          <>
+                            <p className="text-sm text-zinc-300 font-medium">{demanda.videomaker?.nome}</p>
+                            {demanda.videomaker?.cidade && (
+                              <p className="text-xs text-zinc-500">{demanda.videomaker.cidade}</p>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
-                    {!isGrowth && demanda.editor && (
+                    {!isGrowth && (canEdit || demanda.editor) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
-                          <Film className="w-3 h-3" /> Editor
+                          <Film className="w-3 h-3" /> Editor (Pós-produção)
                         </p>
-                        <p className="text-sm text-zinc-300 font-medium">{demanda.editor.nome}</p>
-                        {demanda.editor.especialidade && (
-                          <p className="text-xs text-zinc-500">{demanda.editor.especialidade}</p>
+                        {canEdit ? (
+                          <InlineEdit
+                            value={demanda.editor?.id ? `ed:${demanda.editor.id}` : ""}
+                            canEdit
+                            tipo="select"
+                            options={edicaoOpts}
+                            display={<span className="text-sm text-zinc-300 font-medium">{demanda.editor?.nome ?? "— Sem editor —"}</span>}
+                            onSave={(v) => salvarCampo({ editorId: v || null })}
+                          />
+                        ) : (
+                          <>
+                            <p className="text-sm text-zinc-300 font-medium">{demanda.editor?.nome}</p>
+                            {demanda.editor?.especialidade && (
+                              <p className="text-xs text-zinc-500">{demanda.editor.especialidade}</p>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
-                    {(canEdit || demanda.responsavel || demanda.designer) && (
+                    {isGrowth && (canEdit || demanda.responsavel || demanda.designer) && (
                       <div>
                         <p className="text-[11px] text-zinc-600 mb-0.5 flex items-center gap-1">
                           <User className="w-3 h-3" /> Responsável
@@ -1141,7 +1188,7 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
                     )}
                     {demanda.dataCaptacao && (
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-500">Captação</span>
+                        <span className="text-xs text-zinc-500">{isGrowth ? "Entrega" : "Captação"}</span>
                         <span className="text-xs text-zinc-300">
                           {format(new Date(demanda.dataCaptacao), "dd/MM/yyyy", { locale: ptBR })}
                         </span>
@@ -1275,11 +1322,13 @@ export function DemandaModal({ demandaId, onClose }: DemandaModalProps) {
               </button>
               {type === "video" ? (
                 <video src={embedUrl} controls autoPlay className="w-full rounded-xl bg-black max-h-[80vh]" />
+              ) : type === "image" ? (
+                <img src={embedUrl} alt={copy.finalSingle} className="w-full max-h-[80vh] rounded-xl object-contain bg-black" />
               ) : type === "youtube" || type === "drive" ? (
                 <iframe src={embedUrl} className="w-full aspect-video rounded-xl border-0" allowFullScreen />
               ) : (
                 <div className="text-center text-white p-12 bg-zinc-900 rounded-xl">
-                  <p className="mb-4 text-zinc-400">Não é possível reproduzir inline.</p>
+                  <p className="mb-4 text-zinc-400">{copy.noInline}</p>
                   <a href={playerUrl} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
                     Abrir em nova aba →
                   </a>

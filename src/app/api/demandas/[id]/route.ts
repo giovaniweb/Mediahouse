@@ -507,6 +507,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
     })
     if (!membro) return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
   }
+  if (body.editorId) {
+    const editor = await prisma.editor.findFirst({
+      where: { id: body.editorId, organizacaoId: guard.organizacaoId },
+      select: { id: true },
+    })
+    if (!editor) return NextResponse.json({ error: "Editor inválido para esta organização" }, { status: 400 })
+  }
+  if (body.videomakerId) {
+    const videomaker = await prisma.videomaker.findUnique({
+      where: { id: body.videomakerId },
+      select: { id: true },
+    })
+    if (!videomaker) return NextResponse.json({ error: "Videomaker inválido" }, { status: 400 })
+  }
   if (body.linhaProjetoId) {
     const linha = await prisma.linhaProjeto.findFirst({
       where: { id: body.linhaProjetoId, organizacaoId: guard.organizacaoId },

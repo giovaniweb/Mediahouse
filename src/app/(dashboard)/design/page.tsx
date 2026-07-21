@@ -71,6 +71,7 @@ export default function GrowthKanbanPage() {
           userTipo={session?.user?.tipo}
           colunas={GROWTH_COLUNAS}
           getColuna={(d) => growthColunaDe(d.statusInterno)}
+          openMode="page"
         />
       </div>
 

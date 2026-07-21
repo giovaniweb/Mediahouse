@@ -51,6 +51,124 @@ const STATUS_LABELS: Record<string, string> = {
   expirado: "Expirado",
 }
 
+const GROWTH_STATUS_LABELS: Record<string, string> = {
+  videomaker_notificado: "Responsável Notificado",
+  videomaker_aceitou: "Responsável Aceitou",
+  videomaker_recusou: "Responsável Recusou",
+  captacao_agendada: "Briefing Agendado",
+  captacao_realizada: "Briefing Concluído",
+  brutos_enviados: "Materiais Enviados",
+  editor_atribuido: "Responsável Atribuído",
+  fila_edicao: "Fila de Criação",
+  editando: "Em Criação",
+  edicao_finalizada: "Criativo Finalizado",
+  revisao_pendente: "Revisão Pendente",
+  aguardando_aprovacao_cliente: "Aguardando Aprovação",
+  aprovado_cliente: "Aprovado pelo Cliente",
+  reprovado_cliente: "Ajuste Solicitado",
+  postagem_pendente: "Programado",
+  postado: "Publicado",
+  entregue_cliente: "Finalizado",
+}
+
+function isGrowthDemand(d?: { area?: string | null; departamento?: string | null }) {
+  const area = String(d?.area ?? "").toLowerCase()
+  const departamento = String(d?.departamento ?? "").toLowerCase()
+  return area === "design" || departamento === "growth"
+}
+
+function statusLabel(status: string, growth: boolean) {
+  return (growth ? GROWTH_STATUS_LABELS[status] : undefined) ?? STATUS_LABELS[status] ?? status
+}
+
+function isImageUrl(url: string) {
+  return /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
+}
+
+function formatDetailLabel(key: string) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase())
+}
+
+function formatDetailValue(value: unknown) {
+  if (typeof value === "boolean") return value ? "Sim" : "Não"
+  if (Array.isArray(value)) return value.filter(Boolean).join(", ")
+  if (value === null || value === undefined || value === "") return "Não informado"
+  return String(value)
+}
+
+function getDemandCopy(growth: boolean) {
+  if (growth) {
+    return {
+      teamTitle: "Equipe Growth",
+      responsibleLabel: "Responsável",
+      productionTitle: "Arquivos e Aprovação",
+      rawLabel: "📁 Materiais / Referências (Drive)",
+      addRaw: "Adicionar link de materiais",
+      rawSaved: "Link de materiais salvo!",
+      rawRemoveConfirm: "link de materiais",
+      rawUploaded: "✅ Materiais enviados com sucesso!",
+      finalLabel: "Arquivos Finais",
+      finalSingleLabel: "Arquivo Final",
+      finalEditLabel: "🎨 Arquivo final (arte/criativo)",
+      finalRemoveConfirm: "este arquivo final",
+      finalRemoved: "Arquivo removido!",
+      finalRemoveError: "Erro ao remover arquivo",
+      addFinalButton: "🚀 Enviar outro arquivo",
+      sendApprovalButton: "🚀 Enviar Arte/Criativo para Aprovação",
+      finalCountLabel: "arquivo(s)",
+      progressHint: "Upload → aprovação → Drive automático",
+      uploadModalTitle: "🚀 Enviar arte/criativo para aprovação",
+      rawUploadModalTitle: "📁 Upload de Materiais",
+      uploadModalDescription: "Envie o arquivo final e gere o link de aprovação para o cliente.",
+      rawUploadModalDescription: "Faça upload dos materiais/referências ou informe o link.",
+      fileAccept: "image/*,.pdf,.zip,.psd,.ai,.fig,.svg,.webp,.png,.jpg,.jpeg,.mp4,.mov",
+      uploadFormat: "imagens, pdf, zip, psd, ai, fig, svg ou vídeo curto",
+      contentTypeFallback: "application/octet-stream",
+      approvalTitle: "Aprovação do Criativo",
+      dateCaptureLabel: "Entrega",
+      noInline: "Não é possível visualizar inline.",
+      viewAction: "Visualizar",
+    }
+  }
+
+  return {
+    teamTitle: "Equipe da Demanda",
+    responsibleLabel: "Responsável",
+    productionTitle: "Links da Produção",
+    rawLabel: "📁 Brutos (URL do Google Drive)",
+    addRaw: "Adicionar link de brutos",
+    rawSaved: "Link de brutos salvo!",
+    rawRemoveConfirm: "link de brutos",
+    rawUploaded: "✅ Brutos enviados com sucesso!",
+    finalLabel: "Vídeos Finais",
+    finalSingleLabel: "Vídeo Final",
+    finalEditLabel: "🎬 Arquivo Final (vídeo editado)",
+    finalRemoveConfirm: "este vídeo final",
+    finalRemoved: "Vídeo removido!",
+    finalRemoveError: "Erro ao remover vídeo",
+    addFinalButton: "🚀 Enviar mais um vídeo",
+    sendApprovalButton: "🚀 Enviar para Aprovação",
+    finalCountLabel: "vídeo(s)",
+    progressHint: "Supabase → aprovação → Drive automático",
+    uploadModalTitle: "🚀 Enviar para Aprovação",
+    rawUploadModalTitle: "📁 Upload de Brutos",
+    uploadModalDescription: "Envie o vídeo final e gere o link de aprovação para o cliente.",
+    rawUploadModalDescription: "Faça upload do material bruto filmado ou informe o link.",
+    fileAccept: "video/*,.zip",
+    uploadFormat: "mp4, mov, avi, webm · via Google Drive · sem limite de tamanho",
+    contentTypeFallback: "video/mp4",
+    approvalTitle: "Aprovação de Vídeo",
+    dateCaptureLabel: "Captação",
+    noInline: "Não é possível reproduzir inline.",
+    viewAction: "Ver vídeo",
+  }
+}
+
 interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
 interface ArquivoVideo { id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null; createdAt: string }
 
@@ -101,6 +219,8 @@ export default function DemandaDetailPage() {
   // ── SWR ───────────────────────────────────────────────────────────────────
   const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
   const demanda = data?.demanda
+  const isGrowth = isGrowthDemand(demanda)
+  const copy = getDemandCopy(isGrowth)
 
   const { data: dataOpcoesCaptacao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=captacao", fetcher)
   const { data: dataOpcoesEdicao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=edicao", fetcher)
@@ -227,7 +347,7 @@ export default function DemandaDetailPage() {
   }
 
   async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
-    const contentType = file.type || "video/mp4"
+    const contentType = file.type || copy.contentTypeFallback
 
     // Valida tamanho (Supabase Pro suporta até 5 GB após configurar no dashboard)
     const MAX_UPLOAD_MB = 490
@@ -266,7 +386,7 @@ export default function DemandaDetailPage() {
 
     // 3. Para vídeos finais: captura thumbnail e faz upload separado para Supabase
     let thumbnailUrl: string | undefined
-    if (tipo === "final") {
+    if (!isGrowth && tipo === "final" && file.type.startsWith("video/")) {
       try {
         const thumbBlob = await captureVideoThumbnail(file)
         if (thumbBlob) {
@@ -360,7 +480,7 @@ export default function DemandaDetailPage() {
     setUploadProgress(0)
 
     const CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB por chunk (dentro do limite Vercel 4.5 MB)
-    const contentType = file.type || "video/mp4"
+    const contentType = file.type || copy.contentTypeFallback
     const ext = file.name.split(".").pop() ?? "mp4"
 
     // Filename: [produto]_[titulo]_[codigo]
@@ -374,7 +494,7 @@ export default function DemandaDetailPage() {
     if (produtoNome) parts.push(sanitize(produtoNome).substring(0, 30))
     if (demandaTitulo) parts.push(sanitize(demandaTitulo).substring(0, 40))
     if (demandaCodigo) parts.push(String(demandaCodigo))
-    const fileName = (parts.length > 0 ? parts.join("_") : `video_${tipo}`) + `.${ext}`
+    const fileName = (parts.length > 0 ? parts.join("_") : `${isGrowth ? "arquivo" : "video"}_${tipo}`) + `.${ext}`
 
     // 1. Criar sessão de upload resumável no Google Drive (server-side)
     const params = new URLSearchParams({
@@ -503,7 +623,7 @@ export default function DemandaDetailPage() {
 
       // Brutos: apenas salvar, sem gerar link de aprovação
       if (linkModalTipo === "brutos") {
-        toast.success("✅ Brutos enviados com sucesso!")
+      toast.success(copy.rawUploaded)
         setShowLinkModal(false)
         setLinkModalFile(null)
         setUrlVideoInput("")
@@ -660,7 +780,7 @@ export default function DemandaDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ linkBrutos: quickBrutosInput.trim() }),
       })
-      toast.success("Link de brutos salvo!")
+      toast.success(copy.rawSaved)
       setShowQuickBrutos(false)
       setQuickBrutosInput("")
       mutate()
@@ -670,7 +790,7 @@ export default function DemandaDetailPage() {
   }
 
   async function deleteVideoLink(tipo: "brutos" | "final", arquivoId?: string) {
-    if (!confirm(`Remover ${tipo === "brutos" ? "link de brutos" : "este vídeo final"}?`)) return
+    if (!confirm(`Remover ${tipo === "brutos" ? copy.rawRemoveConfirm : copy.finalRemoveConfirm}?`)) return
     try {
       await fetch(`/api/demandas/${id}/upload-video`, {
         method: "PATCH",
@@ -679,15 +799,18 @@ export default function DemandaDetailPage() {
       })
       if (tipo === "brutos") setLinkBrutos("")
       else setLinkFinal("")
-      toast.success("Vídeo removido!")
+      toast.success(copy.finalRemoved)
       mutate()
     } catch {
-      toast.error("Erro ao remover vídeo")
+      toast.error(copy.finalRemoveError)
     }
   }
 
   // ── Helper para player de vídeo ──────────────────────────────────────────
-  function getEmbedUrl(url: string): { type: "video" | "youtube" | "drive" | "external"; embedUrl: string } {
+  function getEmbedUrl(url: string): { type: "video" | "image" | "youtube" | "drive" | "external"; embedUrl: string } {
+    if (isImageUrl(url)) {
+      return { type: "image", embedUrl: url }
+    }
     if (url.includes("youtu.be/")) {
       const id = url.split("youtu.be/")[1]?.split("?")[0]
       return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
@@ -769,7 +892,7 @@ export default function DemandaDetailPage() {
                   <h1 className="text-xl font-bold text-zinc-100 leading-tight">{demanda.titulo}</h1>
                 )}
               </div>
-              <StatusBadge status={demanda.statusInterno} />
+              <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
             </div>
 
             {editMode ? (
@@ -815,6 +938,28 @@ export default function DemandaDetailPage() {
               )}
             </div>
           </div>
+
+          {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+              <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-sky-400" /> Detalhes do Criativo
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Object.entries(demanda.detalhesEntrega)
+                  .filter(([, value]) => value !== null && value !== undefined && value !== "")
+                  .map(([key, value]) => (
+                    <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                        {formatDetailLabel(key)}
+                      </p>
+                      <p className="mt-1 text-sm text-zinc-300 whitespace-pre-wrap break-words">
+                        {formatDetailValue(value)}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Banner: Demanda externa aguardando aprovação interna ─────── */}
           {demanda.statusInterno === "aguardando_aprovacao_interna" && !editMode && (
@@ -959,8 +1104,41 @@ export default function DemandaDetailPage() {
           {/* ── Atribuição de equipe ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-purple-400" /> Equipe da Demanda
+              <UserCheck className="w-4 h-4 text-purple-400" /> {copy.teamTitle}
             </h2>
+            {isGrowth ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5" /> {copy.responsibleLabel}
+                  </p>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
+                    {demanda.responsavel || demanda.designer ? (
+                      <>
+                        <p className="text-sm font-medium text-zinc-200">
+                          {(demanda.responsavel ?? demanda.designer).nome}
+                        </p>
+                        {(demanda.responsavel ?? demanda.designer).email && (
+                          <p className="text-xs text-zinc-500">{(demanda.responsavel ?? demanda.designer).email}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-zinc-500">— Sem responsável —</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
+                    <Package className="w-3.5 h-3.5" /> Linha / Projeto
+                  </p>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
+                    <p className="text-sm font-medium text-zinc-200">
+                      {demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto ?? "— Sem linha/projeto —"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Videomaker */}
               <div>
@@ -1058,11 +1236,12 @@ export default function DemandaDetailPage() {
                 )}
               </div>
             </div>
+            )}
           </div>
 
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
-          {demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
+          {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
             <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
               <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
                 <span className="text-lg">⏳</span>
@@ -1091,13 +1270,13 @@ export default function DemandaDetailPage() {
           {/* ── Links ────────────────────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-purple-400" /> Links da Produção
+              <Link2 className="w-4 h-4 text-purple-400" /> {copy.productionTitle}
             </h2>
             <div className="space-y-3">
               {/* Brutos — apenas URL (Drive), sem upload de arquivo */}
               <div>
                 <LinkField
-                  label="📁 Brutos (URL do Google Drive)"
+                  label={copy.rawLabel}
                   value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
                   editMode={editMode}
                   onChange={setLinkBrutos}
@@ -1120,7 +1299,7 @@ export default function DemandaDetailPage() {
                         onClick={() => setShowQuickBrutos(true)}
                         className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
                       >
-                        <Upload className="w-3 h-3" /> Adicionar link de brutos
+                        <Upload className="w-3 h-3" /> {copy.addRaw}
                       </button>
                     ) : (
                       <div className="flex items-center gap-2 mt-1">
@@ -1149,7 +1328,7 @@ export default function DemandaDetailPage() {
               <div>
                 {editMode ? (
                   <LinkField
-                    label="🎬 Arquivo Final (vídeo editado)"
+                    label={copy.finalEditLabel}
                     value={linkFinal}
                     editMode={true}
                     onChange={setLinkFinal}
@@ -1168,7 +1347,7 @@ export default function DemandaDetailPage() {
                       return (
                         <>
                           <p className="text-xs font-medium text-zinc-400 mb-2 flex items-center gap-2">
-                            🎬 Vídeos Finais
+                            {isGrowth ? "🎨" : "🎬"} {copy.finalLabel}
                             {videosFinais.length > 0 && (
                               <span className="bg-purple-600/20 text-purple-300 border border-purple-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                                 {videosFinais.length}
@@ -1196,7 +1375,7 @@ export default function DemandaDetailPage() {
                                     {arq.url.includes("drive.google.com") ? "Google Drive" : arq.nomeArquivo}
                                   </span>
                                   <div className="flex items-center gap-1 shrink-0">
-                                    <button onClick={() => setPlayerUrl(arq.url)} title="Ver vídeo"
+                                    <button onClick={() => setPlayerUrl(arq.url)} title={copy.viewAction}
                                       className="p-1 text-zinc-500 hover:text-purple-400 transition-colors">
                                       <Play className="w-3.5 h-3.5" />
                                     </button>
@@ -1219,7 +1398,7 @@ export default function DemandaDetailPage() {
                             <div className="flex items-center gap-2 mb-2">
                               <button onClick={() => setPlayerUrl(demanda.linkFinal!)}
                                 className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors">
-                                <Play className="w-3 h-3" /> Ver vídeo
+                                <Play className="w-3 h-3" /> {copy.viewAction}
                               </button>
                               <button onClick={() => deleteVideoLink("final")}
                                 className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors">
@@ -1234,12 +1413,12 @@ export default function DemandaDetailPage() {
                             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors w-full justify-center"
                           >
                             <Send className="w-4 h-4" />
-                            {videosFinais.length > 0 ? `🚀 Enviar mais um vídeo` : `🚀 Enviar para Aprovação`}
+                            {videosFinais.length > 0 ? copy.addFinalButton : copy.sendApprovalButton}
                           </button>
                           <p className="text-[11px] text-zinc-600 text-center mt-1">
                             {videosFinais.length > 0
-                              ? `${videosFinais.length} vídeo(s) → aprovação gera link individual`
-                              : "Supabase → aprovação → Drive automático"}
+                              ? `${videosFinais.length} ${copy.finalCountLabel} → aprovação gera link individual`
+                              : copy.progressHint}
                           </p>
                         </>
                       )
@@ -1571,7 +1750,7 @@ export default function DemandaDetailPage() {
                 ) : <span className="text-zinc-600 text-xs">—</span>}
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> Captação</span>
+                <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> {copy.dateCaptureLabel}</span>
                 {editMode ? (
                   <input type="date" value={dataCaptacao} onChange={e => setDataCaptacao(e.target.value)}
                     className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/30 text-zinc-200" />
@@ -1584,9 +1763,9 @@ export default function DemandaDetailPage() {
             </div>
           </div>
 
-          {/* Aprovação de vídeo */}
+          {/* Aprovação */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <h2 className="font-semibold text-zinc-300 mb-3">Aprovação de Vídeo</h2>
+            <h2 className="font-semibold text-zinc-300 mb-3">{copy.approvalTitle}</h2>
             {demanda.linkCliente ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
@@ -1646,7 +1825,7 @@ export default function DemandaDetailPage() {
                   <div className="w-2 h-2 rounded-full bg-purple-400 mt-1.5 shrink-0" />
                   <div>
                     <p className="text-xs font-medium text-zinc-300">
-                      {STATUS_LABELS[h.statusNovo] ?? h.statusNovo}
+                      {statusLabel(h.statusNovo, isGrowth)}
                     </p>
                     <p className="text-[10px] text-zinc-500">
                       {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}
@@ -1665,12 +1844,12 @@ export default function DemandaDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="font-semibold text-zinc-200 mb-1">
-              {linkModalTipo === "brutos" ? "📁 Upload de Brutos" : "🚀 Enviar para Aprovação"}
+              {linkModalTipo === "brutos" ? copy.rawUploadModalTitle : copy.uploadModalTitle}
             </h3>
             <p className="text-xs text-zinc-500 mb-4">
               {linkModalTipo === "brutos"
-                ? "Faça upload do material bruto filmado ou informe o link."
-                : "Envie o vídeo final e gere o link de aprovação para o cliente."}
+                ? copy.rawUploadModalDescription
+                : copy.uploadModalDescription}
             </p>
 
             {/* Abas */}
@@ -1714,13 +1893,13 @@ export default function DemandaDetailPage() {
                 <input
                   ref={fileRefLinkModal}
                   type="file"
-                  accept="video/*,.zip"
+                  accept={copy.fileAccept}
                   className="hidden"
                   onChange={e => setLinkModalFile(e.target.files?.[0] ?? null)}
                 />
                 {linkModalFile ? (
                   <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2">
-                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
+                    {isGrowth ? <FileText className="w-4 h-4 text-purple-400 shrink-0" /> : <Film className="w-4 h-4 text-purple-400 shrink-0" />}
                     <span className="text-xs text-zinc-200 truncate flex-1">{linkModalFile.name}</span>
                     <button onClick={() => setLinkModalFile(null)} className="text-zinc-500 hover:text-red-400">
                       <X className="w-3.5 h-3.5" />
@@ -1734,8 +1913,8 @@ export default function DemandaDetailPage() {
                     <Upload className="w-5 h-5 text-zinc-500" />
                     <span className="text-xs text-zinc-400">Clique para escolher arquivo</span>
                     {linkModalTipo === "final"
-                      ? <span className="text-[11px] text-emerald-600">mp4, mov, avi, webm · via Google Drive · sem limite de tamanho</span>
-                      : <span className="text-[11px] text-zinc-600">mp4, mov, avi, webm · máx 49 MB</span>
+                      ? <span className="text-[11px] text-emerald-600">{copy.uploadFormat}</span>
+                      : <span className="text-[11px] text-zinc-600">{isGrowth ? copy.uploadFormat : "mp4, mov, avi, webm · máx 49 MB"}</span>
                     }
                   </button>
                 )}
@@ -1763,8 +1942,8 @@ export default function DemandaDetailPage() {
                     {gerandoLink
                       ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {linkModalTipo === "final" && uploadProgress > 0 && uploadProgress < 100 ? `${uploadProgress}%…` : "Enviando…"}</>
                       : linkModalTipo === "brutos"
-                        ? <><Upload className="w-3.5 h-3.5" /> Enviar Brutos</>
-                        : <><Send className="w-3.5 h-3.5" /> Enviar para Aprovação</>
+                        ? <><Upload className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Materiais" : "Enviar Brutos"}</>
+                        : <><Send className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Criativo" : "Enviar para Aprovação"}</>
                     }
                   </button>
                   <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final"); setUploadProgress(0) }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
@@ -1790,7 +1969,7 @@ export default function DemandaDetailPage() {
                     {gerandoLink
                       ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
                       : linkModalTipo === "brutos"
-                        ? <><Upload className="w-3.5 h-3.5" /> Salvar URL Brutos</>
+                        ? <><Upload className="w-3.5 h-3.5" /> {isGrowth ? "Salvar URL dos materiais" : "Salvar URL Brutos"}</>
                         : <><Link2 className="w-3.5 h-3.5" /> Gerar Link</>
                     }
                   </button>
@@ -1821,11 +2000,13 @@ export default function DemandaDetailPage() {
               </button>
               {type === "video" ? (
                 <video src={embedUrl} controls autoPlay className="w-full rounded-xl bg-black max-h-[80vh]" />
+              ) : type === "image" ? (
+                <img src={embedUrl} alt={copy.finalSingleLabel} className="max-h-[80vh] w-full object-contain rounded-xl bg-black" />
               ) : type === "youtube" || type === "drive" ? (
                 <iframe src={embedUrl} className="w-full aspect-video rounded-xl border-0" allowFullScreen />
               ) : (
                 <div className="text-center text-white p-12 bg-zinc-900 rounded-xl">
-                  <p className="mb-4 text-zinc-400">Não é possível reproduzir inline.</p>
+                  <p className="mb-4 text-zinc-400">{copy.noInline}</p>
                   <a href={playerUrl} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
                     Abrir em nova aba →
                   </a>
@@ -1894,7 +2075,7 @@ function IACard({ demandaId }: { demandaId: string }) {
 }
 
 // ── Sub-componentes utilitários ───────────────────────────────────────────────
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, isGrowth = false }: { status: string; isGrowth?: boolean }) {
   const isUrgente = status.includes("urgencia")
   const isConcluido = ["aprovado", "postado", "entregue_cliente"].includes(status)
   const isAtencao = ["impedimento", "reprovado_cliente", "videomaker_recusou"].includes(status)
@@ -1906,7 +2087,7 @@ function StatusBadge({ status }: { status: string }) {
       isAtencao && "bg-orange-500/15 text-orange-400",
       !isUrgente && !isConcluido && !isAtencao && "bg-zinc-800 text-zinc-400"
     )}>
-      {STATUS_LABELS[status] ?? status}
+      {statusLabel(status, isGrowth)}
     </span>
   )
 }

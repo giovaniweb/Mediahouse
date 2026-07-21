@@ -50,12 +50,14 @@ interface KanbanBoardProps {
   colunas?: ColunaDef[]
   /** Mapeia uma demanda → id da coluna. Default: por statusVisivel (audiovisual). */
   getColuna?: (demanda: Demanda) => string
+  /** Como abrir o card. Default: modal. Growth usa página completa. */
+  openMode?: "modal" | "page"
 }
 
 // Colunas que videomakers externos NÃO podem mover cards para lá (audiovisual)
 const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal" }: KanbanBoardProps) {
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -245,7 +247,13 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                             data-card
                             className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
                           >
-                            <DemandaCard demanda={demanda} onDelete={onDelete} onDuplicate={onDuplicate} onOpen={setModalDemandaId} onMarkPosted={onMarkPosted} />
+                            <DemandaCard
+                              demanda={demanda}
+                              onDelete={onDelete}
+                              onDuplicate={onDuplicate}
+                              onOpen={openMode === "modal" ? setModalDemandaId : undefined}
+                              onMarkPosted={onMarkPosted}
+                            />
                           </div>
                         )}
                       </Draggable>
@@ -261,7 +269,9 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     </DragDropContext>
     </div>
 
-    <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />
+    {openMode === "modal" && (
+      <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />
+    )}
     </>
   )
 }

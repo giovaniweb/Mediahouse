@@ -98,19 +98,14 @@ const sections = [
   },
 ]
 
-const GROWTH_HREFS = new Set([
-  "/design",
-  "/galeria-artes",
-  "/growth/equipe",
-  "/configuracoes/linhas-projetos",
-])
-
 export function Sidebar() {
   const pathname = usePathname()
   const { data: me } = useMe()
 
   const isAdmin = me?.tipo === "admin" || me?.tipo === "gestor"
   const atuaEmGrowth = me?.membership?.areas?.includes("growth") ?? false
+  const podeVerGrowth = atuaEmGrowth || !!me?.permissoes?.verDesign
+  const podeGerenciarGrowth = atuaEmGrowth || !!me?.permissoes?.gerenciarDesigners
 
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
@@ -119,7 +114,8 @@ export function Sidebar() {
     if (href === "/mensagens" && !MENSAGENS_ATIVO) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
-    if (GROWTH_HREFS.has(href) && atuaEmGrowth) return true
+    if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
+    if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
     const key = PERMISSAO_HREF_MAP[href]
     if (!key) return true
     return !!me.permissoes[key]

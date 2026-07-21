@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/equipe-disponivel?papel=captacao|edicao
 // Lista unificada e deduplicada de pessoas atribuíveis a um papel.
@@ -10,6 +11,8 @@ import { prisma } from "@/lib/prisma"
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const papel = req.nextUrl.searchParams.get("papel") === "edicao" ? "edicao" : "captacao"
 
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
     }
     // Editores que captam
     const eds = await prisma.editor.findMany({
-      where: { fazCaptacao: true, status: "ativo" },
+      where: { organizacaoId, fazCaptacao: true, status: "ativo" },
       select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true },
       orderBy: { nome: "asc" },
     })
@@ -75,7 +78,7 @@ export async function GET(req: NextRequest) {
   } else {
     // Fonte primária: Editores
     const eds = await prisma.editor.findMany({
-      where: { status: "ativo" },
+      where: { organizacaoId, status: "ativo" },
       select: { id: true, nome: true, especialidade: true, tipoContrato: true, usuarioId: true },
       orderBy: { nome: "asc" },
     })
@@ -109,7 +112,16 @@ export async function GET(req: NextRequest) {
 
   // Usuários social (comuns aos dois papéis)
   const socials = await prisma.usuario.findMany({
-    where: { tipo: "social", status: "ativo" },
+    where: {
+      tipo: "social",
+      status: "ativo",
+      organizacoes: {
+        some: {
+          organizacaoId,
+          categoria: "interna",
+        },
+      },
+    },
     select: { id: true, nome: true },
     orderBy: { nome: "asc" },
   })
