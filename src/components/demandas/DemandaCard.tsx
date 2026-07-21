@@ -41,6 +41,7 @@ interface DemandaCardProps {
     editor?: { nome: string } | null
     designer?: { nome: string } | null
     responsavel?: { nome: string } | null
+    responsaveis?: { usuario: { nome: string } }[]
     solicitante?: { nome: string } | null
     eventoGestao?: { id: string; nome: string } | null
     produtos?: { produto?: { nome: string } | null }[]
@@ -174,8 +175,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           <div className="flex items-center gap-1">
             {demanda.statusVisivel === "finalizado" ? (
               <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 font-medium">✅ Concluído</span>
-            ) : (demanda.responsavel || demanda.designer || demanda.editor) ? (
-              <><User className="w-3 h-3" /><span className="text-zinc-400">{(demanda.responsavel?.nome ?? demanda.designer?.nome ?? demanda.editor?.nome ?? "").split(" ")[0]}</span></>
+            ) : ((demanda.responsaveis?.length ?? 0) > 0 || demanda.responsavel || demanda.designer || demanda.editor) ? (
+              <><User className="w-3 h-3" /><span className="text-zinc-400">
+                {(demanda.responsaveis?.[0]?.usuario.nome ?? demanda.responsavel?.nome ?? demanda.designer?.nome ?? demanda.editor?.nome ?? "").split(" ")[0]}
+                {(demanda.responsaveis?.length ?? 0) > 1 ? ` +${demanda.responsaveis!.length - 1}` : ""}
+              </span></>
             ) : (
               <><Video className="w-3 h-3 text-zinc-600" /><span className="text-zinc-600">sem responsável</span></>
             )}

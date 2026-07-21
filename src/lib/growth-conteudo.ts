@@ -1,24 +1,22 @@
-// Growth — tipos de conteúdo e seus campos condicionais (item 3).
+// Growth — tipos de DEMANDA e seus campos condicionais.
 // Os valores preenchidos vão para Demanda.detalhesEntrega (Json), sem migração por tipo.
 
 export type CampoTipo = "text" | "textarea" | "number" | "bool"
 export interface CampoCondicional { key: string; label: string; tipo: CampoTipo }
 export interface TipoConteudo { key: string; label: string; campos: CampoCondicional[] }
 
+// Lista de tipos de demanda do Growth — em ordem alfabética (por label).
 export const TIPOS_CONTEUDO: TipoConteudo[] = [
-  { key: "post", label: "Post feed", campos: [
-    { key: "formato", label: "Formato", tipo: "text" },
-    { key: "copy", label: "Copy / legenda", tipo: "textarea" },
+  { key: "administrativo", label: "Administrativo", campos: [] },
+  { key: "anuncio", label: "Anúncio", campos: [
+    { key: "canal", label: "Canal", tipo: "text" },
+    { key: "objetivo", label: "Objetivo", tipo: "text" },
+    { key: "formatos", label: "Formatos necessários", tipo: "text" },
+    { key: "copy", label: "Copy", tipo: "textarea" },
   ] },
-  { key: "story", label: "Story", campos: [
-    { key: "qtd", label: "Quantidade de stories", tipo: "number" },
-    { key: "interacao", label: "Tem interação (enquete/link)?", tipo: "text" },
-  ] },
-  { key: "reels", label: "Reels", campos: [
-    { key: "duracao", label: "Duração estimada (s)", tipo: "number" },
-    { key: "roteiro", label: "Roteiro / ideia", tipo: "textarea" },
-    { key: "trilha", label: "Trilha / áudio de referência", tipo: "text" },
-  ] },
+  { key: "apresentacao", label: "Apresentação", campos: [] },
+  { key: "atualizacao_drive", label: "Atualização de drive", campos: [] },
+  { key: "atualizacao_materiais", label: "Atualização de materiais", campos: [] },
   { key: "carrossel", label: "Carrossel", campos: [
     { key: "slides", label: "Quantidade de slides", tipo: "number" },
     { key: "copyPronta", label: "Copy pronta?", tipo: "bool" },
@@ -26,26 +24,21 @@ export const TIPOS_CONTEUDO: TipoConteudo[] = [
     { key: "formato", label: "Formato", tipo: "text" },
     { key: "refsVisuais", label: "Referências visuais", tipo: "textarea" },
   ] },
-  { key: "email_marketing", label: "E-mail marketing", campos: [
+  { key: "design", label: "Design", campos: [] },
+  { key: "email_marketing", label: "Email Marketing", campos: [
     { key: "assunto", label: "Assunto sugerido", tipo: "text" },
     { key: "cta", label: "CTA", tipo: "text" },
     { key: "objetivoCampanha", label: "Objetivo da campanha", tipo: "text" },
     { key: "segmento", label: "Público / segmento", tipo: "text" },
   ] },
-  { key: "criativo_trafego", label: "Criativo para tráfego", campos: [
-    { key: "canal", label: "Canal", tipo: "text" },
-    { key: "objetivo", label: "Objetivo", tipo: "text" },
-    { key: "formatos", label: "Formatos necessários", tipo: "text" },
-    { key: "copy", label: "Copy", tipo: "textarea" },
-  ] },
-  { key: "landing_copy", label: "Landing page / copy", campos: [
+  { key: "landing_page", label: "Landing Page", campos: [
     { key: "objetivo", label: "Objetivo da página", tipo: "text" },
     { key: "secoes", label: "Seções desejadas", tipo: "textarea" },
     { key: "cta", label: "CTA principal", tipo: "text" },
   ] },
-  { key: "material_grafico", label: "Material gráfico", campos: [
-    { key: "tipoPeca", label: "Tipo de peça", tipo: "text" },
-    { key: "dimensoes", label: "Dimensões / formato", tipo: "text" },
+  { key: "post", label: "Post", campos: [
+    { key: "formato", label: "Formato", tipo: "text" },
+    { key: "copy", label: "Copy / legenda", tipo: "textarea" },
   ] },
 ]
 
