@@ -18,17 +18,27 @@ export async function GET(req: NextRequest) {
   const where: any = {
     area,
     statusVisivel: { in: ["finalizado", "para_postar"] },
-    linkFinal: { not: null },
     ...(tipo ? { tipoVideo: tipo } : {}),
     ...(produtoId ? { produtos: { some: { produtoId } } } : {}),
-    ...(search ? {
-      OR: [
-        { titulo: { contains: search, mode: "insensitive" } },
-        { codigo: { contains: search, mode: "insensitive" } },
-        { departamento: { contains: search, mode: "insensitive" } },
-        { produtos: { some: { produto: { nome: { contains: search, mode: "insensitive" } } } } },
-      ],
-    } : {}),
+    // Tem vídeo final por QUALQUER caminho: linkFinal legado OU registro Arquivo("final")
+    // do fluxo novo (multi-arquivo). Combinado via AND para não colidir com o OR da busca.
+    AND: [
+      {
+        OR: [
+          { linkFinal: { not: null } },
+          { arquivos: { some: { tipoArquivo: "final" } } },
+        ],
+      },
+      ...(search ? [{
+        // Obs.: `departamento` é enum (não aceita `contains`) — busca por título,
+        // código e nome do produto.
+        OR: [
+          { titulo: { contains: search, mode: "insensitive" } },
+          { codigo: { contains: search, mode: "insensitive" } },
+          { produtos: { some: { produto: { nome: { contains: search, mode: "insensitive" } } } } },
+        ],
+      }] : []),
+    ],
   }
 
   // Busca simultânea: contagem total, página atual e todos os IDs (para sub-queries seguras)

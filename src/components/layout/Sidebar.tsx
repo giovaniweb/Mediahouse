@@ -31,6 +31,7 @@ import {
   Inbox,
   Sparkles,
   Layers,
+  VideoOff,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -58,6 +59,7 @@ const sections = [
       { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria", label: "Galeria", icon: PlayCircle },
+      { href: "/relatorios/finalizadas-sem-video", label: "Sem vídeo final", icon: VideoOff },
       { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
       { href: "/equipe", label: "Videomakers Int", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
