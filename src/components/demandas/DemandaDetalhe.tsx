@@ -12,7 +12,7 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download, Eye,
+  CalendarRange, ArrowUpRight, FileText, Download,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -214,7 +214,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
   // ── Documentos anexados ───────────────────────────────────────────────────
-  const [previaAberta, setPreviaAberta] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docUploadProgress, setDocUploadProgress] = useState(0)
   const fileRefDoc = useRef<HTMLInputElement>(null)
@@ -901,11 +900,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <Trash2 className="w-3.5 h-3.5" /> Excluir
             </button>
           )}
-          {isGrowth && (
-            <button onClick={() => setPreviaAberta(true)} className="flex items-center gap-1.5 text-sm border border-fuchsia-500/30 text-fuchsia-300 px-3 py-1.5 rounded-lg hover:bg-fuchsia-500/10">
-              <Eye className="w-3.5 h-3.5" /> Prévia
-            </button>
-          )}
           {podeEditar && (
             <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
               <Pencil className="w-3.5 h-3.5" /> Editar
@@ -932,51 +926,95 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     return demanda.descricao ?? ""
   })()
 
-  const previaModal = previaAberta && (
-    <div className="fixed inset-0 z-[70] bg-black/80 overflow-y-auto" onClick={() => setPreviaAberta(false)}>
-      <div className="min-h-full flex items-start justify-center p-4">
-        <div className="w-full max-w-4xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
-            <span className="text-xs font-bold uppercase tracking-wide bg-fuchsia-500/15 text-fuchsia-300 px-2 py-0.5 rounded-full">Prévia — assim o cliente vê</span>
-            <button onClick={() => setPreviaAberta(false)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="p-5 grid lg:grid-cols-[1fr_320px] gap-5 items-start">
-            <ArteViewer artes={artesPrevia} />
-            <div className="space-y-3">
-              <div>
-                <h3 className="font-bold text-zinc-100">{demanda.titulo}</h3>
-                <div className="flex items-center gap-2 text-xs text-zinc-400 flex-wrap mt-1">
-                  <span className="px-2 py-0.5 rounded-full bg-zinc-800">{demanda.tipoVideo}</span>
-                  {demanda.produtos?.[0]?.produto?.nome && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300"><Package className="w-3 h-3" /> {demanda.produtos[0].produto.nome}</span>
-                  )}
-                  {demanda.linhaProjetoRef?.nome && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300">{demanda.linhaProjetoRef.nome}</span>
-                  )}
-                </div>
-              </div>
-              {copyPrevia && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase mb-1.5">Copy / legenda</p>
-                  <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[40vh] overflow-y-auto">{copyPrevia}</p>
-                </div>
-              )}
-              <p className="text-xs text-zinc-500">Prévia da tela de aprovação. As artes vêm dos arquivos finais anexados; a copy, dos detalhes de entrega.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
   const corpo = (
     <>
-      {previaModal}
       <main className="flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full">
         {/* ── Coluna principal ────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Info + Status */}
+          {isGrowth ? (
+            <>
+              {/* ── HERO Growth: arte + aprovação no topo ─────────────────── */}
+              <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+                <div className="grid lg:grid-cols-[1fr_360px] gap-5 items-start">
+                  <ArteViewer artes={artesPrevia} />
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <InlineEdit
+                          value={demanda.titulo ?? ""}
+                          canEdit={podeEditar}
+                          tipo="text"
+                          placeholder="Sem título"
+                          onSave={(v) => salvarCampo({ titulo: v })}
+                          display={<span className="text-lg font-bold text-zinc-100 leading-tight">{demanda.titulo || "Sem título"}</span>}
+                        />
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 flex-wrap mt-1">
+                          <span className="px-2 py-0.5 rounded-full bg-zinc-800">{demanda.tipoVideo}</span>
+                          {demanda.produtos?.[0]?.produto?.nome && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300"><Package className="w-3 h-3" /> {demanda.produtos[0].produto.nome}</span>
+                          )}
+                          {demanda.linhaProjetoRef?.nome && (
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300">{demanda.linhaProjetoRef.nome}</span>
+                          )}
+                        </div>
+                      </div>
+                      <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
+                    </div>
+
+                    {copyPrevia && (
+                      <div className="bg-zinc-950/40 border border-zinc-800 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Copy / legenda</p>
+                          <button onClick={() => { navigator.clipboard.writeText(copyPrevia); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }} className="text-[11px] text-zinc-400 hover:text-white inline-flex items-center gap-1">
+                            {copiado ? <><Check className="w-3 h-3 text-emerald-400" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar</>}
+                          </button>
+                        </div>
+                        <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">{copyPrevia}</p>
+                      </div>
+                    )}
+
+                    {/* Ação de aprovação — única e clara */}
+                    {artesPrevia.length === 0 ? (
+                      <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                        Anexe a arte final (seção <b>Arquivos e Aprovação</b> abaixo) para poder enviar ao cliente.
+                      </div>
+                    ) : demanda.linkCliente ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                          <span className="text-xs text-green-400 truncate flex-1">{demanda.linkCliente}</span>
+                          <button onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }} title="Copiar link">
+                            {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
+                          </button>
+                        </div>
+                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 text-sm border border-zinc-700 text-zinc-200 hover:bg-zinc-800 font-medium py-2.5 rounded-xl">
+                          <ExternalLink className="w-4 h-4" /> Abrir player de aprovação
+                        </a>
+                      </div>
+                    ) : (
+                      <button onClick={() => abrirModalUpload("final")} className="w-full flex items-center justify-center gap-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-3 rounded-xl text-sm">
+                        <Send className="w-4 h-4" /> Enviar para aprovação
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Briefing */}
+              <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+                <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-2">Briefing</p>
+                <InlineEdit
+                  value={demanda.descricao ?? ""}
+                  canEdit={podeEditar}
+                  tipo="textarea"
+                  placeholder="Adicionar briefing…"
+                  onSave={(v) => salvarCampo({ descricao: v })}
+                  display={<span className="block text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao || <span className="italic text-zinc-600">Adicionar briefing…</span>}</span>}
+                />
+              </div>
+            </>
+          ) : (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
@@ -1034,6 +1072,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          )}
 
           {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -1902,7 +1941,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           </div>
 
-          {/* Aprovação */}
+          {/* Aprovação — no Growth fica no hero (topo). Aqui só audiovisual. */}
+          {!isGrowth && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <h2 className="font-semibold text-zinc-300 mb-3">{copy.approvalTitle}</h2>
             {demanda.linkCliente ? (
@@ -1922,6 +1962,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <p className="text-xs text-zinc-500">Nenhum link gerado ainda.</p>
             )}
           </div>
+          )}
 
           {/* Postagem */}
           {demanda.postagemTipo && (
