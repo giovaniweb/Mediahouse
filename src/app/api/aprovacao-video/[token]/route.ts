@@ -13,8 +13,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       demanda: {
         select: {
           id: true, codigo: true, titulo: true, departamento: true, tipoVideo: true,
-          // Growth: área + copy + todas as artes (carrossel)
+          // Growth: área + copy + todas as artes (carrossel) + produto/linha
           area: true, descricao: true, detalhesEntrega: true,
+          linhaProjetoRef: { select: { nome: true } },
+          produtos: { select: { produto: { select: { nome: true } } }, take: 1 },
           arquivos: {
             where: { tipoArquivo: "final" },
             select: { id: true, url: true, nomeArquivo: true, sequencia: true },

@@ -7,11 +7,12 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
+import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download,
+  CalendarRange, ArrowUpRight, FileText, Download, Eye,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -213,6 +214,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
   // ── Documentos anexados ───────────────────────────────────────────────────
+  const [previaAberta, setPreviaAberta] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docUploadProgress, setDocUploadProgress] = useState(0)
   const fileRefDoc = useRef<HTMLInputElement>(null)
@@ -899,6 +901,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <Trash2 className="w-3.5 h-3.5" /> Excluir
             </button>
           )}
+          {isGrowth && (
+            <button onClick={() => setPreviaAberta(true)} className="flex items-center gap-1.5 text-sm border border-fuchsia-500/30 text-fuchsia-300 px-3 py-1.5 rounded-lg hover:bg-fuchsia-500/10">
+              <Eye className="w-3.5 h-3.5" /> Prévia
+            </button>
+          )}
           {podeEditar && (
             <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
               <Pencil className="w-3.5 h-3.5" /> Editar
@@ -914,8 +921,57 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     </div>
   )
 
+  // Prévia da aprovação (Growth): artes finais + copy dos detalhes de entrega
+  const artesPrevia = ((demanda.arquivos ?? []) as Array<{ tipoArquivo: string; url: string; sequencia: number | null }>)
+    .filter((a) => a.tipoArquivo === "final")
+    .sort((a, b) => (a.sequencia ?? 0) - (b.sequencia ?? 0))
+    .map((a) => a.url)
+  const copyPrevia = (() => {
+    const det = demanda.detalhesEntrega as Record<string, unknown> | null | undefined
+    if (det) for (const [k, v] of Object.entries(det)) if (/copy|legenda|caption/i.test(k) && typeof v === "string" && v.trim()) return v
+    return demanda.descricao ?? ""
+  })()
+
+  const previaModal = previaAberta && (
+    <div className="fixed inset-0 z-[70] bg-black/80 overflow-y-auto" onClick={() => setPreviaAberta(false)}>
+      <div className="min-h-full flex items-start justify-center p-4">
+        <div className="w-full max-w-4xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
+            <span className="text-xs font-bold uppercase tracking-wide bg-fuchsia-500/15 text-fuchsia-300 px-2 py-0.5 rounded-full">Prévia — assim o cliente vê</span>
+            <button onClick={() => setPreviaAberta(false)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="p-5 grid lg:grid-cols-[1fr_320px] gap-5 items-start">
+            <ArteViewer artes={artesPrevia} />
+            <div className="space-y-3">
+              <div>
+                <h3 className="font-bold text-zinc-100">{demanda.titulo}</h3>
+                <div className="flex items-center gap-2 text-xs text-zinc-400 flex-wrap mt-1">
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-800">{demanda.tipoVideo}</span>
+                  {demanda.produtos?.[0]?.produto?.nome && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300"><Package className="w-3 h-3" /> {demanda.produtos[0].produto.nome}</span>
+                  )}
+                  {demanda.linhaProjetoRef?.nome && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300">{demanda.linhaProjetoRef.nome}</span>
+                  )}
+                </div>
+              </div>
+              {copyPrevia && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-zinc-500 uppercase mb-1.5">Copy / legenda</p>
+                  <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[40vh] overflow-y-auto">{copyPrevia}</p>
+                </div>
+              )}
+              <p className="text-xs text-zinc-500">Prévia da tela de aprovação. As artes vêm dos arquivos finais anexados; a copy, dos detalhes de entrega.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   const corpo = (
     <>
+      {previaModal}
       <main className="flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full">
         {/* ── Coluna principal ────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">

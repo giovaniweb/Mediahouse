@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, ChevronLeft, ChevronRight, Copy, Check, Sparkles } from "lucide-react"
+import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Sparkles, Package, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 
 interface ArquivoArte { id: string; url: string; nomeArquivo: string; sequencia: number | null }
 interface Aprovacao {
@@ -24,6 +25,8 @@ interface Aprovacao {
     descricao?: string | null
     detalhesEntrega?: Record<string, unknown> | null
     arquivos?: ArquivoArte[]
+    linhaProjetoRef?: { nome: string } | null
+    produtos?: { produto: { nome: string } }[]
   }
 }
 
@@ -52,7 +55,6 @@ export default function AprovarVideoPage() {
   const [nome, setNome] = useState("")
   const [comentario, setComentario] = useState("")
   const [showFeedback, setShowFeedback] = useState(false)
-  const [slide, setSlide] = useState(0)
   const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
@@ -222,8 +224,9 @@ export default function AprovarVideoPage() {
       ? aprovacao.demanda.arquivos.map((a) => a.url)
       : [aprovacao.urlVideo]
     const total = artes.length
-    const cur = ((slide % total) + total) % total
     const copyText = extrairCopy(aprovacao.demanda.detalhesEntrega, aprovacao.demanda.descricao)
+    const produtoNome = aprovacao.demanda.produtos?.[0]?.produto?.nome
+    const linhaNome = aprovacao.demanda.linhaProjetoRef?.nome
 
     return (
       <div className="min-h-screen bg-zinc-950 text-white">
@@ -266,42 +269,7 @@ export default function AprovarVideoPage() {
 
           <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
             {/* Carrossel estilo Instagram */}
-            <div>
-              <div className="relative bg-black rounded-2xl overflow-hidden border border-zinc-800 aspect-square flex items-center justify-center select-none">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={artes[cur]} alt={`Arte ${cur + 1}`} className="w-full h-full object-contain" />
-                {total > 1 && (
-                  <>
-                    <button onClick={() => setSlide(cur - 1)} aria-label="Anterior"
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 flex items-center justify-center backdrop-blur">
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => setSlide(cur + 1)} aria-label="Próxima"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 flex items-center justify-center backdrop-blur">
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                    <div className="absolute top-3 right-3 bg-black/60 rounded-full px-2.5 py-0.5 text-xs font-medium">{cur + 1}/{total}</div>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {artes.map((_, i) => (
-                        <button key={i} onClick={() => setSlide(i)} aria-label={`Ir para ${i + 1}`}
-                          className={cn("w-2 h-2 rounded-full transition-colors", i === cur ? "bg-white" : "bg-white/40 hover:bg-white/70")} />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              {total > 1 && (
-                <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                  {artes.map((u, i) => (
-                    <button key={i} onClick={() => setSlide(i)}
-                      className={cn("w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-opacity", i === cur ? "border-white" : "border-transparent opacity-60 hover:opacity-100")}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={u} alt="" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ArteViewer artes={artes} />
 
             {/* Copy + info + ações */}
             <div className="space-y-4">
@@ -309,6 +277,12 @@ export default function AprovarVideoPage() {
                 <h1 className="text-xl font-bold mb-1">{aprovacao.demanda.titulo}</h1>
                 <div className="flex items-center gap-2 text-xs text-zinc-400 flex-wrap">
                   <span className="px-2 py-0.5 rounded-full bg-zinc-800">{aprovacao.demanda.tipoVideo}</span>
+                  {produtoNome && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300"><Package className="w-3 h-3" /> {produtoNome}</span>
+                  )}
+                  {linhaNome && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300"><Layers className="w-3 h-3" /> {linhaNome}</span>
+                  )}
                   {total > 1 && <span>{total} artes</span>}
                   {aprovacao.expiresAt && (
                     <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> expira {new Date(aprovacao.expiresAt).toLocaleDateString("pt-BR")}</span>
