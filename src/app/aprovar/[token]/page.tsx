@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2 } from "lucide-react"
+import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, ChevronLeft, ChevronRight, Copy, Check, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+interface ArquivoArte { id: string; url: string; nomeArquivo: string; sequencia: number | null }
 interface Aprovacao {
   id: string
   status: string
@@ -18,7 +19,23 @@ interface Aprovacao {
     codigo: string
     titulo: string
     tipoVideo: string
+    departamento?: string | null
+    area?: string | null
+    descricao?: string | null
+    detalhesEntrega?: Record<string, unknown> | null
+    arquivos?: ArquivoArte[]
   }
+}
+
+// Extrai a copy/legenda dos detalhes de entrega (chaves "Copy", "Copy / legenda"…),
+// com fallback para a descrição da demanda.
+function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | null): string {
+  if (det) {
+    for (const [k, v] of Object.entries(det)) {
+      if (/copy|legenda|caption/i.test(k) && typeof v === "string" && v.trim()) return v
+    }
+  }
+  return descricao ?? ""
 }
 
 export default function AprovarVideoPage() {
@@ -35,6 +52,8 @@ export default function AprovarVideoPage() {
   const [nome, setNome] = useState("")
   const [comentario, setComentario] = useState("")
   const [showFeedback, setShowFeedback] = useState(false)
+  const [slide, setSlide] = useState(0)
+  const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -195,6 +214,165 @@ export default function AprovarVideoPage() {
   }
 
   if (!aprovacao) return null
+
+  // ── Growth (design): tela de aprovação de ARTE — carrossel estilo Instagram + copy ──
+  const isGrowth = aprovacao.demanda.area === "design" || aprovacao.demanda.departamento === "growth"
+  if (isGrowth) {
+    const artes = (aprovacao.demanda.arquivos && aprovacao.demanda.arquivos.length > 0)
+      ? aprovacao.demanda.arquivos.map((a) => a.url)
+      : [aprovacao.urlVideo]
+    const total = artes.length
+    const cur = ((slide % total) + total) % total
+    const copyText = extrairCopy(aprovacao.demanda.detalhesEntrega, aprovacao.demanda.descricao)
+
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white">
+        <header className="border-b border-zinc-800">
+          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-gradient-to-br from-fuchsia-500 to-indigo-500 rounded-md flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <span className="font-bold">NuFlow</span>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-zinc-400">{aprovacao.demanda.codigo}</p>
+              <p className="text-sm font-medium">{aprovacao.demanda.titulo}</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+          {resultado === "aprovado" && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-6 text-center">
+              <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
+              <h2 className="text-xl font-bold text-green-300 mb-2">Arte aprovada! 🎉</h2>
+              <p className="text-green-400/80">{aprovacao.aprovadoPor ? `${aprovacao.aprovadoPor} aprovou.` : "Aprovado."} Seguiremos com a publicação.</p>
+            </div>
+          )}
+          {resultado === "feedback" && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 text-center">
+              <MessageSquare className="w-12 h-12 text-yellow-400 mx-auto mb-3" />
+              <h2 className="text-xl font-bold text-yellow-300 mb-2">Feedback enviado!</h2>
+              <p className="text-yellow-400/80">Recebemos suas observações e faremos os ajustes.</p>
+              {aprovacao.comentario && (
+                <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 mt-4 text-left">
+                  <p className="text-xs text-zinc-400 mb-1">Seu comentário:</p>
+                  <p className="text-sm text-zinc-300">{aprovacao.comentario}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
+            {/* Carrossel estilo Instagram */}
+            <div>
+              <div className="relative bg-black rounded-2xl overflow-hidden border border-zinc-800 aspect-square flex items-center justify-center select-none">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={artes[cur]} alt={`Arte ${cur + 1}`} className="w-full h-full object-contain" />
+                {total > 1 && (
+                  <>
+                    <button onClick={() => setSlide(cur - 1)} aria-label="Anterior"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 flex items-center justify-center backdrop-blur">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => setSlide(cur + 1)} aria-label="Próxima"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 flex items-center justify-center backdrop-blur">
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <div className="absolute top-3 right-3 bg-black/60 rounded-full px-2.5 py-0.5 text-xs font-medium">{cur + 1}/{total}</div>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {artes.map((_, i) => (
+                        <button key={i} onClick={() => setSlide(i)} aria-label={`Ir para ${i + 1}`}
+                          className={cn("w-2 h-2 rounded-full transition-colors", i === cur ? "bg-white" : "bg-white/40 hover:bg-white/70")} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              {total > 1 && (
+                <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                  {artes.map((u, i) => (
+                    <button key={i} onClick={() => setSlide(i)}
+                      className={cn("w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-opacity", i === cur ? "border-white" : "border-transparent opacity-60 hover:opacity-100")}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={u} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Copy + info + ações */}
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-xl font-bold mb-1">{aprovacao.demanda.titulo}</h1>
+                <div className="flex items-center gap-2 text-xs text-zinc-400 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-800">{aprovacao.demanda.tipoVideo}</span>
+                  {total > 1 && <span>{total} artes</span>}
+                  {aprovacao.expiresAt && (
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> expira {new Date(aprovacao.expiresAt).toLocaleDateString("pt-BR")}</span>
+                  )}
+                </div>
+              </div>
+
+              {copyText && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Copy / legenda</p>
+                    <button onClick={() => { navigator.clipboard.writeText(copyText); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }}
+                      className="text-xs text-zinc-400 hover:text-white inline-flex items-center gap-1">
+                      {copiado ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copiado</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                    </button>
+                  </div>
+                  <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap max-h-[40vh] overflow-y-auto">{copyText}</p>
+                </div>
+              )}
+
+              {aprovacao.status === "pendente" && !resultado && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+                  <h2 className="font-semibold text-sm">O que você acha da arte?</h2>
+                  <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
+                    value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome (opcional)" />
+                  {showFeedback && (
+                    <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10 resize-none"
+                      rows={4} value={comentario} onChange={(e) => setComentario(e.target.value)}
+                      placeholder="Ex: trocar a cor do título no 2º slide, ajustar a copy, corrigir o logo…" />
+                  )}
+                  <div className="flex flex-col gap-2">
+                    {!showFeedback ? (
+                      <>
+                        <button onClick={() => agir("aprovar")} disabled={enviando}
+                          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 font-semibold py-3 rounded-xl disabled:opacity-50 text-sm">
+                          {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} Aprovar arte
+                        </button>
+                        <button onClick={() => setShowFeedback(true)}
+                          className="w-full flex items-center justify-center gap-2 border border-zinc-700 text-zinc-300 hover:text-white font-medium py-3 rounded-xl text-sm">
+                          <MessageSquare className="w-4 h-4" /> Solicitar ajuste
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => agir("feedback")} disabled={enviando || !comentario.trim()}
+                          className="w-full flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 font-semibold py-3 rounded-xl disabled:opacity-50 text-sm">
+                          {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Enviar feedback
+                        </button>
+                        <button onClick={() => { setShowFeedback(false); setComentario("") }} className="w-full border border-zinc-700 text-zinc-300 py-3 rounded-xl hover:bg-zinc-800 text-sm">Cancelar</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+
+        <footer className="border-t border-zinc-800 py-6 mt-8">
+          <div className="max-w-5xl mx-auto px-6 text-center text-xs text-zinc-500"><p>NuFlow — Aprovação de criativo</p></div>
+        </footer>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">

@@ -11,7 +11,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     where: { token },
     include: {
       demanda: {
-        select: { id: true, codigo: true, titulo: true, departamento: true, tipoVideo: true },
+        select: {
+          id: true, codigo: true, titulo: true, departamento: true, tipoVideo: true,
+          // Growth: área + copy + todas as artes (carrossel)
+          area: true, descricao: true, detalhesEntrega: true,
+          arquivos: {
+            where: { tipoArquivo: "final" },
+            select: { id: true, url: true, nomeArquivo: true, sequencia: true },
+            orderBy: { sequencia: "asc" },
+          },
+        },
       },
     },
   })
