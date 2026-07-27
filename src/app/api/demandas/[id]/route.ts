@@ -33,8 +33,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       gestor: { select: { id: true, nome: true } },
       videomaker: { select: { id: true, nome: true, cidade: true, telefone: true } },
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
-      designer: { select: { id: true, nome: true } },
-      responsavel: { select: { id: true, nome: true, tipo: true } },
+      designer: { select: { id: true, nome: true, email: true, usuarioId: true } },
+      responsavel: { select: { id: true, nome: true, email: true, tipo: true } },
       responsaveis: { select: { usuario: { select: { id: true, nome: true, tipo: true } } } },
       linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
@@ -550,12 +550,16 @@ export async function PUT(req: NextRequest, { params }: Params) {
     descricao: body.descricao,
     cidade: body.cidade,
     prioridade: body.prioridade,
-    dataLimite: body.dataLimite ? new Date(body.dataLimite) : undefined,
+    dataLimite: body.dataLimite !== undefined
+      ? (body.dataLimite ? new Date(body.dataLimite) : null)
+      : undefined,
     ...(responsaveisValidosPut !== undefined
       ? { responsavelId: responsaveisValidosPut[0] ?? null }
       : (body.responsavelId !== undefined ? { responsavelId: body.responsavelId || null } : {})),
     ...(body.linhaProjetoId !== undefined ? { linhaProjetoId: body.linhaProjetoId || null } : {}),
-    dataCaptacao: body.dataCaptacao ? new Date(body.dataCaptacao) : undefined,
+    dataCaptacao: body.dataCaptacao !== undefined
+      ? (body.dataCaptacao ? new Date(body.dataCaptacao) : null)
+      : undefined,
     videomakerId: body.videomakerId,
     editorId: body.editorId,
     socialId: body.socialId,

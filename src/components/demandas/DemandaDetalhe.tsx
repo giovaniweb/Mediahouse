@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
+import { InlineEdit } from "./InlineEdit"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
@@ -18,7 +19,11 @@ import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error("Erro ao carregar dados")
+  return response.json()
+}
 
 const STATUS_LABELS: Record<string, string> = {
   pedido_criado: "Pedido Criado",
@@ -180,10 +185,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // ── Estado geral ──────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false)
 
-  // Auto-entrar em edit mode se ?edit=true (vindo do lápis do kanban)
-  useEffect(() => {
-    if (searchParams.get("edit") === "true") setEditMode(true)
-  }, [searchParams])
   const [saving, setSaving] = useState(false)
   const [comentario, setComentario] = useState("")
   const [sendingComment, setSendingComment] = useState(false)
@@ -222,12 +223,28 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
 
+  const { data: dataMe } = useSWR("/api/me", fetcher)
   const { data: dataOpcoesCaptacao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=captacao", fetcher)
   const { data: dataOpcoesEdicao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=edicao", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos", fetcher)
+  const { data: dataGrowthResponsaveis } = useSWR<{
+    responsaveis: { id: string; nome: string; email?: string | null; tipo?: string | null; label: string }[]
+  }>(isGrowth ? "/api/growth/responsaveis" : null, fetcher)
+  const { data: dataLinhasProjetos } = useSWR<{
+    linhas: { id: string; nome: string; descricao?: string | null; ativo: boolean }[]
+  }>(isGrowth ? "/api/growth/linhas-projetos?incluirInativas=1" : null, fetcher)
   const opcoesCaptacao = dataOpcoesCaptacao?.opcoes ?? []
   const opcoesEdicao = dataOpcoesEdicao?.opcoes ?? []
   const produtos = dataProdutos?.produtos ?? []
+  const papelAtual = String(dataMe?.membership?.papel ?? dataMe?.tipo ?? "").toLowerCase()
+  const podeGerenciar = papelAtual === "admin" || papelAtual === "gestor"
+  const podeEditar = podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda)
+  const podeExcluir = podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda)
+
+  // O atalho ?edit=true só abre o formulário completo para quem realmente pode editar.
+  useEffect(() => {
+    if (dataMe && searchParams.get("edit") === "true" && podeEditar) setEditMode(true)
+  }, [dataMe, searchParams, podeEditar])
 
   // ── Sincroniza campos ao carregar demanda ─────────────────────────────────
   useEffect(() => {
@@ -279,6 +296,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     } finally {
       setSaving(false)
     }
+  }
+
+  // Salva um único campo (edição inline). Lança em erro para o InlineEdit exibir "Erro".
+  async function salvarCampo(patch: Record<string, unknown>) {
+    const res = await fetch(`/api/demandas/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({} as { error?: string }))
+      throw new Error(err.error ?? "Erro ao salvar")
+    }
+    await mutate()
   }
 
   async function excluirDemanda() {
@@ -561,7 +592,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       }
       const label = campo === "videomakerId" ? "Videomaker atribuído!" : "Editor atribuído!"
       toast.success(label)
-      mutate()
+      await mutate()
     } catch (e) {
       toast.error(String(e))
     }
@@ -863,12 +894,16 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         </>
       ) : (
         <>
-          <button onClick={excluirDemanda} className="flex items-center gap-1.5 text-sm border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/10">
-            <Trash2 className="w-3.5 h-3.5" /> Excluir
-          </button>
-          <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
-            <Pencil className="w-3.5 h-3.5" /> Editar
-          </button>
+          {podeExcluir && (
+            <button onClick={excluirDemanda} className="flex items-center gap-1.5 text-sm border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/10">
+              <Trash2 className="w-3.5 h-3.5" /> Excluir
+            </button>
+          )}
+          {podeEditar && (
+            <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
+              <Pencil className="w-3.5 h-3.5" /> Editar
+            </button>
+          )}
           {mode === "page" && (
             <button onClick={() => router.back()} className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200">
               <ArrowLeft className="w-4 h-4" /> Voltar
@@ -889,30 +924,26 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
-                {editMode ? (
-                  <input
-                    value={titulo}
-                    onChange={e => setTitulo(e.target.value)}
-                    className="w-full text-xl font-bold bg-transparent border-b-2 border-purple-500/50 focus:outline-none focus:border-purple-500 pb-1 text-zinc-200"
-                  />
-                ) : (
-                  <h1 className="text-xl font-bold text-zinc-100 leading-tight">{demanda.titulo}</h1>
-                )}
+                <InlineEdit
+                  value={demanda.titulo ?? ""}
+                  canEdit={podeEditar}
+                  tipo="text"
+                  placeholder="Sem título"
+                  onSave={(v) => salvarCampo({ titulo: v })}
+                  display={<span className="text-xl font-bold text-zinc-100 leading-tight">{demanda.titulo || "Sem título"}</span>}
+                />
               </div>
               <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
             </div>
 
-            {editMode ? (
-              <textarea
-                value={descricao}
-                onChange={e => setDescricao(e.target.value)}
-                rows={12}
-                placeholder="Descreva a demanda com detalhes..."
-                className="w-full text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/40 resize-y text-zinc-200 placeholder:text-zinc-600 leading-relaxed min-h-[140px]"
-              />
-            ) : (
-              <p className="text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao}</p>
-            )}
+            <InlineEdit
+              value={demanda.descricao ?? ""}
+              canEdit={podeEditar}
+              tipo="textarea"
+              placeholder="Adicionar descrição / briefing…"
+              onSave={(v) => salvarCampo({ descricao: v })}
+              display={<span className="block text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao || <span className="italic text-zinc-600">Adicionar descrição / briefing…</span>}</span>}
+            />
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
               <div className="flex items-center gap-2 text-zinc-400">
@@ -928,12 +959,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-500">Cidade:</span>
-                {editMode ? (
-                  <input value={cidade} onChange={e => setCidade(e.target.value)}
-                    className="flex-1 bg-transparent border-b border-zinc-600 focus:outline-none focus:border-purple-500 text-sm px-1 text-zinc-200" />
-                ) : (
-                  <span className="font-medium text-zinc-200">{demanda.cidade || "—"}</span>
-                )}
+                <InlineEdit
+                  value={demanda.cidade ?? ""}
+                  canEdit={podeEditar}
+                  tipo="text"
+                  placeholder="—"
+                  onSave={(v) => salvarCampo({ cidade: v })}
+                  display={<span className="font-medium text-zinc-200">{demanda.cidade || "—"}</span>}
+                />
               </div>
               {editMode && (
                 <div className="flex items-center gap-2">
@@ -1039,6 +1072,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div>
                 <label className="block text-xs text-zinc-500 mb-1.5">Produto vinculado</label>
                 <select
+                  disabled={!podeEditar}
                   value={editMode ? produtoId : (demanda.produtos?.[0]?.produtoId ?? "")}
                   onChange={e => {
                     if (editMode) {
@@ -1055,7 +1089,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       })
                     }
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">— Sem produto —</option>
                   {produtos.map(p => (
@@ -1073,6 +1107,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div>
                 <label className="block text-xs text-zinc-500 mb-1.5">Classificação</label>
                 <select
+                  disabled={!podeEditar}
                   value={editMode ? classificacao : (demanda.classificacao ?? "")}
                   onChange={e => {
                     if (editMode) {
@@ -1088,7 +1123,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       })
                     }
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">— Não definido —</option>
                   <option value="b2c">B2C (Consumidor Final)</option>
@@ -1119,30 +1154,65 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
                     <UserCheck className="w-3.5 h-3.5" /> {copy.responsibleLabel}
                   </p>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
-                    {demanda.responsavel || demanda.designer ? (
-                      <>
-                        <p className="text-sm font-medium text-zinc-200">
-                          {(demanda.responsavel ?? demanda.designer).nome}
-                        </p>
-                        {(demanda.responsavel ?? demanda.designer).email && (
-                          <p className="text-xs text-zinc-500">{(demanda.responsavel ?? demanda.designer).email}</p>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm text-zinc-500">— Sem responsável —</p>
-                    )}
-                  </div>
+                  <InlineEdit
+                    value={demanda.responsavel?.id ?? demanda.designer?.usuarioId ?? ""}
+                    canEdit={podeEditar}
+                    tipo="select"
+                    options={[
+                      { value: "", label: "— Sem responsável —" },
+                      ...(dataGrowthResponsaveis?.responsaveis ?? []).map((p) => ({
+                        value: p.id,
+                        label: p.label ?? `${p.nome}${p.tipo ? ` · ${p.tipo}` : ""}`,
+                      })),
+                    ]}
+                    onSave={(value) => salvarCampo({ responsavelId: value || null })}
+                    display={
+                      demanda.responsavel || demanda.designer ? (
+                        <span className="block rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
+                          <span className="block text-sm font-medium text-zinc-200">
+                            {(demanda.responsavel ?? demanda.designer).nome}
+                          </span>
+                          {(demanda.responsavel ?? demanda.designer).email && (
+                            <span className="block text-xs text-zinc-500">
+                              {(demanda.responsavel ?? demanda.designer).email}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="block rounded-lg border border-dashed border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-500">
+                          — Sem responsável —
+                        </span>
+                      )
+                    }
+                  />
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
                     <Package className="w-3.5 h-3.5" /> Linha / Projeto
                   </p>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
-                    <p className="text-sm font-medium text-zinc-200">
-                      {demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto ?? "— Sem linha/projeto —"}
-                    </p>
-                  </div>
+                  <InlineEdit
+                    value={demanda.linhaProjetoRef?.id ?? ""}
+                    canEdit={podeEditar}
+                    tipo="select"
+                    options={[
+                      { value: "", label: "— Sem linha/projeto —" },
+                      ...(dataLinhasProjetos?.linhas ?? []).map((linha: { id: string; nome: string; ativo: boolean }) => ({
+                        value: linha.id,
+                        label: `${linha.nome}${linha.ativo ? "" : " · Inativa"}`,
+                      })),
+                    ]}
+                    onSave={(value) => salvarCampo({ linhaProjetoId: value || null })}
+                    display={
+                      <span className={cn(
+                        "block rounded-lg border bg-zinc-950/30 px-3 py-2 min-h-10 text-sm font-medium",
+                        demanda.linhaProjetoRef?.nome || demanda.linhaProjeto
+                          ? "border-zinc-800 text-zinc-200"
+                          : "border-dashed border-zinc-800 text-zinc-500"
+                      )}>
+                        {demanda.linhaProjetoRef?.nome ?? demanda.linhaProjeto ?? "— Sem linha/projeto —"}
+                      </span>
+                    }
+                  />
                 </div>
               </div>
             ) : (
@@ -1153,6 +1223,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   <Clapperboard className="w-3.5 h-3.5" /> Videomaker (Captação)
                 </label>
                 <select
+                  disabled={!podeEditar}
                   value={editMode ? videomakerId : (demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")}
                   onChange={e => {
                     if (editMode) {
@@ -1161,7 +1232,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       atribuirRapido("videomakerId", e.target.value)
                     }
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">— Sem videomaker —</option>
                   {opcoesCaptacao.filter(o => o.tipoContrato === "externo").length > 0 && (
@@ -1201,6 +1272,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   <Film className="w-3.5 h-3.5" /> Editor (Pós-produção)
                 </label>
                 <select
+                  disabled={!podeEditar}
                   value={editMode ? editorId : (demanda.editor ? `ed:${demanda.editor.id}` : "")}
                   onChange={e => {
                     if (editMode) {
@@ -1209,7 +1281,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       atribuirRapido("editorId", e.target.value)
                     }
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">— Sem editor —</option>
                   {opcoesEdicao.filter(o => o.tipoContrato === "interno").length > 0 && (
@@ -1747,25 +1819,29 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Prazo</span>
-                {editMode ? (
-                  <input type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/30 text-zinc-200" />
-                ) : demanda.dataLimite ? (
-                  <span className={cn("font-medium", new Date(demanda.dataLimite) < new Date() ? "text-red-400" : "text-zinc-200")}>
-                    {format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR })}
-                  </span>
-                ) : <span className="text-zinc-600 text-xs">—</span>}
+                <InlineEdit
+                  value={demanda.dataLimite ? demanda.dataLimite.split("T")[0] : ""}
+                  canEdit={podeEditar}
+                  tipo="date"
+                  placeholder="—"
+                  onSave={(v) => salvarCampo({ dataLimite: v || null })}
+                  display={demanda.dataLimite
+                    ? <span className={cn("font-medium", new Date(demanda.dataLimite) < new Date() ? "text-red-400" : "text-zinc-200")}>{format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    : <span className="text-zinc-600 text-xs">—</span>}
+                />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> {copy.dateCaptureLabel}</span>
-                {editMode ? (
-                  <input type="date" value={dataCaptacao} onChange={e => setDataCaptacao(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/30 text-zinc-200" />
-                ) : demanda.dataCaptacao ? (
-                  <span className="font-medium text-zinc-200">
-                    {format(new Date(demanda.dataCaptacao), "dd/MM/yyyy", { locale: ptBR })}
-                  </span>
-                ) : <span className="text-zinc-600 text-xs">—</span>}
+                <InlineEdit
+                  value={demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : ""}
+                  canEdit={podeEditar}
+                  tipo="date"
+                  placeholder="—"
+                  onSave={(v) => salvarCampo({ dataCaptacao: v || null })}
+                  display={demanda.dataCaptacao
+                    ? <span className="font-medium text-zinc-200">{format(new Date(demanda.dataCaptacao), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    : <span className="text-zinc-600 text-xs">—</span>}
+                />
               </div>
             </div>
           </div>

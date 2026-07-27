@@ -30,15 +30,31 @@ export function InlineEdit(props: Props) {
 
   useEffect(() => { if (estado !== "editing" && estado !== "saving") setVal(value) }, [value, estado])
   useEffect(() => {
-    if (estado === "editing") ref.current?.focus()
+    if (estado === "editing") {
+      ref.current?.focus()
+      if (tipo === "select") {
+        requestAnimationFrame(() => {
+          try {
+            ;(ref.current as HTMLSelectElement & { showPicker?: () => void })?.showPicker?.()
+          } catch {
+            // Alguns navegadores bloqueiam showPicker; o select continua focado e utilizável.
+          }
+        })
+      }
+    }
     if (estado === "saved") { const t = setTimeout(() => setEstado("idle"), 1400); return () => clearTimeout(t) }
-  }, [estado])
+  }, [estado, tipo])
 
   async function salvar(novo: string) {
     if (novo === value) { setEstado("idle"); return }
     setEstado("saving")
     try { await onSave(novo); setEstado("saved") }
     catch { setEstado("error"); setTimeout(() => setEstado("idle"), 2500) }
+  }
+
+  function cancelar() {
+    setVal(value)
+    setEstado("idle")
   }
 
   const indicador = (
@@ -59,8 +75,12 @@ export function InlineEdit(props: Props) {
       return (
         <span className="inline-flex items-center w-full">
           <select ref={ref as React.RefObject<HTMLSelectElement>} value={val} disabled={estado === "saving"}
-            onChange={(e) => { setVal(e.target.value); salvar(e.target.value) }}
-            onBlur={() => estado === "editing" && setEstado("idle")}
+            onChange={(e) => {
+              const novo = e.target.value
+              setVal(novo)
+              void salvar(novo)
+            }}
+            onBlur={() => estado === "editing" && val === value && setEstado("idle")}
             className={inputCls}>
             {(props.options ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -74,7 +94,10 @@ export function InlineEdit(props: Props) {
           <textarea ref={ref as React.RefObject<HTMLTextAreaElement>} value={val} disabled={estado === "saving"} rows={4}
             onChange={(e) => setVal(e.target.value)}
             onBlur={() => salvar(val)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) salvar(val); if (e.key === "Escape") setEstado("idle") }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.blur()
+              if (e.key === "Escape") cancelar()
+            }}
             className={inputCls} />
           {indicador}
         </span>
@@ -85,7 +108,10 @@ export function InlineEdit(props: Props) {
         <input ref={ref as React.RefObject<HTMLInputElement>} type={tipo === "date" ? "date" : tipo === "number" ? "number" : "text"} value={val} disabled={estado === "saving"}
           onChange={(e) => setVal(e.target.value)}
           onBlur={() => salvar(val)}
-          onKeyDown={(e) => { if (e.key === "Enter") salvar(val); if (e.key === "Escape") setEstado("idle") }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur()
+            if (e.key === "Escape") cancelar()
+          }}
           className={inputCls} />
         {indicador}
       </span>
@@ -94,10 +120,21 @@ export function InlineEdit(props: Props) {
 
   // Idle (editável): clica para editar
   return (
-    <span className={`group/inline cursor-text rounded hover:bg-zinc-800/60 -mx-1 px-1 transition-colors ${className ?? ""}`} onClick={() => setEstado("editing")}>
+    <span
+      role="button"
+      tabIndex={0}
+      className={`group/inline rounded hover:bg-zinc-800/60 -mx-1 px-1 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500/60 ${tipo === "select" ? "cursor-pointer" : "cursor-text"} ${className ?? ""}`}
+      onClick={() => setEstado("editing")}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          setEstado("editing")
+        }
+      }}
+    >
       {display ?? (value || <span className="italic text-zinc-500">{placeholder ?? "—"}</span>)}
       <Pencil className="w-3 h-3 text-zinc-600 opacity-0 group-hover/inline:opacity-100 inline ml-1.5 align-baseline transition-opacity" />
-      {estado === "saved" && indicador}
+      {(estado === "saved" || estado === "error") && indicador}
     </span>
   )
 }
