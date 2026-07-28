@@ -8,11 +8,12 @@ import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
+import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download,
+  CalendarRange, ArrowUpRight, FileText, Download, Eye,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -214,6 +215,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
   // ── Documentos anexados ───────────────────────────────────────────────────
+  const [aprovacaoAberta, setAprovacaoAberta] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docUploadProgress, setDocUploadProgress] = useState(0)
   const fileRefDoc = useRef<HTMLInputElement>(null)
@@ -928,6 +930,22 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   const corpo = (
     <>
+      {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
+      {aprovacaoAberta && demanda.linkCliente && (
+        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={() => { setAprovacaoAberta(false); mutate() }}>
+          <div className="min-h-full flex items-start justify-center p-4">
+            <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
+                <span className="text-sm font-semibold text-zinc-200">Aprovação — {demanda.codigo}</span>
+                <button onClick={() => { setAprovacaoAberta(false); mutate() }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5">
+                <AprovacaoCriativo token={demanda.linkCliente.split("/aprovar/")[1]} onAprovado={() => mutate()} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full">
         {/* ── Coluna principal ────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
@@ -988,8 +1006,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                             {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
                           </button>
                         </div>
-                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 text-sm border border-zinc-700 text-zinc-200 hover:bg-zinc-800 font-medium py-2.5 rounded-xl">
-                          <ExternalLink className="w-4 h-4" /> Abrir player de aprovação
+                        <button onClick={() => setAprovacaoAberta(true)} className="w-full flex items-center justify-center gap-1.5 text-sm bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-2.5 rounded-xl">
+                          <Eye className="w-4 h-4" /> Abrir aprovação
+                        </button>
+                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300">
+                          <ExternalLink className="w-3 h-3" /> abrir em nova aba
                         </a>
                       </div>
                     ) : (
