@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { sendWhatsappMessage, contourlineOrgId } from "@/lib/whatsapp"
+import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -158,6 +159,11 @@ export async function POST(req: NextRequest) {
       acaoSugerida: "Aprovar ou recusar demanda externa",
     },
   })
+
+  // Notifica os líderes do audiovisual (alerta direcionado + WhatsApp)
+  if (area === "audiovisual") {
+    void notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId)
+  }
 
   // Notifica o solicitante via WhatsApp
   if (telSolicitante.length >= 10) {

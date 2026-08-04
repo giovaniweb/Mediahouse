@@ -1848,6 +1848,7 @@ model UsuarioOrganizacao {
   categoria          CategoriaPessoa @default(interna)
   funcaoProfissional String?         // o que a pessoa faz (Social Media, Designer, etc.)
   areas              AreaAtuacao[]   // onde atua (audiovisual, growth, eventos)
+  liderAudiovisual   Boolean         @default(false) // líder do audiovisual: aprova + é notificado de novas demandas
   createdAt     DateTime    @default(now())
 
   usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)

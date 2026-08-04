@@ -161,6 +161,24 @@ export const PRESETS: Record<string, PresetPerms> = {
   admin: ALL_TRUE,
   gestor: ALL_TRUE,
 
+  // Líder audiovisual — autonomia sobre as demandas do audiovisual: edita, move,
+  // vê todas, aprova. (Aplicado ao marcar "Líder audiovisual" em Pessoas & Acessos.)
+  lider_audiovisual: {
+    ...BASE_FALSE,
+    verDashboard: true,
+    verDemandas: true,
+    verKanban: true,
+    verTodasDemandas: true,
+    verAgenda: true,
+    verProdutos: true,
+    verCoberturas: true,
+    verAprovacoes: true,
+    criarDemanda: true,
+    editarDemanda: true,
+    excluirDemanda: true,
+    moverKanban: true,
+  },
+
   // Videomaker interno (editor) — dashboard, demandas, agenda, produtos
   editor: {
     ...BASE_FALSE,

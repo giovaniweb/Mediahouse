@@ -58,6 +58,7 @@ interface Usuario {
   categoria?: string
   funcaoProfissional?: string | null
   areas?: string[]
+  liderAudiovisual?: boolean
 }
 
 interface Videomaker {
@@ -351,7 +352,7 @@ const AREAS = [
 function ModalEditarUsuario({
   usuario, onClose, onSave,
 }: {
-  usuario: { id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[] }
+  usuario: { id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[]; liderAudiovisual?: boolean }
   onClose: () => void
   onSave: () => void
 }) {
@@ -362,6 +363,7 @@ function ModalEditarUsuario({
   const [categoria, setCategoria] = useState(usuario.categoria ?? "interna")
   const [funcao, setFuncao] = useState(usuario.funcaoProfissional ?? "")
   const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
+  const [lider, setLider] = useState(usuario.liderAudiovisual ?? false)
   const [novaSenha, setNovaSenha] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [mostrar, setMostrar] = useState(false)
@@ -391,7 +393,7 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas, liderAudiovisual: lider }
       if (novaSenha) body.novaSenha = novaSenha
       const res = await fetch(`/api/usuarios/${usuario.id}`, {
         method: "PATCH",
@@ -465,6 +467,18 @@ function ModalEditarUsuario({
               </div>
             </div>
           </div>
+          {categoria === "interna" && areas.includes("audiovisual") && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-3">
+              <div>
+                <p className="text-sm font-medium text-fuchsia-200">Líder audiovisual</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">Autonomia para editar, mover e aprovar demandas + notificação de toda nova demanda audiovisual.</p>
+              </div>
+              <button type="button" role="switch" aria-checked={lider} onClick={() => setLider(v => !v)}
+                className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${lider ? "bg-fuchsia-600" : "bg-zinc-700"}`}>
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${lider ? "left-[18px]" : "left-0.5"}`} />
+              </button>
+            </div>
+          )}
           <div className="border-t border-zinc-800 pt-3">
             <p className="text-xs text-zinc-500 mb-3">🔑 Nova senha — deixe em branco para não alterar</p>
             <div className="space-y-2">
@@ -525,7 +539,7 @@ export default function UsuariosPage() {
   const [catFiltro, setCatFiltro] = useState("todos")  // Pessoas & Acessos: filtro por categoria
 
   // Modals
-  const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[] } | null>(null)
+  const [editTarget, setEditTarget] = useState<{ id: string; nome: string; email: string; telefone?: string; tipo: string; categoria?: string; funcaoProfissional?: string | null; areas?: string[]; liderAudiovisual?: boolean } | null>(null)
   const [resetTarget, setResetTarget] = useState<{ id: string; nome: string; email: string } | null>(null)
   const [promoverTarget, setPromoverTarget] = useState<{ id: string; nome: string } | null>(null)
   const [profModal, setProfModal] = useState<{
@@ -956,7 +970,7 @@ export default function UsuariosPage() {
                   <tr
                     key={u.id}
                     className="hover:bg-zinc-800/40 cursor-pointer group transition-colors"
-                    onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas })}
+                    onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas, liderAudiovisual: u.liderAudiovisual })}
                   >
                     <td className="px-4 py-3 font-medium text-zinc-100">
                       <div className="flex items-center gap-2">
@@ -1000,7 +1014,7 @@ export default function UsuariosPage() {
                         </button>
                         {/* Editar */}
                         <button
-                          onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas })}
+                          onClick={() => setEditTarget({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, tipo: u.tipo, categoria: u.categoria, funcaoProfissional: u.funcaoProfissional, areas: u.areas, liderAudiovisual: u.liderAudiovisual })}
                           className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                           title="Editar"
                         >

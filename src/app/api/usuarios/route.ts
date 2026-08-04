@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       } : {}),
     },
     select: {
-      papel: true, categoria: true, funcaoProfissional: true, areas: true,
+      papel: true, categoria: true, funcaoProfissional: true, areas: true, liderAudiovisual: true,
       usuario: { select: { id: true, nome: true, email: true, telefone: true, tipo: true, status: true, avatarUrl: true, createdAt: true } },
     },
     orderBy: { usuario: { nome: "asc" } },
@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
     categoria: m.categoria,
     funcaoProfissional: m.funcaoProfissional,
     areas: m.areas,
+    liderAudiovisual: m.liderAudiovisual,
   }))
 
   if (busca) {

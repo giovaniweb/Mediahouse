@@ -408,7 +408,51 @@ export async function POST(req: NextRequest) {
     organizacaoId
   )
 
+  // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
+  if (demanda.area === "audiovisual") {
+    void notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId)
+  }
+
   return NextResponse.json(demanda, { status: 201 })
+}
+
+/**
+ * Notifica os líderes do audiovisual da org sobre nova demanda:
+ * alerta direcionado (sino, usuarioId do líder) + WhatsApp. Reusado pelo portal público.
+ */
+export async function notificarLideresAudiovisual(
+  demandaId: string,
+  codigo: string,
+  titulo: string,
+  organizacaoId?: string | null
+) {
+  try {
+    if (!organizacaoId) return
+    const lideres = await prisma.usuarioOrganizacao.findMany({
+      where: { organizacaoId, liderAudiovisual: true, usuario: { status: "ativo" } },
+      select: { usuario: { select: { id: true, telefone: true } } },
+    })
+    if (lideres.length === 0) return
+    const msg = `🎬 *Nova demanda audiovisual!*\n\n📋 *${codigo}* — ${titulo}\n\nAcesse o sistema para atribuir e acompanhar.`
+    for (const l of lideres) {
+      await prisma.alertaIA.create({
+        data: {
+          organizacaoId,
+          demandaId,
+          usuarioId: l.usuario.id,
+          tipoAlerta: "nova_demanda_audiovisual",
+          mensagem: `🎬 Nova demanda audiovisual: ${codigo} — ${titulo}`,
+          severidade: "aviso",
+          acaoSugerida: "Atribuir responsável / acompanhar",
+        },
+      }).catch(() => null)
+      if (l.usuario.telefone) {
+        await sendWhatsappMessage(l.usuario.telefone, msg, undefined, organizacaoId).catch(() => null)
+      }
+    }
+  } catch (e) {
+    console.error("[Demanda] Falha ao notificar líderes audiovisual:", e)
+  }
 }
 
 /**

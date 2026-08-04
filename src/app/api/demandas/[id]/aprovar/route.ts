@@ -11,11 +11,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+
+  // Admin/gestor OU líder audiovisual da org podem aprovar/recusar/reverter.
+  if (!["admin", "gestor"].includes(session.user.tipo)) {
+    const membro = await prisma.usuarioOrganizacao.findUnique({
+      where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
+      select: { liderAudiovisual: true },
+    })
+    if (!membro?.liderAudiovisual) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+    }
+  }
 
   const { id } = await params
   const body = await req.json()

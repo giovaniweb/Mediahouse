@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { contarVinculos } from "@/lib/usuario-vinculos"
+import { PRESETS } from "@/lib/permissoes"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
@@ -63,8 +64,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const validas: AreaAtuacao[] = ["audiovisual", "growth", "eventos"]
       memData.areas = (body.areas as string[]).filter((a) => validas.includes(a as AreaAtuacao))
     }
+    if (typeof body.liderAudiovisual === "boolean") memData.liderAudiovisual = body.liderAudiovisual
     if (Object.keys(memData).length > 0) {
       await prisma.usuarioOrganizacao.updateMany({ where: { usuarioId: id, organizacaoId }, data: memData })
+    }
+    // Ao promover a Líder audiovisual, concede o preset de permissões de líder
+    // (edita, move, vê todas, aprova). Ao desligar, não rebaixa (evita surpresa).
+    if (body.liderAudiovisual === true) {
+      const preset = PRESETS.lider_audiovisual
+      await prisma.permissaoUsuario.upsert({
+        where: { usuarioId: id },
+        create: { usuarioId: id, ...preset },
+        update: preset,
+      })
     }
   }
 
