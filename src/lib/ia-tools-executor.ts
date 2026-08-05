@@ -5,6 +5,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 
 // ─── Executor principal ───────────────────────────────────────────────────────
 
@@ -743,6 +744,11 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
         ).catch(() => null)
       }
     }
+  }
+
+  // Notifica os líderes do audiovisual (demanda via WhatsApp nasce como audiovisual).
+  if (demanda.area === "audiovisual") {
+    void notificarLideresAudiovisual(demanda.id, demanda.codigo, demanda.titulo, organizacaoId)
   }
 
   return JSON.stringify({

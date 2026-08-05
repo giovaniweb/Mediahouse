@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { fetchMicrosoftMessages, refreshMicrosoftAccessToken } from "@/lib/microsoft-mail"
 import { htmlToPlainText, parseInboundEmail, type EmailParseResult } from "@/lib/email-inbox-parser"
+import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 
 function filterParts(value?: string | null): string[] {
   return (value ?? "")
@@ -187,6 +188,8 @@ export async function createDemandFromInboxEmail(
       })
       return demanda
     })
+    // Demanda da caixa de entrada é sempre audiovisual — notifica os líderes.
+    void notificarLideresAudiovisual(created.id, created.codigo, created.titulo, email.organizacaoId)
     return { demandaId: created.id, codigo: created.codigo }
   } catch (error) {
     if (error instanceof Error && error.message === "EMAIL_ALREADY_PROCESSING") {
