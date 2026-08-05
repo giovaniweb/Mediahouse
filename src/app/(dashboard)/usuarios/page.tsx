@@ -97,8 +97,10 @@ function ModalPerfilProfissional({
   email,
   telefone,
   status,
+  liderAudiovisual,
   onClose,
   onDeleted,
+  onUpdated,
 }: {
   tipo: "vm_ext" | "vm_int"
   usuarioId: string
@@ -107,11 +109,36 @@ function ModalPerfilProfissional({
   email?: string
   telefone?: string
   status: string
+  liderAudiovisual?: boolean
   onClose: () => void
   onDeleted: () => void
+  onUpdated?: () => void
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [lider, setLider] = useState(liderAudiovisual ?? false)
+  const [savingLider, setSavingLider] = useState(false)
+
+  async function toggleLider() {
+    const novo = !lider
+    setLider(novo)
+    setSavingLider(true)
+    try {
+      const res = await fetch(`/api/usuarios/${usuarioId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ liderAudiovisual: novo }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erro ao salvar")
+      toast.success(novo ? `${nome} agora é líder do audiovisual!` : `${nome} não é mais líder.`)
+      onUpdated?.()
+    } catch (e: unknown) {
+      setLider(!novo) // reverte
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar")
+    } finally {
+      setSavingLider(false)
+    }
+  }
 
   const tipoLabel = tipo === "vm_ext" ? "Videomaker Externo" : "Videomaker Interno"
   const perfilHref = tipo === "vm_ext"
@@ -185,6 +212,26 @@ function ModalPerfilProfissional({
             )}>{status === "ativo" ? "Ativo" : "Inativo"}</span>
           </div>
         </div>
+
+        {/* Líder audiovisual — só para videomaker interno */}
+        {tipo === "vm_int" && (
+          <div className="flex items-start justify-between gap-3 border border-fuchsia-800/50 rounded-xl p-3 bg-fuchsia-500/5">
+            <div>
+              <p className="text-sm font-medium text-fuchsia-200">Líder audiovisual</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Autonomia para editar demandas, trocar responsável e aprovar. Recebe notificação de toda nova demanda audiovisual.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={lider}
+              disabled={savingLider}
+              onClick={toggleLider}
+              className={cn("shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative disabled:opacity-50", lider ? "bg-fuchsia-600" : "bg-zinc-700")}
+            >
+              <span className={cn("absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all", lider ? "left-[18px]" : "left-0.5")} />
+            </button>
+          </div>
+        )}
 
         {/* Link perfil completo */}
         {perfilHref && (
@@ -550,6 +597,7 @@ export default function UsuariosPage() {
     email?: string
     telefone?: string
     status: string
+    liderAudiovisual?: boolean
   } | null>(null)
   type Vinculos = { demandas: number; historicos: number; comentarios: number; coberturas: number; eventos: number; profissional: number; memberships: number; total: number; podeExcluir: boolean }
   const [deleteSistemaTarget, setDeleteSistemaTarget] = useState<{ id: string; nome: string; vinculos: Vinculos | null; carregando: boolean } | null>(null)
@@ -706,6 +754,7 @@ export default function UsuariosPage() {
       email: u.email,
       telefone: u.telefone,
       status: u.status,
+      liderAudiovisual: u.liderAudiovisual,
     })
   }
 
@@ -1241,7 +1290,7 @@ export default function UsuariosPage() {
                           <button
                             onClick={() => {
                               const profId = editores.find(ed => ed.usuarioId === e.id)?.id ?? null
-                              setProfModal({ tipo: "vm_int", usuarioId: e.id, professionalId: profId, nome: e.nome, email: (e as Usuario).email, telefone: e.telefone, status: e.status })
+                              setProfModal({ tipo: "vm_int", usuarioId: e.id, professionalId: profId, nome: e.nome, email: (e as Usuario).email, telefone: e.telefone, status: e.status, liderAudiovisual: e.liderAudiovisual })
                             }}
                             className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
                             title="Excluir"
@@ -1331,6 +1380,7 @@ export default function UsuariosPage() {
           {...profModal}
           onClose={() => setProfModal(null)}
           onDeleted={() => { setProfModal(null); mutate() }}
+          onUpdated={mutate}
         />
       )}
 
