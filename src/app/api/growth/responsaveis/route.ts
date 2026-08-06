@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import type { AreaAtuacao } from "@prisma/client"
 
 // Rótulo amigável da função profissional (fallback ao tipo legado do usuário).
 const LABEL_FUNCAO: Record<string, string> = {
@@ -18,20 +19,24 @@ function rotularFuncao(funcao: string | null, tipoLegado: string): string {
   return LABEL_FUNCAO[key] ?? key
 }
 
-// GET /api/growth/responsaveis — equipe INTERNA ativa da org logada com ÁREA = growth.
-// Dirigido por categoria/área de atuação (Pessoas & Acessos), não mais por adivinhação
-// de tipo. Exclui solicitantes, externos, inativos e usuários de outra org.
-export async function GET() {
+// GET /api/growth/responsaveis?area=growth|audiovisual
+// Equipe INTERNA ativa da org logada, filtrada pela ÁREA de atuação (Pessoas &
+// Acessos). Serve os dois kanbans — o audiovisual passou a ter filtro por
+// responsável e reusa esta rota em vez de ganhar uma cópia. Padrão: growth.
+// Exclui solicitantes, externos, inativos e usuários de outra org.
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
+  const area: AreaAtuacao = req.nextUrl.searchParams.get("area") === "audiovisual" ? "audiovisual" : "growth"
+
   const membros = await prisma.usuarioOrganizacao.findMany({
     where: {
       organizacaoId,
       categoria: "interna",
-      areas: { has: "growth" },
+      areas: { has: area },
       usuario: { status: "ativo" },
     },
     select: {

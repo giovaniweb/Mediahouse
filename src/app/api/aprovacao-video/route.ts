@@ -2,6 +2,37 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { getOrgId, semOrg, requireDemandaOrg } from "@/lib/org"
+
+// GET /api/aprovacao-video?status=pendente&area=audiovisual|design
+// Aprovações de entregável da organização logada. Existe porque a aba "Vídeos"
+// de /aprovacoes já consumia este endpoint, mas só havia POST — a aba respondia
+// 405 e ficava permanentemente vazia.
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
+  const sp = req.nextUrl.searchParams
+  const status = sp.get("status") ?? undefined
+  const areaParam = sp.get("area")
+  const area = areaParam === "design" || areaParam === "audiovisual" ? areaParam : undefined
+
+  const aprovacoes = await prisma.aprovacaoVideo.findMany({
+    where: {
+      ...(status ? { status } : {}),
+      demanda: { organizacaoId, ...(area ? { area } : {}) },
+    },
+    include: {
+      demanda: { select: { id: true, codigo: true, titulo: true, area: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  })
+
+  return NextResponse.json({ aprovacoes })
+}
 
 // POST /api/aprovacao-video — cria link de aprovação de vídeo para uma demanda
 export async function POST(req: NextRequest) {
@@ -15,6 +46,11 @@ export async function POST(req: NextRequest) {
     if (!demandaId || !urlVideo) {
       return NextResponse.json({ error: "demandaId e urlVideo são obrigatórios" }, { status: 400 })
     }
+
+    // Ownership: sem esta checagem, qualquer usuário autenticado de QUALQUER
+    // empresa gerava link público e sobrescrevia o linkCliente de uma demanda alheia.
+    const guard = await requireDemandaOrg(session, demandaId as string)
+    if (guard instanceof NextResponse) return guard
 
     const demanda = await prisma.demanda.findUnique({
       where: { id: demandaId as string },

@@ -163,14 +163,14 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
       {/* Botões de navegação */}
       <button
         onClick={() => scrollBy(-320)}
-        className="fixed left-[228px] top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
         aria-label="Rolar para esquerda"
       >
         <ChevronLeft className="w-5 h-5" />
       </button>
       <button
         onClick={() => scrollBy(320)}
-        className="fixed right-2 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
         aria-label="Rolar para direita"
       >
         <ChevronRight className="w-5 h-5" />
@@ -179,7 +179,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     <DragDropContext onDragEnd={handleDragEnd}>
       <div
         ref={scrollRef}
-        className={cn("kanban-scroll flex gap-3 overflow-x-auto pb-2 h-full px-10 select-none", dragging && "is-dragging")}
+        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging")}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -233,7 +233,10 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={cn(
-                      "flex-1 px-2 pb-2 space-y-2 min-h-24 rounded-b-xl transition-colors",
+                      // Cada coluna rola sozinha: assim a barra horizontal do board
+                      // fica sempre no rodapé visível, em vez de ser empurrada para
+                      // o fim da coluna mais alta.
+                      "flex-1 min-h-0 overflow-y-auto kanban-scroll px-2 pb-2 space-y-2 rounded-b-xl transition-colors",
                       snapshot.isDraggingOver && "bg-zinc-800/50"
                     )}
                   >

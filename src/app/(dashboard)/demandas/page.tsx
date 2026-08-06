@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
-import { Plus, Search, SlidersHorizontal, XCircle } from "lucide-react"
+import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { EVENTOS_ATIVO } from "@/lib/modulos"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -14,6 +14,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 interface Videomaker { id: string; nome: string }
 interface Editor { id: string; nome: string }
 interface Produto { id: string; nome: string }
+interface Responsavel { id: string; nome: string; label: string }
 
 export default function DemandasPage() {
   const { data: session } = useSession()
@@ -23,6 +24,8 @@ export default function DemandasPage() {
   const [filtroEditor, setFiltroEditor] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
   const [filtroEvento, setFiltroEvento] = useState("")
+  const [filtroResp, setFiltroResp] = useState("")
+  const [soMinhas, setSoMinhas] = useState(false)
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
 
@@ -31,13 +34,15 @@ export default function DemandasPage() {
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=200", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
   const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(EVENTOS_ATIVO ? "/api/eventos" : null, fetcher)
+  const { data: dataResp } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis?area=audiovisual", fetcher)
 
   const videomakers = dataVMs?.videomakers ?? []
   const editores = dataEds?.editores ?? []
   const produtos = dataProdutos?.produtos ?? []
   const eventos = dataEventos?.eventos ?? []
+  const responsaveis = dataResp?.responsaveis ?? []
 
-  const temFiltrosAtivos = !!(filtroDepto || filtroVM || filtroEditor || filtroProduto || filtroEvento)
+  const temFiltrosAtivos = !!(filtroDepto || filtroVM || filtroEditor || filtroProduto || filtroEvento || filtroResp || soMinhas)
 
   function limparFiltros() {
     setFiltroDepto("")
@@ -45,6 +50,8 @@ export default function DemandasPage() {
     setFiltroEditor("")
     setFiltroProduto("")
     setFiltroEvento("")
+    setFiltroResp("")
+    setSoMinhas(false)
   }
 
   const params = new URLSearchParams()
@@ -55,6 +62,8 @@ export default function DemandasPage() {
   if (filtroEditor) params.set("editorId", filtroEditor)
   if (filtroProduto) params.set("produtoId", filtroProduto)
   if (filtroEvento) params.set("eventoGestaoId", filtroEvento)
+  if (filtroResp) params.set("responsavelId", filtroResp)
+  if (soMinhas) params.set("mine", "1")
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
@@ -253,6 +262,11 @@ export default function DemandasPage() {
           <option value="">Todos produtos</option>
           {produtos.map(p => (<option key={p.id} value={p.id}>{p.nome}</option>))}
         </select>
+        <select value={filtroResp} onChange={(e) => { setFiltroResp(e.target.value); if (e.target.value) setSoMinhas(false) }}
+          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
+          <option value="">Todos responsáveis</option>
+          {responsaveis.map(r => (<option key={r.id} value={r.id}>{r.label}</option>))}
+        </select>
         {EVENTOS_ATIVO && (
           <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
             className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
@@ -260,6 +274,19 @@ export default function DemandasPage() {
             {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
           </select>
         )}
+        <button
+          type="button"
+          onClick={() => { setSoMinhas(v => !v); if (!soMinhas) setFiltroResp("") }}
+          aria-pressed={soMinhas}
+          title="Só as demandas em que eu sou responsável, videomaker, editor, gestor ou solicitante"
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            soMinhas
+              ? "bg-purple-500/15 text-purple-300 border-purple-500/40"
+              : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5" /> Só minhas
+        </button>
         {temFiltrosAtivos && (
           <button onClick={limparFiltros}
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
@@ -271,7 +298,7 @@ export default function DemandasPage() {
       </div>
 
       {/* Kanban */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 min-h-0 p-4 overflow-hidden">
         <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
       </div>
 

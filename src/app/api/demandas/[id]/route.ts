@@ -5,6 +5,7 @@ import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsap
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
@@ -499,29 +500,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // Edição de responsável(eis) / linha-projeto: valida ownership por org (sem cross-org)
-  let responsaveisValidosPut: string[] | undefined
-  if (Array.isArray(body.responsavelIds)) {
-    const ids = Array.from(new Set(body.responsavelIds as string[]))
-    if (ids.length > 0) {
-      const membros = await prisma.usuario.findMany({
-        where: { id: { in: ids }, organizacoes: { some: { organizacaoId: guard.organizacaoId } } },
-        select: { id: true },
-      })
-      responsaveisValidosPut = ids.filter((id) => membros.some((m) => m.id === id))
-      if (responsaveisValidosPut.length !== ids.length) {
-        return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
-      }
-    } else {
-      responsaveisValidosPut = []
-    }
-  } else if (body.responsavelId) {
-    const membro = await prisma.usuario.findFirst({
-      where: { id: body.responsavelId, organizacoes: { some: { organizacaoId: guard.organizacaoId } } },
-      select: { id: true },
-    })
-    if (!membro) return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
+  // Responsáveis: aceita `responsavelId` (singular, edição inline) ou
+  // `responsavelIds[]` (multi, Growth). A gravação acontece depois do update,
+  // via setResponsaveis — que mantém a M2M e a coluna derivada em sincronia.
+  let responsaveisPut = lerResponsaveisDoBody(body)
+  if (responsaveisPut !== undefined) {
+    const validados = await validarResponsaveis(responsaveisPut, guard.organizacaoId)
+    if (validados instanceof NextResponse) return validados
+    responsaveisPut = validados
   }
   if (body.editorId) {
     const editor = await prisma.editor.findFirst({
@@ -553,9 +539,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
     dataLimite: body.dataLimite !== undefined
       ? (body.dataLimite ? new Date(body.dataLimite) : null)
       : undefined,
-    ...(responsaveisValidosPut !== undefined
-      ? { responsavelId: responsaveisValidosPut[0] ?? null }
-      : (body.responsavelId !== undefined ? { responsavelId: body.responsavelId || null } : {})),
+    // responsavelId NÃO entra aqui: quem grava é setResponsaveis (abaixo),
+    // junto com a M2M, para as duas fontes nunca divergirem.
     ...(body.linhaProjetoId !== undefined ? { linhaProjetoId: body.linhaProjetoId || null } : {}),
     dataCaptacao: body.dataCaptacao !== undefined
       ? (body.dataCaptacao ? new Date(body.dataCaptacao) : null)
@@ -582,15 +567,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
 
-  // Rebuild da lista de responsáveis (Growth) quando enviada via responsavelIds[]
-  if (responsaveisValidosPut !== undefined) {
-    await prisma.demandaResponsavel.deleteMany({ where: { demandaId: id } })
-    if (responsaveisValidosPut.length > 0) {
-      await prisma.demandaResponsavel.createMany({
-        data: responsaveisValidosPut.map((usuarioId) => ({ demandaId: id, usuarioId })),
-        skipDuplicates: true,
-      })
-    }
+  // Responsáveis: vale tanto para `responsavelId` (singular) quanto para
+  // `responsavelIds[]` — antes só o array reconstruía a M2M, e a edição inline
+  // deixava o filtro por responsável apontando para o responsável antigo.
+  if (responsaveisPut !== undefined) {
+    await setResponsaveis(id, responsaveisPut)
   }
 
   // Registrar histórico se mudou para videomaker_notificado

@@ -6,7 +6,9 @@ import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg } from "@/lib/org"
-import type { Prioridade, Departamento } from "@prisma/client"
+import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
+import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
+import type { Prioridade, Departamento, Prisma } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
   titulo: z.string().trim().min(3),
@@ -111,6 +113,23 @@ export async function GET(req: NextRequest) {
     area = "design"
   }
 
+  // Escopo "minhas demandas": explícito via ?mine=1, ou imposto quando a pessoa
+  // NÃO tem `verTodasDemandas`. Essa permissão existia na tela de permissões mas
+  // nunca era lida aqui — a promessa de "só as próprias" não era cumprida.
+  const querSoMinhas = searchParams.get("mine") === "1"
+  let escopoMinhas: Prisma.DemandaWhereInput | null = null
+  if (querSoMinhas) {
+    escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
+  } else if (!["admin", "gestor"].includes(session.user.tipo)) {
+    const perm = await prisma.permissaoUsuario.findUnique({
+      where: { usuarioId: session.user.id },
+      select: { verTodasDemandas: true },
+    })
+    if (perm && !perm.verTodasDemandas) {
+      escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
+    }
+  }
+
   const where: Record<string, unknown> = { organizacaoId }
   if (area) where.area = area
   if (departamento) where.departamento = departamento
@@ -121,45 +140,43 @@ export async function GET(req: NextRequest) {
   if (videomakerId) where.videomakerId = videomakerId
   if (designerId) where.designerId = designerId
   if (tipoVideo) where.tipoVideo = tipoVideo
-  if (responsavelId) where.responsaveis = { some: { usuarioId: responsavelId } }
   if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
   // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
   if (session.user.tipo === "gestor_eventos") where.eventoGestaoId = { not: null }
 
+  // Condições que internamente usam OR entram todas em AND[], para não se
+  // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`
+  // e a busca por código/descrição era silenciosamente descartada no /historico.
+  const and: Prisma.DemandaWhereInput[] = []
+
+  if (escopoMinhas) and.push(escopoMinhas)
+  if (responsavelId) and.push(whereResponsavel(responsavelId))
+
   // Filtro por data de finalização (usado pela página /historico)
   if (deParam || ateParam) {
-    where.OR = [
-      {
-        finalizadaEm: {
-          ...(deParam ? { gte: new Date(deParam) } : {}),
-          ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
-        },
-      },
-      {
-        finalizadaEm: null,
-        updatedAt: {
-          ...(deParam ? { gte: new Date(deParam) } : {}),
-          ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
-        },
-      },
-    ]
+    const faixa = {
+      ...(deParam ? { gte: new Date(deParam) } : {}),
+      ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
+    }
+    and.push({ OR: [{ finalizadaEm: faixa }, { finalizadaEm: null, updatedAt: faixa }] })
   }
 
   const produtoId = searchParams.get("produtoId")
   if (produtoId) where.produtos = { some: { produtoId } }
 
   const search = searchParams.get("search")
-  if (search && !where.OR) {
-    where.OR = [
-      { titulo: { contains: search, mode: "insensitive" } },
-      { codigo: { contains: search, mode: "insensitive" } },
-      { descricao: { contains: search, mode: "insensitive" } },
-    ]
-  } else if (search && where.OR) {
-    // Se já tem OR (filtro de data), fazer AND com busca via título/código direto
-    where.titulo = { contains: search, mode: "insensitive" }
+  if (search) {
+    and.push({
+      OR: [
+        { titulo: { contains: search, mode: "insensitive" } },
+        { codigo: { contains: search, mode: "insensitive" } },
+        { descricao: { contains: search, mode: "insensitive" } },
+      ],
+    })
   }
+
+  if (and.length > 0) where.AND = and
 
   // Paginação: quando limit está presente, retorna total também
   const usePagination = !!limit
@@ -331,12 +348,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Vincular responsável(eis) — múltiplos (Growth), já validados como membros da org.
+  // Vincular responsável(eis) — já validados como membros da org. Passa pelo
+  // escritor compartilhado para a M2M e a coluna derivada nascerem em sincronia.
   if (responsaveisValidos.length > 0) {
-    await prisma.demandaResponsavel.createMany({
-      data: responsaveisValidos.map((usuarioId) => ({ demandaId: demanda.id, usuarioId })),
-      skipDuplicates: true,
-    }).catch(e => console.error("[Demanda] Erro ao vincular responsáveis:", e))
+    await setResponsaveis(demanda.id, responsaveisValidos)
+      .catch(e => console.error("[Demanda] Erro ao vincular responsáveis:", e))
   }
 
   // Auto-populate checklist a partir de templates

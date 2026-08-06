@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { Sparkles, Plus, Loader2, X, Search, SlidersHorizontal, XCircle } from "lucide-react"
+import { Sparkles, Plus, Loader2, X, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO, tipoConteudoDe } from "@/lib/growth-conteudo"
@@ -26,6 +26,7 @@ export default function GrowthKanbanPage() {
   const [filtroLinha, setFiltroLinha] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
+  const [soMinhas, setSoMinhas] = useState(false)
 
   // Dados que alimentam os selects dos filtros
   const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
@@ -35,14 +36,15 @@ export default function GrowthKanbanPage() {
   const { data: pData } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos?limit=200", fetcher)
   const produtos = pData?.produtos ?? []
 
-  const temFiltrosAtivos = !!(filtroResp || filtroLinha || filtroTipo || filtroProduto)
+  const temFiltrosAtivos = !!(filtroResp || filtroLinha || filtroTipo || filtroProduto || soMinhas)
   function limparFiltros() {
-    setFiltroResp(""); setFiltroLinha(""); setFiltroTipo(""); setFiltroProduto("")
+    setFiltroResp(""); setFiltroLinha(""); setFiltroTipo(""); setFiltroProduto(""); setSoMinhas(false)
   }
 
   const params = new URLSearchParams()
   params.set("area", "design")
   if (search) params.set("search", search)
+  if (soMinhas) params.set("mine", "1")
   if (filtroResp) params.set("responsavelId", filtroResp)
   if (filtroLinha) params.set("linhaProjetoId", filtroLinha)
   if (filtroTipo) params.set("tipoVideo", filtroTipo)
@@ -118,6 +120,19 @@ export default function GrowthKanbanPage() {
           <option value="">Todos produtos</option>
           {produtos.map((p) => (<option key={p.id} value={p.id}>{p.nome}</option>))}
         </select>
+        <button
+          type="button"
+          onClick={() => { setSoMinhas(v => !v); if (!soMinhas) setFiltroResp("") }}
+          aria-pressed={soMinhas}
+          title="Só as demandas em que eu sou responsável, designer, social, gestor ou solicitante"
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            soMinhas
+              ? "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40"
+              : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5" /> Só minhas
+        </button>
         {temFiltrosAtivos && (
           <button onClick={limparFiltros}
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
@@ -128,7 +143,7 @@ export default function GrowthKanbanPage() {
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
 
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 min-h-0 p-4 overflow-hidden">
         <KanbanBoard
           demandas={demandas}
           onMove={handleMove}
