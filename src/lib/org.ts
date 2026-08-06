@@ -29,6 +29,21 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
   return m?.organizacaoId ?? null
 }
 
+export const SLUG_ORG_LEGADA = "contourline"
+
+// Resolve a organização de uma rota PÚBLICA (sem sessão) a partir de `?org=<slug>`.
+// Sem slug, cai na organização legada (Contourline) — mesmo contrato do formulário
+// público de demanda. O ponto é nunca consultar sem organização nenhuma, que era o
+// que fazia as vitrines públicas agregarem dados de todas as empresas.
+export async function orgPublica(slug: string | null | undefined): Promise<string | null> {
+  const alvo = slug?.trim() || SLUG_ORG_LEGADA
+  const org = await prisma.organizacao.findUnique({
+    where: { slug: alvo },
+    select: { id: true, ativo: true },
+  })
+  return org?.ativo ? org.id : null
+}
+
 // Resposta padrão quando a sessão não tem organização resolvível.
 export function semOrg() {
   return NextResponse.json({ error: "Organização não encontrada na sessão" }, { status: 403 })

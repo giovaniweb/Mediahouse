@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { orgPublica } from "@/lib/org"
 
-// GET /api/publico/galeria — lista vídeos finalizados/para_postar (sem auth)
-// Query params: page, limit, tipo, search, produtoId
+// GET /api/publico/galeria?org=<slug> — vídeos finalizados/para_postar (sem auth)
+// Query params: org, page, limit, tipo, search, produtoId
+// Escopado por organização: sem isso a vitrine misturava entregas de todas as empresas.
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
+  const organizacaoId = await orgPublica(sp.get("org"))
   const page = Math.max(1, parseInt(sp.get("page") ?? "1"))
   const limit = Math.min(48, Math.max(1, parseInt(sp.get("limit") ?? "24")))
+  if (!organizacaoId) {
+    return NextResponse.json({ total: 0, page, limit, totalPages: 0, videos: [] })
+  }
   const tipo = sp.get("tipo") ?? ""
   const search = sp.get("search") ?? ""
   const produtoId = sp.get("produtoId") ?? ""
@@ -16,6 +22,7 @@ export async function GET(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
+    organizacaoId,
     area,
     statusVisivel: { in: ["finalizado", "para_postar"] },
     ...(tipo ? { tipoVideo: tipo } : {}),

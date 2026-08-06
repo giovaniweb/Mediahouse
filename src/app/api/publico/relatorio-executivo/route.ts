@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { computeRelatorioExecutivo } from "@/lib/relatorio-executivo"
+import { computeRelatorioExecutivo, orgPorRelatorioToken } from "@/lib/relatorio-executivo"
 
-// GET /api/publico/relatorio-executivo?mes=YYYY-MM&area=audiovisual  (sem auth)
-// Resumo executivo do mês: produção (lançada + NuFlow), total e frentes presenciais.
+// GET /api/publico/relatorio-executivo?token=...&mes=YYYY-MM&area=audiovisual
+// Leitura externa do resumo executivo. O token identifica a EMPRESA — sem ele a
+// rota não responde (antes agregava a produção de todas as empresas do banco).
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
-  const data = await computeRelatorioExecutivo(sp.get("mes"), sp.get("area"))
+  const organizacaoId = await orgPorRelatorioToken(sp.get("token"))
+  if (!organizacaoId) {
+    return NextResponse.json({ error: "Link inválido ou revogado" }, { status: 404 })
+  }
+  const data = await computeRelatorioExecutivo(organizacaoId, sp.get("mes"), sp.get("area"))
   return NextResponse.json(data)
 }

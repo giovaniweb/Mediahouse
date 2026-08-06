@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
@@ -10,11 +11,18 @@ import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 // itera todas as organizações ativas (isolamento multiempresa) e uma falha numa org
 // não interrompe as demais. Agentes NÃO se chamam entre si — sem execução dupla.
 export async function GET(req: NextRequest) {
-  // Verifica segredo do cron
+  // Verifica segredo do cron — falha FECHADA: sem CRON_SECRET configurado a rota
+  // não roda (antes, a ausência da variável deixava o endpoint público e qualquer
+  // um podia disparar agentes de IA para todas as organizações).
   const cronSecret = process.env.CRON_SECRET
-  const authHeader = req.headers.get("authorization")
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON_SECRET não configurado" }, { status: 500 })
+  }
+  const authHeader = req.headers.get("authorization") ?? ""
+  const esperado = `Bearer ${cronSecret}`
+  const bufA = Buffer.from(authHeader)
+  const bufB = Buffer.from(esperado)
+  if (bufA.length !== bufB.length || !timingSafeEqual(bufA, bufB)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
 

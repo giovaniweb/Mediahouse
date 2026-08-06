@@ -1809,6 +1809,9 @@ model Organizacao {
   slug      String   @unique  // ex: "contourline" (preparado p/ subdomínio futuro)
   logoUrl   String?
   ativo     Boolean  @default(true)
+  // Token opt-in para leitura externa do Relatório Executivo (página pública + MCP).
+  // Sem token, os endpoints públicos não resolvem organização e respondem 401/404.
+  relatorioToken String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

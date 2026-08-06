@@ -15,6 +15,18 @@ export function mesesDisponiveis(): { value: string; label: string }[] {
   return out
 }
 
+// Resolve a organização a partir do token de leitura externa (query `?token=` ou
+// header `Authorization: Bearer`). Retorna null quando o token não existe ou a
+// organização está inativa — o chamador responde 401/404, nunca agrega tudo.
+export async function orgPorRelatorioToken(token: string | null | undefined): Promise<string | null> {
+  if (!token || token.length < 16) return null
+  const org = await prisma.organizacao.findUnique({
+    where: { relatorioToken: token },
+    select: { id: true, ativo: true },
+  })
+  return org?.ativo ? org.id : null
+}
+
 export interface RelatorioExecutivo {
   mes: string
   area: "audiovisual" | "design"
@@ -28,10 +40,13 @@ export interface RelatorioExecutivo {
 }
 
 // Computa o resumo executivo de um mês: produção lançada (manual) + NuFlow + frentes presenciais.
+// `organizacaoId` é obrigatório e vem primeiro: sem ele os números somariam todas as empresas.
 export async function computeRelatorioExecutivo(
+  organizacaoId: string,
   mesParam: string | null | undefined,
   areaRaw: string | null | undefined
 ): Promise<RelatorioExecutivo> {
+  if (!organizacaoId) throw new Error("organizacaoId é obrigatório no relatório executivo")
   const area: "audiovisual" | "design" = areaRaw === "design" ? "design" : "audiovisual"
   const hoje = new Date()
   let ano = hoje.getFullYear()
@@ -45,7 +60,7 @@ export async function computeRelatorioExecutivo(
   const competencia = ano * 100 + mes
 
   // Produção manual (lançada) por grupo
-  const lancamentos = await prisma.producaoManual.findMany({ where: { area, competencia } })
+  const lancamentos = await prisma.producaoManual.findMany({ where: { organizacaoId, area, competencia } })
   const producaoPorCategoria: Record<string, number> = {}
   const presencialPorCategoria: Record<string, number> = {}
   for (const l of lancamentos) {
@@ -57,6 +72,7 @@ export async function computeRelatorioExecutivo(
   // Vídeos NuFlow entregues no mês (Arquivo final + legado linkFinal)
   const finalizadas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       area,
       OR: [
         { finalizadaEm: { gte: de, lte: ate } },

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { computeRelatorioExecutivo, mesesDisponiveis } from "@/lib/relatorio-executivo"
+import { computeRelatorioExecutivo, mesesDisponiveis, orgPorRelatorioToken } from "@/lib/relatorio-executivo"
 
 // Servidor MCP remoto (Streamable HTTP, stateless) do NuFlow.
 // Conecte em qualquer cliente MCP (Claude, etc.) com a URL: https://nuflow.space/api/mcp
 // Expõe ferramentas para puxar o Relatório Executivo de produção.
+//
+// AUTENTICAÇÃO: exige `Authorization: Bearer <relatorioToken>` da organização.
+// O token é quem define de QUAL empresa são os números — sem ele a rota não responde.
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -66,7 +69,16 @@ export async function GET() {
 
 type RpcMessage = { id?: JsonRpcId; method?: string; params?: Record<string, unknown> }
 
-async function handle(msg: RpcMessage): Promise<object | null> {
+// Token via `Authorization: Bearer <token>` (padrão MCP) ou `?token=` (fallback
+// para clientes que não permitem header customizado).
+function lerToken(req: NextRequest): string | null {
+  const auth = req.headers.get("authorization") ?? ""
+  const m = /^Bearer\s+(.+)$/i.exec(auth.trim())
+  if (m) return m[1].trim()
+  return req.nextUrl.searchParams.get("token")
+}
+
+async function handle(msg: RpcMessage, organizacaoId: string): Promise<object | null> {
   const id = (msg.id ?? null) as JsonRpcId
   const method = msg.method
   const params = msg.params ?? {}
@@ -86,7 +98,7 @@ async function handle(msg: RpcMessage): Promise<object | null> {
       if (name === "relatorio_executivo") {
         const mes = typeof args.mes === "string" ? args.mes : null
         const area = args.area === "design" ? "design" : "audiovisual"
-        const data = await computeRelatorioExecutivo(mes, area)
+        const data = await computeRelatorioExecutivo(organizacaoId, mes, area)
         return ok(id, textResult(data))
       }
       if (name === "listar_meses") {
@@ -103,6 +115,15 @@ async function handle(msg: RpcMessage): Promise<object | null> {
 }
 
 export async function POST(req: NextRequest) {
+  // Autenticação antes de qualquer parsing: o token define a empresa dos números.
+  const organizacaoId = await orgPorRelatorioToken(lerToken(req))
+  if (!organizacaoId) {
+    return NextResponse.json(
+      err(null, -32001, "Não autorizado — informe Authorization: Bearer <token> da organização."),
+      { status: 401, headers: { ...CORS, "WWW-Authenticate": "Bearer" } }
+    )
+  }
+
   let body: unknown
   try {
     body = await req.json()
@@ -111,11 +132,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (Array.isArray(body)) {
-    const responses = (await Promise.all(body.map((m) => handle(m as RpcMessage)))).filter(Boolean)
+    const responses = (await Promise.all(body.map((m) => handle(m as RpcMessage, organizacaoId)))).filter(Boolean)
     return NextResponse.json(responses, { headers: CORS })
   }
 
-  const res = await handle(body as RpcMessage)
+  const res = await handle(body as RpcMessage, organizacaoId)
   if (res === null) return new NextResponse(null, { status: 202, headers: CORS })
   return NextResponse.json(res, { headers: CORS })
 }

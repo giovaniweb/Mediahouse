@@ -44,15 +44,27 @@ export default function RelatorioExecutivoMesPage() {
   const meses = opcoesMes()
   const mes = /^\d{4}-\d{2}$/.test(params.mes ?? "") ? params.mes : meses[0]?.value ?? ""
   const [area, setArea] = useState<"audiovisual" | "design">(searchParams.get("area") === "design" ? "design" : "audiovisual")
+  // O token identifica a empresa do relatório e viaja em toda navegação interna.
+  const token = searchParams.get("token") ?? ""
 
-  const { data, isLoading } = useSWR<Resumo>(mes ? `/api/publico/relatorio-executivo?mes=${mes}&area=${area}` : null, fetcher)
+  const { data, isLoading } = useSWR<Resumo>(
+    mes && token ? `/api/publico/relatorio-executivo?token=${encodeURIComponent(token)}&mes=${mes}&area=${area}` : null,
+    fetcher
+  )
 
+  function urlMes(novoMes: string, novaArea: "audiovisual" | "design") {
+    const qs = new URLSearchParams()
+    if (token) qs.set("token", token)
+    if (novaArea === "design") qs.set("area", "design")
+    const s = qs.toString()
+    return `/relatorio-executivo/${novoMes}${s ? `?${s}` : ""}`
+  }
   function trocarMes(novo: string) {
-    router.push(`/relatorio-executivo/${novo}${area === "design" ? "?area=design" : ""}`)
+    router.push(urlMes(novo, area))
   }
   function trocarArea(a: "audiovisual" | "design") {
     setArea(a)
-    router.replace(`/relatorio-executivo/${mes}${a === "design" ? "?area=design" : ""}`)
+    router.replace(urlMes(mes, a))
   }
 
   const unidade = area === "design" ? "artes" : "vídeos"
@@ -85,7 +97,14 @@ export default function RelatorioExecutivoMesPage() {
           </div>
         </div>
 
-        {isLoading || !data ? (
+        {!token ? (
+          <div className="py-24 text-center">
+            <p className="text-lg font-semibold text-zinc-200">Link incompleto</p>
+            <p className="text-sm text-zinc-400 mt-2">
+              Este relatório só abre pelo link de compartilhamento da empresa, que inclui um token de acesso.
+            </p>
+          </div>
+        ) : isLoading || !data ? (
           <div className="flex justify-center py-24"><Loader2 className="w-7 h-7 animate-spin text-blue-400/60" /></div>
         ) : (
           <>
