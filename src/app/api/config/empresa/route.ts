@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { getPermissoes } from "@/lib/permissoes-server"
 import { contourlineOrgId } from "@/lib/whatsapp"
 
 // GET /api/config/empresa — retorna dados da empresa (público para videomakers)
@@ -23,13 +24,14 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  // Verificar permissão
-  const perm = await prisma.permissaoUsuario.findUnique({ where: { usuarioId: session.user.id } })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
+  // Permissão desta pessoa NESTA empresa (antes era uma linha global por usuário).
+  const perm = await getPermissoes(session.user.id, organizacaoId)
   if (!perm?.gerenciarConfig && !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 

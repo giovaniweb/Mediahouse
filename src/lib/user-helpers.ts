@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { PRESETS } from "@/lib/permissoes"
+import { setPermissoes } from "@/lib/permissoes-server"
 import { dimensoesParaTipo } from "@/lib/pessoas"
 
 /**
@@ -108,13 +109,15 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
     }
   }
 
-  // Criar permissões a partir do preset do tipo
-  await prisma.permissaoUsuario.create({
-    data: { usuarioId: usuario.id, ...(PRESETS[tipo] ?? {}) },
-  })
-
   // Membership explícita na org que está cadastrando (multiempresa)
   await garantirMembership(usuario.id, organizacaoId, tipo)
+
+  // Permissões do preset, válidas NESTA empresa. Vem depois da membership de
+  // propósito: a permissão pertence ao vínculo, não à pessoa — sem empresa não
+  // há permissão a conceder.
+  if (organizacaoId) {
+    await setPermissoes(usuario.id, organizacaoId, PRESETS[tipo] ?? {})
+  }
 
   return { usuario, jáExistia: false, senha: senhaTexto }
 }

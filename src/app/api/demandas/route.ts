@@ -10,6 +10,7 @@ import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { emSegundoPlano } from "@/lib/notificar"
+import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Departamento, Prisma } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
@@ -123,10 +124,7 @@ export async function GET(req: NextRequest) {
   if (querSoMinhas) {
     escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
   } else if (!ehGestor(session)) {
-    const perm = await prisma.permissaoUsuario.findUnique({
-      where: { usuarioId: session.user.id },
-      select: { verTodasDemandas: true },
-    })
+    const perm = await getPermissoes(session.user.id, organizacaoId)
     if (perm && !perm.verTodasDemandas) {
       escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
     }

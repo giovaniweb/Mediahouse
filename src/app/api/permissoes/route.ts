@@ -3,11 +3,16 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { PRESETS } from "@/lib/permissoes"
+import { getPermissoes, setPermissoes } from "@/lib/permissoes-server"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/permissoes?usuarioId=xxx — buscar permissões de um usuário
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const usuarioId = req.nextUrl.searchParams.get("usuarioId") || session.user.id
 
@@ -16,22 +21,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
-  let permissoes = await prisma.permissaoUsuario.findUnique({
-    where: { usuarioId },
+  // Só se lê/escreve permissão de quem é membro DESTA empresa — senão um gestor
+  // conseguiria inspecionar (e depois alterar) os acessos de gente de outra.
+  const membro = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
+    select: { papel: true },
   })
+  if (!membro) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
-  // Se não existir, criar com preset do tipo do usuário
+  let permissoes = await getPermissoes(usuarioId, organizacaoId)
+
+  // Se não existir, criar com preset do papel da pessoa nesta empresa
   if (!permissoes) {
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: usuarioId },
-      select: { tipo: true },
-    })
-    if (!usuario) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
-
-    const preset = PRESETS[usuario.tipo] || PRESETS.solicitante
-    permissoes = await prisma.permissaoUsuario.create({
-      data: { usuarioId, ...preset },
-    })
+    const preset = PRESETS[membro.papel] || PRESETS.solicitante
+    permissoes = await setPermissoes(usuarioId, organizacaoId, preset)
   }
 
   return NextResponse.json(permissoes)
@@ -69,13 +72,23 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  const permissoes = await prisma.permissaoUsuario.upsert({
-    where: { usuarioId },
-    create: { usuarioId, ...data },
-    update: data,
-  })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+  const erro = await exigirMembro(usuarioId, organizacaoId)
+  if (erro) return erro
+
+  const permissoes = await setPermissoes(usuarioId, organizacaoId, data)
 
   return NextResponse.json(permissoes)
+}
+
+// Concede/revoga sempre dentro da empresa ativa — e só para quem é membro dela.
+async function exigirMembro(usuarioId: string, organizacaoId: string): Promise<NextResponse | null> {
+  const membro = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
+    select: { id: true },
+  })
+  return membro ? null : NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 }
 
 // POST /api/permissoes/reset — resetar para preset do tipo
@@ -92,18 +105,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "usuarioId obrigatório" }, { status: 400 })
   }
 
-  const usuario = await prisma.usuario.findUnique({
-    where: { id: usuarioId },
-    select: { tipo: true },
-  })
-  if (!usuario) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const preset = PRESETS[usuario.tipo] || PRESETS.solicitante
-  const permissoes = await prisma.permissaoUsuario.upsert({
-    where: { usuarioId },
-    create: { usuarioId, ...preset },
-    update: preset,
+  // O preset vem do papel NESTA empresa, não do tipo global do usuário.
+  const membro = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
+    select: { papel: true },
   })
+  if (!membro) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
+
+  const preset = PRESETS[membro.papel] || PRESETS.solicitante
+  const permissoes = await setPermissoes(usuarioId, organizacaoId, preset)
 
   return NextResponse.json(permissoes)
 }

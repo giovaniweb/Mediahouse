@@ -65,6 +65,19 @@ async function main() {
   console.log("🔄 Criando contas de acesso para profissionais existentes")
   console.log("─".repeat(60))
 
+  // Este script é anterior ao multiempresa. As permissões agora pertencem a uma
+  // organização, então ele passa a criá-las na Contourline, que é quem gerencia
+  // a rede de profissionais (mesmo critério do cadastro público).
+  const orgRede = await prisma.organizacao.findUnique({
+    where: { slug: "contourline" },
+    select: { id: true },
+  })
+  if (!orgRede) {
+    console.error("Organização 'contourline' não encontrada — abortando.")
+    process.exit(1)
+  }
+  const organizacaoId = orgRede.id
+
   // ─── Videomakers Externos ────────────────────────────────────
   const videomakers = await prisma.videomaker.findMany({
     where: { usuarioId: null }, // só os que ainda não têm conta
@@ -111,6 +124,7 @@ async function main() {
       await prisma.permissaoUsuario.create({
         data: {
           usuarioId: usuario.id,
+          organizacaoId,
           verDashboard: true, verDemandas: true, verAgenda: true,
           verAprovacoes: false, verProdutos: false, verVideomakers: false,
           verEquipe: false, verCustos: false, verIA: false, verAlertas: false,
@@ -187,6 +201,7 @@ async function main() {
       await prisma.permissaoUsuario.create({
         data: {
           usuarioId: usuario.id,
+          organizacaoId,
           verDashboard: true, verDemandas: true, verAgenda: true,
           verAprovacoes: false, verProdutos: false, verVideomakers: false,
           verEquipe: false, verCustos: false, verIA: false, verAlertas: false,

@@ -192,7 +192,7 @@ model Usuario {
   comentarios     Comentario[]
   sessions        Session[]
   eventos         Evento[]
-  permissoes      PermissaoUsuario?
+  permissoes      PermissaoUsuario[]
   videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
   editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
   designerRef     Designer?         // link para designer (quando tipo=designer)
@@ -1217,9 +1217,16 @@ model ConfigTrello {
 // PERMISSÕES CONFIGURÁVEIS POR USUÁRIO
 // ─────────────────────────────────────────────
 
+// Permissões de uma pessoa DENTRO de uma empresa.
+//
+// Antes havia uma linha por usuário (`usuarioId @unique`), então quem
+// participava de duas empresas levava as mesmas permissões para as duas: um
+// admin da empresa A concedendo `verCustos` concedia também na B. É a mesma
+// classe de vazamento que `UsuarioOrganizacao.papel` resolveu para o papel.
 model PermissaoUsuario {
-  id        String   @id @default(cuid())
-  usuarioId String   @unique
+  id            String  @id @default(cuid())
+  usuarioId     String
+  organizacaoId String
 
   // Páginas visíveis (checklist)
   verDashboard    Boolean @default(true)
@@ -1261,8 +1268,11 @@ model PermissaoUsuario {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacao Organizacao  @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
+  @@unique([usuarioId, organizacaoId])
+  @@index([organizacaoId])
   @@map("permissoes_usuario")
 }
 
@@ -1890,6 +1900,7 @@ model Organizacao {
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
   videomakerVinculos VideomakerOrganizacao[]
+  permissoes         PermissaoUsuario[]
   videomakerFiscais  VideomakerDadosFiscais[]
 
   @@map("organizacoes")

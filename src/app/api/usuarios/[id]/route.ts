@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { contarVinculos } from "@/lib/usuario-vinculos"
 import { PRESETS } from "@/lib/permissoes"
+import { setPermissoes } from "@/lib/permissoes-server"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
@@ -72,12 +73,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Ao promover a Líder audiovisual, concede o preset de permissões de líder
     // (edita, move, vê todas, aprova). Ao desligar, não rebaixa (evita surpresa).
     if (body.liderAudiovisual === true) {
-      const preset = PRESETS.lider_audiovisual
-      await prisma.permissaoUsuario.upsert({
-        where: { usuarioId: id },
-        create: { usuarioId: id, ...preset },
-        update: preset,
-      })
+      // O preset vale só nesta empresa — liderar o audiovisual aqui não concede
+      // nada em outra empresa de que a pessoa participe.
+      await setPermissoes(id, organizacaoId, PRESETS.lider_audiovisual)
     }
   }
 

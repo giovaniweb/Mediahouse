@@ -3,17 +3,14 @@ import { randomBytes } from "node:crypto"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
+import { temPermissao } from "@/lib/permissoes-server"
+import { papelNaOrg } from "@/lib/papel"
 
 type Params = { params: Promise<{ id: string }> }
 
 // Só quem pode editar a demanda pode expor ou revogar o link público dela.
-async function podeCompartilhar(usuarioId: string, tipo: string): Promise<boolean> {
-  if (["admin", "gestor"].includes(tipo)) return true
-  const perm = await prisma.permissaoUsuario.findUnique({
-    where: { usuarioId },
-    select: { editarDemanda: true },
-  })
-  return !!perm?.editarDemanda
+async function podeCompartilhar(usuarioId: string, organizacaoId: string, papel: string | null): Promise<boolean> {
+  return temPermissao(usuarioId, organizacaoId, "editarDemanda", papel)
 }
 
 function montarLink(token: string): string {
@@ -31,7 +28,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
 
-  if (!(await podeCompartilhar(session.user.id, session.user.tipo))) {
+  if (!(await podeCompartilhar(session.user.id, guard.organizacaoId, papelNaOrg(session)))) {
     return NextResponse.json({ error: "Sem permissão para compartilhar" }, { status: 403 })
   }
 
@@ -70,7 +67,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
 
-  if (!(await podeCompartilhar(session.user.id, session.user.tipo))) {
+  if (!(await podeCompartilhar(session.user.id, guard.organizacaoId, papelNaOrg(session)))) {
     return NextResponse.json({ error: "Sem permissão para revogar" }, { status: 403 })
   }
 

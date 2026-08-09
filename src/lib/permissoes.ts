@@ -125,7 +125,7 @@ export const PERMISSAO_GRUPOS = [
 // Presets — o que cada tipo de usuário recebe por padrão
 type PresetPerms = Record<PermissaoKey, boolean>
 
-const BASE_FALSE: PresetPerms = {
+export const BASE_FALSE: PresetPerms = {
   verDashboard: false,
   verDemandas: false,
   verAprovacoes: false,
