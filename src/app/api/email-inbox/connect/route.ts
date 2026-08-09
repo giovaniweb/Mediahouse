@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { getOrgId, semOrg } from "@/lib/org"
 import { microsoftAuthorizationUrl } from "@/lib/microsoft-mail"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Apenas admin ou gestor pode conectar a caixa." }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)

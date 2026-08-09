@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -56,7 +57,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -100,7 +101,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   // Excluir apaga o profissional da REDE inteira, não só desta empresa — daí o
   // gate mais estrito: admin/gestor e apenas de quem já trabalhou com ele.
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

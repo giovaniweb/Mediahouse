@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { getBoardLists } from "@/lib/trello"
 
 // Armazenamos config em memória/env (pode ser migrado para DB depois)
@@ -8,7 +9,7 @@ let trelloConfigCache: { apiKey: string; token: string; boardId: string; ativo: 
 
 export async function GET() {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -25,7 +26,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

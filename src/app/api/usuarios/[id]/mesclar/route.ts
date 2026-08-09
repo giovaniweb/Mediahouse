@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão para mesclar usuários" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)

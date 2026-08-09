@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId } from "@/lib/org"
@@ -13,7 +14,7 @@ export async function POST(
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   // Videomaker é GLOBAL; a org da sessão é usada para o WhatsApp e para escopar o alerta.

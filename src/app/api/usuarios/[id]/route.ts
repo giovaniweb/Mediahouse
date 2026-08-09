@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { contarVinculos } from "@/lib/usuario-vinculos"
@@ -15,7 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
 
   const isOwn = session.user.id === id
-  const isPrivileged = ["admin", "gestor"].includes(session.user.tipo)
+  const isPrivileged = ehGestor(session)
 
   if (!isOwn && !isPrivileged) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
@@ -92,7 +93,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { id } = await params
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão para desativar usuários" }, { status: 403 })
   }
   if (session.user.id === id) {

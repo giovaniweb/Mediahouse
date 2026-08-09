@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getBoardLists, getBoardCards } from "@/lib/trello"
 import { getOrgId, semOrg } from "@/lib/org"
@@ -71,7 +72,7 @@ async function nextCode(): Promise<string> {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
 // GET: Preview what will be imported (dry run)
 export async function GET() {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

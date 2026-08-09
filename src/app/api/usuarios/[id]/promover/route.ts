@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { dimensoesParaTipo } from "@/lib/pessoas"
@@ -15,8 +16,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  const userTipo = (session.user as { tipo?: string }).tipo
-  if (userTipo !== "admin" && userTipo !== "gestor") {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)
@@ -40,15 +40,21 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const dim = dimensoesParaTipo(tipo)
 
-  const [, atualizado] = await prisma.$transaction([
-    // Membership da org ativa: papel + dimensões conforme o tipo escolhido
-    prisma.usuarioOrganizacao.update({
-      where: { id: membership.id },
-      data: { papel: tipo as TipoUsuario, categoria: dim.categoria, funcaoProfissional: dim.funcaoProfissional, areas: dim.areas },
-    }),
-    // Usuario.tipo por compatibilidade legada
-    prisma.usuario.update({ where: { id }, data: { tipo: tipo as TipoUsuario } }),
-  ])
+  // Escreve SÓ na membership desta organização.
+  //
+  // Antes, escrevia também `Usuario.tipo`, que é uma coluna global: promover
+  // alguém a admin aqui o tornava admin em todas as outras empresas de que ele
+  // participa. Como as rotas passaram a autorizar por `papel` (src/lib/papel.ts),
+  // a promoção continua tendo efeito — agora restrita a esta empresa.
+  await prisma.usuarioOrganizacao.update({
+    where: { id: membership.id },
+    data: { papel: tipo as TipoUsuario, categoria: dim.categoria, funcaoProfissional: dim.funcaoProfissional, areas: dim.areas },
+  })
 
-  return NextResponse.json({ ok: true, usuario: { id: atualizado.id, nome: atualizado.nome, tipo: atualizado.tipo } })
+  const atualizado = await prisma.usuario.findUnique({
+    where: { id },
+    select: { id: true, nome: true },
+  })
+
+  return NextResponse.json({ ok: true, usuario: { id: atualizado?.id, nome: atualizado?.nome, papel: tipo } })
 }

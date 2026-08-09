@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
@@ -121,7 +122,7 @@ export async function GET(req: NextRequest) {
   let escopoMinhas: Prisma.DemandaWhereInput | null = null
   if (querSoMinhas) {
     escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
-  } else if (!["admin", "gestor"].includes(session.user.tipo)) {
+  } else if (!ehGestor(session)) {
     const perm = await prisma.permissaoUsuario.findUnique({
       where: { usuarioId: session.user.id },
       select: { verTodasDemandas: true },

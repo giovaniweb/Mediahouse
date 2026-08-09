@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { contourlineOrgId } from "@/lib/whatsapp"
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   // Verificar permissão
   const perm = await prisma.permissaoUsuario.findUnique({ where: { usuarioId: session.user.id } })
-  if (!perm?.gerenciarConfig && session.user.tipo !== "admin" && session.user.tipo !== "gestor") {
+  if (!perm?.gerenciarConfig && !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)

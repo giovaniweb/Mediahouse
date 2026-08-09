@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET() {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)
@@ -26,7 +27,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

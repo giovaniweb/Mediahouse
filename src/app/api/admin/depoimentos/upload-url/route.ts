@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { createClient } from "@supabase/supabase-js"
 
 const EXT_MAPA: Record<string, string> = {
@@ -16,7 +17,7 @@ const EXT_MAPA: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
   }
 

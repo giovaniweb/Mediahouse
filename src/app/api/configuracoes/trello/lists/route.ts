@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getBoardLists } from "@/lib/trello"
 
 export async function GET() {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

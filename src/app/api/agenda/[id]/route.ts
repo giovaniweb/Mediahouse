@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { temPapel } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 
@@ -16,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!evento || !pertenceAOrg(evento, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
 
   // Só admin pode editar eventos privados de outros
-  if (evento.privado && evento.usuarioId !== session.user.id && session.user.tipo !== "admin") {
+  if (evento.privado && evento.usuarioId !== session.user.id && !temPapel(session, "admin")) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -46,7 +47,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const evento = await prisma.evento.findUnique({ where: { id } })
   if (!evento || !pertenceAOrg(evento, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
 
-  if (evento.usuarioId !== session.user.id && session.user.tipo !== "admin") {
+  if (evento.usuarioId !== session.user.id && !temPapel(session, "admin")) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { temPapel } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     fim: { lte: new Date(fim) },
   } : {}
 
-  const isAdmin = session.user.tipo === "admin"
+  const isAdmin = temPapel(session, "admin")
   const isVideomaker = session.user.tipo === "videomaker"
   const isGestor = ["admin", "gestor", "operacao"].includes(session.user.tipo)
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Validação de permissão por contexto
-  if (contexto === "pessoal" && session.user.tipo !== "admin") {
+  if (contexto === "pessoal" && !temPapel(session, "admin")) {
     return NextResponse.json({ error: "Agenda pessoal restrita ao admin" }, { status: 403 })
   }
 

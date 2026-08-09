@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg } from "@/lib/org"
@@ -7,7 +8,7 @@ import { getOrgId, semOrg } from "@/lib/org"
 // POST /api/configuracoes/whatsapp/teste — testa conexão + opcionalmente envia mensagem de teste
 export async function POST(req: Request) {
   const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user.tipo)) {
+  if (!session || !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   const organizacaoId = await getOrgId(session)

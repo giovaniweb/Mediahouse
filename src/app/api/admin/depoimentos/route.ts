@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 
 async function requireAdmin() {
   const session = await auth()
   if (!session?.user) return null
-  if (!["admin", "gestor"].includes(session.user.tipo)) return null
+  if (!ehGestor(session)) return null
   return session
 }
 

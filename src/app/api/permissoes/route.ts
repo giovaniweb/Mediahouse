@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { PRESETS } from "@/lib/permissoes"
 
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
   const usuarioId = req.nextUrl.searchParams.get("usuarioId") || session.user.id
 
   // Qualquer um pode buscar as próprias permissões; gestor/admin pode buscar de qualquer um
-  if (usuarioId !== session.user.id && !["admin", "gestor"].includes(session.user.tipo)) {
+  if (usuarioId !== session.user.id && !ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -41,7 +42,7 @@ export async function PUT(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Somente admin/gestor" }, { status: 403 })
   }
 
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     return NextResponse.json({ error: "Somente admin/gestor" }, { status: 403 })
   }
 

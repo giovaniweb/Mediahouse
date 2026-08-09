@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!organizacaoId) return semOrg()
 
   // Admin/gestor OU líder audiovisual da org podem aprovar/recusar/reverter.
-  if (!["admin", "gestor"].includes(session.user.tipo)) {
+  if (!ehGestor(session)) {
     const membro = await prisma.usuarioOrganizacao.findUnique({
       where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
       select: { liderAudiovisual: true },
