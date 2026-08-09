@@ -6,6 +6,10 @@
     "dev": "NODE_OPTIONS='--max-http-header-size=32768' next dev",
     "build": "next build",
     "start": "next start",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "_comment_db_push": "db:push NÃO versiona schema — use só em protótipo local. Mudança que vai para produção entra por db:migrate.",
     "db:push": "prisma db push",
     "db:seed": "dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "db:studio": "prisma studio"
