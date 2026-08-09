@@ -257,8 +257,67 @@ model Videomaker {
   convites         ConviteVideomaker[]
   notasFiscais     NotaFiscalUpload[]
   coberturaEquipe  EventoCoberturaEquipe[]
+  vinculos         VideomakerOrganizacao[]
+  dadosFiscais     VideomakerDadosFiscais[]
 
   @@map("videomakers")
+}
+
+// ── Videomaker em 3 camadas ───────────────────────────────────────────────────
+// O model Videomaker acima é o PERFIL PÚBLICO da rede (nome, cidade, portfólio,
+// avaliação) e continua global de propósito: a rede compartilhada de
+// profissionais é um ativo do produto.
+//
+// O que não podia ser global são as duas camadas abaixo. Estavam misturadas no
+// perfil, então o cliente A enxergava a diária negociada, o status, a lista
+// negra e os dados bancários lançados pelo cliente B.
+
+// Relação COMERCIAL de uma empresa com um profissional da rede.
+model VideomakerOrganizacao {
+  id               String           @id @default(cuid())
+  organizacaoId    String
+  videomakerId     String
+  status           StatusVideomaker @default(ativo)
+  valorDiaria      Float?
+  observacoes      String?
+  emListaNegra     Boolean          @default(false)
+  listaNegraMotivo String?
+  podeEditar       Boolean          @default(false)
+  tipoContrato     String           @default("externo")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  videomaker  Videomaker  @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, videomakerId])
+  @@index([videomakerId])
+  @@map("videomaker_organizacao")
+}
+
+// Dados FISCAIS/BANCÁRIOS, por empresa. `dadosBancarios` e `chavePix` ficam
+// cifrados em repouso (src/lib/secret-crypto.ts) — são o material mais sensível
+// do banco e não precisam ser legíveis em consulta direta.
+model VideomakerDadosFiscais {
+  id             String   @id @default(cuid())
+  organizacaoId  String
+  videomakerId   String
+  cpfCnpj        String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  representante  String?
+  endereco       String?
+  dadosBancarios String?  // cifrado
+  chavePix       String?  // cifrado
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  videomaker  Videomaker  @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, videomakerId])
+  @@index([videomakerId])
+  @@map("videomaker_dados_fiscais")
 }
 
 model Editor {
@@ -1830,6 +1889,8 @@ model Organizacao {
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
+  videomakerVinculos VideomakerOrganizacao[]
+  videomakerFiscais  VideomakerDadosFiscais[]
 
   @@map("organizacoes")
 }

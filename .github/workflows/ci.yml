@@ -19,7 +19,6 @@ jobs:
       # os checks de schema comparam migrations com o datamodel, não com prod.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
-      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nuflow_shadow
 
     services:
       postgres:
@@ -48,13 +47,6 @@ jobs:
       - name: Gerar Prisma Client
         run: npx prisma generate
 
-      # O `migrate diff` replaya as migrations num banco descartável para
-      # comparar com o schema; o serviço só cria nuflow_ci.
-      - name: Criar shadow database
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d nuflow_ci \
-            -c "CREATE DATABASE nuflow_shadow;"
-
       - name: Tipos
         run: npx tsc --noEmit
 
@@ -69,19 +61,16 @@ jobs:
       - name: Isolamento multiempresa (auditor estático)
         run: npm run auditar:tenancy
 
-      # As migrations versionadas precisam reproduzir exatamente o schema.
-      # Divergência aqui significa que alguém mexeu no schema.prisma sem gerar
-      # migration — o mesmo descuido que deixou o banco sem histórico até agora.
-      - name: Migrations reproduzem o schema
-        run: |
-          npx prisma migrate diff \
-            --from-migrations prisma/migrations \
-            --to-schema prisma/schema.prisma \
-            --shadow-database-url "$SHADOW_DATABASE_URL" \
-            --exit-code
-
       - name: Migrations aplicam num banco limpo
         run: npx prisma migrate deploy
+
+      # Depois de aplicar as migrations no banco vazio, ele tem que ficar
+      # idêntico ao schema.prisma. Divergência = alguém mexeu no schema sem gerar
+      # migration — o mesmo descuido que deixou o banco sem histórico até agora.
+      # (Compara banco × schema em vez de migrations × schema: assim não precisa
+      # de shadow database, que o CLI do Prisma 7 só aceita via config.)
+      - name: Banco migrado é idêntico ao schema
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 
       - name: Build
         run: npx next build
