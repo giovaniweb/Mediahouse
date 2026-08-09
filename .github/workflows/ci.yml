@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Postgres efêmero do runner. Nenhum passo aqui toca o banco de produção:
+      # os checks de schema comparam migrations com o datamodel, não com prod.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nuflow_shadow
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nuflow_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+
+      # O `migrate diff` replaya as migrations num banco descartável para
+      # comparar com o schema; o serviço só cria nuflow_ci.
+      - name: Criar shadow database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d nuflow_ci \
+            -c "CREATE DATABASE nuflow_shadow;"
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      # Sem passo de lint: o projeto não tem ESLint configurado (e `next lint`
+      # saiu no Next 16). Adicionar um aqui só produziria falha vazia.
+
+      - name: Testes unitários
+        run: npm test
+
+      # Impede a 59ª rota sem escopo de organização. A allowlist em
+      # scripts/tenancy-allowlist.json guarda a dívida conhecida e só encolhe.
+      - name: Isolamento multiempresa (auditor estático)
+        run: npm run auditar:tenancy
+
+      # As migrations versionadas precisam reproduzir exatamente o schema.
+      # Divergência aqui significa que alguém mexeu no schema.prisma sem gerar
+      # migration — o mesmo descuido que deixou o banco sem histórico até agora.
+      - name: Migrations reproduzem o schema
+        run: |
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code
+
+      - name: Migrations aplicam num banco limpo
+        run: npx prisma migrate deploy
+
+      - name: Build
+        run: npx next build
+        env:
+          NEXTAUTH_SECRET: ci-secret-nao-usado-em-producao
+          NEXTAUTH_URL: http://localhost:3000
