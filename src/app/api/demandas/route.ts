@@ -8,6 +8,7 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
+import { emSegundoPlano } from "@/lib/notificar"
 import type { Prioridade, Departamento, Prisma } from "@prisma/client"
 
 const criarDemandaSchema = z.object({
@@ -416,17 +417,20 @@ export async function POST(req: NextRequest) {
   })
 
   // NOVO: Notifica gestores/admins via WhatsApp sobre nova demanda
-  void notificarGestoresNovaDemanda(
+  emSegundoPlano(() => notificarGestoresNovaDemanda(
     demanda.codigo,
     data.titulo,
     session.user.name ?? "Usuário",
     data.prioridade as string,
     organizacaoId
-  )
+  ), "nova-demanda-gestores")
 
   // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
   if (demanda.area === "audiovisual") {
-    void notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId)
+    emSegundoPlano(
+      () => notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId),
+      "nova-demanda-lideres"
+    )
   }
 
   return NextResponse.json(demanda, { status: 201 })

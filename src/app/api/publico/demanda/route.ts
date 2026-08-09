@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { sendWhatsappMessage, contourlineOrgId } from "@/lib/whatsapp"
@@ -162,17 +163,20 @@ export async function POST(req: NextRequest) {
 
   // Notifica os líderes do audiovisual (alerta direcionado + WhatsApp)
   if (area === "audiovisual") {
-    void notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId)
+    emSegundoPlano(
+      () => notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId),
+      "lideres-audiovisual"
+    )
   }
 
   // Notifica o solicitante via WhatsApp
   if (telSolicitante.length >= 10) {
     const primeiroNome = data.nomeCliente.split(" ")[0]
-    await sendWhatsappMessage(
+    emSegundoPlano(() => sendWhatsappMessage(
       telSolicitante,
       `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`,
       demanda.id, organizacaoId
-    ).catch(() => null)
+    ), "wa-solicitante-recebida")
   }
 
   // Notifica gestores via WhatsApp (da organização da demanda)

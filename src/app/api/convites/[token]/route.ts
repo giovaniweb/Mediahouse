@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 // GET /api/convites/[token] — buscar dados do convite (página pública)
@@ -97,10 +98,10 @@ export async function POST(
     })
 
     // NOVO: Notifica admin/gestor via WhatsApp
-    void notificarGestores(
+    emSegundoPlano(() => notificarGestores(
       `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`,
       convite.demanda.organizacaoId
-    )
+    ), "gestores-convite")
   } else {
     // Recusou → atualizar demanda + registrar histórico
     await prisma.demanda.update({
@@ -121,10 +122,10 @@ export async function POST(
       },
     })
 
-    void notificarGestores(
+    emSegundoPlano(() => notificarGestores(
       `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`,
       convite.demanda.organizacaoId
-    )
+    ), "gestores-convite")
   }
 
   return NextResponse.json({ status: novoStatus })

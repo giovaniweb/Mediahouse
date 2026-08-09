@@ -1156,6 +1156,7 @@ model PermissaoUsuario {
   verDashboard    Boolean @default(true)
   verDemandas     Boolean @default(true)
   verAprovacoes   Boolean @default(false)
+  verAprovacoesGrowth Boolean @default(false)
   verAgenda       Boolean @default(false)
   verProdutos     Boolean @default(false)
   verVideomakers  Boolean @default(false)

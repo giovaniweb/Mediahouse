@@ -6,6 +6,7 @@ import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
+import { emSegundoPlano } from "@/lib/notificar"
 import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
@@ -427,23 +428,26 @@ export async function PUT(req: NextRequest, { params }: Params) {
           console.error("[Convite] Erro ao criar convite:", e)
         }
 
+        // Fixa o telefone num const: dentro do closure o TypeScript não mantém
+        // o narrowing do `if (novoVm.telefone)` de fora.
+        const telVm = novoVm.telefone
         if (isCobertura) {
           // Template rico para cobertura — inclui local, cidade, descrição, pagamento e link
           const local = body.localGravacao || demandaAntes.localGravacao || "A confirmar"
           const cidade = body.cidade || demandaAntes.cidade || ""
           const descricao = body.descricao || demandaAntes.descricao || null
-          void sendWhatsappMessage(
-            novoVm.telefone,
+          emSegundoPlano(() => sendWhatsappMessage(
+            telVm,
             templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao, conviteLink),
             id
-          ).catch(() => null)
+          ), "wa-videomaker-atribuido")
         } else {
           // Demandas normais: template padrão com link
-          void sendWhatsappMessage(
-            novoVm.telefone,
+          emSegundoPlano(() => sendWhatsappMessage(
+            telVm,
             templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt, conviteLink),
             id
-          ).catch(() => null)
+          ), "wa-videomaker-atribuido")
         }
         // Sempre mudar status para "videomaker_notificado" quando VM é atribuído e notificado
         // (seja cobertura ou demanda normal) — permite que o SIM/NÃO via WhatsApp ainda funcione como fallback
@@ -456,11 +460,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
           const telVmFmt = novoVm.telefone
             ? novoVm.telefone.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")
             : undefined
-          void sendWhatsappMessage(
+          emSegundoPlano(() => sendWhatsappMessage(
             telSolicitante,
             templates.profissionalSelecionadoSolicitante(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, telVmFmt),
             id
-          ).catch(() => null)
+          ), "wa-solicitante-profissional")
         }
       }
     }
@@ -478,11 +482,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
         const telEditor = novoEditor.whatsapp || novoEditor.telefone
         // Notificar editor
         if (telEditor) {
-          void sendWhatsappMessage(
+          emSegundoPlano(() => sendWhatsappMessage(
             telEditor,
             templates.editorSelecionado(demandaAntes.codigo, demandaAntes.titulo),
             id
-          ).catch(() => null)
+          ), "wa-editor-atribuido")
         }
         // Notificar solicitante que editor foi atribuído
         const telSolicitante = demandaAntes.telefoneSolicitante || demandaAntes.solicitante?.telefone
@@ -490,11 +494,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
           const telEditorFmt = telEditor
             ? telEditor.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")
             : undefined
-          void sendWhatsappMessage(
+          emSegundoPlano(() => sendWhatsappMessage(
             telSolicitante,
             templates.profissionalSelecionadoSolicitante(novoEditor.nome, demandaAntes.codigo, demandaAntes.titulo, telEditorFmt),
             id
-          ).catch(() => null)
+          ), "wa-solicitante-profissional")
         }
       }
     }

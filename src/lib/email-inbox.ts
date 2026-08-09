@@ -1,6 +1,7 @@
 import crypto from "node:crypto"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { fetchMicrosoftMessages, refreshMicrosoftAccessToken } from "@/lib/microsoft-mail"
 import { htmlToPlainText, parseInboundEmail, type EmailParseResult } from "@/lib/email-inbox-parser"
@@ -189,7 +190,7 @@ export async function createDemandFromInboxEmail(
       return demanda
     })
     // Demanda da caixa de entrada é sempre audiovisual — notifica os líderes.
-    void notificarLideresAudiovisual(created.id, created.codigo, created.titulo, email.organizacaoId)
+    emSegundoPlano(() => notificarLideresAudiovisual(created.id, created.codigo, created.titulo, email.organizacaoId), "lideres-audiovisual")
     return { demandaId: created.id, codigo: created.codigo }
   } catch (error) {
     if (error instanceof Error && error.message === "EMAIL_ALREADY_PROCESSING") {

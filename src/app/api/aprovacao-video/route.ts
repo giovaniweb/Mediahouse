@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg, requireDemandaOrg } from "@/lib/org"
 
@@ -95,14 +96,14 @@ export async function POST(req: NextRequest) {
     if (telefoneSolicitante) {
       const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n\n🔗 Acesse pelo link abaixo:\n${link}\n\n_Válido por ${(expiresInDays as number | undefined) || 30} dias._`
 
-      void sendWhatsappMessage(telefoneSolicitante, msg, demandaId as string, demanda.organizacaoId).catch(() => null)
+      emSegundoPlano(() => sendWhatsappMessage(telefoneSolicitante, msg, demandaId as string, demanda.organizacaoId), "wa-link-aprovacao")
     }
 
     // Notifica admin/gestor que link foi gerado
-    void notificarGestores(
+    emSegundoPlano(() => notificarGestores(
       `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`,
       demanda.organizacaoId
-    )
+    ), "gestores-link-aprovacao")
 
     return NextResponse.json({ ok: true, token: aprovacao.token, link })
   } catch (e) {

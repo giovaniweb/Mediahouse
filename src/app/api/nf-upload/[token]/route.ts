@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 // GET /api/nf-upload/[token] — dados da NF (página pública)
@@ -114,12 +115,12 @@ export async function POST(
   })
 
   // NOVO: Notificar admin/gestor que NF foi recebida
-  void notificarGestoresNF(
+  emSegundoPlano(() => notificarGestoresNF(
     nf.demanda.codigo,
     nf.demanda.titulo,
     nf.videomaker.nome,
     nf.demanda.organizacaoId
-  )
+  ), "gestores-nf-recebida")
 
   return NextResponse.json({ success: true })
 }

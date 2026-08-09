@@ -9,6 +9,7 @@ export type PermissaoKey =
   | "verDashboard"
   | "verDemandas"
   | "verAprovacoes"
+  | "verAprovacoesGrowth"
   | "verAgenda"
   | "verProdutos"
   | "verVideomakers"
@@ -38,7 +39,8 @@ export type PermissaoKey =
 export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   verDashboard: "Ver Dashboard",
   verDemandas: "Ver Demandas",
-  verAprovacoes: "Ver Aprovações",
+  verAprovacoes: "Aprovações · Audiovisual",
+  verAprovacoesGrowth: "Aprovações · Growth",
   verAgenda: "Ver Agenda",
   verProdutos: "Ver Produtos",
   verVideomakers: "Ver Videomakers Ext",
@@ -73,6 +75,7 @@ export const PERMISSAO_GRUPOS = [
       "verDashboard",
       "verDemandas",
       "verAprovacoes",
+      "verAprovacoesGrowth",
       "verAgenda",
       "verProdutos",
       "verVideomakers",
@@ -126,6 +129,7 @@ const BASE_FALSE: PresetPerms = {
   verDashboard: false,
   verDemandas: false,
   verAprovacoes: false,
+  verAprovacoesGrowth: false,
   verAgenda: false,
   verProdutos: false,
   verVideomakers: false,
@@ -173,6 +177,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verProdutos: true,
     verCoberturas: true,
     verAprovacoes: true,
+    verAprovacoesGrowth: true,
     criarDemanda: true,
     editarDemanda: true,
     excluirDemanda: true,
@@ -236,6 +241,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDashboard: true,
     verDemandas: true,
     verAprovacoes: true,
+    verAprovacoesGrowth: true,
     verAgenda: true,
     verProdutos: true,
     verIdeias: true,
@@ -282,6 +288,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDashboard: true,
     verDemandas: true,
     verAprovacoes: true,
+    verAprovacoesGrowth: true,
     verAgenda: true,
     verProdutos: true,
     verCoberturas: true,
@@ -306,6 +313,7 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/dashboard": "verDashboard",
   "/demandas": "verDemandas",
   "/aprovacoes": "verAprovacoes",
+  "/aprovacoes/growth": "verAprovacoesGrowth",
   "/agenda": "verAgenda",
   "/produtos": "verProdutos",
   "/videomakers": "verVideomakers",

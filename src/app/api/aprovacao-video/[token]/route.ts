@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 
@@ -218,23 +219,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       : `🔄 *Cliente Pediu Ajustes!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
 
     // Notifica gestores
-    void notificarGestoresAprovacao(msgBase, demanda.organizacaoId)
+    emSegundoPlano(() => notificarGestoresAprovacao(msgBase, demanda.organizacaoId), "gestores-aprovacao")
 
     // Notifica editor (quem edita precisa saber de ajustes)
     if (demanda.editor) {
       const telEditor = demanda.editor.whatsapp || demanda.editor.telefone
       if (telEditor) {
-        void sendWhatsappMessage(telEditor, msgBase, demanda.id, demanda.organizacaoId).catch(() => null)
+        emSegundoPlano(() => sendWhatsappMessage(telEditor, msgBase, demanda.id, demanda.organizacaoId), "wa-editor-aprovacao")
       }
     }
 
     // Notifica videomaker se aprovado
-    if (acao === "aprovar" && demanda.videomaker?.telefone) {
-      void sendWhatsappMessage(
-        demanda.videomaker.telefone,
+    const telVmAprovacao = demanda.videomaker?.telefone
+    if (acao === "aprovar" && telVmAprovacao) {
+      emSegundoPlano(() => sendWhatsappMessage(
+        telVmAprovacao,
         `✅ *Vídeo Aprovado!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nParabéns! O cliente aprovou o vídeo. 🎬`,
         demanda.id, demanda.organizacaoId
-      ).catch(() => null)
+      ), "wa-videomaker-aprovado")
     }
   }
 

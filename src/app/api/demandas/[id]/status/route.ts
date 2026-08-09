@@ -5,6 +5,7 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
+import { emSegundoPlano } from "@/lib/notificar"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -279,7 +280,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
     if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {
-      void (async () => {
+      emSegundoPlano(async () => {
         try {
           const nfExistente = await prisma.notaFiscalUpload.findFirst({
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
@@ -302,12 +303,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)
         }
-      })()
+      }, "nf-upload-brutos")
     }
 
     // ── Atualizar ultimoConteudo nos produtos ao finalizar ────────────────────
     if (novoStatusVisivel === "finalizado") {
-      void (async () => {
+      emSegundoPlano(async () => {
         try {
           const produtosVinculados = await prisma.demandaProduto.findMany({
             where: { demandaId: id },
@@ -322,12 +323,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         } catch (e) {
           console.error("[Status] Erro ao atualizar ultimoConteudo:", e)
         }
-      })()
+      }, "atualizar-produtos")
     }
 
     // ── Auto-criar CustoVideomaker ao finalizar ───────────────────────────────
     if (novoStatusVisivel === "finalizado" && demandaAtual.videomakerId) {
-      void (async () => {
+      emSegundoPlano(async () => {
         try {
           const jaExiste = await prisma.custoVideomaker.findFirst({
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
@@ -355,11 +356,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         } catch (e) {
           console.error("[Status] Erro ao auto-criar custo:", e)
         }
-      })()
+      }, "custo-videomaker")
     }
 
-    // ── Notificações WhatsApp assíncronas (não bloqueia resposta) ─────────────
-    void notificarMudancaKanban(
+    // ── Notificações WhatsApp: rodam DEPOIS da resposta, mas com a função viva.
+    // Antes eram `void` solto e a instância congelava antes do envio sair.
+    emSegundoPlano(() => notificarMudancaKanban(
       statusInterno,
       demandaAtual.codigo,
       demandaAtual.titulo,
@@ -371,7 +373,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       organizacaoId,
       observacao ?? demandaAtual.motivoImpedimento,
       body.linkFinal ?? demandaAtual.linkFinal
-    )
+    ), "mudanca-kanban")
 
     return NextResponse.json(demanda)
   } catch (e) {

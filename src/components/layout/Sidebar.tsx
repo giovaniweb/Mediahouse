@@ -70,6 +70,7 @@ const sections = [
     label: "Growth",
     items: [
       { href: "/design", label: "Demandas", icon: Sparkles },
+      { href: "/aprovacoes/growth", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
       { href: "/growth/equipe", label: "Equipe Growth", icon: Users },
       { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
