@@ -386,6 +386,12 @@ model Demanda {
   linkPostagem    String?
   postagemTipo    String?   // "feed" | "story" | "reels" | "youtube" | "outro"
   linkCliente     String?
+  // Link público de acompanhamento (somente leitura), gerado sob demanda pelo
+  // botão "Compartilhar". Opt-in de propósito: sem @default, nenhuma demanda
+  // nasce compartilhável. Revogar = publicTokenAtivo = false.
+  publicToken        String?   @unique
+  publicTokenAtivo   Boolean   @default(false)
+  publicTokenExpiraEm DateTime?
   localGravacao   String?
   referencia      String?
 

@@ -201,6 +201,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const fileRefLinkModal = useRef<HTMLInputElement>(null)
   const [playerUrl, setPlayerUrl] = useState<string | null>(null)
   const [copiado, setCopiado] = useState(false)
+  const [compartilhando, setCompartilhando] = useState(false)
+  // null = ainda não mexemos nesta sessão; a origem da verdade é a demanda.
+  const [linkPublicoLocal, setLinkPublicoLocal] = useState<string | null | undefined>(undefined)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -884,6 +887,47 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     )
   }
 
+  // ── Link público de acompanhamento (somente leitura, revogável) ───────────
+  // Sem edição local, o estado vem da própria demanda — assim reabrir o modal
+  // mostra "Link ativo" para quem já compartilhou antes.
+  const linkPublico =
+    linkPublicoLocal !== undefined
+      ? linkPublicoLocal
+      : demanda.publicTokenAtivo && demanda.publicToken
+        ? `${typeof window !== "undefined" ? window.location.origin : ""}/d/${demanda.publicToken}`
+        : null
+
+  async function compartilhar(rotacionar = false) {
+    setCompartilhando(true)
+    try {
+      const res = await fetch(`/api/demandas/${demanda.id}/compartilhar${rotacionar ? "?rotacionar=1" : ""}`, { method: "POST" })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? "Erro ao gerar link")
+      setLinkPublicoLocal(j.link)
+      await navigator.clipboard.writeText(j.link).catch(() => null)
+      toast.success(rotacionar ? "Novo link gerado e copiado (o anterior parou de funcionar)" : "Link copiado!")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar link")
+    } finally {
+      setCompartilhando(false)
+    }
+  }
+
+  async function revogarLink() {
+    if (!confirm("Revogar o link? Quem já recebeu deixa de conseguir abrir.")) return
+    setCompartilhando(true)
+    try {
+      const res = await fetch(`/api/demandas/${demanda.id}/compartilhar`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json()).error ?? "Erro ao revogar")
+      setLinkPublicoLocal(null)
+      toast.success("Link revogado.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao revogar")
+    } finally {
+      setCompartilhando(false)
+    }
+  }
+
   const acoes = (
     <div className="flex items-center gap-2">
       {editMode ? (
@@ -901,6 +945,36 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <button onClick={excluirDemanda} className="flex items-center gap-1.5 text-sm border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/10">
               <Trash2 className="w-3.5 h-3.5" /> Excluir
             </button>
+          )}
+          {podeEditar && (
+            linkPublico ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(linkPublico); toast.success("Link copiado!") }}
+                  title={linkPublico}
+                  className="flex items-center gap-1.5 text-sm border border-emerald-700/50 text-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-500/10"
+                >
+                  <Link2 className="w-3.5 h-3.5" /> Link ativo
+                </button>
+                <button
+                  onClick={revogarLink}
+                  disabled={compartilhando}
+                  title="Revogar o link"
+                  className="p-1.5 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => compartilhar(false)}
+                disabled={compartilhando}
+                title="Gerar link de acompanhamento (somente leitura) para enviar a alguém de fora"
+                className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+              >
+                <Link2 className="w-3.5 h-3.5" /> {compartilhando ? "Gerando..." : "Compartilhar"}
+              </button>
+            )
           )}
           {podeEditar && (
             <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">

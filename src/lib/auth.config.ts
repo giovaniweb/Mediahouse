@@ -75,7 +75,8 @@ export const authConfig: NextAuthConfig = {
         "/api/publico/cobertura", // API pública de coberturas
         "/fornecedor",        // portal público do fornecedor (token)
         "/relatorio-executivo", // relatório executivo público (visualização externa)
-        "/api/mcp",           // servidor MCP remoto (puxar dados via cliente MCP)
+        "/api/mcp",           // servidor MCP remoto (autenticado por Bearer token da org)
+        "/d",                 // acompanhamento público de demanda (token opt-in, read-only)
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")
