@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { ids, action, produtoId, classificacao } = await req.json()
 
@@ -37,10 +40,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
   }
 
+  // O `organizacaoId` no where é o que impede a operação em massa de atravessar
+  // empresas: os ids vêm do corpo da requisição, então sem ele bastava mandar
+  // uma lista de ids de outro cliente para aprovar ou descartar as ideias dele.
   const result = await prisma.ideiaVideo.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, organizacaoId },
     data,
   })
 
+  // Se `updated` vier menor que os ids enviados, parte não pertence a esta
+  // organização (ou não existe) — a operação simplesmente não os alcança.
   return NextResponse.json({ updated: result.count })
 }

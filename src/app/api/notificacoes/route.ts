@@ -41,10 +41,20 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
 
+  const organizacaoIdPatch = await getOrgId(session)
+
   if (body.id) {
-    // Marca uma específica como lida
-    await prisma.alertaIA.update({
-      where: { id: body.id },
+    // Marca uma específica como lida — só se for do próprio usuário (ou
+    // broadcast) e da org ativa. Antes, `update` por id deixava qualquer usuário
+    // marcar como lida a notificação de qualquer pessoa de qualquer empresa.
+    await prisma.alertaIA.updateMany({
+      where: {
+        id: body.id,
+        AND: [
+          { OR: [{ usuarioId: null }, { usuarioId: session.user.id }] },
+          ...(organizacaoIdPatch ? [{ OR: [{ organizacaoId: organizacaoIdPatch }, { organizacaoId: null }] }] : []),
+        ],
+      },
       data: { lida: true },
     })
   } else {

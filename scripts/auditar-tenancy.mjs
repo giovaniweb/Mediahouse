@@ -42,6 +42,7 @@ const SINAIS_DE_ESCOPO = [
   "organizacaoId",
   "getOrgId",
   "requireDemandaOrg",
+  "requireCoberturaOrg",
   "requireEventoGestaoOrg",
   "requireEventoAccess",
   "requireSuperAdmin",

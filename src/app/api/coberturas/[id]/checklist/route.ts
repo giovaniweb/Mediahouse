@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireCoberturaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -16,6 +17,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  // Sem este guard, trocar o id na URL alcançava cobertura de outra empresa.
+
+  const guard = await requireCoberturaOrg(session, id)
+
+  if (guard instanceof NextResponse) return guard
   const dia = req.nextUrl.searchParams.get("dia")
 
   const where: Record<string, unknown> = { coberturaId: id }
@@ -43,6 +50,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  // Sem este guard, trocar o id na URL alcançava cobertura de outra empresa.
+
+  const guard = await requireCoberturaOrg(session, id)
+
+  if (guard instanceof NextResponse) return guard
 
   try {
     const body = await req.json()
@@ -75,6 +88,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id: coberturaId } = await params
+
+  const guard = await requireCoberturaOrg(session, coberturaId)
+
+  if (guard instanceof NextResponse) return guard
 
   try {
     const body = await req.json()

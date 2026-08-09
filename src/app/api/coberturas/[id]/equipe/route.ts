@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireCoberturaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -16,6 +17,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  // Sem este guard, trocar o id na URL alcançava cobertura de outra empresa.
+
+  const guard = await requireCoberturaOrg(session, id)
+
+  if (guard instanceof NextResponse) return guard
   const equipe = await prisma.eventoCoberturaEquipe.findMany({
     where: { coberturaId: id },
     include: {
@@ -36,6 +43,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  // Sem este guard, trocar o id na URL alcançava cobertura de outra empresa.
+
+  const guard = await requireCoberturaOrg(session, id)
+
+  if (guard instanceof NextResponse) return guard
 
   try {
     const body = await req.json()
@@ -112,6 +125,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+
+  // Sem este guard, trocar o id na URL alcançava cobertura de outra empresa.
+
+  const guard = await requireCoberturaOrg(session, id)
+
+  if (guard instanceof NextResponse) return guard
   const membroId = req.nextUrl.searchParams.get("membroId")
 
   if (!membroId) return NextResponse.json({ error: "membroId obrigatório" }, { status: 400 })

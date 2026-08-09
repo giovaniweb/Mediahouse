@@ -88,6 +88,23 @@ export async function requireDemandaOrg(
   return { organizacaoId }
 }
 
+// Ownership de EventoCobertura. As sub-rotas (uploads, equipe, checklist) recebem
+// o coberturaId pela URL e operavam nele sem verificar dono — bastava trocar o id
+// para listar ou apagar material de cobertura de outra empresa.
+export async function requireCoberturaOrg(
+  session: SessionShape,
+  coberturaId: string
+): Promise<{ organizacaoId: string } | NextResponse> {
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+  const c = await prisma.eventoCobertura.findUnique({
+    where: { id: coberturaId },
+    select: { organizacaoId: true },
+  })
+  if (!pertenceAOrg(c, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  return { organizacaoId }
+}
+
 // Ownership compartilhado de EventoGestao (módulo de eventos). Mesmo padrão de requireDemandaOrg.
 export async function requireEventoGestaoOrg(
   session: SessionShape,

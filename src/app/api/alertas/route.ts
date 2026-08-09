@@ -33,25 +33,34 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 
+  // `updateMany` com o escopo no where, em vez de `update` por id: o id vem do
+  // cliente, e sem o filtro qualquer usuário logado resolvia ou silenciava os
+  // alertas críticos de outra empresa. Count 0 = não é desta org (ou não existe).
+  const escopo = (id: string) => ({ id, organizacaoId })
+
   // Resolver alerta (aceita "resolver" ou "action:resolver" por retrocompat)
   if ((body.acao === "resolver" || body.action === "resolver") && body.id) {
-    const alerta = await prisma.alertaIA.update({
-      where: { id: body.id },
+    const r = await prisma.alertaIA.updateMany({
+      where: escopo(body.id),
       data: { status: "resolvido", resolvedAt: new Date() },
     })
-    return NextResponse.json(alerta)
+    if (r.count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    return NextResponse.json({ ok: true })
   }
 
   // Ignorar alerta
   if ((body.acao === "ignorar" || body.action === "ignorar") && body.id) {
-    const alerta = await prisma.alertaIA.update({
-      where: { id: body.id },
+    const r = await prisma.alertaIA.updateMany({
+      where: escopo(body.id),
       data: { status: "ignorado" },
     })
-    return NextResponse.json(alerta)
+    if (r.count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    return NextResponse.json({ ok: true })
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
@@ -61,16 +70,19 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const body = await req.json()
 
   if (body.acao === "snooze" && body.id && body.minutos) {
     const snoozeAte = new Date(Date.now() + Number(body.minutos) * 60 * 1000)
-    const alerta = await prisma.alertaIA.update({
-      where: { id: body.id },
+    const r = await prisma.alertaIA.updateMany({
+      where: { id: body.id, organizacaoId },
       data: { snoozeAte },
     })
-    return NextResponse.json(alerta)
+    if (r.count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    return NextResponse.json({ ok: true })
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
