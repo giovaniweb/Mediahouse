@@ -621,6 +621,10 @@ model ConfigWhatsapp {
   apiKey            String             // (Bloco 8: virá do env da Evolution gerenciada)
   instanceId        String    @unique
   instanceName      String?            // ex: nuflow_contourline
+  // Segredo que a Evolution devolve no webhook (header x-webhook-secret ou ?s=).
+  // Cifrado em repouso. Quando presente, o webhook passa a EXIGIR — é o que
+  // impede terceiro de injetar mensagem falsa e acionar as ferramentas da IA.
+  webhookSecret     String?
   telefoneConectado String?
   pushName          String?
   connectedAt       DateTime?

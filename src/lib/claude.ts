@@ -371,6 +371,24 @@ export const TOOLS_WHATSAPP: Anthropic.Tool[] = TOOLS_VIDEOOPS.filter(t =>
   TOOLS_WHATSAPP_NAMES.includes(t.name)
 )
 
+// Ferramentas que escrevem no banco ou disparam mensagem. Um número que o
+// sistema não reconhece não deve conseguir criar demanda, agendar evento nem
+// mandar WhatsApp em nome da empresa — o webhook é a superfície mais exposta do
+// produto. Para desconhecido, sobra o subconjunto de leitura + a resposta.
+const TOOLS_WHATSAPP_ESCRITA = new Set([
+  "criar_demanda_rascunho",
+  "criar_evento_agenda",
+  "vincular_arquivo_demanda",
+  "salvar_ideia_video",
+  "solicitar_dados_demanda",
+])
+
+// `enviar_whatsapp` fica de fora do bloqueio: é como o agente responde a quem
+// escreveu. Ela só envia para o número que iniciou a conversa no prompt.
+export const TOOLS_WHATSAPP_DESCONHECIDO: Anthropic.Tool[] = TOOLS_WHATSAPP.filter(
+  (t) => !TOOLS_WHATSAPP_ESCRITA.has(t.name)
+)
+
 // ─── Executor de ferramentas (chamado pelo agente) ────────────────────────────
 
 // Esta função é importada pelo chat route e pelos agentes

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { StatusInterno } from "@prisma/client"
-import { sendWhatsappMessage, getWhatsappConfig, contourlineOrgId } from "@/lib/whatsapp"
-import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, SYSTEM_WHATSAPP } from "@/lib/claude"
+import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
+import { decryptSecret } from "@/lib/secret-crypto"
+import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, TOOLS_WHATSAPP_DESCONHECIDO, SYSTEM_WHATSAPP } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { downloadEvolutionMedia, uploadMedia } from "@/lib/storage"
 import { transcreverAudio } from "@/lib/transcription"
@@ -269,12 +271,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // Segredo por header (preferido) ou querystring — a Evolution nem sempre
+  // permite header customizado, e o webhook é configurado por URL.
+  const segredo = req.headers.get("x-webhook-secret") ?? req.nextUrl.searchParams.get("s")
+
   try {
-    await processarMensagem(body)
+    await processarMensagem(body, segredo)
   } catch (e) {
     console.error("[WH] Erro no processamento:", e)
   }
 
+  // Sempre 200: a Evolution reenvia em erro, e reenvio de payload rejeitado
+  // viraria laço. O descarte fica registrado no log, não na resposta.
   return NextResponse.json({ ok: true })
 }
 
@@ -346,7 +354,21 @@ async function notificarAdminNovaDemanda(
 
 // ─── Processamento real ─────────────────────────────────────────────────────
 
-async function processarMensagem(body: unknown) {
+// Compara o segredo apresentado com o guardado (cifrado), em tempo constante.
+function segredoConfere(apresentado: string | null, cifrado: string): boolean {
+  if (!apresentado) return false
+  let esperado: string
+  try {
+    esperado = decryptSecret(cifrado)
+  } catch {
+    return false
+  }
+  const a = Buffer.from(apresentado)
+  const b = Buffer.from(esperado)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+async function processarMensagem(body: unknown, segredoApresentado: string | null) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const b = body as any
   const event = b?.event as string | undefined
@@ -356,26 +378,43 @@ async function processarMensagem(body: unknown) {
   const eventNorm = event?.toLowerCase().replace(/_/g, ".") ?? ""
 
   // ── Resolve a organização pela instância Evolution (multiempresa) ───────
-  let organizacaoId: string | null = null
-  if (instanceName) {
-    const cfg = await prisma.configWhatsapp.findFirst({
-      where: { OR: [{ instanceId: instanceName }, { instanceName }] },
-      select: { organizacaoId: true },
-    }).catch(() => null)
-    if (!cfg) {
-      console.warn(`[WH] Instância desconhecida "${instanceName}" — ignorando`)
-      return
-    }
-    organizacaoId = cfg.organizacaoId
-  }
-  // Fallback legado/temporário: payload sem instância → Contourline
-  if (!organizacaoId) organizacaoId = await contourlineOrgId()
-  // Sem organização resolvível não há como processar com isolamento — aborta.
-  if (!organizacaoId) {
-    console.error("[WH] Nenhuma organização resolvível — abortando processamento")
+  //
+  // Sem fallback: antes, payload sem `instance` era processado como se fosse da
+  // Contourline. Como o endpoint é público, bastava um POST sem esse campo para
+  // injetar mensagem naquela empresa — e as ferramentas de escrita da IA criam
+  // demanda e evento. Instância desconhecida ou ausente agora é descartada.
+  if (!instanceName) {
+    console.warn("[WH] Payload sem instância — descartado")
     return
   }
-  const orgId: string = organizacaoId  // garantido não-nulo daqui pra frente
+  const cfg = await prisma.configWhatsapp.findFirst({
+    where: { OR: [{ instanceId: instanceName }, { instanceName }] },
+    select: { organizacaoId: true, webhookSecret: true },
+  }).catch(() => null)
+  if (!cfg?.organizacaoId) {
+    console.warn(`[WH] Instância desconhecida "${instanceName}" — ignorando`)
+    return
+  }
+
+  // ── Autenticação do webhook ────────────────────────────────────────────
+  // Enquanto a instância não tiver segredo configurado, seguimos processando
+  // (senão a integração em produção pararia no deploy) — mas com aviso, porque
+  // nesse estado qualquer um que descubra o nome da instância pode injetar
+  // mensagem. Configurado o segredo, ele passa a ser obrigatório.
+  if (cfg.webhookSecret) {
+    if (!segredoConfere(segredoApresentado, cfg.webhookSecret)) {
+      console.warn(`[WH] Segredo inválido para "${instanceName}" — descartado`)
+      return
+    }
+  } else {
+    console.warn(
+      `[WH] Instância "${instanceName}" sem webhookSecret — endpoint aceita qualquer origem. ` +
+        `Configure em Configurações › WhatsApp e aponte a Evolution para a URL com ?s=<segredo>.`
+    )
+  }
+
+  const orgId: string = cfg.organizacaoId  // garantido não-nulo daqui pra frente
+  const organizacaoId: string = orgId       // alias usado pelo restante do fluxo
 
   // ── Evento de conexão ──────────────────────────────────────────────────
   if (eventNorm === "connection.update") {
@@ -964,13 +1003,20 @@ REGRAS DE AGENDA:
 - Para consultar agenda: buscar_agenda_videomaker (funciona para editor também, passe editor_id).
 - SEMPRE termine com enviar_whatsapp para responder ao usuário.`
 
+  // Número não reconhecido não recebe as ferramentas de escrita: sem isso,
+  // qualquer pessoa que mande mensagem para o número da empresa cria demanda e
+  // evento no banco. Quem é da equipe, cliente cadastrado ou contato já
+  // conhecido segue com o conjunto completo.
+  const remetenteConhecido = identidade.tipo !== "desconhecido"
+  const ferramentas = remetenteConhecido ? TOOLS_WHATSAPP : TOOLS_WHATSAPP_DESCONHECIDO
+
   try {
     await executarAgenteComTools(
       promptSecretaria,
       (nome, input) => executarFerramenta(nome, input, organizacaoId),
       MODELO_WHATSAPP,
       8,
-      TOOLS_WHATSAPP,
+      ferramentas,
       SYSTEM_WHATSAPP
     )
   } catch (e) {
