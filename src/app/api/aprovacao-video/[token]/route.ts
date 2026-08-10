@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse, after } from "next/server"
+import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
+
+// A validade do token protege o link que vai ao CLIENTE por WhatsApp — não a
+// equipe. Como o botão "Abrir aprovação" do sistema reusa esse mesmo token, a
+// expiração trancava a própria equipe para fora da aprovação depois de 30 dias.
+// Quem está logado na empresa dona da demanda enxerga e decide sempre; o acesso
+// anônimo continua expirando normalmente.
+async function ehAcessoInterno(organizacaoId: string | null | undefined): Promise<boolean> {
+  if (!organizacaoId) return false
+  const session = await auth()
+  if (!session?.user) return false
+  return (await getOrgId(session)) === organizacaoId
+}
 
 // GET /api/aprovacao-video/[token] — busca info da aprovação (público, sem auth)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -14,6 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       demanda: {
         select: {
           id: true, codigo: true, titulo: true, departamento: true, tipoVideo: true,
+          organizacaoId: true,
           // Growth: área + copy + todas as artes (carrossel) + produto/linha
           area: true, descricao: true, detalhesEntrega: true,
           linhaProjetoRef: { select: { nome: true } },
@@ -32,11 +47,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     return NextResponse.json({ error: "Link de aprovação não encontrado" }, { status: 404 })
   }
 
-  if (aprovacao.expiresAt && aprovacao.expiresAt < new Date()) {
+  const expirado = !!aprovacao.expiresAt && aprovacao.expiresAt < new Date()
+  const interno = expirado && (await ehAcessoInterno(aprovacao.demanda?.organizacaoId))
+  if (expirado && !interno) {
     return NextResponse.json({ error: "Este link de aprovação expirou" }, { status: 410 })
   }
 
-  return NextResponse.json({ aprovacao })
+  // `expirado` avisa a tela interna que o link público já não abre para o cliente,
+  // para que ela possa oferecer a renovação.
+  return NextResponse.json({ aprovacao, expirado })
+}
+
+// PATCH /api/aprovacao-video/[token] — renova a validade do link do cliente.
+// Só quem está logado na empresa dona da demanda: reabre o mesmo link por mais 30
+// dias sem recriar a aprovação (preserva token, histórico e comentários).
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+
+  const aprovacao = await prisma.aprovacaoVideo.findUnique({
+    where: { token },
+    select: { id: true, demanda: { select: { organizacaoId: true } } },
+  })
+  if (!aprovacao) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
+
+  if (!(await ehAcessoInterno(aprovacao.demanda?.organizacaoId))) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
+
+  const dias = 30
+  const atualizada = await prisma.aprovacaoVideo.update({
+    where: { token },
+    data: { expiresAt: new Date(Date.now() + dias * 24 * 60 * 60 * 1000) },
+    select: { expiresAt: true },
+  })
+
+  return NextResponse.json({ ok: true, expiresAt: atualizada.expiresAt })
 }
 
 // POST /api/aprovacao-video/[token] — aprova ou solicita feedback (público, sem auth)
@@ -59,7 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   })
   const organizacaoId = demandaOrg?.organizacaoId ?? null
 
-  if (aprovacao.expiresAt && aprovacao.expiresAt < new Date()) {
+  if (aprovacao.expiresAt && aprovacao.expiresAt < new Date() && !(await ehAcessoInterno(organizacaoId))) {
     return NextResponse.json({ error: "Link expirado" }, { status: 410 })
   }
 

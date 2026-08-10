@@ -28,6 +28,14 @@ export async function GET(req: NextRequest) {
 
   const agente = req.nextUrl.searchParams.get("agente") ?? "alertas"
 
+  // Fecha execuções que ficaram presas em "executando" — a função serverless morre
+  // no meio (timeout, deploy) e ninguém fecha a linha. Sem esta varredura elas se
+  // acumulam para sempre e falseiam qualquer leitura de saúde dos agentes.
+  await prisma.agenteExecucao.updateMany({
+    where: { status: "executando", createdAt: { lt: new Date(Date.now() - 30 * 60 * 1000) } },
+    data: { status: "erro", erro: "Execução interrompida (função encerrada antes de concluir)", finishedAt: new Date() },
+  }).catch((e) => console.error("[Cron] Falha ao limpar execuções presas:", e))
+
   // Roda o agente solicitado para CADA organização ativa (isolamento multiempresa).
   const orgs = await prisma.organizacao.findMany({ where: { ativo: true }, select: { id: true } })
   const resultados: Array<Record<string, unknown>> = []

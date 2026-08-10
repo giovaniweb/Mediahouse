@@ -52,6 +52,10 @@ export function AprovacaoCriativo({ token, initialAprovacao, onAprovado }: {
   const [comentario, setComentario] = useState("")
   const [showFeedback, setShowFeedback] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  // Link vencido para o cliente. A equipe continua vendo e decidindo (a API libera
+  // quem está logado na empresa) — este aviso só oferece a renovação do link público.
+  const [expirado, setExpirado] = useState(false)
+  const [renovando, setRenovando] = useState(false)
 
   useEffect(() => {
     if (initialAprovacao) return
@@ -63,6 +67,7 @@ export function AprovacaoCriativo({ token, initialAprovacao, onAprovado }: {
         if (!res.ok) { if (vivo) setErro(json.error ?? "Link inválido"); return }
         if (!vivo) return
         setAprovacao(json.aprovacao)
+        setExpirado(!!json.expirado)
         if (json.aprovacao.status !== "pendente") setResultado(json.aprovacao.status === "aprovado" ? "aprovado" : "feedback")
       } catch {
         if (vivo) setErro("Erro ao carregar a aprovação")
@@ -72,6 +77,20 @@ export function AprovacaoCriativo({ token, initialAprovacao, onAprovado }: {
     })()
     return () => { vivo = false }
   }, [token, initialAprovacao])
+
+  async function renovarLink() {
+    setRenovando(true)
+    try {
+      const res = await fetch(`/api/aprovacao-video/${token}`, { method: "PATCH" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      setExpirado(false)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Não foi possível renovar o link")
+    } finally {
+      setRenovando(false)
+    }
+  }
 
   async function agir(acao: "aprovar" | "feedback") {
     if (acao === "feedback" && !comentario.trim()) return alert("Descreva o que precisa ser ajustado.")
@@ -112,6 +131,21 @@ export function AprovacaoCriativo({ token, initialAprovacao, onAprovado }: {
 
   return (
     <div className="space-y-6">
+      {expirado && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-200 flex-1 min-w-[16rem]">
+            O link enviado ao cliente venceu. Você continua vendo e decidindo por aqui — para o cliente abrir, renove.
+          </p>
+          <button
+            onClick={renovarLink}
+            disabled={renovando}
+            className="text-sm font-medium px-3 py-1.5 rounded-md bg-amber-500/20 text-amber-100 border border-amber-500/40 hover:bg-amber-500/30 disabled:opacity-50 transition-colors"
+          >
+            {renovando ? "Renovando…" : "Renovar por 30 dias"}
+          </button>
+        </div>
+      )}
       {resultado === "aprovado" && (
         <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-6 text-center">
           <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
