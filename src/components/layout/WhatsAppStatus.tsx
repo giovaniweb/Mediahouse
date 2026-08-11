@@ -48,8 +48,10 @@ export function WhatsAppStatus() {
 
   return (
     <Link
-      href="/configuracoes"
-      title={cfg.label}
+      // Havendo avisos perdidos, o destino útil é a fila de reenvio, não a
+      // tela de configuração da conexão.
+      href={naoEnviadas > 0 ? "/mensagens-falhadas" : "/configuracoes"}
+      title={naoEnviadas > 0 ? `${naoEnviadas} aviso(s) não entregue(s) — clique para reenviar` : cfg.label}
       className="flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
     >
       <div className="relative">

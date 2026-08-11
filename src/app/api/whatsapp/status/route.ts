@@ -10,21 +10,25 @@ export async function GET() {
   const config = organizacaoId
     ? await prisma.configWhatsapp.findFirst({ where: { organizacaoId, ativo: true } })
     : null
-  if (!config) {
-    return NextResponse.json({ connected: false, reason: "no_config" })
-  }
-
   // Avisos que não chegaram nas últimas 24h. Uma queda da instância vira silêncio
   // para quem esperava a mensagem, então o indicador precisa dizer quantas se
-  // perderam — não só se a conexão está de pé agora.
-  const naoEnviadas = await prisma.mensagemWhatsapp.count({
-    where: {
-      organizacaoId,
-      direcao: "saida",
-      status: { in: ["falhou", "sem_config"] },
-      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-    },
-  }).catch(() => 0)
+  // perderam — não só se a conexão está de pé agora. Vem antes da checagem de
+  // config de propósito: empresa sem configuração é justamente a que acumula
+  // falhas "sem_config", e sair aqui esconderia todas elas.
+  const naoEnviadas = organizacaoId
+    ? await prisma.mensagemWhatsapp.count({
+        where: {
+          organizacaoId,
+          direcao: "saida",
+          status: { in: ["falhou", "sem_config"] },
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+    : 0
+
+  if (!config) {
+    return NextResponse.json({ connected: false, reason: "no_config", naoEnviadas })
+  }
 
   try {
     const res = await fetch(
