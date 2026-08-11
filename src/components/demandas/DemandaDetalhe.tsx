@@ -19,6 +19,8 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
+import { Comentarios } from "@/components/demandas/Comentarios"
+import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande } from "@/lib/upload-documento"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 
@@ -1896,44 +1898,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           <ChecklistSection demandaId={id as string} />
 
           {/* ── Comentários ──────────────────────────────────────────────── */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
-            <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-zinc-500" />
-              <h2 className="font-semibold text-zinc-300">Comentários</h2>
-            </div>
-            <div className="divide-y divide-zinc-800 max-h-64 overflow-y-auto">
-              {demanda.comentarios?.length === 0 && (
-                <p className="p-4 text-sm text-zinc-500 text-center">Nenhum comentário ainda</p>
-              )}
-              {demanda.comentarios?.map((c: { id: string; texto: string; createdAt: string; usuario?: { nome: string } }) => (
-                <div key={c.id} className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-zinc-200">{c.usuario?.nome ?? "Sistema"}</span>
-                    <span className="text-xs text-zinc-500">
-                      {format(new Date(c.createdAt), "dd/MM HH:mm", { locale: ptBR })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-zinc-400">{c.texto}</p>
-                </div>
-              ))}
-            </div>
-            <div className="p-3 border-t border-zinc-800 flex gap-2">
-              <input
-                value={comentario}
-                onChange={(e) => setComentario(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && enviarComentario()}
-                placeholder="Adicionar comentário..."
-                className="flex-1 text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 placeholder:text-zinc-500"
-              />
-              <button
-                onClick={enviarComentario}
-                disabled={sendingComment || !comentario.trim()}
-                className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+          {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
+              campo que não existe no modelo (é `comentario`) — os comentários
+              apareciam em branco, o que ajuda a explicar as zero utilizações em
+              produção. */}
+          <Comentarios
+            demandaId={id}
+            comentarios={demanda.comentarios ?? []}
+            onEnviado={() => mutate()}
+          />
         </div>
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
@@ -2074,12 +2047,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <h2 className="font-semibold text-zinc-300">Histórico</h2>
             </div>
             <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
-              {demanda.historicos?.map((h: { id: string; statusNovo: string; createdAt: string; origem: string; usuario?: { nome: string } }) => (
+              {demanda.historicos?.map((h: { id: string; statusNovo: string; createdAt: string; origem: string; observacao?: string | null; usuario?: { nome: string } }) => {
+                // Edição e troca de responsável não são status: entram no mesmo
+                // histórico com um marcador próprio, e o que descreve o evento é a
+                // observação ("Editou título e prazo"), não o rótulo de coluna.
+                const ehEvento = h.statusNovo === EVENTO_EDICAO || h.statusNovo === EVENTO_RESPONSAVEL
+                return (
                 <div key={h.id} className="flex items-start gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-400 mt-1.5 shrink-0" />
+                  <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0",
+                    ehEvento ? "bg-zinc-500" : "bg-purple-400")} />
                   <div>
                     <p className="text-xs font-medium text-zinc-300">
-                      {statusLabel(h.statusNovo, isGrowth)}
+                      {ehEvento ? (h.observacao ?? "Editou a demanda") : statusLabel(h.statusNovo, isGrowth)}
                     </p>
                     <p className="text-[10px] text-zinc-500">
                       {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}
@@ -2087,7 +2066,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     </p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>

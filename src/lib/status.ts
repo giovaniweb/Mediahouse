@@ -104,3 +104,11 @@ export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisiv
   const dias = Math.floor((Date.now() - new Date(d.dataLimite!).getTime()) / 86_400_000)
   return dias > 0 && dias < 3650 ? dias : null
 }
+
+// ── Eventos do histórico que não são status ─────────────────────────────────
+// HistoricoStatus.statusNovo é String, então dá para marcar o TIPO do evento sem
+// migração. Estes valores nunca colidem com um status real. Ficam aqui, e não em
+// lib/historico.ts, porque a tela também precisa deles — e aquele módulo importa
+// Prisma, que não pode ir para o bundle do navegador.
+export const EVENTO_EDICAO = "edicao_campos"
+export const EVENTO_RESPONSAVEL = "responsavel_alterado"

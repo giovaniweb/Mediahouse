@@ -8,6 +8,7 @@ import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
 import { dataPrazoPlausivel, MSG_DATA_INVALIDA } from "@/lib/datas"
+import { registrarEdicao, registrarTrocaResponsavel } from "@/lib/historico"
 import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
@@ -576,6 +577,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
     updateData.statusInterno = "videomaker_notificado"
   }
 
+  // Estado anterior, lido antes de gravar: é o que permite dizer O QUE mudou, e
+  // não só que "alguém mexeu". Editar e trocar responsável não deixavam rastro
+  // nenhum — só mudança de status entrava no histórico.
+  const antesDaEdicao = await prisma.demanda.findUnique({
+    where: { id },
+    include: { responsaveis: { select: { usuario: { select: { nome: true } } } } },
+  })
+
   const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
 
   // Responsáveis: vale tanto para `responsavelId` (singular) quanto para
@@ -584,6 +593,27 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (responsaveisPut !== undefined) {
     await setResponsaveis(id, responsaveisPut)
   }
+
+  // Rastro da edição. Vai em segundo plano: é registro, não pode atrasar nem
+  // derrubar a resposta de quem acabou de salvar.
+  emSegundoPlano(async () => {
+    const statusAtual = demanda.statusInterno
+    await registrarEdicao(id, session.user.id, antesDaEdicao, updateData, statusAtual)
+
+    if (responsaveisPut !== undefined) {
+      const depois = await prisma.demandaResponsavel.findMany({
+        where: { demandaId: id },
+        select: { usuario: { select: { nome: true } } },
+      })
+      await registrarTrocaResponsavel(
+        id,
+        session.user.id,
+        (antesDaEdicao?.responsaveis ?? []).map((r) => r.usuario?.nome).filter(Boolean) as string[],
+        depois.map((r) => r.usuario?.nome).filter(Boolean) as string[],
+        statusAtual
+      )
+    }
+  }, "historico-edicao")
 
   // Registrar histórico se mudou para videomaker_notificado
   if (autoStatusVideomakerNotificado) {

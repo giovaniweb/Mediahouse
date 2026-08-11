@@ -30,13 +30,17 @@ export async function GET(req: NextRequest) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  const area: AreaAtuacao = req.nextUrl.searchParams.get("area") === "audiovisual" ? "audiovisual" : "growth"
+  // ?area=todas ignora o recorte: menção em comentário precisa alcançar qualquer
+  // pessoa da casa, não só quem atua na mesma área da demanda.
+  const areaParam = req.nextUrl.searchParams.get("area")
+  const todasAsAreas = areaParam === "todas"
+  const area: AreaAtuacao = areaParam === "audiovisual" ? "audiovisual" : "growth"
 
   const membros = await prisma.usuarioOrganizacao.findMany({
     where: {
       organizacaoId,
       categoria: "interna",
-      areas: { has: area },
+      ...(todasAsAreas ? {} : { areas: { has: area } }),
       usuario: { status: "ativo" },
     },
     select: {
