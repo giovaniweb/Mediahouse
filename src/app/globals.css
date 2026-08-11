@@ -153,3 +153,26 @@
   cursor: grabbing;
   user-select: none;
 }
+/* Demanda atrasada: a borda esquerda pulsa em vermelho para incomodar quem executa.
+   Só entra quando o prazo já venceu — se pulsasse por qualquer urgência viraria
+   ruído de fundo e pararia de ser lido. */
+@keyframes pulso-atraso {
+  0%, 100% {
+    border-left-color: #ef4444;
+    box-shadow: -2px 0 10px -2px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    border-left-color: #7f1d1d;
+    box-shadow: -2px 0 4px -3px rgba(239, 68, 68, 0.15);
+  }
+}
+.atrasada-pulso {
+  animation: pulso-atraso 1.8s ease-in-out infinite;
+}
+/* Quem pediu menos movimento no sistema mantém o vermelho fixo, sem piscar. */
+@media (prefers-reduced-motion: reduce) {
+  .atrasada-pulso {
+    animation: none;
+    border-left-color: #ef4444;
+  }
+}

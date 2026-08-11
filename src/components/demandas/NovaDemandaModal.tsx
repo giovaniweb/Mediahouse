@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { X, Plus, Trash2, Calendar, Link2, Loader2 } from "lucide-react"
+import { X, Plus, Trash2, Calendar, Link2, Loader2, Paperclip } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import useSWR from "swr"
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -58,6 +59,10 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   // ── Estado do form ───────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // Anexos ficam na memória até a demanda existir: o upload é por demandaId, então
+  // só dá para enviá-los depois do POST.
+  const [anexos, setAnexos] = useState<File[]>([])
+  const [enviandoAnexos, setEnviandoAnexos] = useState(false)
 
   // ── Produtos (dropdown) ──────────────────────────────────────────────────
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>(
@@ -165,6 +170,25 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       if (!res.ok) throw new Error((json.error as string | undefined) ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
 
       toast.success(`Demanda ${json.codigo ?? ""} criada!`)
+
+      // Anexos vão depois da criação — a demanda precisa existir para receber o
+      // upload. Falha de anexo não desfaz a demanda: avisamos e seguimos, já que
+      // o arquivo pode ser reenviado na tela de detalhe.
+      if (anexos.length > 0 && typeof json.id === "string") {
+        setEnviandoAnexos(true)
+        const falhas: string[] = []
+        for (const file of anexos) {
+          try {
+            await enviarDocumento(json.id, file)
+          } catch {
+            falhas.push(file.name)
+          }
+        }
+        setEnviandoAnexos(false)
+        if (falhas.length > 0) toast.error(`Não foi possível anexar: ${falhas.join(", ")}`)
+        else toast.success(`${anexos.length} anexo(s) enviado(s)`)
+      }
+
       onClose()
       router.push(`/demandas/${json.id}`)
     } catch (e) {
@@ -396,6 +420,51 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
             </div>
           </div>
 
+          {/* Anexos (briefing, contrato, planilha…) */}
+          <div>
+            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
+              Anexos <span className="text-zinc-600">(PDF, Word, Excel, imagem — até 25 MB cada)</span>
+            </label>
+            <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-800 border border-dashed border-zinc-700 text-sm text-zinc-400 cursor-pointer hover:border-purple-500/50 hover:text-zinc-200 transition-colors">
+              <Paperclip className="w-4 h-4 shrink-0" />
+              <span>Escolher arquivos…</span>
+              <input
+                type="file"
+                multiple
+                accept={ACCEPT_DOCUMENTOS}
+                className="hidden"
+                onChange={(e) => {
+                  const escolhidos = Array.from(e.target.files ?? [])
+                  const grandes = escolhidos.filter(documentoMuitoGrande)
+                  if (grandes.length > 0) {
+                    toast.error(`Acima de 25 MB: ${grandes.map((f) => f.name).join(", ")}`)
+                  }
+                  setAnexos((atuais) => [...atuais, ...escolhidos.filter((f) => !documentoMuitoGrande(f))])
+                  e.target.value = ""
+                }}
+              />
+            </label>
+            {anexos.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {anexos.map((file, i) => (
+                  <li key={`${file.name}-${i}`} className="flex items-center gap-2 text-xs text-zinc-300 bg-zinc-800/60 rounded-md px-2.5 py-1.5">
+                    <Paperclip className="w-3 h-3 text-zinc-500 shrink-0" />
+                    <span className="truncate flex-1">{file.name}</span>
+                    <span className="text-zinc-500 shrink-0">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                    <button
+                      type="button"
+                      onClick={() => setAnexos((atuais) => atuais.filter((_, idx) => idx !== i))}
+                      className="text-zinc-500 hover:text-red-400 transition-colors shrink-0"
+                      aria-label={`Remover ${file.name}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {/* Referências múltiplas */}
           <div>
             <label className="text-xs font-medium text-zinc-400 mb-2 block">Referências (links)</label>
@@ -440,10 +509,14 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || enviandoAnexos}
             className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-60"
           >
-            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Criando...</> : "Criar Demanda →"}
+            {enviandoAnexos
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando anexos...</>
+              : saving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Criando...</>
+              : "Criar Demanda →"}
           </button>
         </div>
 

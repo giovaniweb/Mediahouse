@@ -6,6 +6,7 @@ import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { cn } from "@/lib/utils"
+import { estaAtrasada } from "@/lib/status"
 import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
 
@@ -141,8 +142,11 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     const items = demandas.filter((d) => colDe(d) === colId)
     const order = localOrder[colId]
     if (!order) {
-      // Sort by posicaoKanban if available, urgentes first
+      // Atrasadas no topo, depois urgentes, depois a posição salva. Só vale quando
+      // não há ordenação manual — arrastar continua mandando, como antes.
       return items.sort((a, b) => {
+        const atrA = estaAtrasada(a), atrB = estaAtrasada(b)
+        if (atrA !== atrB) return atrA ? -1 : 1
         if (a.prioridade === "urgente" && b.prioridade !== "urgente") return -1
         if (b.prioridade === "urgente" && a.prioridade !== "urgente") return 1
         const posA = a.posicaoKanban ?? 9999

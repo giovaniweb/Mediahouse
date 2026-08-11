@@ -19,6 +19,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
+import { enviarDocumento, documentoMuitoGrande } from "@/lib/upload-documento"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 
 const fetcher = async (url: string) => {
@@ -456,39 +457,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   // ── Upload de documentos (PDF, Word, Excel…) via Supabase presigned URL ───
   async function uploadDocumento(file: File) {
+    if (documentoMuitoGrande(file)) {
+      toast.error("Arquivo acima de 25 MB — anexe um link ou reduza o arquivo.")
+      return
+    }
     setUploadingDoc(true)
     setDocUploadProgress(0)
     try {
-      const contentType = file.type || "application/octet-stream"
-      // 1. Busca URL presigned
-      const urlRes = await fetch(
-        `/api/demandas/${id}/upload-url?tipo=documento&contentType=${encodeURIComponent(contentType)}`
-      )
-      const urlJson = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL" })) as { uploadUrl?: string; publicUrl?: string; error?: string }
-      if (!urlRes.ok || !urlJson.uploadUrl) throw new Error(urlJson.error ?? "Erro ao gerar URL de upload")
-
-      // 2. Upload direto para Supabase
-      const uploadRes = await new Promise<boolean>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setDocUploadProgress(Math.round((e.loaded / e.total) * 100))
-        }
-        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve(true) : reject(new Error(`HTTP ${xhr.status}`))
-        xhr.onerror = () => reject(new Error("Falha na conexão"))
-        xhr.open("PUT", urlJson.uploadUrl!)
-        xhr.setRequestHeader("Content-Type", contentType)
-        xhr.send(file)
-      })
-      if (!uploadRes) throw new Error("Upload falhou")
-
-      // 3. Registra o Arquivo no banco
-      const saveRes = await fetch(`/api/demandas/${id}/upload-video`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlJson.publicUrl, tipo: "documento", nomeArquivo: file.name }),
-      })
-      if (!saveRes.ok) throw new Error("Erro ao salvar documento")
-
+      await enviarDocumento(id, file, setDocUploadProgress)
       toast.success("📄 Documento anexado!")
       mutate()
     } catch (e) {

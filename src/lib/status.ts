@@ -78,3 +78,27 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
   expirado:                    ["encerrado"],
   encerrado:                   [],
 }
+
+// ── Atraso ──────────────────────────────────────────────────────────────────
+// Colunas onde o prazo fica suspenso: a bola está com o cliente (aprovação) ou
+// com quem posta, não com quem produz — marcar como atraso puniria o executor
+// por espera alheia.
+export const STATUS_PRAZO_PAUSADO = ["aprovacao", "para_postar"]
+
+/** Regra única de atraso — usada pelo card e pela ordenação do kanban. */
+export function estaAtrasada(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): boolean {
+  if (!d.dataLimite) return false
+  if (STATUS_PRAZO_PAUSADO.includes(d.statusVisivel ?? "")) return false
+  return new Date(d.dataLimite) < new Date()
+}
+
+/**
+ * Dias inteiros de atraso, ou null quando o número não é confiável. O banco tem
+ * datas corrompidas (ano 0001, ano 0026) que renderizariam "atrasada há 700 mil
+ * dias" — nesses casos o chamador mostra só "ATRASADA".
+ */
+export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): number | null {
+  if (!estaAtrasada(d)) return null
+  const dias = Math.floor((Date.now() - new Date(d.dataLimite!).getTime()) / 86_400_000)
+  return dias > 0 && dias < 3650 ? dias : null
+}

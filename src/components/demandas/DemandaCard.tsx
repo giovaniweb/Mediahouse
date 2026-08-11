@@ -4,6 +4,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { AlertTriangle, Calendar, Trash2, User, Video, Pencil, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
@@ -62,12 +63,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   const prio = prioridadeConfig[demanda.prioridade] ?? prioridadeConfig.normal
   const deptColor = deptColors[demanda.departamento] ?? "bg-zinc-700/50 text-zinc-400"
 
-  const PAUSAR_PRAZO = ["aprovacao", "para_postar"]
-  const isOverdue = demanda.dataLimite && new Date(demanda.dataLimite) < new Date() &&
-    !PAUSAR_PRAZO.includes(demanda.statusVisivel ?? "")
+  const isOverdue = estaAtrasada(demanda)
   const isNearDeadline = demanda.dataLimite && !isOverdue &&
     new Date(demanda.dataLimite) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) &&
-    !PAUSAR_PRAZO.includes(demanda.statusVisivel ?? "")
+    !STATUS_PRAZO_PAUSADO.includes(demanda.statusVisivel ?? "")
+  const diasAtraso = diasDeAtraso(demanda)
 
   const isCobertura = demanda.tipoVideo?.toLowerCase().includes("cobertura")
   const aguardandoVM = isCobertura && demanda.statusInterno === "videomaker_notificado"
@@ -92,6 +92,8 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           demanda.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
           // Cobertura aguardando confirmação de VM
           aguardandoVM && "border-l-[3px] border-l-amber-400 bg-amber-950/10",
+          // Atraso vence os demais realces: é o que precisa ser resolvido primeiro
+          isOverdue && "border-l-[3px] border-l-red-500 bg-red-950/20 atrasada-pulso",
         )}
         {...dragHandleProps}
       >
@@ -134,6 +136,12 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
         </p>
 
         <div className="flex flex-wrap gap-1 mb-2">
+          {isOverdue && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              {diasAtraso ? `ATRASADA — ${diasAtraso}d` : "ATRASADA"}
+            </span>
+          )}
           <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", deptColor)}>
             {demanda.departamento}
           </span>
