@@ -53,9 +53,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     return NextResponse.json({ error: "Este link de aprovação expirou" }, { status: 410 })
   }
 
+  // Versão anterior do mesmo vídeo. Cada rodada de ajuste cria uma AprovacaoVideo
+  // nova, então a anterior é o corte que o cliente já viu — poder comparar os dois
+  // lado a lado é o que responde "o que mudou?" sem precisar confiar na memória.
+  // Campos deliberadamente mínimos: nada de quem aprovou nem de dados internos.
+  const versaoAnterior = aprovacao.demandaId
+    ? await prisma.aprovacaoVideo.findFirst({
+        where: { demandaId: aprovacao.demandaId, createdAt: { lt: aprovacao.createdAt } },
+        orderBy: { createdAt: "desc" },
+        select: { urlVideo: true, nomeVideo: true, comentario: true, status: true, createdAt: true },
+      })
+    : null
+
   // `expirado` avisa a tela interna que o link público já não abre para o cliente,
   // para que ela possa oferecer a renovação.
-  return NextResponse.json({ aprovacao, expirado })
+  return NextResponse.json({ aprovacao, expirado, versaoAnterior })
 }
 
 // PATCH /api/aprovacao-video/[token] — renova a validade do link do cliente.

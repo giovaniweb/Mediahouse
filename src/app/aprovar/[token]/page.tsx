@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Sparkles, Package, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,20 @@ interface Aprovacao {
   }
 }
 
+interface VersaoAnterior {
+  urlVideo: string
+  nomeVideo: string | null
+  comentario: string | null
+  status: string
+  createdAt: string
+}
+
+/** Segundos → "1:07". O formato que a equipe de edição já usa para se localizar. */
+function timecode(segundos: number): string {
+  const s = Math.max(0, Math.floor(segundos))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
+}
+
 // Extrai a copy/legenda dos detalhes de entrega (chaves "Copy", "Copy / legenda"…),
 // com fallback para a descrição da demanda.
 function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | null): string {
@@ -57,6 +71,14 @@ export default function AprovarVideoPage() {
   const [showFeedback, setShowFeedback] = useState(false)
   const [copiado, setCopiado] = useState(false)
 
+  // Corte anterior do mesmo vídeo, quando existe. "O que mudou?" é a pergunta
+  // que quem aprova faz toda vez, e sem isso a resposta dependia da memória.
+  const [versaoAnterior, setVersaoAnterior] = useState<VersaoAnterior | null>(null)
+  const [comparando, setComparando] = useState(false)
+  // Referência ao <video> para ler o instante em que a pessoa está — é o que
+  // permite ancorar o comentário no timecode em vez de "lá pelo meio".
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
   useEffect(() => {
     async function load() {
       try {
@@ -68,6 +90,7 @@ export default function AprovarVideoPage() {
         }
         const json = await res.json()
         setAprovacao(json.aprovacao)
+        setVersaoAnterior(json.versaoAnterior ?? null)
 
         // Se já respondido, mostra o resultado
         if (json.aprovacao.status !== "pendente") {
@@ -104,7 +127,28 @@ export default function AprovarVideoPage() {
   }
 
   // Detecta se é vídeo direto ou embed (YouTube, Vimeo, Drive, etc.)
-  function renderPlayer(url: string) {
+  // Pausa no instante atual e começa uma linha de comentário já marcada com o
+  // timecode. Antes só existia a caixa de texto livre, e o ajuste chegava ao
+  // editor como "arrumar lá pelo meio" — ele tinha de caçar o ponto.
+  function marcarMomento() {
+    const v = videoRef.current
+    if (!v) return
+    v.pause()
+    const marca = `[${timecode(v.currentTime)}] `
+    setShowFeedback(true)
+    setComentario((atual) => (atual.trim() ? `${atual.replace(/\s*$/, "")}\n${marca}` : marca))
+    // Foca a caixa para a pessoa já sair digitando o que viu naquele ponto.
+    requestAnimationFrame(() => {
+      const ta = document.getElementById("campo-feedback") as HTMLTextAreaElement | null
+      ta?.focus()
+      ta?.setSelectionRange(ta.value.length, ta.value.length)
+    })
+  }
+
+  // `principal` marca o vídeo que está sendo avaliado — só ele recebe a ref,
+  // para o botão de marcar momento ler o tempo do corte certo quando os dois
+  // estão lado a lado na comparação.
+  function renderPlayer(url: string, principal = false) {
     const isYoutube = url.includes("youtube.com") || url.includes("youtu.be")
     const isVimeo = url.includes("vimeo.com")
     const isDrive = url.includes("drive.google.com")
@@ -167,6 +211,7 @@ export default function AprovarVideoPage() {
     return (
       <div className="space-y-3">
         <video
+          ref={principal ? videoRef : undefined}
           className="w-full rounded-xl max-h-[70vh] bg-black"
           controls
           playsInline
@@ -417,14 +462,70 @@ export default function AprovarVideoPage() {
           </div>
         </div>
 
-        {/* Player */}
+        {/* Player — lado a lado com o corte anterior quando a pessoa pede */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-          {renderPlayer(aprovacao.urlVideo)}
+          {comparando && versaoAnterior ? (
+            <div className="grid gap-3 lg:grid-cols-2 p-3">
+              <div>
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2 px-1">
+                  Versão anterior · {new Date(versaoAnterior.createdAt).toLocaleDateString("pt-BR")}
+                </p>
+                {renderPlayer(versaoAnterior.urlVideo)}
+                {versaoAnterior.comentario && (
+                  <p className="mt-2 px-1 text-xs text-zinc-400 italic">
+                    Seu retorno: “{versaoAnterior.comentario}”
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wide mb-2 px-1">
+                  Versão nova · para aprovar
+                </p>
+                {renderPlayer(aprovacao.urlVideo, true)}
+              </div>
+            </div>
+          ) : (
+            renderPlayer(aprovacao.urlVideo, true)
+          )}
         </div>
 
-        {/* Ações (só se pendente) */}
+        {/* Ferramentas de quem avalia. Aparecem só enquanto há decisão a tomar. */}
         {aprovacao.status === "pendente" && !resultado && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={marcarMomento}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 transition-colors"
+            >
+              <Clock className="w-4 h-4" />
+              Marcar este momento
+            </button>
+            {versaoAnterior && (
+              <button
+                onClick={() => setComparando((v) => !v)}
+                className={cn(
+                  "flex items-center gap-2 text-sm px-3 py-2 rounded-xl border transition-colors",
+                  comparando
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-200 hover:border-zinc-500"
+                )}
+              >
+                <Layers className="w-4 h-4" />
+                {comparando ? "Ver só a versão nova" : "Comparar com a anterior"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Ações (só se pendente). Enquanto é só decidir, o painel fica grudado
+            no rodapé — num vídeo alto os botões caíam abaixo da dobra e a pessoa
+            assistia sem ver como responder. Ao abrir o campo de ajuste ele solta:
+            aberto, o painel é alto e taparia justamente os vídeos que a pessoa
+            precisa olhar para escrever. */}
+        {aprovacao.status === "pendente" && !resultado && (
+          <div className={cn(
+            "bg-zinc-900/95 border border-zinc-800 rounded-2xl p-6 space-y-4",
+            !showFeedback && "sticky bottom-0 z-10 backdrop-blur shadow-2xl shadow-black/50"
+          )}>
             <h2 className="font-semibold text-white">O que você acha do vídeo?</h2>
 
             {/* Nome (opcional) */}
@@ -445,12 +546,17 @@ export default function AprovarVideoPage() {
                   Descreva o que precisa ser ajustado *
                 </label>
                 <textarea
+                  id="campo-feedback"
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10 resize-none"
                   rows={4}
                   value={comentario}
                   onChange={(e) => setComentario(e.target.value)}
                   placeholder="Ex: Cortar a parte dos 0:30 a 0:45, ajustar a legenda na segunda cena, incluir logo no final..."
                 />
+                <p className="text-xs text-zinc-500 mt-1.5">
+                  Dica: use <b>Marcar este momento</b> enquanto assiste — o instante entra no
+                  comentário e o editor vai direto ao ponto.
+                </p>
               </div>
             )}
 
