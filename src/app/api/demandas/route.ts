@@ -182,6 +182,13 @@ export async function GET(req: NextRequest) {
     and.push({ responsavelId: null, responsaveis: { none: {} } })
   }
 
+  // ?criadasPorMim=1 — só o que EU abri. Diferente de ?mine=1, que junta todos os
+  // papéis (responsável, videomaker, editor, gestor, solicitante) num filtro só.
+  // Quem recebe pedidos precisa acompanhar o que subiu, não o que executa.
+  if (searchParams.get("criadasPorMim") === "1") {
+    and.push({ solicitanteId: session.user.id })
+  }
+
   const produtoId = searchParams.get("produtoId")
   if (produtoId) where.produtos = { some: { produtoId } }
 

@@ -1,13 +1,18 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { Sparkles, Plus, Loader2, X, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO, tipoConteudoDe } from "@/lib/growth-conteudo"
 import { toast } from "sonner"
+import { BarraVisao } from "@/components/demandas/BarraVisao"
+import { DemandasLista } from "@/components/demandas/DemandasLista"
+import { DemandasTabela } from "@/components/demandas/DemandasTabela"
+import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -16,6 +21,7 @@ const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-no
 // Growth (gestão de conteúdos). Reutiliza a Demanda (area="design" internamente),
 // mas com kanban próprio de 8 colunas e SEM qualquer dependência de Eventos.
 export default function GrowthKanbanPage() {
+  const router = useRouter()
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
 
@@ -27,6 +33,22 @@ export default function GrowthKanbanPage() {
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
   const [soMinhas, setSoMinhas] = useState(false)
+
+  // Mesmas três visões do audiovisual, com preferência guardada em separado:
+  // quem cuida de Growth pode querer tabela e quem cuida de vídeo, kanban.
+  const [visao, setVisao] = useState<Visao>("kanban")
+  const [aba, setAba] = useState<AbaRapida>("todos")
+  const CHAVE_VISAO = "nuflow:visao-demandas-growth"
+
+  useEffect(() => {
+    const salva = localStorage.getItem(CHAVE_VISAO) as Visao | null
+    if (salva === "kanban" || salva === "lista" || salva === "tabela") setVisao(salva)
+  }, [])
+
+  function trocarVisao(v: Visao) {
+    setVisao(v)
+    localStorage.setItem(CHAVE_VISAO, v)
+  }
 
   // Dados que alimentam os selects dos filtros
   const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
@@ -44,7 +66,9 @@ export default function GrowthKanbanPage() {
   const params = new URLSearchParams()
   params.set("area", "design")
   if (search) params.set("search", search)
-  if (soMinhas) params.set("mine", "1")
+  if (soMinhas || aba === "minhas") params.set("mine", "1")
+  if (aba === "criadas") params.set("criadasPorMim", "1")
+  if (aba === "atrasadas") params.set("atrasadas", "1")
   if (filtroResp) params.set("responsavelId", filtroResp)
   if (filtroLinha) params.set("linhaProjetoId", filtroLinha)
   if (filtroTipo) params.set("tipoVideo", filtroTipo)
@@ -143,18 +167,37 @@ export default function GrowthKanbanPage() {
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
 
-      <div className="flex-1 min-h-0 p-4 overflow-hidden">
-        <KanbanBoard
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
           demandas={demandas}
-          onMove={handleMove}
-          onDelete={handleDelete}
-          onDuplicate={handleDuplicate}
-          userTipo={session?.user?.tipo}
-          colunas={GROWTH_COLUNAS}
-          getColuna={(d) => growthColunaDe(d.statusInterno)}
-          openMode="modal"
+          visao={visao}
+          onVisao={trocarVisao}
+          aba={aba}
+          onAba={setAba}
+          total={demandas.length}
         />
       </div>
+
+      {visao === "kanban" ? (
+        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+          <KanbanBoard
+            demandas={demandas}
+            onMove={handleMove}
+            onDelete={handleDelete}
+            onDuplicate={handleDuplicate}
+            userTipo={session?.user?.tipo}
+            colunas={GROWTH_COLUNAS}
+            getColuna={(d) => growthColunaDe(d.statusInterno)}
+            openMode="modal"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
+          {visao === "lista"
+            ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
+            : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
+        </div>
+      )}
 
       {showNova && <NovoConteudoModal onClose={() => setShowNova(false)} onCreated={() => { setShowNova(false); mutate() }} />}
     </div>

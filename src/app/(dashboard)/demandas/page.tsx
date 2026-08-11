@@ -1,12 +1,16 @@
 "use client"
 
-import { useState, useCallback, Suspense } from "react"
+import { useState, useCallback, useEffect, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
+import { BarraVisao } from "@/components/demandas/BarraVisao"
+import { DemandasLista } from "@/components/demandas/DemandasLista"
+import { DemandasTabela } from "@/components/demandas/DemandasTabela"
+import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { EVENTOS_ATIVO } from "@/lib/modulos"
 
@@ -29,6 +33,7 @@ export default function DemandasPage() {
 
 function DemandasKanban() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [search, setSearch] = useState("")
   const [filtroDepto, setFiltroDepto] = useState("")
   const [filtroVM, setFiltroVM] = useState("")
@@ -37,6 +42,23 @@ function DemandasKanban() {
   const [filtroEvento, setFiltroEvento] = useState("")
   const [filtroResp, setFiltroResp] = useState("")
   const [soMinhas, setSoMinhas] = useState(false)
+
+  // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
+  // trabalha em planilha abre direto na Tabela na próxima vez, sem reconfigurar.
+  const [visao, setVisao] = useState<Visao>("kanban")
+  const [aba, setAba] = useState<AbaRapida>("todos")
+  const CHAVE_VISAO = "nuflow:visao-demandas-audiovisual"
+
+  useEffect(() => {
+    const salva = localStorage.getItem(CHAVE_VISAO) as Visao | null
+    if (salva === "kanban" || salva === "lista" || salva === "tabela") setVisao(salva)
+  }, [])
+
+  function trocarVisao(v: Visao) {
+    setVisao(v)
+    localStorage.setItem(CHAVE_VISAO, v)
+  }
+
   // Filtros que chegam pela URL — é assim que os cards do dashboard abrem uma
   // lista já recortada. Antes o link mandava ?filtro=atrasadas e nem a página
   // nem a API liam, então o clique só abria o quadro inteiro.
@@ -85,7 +107,11 @@ function DemandasKanban() {
   if (filtroProduto) params.set("produtoId", filtroProduto)
   if (filtroEvento) params.set("eventoGestaoId", filtroEvento)
   if (filtroResp) params.set("responsavelId", filtroResp)
-  if (soMinhas) params.set("mine", "1")
+  // As abas rápidas são recortes do MESMO conjunto — por isso viram parâmetro da
+  // consulta, e não uma filtragem no cliente: as três visões precisam concordar.
+  if (soMinhas || aba === "minhas") params.set("mine", "1")
+  if (aba === "criadas") params.set("criadasPorMim", "1")
+  if (aba === "atrasadas") params.set("atrasadas", "1")
   if (soAtrasadas) params.set("atrasadas", "1")
   if (prioridadeUrl) params.set("prioridade", prioridadeUrl)
   if (statusUrl) params.set("statusVisivel", statusUrl)
@@ -331,10 +357,31 @@ function DemandasKanban() {
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
 
-      {/* Kanban */}
-      <div className="flex-1 min-h-0 p-4 overflow-hidden">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
+      {/* Números + recortes + seletor de visão */}
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
+          demandas={demandas}
+          visao={visao}
+          onVisao={trocarVisao}
+          aba={aba}
+          onAba={setAba}
+          total={demandas.length}
+        />
       </div>
+
+      {/* A visão escolhida. Kanban precisa de altura ancorada na viewport para a
+          barra de rolagem ficar no rodapé; lista e tabela rolam com a página. */}
+      {visao === "kanban" ? (
+        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+          <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
+          {visao === "lista"
+            ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
+            : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
+        </div>
+      )}
 
       {/* Modal Nova Demanda */}
       <NovaDemandaModal
