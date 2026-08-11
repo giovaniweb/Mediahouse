@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
-import type { Departamento, Prioridade, StatusVisivel, StatusInterno } from "@prisma/client"
+import type { Prioridade, StatusVisivel, StatusInterno } from "@prisma/client"
 
 // ─── List name → StatusVisivel mapping (fuzzy, case-insensitive) ─────────────
 
@@ -110,7 +110,7 @@ function extractEditorNameFromLabels(labels: Array<{ name?: string; color?: stri
 
 // ─── Extract department from labels ─────────────────────────────────────────
 
-function resolveDepartamento(labels: Array<{ name?: string; color?: string }> | undefined): Departamento {
+function resolveDepartamento(labels: Array<{ name?: string; color?: string }> | undefined): string {
   if (!labels || labels.length === 0) return "audiovisual"
   for (const label of labels) {
     const name = (label.name ?? "").toLowerCase()

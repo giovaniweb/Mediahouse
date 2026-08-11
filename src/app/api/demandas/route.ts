@@ -11,12 +11,15 @@ import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
-import type { Prioridade, Departamento, Prisma } from "@prisma/client"
+import type { Prioridade, Prisma } from "@prisma/client"
+import { departamentoValido } from "@/lib/departamentos"
 
 const criarDemandaSchema = z.object({
   titulo: z.string().trim().min(3),
   descricao: z.string().trim().min(10),
-  departamento: z.enum(["growth", "eventos", "institucional", "rh", "audiovisual", "outros"]),
+  // Não é mais uma lista fixa: o conjunto válido vem de ConfigParametro por
+  // empresa e é conferido depois do parse, com departamentoValido().
+  departamento: z.string().trim().min(1),
   tipoVideo: z.string().trim().min(1),
   cidade: z.string().trim().min(2),
   prioridade: z.enum(["normal", "alta", "urgente"]).default("normal"),
@@ -288,13 +291,20 @@ export async function POST(req: NextRequest) {
     linhaProjetoTexto = linha.nome
   }
 
+  if (!(await departamentoValido(data.departamento, organizacaoId))) {
+    return NextResponse.json(
+      { error: "Departamento inválido — cadastre-o em Configurações → Parâmetros" },
+      { status: 400 }
+    )
+  }
+
   const demanda = await prisma.demanda.create({
     data: {
       organizacaoId,
       codigo: gerarCodigo(),
       titulo: data.titulo,
       descricao: data.descricao,
-      departamento: data.departamento as Departamento,
+      departamento: data.departamento,
       area: (data.area ?? "audiovisual") as "audiovisual" | "design",
       tipoVideo: data.tipoVideo,
       cidade: data.cidade,

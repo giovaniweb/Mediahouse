@@ -65,14 +65,10 @@ enum AreaDemanda {
   design
 }
 
-enum Departamento {
-  growth
-  eventos
-  institucional
-  rh
-  audiovisual
-  outros
-}
+// Departamento deixou de ser enum: a tela de Parâmetros deixava cadastrar
+// "CRM"/"Sistema" e a demanda era recusada na gravação, porque o valor não
+// existia aqui. A fonte da verdade agora é ConfigParametro (grupo
+// "departamentos"), por empresa — ver src/lib/departamentos.ts.
 
 enum StatusVisivel {
   entrada
@@ -413,7 +409,7 @@ model Demanda {
   codigo         String        @unique
   titulo         String
   descricao      String
-  departamento   Departamento
+  departamento   String        // validado contra ConfigParametro (grupo "departamentos")
   area           AreaDemanda   @default(audiovisual)  // audiovisual | design
   tipoVideo      String
   cidade         String
@@ -1033,7 +1029,9 @@ model ConfigParametro {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([grupo, valor])
+  // A unicidade tem que ser por empresa: sem organizacaoId aqui, a primeira
+  // empresa a cadastrar "crm" impediria todas as outras de ter o mesmo valor.
+  @@unique([organizacaoId, grupo, valor])
   @@map("config_parametros")
 }
 

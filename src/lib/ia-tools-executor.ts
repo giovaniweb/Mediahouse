@@ -717,7 +717,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
       codigo,
       titulo: input.titulo as string,
       descricao: (input.descricao as string) ?? "Demanda criada via WhatsApp",
-      departamento: ((input.departamento as string) ?? "outros") as import("@prisma/client").Departamento,
+      departamento: (input.departamento as string) ?? "outros",
       tipoVideo: (input.tipo_video as string) ?? "institucional",
       prioridade: (input.prioridade as "normal" | "alta" | "urgente") ?? "normal",
       cidade: (input.cidade as string) ?? "A definir",

@@ -35,7 +35,11 @@ export default function DemandasPage() {
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
   const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(EVENTOS_ATIVO ? "/api/eventos" : null, fetcher)
   const { data: dataResp } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis?area=audiovisual", fetcher)
+  const { data: dataDeptos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
+    "/api/configuracoes/parametros?grupo=departamentos", fetcher
+  )
 
+  const departamentos = dataDeptos?.parametros ?? []
   const videomakers = dataVMs?.videomakers ?? []
   const editores = dataEds?.editores ?? []
   const produtos = dataProdutos?.produtos ?? []
@@ -239,13 +243,13 @@ export default function DemandasPage() {
         </div>
         <select value={filtroDepto} onChange={(e) => setFiltroDepto(e.target.value)}
           className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
+          {/* Lista vem de Configurações → Parâmetros. Antes era fixa aqui e já
+              divergia do banco: oferecia "Comercial" e "Social Media", que nem
+              existiam como departamento, e omitia "Audiovisual", que existia. */}
           <option value="">Todos os departamentos</option>
-          <option value="growth">Growth</option>
-          <option value="eventos">Eventos</option>
-          <option value="institucional">Institucional</option>
-          <option value="rh">RH</option>
-          <option value="comercial">Comercial</option>
-          <option value="social_media">Social Media</option>
+          {departamentos.map((d) => (
+            <option key={d.valor} value={d.valor}>{d.label}</option>
+          ))}
         </select>
         <select value={filtroVM} onChange={(e) => setFiltroVM(e.target.value)}
           className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">

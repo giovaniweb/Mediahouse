@@ -4,7 +4,6 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getBoardLists, getBoardCards } from "@/lib/trello"
 import { getOrgId, semOrg } from "@/lib/org"
-import type { Departamento } from "@prisma/client"
 
 // Reverse mapping: Trello list name → StatusVisivel
 const LIST_NAME_TO_STATUS: Record<string, string> = {
@@ -129,7 +128,7 @@ export async function POST(req: NextRequest) {
             codigo,
             titulo: card.name.slice(0, 200),
             descricao: card.desc || `Importado do Trello: ${card.name}`,
-            departamento: "outros" as Departamento,
+            departamento: "outros",
             tipoVideo: "outro",
             cidade: "",
             statusVisivel: statusVisivel as import("@prisma/client").StatusVisivel,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { requireDemandaOrg } from "@/lib/org"
-import type { Prioridade, Departamento } from "@prisma/client"
+import type { Prioridade } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -52,7 +52,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       codigo: gerarCodigo(),
       titulo: `${original.titulo} (Cópia)`,
       descricao: original.descricao,
-      departamento: original.departamento as Departamento,
+      departamento: original.departamento,
       tipoVideo: original.tipoVideo,
       cidade: original.cidade,
       prioridade: original.prioridade as Prioridade,
