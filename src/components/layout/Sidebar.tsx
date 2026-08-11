@@ -59,9 +59,10 @@ const sections = [
       { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria", label: "Galeria", icon: PlayCircle },
-      { href: "/relatorios/finalizadas-sem-video", label: "Sem vídeo final", icon: VideoOff },
-      { href: "/videomakers", label: "Videomakers Ext", icon: Camera },
-      { href: "/equipe", label: "Videomakers Int", icon: Users },
+      // "Ext" e "Int" eram jargão interno: fora = rede de parceiros contratados por
+      // diária, dentro = time da casa. Os nomes agora dizem isso.
+      { href: "/videomakers", label: "Rede de Parceiros", icon: Camera },
+      { href: "/equipe", label: "Equipe Interna", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
       { href: "/historico", label: "Histórico", icon: Archive },
     ],
@@ -90,6 +91,9 @@ const sections = [
       { href: "/ia", label: "Central IA", icon: BrainCircuit },
       { href: "/alertas", label: "Alertas IA", icon: Bell },
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
+      // Era item fixo do audiovisual: um relatório de diagnóstico promovido ao menu
+      // principal. Continua acessível, mas junto dos outros relatórios.
+      { href: "/relatorios/finalizadas-sem-video", label: "Entregas sem vídeo", icon: VideoOff },
     ],
   },
   {

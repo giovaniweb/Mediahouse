@@ -9,6 +9,9 @@ type Status = "loading" | "connected" | "disconnected" | "error"
 
 export function WhatsAppStatus() {
   const [status, setStatus] = useState<Status>("loading")
+  // Avisos que não chegaram nas últimas 24h. Saber que a conexão caiu importa
+  // menos do que saber quantas mensagens se perderam enquanto ela estava fora.
+  const [naoEnviadas, setNaoEnviadas] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -19,6 +22,7 @@ export function WhatsAppStatus() {
         const json = await res.json()
         if (!mounted) return
         setStatus(json.connected ? "connected" : "disconnected")
+        setNaoEnviadas(Number(json.naoEnviadas) || 0)
       } catch {
         if (mounted) setStatus("error")
       }
@@ -66,6 +70,14 @@ export function WhatsAppStatus() {
       )}>
         {status === "connected" ? "WhatsApp" : status === "disconnected" ? "WA Offline" : status === "error" ? "WA Erro" : "WA..."}
       </span>
+      {naoEnviadas > 0 && (
+        <span
+          title={`${naoEnviadas} aviso(s) não entregue(s) nas últimas 24h`}
+          className="ml-auto shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40"
+        >
+          {naoEnviadas}
+        </span>
+      )}
     </Link>
   )
 }

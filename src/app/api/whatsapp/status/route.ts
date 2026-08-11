@@ -14,6 +14,18 @@ export async function GET() {
     return NextResponse.json({ connected: false, reason: "no_config" })
   }
 
+  // Avisos que não chegaram nas últimas 24h. Uma queda da instância vira silêncio
+  // para quem esperava a mensagem, então o indicador precisa dizer quantas se
+  // perderam — não só se a conexão está de pé agora.
+  const naoEnviadas = await prisma.mensagemWhatsapp.count({
+    where: {
+      organizacaoId,
+      direcao: "saida",
+      status: { in: ["falhou", "sem_config"] },
+      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    },
+  }).catch(() => 0)
+
   try {
     const res = await fetch(
       `${config.instanceUrl}/instance/connectionState/${config.instanceId}`,
@@ -24,7 +36,7 @@ export async function GET() {
     )
 
     if (!res.ok) {
-      return NextResponse.json({ connected: false, reason: "api_error", status: res.status })
+      return NextResponse.json({ connected: false, reason: "api_error", status: res.status, naoEnviadas })
     }
 
     const json = await res.json()
@@ -34,12 +46,14 @@ export async function GET() {
       connected: state === "open",
       state,
       instanceName: config.instanceId,
+      naoEnviadas,
     })
   } catch (e) {
     return NextResponse.json({
       connected: false,
       reason: "network_error",
       error: e instanceof Error ? e.message : String(e),
+      naoEnviadas,
     })
   }
 }

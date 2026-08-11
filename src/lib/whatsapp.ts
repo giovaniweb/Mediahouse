@@ -112,6 +112,22 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
     return json
   } catch (e) {
     console.error("[WhatsApp] Erro ao enviar:", e)
+    // Falha de rede/timeout é justamente o que acontece quando a instância cai.
+    // Antes o erro era engolido e a mensagem sumia sem deixar rastro — quem
+    // esperava o aviso simplesmente não recebia e ninguém ficava sabendo.
+    // Registrar como "falhou" mantém o conteúdo para reenvio e torna a queda
+    // visível em /mensagens.
+    await prisma.mensagemWhatsapp.create({
+      data: {
+        telefone: numero,
+        tipoMensagem: "text",
+        conteudo: mensagem,
+        direcao: "saida",
+        status: "falhou",
+        ...(orgId && { organizacaoId: orgId }),
+        ...(demandaId && { demandaId }),
+      },
+    }).catch(err => console.error("[WhatsApp] Erro ao salvar msg falhada:", err))
     return null
   }
 }
