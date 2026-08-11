@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
@@ -16,7 +17,17 @@ interface Editor { id: string; nome: string }
 interface Produto { id: string; nome: string }
 interface Responsavel { id: string; nome: string; label: string }
 
+// useSearchParams obriga um limite de Suspense para o Next conseguir
+// pré-renderizar a rota — sem ele o build falha em /demandas.
 export default function DemandasPage() {
+  return (
+    <Suspense fallback={null}>
+      <DemandasKanban />
+    </Suspense>
+  )
+}
+
+function DemandasKanban() {
   const { data: session } = useSession()
   const [search, setSearch] = useState("")
   const [filtroDepto, setFiltroDepto] = useState("")
@@ -26,6 +37,13 @@ export default function DemandasPage() {
   const [filtroEvento, setFiltroEvento] = useState("")
   const [filtroResp, setFiltroResp] = useState("")
   const [soMinhas, setSoMinhas] = useState(false)
+  // Filtros que chegam pela URL — é assim que os cards do dashboard abrem uma
+  // lista já recortada. Antes o link mandava ?filtro=atrasadas e nem a página
+  // nem a API liam, então o clique só abria o quadro inteiro.
+  const searchParamsUrl = useSearchParams()
+  const soAtrasadas = searchParamsUrl.get("atrasadas") === "1"
+  const prioridadeUrl = searchParamsUrl.get("prioridade") ?? ""
+  const statusUrl = searchParamsUrl.get("statusVisivel") ?? ""
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
 
@@ -68,6 +86,9 @@ export default function DemandasPage() {
   if (filtroEvento) params.set("eventoGestaoId", filtroEvento)
   if (filtroResp) params.set("responsavelId", filtroResp)
   if (soMinhas) params.set("mine", "1")
+  if (soAtrasadas) params.set("atrasadas", "1")
+  if (prioridadeUrl) params.set("prioridade", prioridadeUrl)
+  if (statusUrl) params.set("statusVisivel", statusUrl)
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
@@ -296,6 +317,15 @@ export default function DemandasPage() {
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
             <XCircle className="w-3.5 h-3.5" /> Limpar filtros
           </button>
+        )}
+        {/* Recorte que veio de um card do dashboard. Sem este aviso o quadro
+            aparece parcial e parece que sumiram demandas. */}
+        {(soAtrasadas || prioridadeUrl || statusUrl) && (
+          <a href="/demandas"
+            className="flex items-center gap-1 text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 rounded-lg hover:bg-amber-500/20 transition-colors">
+            <XCircle className="w-3.5 h-3.5" />
+            {soAtrasadas ? "Só atrasadas" : prioridadeUrl ? `Só ${prioridadeUrl}` : "Recorte ativo"} — ver tudo
+          </a>
         )}
         <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>

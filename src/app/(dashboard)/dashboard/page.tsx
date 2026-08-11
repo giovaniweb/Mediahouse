@@ -67,14 +67,18 @@ function InternalDashboard() {
         <HojeEmFoco />
         {/* Métricas principais */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {/* Cada card leva a uma lista que realmente aplica o filtro. "Prazo
+              Crítico" contava atrasadas (metrics:127) mas se chamava outra coisa
+              e apontava para ?filtro=atrasadas, parâmetro que a API não conhece
+              — o clique abria o quadro inteiro sem filtro. */}
           <MetricCard label="Demandas Ativas" value={isLoading ? "—" : m?.demandasAtivas ?? 0}
             icon={<Film className="w-5 h-5" />} color="blue" href="/demandas" />
           <MetricCard label="Urgentes" value={isLoading ? "—" : m?.urgentesHoje ?? 0}
-            icon={<AlertTriangle className="w-5 h-5" />} color="red" href="/aprovacoes" />
+            icon={<AlertTriangle className="w-5 h-5" />} color="red" href="/demandas?prioridade=urgente" />
+          <MetricCard label="Atrasadas" value={isLoading ? "—" : m?.prazoCritico ?? 0}
+            icon={<Clock className="w-5 h-5" />} color="yellow" href="/demandas?atrasadas=1" />
           <MetricCard label="Concluídas Mês" value={isLoading ? "—" : m?.concluidasMes ?? 0}
             icon={<CheckCircle className="w-5 h-5" />} color="green" href="/demandas?statusVisivel=finalizado" />
-          <MetricCard label="Prazo Crítico" value={isLoading ? "—" : m?.prazoCritico ?? 0}
-            icon={<Clock className="w-5 h-5" />} color="yellow" href="/demandas?filtro=atrasadas" />
         </div>
 
         {/* Tendência semanal */}

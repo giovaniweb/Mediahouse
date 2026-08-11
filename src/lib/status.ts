@@ -80,10 +80,12 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
 }
 
 // ── Atraso ──────────────────────────────────────────────────────────────────
-// Colunas onde o prazo fica suspenso: a bola está com o cliente (aprovação) ou
+// Colunas onde o prazo não conta mais: a bola está com o cliente (aprovação) ou
 // com quem posta, não com quem produz — marcar como atraso puniria o executor
-// por espera alheia.
-export const STATUS_PRAZO_PAUSADO = ["aprovacao", "para_postar"]
+// por espera alheia — e "finalizado", porque uma demanda já entregue não é algo
+// a resolver hoje (era o critério que o contador do dashboard já usava, e sem
+// ele o card pulsava vermelho na coluna Concluído).
+export const STATUS_PRAZO_PAUSADO = ["aprovacao", "para_postar", "finalizado"]
 
 /** Regra única de atraso — usada pelo card e pela ordenação do kanban. */
 export function estaAtrasada(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): boolean {

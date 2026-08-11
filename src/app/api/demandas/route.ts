@@ -4,7 +4,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
-import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { STATUS_PARA_COLUNA, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
@@ -164,6 +164,22 @@ export async function GET(req: NextRequest) {
       ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
     }
     and.push({ OR: [{ finalizadaEm: faixa }, { finalizadaEm: null, updatedAt: faixa }] })
+  }
+
+  // ?atrasadas=1 — prazo vencido, exceto onde o prazo fica suspenso porque a bola
+  // está com o cliente ou com quem posta. Mesma regra de estaAtrasada() no card;
+  // o dashboard apontava para ?filtro=atrasadas, que a API não conhecia e devolvia
+  // a lista inteira sem filtro nenhum.
+  if (searchParams.get("atrasadas") === "1") {
+    and.push({
+      dataLimite: { lt: new Date() },
+      statusVisivel: { notIn: STATUS_PRAZO_PAUSADO as never[] },
+    })
+  }
+
+  // ?semResponsavel=1 — ninguém assumiu ainda, nem pela M2M nem pelo escalar.
+  if (searchParams.get("semResponsavel") === "1") {
+    and.push({ responsavelId: null, responsaveis: { none: {} } })
   }
 
   const produtoId = searchParams.get("produtoId")
