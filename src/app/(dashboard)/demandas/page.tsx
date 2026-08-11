@@ -8,10 +8,11 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
+import { ImportarPlanilhaModal } from "@/components/demandas/ImportarPlanilhaModal"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
-import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
 import { EVENTOS_ATIVO } from "@/lib/modulos"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -68,6 +69,7 @@ function DemandasKanban() {
   const statusUrl = searchParamsUrl.get("statusVisivel") ?? ""
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
+  const [showImportar, setShowImportar] = useState(false)
 
   // Dados para filtros
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
@@ -256,12 +258,21 @@ function DemandasKanban() {
       <Header
         title="Demandas"
         actions={
-          <button
-            onClick={() => setShowNovaDemandaModal(true)}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Nova Demanda
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImportar(true)}
+              title="Criar várias demandas a partir de uma planilha"
+              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Importar planilha
+            </button>
+            <button
+              onClick={() => setShowNovaDemandaModal(true)}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Nova Demanda
+            </button>
+          </div>
         }
       />
 
@@ -381,6 +392,10 @@ function DemandasKanban() {
             ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
             : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
         </div>
+      )}
+
+      {showImportar && (
+        <ImportarPlanilhaModal area="audiovisual" onClose={() => setShowImportar(false)} onImportado={() => mutate()} />
       )}
 
       {/* Modal Nova Demanda */}

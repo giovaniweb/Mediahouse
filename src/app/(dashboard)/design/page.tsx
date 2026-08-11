@@ -4,12 +4,13 @@ import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Sparkles, Plus, Loader2, X, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { Sparkles, Plus, Loader2, X, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO, tipoConteudoDe } from "@/lib/growth-conteudo"
 import { toast } from "sonner"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
+import { ImportarPlanilhaModal } from "@/components/demandas/ImportarPlanilhaModal"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
@@ -24,6 +25,7 @@ export default function GrowthKanbanPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
+  const [showImportar, setShowImportar] = useState(false)
 
   // Filtros — adaptados às peculiaridades do Growth (pessoas/responsável,
   // linha/projeto, tipo de conteúdo, produto) em vez de videomaker/editor.
@@ -114,6 +116,7 @@ export default function GrowthKanbanPage() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-400" /> Growth · Demandas</h1>
         <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><Plus className="w-4 h-4" /> Nova Demanda</button>
+        <button onClick={() => setShowImportar(true)} title="Criar várias demandas a partir de uma planilha" className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg"><FileSpreadsheet className="w-4 h-4" /> Importar planilha</button>
       </div>
 
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
@@ -197,6 +200,10 @@ export default function GrowthKanbanPage() {
             ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
             : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
         </div>
+      )}
+
+      {showImportar && (
+        <ImportarPlanilhaModal area="design" onClose={() => setShowImportar(false)} onImportado={() => mutate()} />
       )}
 
       {showNova && <NovoConteudoModal onClose={() => setShowNova(false)} onCreated={() => { setShowNova(false); mutate() }} />}
