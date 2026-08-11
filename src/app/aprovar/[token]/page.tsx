@@ -263,7 +263,9 @@ export default function AprovarVideoPage() {
   if (!aprovacao) return null
 
   // ── Growth (design): tela de aprovação de ARTE — carrossel estilo Instagram + copy ──
-  const isGrowth = aprovacao.demanda.area === "design" || aprovacao.demanda.departamento === "growth"
+  // Só a ÁREA decide. O departamento é quem pediu, não quem produz: incluí-lo aqui
+  // mandava 104 demandas audiovisuais para a tela de artes, sem player de vídeo.
+  const isGrowth = aprovacao.demanda.area === "design"
   if (isGrowth) {
     const artes = (aprovacao.demanda.arquivos && aprovacao.demanda.arquivos.length > 0)
       ? aprovacao.demanda.arquivos.map((a) => a.url)

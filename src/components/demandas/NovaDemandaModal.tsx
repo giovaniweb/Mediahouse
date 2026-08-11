@@ -63,6 +63,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   // só dá para enviá-los depois do POST.
   const [anexos, setAnexos] = useState<File[]>([])
   const [enviandoAnexos, setEnviandoAnexos] = useState(false)
+  // Avisa que o formulário voltou preenchido, para a pessoa não achar que é lixo
+  // de outra demanda.
+  const [rascunhoRecuperado, setRascunhoRecuperado] = useState(false)
 
   // ── Produtos (dropdown) ──────────────────────────────────────────────────
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>(
@@ -78,33 +81,81 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   )
   const tiposVideo = dataTipos?.parametros ?? []
 
-  // ── ESC fecha o modal ────────────────────────────────────────────────────
+  // ── Proteção contra perda de trabalho ────────────────────────────────────
+  // O modal fechava no clique fora e no ESC sem perguntar nada. Quem escrevia um
+  // briefing longo e esbarrava fora perdia tudo — é a queixa de "não salva o texto
+  // e se sair da tela apaga". Agora só fecha sem perguntar quando não há nada
+  // escrito, e o que foi digitado fica guardado no navegador até virar demanda.
+  const RASCUNHO_KEY = "nuflow:rascunho-nova-demanda"
+
+  const temConteudo = !!(
+    titulo.trim() || descricao.trim() || tipoVideo || produtoId || classificacao ||
+    dataLimite || linkBrutos.trim() || cidade.trim() || localEvento.trim() ||
+    dataEvento || motivoUrgencia.trim() || anexos.length > 0 ||
+    referencias.some((r) => r.trim())
+  )
+
+  function limparRascunho() {
+    if (typeof window !== "undefined") localStorage.removeItem(RASCUNHO_KEY)
+  }
+
+  function fecharComConfirmacao() {
+    if (temConteudo && !confirm("Fechar sem criar a demanda? O que você escreveu fica guardado e volta na próxima vez que abrir.")) {
+      return
+    }
+    onClose()
+  }
+
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") fecharComConfirmacao() }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [open, onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, temConteudo])
 
-  // ── Reset ao abrir ───────────────────────────────────────────────────────
+  // Guarda o rascunho enquanto a pessoa escreve. Anexos ficam de fora: File não
+  // sobrevive ao localStorage.
   useEffect(() => {
-    if (open) {
-      setTipo("video")
-      setTitulo("")
-      setDescricao("")
-      setPrioridade("normal")
-      setMotivoUrgencia("")
-      setDataLimite("")
-      setProdutoId("")
-      setClassificacao("")
-      setReferencias([""])
-      setTipoVideo("")
-      setCidade("")
-      setLocalEvento("")
-      setDataEvento("")
-      setLinkBrutos("")
-      setErrors({})
+    if (!open || typeof window === "undefined") return
+    const t = setTimeout(() => {
+      if (!temConteudo) return
+      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({
+        tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
+        classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos,
+      }))
+    }, 500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
+      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos])
+
+  // ── Ao abrir: recupera o rascunho, ou começa limpo ───────────────────────
+  useEffect(() => {
+    if (!open) return
+    setErrors({})
+    setAnexos([])
+
+    let salvo: Record<string, unknown> | null = null
+    if (typeof window !== "undefined") {
+      try { salvo = JSON.parse(localStorage.getItem(RASCUNHO_KEY) ?? "null") } catch { salvo = null }
     }
+
+    setTipo((salvo?.tipo as "video" | "cobertura") ?? "video")
+    setTitulo((salvo?.titulo as string) ?? "")
+    setDescricao((salvo?.descricao as string) ?? "")
+    setPrioridade((salvo?.prioridade as "normal" | "alta" | "urgente") ?? "normal")
+    setMotivoUrgencia((salvo?.motivoUrgencia as string) ?? "")
+    setDataLimite((salvo?.dataLimite as string) ?? "")
+    setProdutoId((salvo?.produtoId as string) ?? "")
+    setClassificacao((salvo?.classificacao as "b2c" | "b2b" | "") ?? "")
+    setReferencias((salvo?.referencias as string[]) ?? [""])
+    setTipoVideo((salvo?.tipoVideo as string) ?? "")
+    setCidade((salvo?.cidade as string) ?? "")
+    setLocalEvento((salvo?.localEvento as string) ?? "")
+    setDataEvento((salvo?.dataEvento as string) ?? "")
+    setLinkBrutos((salvo?.linkBrutos as string) ?? "")
+    setRascunhoRecuperado(!!salvo)
   }, [open])
 
   if (!open) return null
@@ -177,6 +228,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       if (!res.ok) throw new Error((json.error as string | undefined) ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
 
       toast.success(`Demanda ${json.codigo ?? ""} criada!`)
+      limparRascunho()
 
       // Anexos vão depois da criação — a demanda precisa existir para receber o
       // upload. Falha de anexo não desfaz a demanda: avisamos e seguimos, já que
@@ -209,20 +261,44 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={e => { if (e.target === overlayRef.current) onClose() }}
+      onClick={e => { if (e.target === overlayRef.current) fecharComConfirmacao() }}
     >
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
           <h2 className="font-semibold text-zinc-100 text-base">+ Nova Demanda</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors">
+          <button onClick={fecharComConfirmacao} className="text-zinc-500 hover:text-zinc-200 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body (scrollável) */}
         <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1">
+
+          {/* O formulário voltou preenchido de uma sessão anterior — dizer isso
+              evita que a pessoa ache que é resto de outra demanda e apague tudo. */}
+          {rascunhoRecuperado && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2.5">
+              <p className="text-xs text-blue-200 flex-1 min-w-[14rem]">
+                Recuperamos o que você tinha começado a escrever.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm("Descartar o rascunho e começar do zero?")) return
+                  limparRascunho()
+                  setTipo("video"); setTitulo(""); setDescricao(""); setPrioridade("normal")
+                  setMotivoUrgencia(""); setDataLimite(""); setProdutoId(""); setClassificacao("")
+                  setReferencias([""]); setTipoVideo(""); setCidade(""); setLocalEvento("")
+                  setDataEvento(""); setLinkBrutos(""); setAnexos([]); setRascunhoRecuperado(false)
+                }}
+                className="text-xs font-medium px-2.5 py-1 rounded-md border border-blue-500/40 text-blue-100 hover:bg-blue-500/20 transition-colors"
+              >
+                Começar do zero
+              </button>
+            </div>
+          )}
 
           {/* Tipo */}
           <div>
@@ -506,7 +582,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 shrink-0">
           <button
-            onClick={onClose}
+            onClick={fecharComConfirmacao}
             className="px-4 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:bg-zinc-800 transition-colors"
           >
             Cancelar

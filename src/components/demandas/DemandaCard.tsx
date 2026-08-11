@@ -92,8 +92,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           demanda.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
           // Cobertura aguardando confirmação de VM
           aguardandoVM && "border-l-[3px] border-l-amber-400 bg-amber-950/10",
-          // Atraso vence os demais realces: é o que precisa ser resolvido primeiro
-          isOverdue && "border-l-[3px] border-l-red-500 bg-red-950/20 atrasada-pulso",
+          // Atraso vence os demais realces. A borda é estática de propósito: quando
+          // o card inteiro pulsava, uma coluna cheia de atrasadas tremia toda e
+          // ficava ilegível. Quem pisca — devagar — é só a tag.
+          isOverdue && "border-l-[3px] border-l-red-500 bg-red-950/20",
         )}
         {...dragHandleProps}
       >
@@ -137,7 +139,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
 
         <div className="flex flex-wrap gap-1 mb-2">
           {isOverdue && (
-            <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
+            <span className="tag-atrasada flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
               <AlertTriangle className="w-3 h-3 shrink-0" />
               {diasAtraso ? `ATRASADA — ${diasAtraso}d` : "ATRASADA"}
             </span>

@@ -57,6 +57,14 @@ export function InlineEdit(props: Props) {
     setEstado("idle")
   }
 
+  // ESC jogava fora o que tinha sido digitado sem avisar. Num campo de texto
+  // longo isso é perda de trabalho — e é a reclamação de "alterei um texto e não
+  // salvou". Só descarta em silêncio quando nada mudou.
+  function cancelarComConfirmacao() {
+    if (val !== value && !confirm("Descartar o que você escreveu neste campo?")) return
+    cancelar()
+  }
+
   const indicador = (
     <span className="ml-2 inline-flex items-center text-[11px]">
       {estado === "saving" && <span className="text-zinc-400 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</span>}
@@ -96,7 +104,7 @@ export function InlineEdit(props: Props) {
             onBlur={() => salvar(val)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.blur()
-              if (e.key === "Escape") cancelar()
+              if (e.key === "Escape") cancelarComConfirmacao()
             }}
             className={inputCls} />
           {indicador}
@@ -110,7 +118,7 @@ export function InlineEdit(props: Props) {
           onBlur={() => salvar(val)}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur()
-            if (e.key === "Escape") cancelar()
+            if (e.key === "Escape") cancelarComConfirmacao()
           }}
           className={inputCls} />
         {indicador}

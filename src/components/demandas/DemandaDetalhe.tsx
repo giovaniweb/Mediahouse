@@ -79,10 +79,13 @@ const GROWTH_STATUS_LABELS: Record<string, string> = {
   entregue_cliente: "Finalizado",
 }
 
-function isGrowthDemand(d?: { area?: string | null; departamento?: string | null }) {
-  const area = String(d?.area ?? "").toLowerCase()
-  const departamento = String(d?.departamento ?? "").toLowerCase()
-  return area === "design" || departamento === "growth"
+// A área diz QUEM PRODUZ; o departamento diz QUEM PEDIU. São eixos diferentes, e
+// misturá-los quebrava 104 demandas: um vídeo institucional solicitado pelo
+// departamento de Growth é produção audiovisual, mas caía na interface de Growth
+// — aparecia "Equipe Growth" e o visualizador de artes onde deveria haver
+// videomaker, editor e player. Só a área decide a interface.
+function isGrowthDemand(d?: { area?: string | null }) {
+  return String(d?.area ?? "").toLowerCase() === "design"
 }
 
 function statusLabel(status: string, growth: boolean) {
@@ -848,7 +851,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   if (!demanda) {
     if (mode === "modal") {
       return (
-        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center" onClick={() => onClose?.()}>
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}>
           <div className="animate-spin w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full" />
         </div>
       )
@@ -982,7 +985,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     <>
       {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
       {aprovacaoAberta && demanda.linkCliente && (
-        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={() => { setAprovacaoAberta(false); mutate() }}>
+        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
           <div className="min-h-full flex items-start justify-center p-4">
             <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
@@ -2271,9 +2274,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   )
 
   if (mode === "modal") {
+    // Só fecha em clique direto no fundo. Antes qualquer clique que chegasse aqui
+    // por bubbling fechava o modal — inclusive na margem em volta do card e na
+    // barra de rolagem —, e quem estava editando um campo perdia o contexto no meio.
     return (
-      <div className="fixed inset-0 z-[60] bg-black/70 overflow-y-auto" onClick={() => onClose?.()}>
-        <div className="min-h-full w-full flex items-start justify-center p-4">
+      <div
+        className="fixed inset-0 z-[60] bg-black/70 overflow-y-auto"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
+      >
+        <div
+          className="min-h-full w-full flex items-start justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
+        >
           <div className="w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
               <div className="flex items-center gap-2 min-w-0">
