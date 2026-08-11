@@ -13,6 +13,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
+import { dataPrazoPlausivel, MSG_DATA_INVALIDA } from "@/lib/datas"
 
 const criarDemandaSchema = z.object({
   titulo: z.string().trim().min(3),
@@ -24,7 +25,7 @@ const criarDemandaSchema = z.object({
   cidade: z.string().trim().min(2),
   prioridade: z.enum(["normal", "alta", "urgente"]).default("normal"),
   motivoUrgencia: z.string().optional(),
-  dataLimite: z.string().optional(),
+  dataLimite: z.string().optional().refine(dataPrazoPlausivel, { message: MSG_DATA_INVALIDA }),
   // Campos condicionais
   campanha: z.string().optional(),
   objetivo: z.string().optional(),

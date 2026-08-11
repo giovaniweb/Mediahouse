@@ -7,6 +7,7 @@ import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
+import { dataPrazoPlausivel, MSG_DATA_INVALIDA } from "@/lib/datas"
 import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
@@ -114,6 +115,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
   const body = await req.json()
+
+  // A edição inline é a porta por onde as datas absurdas entraram (há prazos
+  // gravados no ano 0026 e no ano 0001) — aqui não havia checagem nenhuma.
+  if (body.dataLimite !== undefined && !dataPrazoPlausivel(body.dataLimite)) {
+    return NextResponse.json({ error: MSG_DATA_INVALIDA }, { status: 400 })
+  }
 
   const erroTitulo = normalizarTextoObrigatorio(body, "titulo", "Título", 3)
   if (erroTitulo) return erroTitulo
