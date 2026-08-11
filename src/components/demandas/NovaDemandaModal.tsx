@@ -71,6 +71,13 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   )
   const produtos = dataProdutos?.produtos ?? []
 
+  // ── Tipos de vídeo (Configurações → Parâmetros) ──────────────────────────
+  const { data: dataTipos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
+    open ? "/api/configuracoes/parametros?grupo=tipos_video" : null,
+    fetcher
+  )
+  const tiposVideo = dataTipos?.parametros ?? []
+
   // ── ESC fecha o modal ────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return
@@ -278,17 +285,14 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                 onChange={e => setTipoVideo(e.target.value)}
                 className={cn(selectClass, errors.tipoVideo && "border-red-500 focus:ring-red-500")}
               >
+                {/* Vem de Configurações → Parâmetros. A lista fixa que estava
+                    aqui gravava "institucional" e "ads", enquanto os parâmetros
+                    eram "video_institucional" e "video_meta_ads" — editar a tela
+                    não mudava nada neste formulário. */}
                 <option value="">Selecionar...</option>
-                <option value="reels">📱 Reels / Stories</option>
-                <option value="youtube">▶️ YouTube</option>
-                <option value="treinamento">🎓 Treinamento</option>
-                <option value="apresentacao_equipamento">🔬 Apresentação de Equipamento</option>
-                <option value="institucional">🏢 Institucional</option>
-                <option value="depoimento">💬 Depoimento</option>
-                <option value="ads">📣 Anúncio (Ads)</option>
-                <option value="vsl">🎯 VSL (Video Sales Letter)</option>
-                <option value="tutorial">📝 Tutorial</option>
-                <option value="outro">📦 Outro</option>
+                {tiposVideo.map((t) => (
+                  <option key={t.valor} value={t.valor}>{t.label}</option>
+                ))}
               </select>
               {errors.tipoVideo && <p className="text-xs text-red-400 mt-1">{errors.tipoVideo}</p>}
             </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { TIPOS_VIDEO_SEED, TIPOS_CRIATIVO_SEED } from "@/lib/tipos-demanda"
 
 // Seed inicial com valores hardcoded
 const SEED_PARAMETROS = [
@@ -12,17 +13,13 @@ const SEED_PARAMETROS = [
   { grupo: "departamentos", valor: "rh", label: "RH", ordem: 3 },
   { grupo: "departamentos", valor: "audiovisual", label: "Audiovisual", ordem: 4 },
   { grupo: "departamentos", valor: "outros", label: "Outros", ordem: 5 },
-  // Tipos de vídeo
-  { grupo: "tipos_video", valor: "social_media", label: "Social Media", ordem: 0 },
-  { grupo: "tipos_video", valor: "reels", label: "Reels", ordem: 1 },
-  { grupo: "tipos_video", valor: "vsl", label: "VSL", ordem: 2 },
-  { grupo: "tipos_video", valor: "video_meta_ads", label: "Meta Ads", ordem: 3 },
-  { grupo: "tipos_video", valor: "aftermovie", label: "Aftermovie", ordem: 4 },
-  { grupo: "tipos_video", valor: "video_institucional", label: "Institucional", ordem: 5 },
-  { grupo: "tipos_video", valor: "cobertura_evento", label: "Cobertura de Evento", ordem: 6 },
-  { grupo: "tipos_video", valor: "tutorial", label: "Tutorial", ordem: 7 },
-  { grupo: "tipos_video", valor: "corte_simples", label: "Corte Simples", ordem: 8 },
-  { grupo: "tipos_video", valor: "treinamento", label: "Treinamento", ordem: 9 },
+  // Tipos de vídeo (audiovisual) e tipos de criativo (Growth). Os formulários
+  // liam listas fixas no código que não batiam com estes valores — gravavam
+  // "institucional" onde o parâmetro era "video_institucional", e ofereciam
+  // "youtube"/"depoimento", que não existiam aqui. Editar a tela não surtia
+  // efeito nenhum. Estas listas passaram a incluir tudo que já é usado.
+  ...TIPOS_VIDEO_SEED,
+  ...TIPOS_CRIATIVO_SEED,
   // Habilidades
   { grupo: "habilidades", valor: "edicao", label: "Edição", ordem: 0 },
   { grupo: "habilidades", valor: "captacao_camera", label: "Captação com câmera", ordem: 1 },

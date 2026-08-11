@@ -111,9 +111,14 @@ export default function NovaDemandaPage() {
   // ── Erros ───────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // ── Load produtos ───────────────────────────────────────────────────
+  // ── Tipos de vídeo (Configurações → Parâmetros) ─────────────────────
+  const [tiposVideo, setTiposVideo] = useState<{ valor: string; label: string }[]>([])
+
+  // ── Load produtos + tipos ───────────────────────────────────────────
   useEffect(() => {
     fetch("/api/produtos").then(r => r.json()).then(d => setProdutos(d.produtos ?? d ?? [])).catch(() => {})
+    fetch("/api/configuracoes/parametros?grupo=tipos_video")
+      .then(r => r.json()).then(d => setTiposVideo(d.parametros ?? [])).catch(() => {})
   }, [])
 
   // ── Busca videomakers por cidade ────────────────────────────────────
@@ -449,17 +454,11 @@ export default function NovaDemandaPage() {
 
             <Field label="Tipo de vídeo" required error={errors.tipoVideo}>
               <select value={tipoVideo} onChange={e => setTipoVideo(e.target.value)} className={selectClass}>
+                {/* Vem de Configurações → Parâmetros — ver src/lib/tipos-demanda.ts */}
                 <option value="">Selecionar...</option>
-                <option value="reels">📱 Reels / Stories</option>
-                <option value="youtube">▶️ YouTube</option>
-                <option value="treinamento">🎓 Treinamento</option>
-                <option value="apresentacao_equipamento">🔬 Apresentação de Equipamento</option>
-                <option value="institucional">🏢 Institucional</option>
-                <option value="depoimento">💬 Depoimento</option>
-                <option value="ads">📣 Anúncio (Ads)</option>
-                <option value="vsl">🎯 VSL (Video Sales Letter)</option>
-                <option value="tutorial">📝 Tutorial</option>
-                <option value="outro">📦 Outro</option>
+                {tiposVideo.map((t) => (
+                  <option key={t.valor} value={t.valor}>{t.label}</option>
+                ))}
               </select>
             </Field>
 

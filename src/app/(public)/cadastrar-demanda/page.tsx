@@ -112,6 +112,19 @@ export default function CadastrarDemandaPage() {
     if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
   }
 
+  // Vocabulário de tipos — o mesmo que a equipe gerencia em Configurações →
+  // Parâmetros, para o formulário público não gravar valores que o sistema
+  // interno desconhece.
+  const [tiposVideo, setTiposVideo] = useState<{ valor: string; label: string }[]>([])
+  const [tiposCriativo, setTiposCriativo] = useState<{ valor: string; label: string }[]>([])
+
+  useEffect(() => {
+    fetch("/api/publico/parametros?grupo=tipos_video")
+      .then(r => r.json()).then(d => setTiposVideo(d.parametros ?? [])).catch(() => {})
+    fetch("/api/publico/parametros?grupo=tipos_criativo")
+      .then(r => r.json()).then(d => setTiposCriativo(d.parametros ?? [])).catch(() => {})
+  }, [])
+
   // Restaura rascunho salvo ao montar (apenas uma vez)
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -497,17 +510,14 @@ export default function CadastrarDemandaPage() {
 
             <Field label="Tipo de vídeo" required error={errors.tipoVideo}>
               <select value={tipoVideo} onChange={e => setTipoVideo(e.target.value)} className={selectClass}>
+                {/* Vem de Configurações → Parâmetros via /api/publico/parametros.
+                    A lista fixa daqui gravava "institucional" e "ads", valores que
+                    não existiam como parâmetro e duplicavam video_institucional e
+                    video_meta_ads. */}
                 <option value="">Selecionar...</option>
-                <option value="reels">📱 Reels / Stories</option>
-                <option value="youtube">▶️ YouTube</option>
-                <option value="treinamento">🎓 Treinamento</option>
-                <option value="apresentacao_equipamento">🔬 Apresentação de Equipamento</option>
-                <option value="institucional">🏢 Institucional</option>
-                <option value="depoimento">💬 Depoimento</option>
-                <option value="ads">📣 Anúncio (Ads)</option>
-                <option value="vsl">🎯 VSL (Video Sales Letter)</option>
-                <option value="tutorial">📝 Tutorial</option>
-                <option value="outro">📦 Outro</option>
+                {tiposVideo.map((t) => (
+                  <option key={t.valor} value={t.valor}>{t.label}</option>
+                ))}
               </select>
             </Field>
 
@@ -541,14 +551,9 @@ export default function CadastrarDemandaPage() {
 
             <Field label="Tipo de conteúdo" required>
               <select value={tipoConteudo} onChange={e => setTipoConteudo(e.target.value)} className={selectClass}>
-                <option value="post">Post feed</option>
-                <option value="story">Story</option>
-                <option value="reels">Reels</option>
-                <option value="carrossel">Carrossel</option>
-                <option value="email_marketing">E-mail marketing</option>
-                <option value="criativo_trafego">Criativo para tráfego</option>
-                <option value="landing_copy">Landing page / copy</option>
-                <option value="material_grafico">Material gráfico</option>
+                {tiposCriativo.map((t) => (
+                  <option key={t.valor} value={t.valor}>{t.label}</option>
+                ))}
               </select>
             </Field>
 

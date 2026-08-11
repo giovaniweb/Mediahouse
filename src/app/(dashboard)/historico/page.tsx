@@ -24,19 +24,7 @@ interface Demanda {
   produtos?: { produto: { nome: string } }[]
 }
 
-const TIPOS_VIDEO = [
-  "reels", "youtube", "video_institucional", "institucional", "treinamento",
-  "apresentacao_equipamento", "depoimento", "ads", "vsl", "tutorial",
-  "cobertura_evento", "outro",
-]
 
-const TIPO_LABEL: Record<string, string> = {
-  reels: "Reels", youtube: "YouTube", video_institucional: "Institucional",
-  institucional: "Institucional", treinamento: "Treinamento",
-  apresentacao_equipamento: "Apresentação Produto", depoimento: "Depoimento",
-  ads: "Ads", vsl: "VSL", tutorial: "Tutorial",
-  cobertura_evento: "Cobertura Evento", outro: "Outro",
-}
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—"
@@ -64,6 +52,15 @@ export default function HistoricoPage() {
 
   const url = `/api/demandas?${params}`
   const { data, isLoading } = useSWR(url, fetcher, { keepPreviousData: true })
+
+  // Rótulos dos tipos vêm de Configurações → Parâmetros, para o filtro e a
+  // tabela falarem a mesma língua do resto do sistema.
+  const { data: dataTipos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
+    "/api/configuracoes/parametros?grupo=tipos_video", fetcher
+  )
+  const tiposVideo = dataTipos?.parametros ?? []
+  const rotuloTipo = (valor: string) => tiposVideo.find((t) => t.valor === valor)?.label ?? valor
+
   const demandas: Demanda[] = data?.demandas ?? []
   const total: number = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -151,9 +148,11 @@ export default function HistoricoPage() {
                   onChange={(e) => { setTipoVideo(e.target.value); setPage(1) }}
                   className="px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 outline-none"
                 >
+                  {/* Vinha de uma lista fixa que trazia "institucional" e
+                      "video_institucional" como se fossem tipos diferentes. */}
                   <option value="">Todos</option>
-                  {TIPOS_VIDEO.map((t) => (
-                    <option key={t} value={t}>{TIPO_LABEL[t] ?? t}</option>
+                  {tiposVideo.map((t) => (
+                    <option key={t.valor} value={t.valor}>{t.label}</option>
                   ))}
                 </select>
               </div>
@@ -231,7 +230,7 @@ export default function HistoricoPage() {
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700">
-                      {TIPO_LABEL[d.tipoVideo] ?? d.tipoVideo}
+                      {rotuloTipo(d.tipoVideo)}
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell text-zinc-400 text-xs">
