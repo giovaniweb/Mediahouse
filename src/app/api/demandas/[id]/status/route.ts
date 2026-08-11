@@ -18,97 +18,91 @@ function mensagemKanban(
   destinatario: "videomaker" | "solicitante" | "gestor" | "editor",
   extra?: string
 ): string | null {
-  const base = `📋 *${codigo}* — ${titulo}`
+  // Identifica a demanda no meio da frase, não como bloco de campos rotulados.
+  const ref = `${titulo} (${codigo})`
+  // `extra` chega como observação OU como link final (ver chamador). Só vale
+  // como link se de fato for uma URL — senão viraria uma observação apresentada
+  // como se fosse clicável.
+  const link = extra && /^https?:\/\//i.test(extra) ? extra : null
   type Dest = "videomaker" | "solicitante" | "gestor" | "editor"
   type Mapa = Record<string, Partial<Record<Dest, string | null>>>
 
+  // Mesma voz dos templates de src/lib/whatsapp.ts: primeira linha diz o que
+  // aconteceu e o que fazer, um emoji, sem cabeçalho repetindo a marca.
   const mapa: Mapa = {
     videomaker_notificado: {
-      videomaker: `🎬 *NuFlow — Você foi escalado!*\n\n${base}\n\nVocê foi designado para esta captação.\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
-      solicitante: `📋 *NuFlow — Em andamento!*\n\n${base}\n\nUm profissional foi designado para sua demanda. Te avisamos quando confirmar! 🎬`,
+      videomaker: `🎬 Você foi escalado para ${ref}.\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
+      solicitante: `🎬 Já temos um profissional para ${ref}. Avisamos assim que ele confirmar.`,
       gestor: null,
       editor: null,
     },
     videomaker_aceitou: {
       videomaker: null,
-      solicitante: `✅ *NuFlow — Videomaker Confirmado*\n\n${base}\n\nO profissional confirmou a captação. Em breve mais detalhes.`,
-      gestor: `✅ *NuFlow — Captação Confirmada*\n\n${base}\n\nVideomaker aceitou a demanda.`,
+      solicitante: `✅ Captação de ${ref} confirmada pelo profissional.`,
+      gestor: `✅ Videomaker aceitou ${ref}.`,
       editor: null,
     },
     videomaker_recusou: {
       videomaker: null,
-      solicitante: `⏳ *NuFlow — Reagendando*\n\n${base}\n\nEstamos escalando outro profissional. Avisamos em breve!`,
-      gestor: `⚠️ *NuFlow — Recusa de Captação*\n\n${base}\n\nVideomaker recusou. Necessário escalar outro profissional.`,
+      solicitante: `⏳ Estamos trocando o profissional de ${ref}. Avisamos em breve.`,
+      gestor: `⚠️ Videomaker recusou ${ref} — precisa escalar outro.`,
       editor: null,
     },
     captacao_agendada: {
-      videomaker: `📅 *NuFlow — Captação Agendada*\n\n${base}\n\n${extra ?? "Data de captação definida. Verifique sua agenda."}\n\nQualquer dúvida, entre em contato.`,
-      solicitante: `📅 *NuFlow — Captação Agendada*\n\n${base}\n\n${extra ?? "A captação foi agendada com sucesso."}`,
+      videomaker: `📅 Captação de ${ref} agendada.${extra ? `\n\n${extra}` : ""}`,
+      solicitante: `📅 A captação de ${ref} foi agendada.${extra ? `\n\n${extra}` : ""}`,
       gestor: null,
       editor: null,
     },
     brutos_enviados: {
       videomaker: null,
       solicitante: null,
-      gestor: `📤 *NuFlow — Brutos Recebidos*\n\n${base}\n\nArquivos brutos enviados para edição.`,
-      // TDAH: editor é avisado que pode começar a edição
-      editor: `📦 *NuFlow — Brutos Prontos para Edição!*\n\n${base}\n\nOs arquivos brutos chegaram. Sua edição pode começar! ✂️`,
+      gestor: `📤 Brutos de ${ref} chegaram e seguiram para edição.`,
+      editor: `📦 Os brutos de ${ref} chegaram — pode começar a edição.`,
     },
     editando: {
       videomaker: null,
-      solicitante: `✂️ *NuFlow — Em Edição*\n\n${base}\n\nSua demanda entrou em edição. Avisaremos quando finalizar.`,
+      solicitante: `✂️ ${ref} entrou em edição. Avisamos quando ficar pronto.`,
       gestor: null,
-      // TDAH: editor é avisado que foi escalado para editar
-      editor: `✂️ *NuFlow — Você foi escalado para edição!*\n\n${base}\n\nSua tarefa de edição está disponível. Acesse o sistema para mais detalhes.`,
+      editor: `✂️ ${ref} está com você para editar.`,
     },
     edicao_finalizada: {
       videomaker: null,
-      solicitante: `🎥 *NuFlow — Edição Finalizada!*\n\n${base}\n\nSeu vídeo foi editado. Aguarde o link de aprovação.`,
-      gestor: `🎥 *NuFlow — Edição Pronta*\n\n${base}\n\nAguardando aprovação do cliente.`,
-      // TDAH: editor recebe confirmação de que a edição foi entregue
-      editor: `🎉 *NuFlow — Edição Entregue!*\n\n${base}\n\nExcelente trabalho! Seu vídeo foi enviado para aprovação do cliente. ✨`,
+      solicitante: `🎥 A edição de ${ref} ficou pronta. Já já mandamos o link para você aprovar.`,
+      gestor: `🎥 ${ref} editado, aguardando aprovação do cliente.`,
+      editor: `🎉 Edição de ${ref} entregue. Valeu!`,
     },
-    aguardando_aprovacao_cliente: {
+    // Antes esta mensagem morava em "aguardando_aprovacao_cliente", que não
+    // existe no enum StatusInterno — ou seja, o aviso com o link de aprovação
+    // nunca chegou a ser enviado. O status real desta etapa é revisao_pendente.
+    revisao_pendente: {
       videomaker: null,
-      solicitante: `👀 *NuFlow — Vídeo Pronto para Aprovação*\n\n${base}\n\n${extra ? `🔗 ${extra}` : "Acesse o sistema para visualizar e aprovar seu vídeo."}\n\n_Você pode solicitar ajustes caso necessário._`,
-      gestor: null,
+      solicitante: `👀 Seu vídeo de ${ref} está pronto para revisão.\n\n${link ? `Assista e aprove — ou peça ajustes — por aqui:\n${link}` : "Acesse o sistema para aprovar ou pedir ajustes."}`,
+      gestor: `👀 ${ref} aguardando aprovação do cliente.`,
       editor: null,
     },
-    aprovado_cliente: {
-      videomaker: `🏆 *NuFlow — Cliente Aprovou!*\n\n${base}\n\nExcelente trabalho! O cliente aprovou. ✨`,
-      solicitante: `🎉 *NuFlow — Vídeo Aprovado!*\n\n${base}\n\nSeu vídeo foi aprovado e está sendo preparado para publicação! 🎬`,
-      gestor: `✅ *NuFlow — Aprovado pelo Cliente*\n\n${base}`,
-      editor: `🏆 *NuFlow — Cliente Aprovou!*\n\n${base}\n\nSeu trabalho foi aprovado. Parabéns! ✨`,
-    },
-    // Status válidos no schema — usados pelo botão Aprovar/Reprovar no modal admin
     aprovado: {
-      videomaker: `🏆 *NuFlow — Aprovado!*\n\n${base}\n\nExcelente trabalho! O vídeo foi aprovado. ✨`,
-      solicitante: `🎉 *NuFlow — Vídeo Aprovado!*\n\n${base}\n\nSeu vídeo foi aprovado e está sendo preparado para publicação! 🎬`,
-      gestor: `✅ *NuFlow — Aprovado*\n\n${base}`,
-      editor: `🏆 *NuFlow — Aprovado!*\n\n${base}\n\nSeu trabalho foi aprovado. Parabéns! ✨`,
+      videomaker: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
+      solicitante: `🎉 ${ref} aprovado! Seguimos para a publicação.`,
+      gestor: `✅ ${ref} aprovado.`,
+      editor: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
     },
     ajuste_solicitado: {
       videomaker: null,
-      solicitante: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nRecebemos seu feedback e estamos fazendo os ajustes. Te avisamos quando o novo vídeo estiver pronto!`,
-      gestor: `🔄 *NuFlow — Ajuste Solicitado*\n\n${base}\n\nAjustes necessários. Editor foi notificado.`,
-      editor: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes${extra ? `:\n\n_"${extra}"_` : "."}\n\nAcesse o sistema para ver o feedback completo.`,
-    },
-    reprovado_cliente: {
-      videomaker: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes. Verifique o feedback no sistema.`,
-      solicitante: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nRecebemos seu feedback e estamos fazendo os ajustes necessários. Te avisamos quando o novo vídeo estiver pronto!`,
-      gestor: `🔄 *NuFlow — Reprovado*\n\n${base}\n\nAjustes solicitados. Editor foi notificado.`,
-      editor: `🔄 *NuFlow — Ajustes Solicitados*\n\n${base}\n\nO cliente solicitou ajustes${extra ? `:\n\n_"${extra}"_` : "."}\n\nAcesse o sistema para ver o feedback completo.`,
+      solicitante: `🔄 Recebemos seu retorno sobre ${ref} e já estamos ajustando. Avisamos quando a nova versão sair.`,
+      gestor: `🔄 Ajustes pedidos em ${ref} — editor já foi avisado.`,
+      editor: `🔄 O cliente pediu ajustes em ${ref}${extra ? `:\n\n_"${extra}"_` : "."}\n\nO retorno completo está no sistema.`,
     },
     postado: {
-      videomaker: `🎉 *NuFlow — Concluído!*\n\n${base}\n\nVídeo publicado com sucesso. Obrigado pelo excelente trabalho! 🎬⭐`,
-      solicitante: `🎉 *NuFlow — Publicado!*\n\n${base}\n\nSeu vídeo foi publicado com sucesso!`,
+      videomaker: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
+      solicitante: `🎉 ${ref} está no ar!`,
       gestor: null,
-      editor: `🎉 *NuFlow — Vídeo Publicado!*\n\n${base}\n\nSeu trabalho chegou ao fim. Obrigado! 🎬⭐`,
+      editor: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
     },
     impedimento: {
       videomaker: null,
-      solicitante: `⚠️ *NuFlow — Impedimento na sua demanda*\n\n${base}\n\nExiste um impedimento na sua solicitação e precisamos entrar em contato. Aguarde, nossa equipe te avisará em breve.`,
-      gestor: `🚫 *NuFlow — Impedimento*\n\n${base}\n\n${extra ? `Motivo: ${extra}` : "Ação necessária."}`,
+      solicitante: `⚠️ Travamos em ${ref} e precisamos falar com você. Nossa equipe entra em contato em breve.`,
+      gestor: `🚫 Impedimento em ${ref}.${extra ? `\n\nMotivo: ${extra}` : ""}`,
       editor: null,
     },
   }

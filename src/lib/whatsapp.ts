@@ -132,51 +132,65 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
   }
 }
 
-// Templates de mensagens
+// Templates de mensagens.
+//
+// Regras que valem para todos, depois de reescrever os originais: a primeira
+// linha diz o que aconteceu e o que a pessoa precisa fazer; no máximo um emoji;
+// sem cabeçalho "NuFlow — Assunto" (quem recebe já conhece o número, e repetir a
+// marca em toda mensagem empurrava o conteúdo para a terceira linha); o código
+// da demanda entra junto do título, não como um bloco de campos rotulados.
+// Só o link, quando existe, fica sozinho numa linha — é onde a pessoa clica.
 export const templates = {
   novaDemandaUrgente: (codigo: string, titulo: string, solicitante: string) =>
-    `🚨 *URGÊNCIA — NuFlow*\n\nNova demanda urgente recebida!\n\n📋 *${codigo}* — ${titulo}\n👤 Solicitante: ${solicitante}\n\nAcesse o sistema para aprovar ou recusar.`,
+    `🚨 Demanda urgente de ${solicitante}: ${titulo} (${codigo}).\n\nPrecisa da sua aprovação para começar.`,
 
   demandaAprovada: (codigo: string, titulo: string) =>
-    `✅ *NuFlow — Demanda Aprovada*\n\nSua demanda foi aprovada!\n\n📋 *${codigo}* — ${titulo}\n\nEm breve nossa equipe entrará em contato. 🎬`,
+    `✅ Sua demanda foi aprovada: ${titulo} (${codigo}).\n\nJá entrou na fila de produção — avisamos quando estiver pronta.`,
 
   videomakertNotificado: (codigo: string, titulo: string, data: string, link?: string) =>
-    `🎬 *NuFlow — Nova Captação*\n\nVocê foi escalado para uma captação!\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n\n👆 *Veja os detalhes e confirme:*\n${link ?? "Entre em contato com a equipe"}`,
+    `🎬 Você foi escalado para uma captação em ${data}: ${titulo} (${codigo}).\n\n${link ? `Confirme se pode:\n${link}` : "Entre em contato com a equipe para confirmar."}`,
 
   coberturaConfirmacao: (nome: string, codigo: string, titulo: string, data: string, local: string, cidade: string, descricao?: string | null, link?: string) =>
-    `🎥 *NuFlow — Solicitação de Cobertura*\n\nOlá, ${nome}! Temos uma cobertura e gostaríamos de confirmar sua disponibilidade.\n\n📋 *${codigo}* — ${titulo}\n📅 Data: ${data}\n📍 Local: ${local}${cidade ? `, ${cidade}` : ""}${descricao ? `\n\n📝 *Descrição do Job:*\n${descricao.slice(0, 300)}${descricao.length > 300 ? "..." : ""}` : ""}\n\n💰 *Pagamento:* realizado em até *15 dias* após o envio da nota fiscal.\n🧾 A nota fiscal deverá ser enviada assim que os brutos forem entregues.\n\n👆 *Veja os detalhes e confirme:*\n${link ?? "Entre em contato com a equipe"}`,
+    `🎥 ${nome}, temos uma cobertura em ${data} e queremos saber se você pode.\n\n` +
+    `${titulo} (${codigo})\n${local}${cidade ? `, ${cidade}` : ""}` +
+    `${descricao ? `\n\n${descricao.slice(0, 300)}${descricao.length > 300 ? "…" : ""}` : ""}\n\n` +
+    `Pagamento em até 15 dias após a nota fiscal, que você envia junto com os brutos.\n\n` +
+    `${link ? `Confirme aqui:\n${link}` : "Responda esta mensagem para confirmar."}`,
 
   edicaoFinalizada: (codigo: string, titulo: string) =>
-    `✂️ *NuFlow — Edição Concluída*\n\nA edição da sua demanda foi finalizada!\n\n📋 *${codigo}* — ${titulo}\n\nAguardando sua aprovação. Acesse o link enviado. 👆`,
+    `✂️ A edição de ${titulo} (${codigo}) ficou pronta e está esperando sua aprovação.`,
 
   linkAprovacaoVideo: (codigo: string, titulo: string, link: string) =>
-    `🎥 *NuFlow — Aprovação de Vídeo*\n\nSeu vídeo está pronto para revisão!\n\n📋 *${codigo}* — ${titulo}\n\n🔗 Clique para assistir e aprovar:\n${link}\n\n_Você pode aprovar ou solicitar ajustes diretamente pelo link._`,
+    `🎥 Seu vídeo está pronto: ${titulo} (${codigo}).\n\nAssista e aprove — ou peça ajustes — por aqui:\n${link}`,
 
   captacaoLembrete: (codigo: string, titulo: string, data: string, local: string) =>
-    `⏰ *NuFlow — Lembrete de Captação*\n\nAmanhã você tem uma captação agendada!\n\n📋 *${codigo}* — ${titulo}\n📅 ${data}\n📍 ${local}\n\nQualquer dúvida, entre em contato.`,
+    `⏰ Amanhã você tem captação: ${titulo} (${codigo}), ${data}, em ${local}.`,
 
   // Notifica o solicitante que um profissional foi atribuído à demanda dele
   profissionalSelecionadoSolicitante: (nomeProfissional: string, codigo: string, titulo: string, telefoneProfissional?: string) =>
-    `🎬 *NuFlow — Sua demanda está em andamento!*\n\n*${codigo}* — ${titulo}\n\n👤 *${nomeProfissional}* foi selecionado para trabalhar no seu projeto.${telefoneProfissional ? `\n\nQualquer dúvida, fale diretamente com ele:\n📱 ${telefoneProfissional}` : "\n\nQualquer dúvida, entre em contato com nossa equipe."}`,
+    `🎬 ${nomeProfissional} vai cuidar de ${titulo} (${codigo}).\n\n` +
+    `${telefoneProfissional ? `Fale direto com ele se precisar: ${telefoneProfissional}` : "Qualquer dúvida, é só chamar a equipe."}`,
 
   // Notifica o editor interno quando é atribuído a uma demanda
   editorSelecionado: (codigo: string, titulo: string) =>
-    `✂️ *NuFlow — Nova Edição*\n\nVocê foi escalado para editar um projeto!\n\n📋 *${codigo}* — ${titulo}\n\nAcesse o sistema para ver os detalhes e os brutos. 🎞️`,
+    `✂️ Você ficou com a edição de ${titulo} (${codigo}). Os brutos estão no sistema.`,
 
-  // ── Templates TDAH ──────────────────────────────────────────────────────
+  // ── Lembretes ────────────────────────────────────────────────────────────
 
   lembreteEvento: (titulo: string, minutosRestantes: number, local?: string | null) =>
-    `⏰ *NuFlow — Lembrete de Evento*\n\n*${titulo}* começa em ${minutosRestantes} minuto(s).${local ? `\n📍 Local: ${local}` : ""}\n\nBoa captação! 🎬`,
+    `⏰ ${titulo} começa em ${minutosRestantes} minuto(s)${local ? `, em ${local}` : ""}.`,
 
   cobrancaAntecipada: (nomeVm: string, descricao: string, valor: string, dataVencimento: string) =>
-    `💰 *NuFlow — Lembrete de Pagamento*\n\nOlá, ${nomeVm}!\n\nVocê tem um pagamento vencendo em breve:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n📅 Vencimento: ${dataVencimento}\n\nQualquer dúvida, entre em contato. 🤝`,
+    `💰 ${nomeVm}, seu pagamento de R$ ${valor} (${descricao}) cai em ${dataVencimento}.`,
 
   cobrancaVencida: (nomeVm: string, descricao: string, valor: string, diasAtraso: number) =>
-    `⚠️ *NuFlow — Pagamento Vencido*\n\nOlá, ${nomeVm}!\n\nIdentificamos um pagamento em aberto:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n⏰ Vencido há ${diasAtraso} dia(s)\n\nPor favor, regularize assim que possível. Para dúvidas, fale conosco.`,
+    `⚠️ ${nomeVm}, o pagamento de R$ ${valor} (${descricao}) venceu há ${diasAtraso} dia(s).\n\nSe já resolveu, é só ignorar esta mensagem.`,
 
   cobrancaEscalada: (nomeVm: string, descricao: string, valor: string, diasAtraso: number) =>
-    `🚨 *NuFlow — Pagamento Atrasado*\n\nOlá, ${nomeVm}.\n\nAviso importante sobre pagamento em atraso:\n\n📄 ${descricao}\n💵 Valor: R$ ${valor}\n🔴 ${diasAtraso} dias em atraso\n\nSolicito contato imediato para regularização. Obrigado.`,
+    `🚨 ${nomeVm}, o pagamento de R$ ${valor} (${descricao}) está ${diasAtraso} dias em atraso.\n\nPode nos chamar para acertar?`,
 
   briefingDiario: (nome: string, dataFormatada: string, eventos: number, demandas: number, cobrancas: number) =>
-    `☀️ *Bom dia, ${nome}!*\n\n*${dataFormatada}*\n\n📋 *Resumo do dia:*\n• ${eventos} evento(s) agendado(s) hoje\n• ${demandas} demanda(s) com prazo hoje/amanhã\n• ${cobrancas} pagamento(s) em atraso\n\nAcesse o NuFlow para detalhes. 💪\nnuflow.space`,
+    `☀️ Bom dia, ${nome}! Hoje, ${dataFormatada}:\n\n` +
+    `${eventos} evento(s) na agenda\n${demandas} demanda(s) vencendo hoje ou amanhã\n${cobrancas} pagamento(s) em atraso\n\n` +
+    `nuflow.space`,
 }
