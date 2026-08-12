@@ -1933,6 +1933,11 @@ model UsuarioOrganizacao {
   funcaoProfissional String?         // o que a pessoa faz (Social Media, Designer, etc.)
   areas              AreaAtuacao[]   // onde atua (audiovisual, growth, eventos)
   liderAudiovisual   Boolean         @default(false) // líder do audiovisual: aprova + é notificado de novas demandas
+  // "No que estou agora": mora aqui, e não na demanda, porque foco é da PESSOA
+  // numa empresa — cada um tem um de cada vez. Sem FK de propósito: se a demanda
+  // sumir, a leitura simplesmente não encontra e limpa, em vez de exigir cascade.
+  demandaEmFocoId String?
+  focoDesde       DateTime?
   createdAt     DateTime    @default(now())
 
   usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)

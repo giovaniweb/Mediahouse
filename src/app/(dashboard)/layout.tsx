@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar"
 import { SessionProvider } from "@/components/layout/SessionProvider"
 import { Toaster } from "sonner"
+import { PainelExecutor } from "@/components/foco/PainelExecutor"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,8 +16,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </div>
+      <PainelExecutor />
+      {/* Avisos passaram para o topo: o painel do executor é permanente no canto
+          inferior direito, e um toast por cima dele some sem ser lido. */}
       <Toaster
-        position="bottom-right"
+        position="top-right"
         theme="dark"
         richColors
         closeButton
