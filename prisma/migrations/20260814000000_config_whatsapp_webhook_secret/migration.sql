@@ -1,0 +1,12 @@
+-- Coluna que existia no schema.prisma e em produção, mas que NENHUMA migration
+-- criava. É o que fazia o CI falhar em "Banco migrado é idêntico ao schema":
+-- num banco limpo, montado só a partir das migrations, a coluna não nascia.
+--
+-- A origem provável é a migration que precisou ser reescrita à mão (o aviso de
+-- nova versão do Prisma foi parar dentro do .sql gerado por redirecionamento e
+-- quebrou a sintaxe): o banco fez rollback, a coluna entrou por outro caminho e
+-- o histórico ficou sem ela.
+--
+-- IF NOT EXISTS porque produção JÁ tem a coluna — ali isto é um no-op que só
+-- registra a migration no histórico e devolve schema e migrations ao mesmo pé.
+ALTER TABLE "config_whatsapp" ADD COLUMN IF NOT EXISTS "webhookSecret" TEXT;
