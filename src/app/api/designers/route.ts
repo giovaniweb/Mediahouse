@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId, semOrg } from "@/lib/org"
+import { lerNumero } from "@/lib/numeros"
 
 // GET /api/designers — lista designers
 export async function GET(req: NextRequest) {
@@ -49,8 +50,8 @@ export async function POST(req: NextRequest) {
       email: body.email,
       cpfCnpj: body.cpfCnpj,
       chavePix: body.chavePix,
-      valorDiaria: body.valorDiaria ? parseFloat(body.valorDiaria) : undefined,
-      salario: body.salario ? parseFloat(body.salario) : undefined,
+      valorDiaria: lerNumero(body.valorDiaria) ?? undefined,
+      salario: lerNumero(body.salario) ?? undefined,
       dadosBancarios: body.dadosBancarios,
       status: body.status ?? "ativo",
       observacoes: body.observacoes,

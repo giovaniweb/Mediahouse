@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { getOrgId, semOrg } from "@/lib/org"
 import { getWhatsappConfig } from "@/lib/whatsapp"
 
-// Endpoint temporário para resolver @lid manualmente
+// GET /api/whatsapp/resolve-lid — resolve um @lid na Evolution API da organização.
 export async function GET(req: NextRequest) {
-  // Rota de debug — desativada em produção (evita fallback Contourline e exposição).
-  if (process.env.NODE_ENV === "production") return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
-  const secret = req.nextUrl.searchParams.get("s")
-  const dbg = process.env.WHATSAPP_DEBUG_SECRET
-  if (!dbg || secret !== dbg) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 })
-  }
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const lid = req.nextUrl.searchParams.get("lid")
-  if (!lid) return NextResponse.json({ error: "pass ?lid=xxx" })
+  if (!lid) return NextResponse.json({ error: "pass ?lid=xxx" }, { status: 400 })
 
-  const config = await getWhatsappConfig()
-  if (!config) return NextResponse.json({ error: "no config" })
+  const config = await getWhatsappConfig(organizacaoId)
+  if (!config) return NextResponse.json({ error: "no config" }, { status: 404 })
 
   const results: Record<string, unknown> = { lid }
 

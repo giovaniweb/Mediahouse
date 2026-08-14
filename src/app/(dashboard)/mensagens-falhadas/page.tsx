@@ -6,8 +6,8 @@ import Link from "next/link"
 import { Header } from "@/components/layout/Header"
 import { AlertTriangle, RefreshCw, Loader2, CheckCircle2, MessageCircleOff } from "lucide-react"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface MensagemFalhada {
   id: string

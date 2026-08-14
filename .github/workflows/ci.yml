@@ -50,8 +50,11 @@ jobs:
       - name: Tipos
         run: npx tsc --noEmit
 
-      # Sem passo de lint: o projeto não tem ESLint configurado (e `next lint`
-      # saiu no Next 16). Adicionar um aqui só produziria falha vazia.
+      # Falha só em erro. O código anterior ao ESLint gera ~155 avisos: as regras
+      # correspondentes estão em "warn" no eslint.config.mjs e voltam a "error"
+      # conforme a dívida for paga.
+      - name: Lint
+        run: npm run lint
 
       - name: Testes unitários
         run: npm test

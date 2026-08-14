@@ -4,13 +4,13 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Image as ImageIcon, Search, Loader2, X, ExternalLink } from "lucide-react"
 import { TIPO_ARTE_LABEL } from "@/lib/design-pecas"
+import { fetcher } from "@/lib/fetcher"
 
 type Arte = {
   id: string; codigo: string; titulo: string; tipoVideo: string
   linkFinal: string; thumbnailUrl: string | null; finalizadaEm: string | null
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 function isImagem(url: string) {
   return /\.(jpg|jpeg|png|webp|gif|svg)$/.test((url.split("?")[0] || "").toLowerCase())

@@ -69,13 +69,13 @@ export async function GET() {
 
 type RpcMessage = { id?: JsonRpcId; method?: string; params?: Record<string, unknown> }
 
-// Token via `Authorization: Bearer <token>` (padrão MCP) ou `?token=` (fallback
-// para clientes que não permitem header customizado).
+// Token apenas via `Authorization: Bearer <token>` (padrão MCP). O fallback por
+// `?token=` foi removido: token em URL vaza por histórico do navegador, log de
+// proxy e cabeçalho Referer.
 function lerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization") ?? ""
   const m = /^Bearer\s+(.+)$/i.exec(auth.trim())
-  if (m) return m[1].trim()
-  return req.nextUrl.searchParams.get("token")
+  return m ? m[1].trim() : null
 }
 
 async function handle(msg: RpcMessage, organizacaoId: string): Promise<object | null> {

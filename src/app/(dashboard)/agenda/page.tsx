@@ -14,8 +14,8 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval,
   isToday, parseISO, differenceInDays } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface Evento {
   id: string; titulo: string; descricao?: string

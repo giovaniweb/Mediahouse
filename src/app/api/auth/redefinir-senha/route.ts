@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 
 // GET /api/auth/redefinir-senha?token=xxx — valida se token é válido
@@ -32,6 +33,14 @@ export async function GET(req: NextRequest) {
 // POST /api/auth/redefinir-senha — efetua a troca de senha
 export async function POST(req: NextRequest) {
   try {
+    const limite = checarRateLimit(`redefinir-senha:${ipDaRequisicao(req.headers)}`, 10, 15 * 60 * 1000)
+    if (!limite.ok) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
+        { status: 429, headers: { "Retry-After": String(limite.retryAfterSegundos) } }
+      )
+    }
+
     const { token, novaSenha } = await req.json()
 
     if (!token || !novaSenha) {

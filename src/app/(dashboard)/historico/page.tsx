@@ -8,8 +8,8 @@ import {
   Search, Archive, ExternalLink, ChevronLeft, ChevronRight,
   Filter, X, CheckCircle2,
 } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Demanda {
   id: string

@@ -9,8 +9,9 @@ import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const statusConfig = {
   preferencial: { label: "Preferencial", class: "bg-purple-500/20 text-purple-300 border border-purple-700" },
@@ -318,7 +319,7 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
       toast.success("Videomaker cadastrado!")
       onClose()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally {
       setLoading(false)
     }

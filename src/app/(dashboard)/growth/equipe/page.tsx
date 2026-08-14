@@ -2,13 +2,13 @@
 
 import useSWR from "swr"
 import { Users, Mail, Phone } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
 type Membro = {
   id: string; nome: string; email: string | null; telefone: string | null
   papel: string; funcao: string; areas: string[]
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const PAPEL_LABEL: Record<string, string> = {
   admin: "Admin", gestor: "Gestor", operacao: "Operação", solicitante: "Solicitante",

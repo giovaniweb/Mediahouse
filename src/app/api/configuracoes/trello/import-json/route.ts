@@ -4,6 +4,16 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import type { Prioridade, StatusVisivel, StatusInterno } from "@prisma/client"
+import { validarPrazo } from "@/lib/datas"
+
+// Cards antigos do Trello quase sempre têm `due` vencido. O prazo inválido é
+// descartado (o card entra sem prazo) — o total vai no resumo do import.
+// Função pura de propósito: um contador no escopo do módulo sobreviveria entre
+// requisições na mesma instância serverless e somaria imports diferentes.
+function prazoDoCard(due: string | null | undefined): Date | null {
+  if (!due) return null
+  return validarPrazo(due).ok ? new Date(due) : null
+}
 
 // ─── List name → StatusVisivel mapping (fuzzy, case-insensitive) ─────────────
 
@@ -254,8 +264,9 @@ export async function POST(req: NextRequest) {
 
   let imported = 0
   let skipped = 0
-  let skippedClosed = 0
+  const skippedClosed = 0
   let skippedLists = 0
+  let prazosDescartados = 0
   const errors: string[] = []
   const details: Array<{ card: string; status: "imported" | "skipped" | "error"; info?: string }> = []
 
@@ -301,6 +312,9 @@ export async function POST(req: NextRequest) {
         descricao += `\n\n📋 Trello: ${card.shortUrl}`
       }
 
+      const prazo = prazoDoCard(card.due)
+      if (card.due && !prazo) prazosDescartados++
+
       // Create demand
       const demanda = await prisma.demanda.create({
         data: {
@@ -317,7 +331,7 @@ export async function POST(req: NextRequest) {
           solicitanteId: session.user.id,
           editorId,
           trelloCardId: card.id,
-          dataLimite: card.due ? new Date(card.due) : null,
+          dataLimite: prazo,
           linkBrutos: driveLink,
         },
       })
@@ -363,6 +377,7 @@ export async function POST(req: NextRequest) {
     skipped,
     skippedClosed: cards.length - openCards.length,
     skippedLists,
+    prazosDescartados,
     total: cards.length,
     openCards: openCards.length,
     errors: errors.slice(0, 20),

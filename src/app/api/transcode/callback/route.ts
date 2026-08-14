@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 
 // POST /api/transcode/callback — chamado pelo worker de transcodificação (sem sessão).
@@ -6,8 +7,13 @@ import { prisma } from "@/lib/prisma"
 // Body: { arquivoId?, demandaId, mp4Url?, status: "done"|"skipped"|"failed", error? }
 export async function POST(req: NextRequest) {
   const secret = process.env.TRANSCODE_SECRET
+  if (!secret) {
+    return NextResponse.json({ error: "TRANSCODE_SECRET não configurado" }, { status: 500 })
+  }
   const auth = req.headers.get("authorization") ?? ""
-  if (!secret || auth !== `Bearer ${secret}`) {
+  const bufA = Buffer.from(auth)
+  const bufB = Buffer.from(`Bearer ${secret}`)
+  if (bufA.length !== bufB.length || !timingSafeEqual(bufA, bufB)) {
     return NextResponse.json({ error: "não autorizado" }, { status: 401 })
   }
 

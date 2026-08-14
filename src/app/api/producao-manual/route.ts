@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { lerInteiro } from "@/lib/numeros"
 
 function compDe(d: Date): number {
   return d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1)
@@ -61,9 +62,9 @@ export async function POST(req: NextRequest) {
   if (!organizacaoId) return semOrg()
 
   const body = await req.json()
-  const competencia = parseInt(body.competencia)
+  const competencia = lerInteiro(body.competencia)
   const categoria = (body.categoria ?? "").trim()
-  const quantidade = parseInt(body.quantidade) || 0
+  const quantidade = lerInteiro(body.quantidade) ?? 0
   const area = body.area === "design" ? "design" : "audiovisual"
   const grupo = body.grupo === "presencial" ? "presencial" : "producao"
   if (!competencia || !categoria) return NextResponse.json({ error: "competencia e categoria obrigatórios" }, { status: 400 })

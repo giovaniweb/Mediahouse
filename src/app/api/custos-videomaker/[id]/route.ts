@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { lerValorMonetario } from "@/lib/numeros"
+import { erroDeCampo } from "@/lib/erros-api"
 
 // PATCH /api/custos-videomaker/[id] — atualizar custo (ex: marcar como pago)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,13 +18,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const custo = await prisma.custoVideomaker.findUnique({ where: { id } })
   if (!custo || !pertenceAOrg(custo, organizacaoId)) return NextResponse.json({ error: "Custo não encontrado" }, { status: 404 })
 
+  // Antes: `body.valor ? parseFloat(body.valor) : custo.valor` — um zero é falsy
+  // e mantinha o valor anterior sem avisar; texto não numérico virava NaN gravado.
+  const valorLido = lerValorMonetario(body.valor)
+  if (!valorLido.ok) {
+    return erroDeCampo("valor", "Informe um valor numérico maior ou igual a zero.")
+  }
+
   const updated = await prisma.custoVideomaker.update({
     where: { id },
     data: {
       pago: body.pago ?? custo.pago,
       dataPagamento: body.dataPagamento ? new Date(body.dataPagamento) : custo.dataPagamento,
       comprovante: body.comprovante ?? custo.comprovante,
-      valor: body.valor ? parseFloat(body.valor) : custo.valor,
+      valor: valorLido.presente && valorLido.valor !== null ? valorLido.valor : custo.valor,
       descricao: body.descricao ?? custo.descricao,
       tipo: body.tipo ?? custo.tipo,
     },

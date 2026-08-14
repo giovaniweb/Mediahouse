@@ -4,6 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Loader2, Printer, Film, Palette } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
 type Resumo = {
   mes: string
@@ -17,7 +18,6 @@ type Resumo = {
   valorPorVideo: number
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const fmtNum = (v: number) => v.toLocaleString("pt-BR")
 const fmtRS = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]

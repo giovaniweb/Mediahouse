@@ -484,7 +484,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
 
   // Variáveis para mídia processada
   let mediaUrl: string | null = null
-  let mediaType: string | null = midia?.mimetype ?? null
+  const mediaType: string | null = midia?.mimetype ?? null
   let audioTranscrito: string | null = null
 
   console.log(`[WH] De: ${remoteJid} (${pushName}) | Reply: ${replyJid} | Tel: ${telefone} | Texto: "${textoOriginal}" | Mídia: ${midia?.tipo ?? "nenhuma"}`)

@@ -7,8 +7,8 @@ import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Loader2, Trash2, Pencil, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { TIPO_ARTE_LABEL } from "@/lib/design-pecas"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
 const STATUS_ARTE: Record<string, string> = {

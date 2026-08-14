@@ -6,8 +6,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { MessageCircle, Send, Loader2, AtSign } from "lucide-react"
 import { iniciais } from "./tipos-visao"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // Menção guardada como @[Nome](userId): o id evita casar por nome (dois "Gabriel",
 // grafia diferente) e é o que o servidor valida antes de notificar.

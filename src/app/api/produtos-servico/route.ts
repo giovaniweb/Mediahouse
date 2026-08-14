@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
 import type { UnidadeMedida } from "@prisma/client"
+import { lerNumero, lerInteiro } from "@/lib/numeros"
 
 // GET /api/produtos-servico — catálogo
 export async function GET(req: NextRequest) {
@@ -33,10 +34,10 @@ export async function POST(req: NextRequest) {
       nome: body.nome.trim(),
       categoria: body.categoria ?? null,
       fornecedorId: body.fornecedorId || null,
-      valorUnitario: body.valorUnitario ? parseFloat(body.valorUnitario) : null,
+      valorUnitario: lerNumero(body.valorUnitario),
       unidadeMedida: (body.unidadeMedida ?? "unidade") as UnidadeMedida,
-      quantidadeMinima: body.quantidadeMinima ? parseInt(body.quantidadeMinima) : null,
-      prazoMedioDias: body.prazoMedioDias ? parseInt(body.prazoMedioDias) : null,
+      quantidadeMinima: lerInteiro(body.quantidadeMinima),
+      prazoMedioDias: lerInteiro(body.prazoMedioDias),
       observacoes: body.observacoes ?? null,
     },
   })

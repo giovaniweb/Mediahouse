@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { lerValorMonetario } from "@/lib/numeros"
+import { erroDeCampo } from "@/lib/erros-api"
 
 // GET /api/custos-videomaker — listar custos com filtros opcionais
 export async function GET(req: NextRequest) {
@@ -70,8 +72,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
 
-  if (!videomakerId || !valor || !dataReferencia) {
-    return NextResponse.json({ error: "videomakerId, valor e dataReferencia são obrigatórios" }, { status: 400 })
+  if (!videomakerId) return erroDeCampo("videomakerId", "Selecione o videomaker.")
+  if (!dataReferencia) return erroDeCampo("dataReferencia", "Informe a data de referência.")
+
+  // `!valor` recusaria um custo de zero e deixaria passar texto não numérico
+  // (que virava NaN no banco). A leitura separa "ausente" de "inválido".
+  const valorLido = lerValorMonetario(valor)
+  if (!valorLido.ok || valorLido.valor === null) {
+    return erroDeCampo("valor", "Informe um valor numérico maior ou igual a zero.")
   }
 
   const custo = await prisma.custoVideomaker.create({
@@ -80,7 +88,7 @@ export async function POST(req: NextRequest) {
       videomakerId,
       demandaId: demandaId || null,
       tipo: tipo ?? "diaria",
-      valor: parseFloat(valor),
+      valor: valorLido.valor,
       descricao,
       dataReferencia: new Date(dataReferencia),
       dataVencimento: dataVencimento ? new Date(dataVencimento) : null,

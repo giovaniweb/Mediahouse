@@ -7,8 +7,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function UrgenciasPage() {
   const { data, mutate } = useSWR("/api/demandas?statusInterno=urgencia_pendente_aprovacao", fetcher, {

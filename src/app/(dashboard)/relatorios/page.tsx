@@ -27,8 +27,9 @@ import {
   Printer,
 } from "lucide-react"
 import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
+import { hojeEmSaoPaulo, somarMeses } from "@/lib/datas"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -697,10 +698,10 @@ export default function RelatoriosPage() {
 
   // ── Filtro de período ─────────────────────────────────────────────────────
   const [periodo, setPeriodo] = useState<Periodo>("ano")
-  const [periodoCustomDe, setPeriodoCustomDe] = useState(() => {
-    const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10)
-  })
-  const [periodoCustomAte, setPeriodoCustomAte] = useState(() => new Date().toISOString().slice(0, 10))
+  // Datas do fuso de São Paulo: com toISOString() o período padrão pulava um dia
+  // a partir das 21h de Brasília.
+  const [periodoCustomDe, setPeriodoCustomDe] = useState(() => somarMeses(hojeEmSaoPaulo(), -3))
+  const [periodoCustomAte, setPeriodoCustomAte] = useState(() => hojeEmSaoPaulo())
   const [areaRel, setAreaRel] = useState<"audiovisual" | "design">("audiovisual")
 
   const metricasUrl = (() => {

@@ -8,8 +8,8 @@ import { FileText, ExternalLink, CheckCircle2, Clock, Upload, Loader2 } from "lu
 import { Header } from "@/components/layout/Header"
 import { cn } from "@/lib/utils"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const NF_STATUS: Record<string, { label: string; color: string }> = {
   pendente: { label: "Aguardando envio", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" },

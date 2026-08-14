@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
 import { toast } from "sonner"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const statusConfig = {
   ativo: { label: "Ativo", class: "bg-green-500/20 text-green-300 border border-green-700" },
@@ -345,7 +346,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
       toast.success("Editor cadastrado!")
       onClose()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally {
       setLoading(false)
     }

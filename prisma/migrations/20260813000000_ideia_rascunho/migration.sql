@@ -1,0 +1,11 @@
+-- Rascunho pessoal de ideia: visível só para quem criou, até publicar.
+--
+-- Os estados existentes são todos públicos para a organização — o módulo nasceu
+-- como banco COLETIVO de ideias. O que a equipe pediu ("um card de ideias que
+-- ficaria como rascunho antes de subir") precisa de um estado anterior a isso.
+--
+-- ALTER TYPE ... ADD VALUE não roda dentro de transação no Postgres, e o Prisma
+-- executa cada migration numa. `IF NOT EXISTS` deixa o comando idempotente, e a
+-- separação em statement próprio evita usar o valor novo na mesma transação em
+-- que ele é criado.
+ALTER TYPE "StatusIdeia" ADD VALUE IF NOT EXISTS 'rascunho' BEFORE 'nova';

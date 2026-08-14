@@ -9,6 +9,8 @@ import {
   User, Mail, Phone, AlertTriangle, Check, Star
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { ErroApi, erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 /* ═══════════════════════════════════════════════════════════════════════
    TYPES
@@ -144,7 +146,7 @@ export default function NovaDemandaPage() {
   function validar(): boolean {
     const errs: Record<string, string> = {}
     if (!tipo) errs.tipo = "Selecione o tipo"
-    if (!titulo.trim() || titulo.length < 5) errs.titulo = "Mínimo 5 caracteres"
+    if (!titulo.trim() || titulo.trim().length < 3) errs.titulo = "O título precisa ter pelo menos 3 caracteres."
     if (!descricao.trim() || descricao.length < 10) errs.descricao = "Descreva melhor a demanda"
     if (tipo === "cobertura" && !cidade.trim()) errs.cidade = "Informe a cidade"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Obrigatório para urgências"
@@ -236,13 +238,15 @@ export default function NovaDemandaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
+      // Antes: JSON.stringify do erro do zod, que despejava
+      // {"fieldErrors":{"titulo":["String must contain at least 3 character(s)"]}}
+      // — estrutura de biblioteca, em inglês, dentro de um alert().
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível criar a demanda.")
       const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error ? (typeof json.error === "string" ? json.error : JSON.stringify(json.error)) : "Erro ao criar")
-      }
       router.push(`/demandas/${json.id}`)
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erro ao criar demanda")
+      if (e instanceof ErroApi && e.temCampos()) setErrors(e.campos)
+      toast.error(mensagemDeErro(e, "Não foi possível criar a demanda."))
     } finally {
       setLoading(false)
     }

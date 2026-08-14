@@ -6,6 +6,7 @@ import {
   Film, Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
   Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles,
 } from "lucide-react"
+import { AreaReferencia } from "@/components/publico/AreaReferencia"
 
 /* ═══════════════════════════════════════════════════════════════════════
    STYLES
@@ -83,6 +84,10 @@ export default function CadastrarDemandaPage() {
   const [cidade, setCidade] = useState("")
   const [dataLimite, setDataLimite] = useState("")
   const [referencia, setReferencia] = useState("")
+  // Arquivos ficam na memória: o upload é por demandaId e a demanda só passa a
+  // existir depois do envio. Sobem logo em seguida, com o token temporário.
+  const [referenciasArquivo, setReferenciasArquivo] = useState<File[]>([])
+  const [enviandoAnexos, setEnviandoAnexos] = useState(false)
 
   // ── Campos Vídeo ──────────────────────────────────────────────────
   const [tipoVideo, setTipoVideo] = useState("")
@@ -192,9 +197,9 @@ export default function CadastrarDemandaPage() {
     }
     if (step === 1) return !!tipo
     if (step === 2) {
-      if (tipo === "video") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!tipoVideo
-      if (tipo === "conteudo") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!tipoConteudo
-      if (tipo === "cobertura") return titulo.trim().length >= 5 && descricao.trim().length >= 10 && !!cidade.trim() && !!localEvento.trim() && !!dataEvento
+      if (tipo === "video") return titulo.trim().length >= 3 && descricao.trim().length >= 10 && !!tipoVideo
+      if (tipo === "conteudo") return titulo.trim().length >= 3 && descricao.trim().length >= 10 && !!tipoConteudo
+      if (tipo === "cobertura") return titulo.trim().length >= 3 && descricao.trim().length >= 10 && !!cidade.trim() && !!localEvento.trim() && !!dataEvento
     }
     return true
   }
@@ -206,7 +211,7 @@ export default function CadastrarDemandaPage() {
     if (!email.trim() || !email.includes("@")) errs.email = "E-mail inválido"
     if (!telefone.trim() || telefone.length < 10) errs.telefone = "Telefone inválido"
     if (!tipo) errs.tipo = "Selecione o tipo"
-    if (!titulo.trim() || titulo.length < 5) errs.titulo = "Mínimo 5 caracteres"
+    if (!titulo.trim() || titulo.trim().length < 3) errs.titulo = "O título precisa ter pelo menos 3 caracteres."
     if (!descricao.trim() || descricao.length < 10) errs.descricao = "Descreva melhor"
     if (tipo === "video" && !tipoVideo) errs.tipoVideo = "Selecione o tipo de vídeo"
     if (tipo === "cobertura") {
@@ -261,6 +266,29 @@ export default function CadastrarDemandaPage() {
         throw new Error(msgs || "Erro ao enviar")
       }
       setCodigoGerado(json.codigo)
+
+      // Anexos sobem depois: o upload é por demandaId e a demanda acabou de
+      // nascer. Falha aqui não desfaz a solicitação — ela já foi registrada, e
+      // avisar é melhor do que fingir que o arquivo chegou.
+      if (referenciasArquivo.length > 0 && typeof json.anexoToken === "string") {
+        setEnviandoAnexos(true)
+        const falhas: string[] = []
+        for (const arquivo of referenciasArquivo) {
+          try {
+            const fd = new FormData()
+            fd.append("arquivo", arquivo)
+            const r = await fetch(`/api/publico/anexo/${json.anexoToken}`, { method: "POST", body: fd })
+            if (!r.ok) falhas.push(arquivo.name)
+          } catch {
+            falhas.push(arquivo.name)
+          }
+        }
+        setEnviandoAnexos(false)
+        if (falhas.length > 0) {
+          setErro(`Sua solicitação foi enviada, mas ${falhas.length} arquivo(s) não subiram: ${falhas.join(", ")}. Você pode reenviá-los para a equipe.`)
+        }
+      }
+
       if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
       setEnviado(true)
     } catch (err: unknown) {
@@ -534,6 +562,15 @@ export default function CadastrarDemandaPage() {
                   <input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="https://..." className={cn(inputClass, "pl-10")} />
                 </div>
               </Field>
+              <div className="sm:col-span-2">
+                <Field label="Referência visual (opcional)">
+                  <AreaReferencia
+                    arquivos={referenciasArquivo}
+                    onChange={setReferenciasArquivo}
+                    desabilitado={loading || enviandoAnexos}
+                  />
+                </Field>
+              </div>
             </div>
           </div>
         )}
@@ -580,6 +617,15 @@ export default function CadastrarDemandaPage() {
                   <input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="https://..." className={cn(inputClass, "pl-10")} />
                 </div>
               </Field>
+              <div className="sm:col-span-2">
+                <Field label="Referência visual (opcional)">
+                  <AreaReferencia
+                    arquivos={referenciasArquivo}
+                    onChange={setReferenciasArquivo}
+                    desabilitado={loading || enviandoAnexos}
+                  />
+                </Field>
+              </div>
             </div>
           </div>
         )}

@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { X, Plus, Trash2, Calendar, Link2, Loader2, Paperclip } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
+import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import useSWR from "swr"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface Produto { id: string; nome: string }
 
@@ -31,6 +32,8 @@ const MOTIVOS_URGENCIA = [
 export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const router = useRouter()
   const overlayRef = useRef<HTMLDivElement>(null)
+  // O gesto de clique começou no fundo? (ver comentário do backdrop, mais abaixo)
+  const pressionouNoFundo = useRef(false)
 
   // ── Tipo de demanda ──────────────────────────────────────────────────────
   const [tipo, setTipo] = useState<"video" | "cobertura">("video")
@@ -55,6 +58,8 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
 
   // ── Links ────────────────────────────────────────────────────────────────
   const [linkBrutos, setLinkBrutos] = useState("")
+  // Token unificado da equipe (ed:/vm:/user:) — o POST resolve para o id real.
+  const [editorId, setEditorId] = useState("")
 
   // ── Estado do form ───────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -81,6 +86,13 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   )
   const tiposVideo = dataTipos?.parametros ?? []
 
+  // ── Equipe de edição ─────────────────────────────────────────────────────
+  const { data: dataEdicao } = useSWR<{ opcoes: { value: string; label: string; subtitle?: string }[] }>(
+    open ? "/api/equipe-disponivel?papel=edicao" : null,
+    fetcher
+  )
+  const opcoesEdicao = dataEdicao?.opcoes ?? []
+
   // ── Proteção contra perda de trabalho ────────────────────────────────────
   // O modal fechava no clique fora e no ESC sem perguntar nada. Quem escrevia um
   // briefing longo e esbarrava fora perdia tudo — é a queixa de "não salva o texto
@@ -100,7 +112,12 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   }
 
   function fecharComConfirmacao() {
-    if (temConteudo && !confirm("Fechar sem criar a demanda? O que você escreveu fica guardado e volta na próxima vez que abrir.")) {
+    // O aviso não pode prometer os anexos: File não sobrevive ao localStorage,
+    // e a versão anterior dizia "fica guardado" enquanto os arquivos sumiam.
+    const avisoAnexos = anexos.length > 0
+      ? ` Os ${anexos.length} arquivo(s) selecionado(s) precisarão ser anexados de novo.`
+      : ""
+    if (temConteudo && !confirm(`Fechar sem criar a demanda? O texto fica guardado e volta na próxima vez que abrir.${avisoAnexos}`)) {
       return
     }
     onClose()
@@ -108,27 +125,55 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
 
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") fecharComConfirmacao() }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      // ESC dentro de <select> ou <input type="date"> serve para fechar o
+      // dropdown/calendário do próprio controle — e borbulhava até aqui,
+      // derrubando o modal inteiro. O modal tem 7 desses campos: é a explicação
+      // mais provável do "fecha sozinho e perde tudo".
+      if (e.defaultPrevented) return
+      const alvo = e.target as HTMLElement | null
+      const tag = alvo?.tagName
+      if (tag === "SELECT" || (tag === "INPUT" && (alvo as HTMLInputElement).type === "date")) return
+      fecharComConfirmacao()
+    }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, temConteudo])
 
   // Guarda o rascunho enquanto a pessoa escreve. Anexos ficam de fora: File não
-  // sobrevive ao localStorage.
+  // sobrevive ao localStorage — por isso o texto do aviso não promete os arquivos.
+  const gravarRascunho = useCallback(() => {
+    if (typeof window === "undefined" || !temConteudo) return
+    localStorage.setItem(RASCUNHO_KEY, JSON.stringify({
+      tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
+      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos, editorId,
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [temConteudo, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
+      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos, editorId])
+
   useEffect(() => {
     if (!open || typeof window === "undefined") return
-    const t = setTimeout(() => {
-      if (!temConteudo) return
-      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({
-        tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
-        classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos,
-      }))
-    }, 500)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
-      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos])
+    const t = setTimeout(gravarRascunho, 500)
+    // O cleanup roda quando o modal fecha e cancelava o timer pendente: os
+    // últimos <500 ms de digitação nunca chegavam ao localStorage. Agora grava
+    // na saída também.
+    return () => { clearTimeout(t); gravarRascunho() }
+  }, [open, gravarRascunho])
+
+  // Fechar a aba, recarregar ou navegar não passava por nenhuma guarda — o
+  // rascunho ficava com o que o debounce tinha alcançado, e só.
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return
+    const aoSair = (e: BeforeUnloadEvent) => {
+      gravarRascunho()
+      if (temConteudo) { e.preventDefault(); e.returnValue = "" }
+    }
+    window.addEventListener("beforeunload", aoSair)
+    return () => window.removeEventListener("beforeunload", aoSair)
+  }, [open, temConteudo, gravarRascunho])
 
   // ── Ao abrir: recupera o rascunho, ou começa limpo ───────────────────────
   useEffect(() => {
@@ -155,6 +200,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     setLocalEvento((salvo?.localEvento as string) ?? "")
     setDataEvento((salvo?.dataEvento as string) ?? "")
     setLinkBrutos((salvo?.linkBrutos as string) ?? "")
+    setEditorId((salvo?.editorId as string) ?? "")
     setRascunhoRecuperado(!!salvo)
   }, [open])
 
@@ -212,6 +258,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         ...(tipo === "cobertura" && dataEvento && { dataEvento: new Date(dataEvento).toISOString() }),
         cobertura: tipo === "cobertura",
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
+        ...(editorId ? { editorId } : {}),
       }
 
       const res = await fetch("/api/demandas", {
@@ -225,7 +272,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       let json: Record<string, unknown> = {}
       try { json = JSON.parse(text) } catch { /* body não é JSON */ }
 
-      if (!res.ok) throw new Error((json.error as string | undefined) ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
+      // Antes: `json.error as string` — mas a API devolvia o objeto do zod, e o
+      // cast mentia para o TypeScript. O usuário via "[object Object]".
+      if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a demanda.")
 
       toast.success(`Demanda ${json.codigo ?? ""} criada!`)
       limparRascunho()
@@ -251,17 +300,28 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       onClose()
       router.push(`/demandas/${json.id}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao criar demanda")
+      // Marca no formulário o campo que a API recusou — o mesmo estado `errors`
+      // já usado pela validação local, então o input fica destacado igual.
+      if (e instanceof ErroApi && e.temCampos()) setErrors(e.campos)
+      toast.error(mensagemDeErro(e, "Não foi possível criar a demanda."))
     } finally {
       setSaving(false)
     }
   }
 
+  // O evento `click` tem como alvo o ancestral comum do mousedown e do mouseup:
+  // selecionar texto na descrição e soltar o mouse fora do card marcava o overlay
+  // como alvo e fechava o modal. Por isso o fechamento exige que o gesto INTEIRO
+  // (descer e soltar o botão) tenha acontecido no fundo.
   return (
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={e => { if (e.target === overlayRef.current) fecharComConfirmacao() }}
+      onMouseDown={e => { pressionouNoFundo.current = e.target === overlayRef.current }}
+      onClick={e => {
+        if (e.target === overlayRef.current && pressionouNoFundo.current) fecharComConfirmacao()
+        pressionouNoFundo.current = false
+      }}
     >
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
@@ -438,6 +498,28 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                 <input type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)} className={cn(inputClass, "pl-9")} />
               </div>
             </div>
+          </div>
+
+          {/* Editor responsável — a API sempre aceitou `editorId` na criação, mas
+              nenhum formulário oferecia o campo: só dava para atribuir depois de
+              salvar e reabrir o card. É a queixa "não consigo criar o card e
+              colocar o editor responsável". */}
+          <div>
+            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
+              Editor responsável <span className="text-zinc-600">(opcional)</span>
+            </label>
+            <select
+              value={editorId}
+              onChange={e => setEditorId(e.target.value)}
+              className={selectClass}
+            >
+              <option value="">Definir depois</option>
+              {opcoesEdicao.map(o => (
+                <option key={o.value} value={o.value}>
+                  {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Produto + Classificação */}

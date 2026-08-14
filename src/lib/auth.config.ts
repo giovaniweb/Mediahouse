@@ -61,7 +61,7 @@ export const authConfig: NextAuthConfig = {
         "/api/transcode",     // callback do worker de transcodificação (protegido por secret)
         "/api/auth",
         "/api/publico",
-        "/api/whatsapp",      // webhook e envios — acesso externo (Evolution API)
+        "/api/whatsapp/webhook", // webhook da Evolution API — único /api/whatsapp/* sem sessão
         "/api/cron",          // cron jobs — acesso externo (Vercel)
         "/api/fabricantes",   // lista fabricantes (usado no form público)
         "/convite",           // convite público de videomaker
@@ -91,9 +91,20 @@ export const authConfig: NextAuthConfig = {
         return true
       }
 
-      // Bloqueia não-logados em todas as outras rotas
+      // Bloqueia não-logados em todas as outras rotas.
       if (!isLoggedIn) {
-        return false // next-auth redireciona para signIn page
+        // Rota de API precisa de 401 JSON, não do redirect para /login.
+        // Devolvendo `false` o next-auth respondia 307: o fetch de GET seguia o
+        // redirect e recebia o HTML da página de login (o `res.json()` estourava
+        // e a tela esvaziava), e o POST virava `POST /login` → 405. A sessão caía
+        // no meio do preenchimento e o usuário só via "erro ao salvar".
+        if (pathname.startsWith("/api/")) {
+          return new Response(
+            JSON.stringify({ error: "Sua sessão expirou. Entre novamente para continuar.", sessaoExpirada: true }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          )
+        }
+        return false // página: next-auth redireciona para a tela de login
       }
 
       // Módulos congelados (Growth/Design e Eventos) — bloqueados para todos.

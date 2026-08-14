@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CalendarRange, Plus, Search, Users, Upload, CheckSquare, MapPin, Clock, ChevronRight, FileText, Loader2, X, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { fetcher } from "@/lib/fetcher"
 
 type Cobertura = {
   id: string
@@ -23,7 +24,6 @@ type Cobertura = {
   _count: { uploads: number; equipe: number; checklist: number }
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const TIPO_LABEL: Record<string, string> = {
   congresso: "Congresso",

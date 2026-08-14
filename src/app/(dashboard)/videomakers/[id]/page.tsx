@@ -16,8 +16,9 @@ import { TagInput } from "@/components/ui/TagInput"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 import { VideomakerPerformance } from "@/components/VideomakerPerformance"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const statusConfig: Record<string, { label: string; class: string }> = {
   preferencial: { label: "Preferencial", class: "bg-purple-500/20 text-purple-300 border border-purple-700" },
@@ -109,7 +110,7 @@ export default function VideomakerDetalhePage() {
       setEditing(false)
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoading(false) }
   }
 
@@ -127,7 +128,7 @@ export default function VideomakerDetalhePage() {
       setNota(0); setComentarioAvaliacao("")
       mutateAvaliacoes(); mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setEnviandoAvaliacao(false) }
   }
 
@@ -154,7 +155,7 @@ export default function VideomakerDetalhePage() {
       toast.success(vm.podeEditar ? "Permissão de edição removida" : "Videomaker pode editar agora")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     }
   }
 
@@ -170,7 +171,7 @@ export default function VideomakerDetalhePage() {
       toast.success(novo === "interno" ? "Marcado como Interno (fulltime)" : "Marcado como Externo (freelance)")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     }
   }
 
@@ -187,7 +188,7 @@ export default function VideomakerDetalhePage() {
       setShowNegraModal(false); setMotivoNegra("")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoadingNegra(false) }
   }
 

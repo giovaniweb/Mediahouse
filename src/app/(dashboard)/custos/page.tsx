@@ -20,8 +20,11 @@ import {
   Printer,
 } from "lucide-react"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
+import { toast } from "sonner"
+import { hojeEmSaoPaulo } from "@/lib/datas"
+import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Videomaker {
   id: string
@@ -148,7 +151,7 @@ export default function CustosPage() {
     tipo: "diaria",
     valor: "",
     descricao: "",
-    dataReferencia: new Date().toISOString().slice(0, 10),
+    dataReferencia: hojeEmSaoPaulo(),
     dataVencimento: "",
     pago: false,
     dataPagamento: "",
@@ -158,17 +161,23 @@ export default function CustosPage() {
     if (!form.videomakerId || !form.valor || !form.dataReferencia) return
     setSalvando(true)
     try {
-      await fetch("/api/custos-videomaker", {
+      const res = await fetch("/api/custos-videomaker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
+      // Sem esta checagem o modal fechava e o formulário se limpava mesmo quando
+      // a API recusava — o custo simplesmente não existia e ninguém era avisado.
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar o custo.")
       setModal(false)
       setForm({
         videomakerId: "", demandaId: "", tipo: "diaria", valor: "",
-        descricao: "", dataReferencia: new Date().toISOString().slice(0, 10), dataVencimento: "", pago: false, dataPagamento: "",
+        descricao: "", dataReferencia: hojeEmSaoPaulo(), dataVencimento: "", pago: false, dataPagamento: "",
       })
       await mutate()
+      toast.success("Custo lançado!")
+    } catch (e) {
+      toast.error(mensagemDeErro(e, "Não foi possível salvar o custo."))
     } finally {
       setSalvando(false)
     }

@@ -8,8 +8,8 @@ import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useState, useRef, useEffect } from "react"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const severidadeConfig = {
   critico: { icon: AlertTriangle, class: "bg-red-50 border-red-200", iconClass: "text-red-600", badge: "bg-red-100 text-red-700" },

@@ -13,11 +13,16 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
-import { dataPrazoPlausivel, MSG_DATA_INVALIDA } from "@/lib/datas"
+import { validarPrazo } from "@/lib/datas"
+import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
+import { resolveParaEditor } from "@/lib/equipe-resolver"
 
+// Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
+// inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
+// na tela do usuário.
 const criarDemandaSchema = z.object({
-  titulo: z.string().trim().min(3),
-  descricao: z.string().trim().min(10),
+  titulo: z.string().trim().min(3, "O título precisa ter pelo menos 3 caracteres."),
+  descricao: z.string().trim().min(10, "A descrição precisa ter pelo menos 10 caracteres."),
   // Não é mais uma lista fixa: o conjunto válido vem de ConfigParametro por
   // empresa e é conferido depois do parse, com departamentoValido().
   departamento: z.string().trim().min(1),
@@ -25,7 +30,13 @@ const criarDemandaSchema = z.object({
   cidade: z.string().trim().min(2),
   prioridade: z.enum(["normal", "alta", "urgente"]).default("normal"),
   motivoUrgencia: z.string().optional(),
-  dataLimite: z.string().optional().refine(dataPrazoPlausivel, { message: MSG_DATA_INVALIDA }),
+  dataLimite: z
+    .string()
+    .optional()
+    .superRefine((valor, ctx) => {
+      const r = validarPrazo(valor)
+      if (!r.ok) ctx.addIssue({ code: "custom", message: r.motivo })
+    }),
   // Campos condicionais
   campanha: z.string().optional(),
   objetivo: z.string().optional(),
@@ -246,10 +257,21 @@ export async function POST(req: NextRequest) {
   const parsed = criarDemandaSchema.safeParse(body)
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+    return erroDeZod(parsed.error)
   }
 
   const data = parsed.data
+
+  // Token unificado da equipe (ed:/vm:/user:) → id real do editor, mesmo caminho
+  // que o PUT já usava. Cria o registro espelho quando a pessoa vem de outra tabela.
+  let editorIdResolvido: string | undefined = data.editorId || undefined
+  if (editorIdResolvido?.includes(":")) {
+    try {
+      editorIdResolvido = await resolveParaEditor(editorIdResolvido, organizacaoId)
+    } catch (e) {
+      return erroDeCampo("editorId", e instanceof Error ? e.message : "Não foi possível identificar o editor.")
+    }
+  }
 
   // Validar urgência
   if (data.prioridade === "urgente" && !data.motivoUrgencia) {
@@ -351,7 +373,10 @@ export async function POST(req: NextRequest) {
       localGravacao: data.localGravacao,
       // Novos campos
       videomakerId: data.videomakerId || undefined,
-      editorId: data.editorId || undefined,
+      // O seletor de equipe devolve token unificado (ed:/vm:/user:), igual ao da
+      // edição. Sem resolver aqui, escolher o editor na CRIAÇÃO gravaria um id
+      // inválido — por isso o campo nunca tinha sido oferecido nos formulários.
+      editorId: editorIdResolvido,
       designerId: designerIdResolvido || undefined,
       responsavelId: responsavelId || undefined,
       linhaProjeto: linhaProjetoTexto,

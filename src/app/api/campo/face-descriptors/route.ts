@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/campo/face-descriptors
-// Salva descritor facial (128 floats) para um upload de foto
-// Requer sessão autenticada
+// Salva descritor facial (128 floats) para um upload de foto.
+// Descritor facial é dado biométrico: o upload precisa pertencer à organização
+// do usuário logado, não basta existir.
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   let body: { uploadId?: string; descriptor?: number[] } = {}
   try {
@@ -25,9 +30,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Verificar que o upload existe
-  const upload = await prisma.eventoCoberturaUpload.findUnique({
-    where: { id: uploadId },
+  // Upload precisa existir E pertencer à organização da sessão
+  const upload = await prisma.eventoCoberturaUpload.findFirst({
+    where: { id: uploadId, cobertura: { organizacaoId } },
     select: { id: true, tipo: true },
   })
 

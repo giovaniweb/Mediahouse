@@ -14,8 +14,8 @@ import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
 import { EVENTOS_ATIVO } from "@/lib/modulos"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Videomaker { id: string; nome: string }
 interface Editor { id: string; nome: string }

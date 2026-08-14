@@ -8,6 +8,7 @@ import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign, Cl
 import { PECAS_AUDIOVISUAIS, pecasDefaultPara } from "@/lib/eventos-pecas"
 import { PECAS_DESIGN, pecasDesignDefaultPara } from "@/lib/design-pecas"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type EventoLista = {
   id: string
@@ -27,7 +28,6 @@ type EventoLista = {
   _count: { demandas: number; checklist: number; documentos: number; custos: number }
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 type DashboardEventos = {
   proximos: number; emProducao: number; atrasados: number; finalizados: number

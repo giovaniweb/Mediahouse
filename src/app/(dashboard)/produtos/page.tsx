@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
+import { mensagemDeErro } from "@/lib/erro-cliente"
 
 const fetcher = (url: string) => fetch(url).then((r) => {
   if (!r.ok) throw new Error("Erro ao carregar")
@@ -109,7 +110,7 @@ export default function ProdutosPage() {
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success(p.ativo ? `"${p.nome}" desativado` : `"${p.nome}" ativado`)
       mutate()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
     finally { setToggling(false); setConfirmToggle(null) }
   }
 
@@ -124,7 +125,7 @@ export default function ProdutosPage() {
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Atualizado!")
       mutate()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   function pesoColor(peso: number) {
@@ -632,7 +633,7 @@ function ProdutoFormModal({
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success(produto ? "Produto atualizado!" : "Produto criado!")
       onClose()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
     finally { setLoading(false) }
   }
 

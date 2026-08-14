@@ -24,6 +24,11 @@ export async function GET(
   })
 
   if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  // Rascunho é privado dentro da própria empresa: 404 para quem não escreveu, e
+  // não 403 — quem não é o autor não deveria nem saber que ele existe.
+  if (ideia.status === "rascunho" && ideia.usuarioId !== session.user.id) {
+    return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  }
 
   return NextResponse.json(ideia)
 }
@@ -43,6 +48,9 @@ export async function PUT(
 
   const ideia = await prisma.ideiaVideo.findUnique({ where: { id } })
   if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (ideia.status === "rascunho" && ideia.usuarioId !== session.user.id) {
+    return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { lerNumero } from "@/lib/numeros"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -46,8 +47,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
       email: body.email,
       cpfCnpj: body.cpfCnpj,
       chavePix: body.chavePix,
-      valorDiaria: body.valorDiaria !== undefined ? (body.valorDiaria ? parseFloat(body.valorDiaria) : null) : undefined,
-      salario: body.salario !== undefined ? (body.salario ? parseFloat(body.salario) : null) : undefined,
+      valorDiaria: body.valorDiaria !== undefined ? lerNumero(body.valorDiaria) : undefined,
+      salario: body.salario !== undefined ? lerNumero(body.salario) : undefined,
       dadosBancarios: body.dadosBancarios,
       status: body.status,
       observacoes: body.observacoes,

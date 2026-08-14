@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { getWhatsappConfig } from "@/lib/whatsapp"
 
-// GET /api/whatsapp/debug — lista mensagens recentes + config do webhook na Evolution API
-// Temporário para debug
-export async function GET(req: NextRequest) {
-  // Rota de debug — desativada em produção (evita fallback Contourline e exposição).
-  if (process.env.NODE_ENV === "production") return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
-  const secret = req.nextUrl.searchParams.get("s")
-  const dbg = process.env.WHATSAPP_DEBUG_SECRET
-  if (!dbg || secret !== dbg) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 })
-  }
+// GET /api/whatsapp/debug — mensagens recentes + config do webhook na Evolution API.
+// Exige sessão autenticada e devolve apenas dados da organização do usuário —
+// antes era um segredo em query string protegendo mensagens de todas as empresas.
+export async function GET(_req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const [mensagens, config] = await Promise.all([
     prisma.mensagemWhatsapp.findMany({
+      where: { organizacaoId },
       orderBy: { createdAt: "desc" },
       take: 30,
       select: {
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
         createdAt: true,
       },
     }),
-    getWhatsappConfig(),
+    getWhatsappConfig(organizacaoId),
   ])
 
   // Verifica webhook na Evolution API
