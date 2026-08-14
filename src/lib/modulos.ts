@@ -8,7 +8,7 @@
 
 export const GROWTH_ATIVO = true
 export const EVENTOS_ATIVO = false
-export const IDEIAS_ATIVO = false
+export const IDEIAS_ATIVO = true
 export const MENSAGENS_ATIVO = false
 
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e tudo abaixo dele.

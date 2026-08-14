@@ -145,6 +145,9 @@ enum SeveridadeAlerta {
 }
 
 enum StatusIdeia {
+  // Rascunho pessoal: só quem criou enxerga, até publicar. Os demais estados são
+  // públicos para a organização — é o banco coletivo de ideias.
+  rascunho
   nova
   em_analise
   aprovada
@@ -537,6 +540,8 @@ model Demanda {
   eventoGestaoId     String?
   eventoGestao       EventoGestao?      @relation(fields: [eventoGestaoId], references: [id])
 
+  @@index([organizacaoId])
+  @@index([organizacaoId, statusVisivel])
   @@map("demandas")
 }
 
@@ -648,6 +653,8 @@ model AlertaIA {
 
   demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
+  @@index([organizacaoId])
+  @@index([organizacaoId, status])
   @@map("alertas_ia")
 }
 
@@ -706,6 +713,8 @@ model MensagemWhatsapp {
 
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
+  @@index([organizacaoId])
+  @@index([organizacaoId, createdAt])
   @@map("mensagens_whatsapp")
 }
 
@@ -815,6 +824,8 @@ model Evento {
   videomaker Videomaker? @relation(fields: [videomakerId], references: [id])
   editor     Editor?     @relation(fields: [editorId], references: [id])
 
+  @@index([organizacaoId])
+  @@index([organizacaoId, inicio])
   @@map("eventos")
 }
 
@@ -863,6 +874,8 @@ model CustoVideomaker {
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
   demanda    Demanda?   @relation(fields: [demandaId], references: [id])
 
+  @@index([organizacaoId])
+  @@index([organizacaoId, pago])
   @@map("custos_videomaker")
 }
 
@@ -1191,6 +1204,7 @@ model IdeiaVideo {
   produto Produto? @relation(fields: [produtoId], references: [id])
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
+  @@index([organizacaoId])
   @@map("ideias_video")
 }
 
@@ -1443,6 +1457,7 @@ model EventoCobertura {
   demandas   Demanda[]
   eventoGestao EventoGestao?
 
+  @@index([organizacaoId])
   @@map("coberturas")
 }
 
@@ -1718,6 +1733,7 @@ model EventoGestao {
   aprovacoes   EventoGestaoAprovacao[]
   logs         EventoGestaoLog[]
 
+  @@index([organizacaoId])
   @@map("eventos_gestao")
 }
 
@@ -1877,6 +1893,7 @@ model ProducaoManual {
   updatedAt   DateTime @updatedAt
 
   @@unique([competencia, area, grupo, categoria])
+  @@index([organizacaoId])
   @@map("producao_manual")
 }
 

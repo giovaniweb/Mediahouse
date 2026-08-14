@@ -14,7 +14,6 @@
     "src/app/api/campo/agenda/route.ts",
     "src/app/api/campo/demandas/route.ts",
     "src/app/api/campo/eventos/route.ts",
-    "src/app/api/campo/face-descriptors/route.ts",
     "src/app/api/campo/ranking/route.ts",
     "src/app/api/checklist-templates/route.ts",
     "src/app/api/checklist-templates/seed/route.ts",
@@ -24,8 +23,6 @@
     "src/app/api/fabricantes/seed/route.ts",
     "src/app/api/ia/agentes/triagem/route.ts",
     "src/app/api/ia/analisar-demanda/route.ts",
-    "src/app/api/ideias/analisar-batch/route.ts",
-    "src/app/api/ideias/kpi/route.ts",
     "src/app/api/kpi/b2c-b2b/route.ts",
     "src/app/api/me/nf-token/route.ts",
     "src/app/api/me/videomaker/route.ts",
@@ -41,8 +38,6 @@
     "src/app/api/transcode/callback/route.ts",
     "src/app/api/videomakers/[id]/avaliar/route.ts",
     "src/app/api/videomakers/[id]/performance/route.ts",
-    "src/app/api/whatsapp/admin-action/route.ts",
-    "src/app/api/whatsapp/debug/route.ts",
     "src/lib/eventos-conclusao.ts",
     "src/lib/usuario-vinculos.ts"
   ]

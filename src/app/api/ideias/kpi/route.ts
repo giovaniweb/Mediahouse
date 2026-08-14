@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
+// Os indicadores contavam ideias de TODAS as empresas: com um cliente ninguém
+// percebia, com dois os números de um apareceriam no painel do outro. Todo count
+// abaixo passa a ser da organização da sessão. Rascunho fica de fora — é gaveta
+// pessoal, não faz parte do funil que este painel mede.
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
+  const daOrg = { organizacaoId, status: { not: "rascunho" as const } }
 
   const now = new Date()
   const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -23,24 +32,24 @@ export async function GET() {
     porProdutoRaw,
     scores,
   ] = await Promise.all([
-    prisma.ideiaVideo.count(),
-    prisma.ideiaVideo.count({ where: { status: "nova" } }),
-    prisma.ideiaVideo.count({ where: { status: "em_analise" } }),
-    prisma.ideiaVideo.count({ where: { status: "aprovada" } }),
-    prisma.ideiaVideo.count({ where: { status: "em_producao" } }),
-    prisma.ideiaVideo.count({ where: { status: "realizada" } }),
-    prisma.ideiaVideo.count({ where: { status: "descartada" } }),
-    prisma.ideiaVideo.count({ where: { createdAt: { gte: inicioMes } } }),
-    prisma.ideiaVideo.groupBy({ by: ["origem"], _count: true }),
-    prisma.ideiaVideo.groupBy({ by: ["classificacao"], _count: true, where: { classificacao: { not: null } } }),
+    prisma.ideiaVideo.count({ where: daOrg }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "nova" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "em_analise" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "aprovada" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "em_producao" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "realizada" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, status: "descartada" } }),
+    prisma.ideiaVideo.count({ where: { ...daOrg, createdAt: { gte: inicioMes } } }),
+    prisma.ideiaVideo.groupBy({ by: ["origem"], _count: true, where: daOrg }),
+    prisma.ideiaVideo.groupBy({ by: ["classificacao"], _count: true, where: { ...daOrg, classificacao: { not: null } } }),
     prisma.ideiaVideo.groupBy({
       by: ["produtoId"],
       _count: true,
-      where: { produtoId: { not: null } },
+      where: { ...daOrg, produtoId: { not: null } },
     }),
     prisma.ideiaVideo.aggregate({
       _avg: { scoreIA: true },
-      where: { scoreIA: { not: null } },
+      where: { ...daOrg, scoreIA: { not: null } },
     }),
   ])
 

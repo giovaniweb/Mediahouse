@@ -54,6 +54,19 @@ export async function GET(req: NextRequest) {
     where.status = { not: "descartada" }
   }
 
+  // Rascunho é pessoal: só quem escreveu enxerga, até publicar. Sem este recorte
+  // a ideia nasceria visível para a empresa inteira — o oposto de "rascunho
+  // antes de subir", que foi o que a equipe pediu.
+  where.AND = [
+    ...(Array.isArray(where.AND) ? where.AND : []),
+    {
+      OR: [
+        { status: { not: "rascunho" } },
+        { status: "rascunho", usuarioId: session.user.id },
+      ],
+    },
+  ]
+
   const orderBy = sortBy === "scoreIA"
     ? { scoreIA: "desc" as const }
     : sortBy === "produto"
@@ -109,9 +122,16 @@ export async function POST(req: NextRequest) {
   const plataforma = linkReferencia ? detectPlataforma(linkReferencia) : null
   const origemFinal = origem || (linkReferencia ? detectOrigem(linkReferencia) : "manual")
 
+  // Ideia escrita aqui dentro nasce como RASCUNHO — privada de quem escreveu até
+  // ela decidir publicar. O que chega de fora (WhatsApp, Instagram, TikTok) segue
+  // entrando direto no banco coletivo: não é rascunho de ninguém, é material que
+  // precisa de triagem.
+  const nasceComoRascunho = origemFinal === "manual"
+
   const ideia = await prisma.ideiaVideo.create({
     data: {
       organizacaoId,
+      ...(nasceComoRascunho ? { status: "rascunho" as const } : {}),
       titulo: titulo.trim(),
       descricao: descricao?.trim() || null,
       linkReferencia: linkReferencia?.trim() || null,

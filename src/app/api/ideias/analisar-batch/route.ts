@@ -2,15 +2,24 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, extrairJSON, MODELO_RAPIDO } from "@/lib/claude"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function POST() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  // Sem este escopo a análise varria as ideias de TODAS as empresas: uma pessoa
+  // clicava em "analisar" e o sistema gastava tokens de IA lendo — e escrevendo
+  // nota em — ideia de outro cliente.
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   // Find all unanalyzed ideas
   const ideias = await prisma.ideiaVideo.findMany({
     where: {
+      organizacaoId,
       scoreIA: null,
+      // Rascunho não entra: é gaveta pessoal, ainda não foi oferecido ao time.
       status: { in: ["nova", "em_analise"] },
     },
     include: {
