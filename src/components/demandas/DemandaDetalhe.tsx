@@ -21,7 +21,9 @@ import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
-import { enviarDocumento, documentoMuitoGrande } from "@/lib/upload-documento"
+import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
+import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
+import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 
 const fetcher = async (url: string) => {
@@ -194,6 +196,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [editMode, setEditMode] = useState(false)
 
   const [saving, setSaving] = useState(false)
+  const [salvandoResponsaveis, setSalvandoResponsaveis] = useState(false)
+  const [salvandoProdutos, setSalvandoProdutos] = useState(false)
   const [comentario, setComentario] = useState("")
   const [sendingComment, setSendingComment] = useState(false)
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -234,6 +238,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
+
+  // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
+  // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
+  const responsaveisAtuais: string[] = (
+    (demanda?.responsaveis as { usuario?: { id?: string } }[] | undefined) ?? []
+  )
+    .map((r) => r.usuario?.id)
+    .filter((v): v is string => !!v)
+  const produtosAtuais: string[] = (
+    (demanda?.produtos as { produtoId?: string }[] | undefined) ?? []
+  )
+    .map((p) => p.produtoId)
+    .filter((v): v is string => !!v)
 
   const { data: dataMe } = useSWR("/api/me", fetcher)
   const { data: dataOpcoesCaptacao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=captacao", fetcher)
@@ -296,31 +313,29 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           produtoId: produtoId || null,
         }),
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({} as { error?: string }))
-        throw new Error(err.error ?? "Erro ao salvar")
-      }
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar a demanda.")
       toast.success("Demanda atualizada!")
       setEditMode(false)
       mutate()
     } catch (e) {
-      toast.error(String(e))
+      // Título, descrição e prazo não têm input neste formulário (são editados
+      // pelo InlineEdit, que mostra o erro no próprio campo). Aqui o toast já
+      // carrega a mensagem específica da API, não um "erro ao salvar" genérico.
+      toast.error(mensagemDeErro(e, "Não foi possível salvar a demanda."))
     } finally {
       setSaving(false)
     }
   }
 
-  // Salva um único campo (edição inline). Lança em erro para o InlineEdit exibir "Erro".
+  // Salva um único campo (edição inline). Lança ErroApi com a mensagem da API —
+  // o InlineEdit mostra esse texto embaixo do próprio campo.
   async function salvarCampo(patch: Record<string, unknown>) {
     const res = await fetch(`/api/demandas/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({} as { error?: string }))
-      throw new Error(err.error ?? "Erro ao salvar")
-    }
+    if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar este campo.")
     await mutate()
   }
 
@@ -581,7 +596,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       toast.success(label)
       await mutate()
     } catch (e) {
-      toast.error(String(e))
+      toast.error(mensagemDeErro(e))
     }
   }
 
@@ -1241,32 +1256,49 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Produto */}
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Produto vinculado</label>
-                <select
-                  disabled={!podeEditar}
-                  value={editMode ? produtoId : (demanda.produtos?.[0]?.produtoId ?? "")}
-                  onChange={e => {
-                    if (editMode) {
-                      setProdutoId(e.target.value)
-                    } else {
-                      // atribuição rápida de produto
-                      fetch(`/api/demandas/${id}/produto`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ produtoId: e.target.value || null }),
-                      }).then(r => {
-                        if (r.ok) { toast.success("Produto vinculado!"); mutate() }
-                        else toast.error("Erro ao vincular produto")
-                      })
-                    }
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">— Sem produto —</option>
-                  {produtos.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))}
-                </select>
+                <label className="block text-xs text-zinc-500 mb-1.5">
+                  {editMode ? "Produto vinculado" : "Equipamentos / produtos"}
+                </label>
+                {editMode ? (
+                  <select
+                    disabled={!podeEditar}
+                    value={produtoId}
+                    onChange={e => setProdutoId(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">— Sem produto —</option>
+                    {produtos.map(p => (
+                      <option key={p.id} value={p.id}>{p.nome}</option>
+                    ))}
+                  </select>
+                ) : (
+                  /* Vários equipamentos. O <select> único mandava um id só, e a rota
+                     substitui o conjunto — os demais equipamentos eram apagados. */
+                  <SelecaoChips
+                    valores={produtosAtuais}
+                    disabled={!podeEditar}
+                    salvando={salvandoProdutos}
+                    vazio="— Sem produto —"
+                    rotuloAdicionar="+ Adicionar equipamento…"
+                    opcoes={produtos.map(p => ({ value: p.id, label: p.nome }))}
+                    onChange={async (novos) => {
+                      setSalvandoProdutos(true)
+                      try {
+                        const r = await fetch(`/api/demandas/${id}/produto`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ produtoIds: novos }),
+                        })
+                        if (!r.ok) throw await erroDaResposta(r, "Não foi possível vincular o equipamento.")
+                        await mutate()
+                      } catch (e) {
+                        toast.error(mensagemDeErro(e, "Não foi possível vincular o equipamento."))
+                      } finally {
+                        setSalvandoProdutos(false)
+                      }
+                    }}
+                  />
+                )}
                 {!editMode && demanda.produtos?.[0] && (
                   <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> {demanda.produtos[0].produto?.nome}
@@ -1325,36 +1357,29 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
                     <UserCheck className="w-3.5 h-3.5" /> {copy.responsibleLabel}
                   </p>
-                  <InlineEdit
-                    value={demanda.responsavel?.id ?? demanda.designer?.usuarioId ?? ""}
-                    canEdit={podeEditar}
-                    tipo="select"
-                    options={[
-                      { value: "", label: "— Sem responsável —" },
-                      ...(dataGrowthResponsaveis?.responsaveis ?? []).map((p) => ({
-                        value: p.id,
-                        label: p.label ?? `${p.nome}${p.tipo ? ` · ${p.tipo}` : ""}`,
-                      })),
-                    ]}
-                    onSave={(value) => salvarCampo({ responsavelId: value || null })}
-                    display={
-                      demanda.responsavel || demanda.designer ? (
-                        <span className="block rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 min-h-10">
-                          <span className="block text-sm font-medium text-zinc-200">
-                            {(demanda.responsavel ?? demanda.designer).nome}
-                          </span>
-                          {(demanda.responsavel ?? demanda.designer).email && (
-                            <span className="block text-xs text-zinc-500">
-                              {(demanda.responsavel ?? demanda.designer).email}
-                            </span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="block rounded-lg border border-dashed border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-500">
-                          — Sem responsável —
-                        </span>
-                      )
-                    }
+                  {/* Vários responsáveis. Antes era um <select> único que mandava
+                      `responsavelId`; como setResponsaveis substitui a lista inteira,
+                      abrir o card e tocar aqui reduzia 3 responsáveis a 1 sem avisar. */}
+                  <SelecaoChips
+                    valores={responsaveisAtuais}
+                    disabled={!podeEditar}
+                    salvando={salvandoResponsaveis}
+                    vazio="— Sem responsável —"
+                    rotuloAdicionar="+ Adicionar responsável…"
+                    opcoes={(dataGrowthResponsaveis?.responsaveis ?? []).map((p) => ({
+                      value: p.id,
+                      label: p.label ?? `${p.nome}${p.tipo ? ` · ${p.tipo}` : ""}`,
+                    }))}
+                    onChange={async (novos) => {
+                      setSalvandoResponsaveis(true)
+                      try {
+                        await salvarCampo({ responsavelIds: novos })
+                      } catch (e) {
+                        toast.error(mensagemDeErro(e, "Não foi possível salvar os responsáveis."))
+                      } finally {
+                        setSalvandoResponsaveis(false)
+                      }
+                    }}
                   />
                 </div>
                 <div>
@@ -1714,7 +1739,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 ref={fileRefDoc}
                 type="file"
                 className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                accept={ACCEPT_DOCUMENTOS}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
               />
             </div>
@@ -1723,7 +1748,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               if (docs.length === 0) {
                 return (
                   <p className="text-xs text-zinc-600 text-center py-3">
-                    Nenhum documento anexado. Clique em "Anexar" para adicionar PDFs, planilhas, etc.
+                    Nenhum anexo. Clique em &quot;Anexar&quot; para adicionar PDF, Word, Excel ou imagem (PNG, JPEG) — até 25 MB cada.
                   </p>
                 )
               }
@@ -2313,7 +2338,7 @@ function IACard({ demandaId }: { demandaId: string }) {
       if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || "Erro na análise IA"))
       setAnalise(json.sugestao ?? "Sem sugestão retornada.")
     } catch (e) {
-      toast.error(String(e))
+      toast.error(mensagemDeErro(e))
     } finally {
       setLoading(false)
     }
