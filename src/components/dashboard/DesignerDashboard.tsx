@@ -5,8 +5,8 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Palette, Loader2, Clock } from "lucide-react"
 import { TIPO_ARTE_LABEL } from "@/lib/design-pecas"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const STATUS: { id: string; label: string; color: string }[] = [
   { id: "entrada", label: "Briefing", color: "bg-zinc-700/50 text-zinc-300" },

@@ -17,8 +17,9 @@ import { TagInput } from "@/components/ui/TagInput"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 import { VideomakerPerformance } from "@/components/VideomakerPerformance"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const statusConfig: Record<string, { label: string; class: string }> = {
   ativo: { label: "Ativo", class: "bg-green-500/20 text-green-300 border border-green-700" },
@@ -124,7 +125,7 @@ export default function EditorDetalhePage() {
       setEditing(false)
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoading(false) }
   }
 
@@ -142,7 +143,7 @@ export default function EditorDetalhePage() {
       setNota(0); setComentarioAvaliacao("")
       mutateAvaliacoes(); mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setEnviandoAvaliacao(false) }
   }
 
@@ -157,7 +158,7 @@ export default function EditorDetalhePage() {
       toast.success(editor.fazCaptacao ? "Captação desabilitada" : "Editor pode fazer captação agora")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     }
   }
 
@@ -173,7 +174,7 @@ export default function EditorDetalhePage() {
       toast.success(novo === "interno" ? "Marcado como Interno (fulltime)" : "Marcado como Externo (freelance)")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     }
   }
 
@@ -190,7 +191,7 @@ export default function EditorDetalhePage() {
       setShowNegraModal(false); setMotivoNegra("")
       mutate()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoadingNegra(false) }
   }
 

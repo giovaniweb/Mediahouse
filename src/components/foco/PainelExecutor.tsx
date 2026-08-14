@@ -9,8 +9,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso } from "@/lib/status"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // Painel recolhível no canto: em que a pessoa está agora e o que atacar depois.
 //

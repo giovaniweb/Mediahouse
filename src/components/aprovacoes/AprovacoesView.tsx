@@ -14,8 +14,9 @@ import { ptBR } from "date-fns/locale"
 import Link from "next/link"
 import { toast } from "sonner"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
       toast.success("Demanda reaberta para análise!")
       mutateAll()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoading(null) }
   }
 
@@ -124,7 +125,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
       toast.success(acao === "aprovar" ? "Demanda aprovada!" : "Demanda recusada")
       mutateAll(); setModal(null); setMotivo("")
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoading(null) }
   }
 
@@ -143,7 +144,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
       toast.success(data.mensagem ?? (acao === "aprovar_pagamento" ? "Pagamento aprovado!" : "Custo contestado"))
       mutateCustos()
     } catch (err) {
-      toast.error(String(err))
+      toast.error(mensagemDeErro(err))
     } finally { setLoading(null) }
   }
 

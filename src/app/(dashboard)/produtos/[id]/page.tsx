@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { toast } from "sonner"
+import { mensagemDeErro } from "@/lib/erro-cliente"
 
 const fetcher = (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error(); return r.json() })
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -77,7 +78,7 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
       toast.success("Produto atualizado!")
       setEditing(false)
       mutate()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
     finally { setSaving(false) }
   }
 
@@ -98,7 +99,7 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Demanda vinculada!")
       setSearchQuery(""); setSearchResults([]); mutate()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   async function unlinkDemanda(demandaId: string) {
@@ -106,7 +107,7 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/produtos/${id}/demandas?demandaId=${demandaId}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Desvinculada!"); mutate()
-    } catch (err) { toast.error(String(err)) }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   async function fetchAiSuggestion() {

@@ -13,8 +13,8 @@ import {
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   entrada: { label: "Entrada", color: "bg-zinc-700/50 text-zinc-400" },

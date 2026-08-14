@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Send, MessageSquare, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { mensagemDeErro } from "@/lib/erro-cliente"
 
 interface QuickWhatsappProps {
   telefone: string
@@ -46,7 +47,7 @@ export function QuickWhatsapp({ telefone, nome, label, className }: QuickWhatsap
         setExpanded(false)
       }, 2000)
     } catch (e) {
-      toast.error(String(e))
+      toast.error(mensagemDeErro(e))
     } finally { setEnviando(false) }
   }
 

@@ -5,8 +5,8 @@ import { Bell, CheckCheck, X, AlertTriangle, Info, Zap } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import useSWR from "swr"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Alerta {
   id: string

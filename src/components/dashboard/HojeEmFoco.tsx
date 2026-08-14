@@ -3,8 +3,8 @@
 import { Calendar, Clock, AlertTriangle, CreditCard, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import useSWR from "swr"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-white/10 ${className ?? ""}`} />

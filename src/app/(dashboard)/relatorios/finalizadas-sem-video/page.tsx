@@ -8,8 +8,8 @@ import {
   Search, AlertTriangle, ExternalLink, FolderOpen, Sparkles,
   ChevronLeft, ChevronRight, Loader2, Check, X,
 } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface DemandaSemVideo {
   id: string

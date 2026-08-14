@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { fetcher } from "@/lib/fetcher"
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const NAV_BG = "#06142E"
@@ -124,7 +125,6 @@ interface RankingItem {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const STATUS_LABEL: Record<string, string> = {
   entrada: "Entrada",

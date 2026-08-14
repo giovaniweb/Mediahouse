@@ -4,6 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Boxes, Plus, Search, Loader2, X, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type Item = {
   id: string; nome: string; categoria: string | null; valorUnitario: number | null
@@ -12,7 +13,6 @@ type Item = {
 }
 type Fornecedor = { id: string; nome: string }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
 const UNIDADE_LABEL: Record<string, string> = {

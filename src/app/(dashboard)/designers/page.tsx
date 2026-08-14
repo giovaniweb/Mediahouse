@@ -5,6 +5,7 @@ import useSWR from "swr"
 import Link from "next/link"
 import { PenTool, Plus, Search, Loader2, X, Phone, Mail, MapPin } from "lucide-react"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type Designer = {
   id: string; nome: string; cidade: string | null; estado: string | null
@@ -12,7 +13,6 @@ type Designer = {
   tipoContrato: string; especialidade: string[]; _count: { demandas: number }
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
 export default function DesignersPage() {

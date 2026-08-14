@@ -4,6 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Truck, Plus, Search, Loader2, X, Phone, Mail, MapPin, Trash2, Link2 } from "lucide-react"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type Fornecedor = {
   id: string; nome: string; contato: string | null; cnpj: string | null
@@ -11,7 +12,6 @@ type Fornecedor = {
   categoria: string; status: string; portalToken: string; _count: { produtos: number; custos: number }
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
 export const CAT_FORNECEDOR: Record<string, string> = {

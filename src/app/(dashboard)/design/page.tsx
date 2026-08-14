@@ -14,8 +14,8 @@ import { ImportarPlanilhaModal } from "@/components/demandas/ImportarPlanilhaMod
 import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
 const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
 

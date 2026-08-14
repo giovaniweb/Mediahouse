@@ -9,8 +9,8 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSearchParams } from "next/navigation"
 import { EmailInboxSettings } from "@/components/configuracoes/EmailInboxSettings"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 type Tab = "whatsapp" | "email" | "caixa_entrada" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
 

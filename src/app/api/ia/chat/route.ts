@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        let currentMessages: Anthropic.MessageParam[] = [...messages]
+        const currentMessages: Anthropic.MessageParam[] = [...messages]
         let iteracoes = 0
         const MAX_ITER = 8
 

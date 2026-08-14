@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
 import { PermissoesModal } from "@/components/PermissoesModal"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const TIPO_LABEL: Record<string, string> = {
   admin: "Admin", gestor: "Gestor", operacao: "Operação",

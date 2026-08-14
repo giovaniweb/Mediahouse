@@ -6,8 +6,9 @@ import { Send, Phone, User, Search, MessageSquare, ChevronDown, ChevronUp } from
 import useSWR from "swr"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { mensagemDeErro } from "@/lib/erro-cliente"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const TEMPLATES = [
   {
@@ -98,7 +99,7 @@ export default function MensagensPage() {
       toast.success("Mensagem enviada!")
       setMensagem("")
     } catch (e) {
-      toast.error(String(e))
+      toast.error(mensagemDeErro(e))
     } finally { setEnviando(false) }
   }
 

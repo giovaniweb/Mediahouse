@@ -12,6 +12,7 @@ import {
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type Membro = {
   id: string
@@ -77,7 +78,6 @@ type RelatorioConteudo = {
   pontos_atencao?: string[]
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 const TIPO_LABEL: Record<string, string> = {
   congresso: "Congresso", feira: "Feira", evento_corporativo: "Corporativo",

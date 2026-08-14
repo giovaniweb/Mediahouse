@@ -4,10 +4,10 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Layers, Plus, Loader2, Check, X, Pencil } from "lucide-react"
 import { toast } from "sonner"
+import { fetcher } from "@/lib/fetcher"
 
 type Linha = { id: string; nome: string; descricao: string | null; ativo: boolean }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
 
 export default function LinhasProjetosPage() {

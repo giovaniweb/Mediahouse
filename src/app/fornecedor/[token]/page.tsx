@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import useSWR from "swr"
 import { useParams } from "next/navigation"
 import { Truck, Loader2, Upload, CheckCircle2, FileText, MapPin, Calendar } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
 type Custo = {
   id: string; descricao: string; categoria: string; valorPrevisto: number; valorReal: number | null
@@ -12,7 +13,6 @@ type Custo = {
 }
 type Fornecedor = { id: string; nome: string; categoria: string; cidade: string | null; estado: string | null; custos: Custo[] }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const fmtMoney = (n: number) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
 const fmtData = (s: string) => new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
 
