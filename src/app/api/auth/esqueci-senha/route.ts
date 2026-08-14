@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendEmailResetSenha } from "@/lib/email"
+import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
 import crypto from "crypto"
 
 // POST /api/auth/esqueci-senha
 export async function POST(req: NextRequest) {
   try {
+    const limite = checarRateLimit(`esqueci-senha:${ipDaRequisicao(req.headers)}`, 5, 15 * 60 * 1000)
+    if (!limite.ok) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
+        { status: 429, headers: { "Retry-After": String(limite.retryAfterSegundos) } }
+      )
+    }
+
     const { email } = await req.json()
 
     if (!email || typeof email !== "string") {

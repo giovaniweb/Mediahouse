@@ -2,7 +2,7 @@
 // Sem dependências externas: usa apenas módulos nativos do Node 20 + ffmpeg/ffprobe do sistema.
 import http from "node:http"
 import { spawn } from "node:child_process"
-import { randomUUID } from "node:crypto"
+import { randomUUID, timingSafeEqual } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
 import { readFile, unlink, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -153,8 +153,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") return send(200, { ok: true })
 
   if (req.method === "POST" && req.url === "/transcode") {
+    if (!SECRET) return send(500, { error: "TRANSCODE_SECRET não configurado" })
     const auth = req.headers.authorization || ""
-    if (!SECRET || auth !== `Bearer ${SECRET}`) return send(401, { error: "não autorizado" })
+    const bufA = Buffer.from(auth)
+    const bufB = Buffer.from(`Bearer ${SECRET}`)
+    if (bufA.length !== bufB.length || !timingSafeEqual(bufA, bufB)) {
+      return send(401, { error: "não autorizado" })
+    }
 
     const body = await lerBody(req)
     const { arquivoId, demandaId, sourceUrl } = body

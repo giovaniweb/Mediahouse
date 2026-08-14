@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { authConfig } from "./auth.config"
+import { checarRateLimit, limparRateLimit } from "@/lib/rate-limit"
 
 const loginSchema = z.object({
   email: z.string().min(1), // Agora aceita email OU telefone
@@ -24,6 +25,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null
 
         const { email: input, password } = parsed.data
+
+        // Trava de força bruta por identificador: 10 tentativas a cada 15 min.
+        const chaveLimite = `login:${input.toLowerCase().trim()}`
+        if (!checarRateLimit(chaveLimite, 10, 15 * 60 * 1000).ok) return null
 
         // Detectar se é telefone ou email
         const isPhone = /^\+?\d[\d\s()-]{7,}$/.test(input.trim())
@@ -60,6 +65,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const senhaValida = await bcrypt.compare(password, usuario.senhaHash)
         if (!senhaValida) return null
+
+        limparRateLimit(chaveLimite)
 
         // Organização ativa (Fase 1: a primeira/única membership do usuário)
         const membership = await prisma.usuarioOrganizacao.findFirst({
