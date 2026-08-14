@@ -6,6 +6,7 @@ import { lerPlanilha, interpretarData, interpretarPrioridade } from "@/lib/plani
 import { departamentoValido } from "@/lib/departamentos"
 import { setResponsaveis } from "@/lib/responsaveis"
 import { calcularPeso } from "@/lib/peso-demanda"
+import { validarPrazo } from "@/lib/datas"
 
 // Planilha → demandas. Mão única de propósito (ver src/lib/planilha.ts).
 //
@@ -137,6 +138,15 @@ export async function POST(req: NextRequest) {
     }
     if (l.titulo.trim().length < 3) {
       falhas.push({ linha: l.linha, motivo: "título ausente ou curto demais" })
+      continue
+    }
+
+    // Prazo da planilha passa pela mesma regra do formulário. A linha é
+    // reportada em vez de importada com data inválida: corrigir a planilha é
+    // melhor do que descobrir depois uma demanda nascida atrasada.
+    const prazoPlanilha = validarPrazo(res.prazo)
+    if (!prazoPlanilha.ok) {
+      falhas.push({ linha: l.linha, motivo: prazoPlanilha.motivo })
       continue
     }
 
