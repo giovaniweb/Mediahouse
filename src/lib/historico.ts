@@ -14,21 +14,35 @@ import { prisma } from "@/lib/prisma"
 export { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 
-/** Campos cuja alteração vale contar, com o nome que a pessoa reconhece. */
+/**
+ * Campos cuja alteração vale contar, com o nome que a pessoa reconhece.
+ *
+ * A lista precisa espelhar o `updateData` do PUT de demanda: `registrarEdicao`
+ * compara chave a chave, então campo que nunca chega ao update jamais é detectado.
+ * Saíram daqui `tipoVideo`, `departamento`, `localEvento`, `dataEvento` e
+ * `detalhesEntrega` — cinco entradas que pareciam rastreadas e eram inalcançáveis.
+ * Entraram os campos que o update aceita e passavam despercebidos: entregas,
+ * postagem e impedimento.
+ *
+ * Campos de pessoa (videomaker, editor, responsável) NÃO entram aqui: este
+ * registro guarda só o nome do campo, e para eles é preciso saber quem entrou —
+ * ver `registrarTrocaExecutor` e `registrarTrocaResponsavel`.
+ */
 const CAMPOS_RASTREADOS: Record<string, string> = {
   titulo: "título",
   descricao: "descrição",
   dataLimite: "prazo",
+  dataCaptacao: "data de captação",
   prioridade: "prioridade",
-  tipoVideo: "tipo",
-  departamento: "departamento",
   cidade: "cidade",
-  localEvento: "local",
-  dataEvento: "data do evento",
   classificacao: "classificação",
   linhaProjetoId: "linha/projeto",
   linkBrutos: "link dos brutos",
-  detalhesEntrega: "detalhes de entrega",
+  linkFinal: "link do vídeo final",
+  linkPostagem: "link da postagem",
+  linkCliente: "link do cliente",
+  localGravacao: "local de gravação",
+  motivoImpedimento: "motivo do impedimento",
 }
 
 function mesmoValor(a: unknown, b: unknown): boolean {
@@ -79,6 +93,68 @@ export async function registrarEdicao(
       observacao: `Editou ${lista}`,
     },
   }).catch((e) => console.error("[Histórico] Falha ao registrar edição:", e))
+}
+
+/**
+ * Quem passou a executar a demanda — videomaker (captação) ou editor.
+ *
+ * Não dá para usar CAMPOS_RASTREADOS aqui: `registrarEdicao` grava só o NOME do
+ * campo ("Editou videomaker"), e a pergunta da equipe é "quem pegou a demanda
+ * pra executar" — precisa do nome da pessoa. Por isso este registro segue o
+ * formato de `registrarTrocaResponsavel`, que guarda quem entrou e quem saiu.
+ *
+ * Antes desta função, atribuir videomaker ou editor não deixava rastro nenhum.
+ */
+export async function registrarTrocaExecutor(
+  demandaId: string,
+  usuarioId: string,
+  papel: "videomaker" | "editor",
+  idAntes: string | null,
+  idDepois: string | null,
+  statusAtual: string,
+  organizacaoId: string
+) {
+  if ((idAntes ?? null) === (idDepois ?? null)) return
+
+  const rotulo = papel === "videomaker" ? "Videomaker" : "Editor"
+
+  // Busca escopada por organização: o id vem da própria demanda, mas resolver
+  // nome sem escopo abriria a porta para um chamador futuro passar um id de
+  // outra empresa e ver o nome dela no histórico.
+  //
+  // Os dois modelos são escopados de formas diferentes: Editor tem coluna
+  // própria, enquanto Videomaker é rede compartilhada de parceiros e se liga à
+  // empresa por VideomakerOrganizacao.
+  const nomeDe = async (id: string | null): Promise<string> => {
+    if (!id) return ""
+    const registro = papel === "videomaker"
+      ? await prisma.videomaker.findFirst({
+          where: { id, vinculos: { some: { organizacaoId } } },
+          select: { nome: true },
+        }).catch(() => null)
+      : await prisma.editor.findFirst({
+          where: { id, organizacaoId },
+          select: { nome: true },
+        }).catch(() => null)
+    return registro?.nome ?? "(removido)"
+  }
+
+  const [antes, depois] = await Promise.all([nomeDe(idAntes), nomeDe(idDepois)])
+
+  const texto = depois
+    ? antes ? `${rotulo}: ${antes} → ${depois}` : `${rotulo} atribuído: ${depois}`
+    : `${rotulo} removido (era ${antes})`
+
+  await prisma.historicoStatus.create({
+    data: {
+      demandaId,
+      statusAnterior: statusAtual,
+      statusNovo: EVENTO_RESPONSAVEL,
+      usuarioId,
+      origem: "manual",
+      observacao: texto,
+    },
+  }).catch((e) => console.error("[Histórico] Falha ao registrar executor:", e))
 }
 
 /** Quem assumiu (ou saiu de) uma demanda. */

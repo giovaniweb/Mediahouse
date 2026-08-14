@@ -7,19 +7,28 @@ import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
-import { dataPrazoPlausivel, MSG_DATA_INVALIDA } from "@/lib/datas"
-import { registrarEdicao, registrarTrocaResponsavel } from "@/lib/historico"
+import { validarPrazo, mesmoDia } from "@/lib/datas"
+import { erroDeCampo } from "@/lib/erros-api"
+import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } from "@/lib/historico"
 import type { Session } from "next-auth"
 
 type Params = { params: Promise<{ id: string }> }
 
-// Garante que a demanda pertence à org da sessão (404 se não). Retorna a org ativa.
-async function assertDemandaOrg(session: Session | null, id: string): Promise<{ organizacaoId: string } | NextResponse> {
+// Garante que a demanda pertence à org da sessão (404 se não). Retorna a org ativa
+// e o prazo já gravado — usado para não barrar a edição de uma demanda antiga cujo
+// prazo continua o mesmo (a regra "prazo >= hoje" vale para o que muda agora).
+async function assertDemandaOrg(
+  session: Session | null,
+  id: string
+): Promise<{ organizacaoId: string; dataLimiteAtual: Date | null } | NextResponse> {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
-  const dem = await prisma.demanda.findUnique({ where: { id }, select: { organizacaoId: true } })
+  const dem = await prisma.demanda.findUnique({
+    where: { id },
+    select: { organizacaoId: true, dataLimite: true },
+  })
   if (!pertenceAOrg(dem, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
-  return { organizacaoId }
+  return { organizacaoId, dataLimiteAtual: dem?.dataLimite ?? null }
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -93,15 +102,12 @@ function normalizarTextoObrigatorio(
 
   const valor = body[campo]
   if (typeof valor !== "string") {
-    return NextResponse.json({ error: `${label} inválido.` }, { status: 400 })
+    return erroDeCampo(campo, `${label} inválido.`)
   }
 
   const texto = valor.trim()
   if (texto.length < min) {
-    return NextResponse.json(
-      { error: `${label} deve ter pelo menos ${min} caracteres.` },
-      { status: 400 }
-    )
+    return erroDeCampo(campo, `${label} deve ter pelo menos ${min} caracteres.`)
   }
 
   body[campo] = texto
@@ -118,9 +124,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const body = await req.json()
 
   // A edição inline é a porta por onde as datas absurdas entraram (há prazos
-  // gravados no ano 0026 e no ano 0001) — aqui não havia checagem nenhuma.
-  if (body.dataLimite !== undefined && !dataPrazoPlausivel(body.dataLimite)) {
-    return NextResponse.json({ error: MSG_DATA_INVALIDA }, { status: 400 })
+  // gravados no ano 0026 e no ano 0001). O prazo só é checado quando MUDA: senão
+  // salvar o título de uma demanda antiga esbarraria no prazo vencido dela.
+  if (body.dataLimite !== undefined && !mesmoDia(body.dataLimite, guard.dataLimiteAtual)) {
+    const prazo = validarPrazo(body.dataLimite)
+    if (!prazo.ok) return erroDeCampo("dataLimite", prazo.motivo)
   }
 
   const erroTitulo = normalizarTextoObrigatorio(body, "titulo", "Título", 3)
@@ -611,6 +619,24 @@ export async function PUT(req: NextRequest, { params }: Params) {
         (antesDaEdicao?.responsaveis ?? []).map((r) => r.usuario?.nome).filter(Boolean) as string[],
         depois.map((r) => r.usuario?.nome).filter(Boolean) as string[],
         statusAtual
+      )
+    }
+
+    // Quem passou a executar. Era o buraco do histórico: atribuir videomaker ou
+    // editor não deixava rastro nenhum — e "quem pegou a demanda pra executar" é
+    // exatamente o que a equipe pediu para conseguir ver.
+    if (body.videomakerId !== undefined && demandaAntes) {
+      await registrarTrocaExecutor(
+        id, session.user.id, "videomaker",
+        demandaAntes.videomakerId, (body.videomakerId as string | null) || null,
+        statusAtual, guard.organizacaoId
+      )
+    }
+    if (body.editorId !== undefined && demandaAntes) {
+      await registrarTrocaExecutor(
+        id, session.user.id, "editor",
+        demandaAntes.editorId, (body.editorId as string | null) || null,
+        statusAtual, guard.organizacaoId
       )
     }
   }, "historico-edicao")

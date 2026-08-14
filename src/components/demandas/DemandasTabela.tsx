@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import {
   type DemandaLista, responsavelResumo, estaAtrasada, diasDeAtraso, LABEL_STATUS,
 } from "./tipos-visao"
+import { hojeEmSaoPaulo } from "@/lib/datas"
 
 // Visão Tabela: denso, ordenável e exportável. Existe para quem se organiza em
 // planilha — em vez de manter uma paralela no Excel e ficar sincronizando na mão,
@@ -40,18 +41,52 @@ function valorDaColuna(d: DemandaLista, c: Coluna): string | number {
   }
 }
 
+// Exportação para planilha.
+//
+// A versão anterior tinha 7 colunas e perdia dado: `produtos?.[0]` mostrava só o
+// primeiro equipamento e `responsavelResumo` só o principal. Quem tinha demanda
+// com 3 responsáveis (metade delas, no banco) exportava um. Agora vai tudo, e a
+// planilha serve para o controle interno que a equipe pediu.
 function paraCsv(demandas: DemandaLista[]): string {
-  const cab = ["Código", "Título", "Produto", "Status", "Responsável", "Prioridade", "Prazo"]
-  const escapar = (v: string) => `"${String(v).replace(/"/g, '""')}"`
-  const linhas = demandas.map((d) => [
-    d.codigo,
-    d.titulo,
-    d.produtos?.[0]?.produto?.nome ?? "",
-    LABEL_STATUS[d.statusVisivel] ?? d.statusVisivel,
-    responsavelResumo(d)?.nome ?? "",
-    d.prioridade,
-    d.dataLimite ? new Date(d.dataLimite).toLocaleDateString("pt-BR") : "",
-  ].map(escapar).join(";"))
+  const cab = [
+    "Código", "Título", "Status", "Prioridade",
+    "Prazo", "Criada em", "Finalizada em",
+    "Responsáveis", "Videomaker", "Editor", "Solicitante",
+    "Equipamentos", "Evento", "Comentários", "Arquivos",
+  ]
+
+  const escapar = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`
+  const data = (v?: string | null) => (v ? new Date(v).toLocaleDateString("pt-BR") : "")
+
+  const linhas = demandas.map((d) => {
+    // Todos os responsáveis: a M2M primeiro, com o escalar como reserva para
+    // demandas antigas que só têm a coluna derivada preenchida.
+    const responsaveis = (d.responsaveis ?? [])
+      .map((r) => r.usuario?.nome)
+      .filter(Boolean)
+    const listaResp = responsaveis.length > 0
+      ? responsaveis
+      : [d.responsavel?.nome, d.designer?.nome].filter(Boolean)
+
+    return [
+      d.codigo,
+      d.titulo,
+      LABEL_STATUS[d.statusVisivel] ?? d.statusVisivel,
+      d.prioridade,
+      data(d.dataLimite),
+      data(d.createdAt),
+      data(d.finalizadaEm),
+      listaResp.join(", "),
+      d.videomaker?.nome ?? "",
+      d.editor?.nome ?? "",
+      d.solicitante?.nome ?? "",
+      (d.produtos ?? []).map((p) => p.produto?.nome).filter(Boolean).join(", "),
+      d.eventoGestao?.nome ?? "",
+      d._count?.comentarios ?? 0,
+      d._count?.arquivos ?? 0,
+    ].map(escapar).join(";")
+  })
+
   // Ponto e vírgula e BOM para o Excel em português abrir sem passo de importação.
   return "﻿" + [cab.map(escapar).join(";"), ...linhas].join("\n")
 }
@@ -79,7 +114,7 @@ export function DemandasTabela({ demandas, onAbrir }: {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `demandas-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `demandas-${hojeEmSaoPaulo()}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

@@ -5,6 +5,9 @@ import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { sendWhatsappMessage, contourlineOrgId } from "@/lib/whatsapp"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { validarPrazo } from "@/lib/datas"
+import { erroDeZod } from "@/lib/erros-api"
+import { gerarTokenAnexo } from "@/lib/anexo-token"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -12,11 +15,19 @@ const schema = z.object({
   email: z.string().email("E-mail inválido"),
   telefone: z.string().min(10, "Telefone inválido"),
   empresa: z.string().optional(),
-  titulo: z.string().trim().min(3, "Título obrigatório (mín. 3 caracteres)"),
-  descricao: z.string().trim().min(10, "Descrição obrigatória (mín. 10 caracteres)"),
+  titulo: z.string().trim().min(3, "O título precisa ter pelo menos 3 caracteres."),
+  descricao: z.string().trim().min(10, "A descrição precisa ter pelo menos 10 caracteres."),
   tipoVideo: z.string().min(1),
   cidade: z.string().optional().default("N/A"),
-  dataLimite: z.string().optional(),
+  // Formulário público também é porta de entrada de prazo — antes gravava
+  // qualquer string sem checagem nenhuma.
+  dataLimite: z
+    .string()
+    .optional()
+    .superRefine((valor, ctx) => {
+      const r = validarPrazo(valor)
+      if (!r.ok) ctx.addIssue({ code: "custom", message: r.motivo })
+    }),
   dataEvento: z.string().optional(),
   localEvento: z.string().optional(),
   referencia: z.string().optional(),
@@ -41,7 +52,7 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body)
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
+    return erroDeZod(parsed.error)
   }
 
   const data = parsed.data
@@ -194,5 +205,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, codigo: demanda.codigo }, { status: 201 })
+  // Token de 30 min para anexar referência logo depois de enviar. O upload é por
+  // demandaId e a demanda só passa a existir aqui — sem isto, o formulário
+  // público continuaria aceitando apenas link.
+  return NextResponse.json(
+    { ok: true, codigo: demanda.codigo, anexoToken: gerarTokenAnexo(demanda.id) },
+    { status: 201 }
+  )
 }
