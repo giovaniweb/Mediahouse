@@ -892,13 +892,19 @@ async function solicitarDadosDemanda(input: Record<string, unknown>, organizacao
   const msgCompleta = `📋 *NuFlow — ${demanda.codigo}*\n\n${mensagem}\n\n_Responda esta mensagem com as informações solicitadas._`
 
   const resultado = await sendWhatsappMessage(telefone, msgCompleta, demanda.id, organizacaoId)
+  const enviado = !!resultado
 
+  // O texto de `mensagem` afirmava o envio mesmo com `resultado === null`. O
+  // agente lia isso e reportava ao gestor que o solicitante tinha sido avisado —
+  // pior que silêncio, é confirmação falsa. Agora a frase segue o que aconteceu.
   return JSON.stringify({
-    enviado: !!resultado,
+    enviado,
     telefone,
     demanda_codigo: demanda.codigo,
     dados_faltantes: (input.dados_faltantes as string) || "dados gerais",
-    mensagem: `Mensagem enviada para o solicitante de ${demanda.codigo}`,
+    mensagem: enviado
+      ? `Mensagem enviada para o solicitante de ${demanda.codigo}`
+      : `FALHA: não foi possível entregar a mensagem para ${telefone} (demanda ${demanda.codigo}). Não afirme ao usuário que o solicitante foi avisado.`,
   })
 }
 

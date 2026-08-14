@@ -34,6 +34,41 @@ async function resolverOrgEnvio(demandaId?: string, organizacaoId?: string | nul
   return contourlineOrgId() // fallback legado/temporário
 }
 
+/**
+ * Alterna o 9º dígito de um celular brasileiro: "55DD9XXXXXXXX" (13) vira
+ * "55DDXXXXXXXX" (12) e vice-versa. Devolve null quando não é celular BR.
+ *
+ * Contas antigas de WhatsApp têm o JID sem o 9 mesmo com o número comercial
+ * tendo — é a origem da maior parte das falhas de entrega.
+ */
+export function alternar9oDigito(numero: string): string | null {
+  if (!numero.startsWith("55")) return null
+  const ddd = numero.slice(2, 4)
+  const resto = numero.slice(4)
+  if (!/^\d{2}$/.test(ddd)) return null
+
+  if (resto.length === 9 && resto.startsWith("9")) return `55${ddd}${resto.slice(1)}`
+  if (resto.length === 8) return `55${ddd}9${resto}`
+  return null
+}
+
+function enviarTexto(
+  config: { instanceUrl: string; instanceId: string; apiKey: string },
+  numero: string,
+  mensagem: string
+) {
+  return fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: config.apiKey },
+    body: JSON.stringify({
+      number: numero,
+      textMessage: { text: mensagem },
+      options: { delay: 1200, presence: "composing" },
+    }),
+    signal: AbortSignal.timeout(15000),
+  })
+}
+
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null) {
   const orgId = await resolverOrgEnvio(demandaId, organizacaoId)
   const config = await getWhatsappConfig(orgId)
@@ -74,21 +109,26 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
   console.log(`[WhatsApp] Enviando para: ${numero} (original: ${telefone})`)
 
   try {
-    const res = await fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: config.apiKey,
-      },
-      body: JSON.stringify({
-        number: numero,
-        textMessage: { text: mensagem },
-        options: { delay: 1200, presence: "composing" },
-      }),
-      signal: AbortSignal.timeout(15000),
-    })
+    // O quirk do 9º dígito não é teórico: medido em produção, número de 13
+    // dígitos (com o 9) falhava em 706 de 874 envios — 81% — enquanto o de 12
+    // dígitos entregava 81%. A Evolution devolve "exists: false" quando o JID
+    // real da conta não tem o 9. Aqui tentamos o formato alternativo antes de
+    // desistir, em vez de registrar a falha e ficar quieto.
+    let res = await enviarTexto(config, numero, mensagem)
+    let json = await res.json().catch(() => ({}))
 
-    const json = await res.json()
+    const alternativo = alternar9oDigito(numero)
+    if (!res.ok && alternativo) {
+      console.warn(`[WhatsApp] ${numero} recusado (${res.status}) — tentando ${alternativo}`)
+      const res2 = await enviarTexto(config, alternativo, mensagem)
+      const json2 = await res2.json().catch(() => ({}))
+      if (res2.ok) {
+        console.log(`[WhatsApp] Entregue no formato alternativo: ${alternativo}`)
+        numero = alternativo
+      }
+      res = res2
+      json = json2
+    }
 
     if (!res.ok) {
       console.error(`[WhatsApp] Evolution API erro ${res.status}:`, JSON.stringify(json))

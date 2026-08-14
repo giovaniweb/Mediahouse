@@ -5,6 +5,12 @@ import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/cla
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 
+// As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
+// roda para TODAS as organizações em série, não declarava nada e herdava o
+// padrão da conta. É por isso que a rota precisa de uma varredura de execuções
+// presas: a função morria no meio e deixava a linha em "executando" para sempre.
+export const maxDuration = 300
+
 // GET /api/cron/agentes — automação periódica de agentes IA
 // Protegido por CRON_SECRET. Cada agente tem seu próprio schedule no vercel.json
 // (alertas, prazos, vistoria, limpeza, cobranca, lembretes, briefing). Cada execução
@@ -60,15 +66,54 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, agente, organizacoes: resultados.length, resultados })
 }
 
+/**
+ * Roda um agente de IA registrando início, fim E FALHA.
+ *
+ * Antes, o `update` para "concluido" vinha depois da chamada à IA, sem try/catch:
+ * se ela lançasse, a linha ficava "executando" para sempre. Foi o que criou a
+ * necessidade da varredura de execuções presas e do script
+ * prisma/limpar-execucoes-presas.mjs. A versão manual do mesmo agente
+ * (api/ia/agentes/prazos) já gravava "erro" corretamente.
+ */
+async function rodarComRegistro(
+  agente: string,
+  executar: () => Promise<{ resposta: string; tokens: number; ferramentasUsadas: string[] }>
+): Promise<{ resposta: string; tokens: number }> {
+  const execucao = await prisma.agenteExecucao.create({
+    data: { agente, status: "executando" },
+  })
+
+  try {
+    const { resposta, tokens, ferramentasUsadas } = await executar()
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      data: {
+        status: "concluido",
+        resultado: { analise: resposta },
+        tokens,
+        ferramentas: ferramentasUsadas,
+        finishedAt: new Date(),
+      },
+    })
+    return { resposta, tokens }
+  } catch (e) {
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      data: {
+        status: "erro",
+        erro: e instanceof Error ? e.message : String(e),
+        finishedAt: new Date(),
+      },
+    }).catch((err) => console.error(`[Cron] Falha ao registrar erro de ${agente}:`, err))
+    throw e
+  }
+}
+
 async function rodarAgenteAlertas(organizacaoId: string) {
   // Limpar snoozes expirados antes de rodar
   await prisma.alertaIA.updateMany({
     where: { organizacaoId, status: "ativo", snoozeAte: { lt: new Date(), not: null } },
     data: { snoozeAte: null },
-  })
-
-  const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "gerar-alertas-cron", status: "executando" },
   })
 
   const prompt = `Você é o sistema de monitoramento automático do NuFlow. Execute uma varredura rápida e objetiva:
@@ -80,20 +125,9 @@ async function rodarAgenteAlertas(organizacaoId: string) {
 
 Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das ações.`
 
-  const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_RAPIDO, 8
+  const { tokens } = await rodarComRegistro("gerar-alertas-cron", () =>
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_RAPIDO, 8)
   )
-
-  await prisma.agenteExecucao.update({
-    where: { id: execucao.id },
-    data: {
-      status: "concluido",
-      resultado: { analise: resposta },
-      tokens,
-      ferramentas: ferramentasUsadas,
-      finishedAt: new Date(),
-    },
-  })
 
   // NOTA: cobrança, briefing e lembretes têm crons dedicados próprios no vercel.json
   // (agente=cobranca/briefing/lembretes). Não rodar inline aqui — evita execução dupla
@@ -103,10 +137,6 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
 }
 
 async function rodarAgentePrazos(organizacaoId: string) {
-  const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "prazos-cron", status: "executando" },
-  })
-
   const prompt = `Agente de Prazos automático — execute as verificações de prazos e notifique via WhatsApp:
 
 1. buscar_demandas com em_atraso=true — envie mensagem de cobrança para cada videomaker atrasado
@@ -116,29 +146,14 @@ async function rodarAgentePrazos(organizacaoId: string) {
 
 Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissional.`
 
-  const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15
+  const { tokens } = await rodarComRegistro("prazos-cron", () =>
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
   )
-
-  await prisma.agenteExecucao.update({
-    where: { id: execucao.id },
-    data: {
-      status: "concluido",
-      resultado: { analise: resposta },
-      tokens,
-      ferramentas: ferramentasUsadas,
-      finishedAt: new Date(),
-    },
-  })
 
   return { agente: "prazos", tokens }
 }
 
 async function rodarAgenteVistoria(organizacaoId: string) {
-  const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "vistoria-cron", status: "executando" },
-  })
-
   const prompt = `Vistoria semanal automática do NuFlow:
 
 1. buscar_metricas — saúde geral
@@ -150,8 +165,8 @@ async function rodarAgenteVistoria(organizacaoId: string) {
 Envie um resumo executivo completo para cada gestor usando enviar_whatsapp.
 Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomakers.`
 
-  const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
-    prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15
+  const { resposta, tokens } = await rodarComRegistro("vistoria-cron", () =>
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
   )
 
   // Salva como RelatorioIA
@@ -167,17 +182,6 @@ Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomak
       },
     })
   } catch { /* ignora duplicata */ }
-
-  await prisma.agenteExecucao.update({
-    where: { id: execucao.id },
-    data: {
-      status: "concluido",
-      resultado: { analise: resposta },
-      tokens,
-      ferramentas: ferramentasUsadas,
-      finishedAt: new Date(),
-    },
-  })
 
   return { agente: "vistoria", tokens }
 }

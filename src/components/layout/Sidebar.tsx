@@ -21,6 +21,7 @@ import {
   LogOut,
   Lightbulb,
   MessageSquare,
+  MessageSquareWarning,
   FileText,
   Archive,
   PlayCircle,
@@ -32,6 +33,7 @@ import {
   Sparkles,
   Layers,
   VideoOff,
+  ScrollText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -39,6 +41,7 @@ import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
 import { GROWTH_ATIVO, EVENTOS_ATIVO, IDEIAS_ATIVO, MENSAGENS_ATIVO } from "@/lib/modulos"
 import { signOut } from "next-auth/react"
+import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
 
 const sections = [
   {
@@ -90,6 +93,10 @@ const sections = [
     items: [
       { href: "/ia", label: "Central IA", icon: BrainCircuit },
       { href: "/alertas", label: "Alertas IA", icon: Bell },
+      // A fila de avisos não entregues só era alcançável por um badge que sumia
+      // depois de 24 h — e /mensagens, a outra porta, está congelada. Resultado:
+      // 716 mensagens falharam em 30 dias sem ninguém ver. Agora tem porta fixa.
+      { href: "/mensagens-falhadas", label: "Avisos não entregues", icon: MessageSquareWarning },
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
       // Era item fixo do audiovisual: um relatório de diagnóstico promovido ao menu
       // principal. Continua acessível, mas junto dos outros relatórios.
@@ -100,6 +107,9 @@ const sections = [
     label: "Sistema",
     items: [
       { href: "/usuarios", label: "Usuários", icon: UserCog },
+      // O histórico existia só dentro do card: não havia como responder "o que
+      // mudou ontem" nem "o que fulano fez". Restrito a gestor pela própria rota.
+      { href: "/auditoria", label: "Registro de Auditoria", icon: ScrollText },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
     ],
   },
@@ -242,6 +252,8 @@ export function Sidebar() {
           </button>
         </div>
       )}
+
+      <VersaoNoAr />
     </aside>
   )
 }
