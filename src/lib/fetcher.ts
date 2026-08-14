@@ -30,7 +30,12 @@ export async function fetcher(url: string): Promise<any> {
 
     // Sessão expirada: manda para o login preservando para onde a pessoa queria
     // ir. Sem isto o usuário fica numa tela vazia sem entender o motivo.
-    if (res.status === 401 && typeof window !== "undefined") {
+    //
+    // Só redireciona quando o 401 veio do MIDDLEWARE (que marca `sessaoExpirada`).
+    // Um 401 emitido pela própria rota não vale: as páginas públicas de token
+    // (fornecedor, relatório executivo, aprovação) são abertas por gente sem
+    // conta nenhuma, e mandá-las para o login seria um beco sem saída.
+    if (erro.status === 401 && erro.sessaoExpirada && typeof window !== "undefined") {
       const destino = window.location.pathname + window.location.search
       if (!window.location.pathname.startsWith("/login")) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(destino)}`

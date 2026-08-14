@@ -14,12 +14,15 @@ import type { CamposComErro } from "@/lib/erros-api"
 export class ErroApi extends Error {
   readonly campos: CamposComErro
   readonly status: number
+  /** Veio do middleware por sessão caída — e não de um 401 da própria rota. */
+  readonly sessaoExpirada: boolean
 
-  constructor(mensagem: string, campos: CamposComErro = {}, status = 400) {
+  constructor(mensagem: string, campos: CamposComErro = {}, status = 400, sessaoExpirada = false) {
     super(mensagem)
     this.name = "ErroApi"
     this.campos = campos
     this.status = status
+    this.sessaoExpirada = sessaoExpirada
   }
 
   /** Há campo específico para marcar no formulário? */
@@ -56,7 +59,7 @@ export function erroDeCorpo(
   padrao = "Não foi possível concluir a ação."
 ): ErroApi {
   if (corpo && typeof corpo === "object") {
-    const { error, campos } = corpo as { error?: unknown; campos?: unknown }
+    const { error, campos, sessaoExpirada } = corpo as { error?: unknown; campos?: unknown; sessaoExpirada?: unknown }
     const camposValidos: CamposComErro = {}
     if (campos && typeof campos === "object") {
       for (const [k, v] of Object.entries(campos as Record<string, unknown>)) {
@@ -69,7 +72,7 @@ export function erroDeCorpo(
       typeof error === "string" && error.trim()
         ? error
         : (Object.values(camposValidos)[0] ?? `${padrao} (HTTP ${status})`)
-    return new ErroApi(mensagem, camposValidos, status)
+    return new ErroApi(mensagem, camposValidos, status, sessaoExpirada === true)
   }
 
   const recorte = textoOriginal.trim().slice(0, 200)
