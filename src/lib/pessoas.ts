@@ -15,9 +15,9 @@ export function dimensoesParaTipo(tipo: string): DimensoesPessoa {
     case "videomaker":      return { categoria: "externo", funcaoProfissional: "videomaker", areas: ["audiovisual"] }
     case "editor":          return { categoria: "interna", funcaoProfissional: "editor", areas: ["audiovisual"] }
     case "designer":        return { categoria: "interna", funcaoProfissional: "designer", areas: ["growth"] }
-    case "social":          return { categoria: "interna", funcaoProfissional: "social", areas: ["growth"] }
+    case "social":          return { categoria: "interna", funcaoProfissional: "social", areas: ["audiovisual", "growth"] }
     case "analista_crm":    return { categoria: "interna", funcaoProfissional: "analista_crm", areas: ["growth"] }
-    case "gestor_trafego":  return { categoria: "interna", funcaoProfissional: "gestor_trafego", areas: ["growth"] }
+    case "gestor_trafego":  return { categoria: "interna", funcaoProfissional: "gestor_trafego", areas: ["audiovisual", "growth"] }
     case "gestor_eventos":  return { categoria: "interna", funcaoProfissional: "gestor_eventos", areas: ["eventos"] }
     case "gestor":          return { categoria: "interna", funcaoProfissional: "gestor", areas: ["audiovisual", "growth"] }
     case "admin":           return { categoria: "interna", funcaoProfissional: "admin", areas: ["audiovisual", "growth"] }
