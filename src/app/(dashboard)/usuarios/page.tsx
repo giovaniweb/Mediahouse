@@ -604,7 +604,7 @@ export default function UsuariosPage() {
   const [deletingSistema, setDeletingSistema] = useState(false)
   const [promoverTipo, setPromoverTipo] = useState("operacao")
   const [loadingPromover, setLoadingPromover] = useState(false)
-  const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string } | null>(null)
+  const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string; areas?: string[] } | null>(null)
   const [mesclarModal, setMesclarModal] = useState<MesclarModal | null>(null)
 
   // Nova Pessoa form (categoria/função/áreas além do básico)
@@ -621,7 +621,13 @@ export default function UsuariosPage() {
   const videomakers = data?.videomakers ?? []
   const editores = data?.editores ?? []
 
-  const sistemaBase = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"].includes(u.tipo))
+  // As três abas particionam TODAS as pessoas: Sistema é o complemento das
+  // outras duas, não uma lista de tipos escrita à mão.
+  //
+  // Antes eram 10 tipos listados manualmente. Como o enum tem 12 e as outras
+  // abas cobrem 2, a conta fechava por coincidência — um 13º tipo faria a pessoa
+  // sumir das três abas ao mesmo tempo, sem erro nenhum. Agora ela cai aqui.
+  const sistemaBase = allUsuarios.filter(u => u.tipo !== "videomaker" && u.tipo !== "editor")
   const sistema = catFiltro === "todos" ? sistemaBase
     : catFiltro === "inativos" ? sistemaBase.filter(u => u.status === "inativo")
     : sistemaBase.filter(u => (u.categoria ?? "interna") === catFiltro)
@@ -1055,7 +1061,7 @@ export default function UsuariosPage() {
                       <div className="flex items-center justify-end gap-1">
                         {/* Permissões */}
                         <button
-                          onClick={() => setPermUser({ id: u.id, nome: u.nome, tipo: u.tipo })}
+                          onClick={() => setPermUser({ id: u.id, nome: u.nome, tipo: u.tipo, areas: u.areas })}
                           className="p-1.5 rounded-md text-zinc-500 hover:text-purple-400 hover:bg-purple-900/20 transition-colors"
                           title="Permissões"
                         >
@@ -1190,6 +1196,13 @@ export default function UsuariosPage() {
                             ) : null
                           })()}
                           <button
+                            onClick={() => setPermUser({ id: v.id, nome: v.nome, tipo: v.tipo, areas: (v as Usuario).areas })}
+                            className="p-1.5 rounded-md text-zinc-500 hover:text-purple-400 hover:bg-purple-900/20 transition-colors"
+                            title="Acesso: quadros, senha e permissões"
+                          >
+                            <Shield className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => abrirProfModal(v, "vm_ext")}
                             className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                             title="Editar / ver dados"
@@ -1280,6 +1293,13 @@ export default function UsuariosPage() {
                               </Link>
                             ) : null
                           })()}
+                          <button
+                            onClick={() => setPermUser({ id: e.id, nome: e.nome, tipo: e.tipo, areas: (e as Usuario).areas })}
+                            className="p-1.5 rounded-md text-zinc-500 hover:text-purple-400 hover:bg-purple-900/20 transition-colors"
+                            title="Acesso: quadros, senha e permissões"
+                          >
+                            <Shield className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => abrirProfModal(e, "vm_int")}
                             className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
@@ -1456,11 +1476,14 @@ export default function UsuariosPage() {
 
       {permUser && (
         <PermissoesModal
+          key={permUser.id}
           usuarioId={permUser.id}
           usuarioNome={permUser.nome}
           usuarioTipo={permUser.tipo}
+          usuarioAreas={permUser.areas}
           open={!!permUser}
           onClose={() => setPermUser(null)}
+          onSalvo={() => mutate()}
         />
       )}
 

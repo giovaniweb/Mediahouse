@@ -104,31 +104,31 @@ export async function GET(req: NextRequest) {
   const offsetParam = searchParams.get("offset")
   const limit = limitParam ? Math.min(200, parseInt(limitParam)) : undefined
   const offset = offsetParam ? parseInt(offsetParam) : undefined
-  let videomakerId = searchParams.get("videomakerId") ?? undefined
-  let designerId = searchParams.get("designerId") ?? undefined
+  const videomakerId = searchParams.get("videomakerId") ?? undefined
+  const designerId = searchParams.get("designerId") ?? undefined
   let area = searchParams.get("area") ?? undefined
   const eventoGestaoId = searchParams.get("eventoGestaoId") ?? undefined
   // Growth: filtro por responsável (Usuario interno) e por linha/projeto
   const responsavelId = searchParams.get("responsavelId") ?? undefined
   const linhaProjetoId = searchParams.get("linhaProjetoId") ?? undefined
 
-  // Auto-filtro: videomakers externos só veem suas próprias demandas
-  if (session.user.tipo === "videomaker") {
-    const vmRecord = await prisma.videomaker.findFirst({
-      where: { usuarioId: session.user.id },
-      select: { id: true },
+  // A separação entre as pessoas é por ÁREA, e a área vem da pessoa — não de uma
+  // lista de tipos escrita aqui. Quem atua nas duas vê as duas; quem atua em uma
+  // fica nela. Dentro da própria área, o quanto se enxerga é decidido por
+  // `verTodasDemandas`. É isso que o painel edita: mudar a área de alguém muda o
+  // que ele vê, sem tocar em código.
+  if (!ehGestor(session)) {
+    const membership = await prisma.usuarioOrganizacao.findUnique({
+      where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
+      select: { areas: true },
     })
-    if (vmRecord) videomakerId = vmRecord.id
-  }
-
-  // Auto-filtro: designer só vê suas artes (area=design)
-  if (session.user.tipo === "designer") {
-    const dRecord = await prisma.designer.findFirst({
-      where: { usuarioId: session.user.id },
-      select: { id: true },
-    })
-    if (dRecord) designerId = dRecord.id
-    area = "design"
+    const areas = membership?.areas ?? []
+    const veAudiovisual = areas.includes("audiovisual")
+    const veGrowth = areas.includes("growth")
+    // Só tranca quem tem exatamente um dos dois quadros. Sem área definida não
+    // tranca nada: o escopo de "minhas demandas" abaixo já cobre esse caso.
+    if (veAudiovisual && !veGrowth) area = "audiovisual"
+    else if (veGrowth && !veAudiovisual) area = "design"
   }
 
   // Escopo "minhas demandas": explícito via ?mine=1, ou imposto quando a pessoa
