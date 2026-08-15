@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { PermissoesModal } from "@/components/PermissoesModal"
 import { fetcher } from "@/lib/fetcher"
+import { mensagemDeErro } from "@/lib/erro-cliente"
 import { PainelPessoa } from "@/components/pessoas/PainelPessoa"
 import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
 import { AbaPerfis } from "@/components/pessoas/AbaPerfis"
@@ -500,7 +501,7 @@ export default function PessoasAcessosPage() {
   const [conflito, setConflito] = useState<{ id: string; nome: string; email: string | null; telefone: string | null } | null>(null)
   const [adicionandoEmail, setAdicionandoEmail] = useState(false)
 
-  const { data, mutate } = useSWR<{ usuarios: Usuario[]; videomakers: Profissional[]; editores: Profissional[] }>("/api/usuarios", fetcher)
+  const { data, error, isLoading, mutate } = useSWR<{ usuarios: Usuario[]; videomakers: Profissional[]; editores: Profissional[] }>("/api/usuarios", fetcher)
 
   const pessoas = useMemo(() => data?.usuarios ?? [], [data])
   const videomakers = data?.videomakers ?? []
@@ -1137,7 +1138,13 @@ export default function PessoasAcessosPage() {
                       <td colSpan={9} className="px-4 py-12 text-center">
                         <Users className="w-8 h-8 mx-auto mb-2 text-zinc-700" />
                         <p className="text-sm text-zinc-500">
-                          {filtroAtivo ? "Nenhuma pessoa com esses filtros." : "Nenhuma pessoa cadastrada ainda."}
+                          {error
+                          ? mensagemDeErro(error, "Não foi possível carregar as pessoas.")
+                          : isLoading
+                            ? "Carregando..."
+                            : filtroAtivo
+                              ? "Nenhuma pessoa com esses filtros."
+                              : "Nenhuma pessoa cadastrada ainda."}
                         </p>
                         {filtroAtivo && (
                           <button onClick={limparFiltros} className="text-xs text-purple-400 hover:text-purple-300 mt-2">
