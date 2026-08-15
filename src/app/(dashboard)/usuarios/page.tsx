@@ -621,7 +621,13 @@ export default function UsuariosPage() {
   const videomakers = data?.videomakers ?? []
   const editores = data?.editores ?? []
 
-  const sistemaBase = allUsuarios.filter(u => ["admin", "gestor", "operacao", "solicitante", "social", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin", "gestor_eventos"].includes(u.tipo))
+  // As três abas particionam TODAS as pessoas: Sistema é o complemento das
+  // outras duas, não uma lista de tipos escrita à mão.
+  //
+  // Antes eram 10 tipos listados manualmente. Como o enum tem 12 e as outras
+  // abas cobrem 2, a conta fechava por coincidência — um 13º tipo faria a pessoa
+  // sumir das três abas ao mesmo tempo, sem erro nenhum. Agora ela cai aqui.
+  const sistemaBase = allUsuarios.filter(u => u.tipo !== "videomaker" && u.tipo !== "editor")
   const sistema = catFiltro === "todos" ? sistemaBase
     : catFiltro === "inativos" ? sistemaBase.filter(u => u.status === "inativo")
     : sistemaBase.filter(u => (u.categoria ?? "interna") === catFiltro)
