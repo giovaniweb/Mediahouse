@@ -106,7 +106,10 @@ const sections = [
   {
     label: "Sistema",
     items: [
-      { href: "/usuarios", label: "Usuários", icon: UserCog },
+      // Pessoas & Acessos: uma lista só, com vínculo/equipe/nível como filtro.
+      // Substitui a partição por tipo que fazia a mesma equipe dar 3, 6 ou 7.
+      { href: "/pessoas", label: "Pessoas & Acessos", icon: Users },
+      { href: "/usuarios", label: "Usuários (antigo)", icon: UserCog },
       // O histórico existia só dentro do card: não havia como responder "o que
       // mudou ontem" nem "o que fulano fez". Restrito a gestor pela própria rota.
       { href: "/auditoria", label: "Registro de Auditoria", icon: ScrollText },
