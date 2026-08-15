@@ -197,6 +197,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     excluirDemanda: true,
     moverKanban: true,
     verKanban: true,
+    verTodasDemandas: true,
   },
 
   // Social Media (Growth) — conteúdo: demandas, artes, ideias
@@ -214,6 +215,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     excluirDemanda: true,
     moverKanban: true,
     verKanban: true,
+    verTodasDemandas: true,
   },
 
   // Analista CRM (Growth) — análise: relatórios, alertas, ideias
@@ -223,6 +225,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verRelatorios: true,
     verAlertas: true,
     verIdeias: true,
+    verTodasDemandas: true,
   },
 
   // Gestor de Tráfego (Growth) — criativos + análise
@@ -233,6 +236,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verIdeias: true,
     verProdutos: true,
     verDesign: true,
+    verTodasDemandas: true,
   },
 
   // Auxiliar Admin (Growth) — apoio amplo, sem financeiro/usuários/config
@@ -250,6 +254,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verCoberturas: true,
     gerenciarFornecedores: true,
     verRelatorios: true,
+    verTodasDemandas: true,
   },
 
   // Gestor de Eventos — gestão de eventos + acompanha os cards do evento nos
@@ -264,6 +269,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     gerenciarFornecedores: true,
     verDemandas: true,
     verDesign: true,
+    verTodasDemandas: true,
   },
 
   // Videomaker externo — dashboard dele, demandas dele, feedbacks, perfil
@@ -280,6 +286,7 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDashboard: true,
     verDesign: true,
     verKanban: false,
+    verTodasDemandas: true,
   },
 
   // Operação
