@@ -81,7 +81,7 @@ export default function EquipePage() {
   return (
     <>
       <Header
-        title="Videomakers Int"
+        title="Videomakers Internos"
         actions={
           <button
             onClick={() => setShowForm(true)}

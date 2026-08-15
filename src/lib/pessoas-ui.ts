@@ -38,7 +38,7 @@ export function vinculoDe(p: Pick<PessoaLista, "categoria">): Vinculo {
 
 export const VINCULO_LABEL: Record<Vinculo, string> = {
   interno: "Interno",
-  parceiro: "Parceiro",
+  parceiro: "Externo",
   sistema: "Sistema",
 }
 
