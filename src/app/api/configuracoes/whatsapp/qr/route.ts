@@ -45,11 +45,37 @@ export async function GET() {
 
       // Já conectado
       if (state === "open") {
+        // Guarda QUAL número está pareado. As colunas existiam e nunca eram
+        // preenchidas — por isso a tela só sabia mostrar uma bolinha verde, que
+        // continuava verde com a sessão morta. Sem o número, ninguém percebia.
+        let fone: string | null = null
+        let perfil: string | null = null
+        try {
+          const infoRes = await fetch(
+            `${base}/instance/fetchInstances?instanceName=${encodeURIComponent(config.instanceId)}`,
+            { headers, signal: AbortSignal.timeout(8000) }
+          )
+          if (infoRes.ok) {
+            const info = await infoRes.json()
+            const inst = Array.isArray(info) ? info[0] : info
+            const dados = inst?.instance ?? inst
+            const jid: string = dados?.owner ?? dados?.ownerJid ?? ""
+            fone = jid ? jid.split("@")[0].split(":")[0] : null
+            perfil = dados?.profileName ?? dados?.pushName ?? null
+          }
+        } catch { /* informativo: não impede reportar a conexão */ }
+
         await prisma.configWhatsapp.update({
           where: { id: config.id },
-          data: { ativo: true, lastStatus: "open", connectedAt: new Date() },
+          data: {
+            ativo: true,
+            lastStatus: "open",
+            connectedAt: new Date(),
+            ...(fone && { telefoneConectado: fone }),
+            ...(perfil && { pushName: perfil }),
+          },
         }).catch(() => null)
-        return NextResponse.json({ conectado: true, estado: "open" })
+        return NextResponse.json({ conectado: true, estado: "open", telefone: fone, perfil })
       }
 
       // Instância existe mas desconectada → buscar QR code
