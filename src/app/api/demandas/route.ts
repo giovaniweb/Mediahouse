@@ -104,32 +104,21 @@ export async function GET(req: NextRequest) {
   const offsetParam = searchParams.get("offset")
   const limit = limitParam ? Math.min(200, parseInt(limitParam)) : undefined
   const offset = offsetParam ? parseInt(offsetParam) : undefined
-  let videomakerId = searchParams.get("videomakerId") ?? undefined
-  let designerId = searchParams.get("designerId") ?? undefined
+  const videomakerId = searchParams.get("videomakerId") ?? undefined
+  const designerId = searchParams.get("designerId") ?? undefined
   let area = searchParams.get("area") ?? undefined
   const eventoGestaoId = searchParams.get("eventoGestaoId") ?? undefined
   // Growth: filtro por responsável (Usuario interno) e por linha/projeto
   const responsavelId = searchParams.get("responsavelId") ?? undefined
   const linhaProjetoId = searchParams.get("linhaProjetoId") ?? undefined
 
-  // Auto-filtro: videomakers externos só veem suas próprias demandas
-  if (session.user.tipo === "videomaker") {
-    const vmRecord = await prisma.videomaker.findFirst({
-      where: { usuarioId: session.user.id },
-      select: { id: true },
-    })
-    if (vmRecord) videomakerId = vmRecord.id
-  }
-
-  // Auto-filtro: designer só vê suas artes (area=design)
-  if (session.user.tipo === "designer") {
-    const dRecord = await prisma.designer.findFirst({
-      where: { usuarioId: session.user.id },
-      select: { id: true },
-    })
-    if (dRecord) designerId = dRecord.id
-    area = "design"
-  }
+  // A separação entre as pessoas é por ÁREA, não por pessoa: quem é do
+  // audiovisual não acompanha o quadro do Growth e vice-versa. Dentro da própria
+  // área, o que a pessoa enxerga é decidido por `verTodasDemandas` — antes essas
+  // travas de tipo prendiam videomaker e designer às próprias demandas e a
+  // permissão nem chegava a ser consultada.
+  if (session.user.tipo === "videomaker") area = "audiovisual"
+  if (session.user.tipo === "designer") area = "design"
 
   // Escopo "minhas demandas": explícito via ?mine=1, ou imposto quando a pessoa
   // NÃO tem `verTodasDemandas`. Essa permissão existia na tela de permissões mas

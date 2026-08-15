@@ -169,7 +169,9 @@ export function Sidebar() {
             <div className="space-y-0.5">
               {[
                 { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
-                { href: "/demandas", label: "Minhas Demandas", icon: Film },
+                // O videomaker enxerga o quadro do audiovisual inteiro, não só o
+                // que é dele — o rótulo antigo prometia menos do que a tela entrega.
+                { href: "/demandas", label: "Demandas", icon: Film },
                 { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
               ].map((item) => {
                 const Icon = item.icon

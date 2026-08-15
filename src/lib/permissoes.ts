@@ -278,6 +278,9 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDashboard: true,
     verDemandas: true,
     verKanban: false, // visualização em cards, não kanban
+    // Vê o quadro do audiovisual inteiro; a rota o prende a `area=audiovisual`,
+    // então o Growth continua fora do alcance.
+    verTodasDemandas: true,
   },
 
   // Designer — dashboard dele + quadro de artes (área design)
