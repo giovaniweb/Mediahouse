@@ -92,7 +92,7 @@ export default function VideomakersPage() {
   return (
     <>
       <Header
-        title="Videomakers Ext"
+        title="Videomakers Externos"
         actions={
           <button
             onClick={() => setShowForm(true)}

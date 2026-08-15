@@ -571,7 +571,7 @@ export default function PessoasAcessosPage() {
       aplicar: () => { limparFiltros(); setFStatus("inativo") },
     },
     {
-      label: "Parceiros", valor: pessoas.filter(p => vinculoDe(p) === "parceiro").length, Icon: ShieldCheck,
+      label: "Externos", valor: pessoas.filter(p => vinculoDe(p) === "parceiro").length, Icon: ShieldCheck,
       cor: "text-blue-400", bg: "bg-blue-500/10",
       ativo: fVinculo === "parceiro",
       aplicar: () => { limparFiltros(); setFVinculo("parceiro") },
@@ -981,7 +981,7 @@ export default function PessoasAcessosPage() {
               <Filtro valor={fVinculo} onChange={v => { setFVinculo(v); setPagina(1) }}>
                 <option value="todos">Todos os vínculos</option>
                 <option value="interno">Interno</option>
-                <option value="parceiro">Parceiro</option>
+                <option value="parceiro">Externo</option>
                 <option value="sistema">Sistema / Teste</option>
               </Filtro>
 

@@ -62,10 +62,11 @@ const sections = [
       { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria", label: "Galeria", icon: PlayCircle },
-      // "Ext" e "Int" eram jargão interno: fora = rede de parceiros contratados por
-      // diária, dentro = time da casa. Os nomes agora dizem isso.
-      { href: "/videomakers", label: "Rede de Parceiros", icon: Camera },
-      { href: "/equipe", label: "Equipe Interna", icon: Users },
+      // Externo = contratado por diária; interno = time da casa. O sistema inteiro
+      // diz "videomaker interno" e "videomaker externo", e só isso — eram cinco
+      // nomes para duas coisas, e cada tela usava um.
+      { href: "/videomakers", label: "Videomakers Externos", icon: Camera },
+      { href: "/equipe", label: "Videomakers Internos", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
       { href: "/historico", label: "Histórico", icon: Archive },
     ],
