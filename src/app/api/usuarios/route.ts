@@ -40,6 +40,37 @@ export async function GET(req: NextRequest) {
     orderBy: { usuario: { nome: "asc" } },
   })
 
+  // Última atividade — a coluna "quando essa pessoa apareceu por aqui".
+  //
+  // Não existe registro de login (a sessão é JWT, a tabela `sessions` não é
+  // usada), então a pergunta é respondida pelo rastro que a pessoa deixa
+  // trabalhando: mudança de status e comentário. Quem nunca aparece devolve
+  // `null` e a tela mostra "Nunca" — que é exatamente a informação útil aqui,
+  // já que essa é a conta que se pode desativar sem medo.
+  const ids = memberships.map((m) => m.usuario.id)
+  const ultimaAtividade = new Map<string, Date>()
+  if (ids.length > 0) {
+    const [historicos, comentarios] = await Promise.all([
+      prisma.historicoStatus.groupBy({
+        by: ["usuarioId"],
+        where: { usuarioId: { in: ids } },
+        _max: { createdAt: true },
+      }),
+      prisma.comentario.groupBy({
+        by: ["usuarioId"],
+        where: { usuarioId: { in: ids } },
+        _max: { createdAt: true },
+      }),
+    ])
+    for (const g of [...historicos, ...comentarios]) {
+      const id = g.usuarioId
+      const quando = g._max.createdAt
+      if (!id || !quando) continue
+      const atual = ultimaAtividade.get(id)
+      if (!atual || quando > atual) ultimaAtividade.set(id, quando)
+    }
+  }
+
   const usuarios = memberships.map((m) => ({
     ...m.usuario,
     papel: m.papel,
@@ -47,6 +78,7 @@ export async function GET(req: NextRequest) {
     funcaoProfissional: m.funcaoProfissional,
     areas: m.areas,
     liderAudiovisual: m.liderAudiovisual,
+    ultimaAtividade: ultimaAtividade.get(m.usuario.id) ?? null,
   }))
 
   if (busca) {
