@@ -16,6 +16,7 @@ import useSWR from "swr"
 import Link from "next/link"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
+import { PainelPessoa } from "@/components/pessoas/PainelPessoa"
 import { LABEL_VINCULO, LABEL_NIVEL, type Vinculo, type Nivel } from "@/lib/pessoas-vocabulario"
 import {
   Search, Users, UserCheck, UserX, MoreHorizontal, Plus,
@@ -70,6 +71,7 @@ export default function PessoasPage() {
   const [equipe, setEquipe] = useState("")
   const [nivel, setNivel] = useState("")
   const [menuAberto, setMenuAberto] = useState<string | null>(null)
+  const [pessoaAberta, setPessoaAberta] = useState<string | null>(null)
 
   const params = new URLSearchParams({ grupo })
   if (buscaAtiva) params.set("busca", buscaAtiva)
@@ -202,7 +204,12 @@ export default function PessoasPage() {
                   {pessoas.map((p) => (
                     <tr key={p.id} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-800/40">
                       <td className="px-4 py-2.5">
-                        <span className="block text-zinc-200 truncate">{p.nome}</span>
+                        <button
+                          onClick={() => setPessoaAberta(p.id)}
+                          className="block text-left text-zinc-200 truncate hover:text-purple-300 transition-colors w-full"
+                        >
+                          {p.nome}
+                        </button>
                         {p.email && <span className="block text-[11px] text-zinc-500 truncate">{p.email}</span>}
                       </td>
                       <td className="px-3 py-2.5 text-zinc-400 truncate">{p.funcao || "—"}</td>
@@ -251,6 +258,12 @@ export default function PessoasPage() {
                             <span className="absolute right-4 top-9 z-20 w-52 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl py-1 text-left">
                               {/* Fase 2 traz o painel lateral; por ora as ações levam
                                   ao fluxo que já existe, sem reimplementar nada. */}
+                              <button
+                                onClick={() => { setPessoaAberta(p.id); setMenuAberto(null) }}
+                                className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 w-full text-left"
+                              >
+                                <Users className="w-3.5 h-3.5" /> Ver detalhes
+                              </button>
                               <Link
                                 href="/usuarios"
                                 className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
@@ -288,6 +301,8 @@ export default function PessoasPage() {
           </>
         )}
       </div>
+
+      <PainelPessoa pessoaId={pessoaAberta} onFechar={() => setPessoaAberta(null)} />
     </>
   )
 }
