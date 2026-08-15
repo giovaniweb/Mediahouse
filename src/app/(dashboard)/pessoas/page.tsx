@@ -17,6 +17,7 @@ import Link from "next/link"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
 import { PainelPessoa } from "@/components/pessoas/PainelPessoa"
+import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
 import { LABEL_VINCULO, LABEL_NIVEL, type Vinculo, type Nivel } from "@/lib/pessoas-vocabulario"
 import {
   Search, Users, UserCheck, UserX, MoreHorizontal, Plus,
@@ -72,6 +73,7 @@ export default function PessoasPage() {
   const [nivel, setNivel] = useState("")
   const [menuAberto, setMenuAberto] = useState<string | null>(null)
   const [pessoaAberta, setPessoaAberta] = useState<string | null>(null)
+  const [abaAtiva, setAbaAtiva] = useState<"pessoas" | "equipes">("pessoas")
 
   const params = new URLSearchParams({ grupo })
   if (buscaAtiva) params.set("busca", buscaAtiva)
@@ -105,17 +107,28 @@ export default function PessoasPage() {
 
         {/* Abas — Equipes e Perfis chegam nas fases 3 e 4 */}
         <div className="flex gap-1 border-b border-zinc-800">
-          <span className="px-4 py-2 text-sm font-medium text-zinc-100 border-b-2 border-purple-500 -mb-px">
-            Pessoas
-          </span>
-          <span className="px-4 py-2 text-sm text-zinc-600 cursor-not-allowed" title="Chega na fase 3">
-            Equipes
-          </span>
+          {([["pessoas", "Pessoas"], ["equipes", "Equipes"]] as const).map(([id, rot]) => (
+            <button
+              key={id}
+              onClick={() => setAbaAtiva(id)}
+              className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+                abaAtiva === id
+                  ? "font-medium text-zinc-100 border-purple-500"
+                  : "text-zinc-500 border-transparent hover:text-zinc-300"
+              }`}
+            >
+              {rot}
+            </button>
+          ))}
           <span className="px-4 py-2 text-sm text-zinc-600 cursor-not-allowed" title="Chega na fase 4">
             Perfis de Acesso
           </span>
         </div>
 
+        {abaAtiva === "equipes" ? (
+          <AbaEquipes onAbrirPessoa={setPessoaAberta} />
+        ) : (
+        <>
         {/* Resumo. Conta a MESMA lista da tabela — era daí que vinha a divergência. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card icone={Users} rotulo="Total de pessoas" valor={r?.total} cor="text-zinc-200" />
@@ -299,6 +312,8 @@ export default function PessoasPage() {
               </table>
             </div>
           </>
+        )}
+        </>
         )}
       </div>
 
