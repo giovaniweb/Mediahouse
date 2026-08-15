@@ -627,7 +627,7 @@ export default function UsuariosPage() {
   // Antes eram 10 tipos listados manualmente. Como o enum tem 12 e as outras
   // abas cobrem 2, a conta fechava por coincidência — um 13º tipo faria a pessoa
   // sumir das três abas ao mesmo tempo, sem erro nenhum. Agora ela cai aqui.
-  const sistemaBase = allUsuarios.filter(u => u.tipo !== "videomaker" && u.tipo !== "editor")
+  const sistemaBase = allUsuarios
   const sistema = catFiltro === "todos" ? sistemaBase
     : catFiltro === "inativos" ? sistemaBase.filter(u => u.status === "inativo")
     : sistemaBase.filter(u => (u.categoria ?? "interna") === catFiltro)
@@ -640,9 +640,9 @@ export default function UsuariosPage() {
   const currentList = subTab === "sistema" ? filtrar(sistema) : subTab === "vm_ext" ? filtrar(vmExt) : filtrar(vmInt)
 
   const subTabs = [
-    { id: "sistema" as SubTab, label: "Sistema", icon: Shield, count: sistema.length },
-    { id: "vm_ext" as SubTab, label: "Videomakers Ext", icon: Camera, count: vmExt.length },
-    { id: "vm_int" as SubTab, label: "Videomakers Int", icon: Film, count: vmInt.length },
+    { id: "sistema" as SubTab, label: "Pessoas", icon: Users, count: sistema.length },
+    { id: "vm_ext" as SubTab, label: "Parceiros", icon: Camera, count: vmExt.length },
+    { id: "vm_int" as SubTab, label: "Equipe interna", icon: Film, count: vmInt.length },
   ]
 
   // ── Actions ──────────────────────────────────────────────────────────────
