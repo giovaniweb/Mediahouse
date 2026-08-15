@@ -831,6 +831,34 @@ export default function UsuariosPage() {
 
       <main className="flex-1 p-6 space-y-5">
 
+        {/* ── Números da equipe ──────────────────────────────────────────────
+            Antes era preciso somar as três abas de cabeça para responder
+            "quantas pessoas eu tenho". Os números saem da mesma lista que
+            alimenta a tabela, então não existe cenário em que discordem. */}
+        <div>
+          <p className="text-sm text-zinc-500 -mt-1 mb-4">
+            Gerencie todas as pessoas, equipes e níveis de acesso do NuFlow.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Total de pessoas", valor: allUsuarios.length, Icon: Users, cor: "text-purple-400", bg: "bg-purple-500/10" },
+              { label: "Ativas", valor: allUsuarios.filter(u => u.status === "ativo").length, Icon: CheckCircle2, cor: "text-emerald-400", bg: "bg-emerald-500/10" },
+              { label: "Inativas", valor: allUsuarios.filter(u => u.status !== "ativo").length, Icon: XCircle, cor: "text-zinc-400", bg: "bg-zinc-500/10" },
+              { label: "Parceiros externos", valor: vmExt.length, Icon: Camera, cor: "text-amber-400", bg: "bg-amber-500/10" },
+            ].map(c => (
+              <div key={c.label} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3.5">
+                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", c.bg)}>
+                  <c.Icon className={cn("w-4.5 h-4.5", c.cor)} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-zinc-500 leading-tight truncate">{c.label}</p>
+                  <p className="text-xl font-semibold text-zinc-100 leading-tight">{c.valor}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ── Sub-tabs ── */}
         <div className="flex items-center gap-0 border-b border-zinc-800">
           {subTabs.map(t => {
