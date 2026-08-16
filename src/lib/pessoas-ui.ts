@@ -26,25 +26,29 @@ export interface PessoaLista {
 // ─── Vínculo ─────────────────────────────────────────────────────────────────
 // Quem está na casa x quem é de fora. Solicitante é interno: pede demanda de
 // dentro da empresa.
+//
+// A chave é "externo", não "parceiro": o vocabulário da casa é videomaker
+// interno / videomaker externo, e sinônimo que mora no código volta para a tela
+// mais cedo ou mais tarde.
 
-export type Vinculo = "interno" | "parceiro" | "sistema"
+export type Vinculo = "interno" | "externo" | "sistema"
 
 export function vinculoDe(p: Pick<PessoaLista, "categoria">): Vinculo {
   const c = p.categoria ?? "interna"
-  if (c === "externo") return "parceiro"
+  if (c === "externo") return "externo"
   if (c === "sistema") return "sistema"
   return "interno"
 }
 
 export const VINCULO_LABEL: Record<Vinculo, string> = {
   interno: "Interno",
-  parceiro: "Externo",
+  externo: "Externo",
   sistema: "Sistema",
 }
 
 export const VINCULO_COR: Record<Vinculo, string> = {
   interno: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-  parceiro: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  externo: "bg-amber-500/10 text-amber-400 border-amber-500/30",
   sistema: "bg-zinc-500/10 text-zinc-400 border-zinc-700",
 }
 
@@ -89,7 +93,7 @@ export function perfilDe(p: Pick<PessoaLista, "tipo" | "categoria" | "liderAudio
   if (p.tipo === "gestor") return "gestor"
   if (p.liderAudiovisual) return "lider"
   if (p.tipo === "solicitante") return "solicitante"
-  if (vinculoDe(p) === "parceiro") return "executor_ext"
+  if (vinculoDe(p) === "externo") return "executor_ext"
   return "executor"
 }
 
@@ -107,7 +111,7 @@ export const PERFIL_DESCRICAO: Record<PerfilAcesso, string> = {
   gestor: "Gerencia equipe, demandas e aprovações.",
   lider: "Gerencia as demandas da própria equipe.",
   executor: "Trabalha nas demandas atribuídas.",
-  executor_ext: "Acesso limitado para parceiros externos.",
+  executor_ext: "Acesso limitado para videomakers externos.",
   solicitante: "Cria demandas e acompanha solicitações.",
 }
 
