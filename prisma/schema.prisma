@@ -709,6 +709,12 @@ model MensagemWhatsapp {
   mediaType    String?         // MIME type (ex: "image/jpeg", "audio/ogg")
   direcao      DirecaoWhatsapp @default(saida)
   status       String          @default("enviado")
+  // O motivo da falha, vindo da Evolution. Sem isto, `status: "falhou"` era tudo
+  // que ficava registrado: em 15/08/2026 foram 21 falhas seguidas sem uma linha
+  // dizendo o porquê, e o diagnóstico levou horas para chegar a "a sessão do
+  // WhatsApp morreu" — informação que a Evolution devolvia em cada resposta.
+  erro         String?
+  tentativas   Int             @default(1)
   createdAt    DateTime        @default(now())
 
   demanda Demanda? @relation(fields: [demandaId], references: [id])
