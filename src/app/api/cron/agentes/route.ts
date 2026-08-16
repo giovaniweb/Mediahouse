@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
@@ -51,10 +52,10 @@ export async function GET(req: NextRequest) {
       let r: Record<string, unknown>
       if (agente === "prazos") r = await rodarAgentePrazos(org.id)
       else if (agente === "vistoria") r = await rodarAgenteVistoria(org.id)
-      else if (agente === "cobranca") r = await rodarAgenteCobranca(org.id)
-      else if (agente === "lembretes") r = await rodarAgenteLembretes(org.id)
-      else if (agente === "briefing") r = await rodarAgenteBriefing(org.id)
-      else if (agente === "limpeza") r = await rodarAgenteLimpeza(org.id)
+      else if (agente === "cobranca") r = await registrarExecucao("cobranca-cron", () => rodarAgenteCobranca(org.id))
+      else if (agente === "lembretes") r = await registrarExecucao("lembretes-cron", () => rodarAgenteLembretes(org.id))
+      else if (agente === "briefing") r = await registrarExecucao("briefing-cron", () => rodarAgenteBriefing(org.id))
+      else if (agente === "limpeza") r = await registrarExecucao("limpeza-cron", () => rodarAgenteLimpeza(org.id))
       else r = await rodarAgenteAlertas(org.id)
       resultados.push({ organizacaoId: org.id, ...r })
     } catch (e) {
@@ -96,6 +97,46 @@ async function rodarComRegistro(
       },
     })
     return { resposta, tokens }
+  } catch (e) {
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      data: {
+        status: "erro",
+        erro: e instanceof Error ? e.message : String(e),
+        finishedAt: new Date(),
+      },
+    }).catch((err) => console.error(`[Cron] Falha ao registrar erro de ${agente}:`, err))
+    throw e
+  }
+}
+
+/**
+ * Registra a execução de um agente que não usa IA (cobrança, lembretes,
+ * briefing, limpeza).
+ *
+ * Estes quatro só deixavam vestígio quando ACHAVAM trabalho: sem custo vencido,
+ * a cobrança rodava e não gravava nada. O efeito colateral é que a pergunta
+ * "esse cron chegou a ser registrado na Vercel?" não tinha resposta dentro do
+ * sistema — em 16/08/2026 dava para provar que alertas, prazos, vistoria e
+ * briefing rodavam, e era impossível dizer o mesmo dos outros. Agora toda
+ * execução deixa linha, inclusive a que não fez nada, e a resposta mora aqui.
+ */
+async function registrarExecucao<T extends Record<string, unknown>>(
+  agente: string,
+  executar: () => Promise<T>
+): Promise<T> {
+  const execucao = await prisma.agenteExecucao.create({
+    data: { agente, status: "executando" },
+  })
+
+  try {
+    const resultado = await executar()
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      // Prisma.InputJsonObject: o resultado é sempre um objeto raso de contadores.
+      data: { status: "concluido", resultado: resultado as Prisma.InputJsonObject, finishedAt: new Date() },
+    })
+    return resultado
   } catch (e) {
     await prisma.agenteExecucao.update({
       where: { id: execucao.id },
