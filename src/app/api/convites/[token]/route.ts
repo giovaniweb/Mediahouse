@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
@@ -142,10 +143,7 @@ export async function POST(
  */
 async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
   try {
-    const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
         await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)

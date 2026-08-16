@@ -20,6 +20,8 @@ export interface PessoaLista {
   funcaoProfissional?: string | null
   areas?: string[]
   liderAudiovisual?: boolean
+  /** Recebe todo aviso da operação no WhatsApp, independente do cargo. */
+  recebeTodosAvisos?: boolean
   ultimaAtividade?: string | null
 }
 

@@ -196,6 +196,7 @@ function ModalEditarUsuario({
   const [funcao, setFuncao] = useState(usuario.funcaoProfissional ?? "")
   const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
   const [lider, setLider] = useState(usuario.liderAudiovisual ?? false)
+  const [recebeTudo, setRecebeTudo] = useState(usuario.recebeTodosAvisos ?? false)
   const [novaSenha, setNovaSenha] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [mostrar, setMostrar] = useState(false)
@@ -225,7 +226,7 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas, liderAudiovisual: lider }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo }
       if (novaSenha) body.novaSenha = novaSenha
       const res = await fetch(`/api/usuarios/${usuario.id}`, {
         method: "PATCH",
@@ -299,6 +300,25 @@ function ModalEditarUsuario({
               </div>
             </div>
           </div>
+          {/* Recebe todos os avisos — separado do cargo de propósito: antes,
+              acompanhar a operação exigia virar gestor, o que dá acesso total
+              ao sistema junto. Aqui é só o WhatsApp apitando. */}
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">Recebe todos os avisos</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Toda movimentação da operação chega no WhatsApp desta pessoa. Não altera permissão nenhuma.
+                {(tipo === "admin" || tipo === "gestor") && (
+                  <span className="text-zinc-500"> Admin e gestor já recebem por padrão.</span>
+                )}
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={recebeTudo} onClick={() => setRecebeTudo(v => !v)}
+              className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${recebeTudo ? "bg-emerald-600" : "bg-zinc-700"}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${recebeTudo ? "left-[18px]" : "left-0.5"}`} />
+            </button>
+          </div>
+
           {categoria === "interna" && areas.includes("audiovisual") && (
             <div className="flex items-start justify-between gap-3 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-3">
               <div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
+import { quemRecebeTudo } from "@/lib/notificados"
 import { StatusInterno } from "@prisma/client"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
@@ -244,10 +245,7 @@ async function salvarCacheLid(lidJid: string, realJid: string, telefone: string,
  */
 async function notificarAdminLidNaoResolvido(lidJid: string, pushName: string, lidNumber: string, organizacaoId?: string | null) {
   try {
-    const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const admins = await quemRecebeTudo(organizacaoId)
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(
@@ -331,10 +329,7 @@ async function notificarAdminNovaDemanda(
   organizacaoId?: string | null
 ) {
   try {
-    const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true, nome: true },
-    })
+    const admins = await quemRecebeTudo(organizacaoId)
     const origem = identidadeTipo === "desconhecido" || identidadeTipo === "externo"
       ? "📌 Solicitante EXTERNO"
       : `📌 ${identidadeTipo}`
@@ -1109,10 +1104,7 @@ REGRAS DE AGENDA:
  */
 async function notificarAdminNovoContato(nome: string, telefone: string, mensagem: string, organizacaoId?: string | null) {
   try {
-    const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const admins = await quemRecebeTudo(organizacaoId)
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(
@@ -1132,10 +1124,7 @@ async function notificarAdminNovoContato(nome: string, telefone: string, mensage
  */
 async function notificarAdminMovimentacao(codigo: string, titulo: string, nome: string, acao: string, organizacaoId?: string | null) {
   try {
-    const admins = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const admins = await quemRecebeTudo(organizacaoId)
     for (const admin of admins) {
       if (admin.telefone) {
         await sendWhatsappMessage(

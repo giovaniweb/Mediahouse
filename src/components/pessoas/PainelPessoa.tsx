@@ -8,7 +8,7 @@
 
 import { useState } from "react"
 import {
-  X, Mail, Phone, Copy, Check, CalendarDays, Link2, Briefcase, Users2, Award,
+  X, Mail, Phone, Copy, Check, CalendarDays, Link2, Briefcase, Users2, Award, BellRing,
   ShieldCheck, CircleDot, Clock, Pencil, ChevronDown, KeyRound, GitMerge,
   Power, Trash2, ExternalLink,
 } from "lucide-react"
@@ -98,6 +98,8 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   const funcao = funcaoDe(pessoa)
   const areas = pessoa.areas ?? []
   const ativo = pessoa.status === "ativo"
+  // Mesma regra de lib/notificados.ts: por cargo OU por escolha explícita.
+  const recebeTudo = pessoa.recebeTodosAvisos || pessoa.tipo === "admin" || pessoa.tipo === "gestor"
 
   const acoesMenu = [
     { label: "Redefinir senha", Icon: KeyRound, run: acoes.onSenha, cor: "text-zinc-300" },
@@ -212,6 +214,16 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
               </Linha>
               <Linha icon={Clock} rotulo="Última atividade">
                 {formatarAtividade(pessoa.ultimaAtividade)}
+              </Linha>
+              <Linha icon={BellRing} rotulo="Avisos no WhatsApp">
+                {recebeTudo ? (
+                  <span className="text-sm text-emerald-400">
+                    Recebe todos
+                    {!pessoa.recebeTodosAvisos && <span className="text-zinc-500"> (por ser {NIVEL_LABEL[nivel].toLowerCase()})</span>}
+                  </span>
+                ) : (
+                  <span className="text-sm text-zinc-400">Só o que é dela</span>
+                )}
               </Linha>
             </Secao>
 
