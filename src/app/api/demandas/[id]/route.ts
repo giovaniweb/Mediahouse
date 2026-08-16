@@ -590,7 +590,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // nenhum — só mudança de status entrava no histórico.
   const antesDaEdicao = await prisma.demanda.findUnique({
     where: { id },
-    include: { responsaveis: { select: { usuario: { select: { nome: true } } } } },
+    include: { responsaveis: { select: { usuario: { select: { id: true, nome: true } } } } },
   })
 
   const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
@@ -609,6 +609,26 @@ export async function PUT(req: NextRequest, { params }: Params) {
     await registrarEdicao(id, session.user.id, antesDaEdicao, updateData, statusAtual)
 
     if (responsaveisPut !== undefined) {
+      // Avisa QUEM ENTROU — só os novos, e nunca quem se atribuiu sozinho.
+      // Videomaker e editor sempre receberam WhatsApp ao serem escalados; o
+      // responsável do Growth não recebia nada e só descobria o trabalho
+      // abrindo o sistema.
+      const jaEram = new Set((antesDaEdicao?.responsaveis ?? []).map((r) => r.usuario?.id).filter(Boolean))
+      const novos = (responsaveisPut ?? []).filter((uid) => !jaEram.has(uid) && uid !== session.user.id)
+      if (novos.length > 0) {
+        const pessoas = await prisma.usuario.findMany({
+          where: { id: { in: novos }, status: "ativo", telefone: { not: null } },
+          select: { telefone: true },
+        })
+        const prazo = demanda.dataLimite
+          ? new Date(demanda.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+          : null
+        const msg = templates.responsavelAtribuido(demanda.codigo, demanda.titulo, prazo)
+        await Promise.allSettled(
+          pessoas.map((p) => sendWhatsappMessage(p.telefone!, msg, id, guard.organizacaoId))
+        )
+      }
+
       const depois = await prisma.demandaResponsavel.findMany({
         where: { demandaId: id },
         select: { usuario: { select: { nome: true } } },
