@@ -6,109 +6,10 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
+import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
-
-// ─── Mensagens automáticas por mudança de Kanban ──────────────────────────────
-function mensagemKanban(
-  statusNovo: string,
-  codigo: string,
-  titulo: string,
-  destinatario: "videomaker" | "solicitante" | "gestor" | "editor",
-  extra?: string
-): string | null {
-  // Identifica a demanda no meio da frase, não como bloco de campos rotulados.
-  const ref = `${titulo} (${codigo})`
-  // `extra` chega como observação OU como link final (ver chamador). Só vale
-  // como link se de fato for uma URL — senão viraria uma observação apresentada
-  // como se fosse clicável.
-  const link = extra && /^https?:\/\//i.test(extra) ? extra : null
-  type Dest = "videomaker" | "solicitante" | "gestor" | "editor"
-  type Mapa = Record<string, Partial<Record<Dest, string | null>>>
-
-  // Mesma voz dos templates de src/lib/whatsapp.ts: primeira linha diz o que
-  // aconteceu e o que fazer, um emoji, sem cabeçalho repetindo a marca.
-  const mapa: Mapa = {
-    videomaker_notificado: {
-      videomaker: `🎬 Você foi escalado para ${ref}.\n\nResponda *SIM* para confirmar ou *NÃO* para recusar.`,
-      solicitante: `🎬 Já temos um profissional para ${ref}. Avisamos assim que ele confirmar.`,
-      gestor: null,
-      editor: null,
-    },
-    videomaker_aceitou: {
-      videomaker: null,
-      solicitante: `✅ Captação de ${ref} confirmada pelo profissional.`,
-      gestor: `✅ Videomaker aceitou ${ref}.`,
-      editor: null,
-    },
-    videomaker_recusou: {
-      videomaker: null,
-      solicitante: `⏳ Estamos trocando o profissional de ${ref}. Avisamos em breve.`,
-      gestor: `⚠️ Videomaker recusou ${ref} — precisa escalar outro.`,
-      editor: null,
-    },
-    captacao_agendada: {
-      videomaker: `📅 Captação de ${ref} agendada.${extra ? `\n\n${extra}` : ""}`,
-      solicitante: `📅 A captação de ${ref} foi agendada.${extra ? `\n\n${extra}` : ""}`,
-      gestor: null,
-      editor: null,
-    },
-    brutos_enviados: {
-      videomaker: null,
-      solicitante: null,
-      gestor: `📤 Brutos de ${ref} chegaram e seguiram para edição.`,
-      editor: `📦 Os brutos de ${ref} chegaram — pode começar a edição.`,
-    },
-    editando: {
-      videomaker: null,
-      solicitante: `✂️ ${ref} entrou em edição. Avisamos quando ficar pronto.`,
-      gestor: null,
-      editor: `✂️ ${ref} está com você para editar.`,
-    },
-    edicao_finalizada: {
-      videomaker: null,
-      solicitante: `🎥 A edição de ${ref} ficou pronta. Já já mandamos o link para você aprovar.`,
-      gestor: `🎥 ${ref} editado, aguardando aprovação do cliente.`,
-      editor: `🎉 Edição de ${ref} entregue. Valeu!`,
-    },
-    // Antes esta mensagem morava em "aguardando_aprovacao_cliente", que não
-    // existe no enum StatusInterno — ou seja, o aviso com o link de aprovação
-    // nunca chegou a ser enviado. O status real desta etapa é revisao_pendente.
-    revisao_pendente: {
-      videomaker: null,
-      solicitante: `👀 Seu vídeo de ${ref} está pronto para revisão.\n\n${link ? `Assista e aprove — ou peça ajustes — por aqui:\n${link}` : "Acesse o sistema para aprovar ou pedir ajustes."}`,
-      gestor: `👀 ${ref} aguardando aprovação do cliente.`,
-      editor: null,
-    },
-    aprovado: {
-      videomaker: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
-      solicitante: `🎉 ${ref} aprovado! Seguimos para a publicação.`,
-      gestor: `✅ ${ref} aprovado.`,
-      editor: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
-    },
-    ajuste_solicitado: {
-      videomaker: null,
-      solicitante: `🔄 Recebemos seu retorno sobre ${ref} e já estamos ajustando. Avisamos quando a nova versão sair.`,
-      gestor: `🔄 Ajustes pedidos em ${ref} — editor já foi avisado.`,
-      editor: `🔄 O cliente pediu ajustes em ${ref}${extra ? `:\n\n_"${extra}"_` : "."}\n\nO retorno completo está no sistema.`,
-    },
-    postado: {
-      videomaker: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
-      solicitante: `🎉 ${ref} está no ar!`,
-      gestor: null,
-      editor: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
-    },
-    impedimento: {
-      videomaker: null,
-      solicitante: `⚠️ Travamos em ${ref} e precisamos falar com você. Nossa equipe entra em contato em breve.`,
-      gestor: `🚫 Impedimento em ${ref}.${extra ? `\n\nMotivo: ${extra}` : ""}`,
-      editor: null,
-    },
-  }
-
-  return mapa[statusNovo]?.[destinatario] ?? null
-}
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
@@ -135,6 +36,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       videomaker: { select: { nome: true, telefone: true } },
       solicitante: { select: { nome: true, telefone: true } },
       editor: { select: { nome: true, telefone: true, whatsapp: true } },
+      // Executores do Growth. Faltavam aqui, e por isso quem ia fazer o
+      // trabalho era a única pessoa que não recebia aviso nenhum.
+      responsavel: { select: { telefone: true } },
+      responsaveis: { select: { usuario: { select: { telefone: true } } } },
+      designer: { select: { telefone: true, whatsapp: true } },
     },
   })
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
@@ -355,19 +261,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // ── Notificações WhatsApp: rodam DEPOIS da resposta, mas com a função viva.
     // Antes eram `void` solto e a instância congelava antes do envio sair.
-    emSegundoPlano(() => notificarMudancaKanban(
-      statusInterno,
-      demandaAtual.codigo,
-      demandaAtual.titulo,
-      demandaAtual.videomaker?.telefone ?? null,
-      demandaAtual.solicitante?.telefone ?? null,
-      demandaAtual.telefoneSolicitante ?? null,
-      demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
-      id,
+    // Quem mexeu no card: usado para não mandar o aviso de volta para ele e para
+    // decidir se a gestão precisa saber (executor mexendo é notícia; gestor
+    // mexendo não precisa ser anunciado para os outros gestores).
+    const autor = await prisma.usuario.findUnique({
+      where: { id: session.user.id },
+      select: { nome: true, telefone: true, tipo: true },
+    }).catch(() => null)
+
+    emSegundoPlano(() => notificarMudancaKanban({
+      statusNovo: statusInterno,
+      codigo: demandaAtual.codigo,
+      titulo: demandaAtual.titulo,
+      demandaId: id,
       organizacaoId,
-      observacao ?? demandaAtual.motivoImpedimento,
-      body.linkFinal ?? demandaAtual.linkFinal
-    ), "mudanca-kanban")
+      telefoneVideomaker: demandaAtual.videomaker?.telefone ?? null,
+      telefoneEditor: demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
+      telefonesExecutores: [
+        ...demandaAtual.responsaveis.map((r) => r.usuario.telefone),
+        demandaAtual.responsavel?.telefone ?? null,
+        demandaAtual.designer?.whatsapp ?? demandaAtual.designer?.telefone ?? null,
+      ].filter((t): t is string => !!t),
+      telefoneSolicitanteSistema: demandaAtual.solicitante?.telefone ?? null,
+      telefoneSolicitanteWhatsapp: demandaAtual.telefoneSolicitante ?? null,
+      autorTelefone: autor?.telefone ?? null,
+      autorNome: (autor?.nome ?? "Alguém").split(" ")[0],
+      autorEhGestor: autor?.tipo === "admin" || autor?.tipo === "gestor",
+      // `extra` vira observação OU link final — nessa ordem: um motivo de
+      // impedimento escrito à mão é mais útil que um link que a mensagem
+      // do papel já carrega quando precisa.
+      extra: observacao ?? demandaAtual.motivoImpedimento ?? body.linkFinal ?? demandaAtual.linkFinal,
+    }), "mudanca-kanban")
 
     return NextResponse.json(demanda)
   } catch (e) {
@@ -377,21 +301,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-async function notificarMudancaKanban(
-  statusNovo: string,
-  codigo: string,
-  titulo: string,
-  telefoneVideomaker: string | null,
-  telefoneSolicitanteSistema: string | null,
-  telefoneSolicitanteWhatsapp: string | null,
-  telefoneEditor: string | null,
-  demandaId: string,
-  organizacaoId: string,
-  observacao?: string | null,
-  linkFinal?: string | null
-) {
+/**
+ * Busca os telefones que dependem do banco e delega a decisão de quem recebe o
+ * quê para @/lib/kanban-avisos (função pura, coberta por testes).
+ */
+async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGestores" | "telefonesSocial"> & {
+  demandaId: string
+  organizacaoId: string
+}) {
+  const { demandaId, organizacaoId, ...dados } = aviso
   try {
-    const extra = observacao ?? linkFinal ?? undefined
     const gestores = await prisma.usuario.findMany({
       where: {
         tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] },
@@ -401,69 +320,22 @@ async function notificarMudancaKanban(
       select: { telefone: true },
     })
 
-    const envios: Promise<unknown>[] = []
+    const social = dados.statusNovo === "postagem_pendente"
+      ? await prisma.usuario.findMany({
+          where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo", organizacoes: { some: { organizacaoId } } },
+          select: { telefone: true },
+        })
+      : []
 
-    // Notificar videomaker
-    if (telefoneVideomaker) {
-      const msg = mensagemKanban(statusNovo, codigo, titulo, "videomaker", extra)
-      if (msg) envios.push(sendWhatsappMessage(telefoneVideomaker, msg, demandaId, organizacaoId))
-    }
+    const destinatarios = destinatariosDoAviso({
+      ...dados,
+      telefonesGestores: gestores.map((g) => g.telefone).filter((t): t is string => !!t),
+      telefonesSocial: social.map((s) => s.telefone).filter((t): t is string => !!t),
+    })
 
-    // TDAH: Notificar editor (diferente do videomaker — edita o vídeo)
-    if (telefoneEditor) {
-      // Não notificar editor se for o mesmo número do videomaker
-      const telVm = (telefoneVideomaker ?? "").replace(/\D/g, "")
-      const telEd = telefoneEditor.replace(/\D/g, "")
-      if (!telVm || telVm.slice(-8) !== telEd.slice(-8)) {
-        const msg = mensagemKanban(statusNovo, codigo, titulo, "editor", extra)
-        if (msg) envios.push(sendWhatsappMessage(telefoneEditor, msg, demandaId, organizacaoId))
-      }
-    }
-
-    // Notificar solicitante do sistema (usuario cadastrado)
-    if (telefoneSolicitanteSistema) {
-      const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
-      if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteSistema, msg, demandaId, organizacaoId))
-    }
-
-    // Notificar quem solicitou via WhatsApp (se for telefone diferente do solicitante do sistema)
-    if (telefoneSolicitanteWhatsapp) {
-      const telSistema = (telefoneSolicitanteSistema ?? "").replace(/\D/g, "")
-      const telWhatsapp = telefoneSolicitanteWhatsapp.replace(/\D/g, "")
-      // Compara últimos 8 dígitos para evitar mandar duas vezes para a mesma pessoa
-      if (telSistema.slice(-8) !== telWhatsapp.slice(-8)) {
-        const msg = mensagemKanban(statusNovo, codigo, titulo, "solicitante", extra)
-        if (msg) envios.push(sendWhatsappMessage(telefoneSolicitanteWhatsapp, msg, demandaId, organizacaoId))
-      }
-    }
-
-    // Notificar gestores
-    for (const g of gestores) {
-      if (g.telefone) {
-        const msg = mensagemKanban(statusNovo, codigo, titulo, "gestor", extra)
-        if (msg) envios.push(sendWhatsappMessage(g.telefone, msg, demandaId, organizacaoId))
-      }
-    }
-
-    // Notificar Social Media quando pronto para postar
-    if (statusNovo === "postagem_pendente") {
-      const socialUsers = await prisma.usuario.findMany({
-        where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo", organizacoes: { some: { organizacaoId } } },
-        select: { telefone: true },
-      })
-      const baseSocial = `📋 *${codigo}* — ${titulo}`
-      for (const u of socialUsers) {
-        if (u.telefone) {
-          envios.push(sendWhatsappMessage(
-            u.telefone,
-            `📱 *NuFlow — Pronto para Postar!*\n\n${baseSocial}\n\nVídeo aprovado e disponível para postagem. 🚀`,
-            demandaId, organizacaoId
-          ))
-        }
-      }
-    }
-
-    await Promise.allSettled(envios)
+    await Promise.allSettled(
+      destinatarios.map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId))
+    )
   } catch (e) {
     console.error("[Kanban Notify]", e)
   }
