@@ -272,3 +272,62 @@ describe("consistência do mapa (a classe de erro que já aconteceu)", () => {
     expect(semAviso).toEqual([])
   })
 })
+
+describe("variação de texto", () => {
+  it("demandas diferentes recebem frases diferentes na aprovação", () => {
+    const textos = ["V-1", "V-2", "V-3", "V-4", "V-5", "V-6", "V-7", "V-8"]
+      .map((c) => mensagemKanban("aprovado", c, "T", "executor"))
+    expect(new Set(textos).size).toBeGreaterThan(1)
+  })
+
+  it("a MESMA demanda no mesmo estado devolve sempre a mesma frase", () => {
+    // Reenviar ou reprocessar não pode parecer um aviso novo.
+    const a = mensagemKanban("aprovado", "VOP-26-0001", "Vídeo", "executor")
+    const b = mensagemKanban("aprovado", "VOP-26-0001", "Vídeo", "executor")
+    expect(a).toBe(b)
+  })
+
+  it("NÃO varia a mensagem de ação — o SIM/NÃO precisa ser reconhecível", () => {
+    const textos = ["V-1", "V-2", "V-3", "V-4", "V-5", "V-6"]
+      .map((c) => mensagemKanban("videomaker_notificado", c, "T", "videomaker"))
+    expect(new Set(textos).size).toBe(textos.length ? 6 : 0)   // mudam só pelo código
+    for (const t of textos) {
+      expect(t).toContain("Responda *SIM*")
+      expect(t).toContain("*NÃO*")
+    }
+  })
+
+  it("NÃO varia impedimento — assunto sério, texto estável", () => {
+    const a = mensagemKanban("impedimento", "V-1", "T", "executor", "motivo x")
+    const b = mensagemKanban("impedimento", "V-9", "T", "executor", "motivo x")
+    expect(a?.replace("V-1", "")).toBe(b?.replace("V-9", ""))
+  })
+
+  it("toda variante de celebração identifica a demanda", () => {
+    for (const cod of ["A-1", "B-2", "C-3", "D-4", "E-5", "F-6", "G-7", "H-8"]) {
+      for (const st of ["aprovado", "postado", "entregue_cliente"]) {
+        expect(mensagemKanban(st, cod, "Título", "executor")).toContain(cod)
+      }
+    }
+  })
+})
+
+describe("dica de bem-estar", () => {
+  it("é a mesma no mesmo dia e muda de um dia para o outro", async () => {
+    const { dicaDoDia } = await import("@/lib/variacao")
+    expect(dicaDoDia("2026-08-16")).toBe(dicaDoDia("2026-08-16"))
+    const semana = ["2026-08-16","2026-08-17","2026-08-18","2026-08-19","2026-08-20"].map(dicaDoDia)
+    expect(new Set(semana).size).toBeGreaterThan(1)
+  })
+
+  it("não entra em aviso operacional nenhum", async () => {
+    const { TOTAL_DICAS } = await import("@/lib/variacao")
+    expect(TOTAL_DICAS).toBeGreaterThan(0)
+    for (const st of STATUS_COM_AVISO_KANBAN) {
+      for (const p of ["videomaker","solicitante","gestor","editor","executor"] as const) {
+        const m = mensagemKanban(st, "V-1", "T", p) ?? ""
+        expect(m).not.toMatch(/Bebe água|alonga|Almoça|dorme/i)
+      }
+    }
+  })
+})

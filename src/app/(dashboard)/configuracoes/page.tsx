@@ -307,22 +307,32 @@ function TabWhatsapp() {
       </div>
 
       <div className="border-t border-zinc-800 pt-4">
-        <p className="text-xs font-semibold text-zinc-500 mb-2">Notificacoes automaticas configuradas:</p>
-        <ul className="space-y-1 text-xs text-zinc-500">
+        {/* Esta lista dizia seis itens e nunca foi atualizada — só o quadro de
+            demandas dispara catorze avisos distintos, e um dos seis prometidos
+            (lembrete de captação) não existia no código. Agora ela descreve os
+            grupos reais, que é o que se consegue manter honesto. */}
+        <p className="text-xs font-semibold text-zinc-500 mb-2">O que o sistema avisa sozinho:</p>
+        <ul className="space-y-1.5 text-xs text-zinc-500">
           {[
-            "Nova demanda urgente — notifica gestores",
-            "Videomaker notificado — aguarda confirmacao",
-            "Captacao agendada — lembrete 24h antes",
-            "Edicao finalizada — notifica solicitante",
-            "Demanda aprovada — notifica solicitante",
-            "Aprovacao de video pendente — link enviado ao cliente",
-          ].map((t) => (
-            <li key={t} className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-              {t}
+            ["Cada passo da demanda", "de escalar o profissional até publicar — quem produz, quem pediu e a gestão, cada um com a sua mensagem"],
+            ["Escalação e confirmação", "o profissional recebe o convite e responde SIM ou NÃO pelo próprio WhatsApp"],
+            ["Aprovação do cliente", "link enviado ao cliente, e o retorno dele volta para quem editou"],
+            ["Captação de amanhã", "lembrete no dia anterior para quem vai captar"],
+            ["Cobrança e nota fiscal", "vencimento próximo, atraso e pedido de NF"],
+            ["Bom dia dos gestores", "resumo do dia — agenda, prazos e pagamentos"],
+          ].map(([titulo, detalhe]) => (
+            <li key={titulo} className="flex items-start gap-1.5">
+              <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0 mt-0.5" />
+              <span>
+                <span className="text-zinc-400">{titulo}</span> — {detalhe}
+              </span>
             </li>
           ))}
         </ul>
+        <p className="text-[11px] text-zinc-600 mt-2.5">
+          Quem recebe cada aviso depende do papel na demanda. Para alguém acompanhar tudo,
+          marque <span className="text-zinc-500">Recebe todos os avisos</span> em Pessoas &amp; Acessos.
+        </p>
       </div>
     </div>
   )

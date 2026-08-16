@@ -55,6 +55,36 @@ function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | 
   return descricao ?? ""
 }
 
+/**
+ * O que aparece no lugar do player quando não há o que tocar.
+ *
+ * Antes, link de pasta do Drive e arquivo que não é vídeo caíam no <video> e
+ * rendiam um retângulo preto sem explicação — o cliente ficava sem saber se o
+ * vídeo não carregou, se o navegador travou, ou se era ele que estava fazendo
+ * algo errado. Dizer o que aconteceu e oferecer a saída custa o mesmo espaço.
+ */
+function ForaDoPlayer({ url, titulo, detalhe, rotuloBotao }: {
+  url: string
+  titulo: string
+  detalhe: string
+  rotuloBotao: string
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-6 text-center space-y-3">
+      <p className="text-sm font-semibold text-zinc-100">{titulo}</p>
+      <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">{detalhe}</p>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center justify-center gap-2 border border-zinc-600 text-zinc-100 hover:bg-zinc-800 font-medium px-5 py-2.5 rounded-xl transition-colors text-sm"
+      >
+        {rotuloBotao}
+      </a>
+    </div>
+  )
+}
+
 export default function AprovarVideoPage() {
   const params = useParams()
   const token = params?.token as string
@@ -204,6 +234,32 @@ export default function AprovarVideoPage() {
           />
         )
       }
+      // Link de PASTA do Drive (/drive/folders/...). Não tem o que tocar: é uma
+      // lista de arquivos. Antes caía no <video> abaixo com uma URL que devolve
+      // HTML — o cliente via um retângulo preto e nenhuma explicação.
+      return (
+        <ForaDoPlayer
+          url={url}
+          titulo="Este é um link de pasta, não de um vídeo"
+          detalhe="Abra a pasta para ver os arquivos. Se você esperava um vídeo aqui, avise a equipe — o link enviado aponta para uma pasta inteira."
+          rotuloBotao="Abrir pasta no Drive"
+        />
+      )
+    }
+
+    // Só tocamos no <video> o que o navegador consegue tocar. Qualquer outra
+    // coisa que tenha sido anexada como "vídeo final" — PDF, planilha, um link
+    // qualquer — vira aviso em vez de player quebrado.
+    const ehVideoConhecido = /\.(mp4|webm|ogg|mov|qt|m4v)$/.test(urlLimpa)
+    if (!ehVideoConhecido) {
+      return (
+        <ForaDoPlayer
+          url={url}
+          titulo="Não consegui exibir este arquivo aqui"
+          detalhe="O que foi anexado não é um vídeo que o navegador saiba abrir. Você ainda pode abri-lo pelo botão abaixo."
+          rotuloBotao="Abrir arquivo"
+        />
+      )
     }
 
     // Vídeo direto (mp4, webm, mov, etc.)

@@ -6,6 +6,8 @@
 // (tests/unit/kanban-avisos.spec.ts) em vez de descobrir em produção que o
 // executor do Growth nunca recebeu nada — que foi exatamente o que aconteceu.
 
+import { variar } from "@/lib/variacao"
+
 export type DestinatarioKanban =
   | "videomaker" | "solicitante" | "gestor" | "editor" | "executor"
 
@@ -21,6 +23,29 @@ export const STATUS_COM_AVISO_KANBAN = [
   "edicao_finalizada", "revisao_pendente", "aprovado", "ajuste_solicitado",
   "postado", "entregue_cliente", "impedimento",
 ] as const
+
+// Variantes de celebração — só para quem PRODUZIU. Quem pediu e a gestão
+// continuam com texto fixo: para eles o aviso é informação, não reconhecimento.
+const APROVADO_QUEM_FEZ = (ref: string) => [
+  `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
+  `✅ Aprovado! ${ref} passou sem ajuste. Mandou bem 👏`,
+  `🎯 ${ref} aprovado de primeira. Trabalho bem feito.`,
+  `💚 O cliente gostou de ${ref}. Valeu pelo capricho!`,
+]
+
+const PUBLICADO_QUEM_FEZ = (ref: string) => [
+  `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
+  `🚀 ${ref} está no ar. Seu trabalho já está rodando por aí!`,
+  `📢 Publicado: ${ref}. Mais uma entregue 👊`,
+  `✨ ${ref} saiu do forno e foi pro ar. Valeu!`,
+]
+
+const ENTREGUE_QUEM_FEZ = (ref: string) => [
+  `🎉 ${ref} entregue. Valeu!`,
+  `✔️ ${ref} fechada. Uma a menos na lista 😉`,
+  `🙌 Entrega de ${ref} concluída. Obrigado!`,
+  `📦 ${ref} entregue e fora da sua fila.`,
+]
 
 /**
  * Texto do aviso para um papel, ou null quando esse papel não precisa saber
@@ -43,6 +68,10 @@ export function mensagemKanban(
   // como link se de fato for uma URL — senão viraria uma observação apresentada
   // como se fosse clicável.
   const link = extra && /^https?:\/\//i.test(extra) ? extra : null
+  // Semente por demanda + estado: a mesma demanda no mesmo ponto devolve sempre
+  // a mesma frase, então reenviar não parece um aviso novo. Demandas diferentes
+  // é que soam diferentes.
+  const v = (opcoes: string[]) => variar(opcoes, `${codigo}:${statusNovo}:${destinatario}`)
   type Mapa = Record<string, Partial<Record<DestinatarioKanban, string | null>>>
 
   // Mesma voz dos templates de src/lib/whatsapp.ts: primeira linha diz o que
@@ -82,8 +111,8 @@ export function mensagemKanban(
     edicao_finalizada: {
       solicitante: `🎥 A edição de ${ref} ficou pronta. Já já mandamos o link para você aprovar.`,
       gestor: `🎥 ${ref} editado, aguardando aprovação do cliente.`,
-      editor: `🎉 Edição de ${ref} entregue. Valeu!`,
-      executor: `🎉 ${ref} entregue. Valeu!`,
+      editor: v(ENTREGUE_QUEM_FEZ(ref)),
+      executor: v(ENTREGUE_QUEM_FEZ(ref)),
     },
     // Antes esta mensagem morava em "aguardando_aprovacao_cliente", que não
     // existe no enum StatusInterno — ou seja, o aviso com o link de aprovação
@@ -93,11 +122,11 @@ export function mensagemKanban(
       gestor: `👀 ${ref} aguardando aprovação do cliente.`,
     },
     aprovado: {
-      videomaker: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
+      videomaker: v(APROVADO_QUEM_FEZ(ref)),
       solicitante: `🎉 ${ref} aprovado! Seguimos para a publicação.`,
       gestor: `✅ ${ref} aprovado.`,
-      editor: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
-      executor: `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
+      editor: v(APROVADO_QUEM_FEZ(ref)),
+      executor: v(APROVADO_QUEM_FEZ(ref)),
     },
     ajuste_solicitado: {
       solicitante: `🔄 Recebemos seu retorno sobre ${ref} e já estamos ajustando. Avisamos quando a nova versão sair.`,
@@ -106,16 +135,16 @@ export function mensagemKanban(
       executor: `🔄 O cliente pediu ajustes em ${ref}${extra ? `:\n\n_"${extra}"_` : "."}\n\nO retorno completo está no sistema.`,
     },
     postado: {
-      videomaker: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
+      videomaker: v(PUBLICADO_QUEM_FEZ(ref)),
       solicitante: `🎉 ${ref} está no ar!`,
-      editor: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
-      executor: `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
+      editor: v(PUBLICADO_QUEM_FEZ(ref)),
+      executor: v(PUBLICADO_QUEM_FEZ(ref)),
     },
     // "Finalizado" no kanban do Growth — a coluna onde o card morre. Sem isto,
     // encerrar uma demanda de Growth não avisava ninguém.
     entregue_cliente: {
       solicitante: `✅ ${ref} foi finalizada e entregue. Obrigado!`,
-      executor: `✅ ${ref} finalizada. Valeu!`,
+      executor: v(ENTREGUE_QUEM_FEZ(ref)),
     },
     impedimento: {
       solicitante: `⚠️ Travamos em ${ref} e precisamos falar com você. Nossa equipe entra em contato em breve.`,
