@@ -100,14 +100,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         url,
         sequencia: existingCount + 1,
         ...(thumbnailUrl ? { thumbnailUrl } : {}),
-        ...(ehTranscode ? { transcodeStatus: "processing" } : {}),
+        // "processing" só depois de o worker ACEITAR — ver abaixo. Marcar aqui
+        // deixava o arquivo eternamente "convertendo" mesmo sem worker nenhum.
       },
     })
     arqId = arq.id
 
-    // .mov/HEVC → enfileira conversão para MP4 (toca em qualquer dispositivo)
+    // .mov/HEVC → enfileira conversão para MP4 (toca em qualquer dispositivo).
+    // O estado gravado reflete o que de fato aconteceu: "processing" quando o
+    // worker aceitou, "sem_worker" quando não há para onde mandar. A diferença
+    // importa — a segunda é um problema de configuração que precisa aparecer,
+    // não um vídeo que está convertendo.
     if (ehTranscode) {
-      void enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
+      const aceito = await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
+      await prisma.arquivo.update({
+        where: { id: arq.id },
+        data: { transcodeStatus: aceito ? "processing" : "sem_worker" },
+      }).catch(() => null)
     }
   }
 

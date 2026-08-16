@@ -10,17 +10,25 @@ export function precisaTranscode(url: string | null | undefined): boolean {
   return limpa.endsWith(".mov") || limpa.endsWith(".qt")
 }
 
-// Dispara o job no worker (fire-and-forget). Não lança — falha silenciosa.
+/**
+ * Dispara o job no worker. Devolve se foi ACEITO — quem chama precisa saber.
+ *
+ * Antes devolvia void e falhava em silêncio: sem as variáveis do worker, a
+ * função saía pela porta dos fundos e o arquivo ficava marcado "processing"
+ * para sempre. Em 16/08/2026 havia 5 arquivos nesse estado e 15 .mov sem
+ * conversão nenhuma — e nenhum arquivo jamais em "done". O transcode nunca
+ * rodou em produção, e nada no sistema dizia isso.
+ */
 export async function enqueueTranscode(opts: {
   arquivoId?: string
   demandaId: string
   sourceUrl: string
-}): Promise<void> {
+}): Promise<boolean> {
   const worker = process.env.TRANSCODE_WORKER_URL?.replace(/\/$/, "")
   const secret = process.env.TRANSCODE_SECRET
   if (!worker || !secret) {
-    console.info("[transcode] worker não configurado — pulando", opts.demandaId)
-    return
+    console.warn("[transcode] worker NÃO configurado (TRANSCODE_WORKER_URL/TRANSCODE_SECRET) — vídeo .mov segue sem conversão:", opts.demandaId)
+    return false
   }
   try {
     const res = await fetch(`${worker}/transcode`, {
@@ -29,7 +37,9 @@ export async function enqueueTranscode(opts: {
       body: JSON.stringify(opts),
     })
     console.info("[transcode] enfileirado", opts.demandaId, "→", res.status)
+    return res.ok
   } catch (e) {
     console.error("[transcode] falha ao enfileirar:", e instanceof Error ? e.message : e)
+    return false
   }
 }
