@@ -136,6 +136,13 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
       console.log(`[WhatsApp] Mensagem enviada para ${numero} — key: ${json?.key?.id ?? "?"}`)
     }
 
+    // O motivo da recusa vinha só no console da Vercel, que expira. Guardado no
+    // banco, ele fica ao lado da mensagem — e responde "por que o fulano não
+    // recebeu" sem ninguém ter que caçar log.
+    const motivo = res.ok
+      ? null
+      : `HTTP ${res.status}: ${JSON.stringify(json).slice(0, 400)}`
+
     // Loga no banco
     await prisma.mensagemWhatsapp.create({
       data: {
@@ -144,6 +151,8 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         conteudo: mensagem,
         direcao: "saida",
         status: res.ok ? "enviado" : "falhou",
+        ...(motivo && { erro: motivo }),
+        tentativas: alternativo && !res.ok ? 2 : 1,
         ...(orgId && { organizacaoId: orgId }),
         ...(demandaId && { demandaId }),
       },
@@ -164,6 +173,9 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         conteudo: mensagem,
         direcao: "saida",
         status: "falhou",
+        // Timeout e queda de rede são o sintoma da instância morta. Sem o texto
+        // do erro, essa falha era indistinguível de "número inválido".
+        erro: (e instanceof Error ? `${e.name}: ${e.message}` : String(e)).slice(0, 400),
         ...(orgId && { organizacaoId: orgId }),
         ...(demandaId && { demandaId }),
       },
