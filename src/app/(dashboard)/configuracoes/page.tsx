@@ -7,6 +7,7 @@ import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
+import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { useSearchParams } from "next/navigation"
 import { EmailInboxSettings } from "@/components/configuracoes/EmailInboxSettings"
 import { fetcher } from "@/lib/fetcher"
@@ -760,6 +761,25 @@ function TabWhatsappQR() {
   const [conectado, setConectado] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [religando, setReligando] = useState(false)
+
+  // Reaplica o webhook de entrada na Evolution. A rota lê a chave no servidor e
+  // confere lendo de volta — registrar e confiar foi o que escondeu essa falha.
+  async function reaplicarWebhook() {
+    setReligando(true)
+    setErro(null)
+    try {
+      const res = await fetch("/api/configuracoes/whatsapp/webhook", { method: "POST" })
+      if (!res.ok) throw await erroDaResposta(res)
+      const dados = await res.json()
+      if (dados.confirmado) toast.success("Recebimento de respostas reativado")
+      else toast.warning("Registrado, mas a Evolution não confirmou. Verifique o servidor.")
+    } catch (e: unknown) {
+      toast.error(mensagemDeErro(e, "Não foi possível reativar o recebimento"))
+    } finally {
+      setReligando(false)
+    }
+  }
 
   // Verifica se a config do WhatsApp existe antes de tentar
   const { data: wppConfig } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string } | null }>(
@@ -908,6 +928,28 @@ function TabWhatsappQR() {
           {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
           {loading ? "Gerando QR Code..." : "Gerar QR Code"}
         </button>
+      )}
+
+      {/* Reaplicar webhook de entrada.
+          Reiniciar a instância na Evolution derruba o webhook, e o sintoma é
+          traiçoeiro: continua ENVIANDO normalmente e para de RECEBER, sem nada
+          na tela indicando isso. Foi assim que as respostas dos videomakers
+          ficaram mudas por meses. Botão separado porque é reparo, não rotina. */}
+      {temConfig && (
+        <div className="pt-2 border-t border-zinc-800">
+          <button
+            onClick={reaplicarWebhook}
+            disabled={religando}
+            className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+          >
+            {religando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Reativar recebimento de respostas
+          </button>
+          <p className="text-[11px] text-zinc-600 mt-1.5">
+            Use se o sistema envia mensagens mas não recebe as respostas — costuma
+            acontecer depois de reiniciar o servidor do WhatsApp.
+          </p>
+        </div>
       )}
     </div>
   )
