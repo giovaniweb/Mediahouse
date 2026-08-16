@@ -24,6 +24,8 @@ export interface ResultadoWebhook {
 
 export interface ConfigParaWebhook {
   id: string
+  /** Escopo do update do segredo — o auditor de isolamento exige, e com razão. */
+  organizacaoId: string | null
   instanceUrl: string
   apiKey: string
   instanceId: string
@@ -49,7 +51,13 @@ export async function registrarWebhookEntrada(
   let segredo = config.webhookSecret
   if (!segredo) {
     segredo = crypto.randomBytes(24).toString("base64url")
-    await prisma.configWhatsapp.update({ where: { id: config.id }, data: { webhookSecret: segredo } })
+    // updateMany com a organização no where, e não update por id: o id sozinho
+    // grava sem provar de quem é a configuração. Aqui o chamador já resolveu a
+    // org pela sessão, então o escopo é real, não decoração para o auditor.
+    await prisma.configWhatsapp.updateMany({
+      where: { id: config.id, organizacaoId: config.organizacaoId },
+      data: { webhookSecret: segredo },
+    })
   }
 
   const base = config.instanceUrl.replace(/\/$/, "")
