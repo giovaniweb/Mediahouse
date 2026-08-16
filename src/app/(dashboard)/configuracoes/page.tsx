@@ -30,7 +30,7 @@ function TabWhatsapp() {
   const [sendingTest, setSendingTest] = useState(false)
 
   // Check connection on mount + poll every 15s
-  useSWR<{ connected: boolean; state?: string }>(
+  const { data: status } = useSWR<{ connected: boolean; state?: string; diasSemResposta?: number | null; reiniciosEm24h?: number; webhookRejeitado?: number }>(
     "/api/whatsapp/status", fetcher,
     {
       refreshInterval: 15000,
@@ -39,6 +39,11 @@ function TabWhatsapp() {
       },
     }
   )
+
+  // Recebimento: mudo demais é defeito, não calmaria. Sete dias porque um fim de
+  // semana quieto é normal e uma semana inteira sem ninguém responder não é.
+  const diasSemResposta = status?.diasSemResposta ?? null
+  const recebimentoMudo = !!status && (diasSemResposta === null || diasSemResposta > 7)
 
   async function salvar() {
     setLoading(true)
@@ -136,7 +141,7 @@ function TabWhatsapp() {
               {connState === "open" ? "WhatsApp Conectado" : connState === "close" ? "WhatsApp Desconectado" : "Verificando..."}
             </p>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {connState === "open" ? "Bot ativo — recebendo e respondendo mensagens" : connState === "close" ? "Reconecte via QR Code abaixo" : "Aguarde..."}
+              {connState === "open" ? "O envio de mensagens está funcionando" : connState === "close" ? "Reconecte via QR Code abaixo" : "Aguarde..."}
             </p>
           </div>
         </div>
@@ -150,6 +155,74 @@ function TabWhatsapp() {
           </button>
         )}
       </div>
+
+      {/* Recebimento de respostas — o outro sentido, que o card acima não vê.
+          Enviar e receber quebram separado: em 2026 o envio ficou de pé por
+          cinco meses enquanto nenhuma resposta entrava, e nada na tela dizia. */}
+      <div className={cn(
+        "rounded-xl p-4 flex items-start gap-3",
+        recebimentoMudo ? "bg-amber-500/10 border border-amber-700" : "bg-zinc-800/50 border border-zinc-700"
+      )}>
+        <Inbox className={cn("w-4 h-4 mt-0.5 shrink-0", recebimentoMudo ? "text-amber-400" : "text-zinc-400")} />
+        <div className="min-w-0">
+          <p className={cn("text-sm font-semibold", recebimentoMudo ? "text-amber-300" : "text-zinc-200")}>
+            Recebimento de respostas
+          </p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            {!status
+              ? "Verificando..."
+              : diasSemResposta === null
+              ? "Nenhuma resposta recebida até hoje."
+              : diasSemResposta === 0
+              ? "Última resposta recebida hoje."
+              : diasSemResposta === 1
+              ? "Última resposta recebida ontem."
+              : `Última resposta recebida há ${diasSemResposta} dias.`}
+          </p>
+          {recebimentoMudo && (
+            <p className="text-xs text-amber-300/80 mt-1.5">
+              O sistema pode estar enviando e não recebendo. Use
+              <span className="text-amber-200"> Reativar recebimento de respostas</span>, logo abaixo do QR Code.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Mensagem chegando e sendo recusada — o pior caso, porque os dois lados
+          parecem certos e a mensagem morre no meio. */}
+      {(status?.webhookRejeitado ?? 0) > 0 && (
+        <div className="rounded-xl p-4 flex items-start gap-3 bg-red-500/10 border border-red-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-red-300">
+              Mensagens estão chegando e sendo recusadas
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              O WhatsApp entregou mensagens que o NuFlow não aceitou nas últimas 24h.
+              Use <span className="text-zinc-200">Reativar recebimento de respostas</span>, logo abaixo do QR Code — isso reconfigura o endereço de entrada.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Estabilidade do servidor. Cada reinício apaga as sessões de criptografia
+          da Evolution: mensagem que chega durante a queda simplesmente some, e
+          não existe como recuperá-la depois. */}
+      {(status?.reiniciosEm24h ?? 0) > 0 && (
+        <div className="rounded-xl p-4 flex items-start gap-3 bg-red-500/10 border border-red-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-red-300">
+              O servidor do WhatsApp reiniciou {status?.reiniciosEm24h}{" "}
+              {status?.reiniciosEm24h === 1 ? "vez" : "vezes"} nas últimas 24h
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              A cada reinício, as mensagens que chegam naquele momento se perdem — não há como recuperá-las depois.
+              Se este número não for zero, o problema está no servidor da Evolution, não na configuração daqui.
+            </p>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div className={cn(

@@ -227,6 +227,14 @@ export const templates = {
   editorSelecionado: (codigo: string, titulo: string) =>
     `✂️ Você ficou com a edição de ${titulo} (${codigo}). Os brutos estão no sistema.`,
 
+  // Notifica o executor interno (Growth) quando vira responsável pela demanda.
+  // Videomaker e editor sempre foram avisados ao serem atribuídos; o responsável
+  // do Growth não era, e descobria o trabalho só ao abrir o sistema.
+  responsavelAtribuido: (codigo: string, titulo: string, prazo?: string | null) =>
+    `📌 ${titulo} (${codigo}) é sua agora.` +
+    `${prazo ? `\n\nPrazo: ${prazo}` : ""}` +
+    `\n\nOs detalhes estão no sistema.`,
+
   // ── Lembretes ────────────────────────────────────────────────────────────
 
   lembreteEvento: (titulo: string, minutosRestantes: number, local?: string | null) =>

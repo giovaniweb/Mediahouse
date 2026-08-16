@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA, STATUS_PRAZO_PAUSADO } from "@/lib/status"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
@@ -412,6 +412,25 @@ export async function POST(req: NextRequest) {
   if (responsaveisValidos.length > 0) {
     await setResponsaveis(demanda.id, responsaveisValidos)
       .catch(e => console.error("[Demanda] Erro ao vincular responsáveis:", e))
+
+    // Avisa quem já nasce responsável. Sem isto, criar a demanda de Growth já
+    // atribuída era o único caminho em que a pessoa nunca ficava sabendo —
+    // atribuir depois avisa (ver PATCH), criar atribuindo não avisava.
+    emSegundoPlano(async () => {
+      const novos = responsaveisValidos.filter((uid) => uid !== session.user.id)
+      if (novos.length === 0) return
+      const pessoas = await prisma.usuario.findMany({
+        where: { id: { in: novos }, status: "ativo", telefone: { not: null } },
+        select: { telefone: true },
+      })
+      const prazo = demanda.dataLimite
+        ? new Date(demanda.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+        : null
+      const msg = templates.responsavelAtribuido(demanda.codigo, demanda.titulo, prazo)
+      await Promise.allSettled(
+        pessoas.map((p) => sendWhatsappMessage(p.telefone!, msg, demanda.id, organizacaoId))
+      )
+    }, "wa-responsavel-nova-demanda")
   }
 
   // Auto-populate checklist a partir de templates

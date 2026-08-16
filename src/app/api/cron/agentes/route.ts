@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { janelaDoDiaSeguinte } from "@/lib/datas"
 
 // As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
 // roda para TODAS as organizações em série, não declarava nada e herdava o
@@ -51,10 +53,10 @@ export async function GET(req: NextRequest) {
       let r: Record<string, unknown>
       if (agente === "prazos") r = await rodarAgentePrazos(org.id)
       else if (agente === "vistoria") r = await rodarAgenteVistoria(org.id)
-      else if (agente === "cobranca") r = await rodarAgenteCobranca(org.id)
-      else if (agente === "lembretes") r = await rodarAgenteLembretes(org.id)
-      else if (agente === "briefing") r = await rodarAgenteBriefing(org.id)
-      else if (agente === "limpeza") r = await rodarAgenteLimpeza(org.id)
+      else if (agente === "cobranca") r = await registrarExecucao("cobranca-cron", () => rodarAgenteCobranca(org.id))
+      else if (agente === "lembretes") r = await registrarExecucao("lembretes-cron", () => rodarAgenteLembretes(org.id))
+      else if (agente === "briefing") r = await registrarExecucao("briefing-cron", () => rodarAgenteBriefing(org.id))
+      else if (agente === "limpeza") r = await registrarExecucao("limpeza-cron", () => rodarAgenteLimpeza(org.id))
       else r = await rodarAgenteAlertas(org.id)
       resultados.push({ organizacaoId: org.id, ...r })
     } catch (e) {
@@ -96,6 +98,46 @@ async function rodarComRegistro(
       },
     })
     return { resposta, tokens }
+  } catch (e) {
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      data: {
+        status: "erro",
+        erro: e instanceof Error ? e.message : String(e),
+        finishedAt: new Date(),
+      },
+    }).catch((err) => console.error(`[Cron] Falha ao registrar erro de ${agente}:`, err))
+    throw e
+  }
+}
+
+/**
+ * Registra a execução de um agente que não usa IA (cobrança, lembretes,
+ * briefing, limpeza).
+ *
+ * Estes quatro só deixavam vestígio quando ACHAVAM trabalho: sem custo vencido,
+ * a cobrança rodava e não gravava nada. O efeito colateral é que a pergunta
+ * "esse cron chegou a ser registrado na Vercel?" não tinha resposta dentro do
+ * sistema — em 16/08/2026 dava para provar que alertas, prazos, vistoria e
+ * briefing rodavam, e era impossível dizer o mesmo dos outros. Agora toda
+ * execução deixa linha, inclusive a que não fez nada, e a resposta mora aqui.
+ */
+async function registrarExecucao<T extends Record<string, unknown>>(
+  agente: string,
+  executar: () => Promise<T>
+): Promise<T> {
+  const execucao = await prisma.agenteExecucao.create({
+    data: { agente, status: "executando" },
+  })
+
+  try {
+    const resultado = await executar()
+    await prisma.agenteExecucao.update({
+      where: { id: execucao.id },
+      // Prisma.InputJsonObject: o resultado é sempre um objeto raso de contadores.
+      data: { status: "concluido", resultado: resultado as Prisma.InputJsonObject, finishedAt: new Date() },
+    })
+    return resultado
   } catch (e) {
     await prisma.agenteExecucao.update({
       where: { id: execucao.id },
@@ -290,7 +332,75 @@ async function rodarAgenteLembretes(organizacaoId: string) {
     enviados++
   }
 
-  return { agente: "lembretes", enviados }
+  const captacoes = await lembrarCaptacoesDeAmanha(organizacaoId)
+  return { agente: "lembretes", enviados, captacoes }
+}
+
+/**
+ * Avisa quem vai captar amanhã.
+ *
+ * A tela de Configurações prometia "Captação agendada — lembrete 24h antes"
+ * desde sempre, e o template `captacaoLembrete` existia em lib/whatsapp.ts —
+ * mas nenhuma rota e nenhum cron o chamavam. A promessa estava na tela e o
+ * videomaker nunca recebeu esse lembrete. O agente de lembretes só olhava o
+ * model Evento (agenda), que é outra coisa e hoje está vazio.
+ *
+ * Roda uma vez por dia, então o recorte é "as captações de amanhã" — não uma
+ * janela de 24h contadas na hora, que exigiria cron de hora em hora.
+ */
+async function lembrarCaptacoesDeAmanha(organizacaoId: string) {
+  const FUSO = "America/Sao_Paulo"
+  const agora = new Date()
+  // Amanhã no fuso de São Paulo, não em UTC: depois das 21h de Brasília o dia
+  // em UTC já virou e o lembrete sairia com um dia de erro. A conta mora em
+  // lib/datas.ts, coberta por teste.
+  const { inicio, fim } = janelaDoDiaSeguinte(agora)
+
+  const demandas = await prisma.demanda.findMany({
+    where: {
+      organizacaoId,
+      dataCaptacao: { gte: inicio, lte: fim },
+      statusInterno: { notIn: ["encerrado", "expirado", "videomaker_recusou"] },
+      videomakerId: { not: null },
+    },
+    select: {
+      id: true, codigo: true, titulo: true, dataCaptacao: true,
+      localGravacao: true, cidade: true,
+      videomaker: { select: { telefone: true } },
+    },
+  })
+
+  let enviados = 0
+  for (const d of demandas) {
+    const telefone = d.videomaker?.telefone
+    if (!telefone || !d.dataCaptacao) continue
+
+    // Sem campo "lembreteEnviado" na Demanda — e sem migration para isto. Se o
+    // cron rodar duas vezes no mesmo dia, a mensagem já registrada segura a
+    // segunda: mesma demanda, mesmo texto, últimas 20h.
+    const jaAvisado = await prisma.mensagemWhatsapp.findFirst({
+      where: {
+        demandaId: d.id,
+        direcao: "saida",
+        conteudo: { startsWith: "⏰ Amanhã você tem captação" },
+        createdAt: { gte: new Date(agora.getTime() - 20 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    }).catch(() => null)
+    if (jaAvisado) continue
+
+    const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" }).format(d.dataCaptacao)
+    const local = d.localGravacao || d.cidade || "local a confirmar"
+    await sendWhatsappMessage(
+      telefone,
+      templates.captacaoLembrete(d.codigo, d.titulo, `às ${hora}`, local),
+      d.id,
+      organizacaoId
+    ).catch(() => null)
+    enviados++
+  }
+
+  return enviados
 }
 
 // ── TDAH: Morning Briefing para Gestores ─────────────────────────────────

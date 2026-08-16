@@ -509,7 +509,7 @@ export default function PessoasAcessosPage() {
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   // Uma lista só, recortada por dimensão. Não existe mais "aba onde a pessoa
-  // não aparece": quem não lembra se o fulano é interno ou parceiro busca pelo
+  // não aparece": quem não lembra se o fulano é interno ou externo busca pelo
   // nome e acha, e é o filtro de vínculo que responde qual dos dois ele é.
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -571,10 +571,10 @@ export default function PessoasAcessosPage() {
       aplicar: () => { limparFiltros(); setFStatus("inativo") },
     },
     {
-      label: "Externos", valor: pessoas.filter(p => vinculoDe(p) === "parceiro").length, Icon: ShieldCheck,
+      label: "Externos", valor: pessoas.filter(p => vinculoDe(p) === "externo").length, Icon: ShieldCheck,
       cor: "text-blue-400", bg: "bg-blue-500/10",
-      ativo: fVinculo === "parceiro",
-      aplicar: () => { limparFiltros(); setFVinculo("parceiro") },
+      ativo: fVinculo === "externo",
+      aplicar: () => { limparFiltros(); setFVinculo("externo") },
     },
     {
       label: "Nunca acessaram", valor: pessoas.filter(semAtividade).length, Icon: ShieldOff,
@@ -981,7 +981,7 @@ export default function PessoasAcessosPage() {
               <Filtro valor={fVinculo} onChange={v => { setFVinculo(v); setPagina(1) }}>
                 <option value="todos">Todos os vínculos</option>
                 <option value="interno">Interno</option>
-                <option value="parceiro">Externo</option>
+                <option value="externo">Externo</option>
                 <option value="sistema">Sistema / Teste</option>
               </Filtro>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { validarPrazo, hojeEmSaoPaulo, dataEmSaoPaulo, dataCalendario, mesmoDia, somarDias, somarMeses } from "@/lib/datas"
+import { validarPrazo, hojeEmSaoPaulo, dataEmSaoPaulo, dataCalendario, mesmoDia, somarDias, somarMeses, janelaDoDiaSeguinte } from "@/lib/datas"
 
 afterEach(() => vi.useRealTimers())
 
@@ -132,5 +132,33 @@ describe("somarDias e somarMeses", () => {
 
   it("DTEND de evento de dia inteiro aponta para o dia seguinte (regra do iCal)", () => {
     expect(somarDias("2026-08-13", 1)).toBe("2026-08-14")
+  })
+})
+
+describe("janelaDoDiaSeguinte", () => {
+  it("pega o dia seguinte no fuso de São Paulo", () => {
+    // 16/08 12:00 em Brasília = 15:00 UTC
+    const { dia } = janelaDoDiaSeguinte(new Date("2026-08-16T15:00:00Z"))
+    expect(dia).toBe("2026-08-17")
+  })
+
+  it("às 22h de Brasília ainda é o mesmo 'amanhã' — não pula um dia", () => {
+    // 16/08 22:00 em Brasília = 17/08 01:00 UTC. Em UTC já virou o dia 17,
+    // e um cálculo ingênuo devolveria 18 como "amanhã".
+    const { dia } = janelaDoDiaSeguinte(new Date("2026-08-17T01:00:00Z"))
+    expect(dia).toBe("2026-08-17")
+  })
+
+  it("a janela cobre o dia inteiro", () => {
+    const { inicio, fim } = janelaDoDiaSeguinte(new Date("2026-08-16T15:00:00Z"))
+    const meioDia = new Date("2026-08-17T15:00:00Z")  // 12:00 BRT do dia 17
+    expect(inicio.getTime()).toBeLessThan(meioDia.getTime())
+    expect(fim.getTime()).toBeGreaterThan(meioDia.getTime())
+    expect(fim.getTime() - inicio.getTime()).toBeLessThan(24 * 60 * 60 * 1000)
+  })
+
+  it("vira o mês corretamente", () => {
+    const { dia } = janelaDoDiaSeguinte(new Date("2026-08-31T15:00:00Z"))
+    expect(dia).toBe("2026-09-01")
   })
 })

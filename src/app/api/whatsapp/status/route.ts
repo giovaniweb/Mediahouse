@@ -26,8 +26,63 @@ export async function GET() {
       }).catch(() => 0)
     : 0
 
+  // Quando chegou a última mensagem DE ALGUÉM.
+  //
+  // `state: "open"` diz só que o servidor da Evolution responde HTTP — não que
+  // exista sessão de WhatsApp viva. Foi por acreditar nesse "open" que as
+  // respostas dos videomakers ficaram cinco meses mudas sem ninguém notar: a
+  // tela dizia "recebendo e respondendo mensagens" enquanto a última entrada
+  // real era de 23/03. Silêncio de entrada é o único sinal que não mente.
+  const ultimaEntrada = organizacaoId
+    ? await prisma.mensagemWhatsapp
+        .findFirst({
+          where: { organizacaoId, direcao: "entrada" },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        })
+        .then((m) => m?.createdAt ?? null)
+        .catch(() => null)
+    : null
+
+  // A conta de "há quantos dias" sai daqui, e não da tela: no componente ela
+  // dependeria de Date.now() durante o render, que é impuro e reprovado pelo lint.
+  const diasSemResposta = ultimaEntrada
+    ? Math.floor((Date.now() - ultimaEntrada.getTime()) / 86_400_000)
+    : null
+
+  // Quantas vezes a instância voltou do zero nas últimas 24h.
+  //
+  // Cada reinício apaga o histórico da própria Evolution e mata as sessões de
+  // criptografia — é a explicação mais provável para mensagens que somem no
+  // caminho. Sem este número, mexer no servidor é chutar: não dá para saber se
+  // a mudança melhorou alguma coisa.
+  const reiniciosEm24h = organizacaoId
+    ? await prisma.alertaIA.count({
+        where: {
+          organizacaoId,
+          tipoAlerta: "whatsapp_reconectou",
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+    : 0
+
+  // Mensagens que a Evolution entregou e o NuFlow recusou. É o ponto cego mais
+  // perigoso do caminho de entrada: tudo parece certo dos dois lados e a
+  // mensagem morre no meio, sem deixar nada além de um log na Vercel.
+  const webhookRejeitado = organizacaoId
+    ? await prisma.alertaIA.count({
+        where: {
+          organizacaoId,
+          tipoAlerta: "whatsapp_webhook_rejeitado",
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+    : 0
+
+  const recebimento = { naoEnviadas, ultimaEntrada, diasSemResposta, reiniciosEm24h, webhookRejeitado }
+
   if (!config) {
-    return NextResponse.json({ connected: false, reason: "no_config", naoEnviadas })
+    return NextResponse.json({ connected: false, reason: "no_config", ...recebimento })
   }
 
   try {
@@ -40,7 +95,7 @@ export async function GET() {
     )
 
     if (!res.ok) {
-      return NextResponse.json({ connected: false, reason: "api_error", status: res.status, naoEnviadas })
+      return NextResponse.json({ connected: false, reason: "api_error", status: res.status, ...recebimento })
     }
 
     const json = await res.json()
@@ -50,14 +105,14 @@ export async function GET() {
       connected: state === "open",
       state,
       instanceName: config.instanceId,
-      naoEnviadas,
+      ...recebimento,
     })
   } catch (e) {
     return NextResponse.json({
       connected: false,
       reason: "network_error",
       error: e instanceof Error ? e.message : String(e),
-      naoEnviadas,
+      ...recebimento,
     })
   }
 }

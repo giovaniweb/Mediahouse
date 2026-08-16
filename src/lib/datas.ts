@@ -129,3 +129,19 @@ export function mesmoDia(
   if (!a || !b) return false
   return dataCalendario(a) === dataCalendario(b)
 }
+
+/**
+ * Início e fim do DIA SEGUINTE no fuso de São Paulo.
+ *
+ * Usado pelo lembrete de captação, que roda uma vez por dia e precisa do
+ * recorte "amanhã". Fazer a conta em UTC erra por um dia depois das 21h de
+ * Brasília — o mesmo tipo de deslocamento que já colocou prazos no dia errado.
+ */
+export function janelaDoDiaSeguinte(agora: Date = new Date()): { inicio: Date; fim: Date; dia: string } {
+  const dia = somarDias(dataEmSaoPaulo(agora), 1)
+  return {
+    dia,
+    inicio: new Date(`${dia}T00:00:00-03:00`),
+    fim: new Date(`${dia}T23:59:59.999-03:00`),
+  }
+}

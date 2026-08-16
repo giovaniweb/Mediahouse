@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
 
 // GET /api/convites/[token] — buscar dados do convite (página pública)
 export async function GET(
@@ -84,6 +85,10 @@ export async function POST(
       data: {
         videomakerId: convite.videomakerId,
         statusInterno: "videomaker_aceitou",
+        // A coluna do kanban precisa acompanhar o status: gravar só o
+        // statusInterno deixava o card parado numa coluna que não corresponde
+        // mais ao estado real da demanda.
+        statusVisivel: STATUS_PARA_COLUNA["videomaker_aceitou"],
       },
     })
 
@@ -109,6 +114,7 @@ export async function POST(
       data: {
         videomakerId: null,               // libera o slot para outro VM
         statusInterno: "videomaker_recusou",
+        statusVisivel: STATUS_PARA_COLUNA["videomaker_recusou"],
       },
     })
 
