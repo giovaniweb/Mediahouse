@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { precisaTranscode, enqueueTranscode } from "@/lib/transcode"
+import { precisaTranscodeConferindo, enqueueTranscode } from "@/lib/transcode"
 import { requireDemandaOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
@@ -91,7 +91,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       where: { demandaId: id, tipoArquivo: "final" },
     })
     const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
-    const ehTranscode = precisaTranscode(url)
+    // Confere o tipo real: arquivo sem extensão passava batido e chegava ao
+    // cliente como quicktime, que o Chrome não toca.
+    const ehTranscode = await precisaTranscodeConferindo(url)
     const arq = await prisma.arquivo.create({
       data: {
         demandaId: id,

@@ -10,6 +10,35 @@ export function precisaTranscode(url: string | null | undefined): boolean {
   return limpa.endsWith(".mov") || limpa.endsWith(".qt")
 }
 
+/** Extensões que o navegador toca sem conversão. */
+const EXTENSOES_WEB = [".mp4", ".m4v", ".webm", ".ogg", ".ogv"]
+
+/**
+ * Igual à anterior, mas pergunta ao arquivo em vez de confiar no nome.
+ *
+ * A extensão mente: em 16/08/2026 havia 9 vídeos HEVC gravados no Supabase SEM
+ * extensão nenhuma. `precisaTranscode` devolvia false para todos, ninguém
+ * enfileirava conversão, e eles chegavam ao cliente como quicktime — que o
+ * Chrome não reproduz. Ficaram três meses assim.
+ *
+ * Só vai à rede quando a extensão não decide: `.mov` já é conclusivo, e `.mp4`
+ * também. Falha de rede devolve o palpite da extensão, nunca quebra o upload.
+ */
+export async function precisaTranscodeConferindo(url: string | null | undefined): Promise<boolean> {
+  if (!url) return false
+  const limpa = url.split("?")[0].toLowerCase()
+  if (limpa.endsWith(".mov") || limpa.endsWith(".qt")) return true
+  if (EXTENSOES_WEB.some((e) => limpa.endsWith(e))) return false
+
+  try {
+    const r = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(8000) })
+    const tipo = r.headers.get("content-type")?.toLowerCase() ?? ""
+    return tipo.includes("quicktime") || tipo.includes("x-m4v")
+  } catch {
+    return false
+  }
+}
+
 /**
  * Dispara o job no worker. Devolve se foi ACEITO — quem chama precisa saber.
  *
