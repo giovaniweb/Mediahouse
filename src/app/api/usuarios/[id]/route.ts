@@ -67,6 +67,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       memData.areas = (body.areas as string[]).filter((a) => validas.includes(a as AreaAtuacao))
     }
     if (typeof body.liderAudiovisual === "boolean") memData.liderAudiovisual = body.liderAudiovisual
+    // Só os avisos — não mexe em permissão nenhuma. É o ponto: acompanhar a
+    // operação deixou de exigir virar gestor.
+    if (typeof body.recebeTodosAvisos === "boolean") memData.recebeTodosAvisos = body.recebeTodosAvisos
     if (Object.keys(memData).length > 0) {
       await prisma.usuarioOrganizacao.updateMany({ where: { usuarioId: id, organizacaoId }, data: memData })
     }

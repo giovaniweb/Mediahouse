@@ -1956,6 +1956,10 @@ model UsuarioOrganizacao {
   funcaoProfissional String?         // o que a pessoa faz (Social Media, Designer, etc.)
   areas              AreaAtuacao[]   // onde atua (audiovisual, growth, eventos)
   liderAudiovisual   Boolean         @default(false) // líder do audiovisual: aprova + é notificado de novas demandas
+  // Recebe todo aviso da operação no WhatsApp, independente do cargo. Antes isso
+  // era efeito colateral de ser admin/gestor — quem quisesse só acompanhar
+  // precisava ganhar acesso total ao sistema para receber as mensagens.
+  recebeTodosAvisos  Boolean         @default(false)
   // "No que estou agora": mora aqui, e não na demanda, porque foco é da PESSOA
   // numa empresa — cada um tem um de cada vez. Sem FK de propósito: se a demanda
   // sumir, a leitura simplesmente não encontra e limpa, em vez de exigir cascade.

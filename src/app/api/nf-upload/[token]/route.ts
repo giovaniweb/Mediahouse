@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 
@@ -130,10 +131,7 @@ export async function POST(
  */
 async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string, organizacaoId?: string | null) {
   try {
-    const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const gestores = await quemRecebeTudo(organizacaoId)
 
     const msg = `📄 *NF Recebida!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeVideomaker} enviou a nota fiscal.\n\nAcesse *Aprovações → Pagamentos* para aprovar.`
 

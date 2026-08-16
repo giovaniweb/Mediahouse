@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
+import { quemRecebeTudo } from "@/lib/notificados"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA, STATUS_PRAZO_PAUSADO } from "@/lib/status"
@@ -563,10 +564,7 @@ async function notificarGestoresNovaDemanda(
   organizacaoId?: string | null
 ) {
   try {
-    const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const gestores = await quemRecebeTudo(organizacaoId)
 
     const emoji = prioridade === "urgente" ? "🚨" : prioridade === "alta" ? "⚡" : "📋"
     const prioLabel = prioridade === "urgente" ? "URGENTE" : prioridade === "alta" ? "Alta" : "Normal"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
@@ -302,10 +303,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
 async function notificarGestoresAprovacao(mensagem: string, organizacaoId?: string | null) {
   try {
-    const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] }, status: "ativo", telefone: { not: null }, ...(organizacaoId ? { organizacoes: { some: { organizacaoId } } } : {}) },
-      select: { telefone: true },
-    })
+    const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
         await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
