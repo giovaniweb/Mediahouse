@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { registrarWebhookEntrada, origemPublica } from "@/lib/whatsapp-webhook"
 
 // GET /api/configuracoes/whatsapp/qr — QR da instância Evolution DA ORGANIZAÇÃO logada.
 // Cada empresa tem sua própria instância (instanceName = nuflow_<slug>).
@@ -75,7 +76,26 @@ export async function GET() {
             ...(perfil && { pushName: perfil }),
           },
         }).catch(() => null)
-        return NextResponse.json({ conectado: true, estado: "open", telefone: fone, perfil })
+
+        // Parear derruba o webhook em memória da Evolution. Reaplicar aqui é o
+        // que impede a falha de sempre: envio de pé, recebimento desligado, e
+        // ninguém sabendo — em 16/08/2026 um "sim" caiu justamente nos 18
+        // minutos entre o pareamento e alguém lembrar de apertar o botão.
+        const webhook = await registrarWebhookEntrada(
+          { ...config, webhookSecret: config.webhookSecret },
+          origemPublica()
+        )
+        if (!webhook.confirmado) {
+          console.warn(`[QR] Webhook de entrada NÃO confirmado após conectar: ${webhook.erro ?? "sem MESSAGES_UPSERT"}`)
+        }
+
+        return NextResponse.json({
+          conectado: true,
+          estado: "open",
+          telefone: fone,
+          perfil,
+          recebimentoAtivo: webhook.confirmado,
+        })
       }
 
       // Instância existe mas desconectada → buscar QR code
