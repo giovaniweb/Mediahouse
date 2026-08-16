@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest"
-import { destinatariosDoAviso, mensagemKanban, type DadosAvisoKanban } from "@/lib/kanban-avisos"
+import {
+  destinatariosDoAviso, mensagemKanban, STATUS_COM_AVISO_KANBAN,
+  AVISO_GESTOR_QUANDO_EXECUTOR_MEXE, type DadosAvisoKanban,
+} from "@/lib/kanban-avisos"
 
 // Base com todo mundo vazio: cada teste liga só o que está exercitando.
 function base(over: Partial<DadosAvisoKanban> = {}): DadosAvisoKanban {
@@ -218,5 +221,54 @@ describe("texto das mensagens", () => {
   it("impedimento leva o motivo para quem executa", () => {
     const m = mensagemKanban("impedimento", "V-1", "T", "executor", "faltou o material do cliente")
     expect(m).toContain("faltou o material do cliente")
+  })
+})
+
+describe("consistência do mapa (a classe de erro que já aconteceu)", () => {
+  // Um aviso já foi escrito para "aguardando_aprovacao_cliente", status que
+  // nunca existiu no enum: a chave não casava com nada e a mensagem com o link
+  // de aprovação nunca era enviada. Sem erro, sem log, sem ninguém saber.
+  it("todo status com aviso existe no enum do Prisma", async () => {
+    const { StatusInterno } = await import("@prisma/client")
+    const reais = new Set(Object.keys(StatusInterno))
+    const fantasmas = STATUS_COM_AVISO_KANBAN.filter((s) => !reais.has(s))
+    expect(fantasmas).toEqual([])
+  })
+
+  it("todo status declarado produz mensagem para pelo menos um papel", () => {
+    const papeisTodos = ["videomaker", "solicitante", "gestor", "editor", "executor"] as const
+    const mudos = STATUS_COM_AVISO_KANBAN.filter(
+      (s) => !papeisTodos.some((p) => mensagemKanban(s, "V-1", "T", p))
+    )
+    expect(mudos).toEqual([])
+  })
+
+  it("os avisos de gestão apontam para status reais", async () => {
+    const { StatusInterno } = await import("@prisma/client")
+    const reais = new Set(Object.keys(StatusInterno))
+    const fantasmas = Object.keys(AVISO_GESTOR_QUANDO_EXECUTOR_MEXE).filter((s) => !reais.has(s))
+    expect(fantasmas).toEqual([])
+  })
+
+  it("cada coluna de trabalho do Growth avisa alguém", async () => {
+    const { GROWTH_COLUNA_PARA_STATUS } = await import("@/lib/growth-kanban")
+    // backlog e briefing ficam de fora de propósito: a demanda ainda não é de
+    // ninguém, avisar ali seria ruído.
+    const colunasDeTrabalho = ["para_fazer", "fazendo", "para_aprovacao", "programado", "finalizado", "impedimento"] as const
+
+    const semAviso = colunasDeTrabalho.filter((coluna) => {
+      const status = GROWTH_COLUNA_PARA_STATUS[coluna]
+      const r = destinatariosDoAviso(base({
+        statusNovo: status,
+        telefonesExecutores: ["5531988887777"],
+        telefoneSolicitanteSistema: "5531955554444",
+        telefonesGestores: ["5531911112222"],
+        telefonesSocial: ["5531933332222"],
+        autorTelefone: "5531900009999",
+        autorEhGestor: false,
+      }))
+      return r.length === 0
+    })
+    expect(semAviso).toEqual([])
   })
 })

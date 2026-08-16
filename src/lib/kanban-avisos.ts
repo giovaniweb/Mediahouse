@@ -10,6 +10,19 @@ export type DestinatarioKanban =
   | "videomaker" | "solicitante" | "gestor" | "editor" | "executor"
 
 /**
+ * Status que têm aviso definido. Existe para ser conferida contra o enum do
+ * Prisma no teste: já houve um aviso escrito para "aguardando_aprovacao_cliente",
+ * status que nunca existiu — a chave não casava com nada e a mensagem com o
+ * link de aprovação simplesmente nunca era enviada, sem erro nenhum.
+ */
+export const STATUS_COM_AVISO_KANBAN = [
+  "videomaker_notificado", "videomaker_aceitou", "videomaker_recusou",
+  "captacao_agendada", "brutos_enviados", "fila_edicao", "editando",
+  "edicao_finalizada", "revisao_pendente", "aprovado", "ajuste_solicitado",
+  "postado", "entregue_cliente", "impedimento",
+] as const
+
+/**
  * Texto do aviso para um papel, ou null quando esse papel não precisa saber
  * dessa mudança.
  *

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { StatusInterno } from "@prisma/client"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
 import { decryptSecret } from "@/lib/secret-crypto"
 import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, TOOLS_WHATSAPP_DESCONHECIDO, SYSTEM_WHATSAPP } from "@/lib/claude"
@@ -752,7 +753,10 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
       await prisma.$transaction([
         prisma.demanda.update({
           where: { id: demanda.id },
-          data: { statusInterno: "videomaker_aceitou" },
+          // statusVisivel junto: sem ele o card ficava numa coluna do kanban
+          // que já não corresponde ao estado da demanda — o SIM avançava o
+          // status interno e o quadro continuava mostrando o anterior.
+          data: { statusInterno: "videomaker_aceitou", statusVisivel: STATUS_PARA_COLUNA["videomaker_aceitou"] },
         }),
         prisma.historicoStatus.create({
           data: {
@@ -784,7 +788,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
       await prisma.$transaction([
         prisma.demanda.update({
           where: { id: demanda.id },
-          data: { statusInterno: "videomaker_recusou", videomakerId: null },
+          data: { statusInterno: "videomaker_recusou", statusVisivel: STATUS_PARA_COLUNA["videomaker_recusou"], videomakerId: null },
         }),
         prisma.historicoStatus.create({
           data: {
