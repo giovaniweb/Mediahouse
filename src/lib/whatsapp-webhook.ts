@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma"
 import crypto from "crypto"
+import { encryptSecret, decryptSecret } from "@/lib/secret-crypto"
 
 export interface ResultadoWebhook {
   ok: boolean
@@ -46,22 +47,40 @@ export async function registrarWebhookEntrada(
     return { ok: false, confirmado: false, erro: "URL pública indisponível (NEXTAUTH_URL). A Evolution não alcançaria este endereço." }
   }
 
-  // Sem segredo, o endpoint aceitaria qualquer origem — e ele cria demanda e
-  // evento pelas ferramentas da IA. Gera um na primeira vez.
-  let segredo = config.webhookSecret
-  if (!segredo) {
-    segredo = crypto.randomBytes(24).toString("base64url")
+  // O contrato do segredo tem dois lados, e eles são DIFERENTES:
+  //   banco → cifrado (encryptSecret)
+  //   URL   → texto plano, porque é o que o webhook compara depois de decifrar
+  //           o valor do banco (ver segredoConfere em api/whatsapp/webhook).
+  //
+  // Registrar o valor cifrado na URL foi o que manteve o recebimento morto: a
+  // Evolution mandava o cifrado, o webhook comparava com o decifrado, nunca
+  // batia, e cada mensagem era descartada com 200 na resposta. Os dois lados
+  // pareciam certos — o segredo do banco era idêntico ao registrado na
+  // Evolution — e mesmo assim nada entrava.
+  let segredoPlano: string | null = null
+  if (config.webhookSecret) {
+    try {
+      segredoPlano = decryptSecret(config.webhookSecret)
+    } catch {
+      // Gravado em texto plano por uma versão anterior, ou ilegível com a chave
+      // atual. Nos dois casos não dá para confiar: gera um novo abaixo.
+      segredoPlano = null
+    }
+  }
+
+  if (!segredoPlano) {
+    segredoPlano = crypto.randomBytes(24).toString("base64url")
     // updateMany com a organização no where, e não update por id: o id sozinho
     // grava sem provar de quem é a configuração. Aqui o chamador já resolveu a
     // org pela sessão, então o escopo é real, não decoração para o auditor.
     await prisma.configWhatsapp.updateMany({
       where: { id: config.id, organizacaoId: config.organizacaoId },
-      data: { webhookSecret: segredo },
+      data: { webhookSecret: encryptSecret(segredoPlano) },
     })
   }
 
   const base = config.instanceUrl.replace(/\/$/, "")
-  const url = `${origem.replace(/\/$/, "")}/api/whatsapp/webhook?s=${segredo}`
+  const url = `${origem.replace(/\/$/, "")}/api/whatsapp/webhook?s=${segredoPlano}`
   const eventos = ["MESSAGES_UPSERT", "CONNECTION_UPDATE"]
 
   try {
