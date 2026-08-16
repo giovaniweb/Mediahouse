@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
-import { Film, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Sparkles, Package, Layers } from "lucide-react"
+import { Film, Play, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Sparkles, Package, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 
@@ -53,6 +53,66 @@ function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | 
     }
   }
   return descricao ?? ""
+}
+
+/**
+ * Player com capa de "toque para assistir".
+ *
+ * Um <video> parado mostra o primeiro frame — e roteiro de reels costuma abrir
+ * em tela escura. O resultado é um retângulo preto que parece player quebrado:
+ * o cliente não sabe se o vídeo não carregou, se a internet dele falhou, ou se
+ * não há nada ali. Aconteceu em produção e chegou como "a tela de aprovação não
+ * mostra o vídeo" — o vídeo estava lá, carregado e íntegro.
+ *
+ * A capa some no primeiro play e não volta.
+ */
+function PlayerVideo({ url, refVideo, duracaoConhecida }: {
+  url: string
+  refVideo?: React.RefObject<HTMLVideoElement | null>
+  duracaoConhecida?: number | null
+}) {
+  const [tocando, setTocando] = useState(false)
+  const interno = useRef<HTMLVideoElement | null>(null)
+  const el = refVideo ?? interno
+
+  const mmss = (s?: number | null) =>
+    s && Number.isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : null
+  const dur = mmss(duracaoConhecida)
+
+  return (
+    <div className="relative">
+      <video
+        ref={el}
+        // 60vh, e não 70: o painel de aprovação é sticky no rodapé e, num vídeo
+        // vertical (reels é 1080x1920), os dois juntos cobriam justamente o
+        // rodapé do vídeo — onde costuma estar a legenda.
+        className="w-full rounded-xl max-h-[60vh] bg-black"
+        controls
+        playsInline
+        preload="metadata"
+        src={url}
+        onPlay={() => setTocando(true)}
+      >
+        Seu navegador não suporta o player de vídeo.
+      </video>
+
+      {!tocando && (
+        <button
+          type="button"
+          onClick={() => el.current?.play()}
+          aria-label="Assistir ao vídeo"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/45 backdrop-blur-[1px] transition-colors hover:bg-black/35"
+        >
+          <span className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center shadow-lg">
+            <Play className="w-7 h-7 text-zinc-900 ml-1" fill="currentColor" />
+          </span>
+          <span className="text-sm font-medium text-white">
+            Toque para assistir{dur ? ` · ${dur}` : ""}
+          </span>
+        </button>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -266,16 +326,7 @@ export default function AprovarVideoPage() {
     const isMov = urlLimpa.endsWith(".mov") || urlLimpa.endsWith(".qt")
     return (
       <div className="space-y-3">
-        <video
-          ref={principal ? videoRef : undefined}
-          className="w-full rounded-xl max-h-[70vh] bg-black"
-          controls
-          playsInline
-          preload="metadata"
-          src={url}
-        >
-          Seu navegador não suporta o player de vídeo.
-        </video>
+        <PlayerVideo url={url} refVideo={principal ? videoRef : undefined} />
         {isMov && (
           <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
             Este vídeo está em formato <b>.mov</b> (Apple). Em alguns navegadores (ex: Chrome) a imagem pode aparecer preta.
