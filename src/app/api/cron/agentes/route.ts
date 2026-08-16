@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
-import { janelaDoDiaSeguinte } from "@/lib/datas"
+import { janelaDoDiaSeguinte, hojeEmSaoPaulo } from "@/lib/datas"
 
 // As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
 // roda para TODAS as organizações em série, não declarava nada e herdava o
@@ -461,7 +461,10 @@ async function rodarAgenteBriefing(organizacaoId: string) {
       dataFormatada,
       qtdEventos,
       qtdDemandas,
-      qtdCobrancias
+      qtdCobrancias,
+      // A dica do dia vem da data: todo mundo recebe a mesma, e ela só muda
+      // quando o dia vira.
+      hojeEmSaoPaulo(agora)
     )
     await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
     enviados++
