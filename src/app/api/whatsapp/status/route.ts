@@ -50,7 +50,36 @@ export async function GET() {
     ? Math.floor((Date.now() - ultimaEntrada.getTime()) / 86_400_000)
     : null
 
-  const recebimento = { naoEnviadas, ultimaEntrada, diasSemResposta }
+  // Quantas vezes a instância voltou do zero nas últimas 24h.
+  //
+  // Cada reinício apaga o histórico da própria Evolution e mata as sessões de
+  // criptografia — é a explicação mais provável para mensagens que somem no
+  // caminho. Sem este número, mexer no servidor é chutar: não dá para saber se
+  // a mudança melhorou alguma coisa.
+  const reiniciosEm24h = organizacaoId
+    ? await prisma.alertaIA.count({
+        where: {
+          organizacaoId,
+          tipoAlerta: "whatsapp_reconectou",
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+    : 0
+
+  // Mensagens que a Evolution entregou e o NuFlow recusou. É o ponto cego mais
+  // perigoso do caminho de entrada: tudo parece certo dos dois lados e a
+  // mensagem morre no meio, sem deixar nada além de um log na Vercel.
+  const webhookRejeitado = organizacaoId
+    ? await prisma.alertaIA.count({
+        where: {
+          organizacaoId,
+          tipoAlerta: "whatsapp_webhook_rejeitado",
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+    : 0
+
+  const recebimento = { naoEnviadas, ultimaEntrada, diasSemResposta, reiniciosEm24h, webhookRejeitado }
 
   if (!config) {
     return NextResponse.json({ connected: false, reason: "no_config", ...recebimento })

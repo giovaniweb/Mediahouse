@@ -404,7 +404,36 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   // mensagem. Configurado o segredo, ele passa a ser obrigatório.
   if (cfg.webhookSecret) {
     if (!segredoConfere(segredoApresentado, cfg.webhookSecret)) {
+      // Descartar em silêncio é a mesma doença de sempre: a mensagem some, o
+      // sistema segue verde e o único vestígio é um console.warn no log da
+      // Vercel, que ninguém lê. Se a Evolution perder a query `?s=` ao montar
+      // a chamada, TODA entrada morre aqui — e ninguém saberia por meses.
+      //
+      // Um alerta por hora: rejeição costuma vir em rajada, e o objetivo é
+      // aparecer na tela, não inundá-la.
       console.warn(`[WH] Segredo inválido para "${instanceName}" — descartado`)
+      const jaAvisou = await prisma.alertaIA.findFirst({
+        where: {
+          organizacaoId: cfg.organizacaoId,
+          tipoAlerta: "whatsapp_webhook_rejeitado",
+          createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+        },
+        select: { id: true },
+      }).catch(() => null)
+      if (!jaAvisou) {
+        await prisma.alertaIA.create({
+          data: {
+            organizacaoId: cfg.organizacaoId,
+            tipoAlerta: "whatsapp_webhook_rejeitado",
+            mensagem: segredoApresentado
+              ? "Mensagens do WhatsApp estão chegando com segredo inválido e sendo descartadas."
+              : "Mensagens do WhatsApp estão chegando SEM o segredo e sendo descartadas — a Evolution provavelmente perdeu o `?s=` da URL do webhook.",
+            severidade: "critico",
+            acaoSugerida: "Configurações › WhatsApp › Reativar recebimento de respostas",
+            status: "ativo",
+          },
+        }).catch(() => null)
+      }
       return
     }
   } else {
@@ -421,6 +450,27 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   if (eventNorm === "connection.update") {
     const state = data?.state ?? data?.status ?? "desconhecido"
     console.log(`[WH-CONN] Estado: ${state}`)
+
+    // Guarda o estado anterior ANTES de sobrescrever: é a diferença entre os
+    // dois que revela o reinício. Uma instância que morre de vez (OOM, deploy,
+    // crash) não manda "close" — ela só reaparece com "open", e sem comparar
+    // com o que estava gravado esse retorno passa despercebido.
+    const cfgAntes = await prisma.configWhatsapp.findFirst({
+      where: { OR: [{ instanceId: instanceName }, { instanceName }] },
+      select: { id: true, lastStatus: true, connectedAt: true },
+    }).catch(() => null)
+
+    if (cfgAntes) {
+      await prisma.configWhatsapp.update({
+        where: { id: cfgAntes.id },
+        data: {
+          lastStatus: String(state),
+          ativo: state === "open",
+          ...(state === "open" ? { connectedAt: new Date() } : {}),
+        },
+      }).catch(() => null)
+    }
+
     if (state === "close" || state === "disconnected") {
       console.error("[WH-CONN] ⚠️ WhatsApp DESCONECTADO")
       await prisma.alertaIA.create({
@@ -433,6 +483,31 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
           ...(organizacaoId && { organizacaoId }),
         },
       }).catch(() => null)
+    }
+
+    // Voltou a ficar de pé. Cada um destes é uma queda que aconteceu — é a
+    // única contagem de instabilidade que existe: a instância reinicia, perde o
+    // histórico dela e nada no NuFlow registrava que isso tinha acontecido.
+    if (state === "open" && cfgAntes) {
+      const desde = cfgAntes.connectedAt
+      const horasDePe = desde ? (Date.now() - desde.getTime()) / 3_600_000 : null
+      // "connecting" → "open" na mesma subida é a sequência normal de um boot;
+      // não conta como queda nova, senão cada reinício viraria dois alertas.
+      if (cfgAntes.lastStatus !== "connecting") {
+        console.warn(`[WH-CONN] Instância reconectou (estava de pé há ${horasDePe?.toFixed(1) ?? "?"}h)`)
+        await prisma.alertaIA.create({
+          data: {
+            tipoAlerta: "whatsapp_reconectou",
+            mensagem: horasDePe !== null && horasDePe < 24
+              ? `WhatsApp reconectou — estava de pé há apenas ${horasDePe < 1 ? `${Math.round(horasDePe * 60)} min` : `${horasDePe.toFixed(1)}h`}.`
+              : "WhatsApp reconectou.",
+            severidade: horasDePe !== null && horasDePe < 6 ? "aviso" : "info",
+            acaoSugerida: "Reinícios frequentes derrubam mensagens de entrada — verificar memória/estabilidade do servidor da Evolution",
+            status: "ativo",
+            ...(organizacaoId && { organizacaoId }),
+          },
+        }).catch(() => null)
+      }
     }
     return
   }

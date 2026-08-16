@@ -30,7 +30,7 @@ function TabWhatsapp() {
   const [sendingTest, setSendingTest] = useState(false)
 
   // Check connection on mount + poll every 15s
-  const { data: status } = useSWR<{ connected: boolean; state?: string; diasSemResposta?: number | null }>(
+  const { data: status } = useSWR<{ connected: boolean; state?: string; diasSemResposta?: number | null; reiniciosEm24h?: number; webhookRejeitado?: number }>(
     "/api/whatsapp/status", fetcher,
     {
       refreshInterval: 15000,
@@ -187,6 +187,42 @@ function TabWhatsapp() {
           )}
         </div>
       </div>
+
+      {/* Mensagem chegando e sendo recusada — o pior caso, porque os dois lados
+          parecem certos e a mensagem morre no meio. */}
+      {(status?.webhookRejeitado ?? 0) > 0 && (
+        <div className="rounded-xl p-4 flex items-start gap-3 bg-red-500/10 border border-red-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-red-300">
+              Mensagens estão chegando e sendo recusadas
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              O WhatsApp entregou mensagens que o NuFlow não aceitou nas últimas 24h.
+              Use <span className="text-zinc-200">Reativar recebimento de respostas</span>, logo abaixo do QR Code — isso reconfigura o endereço de entrada.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Estabilidade do servidor. Cada reinício apaga as sessões de criptografia
+          da Evolution: mensagem que chega durante a queda simplesmente some, e
+          não existe como recuperá-la depois. */}
+      {(status?.reiniciosEm24h ?? 0) > 0 && (
+        <div className="rounded-xl p-4 flex items-start gap-3 bg-red-500/10 border border-red-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-red-300">
+              O servidor do WhatsApp reiniciou {status?.reiniciosEm24h}{" "}
+              {status?.reiniciosEm24h === 1 ? "vez" : "vezes"} nas últimas 24h
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              A cada reinício, as mensagens que chegam naquele momento se perdem — não há como recuperá-las depois.
+              Se este número não for zero, o problema está no servidor da Evolution, não na configuração daqui.
+            </p>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div className={cn(
