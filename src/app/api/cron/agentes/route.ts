@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { janelaDoDiaSeguinte } from "@/lib/datas"
 
 // As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
 // roda para TODAS as organizações em série, não declarava nada e herdava o
@@ -331,7 +332,75 @@ async function rodarAgenteLembretes(organizacaoId: string) {
     enviados++
   }
 
-  return { agente: "lembretes", enviados }
+  const captacoes = await lembrarCaptacoesDeAmanha(organizacaoId)
+  return { agente: "lembretes", enviados, captacoes }
+}
+
+/**
+ * Avisa quem vai captar amanhã.
+ *
+ * A tela de Configurações prometia "Captação agendada — lembrete 24h antes"
+ * desde sempre, e o template `captacaoLembrete` existia em lib/whatsapp.ts —
+ * mas nenhuma rota e nenhum cron o chamavam. A promessa estava na tela e o
+ * videomaker nunca recebeu esse lembrete. O agente de lembretes só olhava o
+ * model Evento (agenda), que é outra coisa e hoje está vazio.
+ *
+ * Roda uma vez por dia, então o recorte é "as captações de amanhã" — não uma
+ * janela de 24h contadas na hora, que exigiria cron de hora em hora.
+ */
+async function lembrarCaptacoesDeAmanha(organizacaoId: string) {
+  const FUSO = "America/Sao_Paulo"
+  const agora = new Date()
+  // Amanhã no fuso de São Paulo, não em UTC: depois das 21h de Brasília o dia
+  // em UTC já virou e o lembrete sairia com um dia de erro. A conta mora em
+  // lib/datas.ts, coberta por teste.
+  const { inicio, fim } = janelaDoDiaSeguinte(agora)
+
+  const demandas = await prisma.demanda.findMany({
+    where: {
+      organizacaoId,
+      dataCaptacao: { gte: inicio, lte: fim },
+      statusInterno: { notIn: ["encerrado", "expirado", "videomaker_recusou"] },
+      videomakerId: { not: null },
+    },
+    select: {
+      id: true, codigo: true, titulo: true, dataCaptacao: true,
+      localGravacao: true, cidade: true,
+      videomaker: { select: { telefone: true } },
+    },
+  })
+
+  let enviados = 0
+  for (const d of demandas) {
+    const telefone = d.videomaker?.telefone
+    if (!telefone || !d.dataCaptacao) continue
+
+    // Sem campo "lembreteEnviado" na Demanda — e sem migration para isto. Se o
+    // cron rodar duas vezes no mesmo dia, a mensagem já registrada segura a
+    // segunda: mesma demanda, mesmo texto, últimas 20h.
+    const jaAvisado = await prisma.mensagemWhatsapp.findFirst({
+      where: {
+        demandaId: d.id,
+        direcao: "saida",
+        conteudo: { startsWith: "⏰ Amanhã você tem captação" },
+        createdAt: { gte: new Date(agora.getTime() - 20 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    }).catch(() => null)
+    if (jaAvisado) continue
+
+    const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" }).format(d.dataCaptacao)
+    const local = d.localGravacao || d.cidade || "local a confirmar"
+    await sendWhatsappMessage(
+      telefone,
+      templates.captacaoLembrete(d.codigo, d.titulo, `às ${hora}`, local),
+      d.id,
+      organizacaoId
+    ).catch(() => null)
+    enviados++
+  }
+
+  return enviados
 }
 
 // ── TDAH: Morning Briefing para Gestores ─────────────────────────────────
