@@ -41,6 +41,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       responsavel: { select: { telefone: true } },
       responsaveis: { select: { usuario: { select: { telefone: true } } } },
       designer: { select: { telefone: true, whatsapp: true } },
+      // Para a checagem de "não mandar para aprovação sem peça anexada".
+      _count: { select: { arquivos: true } },
     },
   })
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
@@ -57,6 +59,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
   if (statusInterno === "impedimento" && !observacao && !demandaAtual.motivoImpedimento) {
     return NextResponse.json({ error: "Motivo do impedimento obrigatório." }, { status: 400 })
+  }
+  // Growth: "Para aprovação" sem arte anexada é um card que não tem o que
+  // aprovar. Em 16/08/2026 as três demandas de Growth nessa coluna estavam
+  // assim — nenhuma com peça, nenhuma com link de aprovação. Quem movia achava
+  // que tinha mandado para o cliente; o cliente nunca recebeu nada.
+  //
+  // Mesmo princípio que o audiovisual já aplica ao exigir o link do vídeo final
+  // para sair da edição.
+  if (
+    statusInterno === "revisao_pendente" &&
+    demandaAtual.area === "design" &&
+    demandaAtual._count.arquivos === 0
+  ) {
+    return NextResponse.json(
+      { error: "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio." },
+      { status: 400 }
+    )
   }
 
   const novoStatusVisivel = STATUS_PARA_COLUNA[statusInterno as StatusInterno]
