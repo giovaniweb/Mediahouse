@@ -73,7 +73,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
         where: { status: "pendente" },
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { token: true, urlVideo: true, status: true, createdAt: true },
+        // expiresAt vai junto: o link pode estar de pé na tela e morto para o
+        // cliente. Em 17/08/2026, 44 das 49 aprovações pendentes estavam
+        // expiradas — e a tela mostrava o link em verde, com check.
+        select: { token: true, urlVideo: true, status: true, createdAt: true, expiresAt: true },
       },
     },
   })

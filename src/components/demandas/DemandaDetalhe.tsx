@@ -13,7 +13,7 @@ import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
-  AlertTriangle, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
+  AlertTriangle, RefreshCw, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
   CalendarRange, ArrowUpRight, FileText, Download, Eye,
 } from "lucide-react"
 import Link from "next/link"
@@ -187,6 +187,59 @@ function getDemandCopy(growth: boolean) {
 
 interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
 interface ArquivoVideo { id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null; createdAt: string }
+
+/**
+ * Avisa que o link de aprovação morreu — e oferece a renovação num clique.
+ *
+ * A tela mostrava o link em verde com check mesmo depois de vencido. Quem
+ * acompanhava a demanda achava que o cliente tinha o vídeo em mãos; o cliente
+ * abria e via "Link inválido", sem nenhuma saída na página. Em 17/08/2026 isso
+ * valia para 44 das 49 aprovações pendentes.
+ *
+ * A rota de renovar já existia (PATCH, +30 dias) e nenhuma tela a chamava.
+ */
+function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
+  linkCliente?: string | null
+  expiresAt?: string | null
+  onRenovado: () => void
+}) {
+  const [renovando, setRenovando] = useState(false)
+  if (!linkCliente || !expiresAt) return null
+  const venceu = new Date(expiresAt) < new Date()
+  if (!venceu) return null
+
+  const token = linkCliente.split("/aprovar/")[1]?.split(/[?#]/)[0]
+  const quando = new Date(expiresAt).toLocaleDateString("pt-BR")
+
+  async function renovar() {
+    if (!token) return
+    setRenovando(true)
+    try {
+      const r = await fetch(`/api/aprovacao-video/${token}`, { method: "PATCH" })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Erro ao renovar")
+      toast.success("Link renovado por mais 30 dias. Pode reenviar ao cliente.")
+      onRenovado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui renovar o link")
+    } finally { setRenovando(false) }
+  }
+
+  return (
+    <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2.5 space-y-2">
+      <p className="text-xs text-red-300">
+        <b>Este link expirou em {quando}.</b> Quem abrir vê “Link inválido” — o vídeo não chega ao cliente.
+      </p>
+      <button
+        onClick={renovar}
+        disabled={renovando || !token}
+        className="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+      >
+        <RefreshCw className={`w-3.5 h-3.5 ${renovando ? "animate-spin" : ""}`} />
+        {renovando ? "Renovando..." : "Renovar por mais 30 dias"}
+      </button>
+    </div>
+  )
+}
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
   const id = demandaId
@@ -686,7 +739,17 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       const res = await fetch("/api/aprovacao-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId: id, urlVideo: videoUrl, expiresInDays: 7 }),
+        // 30 dias, não 7.
+        //
+        // Sete dias não cabem no ciclo real: o cliente viaja, o material fica
+        // para a semana seguinte, e quando ele abre o link já morreu. Em
+        // 17/08/2026, 44 das 49 aprovações pendentes estavam expiradas — a mais
+        // antiga esperando desde abril. Cada uma dessas é um vídeo pronto que
+        // não vira publicação.
+        //
+        // O texto que vai no WhatsApp já dizia "válido por 30 dias" quando o
+        // valor não era informado: a tela mandava 7 e prometia 30.
+        body: JSON.stringify({ demandaId: id, urlVideo: videoUrl, expiresInDays: 30 }),
       })
       const text = await res.text()
       let json: { ok?: boolean; link?: string; error?: string } = {}
@@ -1093,6 +1156,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                             {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
                           </button>
                         </div>
+                        <AvisoLinkExpirado
+                          linkCliente={demanda.linkCliente}
+                          expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
+                          onRenovado={() => mutate()}
+                        />
                         <button onClick={() => setAprovacaoAberta(true)} className="w-full flex items-center justify-center gap-1.5 text-sm bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-2.5 rounded-xl">
                           <Eye className="w-4 h-4" /> Abrir aprovação
                         </button>
@@ -2046,6 +2114,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 {/* Ver o vídeo aqui dentro, sem sair para o link do cliente.
                     Quem acompanha a demanda precisa conferir o que foi enviado
                     para aprovação — antes só dava abrindo a página pública. */}
+                <AvisoLinkExpirado
+                  linkCliente={demanda.linkCliente}
+                  expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
+                  onRenovado={() => mutate()}
+                />
                 {demanda.linkFinal && (
                   <button
                     onClick={() => setPlayerUrl(demanda.linkFinal!)}
