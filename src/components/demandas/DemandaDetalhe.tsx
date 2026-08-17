@@ -8,6 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
+import { analisarVideoDoUpload } from "@/lib/video-compat"
 import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
@@ -407,6 +408,22 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
     const contentType = file.type || copy.contentTypeFallback
+
+    // Confere ANTES de subir se o vídeo abre no navegador de quem aprova.
+    //
+    // Não adianta testar o player daqui: quem envia costuma estar no Mac, onde
+    // o Safari toca HEVC sem reclamar — o videomaker vê o vídeo perfeito e sobe
+    // tranquilo, e o cliente abre no Chrome e vê preto. Por isso a checagem
+    // olha os bytes do arquivo, não o navegador.
+    if (tipo === "final") {
+      const compat = await analisarVideoDoUpload(file)
+      if (!compat.compativel) {
+        const seguir = window.confirm(
+          `${compat.motivo}\n\n${compat.comoResolver}\n\nEnviar mesmo assim?`
+        )
+        if (!seguir) throw new Error("Envio cancelado — exporte em H.264 / MP4 e tente de novo.")
+      }
+    }
 
     // Valida tamanho (Supabase Pro suporta até 5 GB após configurar no dashboard)
     const MAX_UPLOAD_MB = 490
@@ -2026,8 +2043,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
                   </button>
                 </div>
+                {/* Ver o vídeo aqui dentro, sem sair para o link do cliente.
+                    Quem acompanha a demanda precisa conferir o que foi enviado
+                    para aprovação — antes só dava abrindo a página pública. */}
+                {demanda.linkFinal && (
+                  <button
+                    onClick={() => setPlayerUrl(demanda.linkFinal!)}
+                    className="w-full flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 text-sm font-medium py-2.5 rounded-lg transition-colors"
+                  >
+                    <Play className="w-4 h-4" /> Ver o vídeo enviado
+                  </button>
+                )}
                 <Link href={demanda.linkCliente} target="_blank" className="flex items-center gap-1 text-xs text-blue-400 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Abrir player de aprovação
+                  <ExternalLink className="w-3 h-3" /> Abrir a página que o cliente vê
                 </Link>
               </div>
             ) : (
