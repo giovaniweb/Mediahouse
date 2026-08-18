@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { TIPOS_PENDENTES, TIPOS_FATO, DIAS_ATE_EXPIRAR_FATO } from "@/lib/alertas"
+import { TIPOS_PENDENTES, TIPOS_FATO, DIAS_ATE_EXPIRAR_FATO, ehTipoConhecido } from "@/lib/alertas"
 
 // Cada tipo de pendência tem que saber dizer quando ainda vale e quando não vale
 // mais. É o par que importa: um predicado que só devolve `true` fecha nada (é o
@@ -59,13 +59,48 @@ describe("pagamento_pendente", () => {
 })
 
 describe("demanda_parada", () => {
-  it("vale enquanto a demanda existir e não estiver encerrada", () => {
-    expect(vale("demanda_parada", { statusDemanda: "aguardando_triagem" })).toBe(true)
+  const criado = new Date("2026-08-10T12:00:00Z")
+
+  it("vale enquanto ninguém mexeu na demanda depois do alerta", () => {
+    expect(vale("demanda_parada", {
+      statusDemanda: "aguardando_triagem",
+      alertaCriadoEm: criado,
+      demandaMexidaEm: new Date("2026-08-01T12:00:00Z"),
+    })).toBe(true)
+  })
+
+  it("deixa de valer no instante em que a demanda anda", () => {
+    // Sem isto o alerta era imortal: demanda destravada, aviso de pé. Eram 274
+    // assim na base.
+    expect(vale("demanda_parada", {
+      statusDemanda: "editando",
+      alertaCriadoEm: criado,
+      demandaMexidaEm: new Date("2026-08-15T12:00:00Z"),
+    })).toBe(false)
   })
 
   it("deixa de valer quando encerrada ou apagada", () => {
     expect(vale("demanda_parada", { statusDemanda: "encerrado" })).toBe(false)
     expect(vale("demanda_parada", { statusDemanda: undefined })).toBe(false)
+  })
+})
+
+describe("tipos que a IA inventa", () => {
+  it("os que o código declara são reconhecidos", () => {
+    expect(ehTipoConhecido("aprovacao_pendente")).toBe(true)
+    expect(ehTipoConhecido("video_aprovado")).toBe(true)
+  })
+
+  it("os que a IA cria não são — e é por isso que precisam expirar", () => {
+    // `criar_alerta` grava `tipoAlerta: input.tipo`: a string vem do modelo.
+    // Estes existem na base e não aparecem em lugar nenhum do código.
+    for (const inventado of [
+      "capacidade_baixa", "sobrecarga_editor", "processo_falho",
+      "processo_quebrado", "dados_incompletos", "cadastro_incompleto",
+      "demandas_sem_prazo", "gestor_sem_telefone",
+    ]) {
+      expect(ehTipoConhecido(inventado)).toBe(false)
+    }
   })
 })
 

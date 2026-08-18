@@ -38,16 +38,20 @@ async function main() {
     const antes = await prisma.alertaIA.count({ where: { organizacaoId: org.id, status: "ativo" } })
 
     if (!aplicar) {
-      // Sem escrever: reproduz a contagem lendo o mesmo estado que o resolvedor
-      // olharia. Serve para dimensionar antes de mexer.
-      const porTipo = await prisma.alertaIA.groupBy({
-        by: ["tipoAlerta"],
-        where: { organizacaoId: org.id, status: "ativo" },
-        _count: true,
-      })
-      console.log(`${org.slug}: ${antes} ativo(s)`)
-      for (const t of porTipo.sort((a, b) => b._count - a._count)) {
-        console.log(`   ${String(t._count).padStart(4)}  ${t.tipoAlerta}`)
+      // Simulação de verdade: aplica o MESMO critério da execução e não
+      // escreve. Contar por tipo, como a primeira versão fazia, dizia quantos
+      // alertas existem — não quantos fechariam, que é a pergunta.
+      const { simularResolucao } = await import("@/lib/alertas")
+      const previsto = await simularResolucao(org.id)
+
+      console.log(`${org.slug}: ${antes} ativo(s) → ${antes - previsto.total} depois\n`)
+      for (const [tipo, n] of Object.entries(previsto.fecharia).sort((a, b) => b[1] - a[1])) {
+        console.log(`   fecha  ${String(n).padStart(4)}  ${tipo}`)
+      }
+      const ficam = Object.entries(previsto.ficaria).sort((a, b) => b[1] - a[1])
+      if (ficam.length > 0) console.log("")
+      for (const [tipo, n] of ficam) {
+        console.log(`   FICA   ${String(n).padStart(4)}  ${tipo}`)
       }
       continue
     }
@@ -58,7 +62,7 @@ async function main() {
 
     console.log(
       `${org.slug}: ${antes} → ${depois} ativo(s)  ` +
-        `(${r.pendencias} pendência(s) fechada(s), ${r.fatosExpirados} fato(s) expirado(s))`
+        `(${r.pendencias} pendência(s) fechada(s), ${r.expirados} expirado(s) por idade)`
     )
   }
 
