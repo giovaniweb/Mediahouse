@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { listarDepartamentos } from "@/lib/departamentos"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 
 // ─── Executor principal ───────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ export async function executarFerramenta(
       case "buscar_demandas":
         return await buscarDemandas(input, organizacaoId)
       case "buscar_videomakers":
-        return await buscarVideomakers(input) // rede global — não escopar
+        return await buscarVideomakers(input, organizacaoId)
       case "buscar_custos":
         return await buscarCustos(input, organizacaoId)
       case "buscar_metricas":
@@ -45,7 +46,7 @@ export async function executarFerramenta(
       case "listar_gestores":
         return await listarGestores(organizacaoId)
       case "estruturar_demanda":
-        return await estruturarDemanda(input) // lógica pura — sem DB
+        return await estruturarDemanda(input, organizacaoId)
       case "solicitar_dados_demanda":
         return await solicitarDadosDemanda(input, organizacaoId)
       case "vincular_arquivo_demanda":
@@ -135,22 +136,50 @@ async function buscarDemandas(input: Record<string, unknown>, organizacaoId?: st
 async function buscarVideomakers(input: Record<string, unknown>, organizacaoId?: string | null): Promise<string> {
   const apenasAtivos = input.apenas_ativos !== false
 
+  // A REDE de videomakers é compartilhada entre as empresas — isso é decisão de
+  // produto e continua valendo. O que não pode vazar é o que pertence a UMA
+  // empresa: quanto ela paga de diária, quais demandas dela o profissional está
+  // tocando e quanto já custou. Antes esta função recebia organizacaoId e
+  // ignorava, então a IA de uma empresa respondia com número de outra.
+  //
+  // status e emListaNegra também moram no vínculo, não no perfil global: quem a
+  // empresa A barrou continua disponível para a empresa B.
+  const vinculos = organizacaoId
+    ? await prisma.videomakerOrganizacao.findMany({
+        where: {
+          organizacaoId,
+          ...(apenasAtivos ? { status: { in: ["ativo", "preferencial"] }, emListaNegra: false } : {}),
+        },
+        select: { videomakerId: true, valorDiaria: true, status: true, tipoContrato: true },
+      })
+    : []
+
+  if (organizacaoId && vinculos.length === 0) {
+    return JSON.stringify({ total: 0, videomakers: [], nota: "Nenhum videomaker vinculado a esta empresa." })
+  }
+
+  const idsDaEmpresa = vinculos.map((v) => v.videomakerId)
+  const porId = new Map(vinculos.map((v) => [v.videomakerId, v]))
+
+  // Perfil: só o que é da rede. Diária e status saem do vínculo, abaixo.
   const videomakers = await prisma.videomaker.findMany({
-    where: apenasAtivos
-      ? { status: { in: ["ativo", "preferencial"] }, emListaNegra: false }
-      : undefined,
+    where: {
+      ...(organizacaoId ? { id: { in: idsDaEmpresa } } : {}),
+      ...(apenasAtivos && !organizacaoId
+        ? { status: { in: ["ativo", "preferencial"] }, emListaNegra: false }
+        : {}),
+    },
     select: {
       id: true,
       nome: true,
       cidade: true,
-      telefone: true,
-      valorDiaria: true,
+      telefone: true,   // contato profissional — parte do perfil da rede
       avaliacao: true,
-      status: true,
       areasAtuacao: true,
       habilidades: true,
       demandas: {
         where: {
+          ...(organizacaoId ? { organizacaoId } : {}),
           statusInterno: {
             notIn: ["postado", "entregue_cliente", "encerrado", "expirado"],
           },
@@ -160,20 +189,26 @@ async function buscarVideomakers(input: Record<string, unknown>, organizacaoId?:
     },
   })
 
-  const hoje = new Date()
-  const ha30dias = new Date(hoje.getTime() - 30 * 86400000)
+  const ha30dias = new Date(Date.now() - 30 * 86400000)
 
   const custosPorVm = await prisma.custoVideomaker.groupBy({
     by: ["videomakerId"],
-    where: { dataReferencia: { gte: ha30dias } },
+    where: {
+      ...(organizacaoId ? { organizacaoId } : {}),
+      dataReferencia: { gte: ha30dias },
+    },
     _sum: { valor: true },
     _count: { id: true },
   })
 
   const vmComDados = videomakers.map(vm => {
     const custoVm = custosPorVm.find(c => c.videomakerId === vm.id)
+    const vinculo = porId.get(vm.id)
     return {
       ...vm,
+      valorDiaria: vinculo?.valorDiaria ?? null,
+      status: vinculo?.status ?? null,
+      tipoContrato: vinculo?.tipoContrato ?? null,
       demandasAtivas: vm.demandas.length,
       custoUltimos30d: custoVm?._sum.valor ?? 0,
       servicosMes: custoVm?._count.id ?? 0,
@@ -820,12 +855,25 @@ async function estruturarDemanda(input: Record<string, unknown>, organizacaoId?:
   else if (textoLower.includes("ads") || textoLower.includes("meta") || textoLower.includes("anúncio")) tipoVideo = "video_meta_ads"
   else if (textoLower.includes("vsl") || textoLower.includes("vendas")) tipoVideo = "vsl"
 
-  // Detecta departamento
-  let departamento = "outros"
-  if (textoLower.includes("growth") || textoLower.includes("marketing")) departamento = "growth"
-  else if (textoLower.includes("evento")) departamento = "eventos"
-  else if (textoLower.includes("institucional") || textoLower.includes("empresa")) departamento = "institucional"
-  else if (textoLower.includes("rh") || textoLower.includes("recurso")) departamento = "rh"
+  // Detecta departamento contra a lista REAL da empresa, não uma lista fixa aqui.
+  // Departamento saiu do enum e virou ConfigParametro por empresa justamente
+  // para caber "CRM" e "Sistema". Enquanto esta função chutava de uma lista
+  // fixa, "preciso de um vídeo pro CRM" caía em "outros" e alguém tinha que
+  // reclassificar na mão depois.
+  const departamentos = await listarDepartamentos(organizacaoId)
+  const existe = (v: string) => departamentos.some((d) => d.valor === v)
+
+  // Primeiro o nome do próprio departamento aparecendo no texto.
+  let departamento = departamentos.find((d) => textoLower.includes(d.label.toLowerCase()))?.valor ?? ""
+
+  // Depois os apelidos que a equipe usa e que não são o nome cadastrado.
+  if (!departamento) {
+    if (textoLower.includes("marketing") && existe("growth")) departamento = "growth"
+    else if (textoLower.includes("evento") && existe("eventos")) departamento = "eventos"
+    else if (textoLower.includes("empresa") && existe("institucional")) departamento = "institucional"
+    else if (textoLower.includes("recurso") && existe("rh")) departamento = "rh"
+  }
+  if (!departamento) departamento = "outros"
 
   // Detecta prioridade
   let prioridade = "normal"
