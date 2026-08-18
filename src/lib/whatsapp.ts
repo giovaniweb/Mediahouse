@@ -3,7 +3,6 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { dicaDoDia } from "@/lib/variacao"
 
 // ─── Resolução de organização (SaaS multiempresa) ────────────────────────────
 // Cache do id da org Contourline — usado APENAS como fallback legado/temporário
@@ -254,9 +253,12 @@ export const templates = {
   // uma vez por dia, num momento em que a pessoa ainda não está no meio de uma
   // tarefa. Espalhar conselho pelos avisos operacionais faria a equipe parar de
   // ler todos eles — inclusive os que importam.
-  briefingDiario: (nome: string, dataFormatada: string, eventos: number, demandas: number, cobrancas: number, dia?: string) =>
+  // A "dica do dia" saiu daqui. A mensagem passou a carregar cobrança real sobre
+  // demanda parada, e num texto que se lê todo dia o enfeite é a parte que se
+  // aprende a pular — junto com o que vinha ao lado dele.
+  briefingDiario: (nome: string, dataFormatada: string, eventos: number, demandas: number, cobrancas: number, blocoParados?: string) =>
     `☀️ Bom dia, ${nome}! Hoje, ${dataFormatada}:\n\n` +
-    `${eventos} evento(s) na agenda\n${demandas} demanda(s) vencendo hoje ou amanhã\n${cobrancas} pagamento(s) em atraso\n\n` +
-    `${dia ? `_${dicaDoDia(dia)}_\n\n` : ""}` +
-    `nuflow.space`,
+    `${eventos} evento(s) na agenda\n${demandas} demanda(s) vencendo hoje ou amanhã\n${cobrancas} pagamento(s) em atraso\n` +
+    `${blocoParados ? `\n${blocoParados}\n` : ""}` +
+    `\nnuflow.space`,
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
+import { resolverAlertas } from "@/lib/alertas"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 
@@ -278,6 +279,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     // Notifica gestores
     emSegundoPlano(() => notificarGestoresAprovacao(msgBase, demanda.organizacaoId), "gestores-aprovacao")
+    // A demanda mudou de estado — o que estava pendente por causa do estado
+    // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
+    emSegundoPlano(() => resolverAlertas(demanda.organizacaoId, demanda.id), "resolver-alertas")
 
     // Notifica editor (quem edita precisa saber de ajustes)
     if (demanda.editor) {
