@@ -71,6 +71,25 @@ function DemandasKanban() {
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
   const [showImportar, setShowImportar] = useState(false)
 
+  // Abrir o formulário por link. Existia uma página cheia em /demandas/nova que
+  // fazia a mesma coisa que este modal — e tinha divergido dele. Agora os botões
+  // "Nova Demanda" espalhados pelo sistema apontam para cá, e a pessoa que veio
+  // pronta no link (ficha do videomaker/editor) chega já escolhida.
+  const abrirNova = searchParamsUrl.get("nova") === "1"
+  const prefillVideomaker = searchParamsUrl.get("videomakerId") ?? undefined
+  const prefillEditor = searchParamsUrl.get("editorId") ?? undefined
+
+  useEffect(() => {
+    if (abrirNova) setShowNovaDemandaModal(true)
+  }, [abrirNova])
+
+  // Tira os parâmetros da URL ao fechar: sem isso um F5 (ou o Voltar do
+  // navegador) reabriria o formulário sozinho.
+  function fecharNovaDemanda() {
+    setShowNovaDemandaModal(false)
+    if (abrirNova) router.replace("/demandas", { scroll: false })
+  }
+
   // Dados para filtros
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=200", fetcher)
@@ -401,7 +420,8 @@ function DemandasKanban() {
       {/* Modal Nova Demanda */}
       <NovaDemandaModal
         open={showNovaDemandaModal}
-        onClose={() => setShowNovaDemandaModal(false)}
+        onClose={fecharNovaDemanda}
+        prefill={{ videomakerId: prefillVideomaker, editorId: prefillEditor }}
       />
     </>
   )

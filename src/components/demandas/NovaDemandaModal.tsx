@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   X, Plus, Calendar, Link2, Loader2, Paperclip, Smartphone, Monitor,
   LayoutGrid, ClipboardList, Settings2, Users, Package, UploadCloud,
-  ChevronDown, FileText, MapPin,
+  ChevronDown, FileText, MapPin, User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -22,6 +22,12 @@ interface OpcaoEquipe { value: string; label: string; subtitle?: string }
 interface NovaDemandaModalProps {
   open: boolean
   onClose: () => void
+  /**
+   * Pessoa já escolhida ao abrir — vem do botão "Nova Demanda" na ficha de um
+   * videomaker ou de um editor. São tokens da equipe (`vm:<id>` / `ed:<id>`),
+   * os mesmos valores que /api/equipe-disponivel devolve.
+   */
+  prefill?: { videomakerId?: string; editorId?: string }
 }
 
 const inputClass =
@@ -109,7 +115,7 @@ function Chip({ texto, onRemover }: { texto: string; onRemover: () => void }) {
   )
 }
 
-export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
+export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalProps) {
   const router = useRouter()
   const overlayRef = useRef<HTMLDivElement>(null)
   // O gesto de clique começou no fundo? (ver comentário do backdrop, mais abaixo)
@@ -137,6 +143,13 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const [cidade, setCidade] = useState("")
   const [localEvento, setLocalEvento] = useState("")
   const [dataEvento, setDataEvento] = useState("")
+  const [horaEvento, setHoraEvento] = useState("")
+  // Quem comprou o equipamento. Não é enfeite: /api/demandas/[id]/converter-evento
+  // usa clienteFinalNome como cliente do evento, e quem vai gravar precisa de um
+  // telefone para combinar a chegada na clínica.
+  const [clienteNome, setClienteNome] = useState("")
+  const [clienteTelefone, setClienteTelefone] = useState("")
+  const [clienteEmail, setClienteEmail] = useState("")
 
   // ── Equipe e links ───────────────────────────────────────────────────────
   const [linkBrutos, setLinkBrutos] = useState("")
@@ -196,8 +209,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const temConteudo = !!(
     titulo.trim() || descricao.trim() || tipoVideo || produtoIds.length > 0 || classificacao ||
     dataLimite || linkBrutos.trim() || cidade.trim() || localEvento.trim() ||
-    dataEvento || motivoUrgencia.trim() || anexos.length > 0 ||
-    videomakerId || editorId || referencias.length > 0 || novaReferencia.trim()
+    dataEvento || horaEvento || motivoUrgencia.trim() || anexos.length > 0 ||
+    videomakerId || editorId || referencias.length > 0 || novaReferencia.trim() ||
+    clienteNome.trim() || clienteTelefone.trim() || clienteEmail.trim()
   )
 
   function limparRascunho() {
@@ -242,12 +256,14 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     localStorage.setItem(RASCUNHO_KEY, JSON.stringify({
       tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoIds,
       classificacao, referencias, tipoVideo, formato, cidade, localEvento, dataEvento,
-      linkBrutos, videomakerId, editorId,
+      horaEvento, linkBrutos, videomakerId, editorId,
+      clienteNome, clienteTelefone, clienteEmail,
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [temConteudo, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoIds,
       classificacao, referencias, tipoVideo, formato, cidade, localEvento, dataEvento,
-      linkBrutos, videomakerId, editorId])
+      horaEvento, linkBrutos, videomakerId, editorId,
+      clienteNome, clienteTelefone, clienteEmail])
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return
@@ -296,11 +312,36 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     setCidade((salvo?.cidade as string) ?? "")
     setLocalEvento((salvo?.localEvento as string) ?? "")
     setDataEvento((salvo?.dataEvento as string) ?? "")
+    setHoraEvento((salvo?.horaEvento as string) ?? "")
     setLinkBrutos((salvo?.linkBrutos as string) ?? "")
     setVideomakerId((salvo?.videomakerId as string) ?? "")
     setEditorId((salvo?.editorId as string) ?? "")
+    setClienteNome((salvo?.clienteNome as string) ?? "")
+    setClienteTelefone((salvo?.clienteTelefone as string) ?? "")
+    setClienteEmail((salvo?.clienteEmail as string) ?? "")
     setRascunhoRecuperado(!!salvo)
   }, [open])
+
+  // ── Pessoa que veio pronta no link ───────────────────────────────────────
+  // Roda depois da recuperação do rascunho (e de novo quando a lista chega):
+  // quem clicou "Nova Demanda" na ficha de alguém quis aquela pessoa, não a que
+  // tinha sobrado do rascunho. Só aplica se o token estiver na lista carregada —
+  // um select apontando para quem saiu da equipe mostraria "Definir na triagem"
+  // e mesmo assim enviaria a pessoa: a tela diria uma coisa e o POST outra.
+  const prefillVideomaker = prefill?.videomakerId
+  const prefillEditor = prefill?.editorId
+
+  // A dependência é a resposta do SWR, e não a lista com `?? []`: o fallback cria
+  // um array novo a cada render e faria o efeito rodar sem parar.
+  useEffect(() => {
+    if (!open || !prefillVideomaker) return
+    if (dataCaptacao?.opcoes?.some(o => o.value === prefillVideomaker)) setVideomakerId(prefillVideomaker)
+  }, [open, prefillVideomaker, dataCaptacao])
+
+  useEffect(() => {
+    if (!open || !prefillEditor) return
+    if (dataEdicao?.opcoes?.some(o => o.value === prefillEditor)) setEditorId(prefillEditor)
+  }, [open, prefillEditor, dataEdicao])
 
   if (!open) return null
 
@@ -381,8 +422,16 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         ...(tipo === "video" && formato ? { formato } : {}),
         ...(referencia && { referencia }),
         ...(tipo === "cobertura" && { localEvento: localEvento.trim() }),
-        ...(tipo === "cobertura" && dataEvento && { dataEvento: new Date(dataEvento).toISOString() }),
+        // Com a data sozinha, `new Date("2026-08-20")` é meia-noite UTC — que em
+        // São Paulo ainda é dia 19. Compondo data+hora o horário é lido como
+        // local, e a gravação deixa de aparecer um dia antes na agenda.
+        ...(tipo === "cobertura" && dataEvento && {
+          dataEvento: new Date(`${dataEvento}T${horaEvento || "09:00"}`).toISOString(),
+        }),
         cobertura: tipo === "cobertura",
+        ...(tipo === "cobertura" && clienteNome.trim() ? { clienteFinalNome: clienteNome.trim() } : {}),
+        ...(tipo === "cobertura" && clienteTelefone.trim() ? { clienteFinalTelefone: clienteTelefone.trim() } : {}),
+        ...(tipo === "cobertura" && clienteEmail.trim() ? { clienteFinalEmail: clienteEmail.trim() } : {}),
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
         ...(videomakerId ? { videomakerId } : {}),
         ...(editorId ? { editorId } : {}),
@@ -487,8 +536,10 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                   setTipo("video"); setTitulo(""); setDescricao(""); setPrioridade("normal")
                   setMotivoUrgencia(""); setDataLimite(""); setProdutoIds([]); setClassificacao("")
                   setReferencias([]); setNovaReferencia(""); setTipoVideo(""); setFormato("9:16")
-                  setCidade(""); setLocalEvento(""); setDataEvento(""); setLinkBrutos("")
-                  setVideomakerId(""); setEditorId(""); setAnexos([]); setRascunhoRecuperado(false)
+                  setCidade(""); setLocalEvento(""); setDataEvento(""); setHoraEvento("")
+                  setLinkBrutos(""); setVideomakerId(""); setEditorId("")
+                  setClienteNome(""); setClienteTelefone(""); setClienteEmail("")
+                  setAnexos([]); setRascunhoRecuperado(false)
                 }}
                 className="rounded-md border border-blue-500/40 px-2.5 py-1 text-xs font-medium text-blue-100 transition-colors hover:bg-blue-500/20"
               >
@@ -611,13 +662,23 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                       className={cn(inputClass, errors.cidade && erroClass)}
                     />
                   </Campo>
-                  <Campo label="Data do evento" obrigatorio erro={errors.dataEvento}>
-                    <input
-                      type="date"
-                      value={dataEvento}
-                      onChange={e => { setDataEvento(e.target.value); limparCampo("dataEvento") }}
-                      className={cn(inputClass, errors.dataEvento && erroClass)}
-                    />
+                  <Campo label="Data e horário" obrigatorio erro={errors.dataEvento}>
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={dataEvento}
+                        onChange={e => { setDataEvento(e.target.value); limparCampo("dataEvento") }}
+                        className={cn(inputClass, "min-w-0 flex-1", errors.dataEvento && erroClass)}
+                      />
+                      {/* Sem horário a gravação entra às 9h — o padrão antigo.
+                          Quem sabe a hora da entrega informa e evita o telefonema. */}
+                      <input
+                        type="time"
+                        value={horaEvento}
+                        onChange={e => setHoraEvento(e.target.value)}
+                        className={cn(inputClass, "w-28 shrink-0 px-2")}
+                      />
+                    </div>
                   </Campo>
                   <div className="col-span-2">
                     <Campo label="Local" obrigatorio erro={errors.localEvento}>
@@ -631,6 +692,43 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                         />
                       </div>
                     </Campo>
+                  </div>
+
+                  {/* Cliente final — só existe em cobertura/entrega. Vira o
+                      cliente do evento quando a demanda é convertida, e é o
+                      contato de quem vai gravar na clínica. */}
+                  <div className="col-span-2 space-y-4 border-t border-zinc-800/60 pt-4">
+                    <p className="flex items-center gap-2 text-xs font-medium text-zinc-400">
+                      <User className="h-3.5 w-3.5 text-zinc-500" />
+                      Cliente final <span className="text-zinc-600">(quem recebe o equipamento)</span>
+                    </p>
+                    <Campo label="Nome" opcional>
+                      <input
+                        value={clienteNome}
+                        onChange={e => setClienteNome(e.target.value)}
+                        placeholder="Dra. Solange Martins"
+                        className={inputClass}
+                      />
+                    </Campo>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Campo label="Telefone" opcional>
+                        <input
+                          value={clienteTelefone}
+                          onChange={e => setClienteTelefone(e.target.value)}
+                          placeholder="+55 85 99999-9999"
+                          className={inputClass}
+                        />
+                      </Campo>
+                      <Campo label="E-mail" opcional>
+                        <input
+                          type="email"
+                          value={clienteEmail}
+                          onChange={e => setClienteEmail(e.target.value)}
+                          placeholder="contato@clinica.com"
+                          className={inputClass}
+                        />
+                      </Campo>
+                    </div>
                   </div>
                 </div>
               )}

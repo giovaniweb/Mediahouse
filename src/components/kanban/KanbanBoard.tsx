@@ -214,7 +214,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                   )}
                 </div>
                 {col.id === "entrada" && !isBloqueada && (
-                  <Link href="/demandas/nova">
+                  <Link href="/demandas?nova=1">
                     <button className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
                       <Plus className="w-4 h-4" />
                     </button>
