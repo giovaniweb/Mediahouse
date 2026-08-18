@@ -165,8 +165,8 @@ async function rodarAgenteAlertas(organizacaoId: string) {
   // precisa de uma lista limpa para isso funcionar, e é a rede de segurança para
   // qualquer mutação que não tenha passado pelo resolvedor em segundo plano.
   const fechados = await resolverAlertas(organizacaoId)
-  if (fechados.pendencias || fechados.fatosExpirados) {
-    console.log(`[Cron] Alertas fechados: ${fechados.pendencias} pendência(s), ${fechados.fatosExpirados} fato(s) expirado(s)`)
+  if (fechados.pendencias || fechados.expirados) {
+    console.log(`[Cron] Alertas fechados: ${fechados.pendencias} pendência(s), ${fechados.expirados} expirado(s) por idade`)
   }
 
   const prompt = `Você é o sistema de monitoramento automático do NuFlow. Execute uma varredura rápida e objetiva:
