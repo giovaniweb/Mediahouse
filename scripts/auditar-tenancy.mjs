@@ -97,11 +97,76 @@ function auditar() {
   return violacoes
 }
 
+
+// ── Segunda regra: parâmetro recebido e ignorado ────────────────────────────
+//
+// A checagem acima é POR ARQUIVO: se o arquivo cita organização em algum lugar,
+// confia na revisão humana. Foi por essa fresta que buscarVideomakers passou —
+// o arquivo citava organizacaoId dezenas de vezes, e a função que importava
+// recebia o parâmetro e não usava. Resultado: a IA de uma empresa respondia com
+// demandas e custos de outra.
+//
+// O ESLint já apontava ("argumento definido e nunca usado"), mas o aviso estava
+// perdido entre outros 150. Aqui vira erro, com nome e linha.
+function corpoDaFuncao(texto, inicio) {
+  // Pular a anotação de tipo de retorno antes de achar o corpo. Em
+  // `): Promise<{ ok: boolean }> {` o primeiro `{` depois do `)` é o TIPO, não
+  // o corpo — e ler o tipo como corpo dá falso positivo em toda função que
+  // devolve objeto. O corpo é o primeiro `{` fora de `<...>`.
+  let abre = -1
+  let angulo = 0
+  for (let i = inicio; i < texto.length; i++) {
+    const c = texto[i]
+    if (c === "<") angulo++
+    else if (c === ">") {
+      if (texto[i - 1] !== "=") angulo = Math.max(0, angulo - 1)
+    } else if (c === "{" && angulo === 0) {
+      abre = i
+      break
+    }
+  }
+  if (abre === -1) return ""
+  let nivel = 0
+  for (let i = abre; i < texto.length; i++) {
+    if (texto[i] === "{") nivel++
+    else if (texto[i] === "}") {
+      nivel--
+      if (nivel === 0) return texto.slice(abre + 1, i)
+    }
+  }
+  return texto.slice(abre)
+}
+
+function auditarParametroIgnorado() {
+  const alvos = [join(RAIZ, "src/app/api"), join(RAIZ, "src/lib")]
+  const achados = []
+
+  for (const alvo of alvos) {
+    if (!existsSync(alvo)) continue
+    for (const arquivo of listarArquivos(alvo)) {
+      const texto = readFileSync(arquivo, "utf8")
+      const rel = relative(RAIZ, arquivo)
+
+      const re = /(?:async\s+)?function\s+(\w+)\s*\(([^)]*organizacaoId[^)]*)\)/g
+      let m
+      while ((m = re.exec(texto)) !== null) {
+        const [, nome] = m
+        const corpo = corpoDaFuncao(texto, m.index + m[0].length)
+        if (!corpo.includes("organizacaoId")) {
+          achados.push({ arquivo: rel, funcao: nome, linha: linhaDe(texto, m.index) })
+        }
+      }
+    }
+  }
+  return achados
+}
+
 function chaveDe(v) {
   return v.arquivo
 }
 
 const violacoes = auditar()
+const ignorados = auditarParametroIgnorado()
 const args = process.argv.slice(2)
 
 if (args.includes("--listar")) {
@@ -155,4 +220,17 @@ if (novas.length > 0) {
   process.exit(1)
 }
 
+if (ignorados.length > 0) {
+  console.error(`\n❌ ${ignorados.length} função(ões) recebem organizacaoId e não usam:\n`)
+  for (const i of ignorados) {
+    console.error(`   ${i.arquivo}:${i.linha}  ${i.funcao}()`)
+  }
+  console.error(
+    `\nOu a função escopa pela organização recebida, ou o parâmetro sai da assinatura.` +
+      `\nRecebê-lo e ignorar é o pior dos dois: parece escopado e não é.\n`
+  )
+  process.exit(1)
+}
+
 console.log(`✅ Nenhuma consulta nova sem escopo. (${cobertas} conhecida(s) na allowlist — meta: zero)`)
+console.log(`✅ Nenhuma função recebe organizacaoId e ignora.`)

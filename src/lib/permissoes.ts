@@ -341,7 +341,6 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/fornecedores": "gerenciarFornecedores",
   "/produtos-servico": "gerenciarFornecedores",
   "/design": "verDesign",
-  "/designers": "gerenciarDesigners",
   "/galeria-artes": "verDesign",
   "/growth/equipe": "gerenciarDesigners",
   "/configuracoes/linhas-projetos": "gerenciarDesigners",

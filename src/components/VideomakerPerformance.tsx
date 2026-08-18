@@ -3,8 +3,8 @@
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { TrendingUp, Clock, DollarSign, Film, Target, Loader2 } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
-const fetcher = (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error(); return r.json() })
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 
 interface Props {

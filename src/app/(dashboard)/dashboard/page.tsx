@@ -13,11 +13,7 @@ import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
 import { Header } from "@/components/layout/Header"
 import { Activity, AlertTriangle, CheckCircle, Clock, Film, Users, TrendingUp, TrendingDown, Minus, BarChart3, Lightbulb } from "lucide-react"
 import { IDEIAS_ATIVO } from "@/lib/modulos"
-
-const fetcher = (url: string) => fetch(url).then((r) => {
-  if (!r.ok) throw new Error("Erro ao carregar")
-  return r.json()
-})
+import { fetcher } from "@/lib/fetcher"
 
 // Mini SVG bar chart
 function MiniBarChart({ data, color = "#3b82f6" }: { data: number[]; color?: string }) {

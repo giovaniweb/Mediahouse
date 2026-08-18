@@ -15,12 +15,7 @@ import {
 } from "lucide-react"
 import { Header } from "@/components/layout/Header"
 import { cn } from "@/lib/utils"
-
-const fetcher = (url: string) => fetch(url).then(async (res) => {
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || "Falha ao carregar")
-  return data
-})
+import { fetcher } from "@/lib/fetcher"
 
 interface ParsedFields {
   solicitanteNome?: string

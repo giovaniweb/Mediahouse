@@ -5,7 +5,7 @@ import useSWR from "swr"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { MessageCircle, Send, Loader2, AtSign } from "lucide-react"
-import { iniciais } from "./tipos-visao"
+import { iniciais } from "@/lib/pessoas-ui"
 import { fetcher } from "@/lib/fetcher"
 
 

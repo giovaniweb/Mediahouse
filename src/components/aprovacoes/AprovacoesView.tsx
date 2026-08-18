@@ -65,7 +65,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
   const [aba, setAba] = useState<Aba>("demandas")
   const [loading, setLoading] = useState<string | null>(null)
-  const [modal, setModal] = useState<{ id: string; statusInterno: string } | null>(null)
+  const [modal, setModal] = useState<{ id: string } | null>(null)
   const [motivo, setMotivo] = useState("")
   const [sugestaoIA, setSugestaoIA] = useState<Record<string, string>>({})
   const [analisandoIA, setAnalisandoIA] = useState<string | null>(null)
@@ -110,13 +110,11 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
   // ─── Ações demandas ───────────────────────────────────────────────────────
 
-  async function agirDemanda(id: string, statusInterno: string, acao: "aprovar" | "recusar", motivoRecusa?: string) {
+  async function agirDemanda(id: string, acao: "aprovar" | "recusar", motivoRecusa?: string) {
     setLoading(id)
     try {
-      const endpoint = statusInterno === "urgencia_pendente_aprovacao"
-        ? `/api/urgencias/${id}/acao`
-        : `/api/demandas/${id}/aprovar`
-      const res = await fetch(endpoint, {
+      // Urgência e demanda comum vão pela mesma rota — ela distingue pelo status.
+      const res = await fetch(`/api/demandas/${id}/aprovar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acao, motivo: motivoRecusa }),
@@ -235,8 +233,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             loading={loading}
             sugestaoIA={sugestaoIA}
             analisandoIA={analisandoIA}
-            onAprovar={(d) => agirDemanda(d.id, d.statusInterno, "aprovar")}
-            onRecusar={(d) => setModal({ id: d.id, statusInterno: d.statusInterno })}
+            onAprovar={(d) => agirDemanda(d.id, "aprovar")}
+            onRecusar={(d) => setModal({ id: d.id })}
             onIA={analisarIA}
             emptyMsg="Nenhuma demanda aguardando aprovação"
           />
@@ -249,8 +247,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             loading={loading}
             sugestaoIA={sugestaoIA}
             analisandoIA={analisandoIA}
-            onAprovar={(d) => agirDemanda(d.id, d.statusInterno, "aprovar")}
-            onRecusar={(d) => setModal({ id: d.id, statusInterno: d.statusInterno })}
+            onAprovar={(d) => agirDemanda(d.id, "aprovar")}
+            onRecusar={(d) => setModal({ id: d.id })}
             onIA={analisarIA}
             emptyMsg="Nenhuma urgência pendente"
             emptyIcon={<Zap className="w-12 h-12 text-zinc-600 mb-3" />}
@@ -332,7 +330,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             />
             <div className="flex gap-2 mt-4">
               <button
-                onClick={() => agirDemanda(modal.id, modal.statusInterno, "recusar", motivo)}
+                onClick={() => agirDemanda(modal.id, "recusar", motivo)}
                 disabled={loading === modal.id}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
                 {loading === modal.id ? "Recusando..." : "Confirmar Recusa"}
