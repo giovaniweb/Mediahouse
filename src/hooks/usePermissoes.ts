@@ -1,11 +1,7 @@
 "use client"
 
 import useSWR from "swr"
-
-const fetcher = (url: string) => fetch(url).then((r) => {
-  if (!r.ok) throw new Error("Erro ao carregar")
-  return r.json()
-})
+import { fetcher } from "@/lib/fetcher"
 
 export interface MeData {
   id: string

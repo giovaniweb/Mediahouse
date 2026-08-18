@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { X, User, Lock, Trash2, Save, Eye, EyeOff, Camera, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { iniciais } from "@/lib/pessoas-ui"
 import Image from "next/image"
 
 interface Props {
@@ -112,7 +113,7 @@ export function UserProfileModal({ onClose }: Props) {
     }
   }
 
-  const iniciais = (nome || user?.name || "?").slice(0, 2).toUpperCase()
+  const letras = iniciais(nome || user?.name || "")
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "perfil", label: "Meu Perfil", icon: User },
@@ -185,7 +186,7 @@ export function UserProfileModal({ onClose }: Props) {
                     />
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-white text-xl font-bold">
-                      {iniciais}
+                      {letras}
                     </div>
                   )}
                   <button

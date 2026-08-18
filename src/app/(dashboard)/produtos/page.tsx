@@ -12,11 +12,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
 import { mensagemDeErro } from "@/lib/erro-cliente"
-
-const fetcher = (url: string) => fetch(url).then((r) => {
-  if (!r.ok) throw new Error("Erro ao carregar")
-  return r.json()
-})
+import { fetcher } from "@/lib/fetcher"
 
 interface Fabricante {
   id: string

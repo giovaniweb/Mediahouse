@@ -13,12 +13,7 @@ import {
   Save,
   Unplug,
 } from "lucide-react"
-
-const fetcher = (url: string) => fetch(url).then(async (res) => {
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || "Falha ao carregar")
-  return data
-})
+import { fetcher } from "@/lib/fetcher"
 
 interface InboxConfig {
   emailCaixa: string | null

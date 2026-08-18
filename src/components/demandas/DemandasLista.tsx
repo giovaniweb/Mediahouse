@@ -3,9 +3,10 @@
 import { MessageSquare, Paperclip, AlertTriangle, CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  type DemandaLista, GRUPOS_LISTA, grupoDaDemanda, responsavelResumo, iniciais,
+  type DemandaLista, GRUPOS_LISTA, grupoDaDemanda, responsavelResumo,
   estaAtrasada, diasDeAtraso, LABEL_STATUS,
 } from "./tipos-visao"
+import { iniciais } from "@/lib/pessoas-ui"
 
 // Visão Lista: agrupada por urgência, não por coluna do kanban. Quem abre aqui
 // quer saber o que fazer agora — e "atrasada" e "vence hoje" respondem isso

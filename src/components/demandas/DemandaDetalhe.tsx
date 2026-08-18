@@ -27,12 +27,7 @@ import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
-
-const fetcher = async (url: string) => {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error("Erro ao carregar dados")
-  return response.json()
-}
+import { fetcher } from "@/lib/fetcher"
 
 const STATUS_LABELS: Record<string, string> = {
   pedido_criado: "Pedido Criado",
@@ -1599,7 +1594,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
             )}
           </div>
-
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
           {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (

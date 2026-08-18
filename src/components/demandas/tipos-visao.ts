@@ -59,12 +59,6 @@ export function responsavelResumo(d: DemandaLista): { nome: string; extras: numb
   return unico ? { nome: unico, extras: 0 } : null
 }
 
-/** Iniciais para o avatar redondo das listas. */
-export function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/)
-  return ((partes[0]?.[0] ?? "") + (partes.length > 1 ? partes[partes.length - 1][0] : "")).toUpperCase()
-}
-
 /**
  * Agrupamento da visão Lista. Ordena por urgência real em vez de por coluna do
  * kanban: quem abre a lista quer saber o que fazer agora, não onde o card está.

@@ -3,6 +3,7 @@
 import useSWR from "swr"
 import { useParams } from "next/navigation"
 import { Loader2, CalendarDays, CheckCircle2, Clock, Film, Sparkles, Download } from "lucide-react"
+import { fetcher } from "@/lib/fetcher"
 
 // Acompanhamento público de uma demanda (somente leitura). Quem abre não tem
 // conta no sistema — vê o andamento e o material final, nada além disso.
@@ -24,9 +25,6 @@ type Demanda = {
   arquivos: Arquivo[]
   organizacao: { nome: string; logoUrl: string | null } | null
 }
-
-const fetcher = (url: string) =>
-  fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
 
 // Etapas na linguagem de quem acompanha de fora — sem jargão interno.
 const ETAPAS = [
