@@ -4,6 +4,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { Resend } from "resend"
 
 // POST /api/demandas/[id]/aprovar
@@ -78,13 +79,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // ── Aprovar / Recusar ──────────────────────────────────────────────────────
-  if (demanda.statusInterno !== "aguardando_aprovacao_interna") {
+  //
+  // Duas filas chegam aqui. Demanda comum nasce em `aguardando_aprovacao_interna`;
+  // demanda marcada como urgente nasce em `urgencia_pendente_aprovacao` (veja
+  // POST /api/demandas). As duas aparecem na tela de Aprovações, e até agora só
+  // a primeira podia ser decidida: a tela mandava a urgente para
+  // /api/urgencias/[id]/acao, rota que nunca existiu, e esta aqui devolvia 400.
+  // Ou seja, demanda urgente não podia ser aprovada nem recusada por caminho
+  // nenhum — ficava parada na fila justamente o que era pra andar mais rápido.
+  const AGUARDANDO = ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] as const
+  if (!AGUARDANDO.includes(demanda.statusInterno as (typeof AGUARDANDO)[number])) {
     return NextResponse.json({ error: "Demanda não está aguardando aprovação interna" }, { status: 400 })
   }
 
-  const novoStatus = acao === "aprovar" ? "aguardando_triagem" : "encerrado"
-  const novoStatusVisivel: "entrada" | "producao" | "edicao" | "aprovacao" | "para_postar" | "finalizado" =
-    acao === "aprovar" ? "entrada" : demanda.statusVisivel
+  const ehUrgencia = demanda.statusInterno === "urgencia_pendente_aprovacao"
+
+  // Urgência aprovada pula a triagem e entra em produção — é o que a urgência
+  // significa, e é a transição que TRANSICOES_VALIDAS já declara.
+  const novoStatus = acao !== "aprovar"
+    ? "encerrado"
+    : ehUrgencia ? "urgencia_aprovada" : "aguardando_triagem"
+  const novoStatusVisivel = acao === "aprovar"
+    ? STATUS_PARA_COLUNA[novoStatus]
+    : demanda.statusVisivel
 
   await prisma.demanda.update({
     where: { id },
@@ -98,12 +115,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await prisma.historicoStatus.create({
     data: {
       demandaId: id,
-      statusAnterior: "aguardando_aprovacao_interna",
+      statusAnterior: demanda.statusInterno,
       statusNovo: novoStatus,
       usuarioId: session.user.id,
       origem: "manual",
       observacao: acao === "aprovar"
-        ? "Demanda aprovada e enviada para triagem"
+        ? ehUrgencia
+          ? "Urgência aprovada — segue direto para produção"
+          : "Demanda aprovada e enviada para triagem"
         : `Demanda recusada${motivo ? `: ${motivo}` : ""}`,
     },
   })

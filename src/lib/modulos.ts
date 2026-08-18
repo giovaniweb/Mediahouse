@@ -15,8 +15,6 @@ export const MENSAGENS_ATIVO = false
 const ROTAS_GROWTH = [
   "/design",
   "/galeria-artes",
-  "/designers",
-  "/api/designers",
 ]
 const ROTAS_EVENTOS = [
   "/eventos",
