@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
+import { BriefingResumido } from "@/components/demandas/BriefingResumido"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -1186,7 +1187,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   tipo="textarea"
                   placeholder="Adicionar briefing…"
                   onSave={(v) => salvarCampo({ descricao: v })}
-                  display={<span className="block text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao || <span className="italic text-zinc-600">Adicionar briefing…</span>}</span>}
+                  display={<BriefingResumido texto={demanda.descricao ?? ""} vazio={<span className="italic text-zinc-600 text-sm">Adicionar briefing…</span>} />}
                 />
               </div>
             </>
@@ -1212,7 +1213,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               tipo="textarea"
               placeholder="Adicionar descrição / briefing…"
               onSave={(v) => salvarCampo({ descricao: v })}
-              display={<span className="block text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap break-words">{demanda.descricao || <span className="italic text-zinc-600">Adicionar descrição / briefing…</span>}</span>}
+              display={<BriefingResumido texto={demanda.descricao ?? ""} vazio={<span className="italic text-zinc-600 text-sm">Adicionar descrição / briefing…</span>} />}
             />
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
