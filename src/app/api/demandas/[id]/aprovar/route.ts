@@ -6,6 +6,8 @@ import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { Resend } from "resend"
+import { emSegundoPlano } from "@/lib/notificar"
+import { resolverAlertas } from "@/lib/alertas"
 
 // POST /api/demandas/[id]/aprovar
 // acao: "aprovar" | "recusar" | "reverter" (reverter demanda encerrada por recusa)
@@ -67,13 +69,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     // Notificar solicitante
-    await notificarSolicitante({
+    emSegundoPlano(() => notificarSolicitante({
       tipo: "reaberta",
       demanda,
       solicitante: demanda.solicitante,
       telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
       organizacaoId,
-    })
+    }), "notificar-reabertura")
+    emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
 
     return NextResponse.json({ ok: true, statusInterno: "aguardando_aprovacao_interna" })
   }
@@ -128,14 +131,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
 
   // Notificar solicitante via WhatsApp e e-mail
-  await notificarSolicitante({
+  emSegundoPlano(() => notificarSolicitante({
     tipo: acao === "aprovar" ? "aprovada" : "recusada",
     demanda,
     solicitante: demanda.solicitante,
     telefoneSolicitanteWhatsapp: demanda.telefoneSolicitante,
     motivo,
     organizacaoId,
-  })
+  }), "notificar-decisao")
+
+  // A demanda saiu da fila de aprovação — o alerta `aprovacao_pendente` dela
+  // deixa de valer aqui. Era exatamente este ponto que faltava: em 18/08/2026,
+  // 172 dos 173 alertas de aprovação ativos falavam de demandas já aprovadas.
+  emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
 
   return NextResponse.json({ ok: true, statusInterno: novoStatus })
 }

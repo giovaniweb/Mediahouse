@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { sendEmailFinanceiro, sendEmailVideomakerNFRecebida } from "@/lib/email"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { requireDemandaOrg } from "@/lib/org"
+import { emSegundoPlano } from "@/lib/notificar"
+import { resolverAlertas } from "@/lib/alertas"
 
 // Validação de chave PIX
 function validarChavePix(chave: string): boolean {
@@ -160,6 +162,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       custoId: custo.id,
     }, organizacaoId)
 
+
+    // Alguém decidiu — o alerta de "aguardando aprovação do pagamento" morre
+    // aqui, aprovado ou contestado.
+    emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
+
     return NextResponse.json({
       ok: true,
       emailEnviado: emailResult.ok,
@@ -182,6 +189,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id: custo.id },
       data: { statusPagamento: "contestado" },
     })
+
+    // Alguém decidiu — o alerta de "aguardando aprovação do pagamento" morre
+    // aqui, aprovado ou contestado.
+    emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
+
     return NextResponse.json({ ok: true })
   }
 

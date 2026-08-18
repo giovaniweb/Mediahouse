@@ -5,7 +5,9 @@ import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
-import { janelaDoDiaSeguinte, hojeEmSaoPaulo } from "@/lib/datas"
+import { janelaDoDiaSeguinte } from "@/lib/datas"
+import { resolverAlertas } from "@/lib/alertas"
+import { resumirParados, textoDeParados, DIAS_PARA_COBRAR } from "@/lib/parados"
 
 // As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
 // roda para TODAS as organizações em série, não declarava nada e herdava o
@@ -157,6 +159,15 @@ async function rodarAgenteAlertas(organizacaoId: string) {
     where: { organizacaoId, status: "ativo", snoozeAte: { lt: new Date(), not: null } },
     data: { snoozeAte: null },
   })
+
+  // Fechar o que deixou de ser verdade ANTES de a IA olhar a lista. Duas razões:
+  // a IA recebe a instrução "crie apenas alertas que ainda não existam" e
+  // precisa de uma lista limpa para isso funcionar, e é a rede de segurança para
+  // qualquer mutação que não tenha passado pelo resolvedor em segundo plano.
+  const fechados = await resolverAlertas(organizacaoId)
+  if (fechados.pendencias || fechados.fatosExpirados) {
+    console.log(`[Cron] Alertas fechados: ${fechados.pendencias} pendência(s), ${fechados.fatosExpirados} fato(s) expirado(s)`)
+  }
 
   const prompt = `Você é o sistema de monitoramento automático do NuFlow. Execute uma varredura rápida e objetiva:
 
@@ -414,21 +425,29 @@ async function rodarAgenteBriefing(organizacaoId: string) {
   fimAmanha.setDate(fimAmanha.getDate() + 1)
   fimAmanha.setHours(23, 59, 59, 999)
 
-  // Buscar gestores com telefone (membros desta organização)
+  // Quem recebe o briefing. Além de admin/gestor, entra o líder audiovisual:
+  // triagem é trabalho dele também, e o briefing passou a cobrar justamente as
+  // demandas paradas na triagem — cobrar sem avisar quem executa não faz sentido.
   const gestores = await prisma.usuario.findMany({
     where: {
-      tipo: { in: ["admin", "gestor"] },
       status: "ativo",
       telefone: { not: null },
-      organizacoes: { some: { organizacaoId } },
+      organizacoes: {
+        some: {
+          organizacaoId,
+          OR: [{ papel: { in: ["admin", "gestor"] } }, { liderAudiovisual: true }],
+        },
+      },
     },
     select: { id: true, nome: true, telefone: true },
   })
 
   if (gestores.length === 0) return { agente: "briefing", enviados: 0 }
 
+  const limiteParada = new Date(agora.getTime() - DIAS_PARA_COBRAR * 86_400_000)
+
   // Buscar dados em paralelo
-  const [qtdEventos, qtdDemandas, qtdCobrancias] = await Promise.all([
+  const [qtdEventos, qtdDemandas, qtdCobrancias, paradas, prazoVencido] = await Promise.all([
     prisma.evento.count({
       where: {
         organizacaoId,
@@ -446,7 +465,31 @@ async function rodarAgenteBriefing(organizacaoId: string) {
     prisma.custoVideomaker.count({
       where: { organizacaoId, pago: false, dataVencimento: { not: null, lte: fimDia } },
     }),
+    // Paradas: sem ninguém mexer há mais de uma semana e ainda não entregues.
+    prisma.demanda.findMany({
+      where: {
+        organizacaoId,
+        statusVisivel: { not: "finalizado" },
+        updatedAt: { lt: limiteParada },
+      },
+      select: { codigo: true, updatedAt: true },
+      orderBy: { updatedAt: "asc" },
+    }),
+    prisma.demanda.count({
+      where: {
+        organizacaoId,
+        statusVisivel: { not: "finalizado" },
+        dataLimite: { lt: agora },
+      },
+    }),
   ])
+
+  const resumoParados = resumirParados(
+    paradas.map((d) => ({ codigo: d.codigo, atualizadaEm: d.updatedAt })),
+    prazoVencido,
+    agora
+  )
+  const blocoParados = textoDeParados(resumoParados)
 
   const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
   const diaSemana = diasSemana[agora.getDay()]
@@ -462,15 +505,13 @@ async function rodarAgenteBriefing(organizacaoId: string) {
       qtdEventos,
       qtdDemandas,
       qtdCobrancias,
-      // A dica do dia vem da data: todo mundo recebe a mesma, e ela só muda
-      // quando o dia vira.
-      hojeEmSaoPaulo(agora)
+      blocoParados
     )
     await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
     enviados++
   }
 
-  return { agente: "briefing", enviados }
+  return { agente: "briefing", enviados, parados: resumoParados.total }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

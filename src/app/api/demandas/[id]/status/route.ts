@@ -6,6 +6,7 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
+import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
 import type { StatusInterno } from "@prisma/client"
 
@@ -287,6 +288,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       where: { id: session.user.id },
       select: { nome: true, telefone: true, tipo: true },
     }).catch(() => null)
+
+    // A demanda mudou de estado — o que estava pendente por causa do estado
+    // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
+    emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
 
     emSegundoPlano(() => notificarMudancaKanban({
       statusNovo: statusInterno,
