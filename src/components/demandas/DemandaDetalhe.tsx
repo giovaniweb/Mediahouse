@@ -1217,6 +1217,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <span className="text-zinc-500">Tipo:</span>
                 <span className="font-medium text-zinc-200">{demanda.tipoVideo}</span>
               </div>
+              {demanda.formato && (
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Film className="w-4 h-4 text-zinc-500" />
+                  <span className="text-zinc-500">Formato:</span>
+                  <span className="font-medium text-zinc-200">
+                    {demanda.formato}
+                    <span className="ml-1 text-zinc-500">
+                      {demanda.formato === "9:16" ? "vertical" : demanda.formato === "16:9" ? "horizontal" : ""}
+                    </span>
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-zinc-400">
                 <User className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-500">Departamento:</span>

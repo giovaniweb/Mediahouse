@@ -579,6 +579,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     localGravacao: body.localGravacao,
     motivoImpedimento: body.motivoImpedimento,
     classificacao: body.classificacao,
+    formato: body.formato,
     linkFolderBrutos: body.linkFolderBrutos,
     linkFolderFinal: body.linkFolderFinal,
   }
