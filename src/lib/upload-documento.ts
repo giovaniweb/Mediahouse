@@ -58,3 +58,22 @@ export async function enviarDocumento(
   })
   if (!saveRes.ok) throw new Error("Erro ao salvar documento")
 }
+
+/**
+ * Sobe os anexos que o formulário de criação segurou na memória. Roda DEPOIS do
+ * POST, porque o upload é por demandaId e a demanda precisa existir.
+ *
+ * Falha de anexo não desfaz a demanda: devolve a lista dos que não subiram para
+ * o chamador avisar, já que o arquivo pode ser reenviado na tela de detalhe.
+ */
+export async function enviarAnexos(demandaId: string, anexos: File[]): Promise<string[]> {
+  const falhas: string[] = []
+  for (const file of anexos) {
+    try {
+      await enviarDocumento(demandaId, file)
+    } catch {
+      falhas.push(file.name)
+    }
+  }
+  return falhas
+}

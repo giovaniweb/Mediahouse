@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { Film, Play, CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Sparkles, Package, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
+import { extrairCopy } from "@/lib/copy-criativo"
 
 interface ArquivoArte { id: string; url: string; nomeArquivo: string; sequencia: number | null }
 interface Aprovacao {
@@ -42,17 +43,6 @@ interface VersaoAnterior {
 function timecode(segundos: number): string {
   const s = Math.max(0, Math.floor(segundos))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
-}
-
-// Extrai a copy/legenda dos detalhes de entrega (chaves "Copy", "Copy / legenda"…),
-// com fallback para a descrição da demanda.
-function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | null): string {
-  if (det) {
-    for (const [k, v] of Object.entries(det)) {
-      if (/copy|legenda|caption/i.test(k) && typeof v === "string" && v.trim()) return v
-    }
-  }
-  return descricao ?? ""
 }
 
 /**
