@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   X, Plus, Calendar, Link2, Loader2, Paperclip, Smartphone, Monitor,
-  LayoutGrid, ClipboardList, Settings2, Users, Package, UploadCloud,
+  ClipboardList, Settings2, Users, Package, UploadCloud,
   ChevronDown, FileText, MapPin, User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -306,7 +306,17 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
     setDataLimite((salvo?.dataLimite as string) ?? "")
     setProdutoIds((salvo?.produtoIds as string[]) ?? [])
     setClassificacao((salvo?.classificacao as "b2c" | "b2b" | "") ?? "")
-    setReferencias((salvo?.referencias as string[]) ?? [])
+    // Filtra vazios: o rascunho da versão anterior guardava `referencias: [""]`
+    // (o campo começava com uma linha em branco). Restaurado cru, cada string
+    // vazia virava um chip só com o "×", sem texto — lixo visual que o usuário
+    // não sabe de onde veio.
+    setReferencias(
+      Array.isArray(salvo?.referencias)
+        ? (salvo.referencias as unknown[]).filter(
+            (r): r is string => typeof r === "string" && r.trim() !== ""
+          )
+        : []
+    )
     setTipoVideo((salvo?.tipoVideo as string) ?? "")
     setFormato((salvo?.formato as "9:16" | "16:9") ?? "9:16")
     setCidade((salvo?.cidade as string) ?? "")
@@ -548,30 +558,34 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
             </div>
           )}
 
-          {/* ── Bloco 1: o pedido ───────────────────────────────────────── */}
-          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
+          {/* ── Bloco 1: o pedido ───────────────────────────────────────
+              Largura inteira de propósito. Em duas colunas, "Tipo de demanda"
+              eram dois botões ocupando metade da tela e deixando um vão até o
+              divisor, enquanto a descrição — o campo em que mais se escreve —
+              ficava espremida na outra metade. Agora o tipo divide a linha com
+              o título, e o briefing usa a largura toda. */}
+          <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
+            <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+              <Campo label="Tipo de demanda" obrigatorio>
+                <div className="flex gap-3">
+                  {(["video", "cobertura"] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTipo(t)}
+                      className={cn(
+                        "flex-1 rounded-xl border py-2.5 text-sm font-medium transition-colors",
+                        tipo === t
+                          ? "border-purple-500 bg-purple-600 text-white shadow-lg shadow-purple-900/30"
+                          : "border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      )}
+                    >
+                      {t === "video" ? "🎬 Vídeo" : "📸 Cobertura / Entrega"}
+                    </button>
+                  ))}
+                </div>
+              </Campo>
 
-            <Secao icone={LayoutGrid} titulo="Tipo de demanda">
-              <div className="flex gap-3">
-                {(["video", "cobertura"] as const).map(t => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTipo(t)}
-                    className={cn(
-                      "flex-1 rounded-xl border py-4 text-sm font-medium transition-colors",
-                      tipo === t
-                        ? "border-purple-500 bg-purple-600 text-white shadow-lg shadow-purple-900/30"
-                        : "border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                    )}
-                  >
-                    {t === "video" ? "🎬 Vídeo" : "📸 Cobertura / Entrega"}
-                  </button>
-                ))}
-              </div>
-            </Secao>
-
-            <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
               <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
                 <input
                   value={titulo}
@@ -580,435 +594,443 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
                   className={cn(inputClass, errors.titulo && erroClass)}
                 />
               </Campo>
-              <Campo label="Descrição / Objetivo" obrigatorio erro={errors.descricao}>
-                <textarea
-                  rows={4}
-                  value={descricao}
-                  onChange={e => { setDescricao(e.target.value); limparCampo("descricao") }}
-                  placeholder="Explique rapidamente o que precisa ser produzido, para quem é e qual resultado espera."
-                  className={cn(inputClass, "resize-none", errors.descricao && erroClass)}
-                />
-              </Campo>
-            </Secao>
-          </div>
+            </div>
+
+            <Campo label="Descrição / Objetivo" obrigatorio erro={errors.descricao}>
+              {/* resize-y porque briefing longo existe: quem precisa de mais
+                  espaço puxa a alça em vez de escrever numa fresta rolando. */}
+              <textarea
+                rows={6}
+                value={descricao}
+                onChange={e => { setDescricao(e.target.value); limparCampo("descricao") }}
+                placeholder="Explique rapidamente o que precisa ser produzido, para quem é e qual resultado espera."
+                className={cn(inputClass, "min-h-[9rem] resize-y", errors.descricao && erroClass)}
+              />
+            </Campo>
+          </Secao>
 
           <div className="my-7 border-t border-zinc-800/80" />
 
-          {/* ── Bloco 2: configuração + equipe ──────────────────────────── */}
-          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
+          {/* ── Bloco 2: configuração, equipe, produtos e arquivos ───────
+              Duas colunas que crescem independentes, em vez de dois grids de
+              uma linha cada. Antes a linha inteira herdava a altura do bloco
+              mais alto: "Equipe" (dois campos) ficava ao lado de "Configuração"
+              (seis) e sobrava um vão enorme embaixo — o mesmo entre
+              "Equipamentos" e "Arquivos". Empilhando dentro de cada coluna, o
+              vão só pode sobrar no fim de uma delas. */}
+          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2 md:items-start">
 
-            <Secao
-              icone={Settings2}
-              titulo={tipo === "video" ? "Configuração do vídeo" : "Configuração da cobertura"}
-            >
-              {tipo === "video" ? (
-                <>
-                  <Campo label="Formato" obrigatorio erro={errors.formato}>
-                    <div className="flex gap-3">
-                      {([
-                        { valor: "9:16" as const, nome: "Vertical", Icone: Smartphone },
-                        { valor: "16:9" as const, nome: "Horizontal", Icone: Monitor },
-                      ]).map(({ valor, nome, Icone }) => (
-                        <button
-                          key={valor}
-                          type="button"
-                          onClick={() => { setFormato(valor); limparCampo("formato") }}
-                          className={cn(
-                            "flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
-                            formato === valor
-                              ? "border-purple-500 bg-purple-500/10"
-                              : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
-                          )}
-                        >
-                          <Icone className={cn("h-5 w-5 shrink-0", formato === valor ? "text-purple-300" : "text-zinc-500")} />
-                          <span className="min-w-0">
-                            <span className={cn("block text-sm font-semibold", formato === valor ? "text-zinc-50" : "text-zinc-300")}>
-                              {valor}
+            <div className="min-w-0 space-y-8">
+              <Secao
+                icone={Settings2}
+                titulo={tipo === "video" ? "Configuração do vídeo" : "Configuração da cobertura"}
+              >
+                {tipo === "video" ? (
+                  <>
+                    <Campo label="Formato" obrigatorio erro={errors.formato}>
+                      <div className="flex gap-3">
+                        {([
+                          { valor: "9:16" as const, nome: "Vertical", Icone: Smartphone },
+                          { valor: "16:9" as const, nome: "Horizontal", Icone: Monitor },
+                        ]).map(({ valor, nome, Icone }) => (
+                          <button
+                            key={valor}
+                            type="button"
+                            onClick={() => { setFormato(valor); limparCampo("formato") }}
+                            className={cn(
+                              "flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                              formato === valor
+                                ? "border-purple-500 bg-purple-500/10"
+                                : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                            )}
+                          >
+                            <Icone className={cn("h-5 w-5 shrink-0", formato === valor ? "text-purple-300" : "text-zinc-500")} />
+                            <span className="min-w-0">
+                              <span className={cn("block text-sm font-semibold", formato === valor ? "text-zinc-50" : "text-zinc-300")}>
+                                {valor}
+                              </span>
+                              <span className="block text-xs text-zinc-500">{nome}</span>
                             </span>
-                            <span className="block text-xs text-zinc-500">{nome}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </Campo>
-
-                  <Campo label="Tipo de vídeo" obrigatorio erro={errors.tipoVideo}>
-                    <div className="relative">
-                      {/* Vem de Configurações → Parâmetros. A lista fixa que estava
-                          aqui gravava "institucional" e "ads", enquanto os parâmetros
-                          eram "video_institucional" e "video_meta_ads" — editar a tela
-                          não mudava nada neste formulário. */}
-                      <select
-                        value={tipoVideo}
-                        onChange={e => { setTipoVideo(e.target.value); limparCampo("tipoVideo") }}
-                        className={cn(selectClass, errors.tipoVideo && erroClass)}
-                      >
-                        <option value="">Selecionar tipo...</option>
-                        {tiposVideo.map((t) => (
-                          <option key={t.valor} value={t.valor}>{t.label}</option>
+                          </button>
                         ))}
+                      </div>
+                    </Campo>
+
+                    <Campo label="Tipo de vídeo" obrigatorio erro={errors.tipoVideo}>
+                      <div className="relative">
+                        {/* Vem de Configurações → Parâmetros. A lista fixa que estava
+                            aqui gravava "institucional" e "ads", enquanto os parâmetros
+                            eram "video_institucional" e "video_meta_ads" — editar a tela
+                            não mudava nada neste formulário. */}
+                        <select
+                          value={tipoVideo}
+                          onChange={e => { setTipoVideo(e.target.value); limparCampo("tipoVideo") }}
+                          className={cn(selectClass, errors.tipoVideo && erroClass)}
+                        >
+                          <option value="">Selecionar tipo...</option>
+                          {tiposVideo.map((t) => (
+                            <option key={t.valor} value={t.valor}>{t.label}</option>
+                          ))}
+                        </select>
+                        <Seta />
+                      </div>
+                    </Campo>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <Campo label="Cidade" obrigatorio erro={errors.cidade}>
+                      <input
+                        value={cidade}
+                        onChange={e => { setCidade(e.target.value); limparCampo("cidade") }}
+                        placeholder="São Paulo"
+                        className={cn(inputClass, errors.cidade && erroClass)}
+                      />
+                    </Campo>
+                    <Campo label="Data e horário" obrigatorio erro={errors.dataEvento}>
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={dataEvento}
+                          onChange={e => { setDataEvento(e.target.value); limparCampo("dataEvento") }}
+                          className={cn(inputClass, "min-w-0 flex-1", errors.dataEvento && erroClass)}
+                        />
+                        {/* Sem horário a gravação entra às 9h — o padrão antigo.
+                            Quem sabe a hora da entrega informa e evita o telefonema. */}
+                        <input
+                          type="time"
+                          value={horaEvento}
+                          onChange={e => setHoraEvento(e.target.value)}
+                          className={cn(inputClass, "w-28 shrink-0 px-2")}
+                        />
+                      </div>
+                    </Campo>
+                    <div className="col-span-2">
+                      <Campo label="Local" obrigatorio erro={errors.localEvento}>
+                        <div className="relative">
+                          <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                          <input
+                            value={localEvento}
+                            onChange={e => { setLocalEvento(e.target.value); limparCampo("localEvento") }}
+                            placeholder="Nome da clínica / endereço"
+                            className={cn(inputClass, "pl-10", errors.localEvento && erroClass)}
+                          />
+                        </div>
+                      </Campo>
+                    </div>
+
+                    {/* Cliente final — só existe em cobertura/entrega. Vira o
+                        cliente do evento quando a demanda é convertida, e é o
+                        contato de quem vai gravar na clínica. */}
+                    <div className="col-span-2 space-y-4 border-t border-zinc-800/60 pt-4">
+                      <p className="flex items-center gap-2 text-xs font-medium text-zinc-400">
+                        <User className="h-3.5 w-3.5 text-zinc-500" />
+                        Cliente final <span className="text-zinc-600">(quem recebe o equipamento)</span>
+                      </p>
+                      <Campo label="Nome" opcional>
+                        <input
+                          value={clienteNome}
+                          onChange={e => setClienteNome(e.target.value)}
+                          placeholder="Dra. Solange Martins"
+                          className={inputClass}
+                        />
+                      </Campo>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Campo label="Telefone" opcional>
+                          <input
+                            value={clienteTelefone}
+                            onChange={e => setClienteTelefone(e.target.value)}
+                            placeholder="+55 85 99999-9999"
+                            className={inputClass}
+                          />
+                        </Campo>
+                        <Campo label="E-mail" opcional>
+                          <input
+                            type="email"
+                            value={clienteEmail}
+                            onChange={e => setClienteEmail(e.target.value)}
+                            placeholder="contato@clinica.com"
+                            className={inputClass}
+                          />
+                        </Campo>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Campo label="Prioridade" obrigatorio>
+                    <div className="relative">
+                      <span className={cn("pointer-events-none absolute left-3.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full", COR_PRIORIDADE[prioridade])} />
+                      <select
+                        value={prioridade}
+                        onChange={e => {
+                          const p = e.target.value as "normal" | "alta" | "urgente"
+                          setPrioridade(p)
+                          if (p !== "urgente") { setMotivoUrgencia(""); limparCampo("motivoUrgencia") }
+                        }}
+                        className={cn(selectClass, "pl-8")}
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="alta">Alta</option>
+                        <option value="urgente">Urgente</option>
                       </select>
                       <Seta />
                     </div>
                   </Campo>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <Campo label="Cidade" obrigatorio erro={errors.cidade}>
-                    <input
-                      value={cidade}
-                      onChange={e => { setCidade(e.target.value); limparCampo("cidade") }}
-                      placeholder="São Paulo"
-                      className={cn(inputClass, errors.cidade && erroClass)}
-                    />
-                  </Campo>
-                  <Campo label="Data e horário" obrigatorio erro={errors.dataEvento}>
-                    <div className="flex gap-2">
+
+                  <Campo label="Prazo de entrega" obrigatorio erro={errors.dataLimite}>
+                    <div className="relative">
+                      <Calendar className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                       <input
                         type="date"
-                        value={dataEvento}
-                        onChange={e => { setDataEvento(e.target.value); limparCampo("dataEvento") }}
-                        className={cn(inputClass, "min-w-0 flex-1", errors.dataEvento && erroClass)}
-                      />
-                      {/* Sem horário a gravação entra às 9h — o padrão antigo.
-                          Quem sabe a hora da entrega informa e evita o telefonema. */}
-                      <input
-                        type="time"
-                        value={horaEvento}
-                        onChange={e => setHoraEvento(e.target.value)}
-                        className={cn(inputClass, "w-28 shrink-0 px-2")}
+                        min={hojeEmSaoPaulo()}
+                        value={dataLimite}
+                        onChange={e => { setDataLimite(e.target.value); limparCampo("dataLimite") }}
+                        className={cn(inputClass, "pl-10", errors.dataLimite && erroClass)}
                       />
                     </div>
                   </Campo>
-                  <div className="col-span-2">
-                    <Campo label="Local" obrigatorio erro={errors.localEvento}>
-                      <div className="relative">
-                        <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                        <input
-                          value={localEvento}
-                          onChange={e => { setLocalEvento(e.target.value); limparCampo("localEvento") }}
-                          placeholder="Nome da clínica / endereço"
-                          className={cn(inputClass, "pl-10", errors.localEvento && erroClass)}
-                        />
-                      </div>
-                    </Campo>
-                  </div>
-
-                  {/* Cliente final — só existe em cobertura/entrega. Vira o
-                      cliente do evento quando a demanda é convertida, e é o
-                      contato de quem vai gravar na clínica. */}
-                  <div className="col-span-2 space-y-4 border-t border-zinc-800/60 pt-4">
-                    <p className="flex items-center gap-2 text-xs font-medium text-zinc-400">
-                      <User className="h-3.5 w-3.5 text-zinc-500" />
-                      Cliente final <span className="text-zinc-600">(quem recebe o equipamento)</span>
-                    </p>
-                    <Campo label="Nome" opcional>
-                      <input
-                        value={clienteNome}
-                        onChange={e => setClienteNome(e.target.value)}
-                        placeholder="Dra. Solange Martins"
-                        className={inputClass}
-                      />
-                    </Campo>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Campo label="Telefone" opcional>
-                        <input
-                          value={clienteTelefone}
-                          onChange={e => setClienteTelefone(e.target.value)}
-                          placeholder="+55 85 99999-9999"
-                          className={inputClass}
-                        />
-                      </Campo>
-                      <Campo label="E-mail" opcional>
-                        <input
-                          type="email"
-                          value={clienteEmail}
-                          onChange={e => setClienteEmail(e.target.value)}
-                          placeholder="contato@clinica.com"
-                          className={inputClass}
-                        />
-                      </Campo>
-                    </div>
-                  </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <Campo label="Prioridade" obrigatorio>
-                  <div className="relative">
-                    <span className={cn("pointer-events-none absolute left-3.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full", COR_PRIORIDADE[prioridade])} />
-                    <select
-                      value={prioridade}
-                      onChange={e => {
-                        const p = e.target.value as "normal" | "alta" | "urgente"
-                        setPrioridade(p)
-                        if (p !== "urgente") { setMotivoUrgencia(""); limparCampo("motivoUrgencia") }
-                      }}
-                      className={cn(selectClass, "pl-8")}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="alta">Alta</option>
-                      <option value="urgente">Urgente</option>
-                    </select>
-                    <Seta />
-                  </div>
-                </Campo>
-
-                <Campo label="Prazo de entrega" obrigatorio erro={errors.dataLimite}>
-                  <div className="relative">
-                    <Calendar className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                    <input
-                      type="date"
-                      min={hojeEmSaoPaulo()}
-                      value={dataLimite}
-                      onChange={e => { setDataLimite(e.target.value); limparCampo("dataLimite") }}
-                      className={cn(inputClass, "pl-10", errors.dataLimite && erroClass)}
-                    />
-                  </div>
-                </Campo>
-              </div>
-
-              {prioridade === "urgente" && (
-                <Campo label="Motivo da urgência" obrigatorio erro={errors.motivoUrgencia}>
-                  <div className="relative">
-                    <select
-                      value={motivoUrgencia}
-                      onChange={e => { setMotivoUrgencia(e.target.value); limparCampo("motivoUrgencia") }}
-                      className={cn(selectClass, errors.motivoUrgencia && erroClass)}
-                    >
-                      <option value="">Selecionar motivo...</option>
-                      {MOTIVOS_URGENCIA.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <Seta />
-                  </div>
-                </Campo>
-              )}
-
-              <Campo label="Classificação" obrigatorio erro={errors.classificacao}>
-                <div className="flex gap-3">
-                  {(["b2c", "b2b"] as const).map(c => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => { setClassificacao(prev => prev === c ? "" : c); limparCampo("classificacao") }}
-                      className={cn(
-                        "flex-1 rounded-xl border py-2.5 text-xs font-bold uppercase transition-colors",
-                        classificacao === c
-                          ? c === "b2c"
-                            ? "border-purple-500 bg-purple-600/20 text-purple-200"
-                            : "border-blue-500 bg-blue-600/20 text-blue-200"
-                          : cn(
-                              "bg-zinc-900/70 text-zinc-500 hover:text-zinc-300",
-                              errors.classificacao ? "border-red-500/70" : "border-zinc-800 hover:border-zinc-700"
-                            )
-                      )}
-                    >
-                      {c.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </Campo>
-            </Secao>
-
-            {/* A API sempre aceitou videomaker e editor na criação, mas nenhum
-                formulário oferecia os campos: só dava para atribuir depois de
-                salvar e reabrir o card. Ficam opcionais de propósito — quem só
-                abre o pedido normalmente não sabe quem vai gravar, e a triagem
-                existe justamente para isso. */}
-            <Secao icone={Users} titulo="Equipe">
-              <Campo label="Videomaker da gravação" opcional>
-                <div className="relative">
-                  <select
-                    value={videomakerId}
-                    onChange={e => setVideomakerId(e.target.value)}
-                    className={cn(selectClass, "pl-10")}
-                  >
-                    <option value="">Definir na triagem</option>
-                    {opcoesCaptacao.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                  <Seta />
-                </div>
-              </Campo>
-
-              <Campo label="Videomaker editor" opcional>
-                <div className="relative">
-                  <select
-                    value={editorId}
-                    onChange={e => setEditorId(e.target.value)}
-                    className={cn(selectClass, "pl-10")}
-                  >
-                    <option value="">Definir na triagem</option>
-                    {opcoesEdicao.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                  <Seta />
-                </div>
-              </Campo>
-
-              <p className="text-xs text-zinc-600">
-                Deixe em branco e a demanda entra na fila de triagem para alguém assumir.
-              </p>
-            </Secao>
-          </div>
-
-          <div className="my-7 border-t border-zinc-800/80" />
-
-          {/* ── Bloco 3: produtos + arquivos ────────────────────────────── */}
-          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
-
-            <Secao icone={Package} titulo="Equipamentos / Produtos">
-              <div className="relative">
-                <Plus className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <select
-                  value=""
-                  onChange={e => {
-                    const id = e.target.value
-                    if (!id) return
-                    setProdutoIds(prev => prev.includes(id) ? prev : [...prev, id])
-                    limparCampo("produtoIds")
-                  }}
-                  className={cn(selectClass, "pl-10", errors.produtoIds && erroClass)}
-                >
-                  <option value="">Adicionar equipamento / produto</option>
-                  {produtos
-                    .filter(p => !produtoIds.includes(p.id))
-                    .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
-                <Seta />
-              </div>
-
-              {produtosSelecionados.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {produtosSelecionados.map(p => (
-                    <Chip
-                      key={p.id}
-                      texto={p.nome}
-                      onRemover={() => setProdutoIds(prev => prev.filter(id => id !== p.id))}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {errors.produtoIds
-                ? <p className="text-xs text-red-400">{errors.produtoIds}</p>
-                : <p className="text-xs text-zinc-600">Selecione um ou mais equipamentos/produtos envolvidos.</p>}
-            </Secao>
-
-            <Secao icone={Paperclip} titulo="Arquivos e referências">
-              {/* O anexo passa pela rota de documento: briefing, contrato, planilha,
-                  imagem de referência. Material bruto de vídeo não cabe aqui (25 MB)
-                  — vai por link, no campo logo abaixo. */}
-              <label
-                onDragOver={e => { e.preventDefault(); setArrastando(true) }}
-                onDragLeave={() => setArrastando(false)}
-                onDrop={e => {
-                  e.preventDefault()
-                  setArrastando(false)
-                  if (e.dataTransfer.files?.length) receberArquivos(e.dataTransfer.files)
-                }}
-                className={cn(
-                  "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-7 text-center transition-colors",
-                  arrastando
-                    ? "border-purple-400 bg-purple-500/10"
-                    : "border-purple-500/40 bg-zinc-900/40 hover:border-purple-500/70 hover:bg-purple-500/5"
-                )}
-              >
-                <UploadCloud className="h-6 w-6 text-purple-400" />
-                <span className="text-sm font-medium text-zinc-200">Arraste arquivos para cá</span>
-                <span className="text-xs text-zinc-500">
-                  ou <span className="text-purple-400 underline underline-offset-2">clique para selecionar</span>
-                </span>
-                <span className="text-[11px] text-zinc-600">PDF, Word, Excel, PNG, JPG — até 25 MB cada</span>
-                <input
-                  type="file"
-                  multiple
-                  accept={ACCEPT_DOCUMENTOS}
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files) receberArquivos(e.target.files)
-                    e.target.value = ""
-                  }}
-                />
-              </label>
-
-              {anexos.length > 0 && (
-                <ul className="space-y-1.5">
-                  {anexos.map((file, i) => (
-                    <li key={`${file.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-300">
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-                      <span className="flex-1 truncate">{file.name}</span>
-                      <span className="shrink-0 text-zinc-500">{Math.max(1, Math.round(file.size / 1024))} KB</span>
-                      <button
-                        type="button"
-                        onClick={() => setAnexos((atuais) => atuais.filter((_, idx) => idx !== i))}
-                        className="shrink-0 text-zinc-500 transition-colors hover:text-red-400"
-                        aria-label={`Remover ${file.name}`}
+                {prioridade === "urgente" && (
+                  <Campo label="Motivo da urgência" obrigatorio erro={errors.motivoUrgencia}>
+                    <div className="relative">
+                      <select
+                        value={motivoUrgencia}
+                        onChange={e => { setMotivoUrgencia(e.target.value); limparCampo("motivoUrgencia") }}
+                        className={cn(selectClass, errors.motivoUrgencia && erroClass)}
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        <option value="">Selecionar motivo...</option>
+                        {MOTIVOS_URGENCIA.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <Seta />
+                    </div>
+                  </Campo>
+                )}
 
-              <Campo label="Links de referência">
-                <div className="flex gap-2">
-                  <div className="relative min-w-0 flex-1">
+                <Campo label="Classificação" obrigatorio erro={errors.classificacao}>
+                  <div className="flex gap-3">
+                    {(["b2c", "b2b"] as const).map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => { setClassificacao(prev => prev === c ? "" : c); limparCampo("classificacao") }}
+                        className={cn(
+                          "flex-1 rounded-xl border py-2.5 text-xs font-bold uppercase transition-colors",
+                          classificacao === c
+                            ? c === "b2c"
+                              ? "border-purple-500 bg-purple-600/20 text-purple-200"
+                              : "border-blue-500 bg-blue-600/20 text-blue-200"
+                            : cn(
+                                "bg-zinc-900/70 text-zinc-500 hover:text-zinc-300",
+                                errors.classificacao ? "border-red-500/70" : "border-zinc-800 hover:border-zinc-700"
+                              )
+                        )}
+                      >
+                        {c.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </Campo>
+              </Secao>
+
+
+              <Secao icone={Package} titulo="Equipamentos / Produtos">
+                <div className="relative">
+                  <Plus className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <select
+                    value=""
+                    onChange={e => {
+                      const id = e.target.value
+                      if (!id) return
+                      setProdutoIds(prev => prev.includes(id) ? prev : [...prev, id])
+                      limparCampo("produtoIds")
+                    }}
+                    className={cn(selectClass, "pl-10", errors.produtoIds && erroClass)}
+                  >
+                    <option value="">Adicionar equipamento / produto</option>
+                    {produtos
+                      .filter(p => !produtoIds.includes(p.id))
+                      .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                  <Seta />
+                </div>
+
+                {produtosSelecionados.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {produtosSelecionados.map(p => (
+                      <Chip
+                        key={p.id}
+                        texto={p.nome}
+                        onRemover={() => setProdutoIds(prev => prev.filter(id => id !== p.id))}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {errors.produtoIds
+                  ? <p className="text-xs text-red-400">{errors.produtoIds}</p>
+                  : <p className="text-xs text-zinc-600">Selecione um ou mais equipamentos/produtos envolvidos.</p>}
+              </Secao>
+            </div>
+
+            <div className="min-w-0 space-y-8">
+              {/* A API sempre aceitou videomaker e editor na criação, mas nenhum
+                  formulário oferecia os campos: só dava para atribuir depois de
+                  salvar e reabrir o card. Ficam opcionais de propósito — quem só
+                  abre o pedido normalmente não sabe quem vai gravar, e a triagem
+                  existe justamente para isso. */}
+              <Secao icone={Users} titulo="Equipe">
+                <Campo label="Videomaker da gravação" opcional>
+                  <div className="relative">
+                    <select
+                      value={videomakerId}
+                      onChange={e => setVideomakerId(e.target.value)}
+                      className={cn(selectClass, "pl-10")}
+                    >
+                      <option value="">Definir na triagem</option>
+                      {opcoesCaptacao.map(o => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <Seta />
+                  </div>
+                </Campo>
+
+                <Campo label="Videomaker editor" opcional>
+                  <div className="relative">
+                    <select
+                      value={editorId}
+                      onChange={e => setEditorId(e.target.value)}
+                      className={cn(selectClass, "pl-10")}
+                    >
+                      <option value="">Definir na triagem</option>
+                      {opcoesEdicao.map(o => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <Seta />
+                  </div>
+                </Campo>
+
+                <p className="text-xs text-zinc-600">
+                  Deixe em branco e a demanda entra na fila de triagem para alguém assumir.
+                </p>
+              </Secao>
+
+              <Secao icone={Paperclip} titulo="Arquivos e referências">
+                {/* O anexo passa pela rota de documento: briefing, contrato, planilha,
+                    imagem de referência. Material bruto de vídeo não cabe aqui (25 MB)
+                    — vai por link, no campo logo abaixo. */}
+                <label
+                  onDragOver={e => { e.preventDefault(); setArrastando(true) }}
+                  onDragLeave={() => setArrastando(false)}
+                  onDrop={e => {
+                    e.preventDefault()
+                    setArrastando(false)
+                    if (e.dataTransfer.files?.length) receberArquivos(e.dataTransfer.files)
+                  }}
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-7 text-center transition-colors",
+                    arrastando
+                      ? "border-purple-400 bg-purple-500/10"
+                      : "border-purple-500/40 bg-zinc-900/40 hover:border-purple-500/70 hover:bg-purple-500/5"
+                  )}
+                >
+                  <UploadCloud className="h-6 w-6 text-purple-400" />
+                  <span className="text-sm font-medium text-zinc-200">Arraste arquivos para cá</span>
+                  <span className="text-xs text-zinc-500">
+                    ou <span className="text-purple-400 underline underline-offset-2">clique para selecionar</span>
+                  </span>
+                  <span className="text-[11px] text-zinc-600">PDF, Word, Excel, PNG, JPG — até 25 MB cada</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept={ACCEPT_DOCUMENTOS}
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) receberArquivos(e.target.files)
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+
+                {anexos.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {anexos.map((file, i) => (
+                      <li key={`${file.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-300">
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="flex-1 truncate">{file.name}</span>
+                        <span className="shrink-0 text-zinc-500">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                        <button
+                          type="button"
+                          onClick={() => setAnexos((atuais) => atuais.filter((_, idx) => idx !== i))}
+                          className="shrink-0 text-zinc-500 transition-colors hover:text-red-400"
+                          aria-label={`Remover ${file.name}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <Campo label="Links de referência">
+                  <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                      <input
+                        value={novaReferencia}
+                        onChange={e => setNovaReferencia(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { e.preventDefault(); adicionarReferencia() }
+                        }}
+                        placeholder="Cole aqui links do Drive, Instagram, YouTube..."
+                        className={cn(inputClass, "pl-10")}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={adicionarReferencia}
+                      className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-purple-500/50 hover:text-purple-300"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Adicionar link
+                    </button>
+                  </div>
+                </Campo>
+
+                {referencias.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {referencias.map(ref => (
+                      <Chip
+                        key={ref}
+                        texto={ref}
+                        onRemover={() => setReferencias(prev => prev.filter(r => r !== ref))}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <Campo label="Link dos brutos" opcional>
+                  <div className="relative">
                     <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                     <input
-                      value={novaReferencia}
-                      onChange={e => setNovaReferencia(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter") { e.preventDefault(); adicionarReferencia() }
-                      }}
-                      placeholder="Cole aqui links do Drive, Instagram, YouTube..."
+                      type="url"
+                      value={linkBrutos}
+                      onChange={e => setLinkBrutos(e.target.value)}
+                      placeholder="https://drive.google.com/... (pasta com o material bruto)"
                       className={cn(inputClass, "pl-10")}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={adicionarReferencia}
-                    className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-purple-500/50 hover:text-purple-300"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Adicionar link
-                  </button>
-                </div>
-              </Campo>
-
-              {referencias.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {referencias.map(ref => (
-                    <Chip
-                      key={ref}
-                      texto={ref}
-                      onRemover={() => setReferencias(prev => prev.filter(r => r !== ref))}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <Campo label="Link dos brutos" opcional>
-                <div className="relative">
-                  <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                  <input
-                    type="url"
-                    value={linkBrutos}
-                    onChange={e => setLinkBrutos(e.target.value)}
-                    placeholder="https://drive.google.com/... (pasta com o material bruto)"
-                    className={cn(inputClass, "pl-10")}
-                  />
-                </div>
-              </Campo>
-            </Secao>
+                </Campo>
+              </Secao>
+            </div>
           </div>
         </div>
 
