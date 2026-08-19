@@ -566,6 +566,15 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
               o título, e o briefing usa a largura toda. */}
           <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
             <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+              <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
+                <input
+                  value={titulo}
+                  onChange={e => { setTitulo(e.target.value); limparCampo("titulo") }}
+                  placeholder="Ex.: Reels Mounjaro — Antes e Depois"
+                  className={cn(inputClass, errors.titulo && erroClass)}
+                />
+              </Campo>
+
               <Campo label="Tipo de demanda" obrigatorio>
                 <div className="flex gap-3">
                   {(["video", "cobertura"] as const).map(t => (
@@ -584,15 +593,6 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
                     </button>
                   ))}
                 </div>
-              </Campo>
-
-              <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
-                <input
-                  value={titulo}
-                  onChange={e => { setTitulo(e.target.value); limparCampo("titulo") }}
-                  placeholder="Ex.: Reels Mounjaro — Antes e Depois"
-                  className={cn(inputClass, errors.titulo && erroClass)}
-                />
               </Campo>
             </div>
 
