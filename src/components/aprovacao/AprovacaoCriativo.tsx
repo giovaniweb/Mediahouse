@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { CheckCircle2, MessageSquare, ThumbsUp, Send, AlertCircle, Clock, Loader2, Copy, Check, Package, Layers } from "lucide-react"
 import { ArteViewer } from "./ArteViewer"
+import { extrairCopy } from "@/lib/copy-criativo"
 
 interface ArquivoArte { id: string; url: string; nomeArquivo: string; sequencia: number | null }
 export interface AprovacaoData {
@@ -25,11 +26,6 @@ export interface AprovacaoData {
     linhaProjetoRef?: { nome: string } | null
     produtos?: { produto: { nome: string } }[]
   }
-}
-
-function extrairCopy(det?: Record<string, unknown> | null, descricao?: string | null): string {
-  if (det) for (const [k, v] of Object.entries(det)) if (/copy|legenda|caption/i.test(k) && typeof v === "string" && v.trim()) return v
-  return descricao ?? ""
 }
 
 // Tela de aprovação de arte (Growth) — carrossel + copy + Aprovar/Solicitar ajuste.

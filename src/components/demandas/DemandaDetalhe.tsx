@@ -28,6 +28,7 @@ import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
+import { extrairCopy } from "@/lib/copy-criativo"
 
 const STATUS_LABELS: Record<string, string> = {
   pedido_criado: "Pedido Criado",
@@ -1068,11 +1069,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     .filter((a) => a.tipoArquivo === "final")
     .sort((a, b) => (a.sequencia ?? 0) - (b.sequencia ?? 0))
     .map((a) => a.url)
-  const copyPrevia = (() => {
-    const det = demanda.detalhesEntrega as Record<string, unknown> | null | undefined
-    if (det) for (const [k, v] of Object.entries(det)) if (/copy|legenda|caption/i.test(k) && typeof v === "string" && v.trim()) return v
-    return demanda.descricao ?? ""
-  })()
+  const copyPrevia = extrairCopy(
+    demanda.detalhesEntrega as Record<string, unknown> | null | undefined,
+    demanda.descricao
+  )
 
   const corpo = (
     <>
