@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest"
-import { TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel } from "@/lib/growth-conteudo"
+import {
+  TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel, campoDescricaoDe, CHAVE_DESCRICAO,
+} from "@/lib/growth-conteudo"
 
 // O carrossel perguntava se a copy estava pronta e não dava campo nenhum para
 // ela. Uma pergunta só, que abre o campo certo para cada resposta.
@@ -56,31 +58,81 @@ describe("catálogo", () => {
     expect(duplicados).toEqual([])
   })
 
-  it("tipos simples não têm miolo — o formulário esconde o bloco inteiro", () => {
-    for (const k of ["administrativo", "apresentacao", "atualizacao_drive", "atualizacao_materiais", "design"]) {
-      expect(tipoConteudoDe(k)!.campos, k).toEqual([])
+  it("todo tipo tem exatamente um campo de descrição", () => {
+    // Demanda.descricao é NOT NULL e alimenta a triagem por IA, a tela de campo
+    // e o fallback da aprovação. Tipo sem este campo não conseguiria nem criar
+    // a demanda — o POST seria recusado pelo zod.
+    for (const tipo of TIPOS_CONTEUDO) {
+      const marcados = tipo.campos.filter((c) => c.mapeiaPara === "descricao")
+      expect(marcados, tipo.key).toHaveLength(1)
+      expect(marcados[0].tipo, tipo.key).toBe("textarea")
+      expect(marcados[0].key, tipo.key).toBe(CHAVE_DESCRICAO)
+      expect(marcados[0].placeholder, tipo.key).toBeTruthy()
+      expect(campoDescricaoDe(tipo)).toBe(marcados[0])
     }
   })
 
-  it("formato é escolha fechada, com o tamanho em pixels junto", () => {
-    const esperado = ["4:5 (1080x1350)", "9:16 (1080x1920)", "1:1 (1080x1080)"]
+  it("a descrição é o primeiro campo e nunca é condicional", () => {
+    // Se ela pudesse ficar escondida atrás de outra resposta, existiria um
+    // estado em que a demanda não tem como ser preenchida.
+    for (const tipo of TIPOS_CONTEUDO) {
+      expect(tipo.campos[0].mapeiaPara, tipo.key).toBe("descricao")
+      expect(tipo.campos[0].visivelSe, tipo.key).toBeUndefined()
+      expect(campoVisivel(tipo.campos[0], {}), tipo.key).toBe(true)
+    }
+  })
+
+  it("a chave da descrição é a mesma em todo tipo — sobrevive à troca", () => {
+    const chavesUsadas = new Set(TIPOS_CONTEUDO.map((t) => campoDescricaoDe(t)!.key))
+    expect([...chavesUsadas]).toEqual([CHAVE_DESCRICAO])
+  })
+
+  it("formato é cartão visual, não dropdown", () => {
+    // Três opções escondidas atrás de um clique é atrito à toa.
     for (const k of ["carrossel", "post"]) {
       const formato = tipoConteudoDe(k)!.campos.find((c) => c.key === "formato")!
-      expect(formato.tipo, k).toBe("select")
-      expect(formato.opcoes, k).toEqual(esperado)
+      expect(formato.tipo, k).toBe("radio-visual")
+      expect(formato.opcoesVisuais?.map((o) => o.valor), k).toEqual(["1:1", "4:5", "9:16"])
+      expect(formato.opcoesVisuais?.map((o) => o.icone), k).toEqual(["quadrado", "retrato", "celular"])
+      // O tamanho em pixels continua à vista, agora como linha de apoio.
+      expect(formato.opcoesVisuais?.every((o) => /\d{3,4} × \d{3,4}/.test(o.rotulo)), k).toBe(true)
     }
   })
 
-  it("anúncio pergunta plataforma, público e dor — não 'canal' em texto livre", () => {
-    expect(chaves("anuncio")).toEqual(["plataforma", "publico", "dor"])
-    const plataforma = tipoConteudoDe("anuncio")!.campos[0]
+  it("toda opção visual tem ícone conhecido", () => {
+    const validos = ["quadrado", "retrato", "celular"]
+    for (const tipo of TIPOS_CONTEUDO) {
+      for (const campo of tipo.campos) {
+        if (campo.tipo !== "radio-visual") continue
+        expect(campo.opcoesVisuais, `${tipo.key}.${campo.key}`).toBeTruthy()
+        for (const o of campo.opcoesVisuais!) {
+          expect(validos, `${tipo.key}.${campo.key}`).toContain(o.icone)
+        }
+      }
+    }
+  })
+
+  it("anúncio pergunta plataforma, público e dor — e tem onde colar a copy", () => {
+    expect(chaves("anuncio")).toEqual([CHAVE_DESCRICAO, "plataforma", "publico", "dor", "copyTexto"])
+    const plataforma = tipoConteudoDe("anuncio")!.campos.find((c) => c.key === "plataforma")!
     expect(plataforma.opcoes).toEqual(["Meta Ads", "Google Ads", "TikTok", "LinkedIn", "Outro"])
   })
 
-  it("email marketing fecha as duas linhas do grid de 2 colunas", () => {
+  it("todo tipo com peça de copy tem onde colar o texto", () => {
+    // Sem isto o cliente vê a descrição no lugar da copy na tela de aprovação.
+    for (const k of ["anuncio", "carrossel", "post"]) {
+      const temCopy = tipoConteudoDe(k)!.campos.some(
+        (c) => c.tipo === "textarea" && /copy|legenda/i.test(c.label)
+      )
+      expect(temCopy, k).toBe(true)
+    }
+  })
+
+  it("email marketing não pergunta objetivo e descrição em campos separados", () => {
     const campos = tipoConteudoDe("email_marketing")!.campos
-    expect(campos).toHaveLength(4)
-    expect(campos.every((c) => c.largura !== "inteira")).toBe(true)
+    expect(campoDescricaoDe(tipoConteudoDe("email_marketing"))!.label).toBe("Objetivo da campanha")
+    // Os três campos curtos que sobram fecham as linhas do grid de 2 colunas.
+    expect(campos.filter((c) => c.tipo === "text").every((c) => c.largura !== "inteira")).toBe(true)
   })
 
   it("todo campo select declara suas opções", () => {

@@ -12,6 +12,7 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import {
   Plus, Calendar, Loader2, LayoutGrid, ClipboardList, Settings2, Users, Package, Sparkles,
+  Square, RectangleVertical, Smartphone,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
@@ -19,7 +20,10 @@ import { hojeEmSaoPaulo } from "@/lib/datas"
 import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import { enviarAnexos } from "@/lib/upload-documento"
 import { useRascunho } from "@/lib/use-rascunho"
-import { TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel, type CampoCondicional } from "@/lib/growth-conteudo"
+import {
+  TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel, campoDescricaoDe, CHAVE_DESCRICAO,
+  type CampoCondicional, type IconeVisual,
+} from "@/lib/growth-conteudo"
 import {
   Secao, Campo, Seta, Chip, DivisorBloco,
   inputClass, selectClass, erroClass, MOTIVOS_URGENCIA, COR_PRIORIDADE,
@@ -33,7 +37,6 @@ interface Item { id: string; nome: string }
 
 interface RascunhoGrowth {
   titulo: string
-  descricao: string
   tipoVideo: string
   prioridade: string
   motivoUrgencia: string
@@ -49,7 +52,7 @@ interface RascunhoGrowth {
 }
 
 const PADRAO: RascunhoGrowth = {
-  titulo: "", descricao: "", tipoVideo: "post", prioridade: "normal", motivoUrgencia: "",
+  titulo: "", tipoVideo: "post", prioridade: "normal", motivoUrgencia: "",
   dataLimite: "", classificacao: "", linhaProjetoId: "", responsavelIds: [], produtoIds: [],
   detalhes: {}, referencias: [], novaReferencia: "", linkBrutos: "",
 }
@@ -60,7 +63,6 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   onCreated: () => void
 }) {
   const [titulo, setTitulo] = useState(PADRAO.titulo)
-  const [descricao, setDescricao] = useState(PADRAO.descricao)
   const [tipoVideo, setTipoVideo] = useState(PADRAO.tipoVideo)
   const [prioridade, setPrioridade] = useState(PADRAO.prioridade)
   const [motivoUrgencia, setMotivoUrgencia] = useState(PADRAO.motivoUrgencia)
@@ -88,12 +90,17 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   const produtos = pData?.produtos ?? []
 
   const tipo = tipoConteudoDe(tipoVideo)
+  // A descrição deixou de ser um "Observação / Objetivo" genérico no topo: cada
+  // tipo pergunta o que precisa saber, no miolo. O valor continua indo para a
+  // coluna Demanda.descricao — a pergunta muda, o destino não.
+  const campoDescricao = campoDescricaoDe(tipo)
+  const descricao = detalhes[CHAVE_DESCRICAO] ?? ""
   // Campo escondido não vale: trocar "Pronta" por "Precisa criar" não pode deixar
   // um "Texto da Copy" órfão viajando no payload nem no rascunho.
   const camposVisiveis = (tipo?.campos ?? []).filter((c) => campoVisivel(c, detalhes))
 
   const temConteudo = !!(
-    titulo.trim() || descricao.trim() || dataLimite || classificacao || linhaProjetoId ||
+    titulo.trim() || dataLimite || classificacao || linhaProjetoId ||
     responsavelIds.length > 0 || produtoIds.length > 0 || referencias.length > 0 ||
     novaReferencia.trim() || linkBrutos.trim() || anexos.length > 0 ||
     motivoUrgencia || Object.values(detalhes).some((v) => v.trim())
@@ -104,12 +111,11 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
     aberto: open,
     temConteudo,
     valores: {
-      titulo, descricao, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
+      titulo, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
       linhaProjetoId, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, linkBrutos,
     },
     aoRestaurar: (s) => {
       setTitulo(s.titulo ?? PADRAO.titulo)
-      setDescricao(s.descricao ?? PADRAO.descricao)
       setTipoVideo(s.tipoVideo ?? PADRAO.tipoVideo)
       setPrioridade(s.prioridade ?? PADRAO.prioridade)
       setMotivoUrgencia(s.motivoUrgencia ?? PADRAO.motivoUrgencia)
@@ -145,6 +151,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   function validate() {
     const errs: Record<string, string> = {}
     if (titulo.trim().length < 3) errs.titulo = "Mínimo 3 caracteres"
+    // A coluna Demanda.descricao é NOT NULL e alimenta a triagem por IA: sem
+    // este campo a demanda nem chega ao servidor.
     if (descricao.trim().length < 10) errs.descricao = "Mínimo 10 caracteres"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Informe o motivo"
     setErrors(errs)
@@ -162,6 +170,10 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
       // detalhe exibe). Só entram os campos visíveis e preenchidos.
       const detalhesEntrega: Record<string, string> = {}
       for (const c of camposVisiveis) {
+        // A descrição vai para a coluna própria, não para o Json de detalhes —
+        // gravar nos dois lugares faria a tela de detalhe exibir o mesmo texto
+        // duas vezes.
+        if (c.mapeiaPara === "descricao") continue
         const v = detalhes[c.key]
         if (v !== undefined && v !== "") detalhesEntrega[c.label] = v
       }
@@ -253,7 +265,14 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
             <div className="relative">
               <select
                 value={tipoVideo}
-                onChange={(e) => { setTipoVideo(e.target.value); setDetalhes({}) }}
+                onChange={(e) => {
+                  setTipoVideo(e.target.value)
+                  // Os campos específicos mudam com o tipo, mas a descrição
+                  // sobrevive: quem escreveu o briefing e só então percebeu que
+                  // era carrossel e não post não deve perder o texto.
+                  setDetalhes((d): Record<string, string> =>
+                    d[CHAVE_DESCRICAO] ? { [CHAVE_DESCRICAO]: d[CHAVE_DESCRICAO] } : {})
+                }}
                 className={selectClass}
               >
                 {TIPOS_CONTEUDO.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
@@ -322,15 +341,6 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
               className={cn(inputClass, errors.titulo && erroClass)}
             />
           </Campo>
-          <Campo label="Observação / Objetivo" obrigatorio erro={errors.descricao}>
-            <textarea
-              rows={4}
-              value={descricao}
-              onChange={(e) => { setDescricao(e.target.value); limparCampo("descricao") }}
-              placeholder="Explique rapidamente o que precisa ser produzido, para quem é e qual resultado espera."
-              className={cn(inputClass, "resize-none", errors.descricao && erroClass)}
-            />
-          </Campo>
         </Secao>
       </div>
 
@@ -345,7 +355,11 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
                   <CampoDinamico
                     campo={c}
                     valor={detalhes[c.key] ?? ""}
-                    onChange={(v) => setDetalhes((d) => ({ ...d, [c.key]: v }))}
+                    erro={c.mapeiaPara === "descricao" ? errors.descricao : undefined}
+                    onChange={(v) => {
+                      setDetalhes((d) => ({ ...d, [c.key]: v }))
+                      if (c.mapeiaPara === "descricao") limparCampo("descricao")
+                    }}
                   />
                 </div>
               ))}
@@ -488,16 +502,62 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   )
 }
 
+const ICONES_VISUAIS: Record<IconeVisual, React.ComponentType<{ className?: string }>> = {
+  quadrado: Square,
+  retrato: RectangleVertical,
+  celular: Smartphone,
+}
+
 /** Um campo do catálogo de tipos do Growth. */
-function CampoDinamico({ campo, valor, onChange }: {
+function CampoDinamico({ campo, valor, erro, onChange }: {
   campo: CampoCondicional
   valor: string
+  erro?: string
   onChange: (valor: string) => void
 }) {
+  // Cartões em vez de dropdown: o formato é uma escolha entre três, e três
+  // opções escondidas atrás de um clique é atrito à toa. É o mesmo componente
+  // do 9:16 / 16:9 do audiovisual.
+  if (campo.tipo === "radio-visual") {
+    return (
+      <Campo label={campo.label} erro={erro}>
+        <div className="flex gap-3">
+          {(campo.opcoesVisuais ?? []).map(({ valor: v, rotulo, icone }) => {
+            const Icone = ICONES_VISUAIS[icone]
+            const ativo = valor === v
+            return (
+              <button
+                key={v}
+                type="button"
+                // Clicar no ativo desmarca: o formato é opcional, e sem isso não
+                // haveria como voltar atrás depois de escolher.
+                onClick={() => onChange(ativo ? "" : v)}
+                className={cn(
+                  "flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                  ativo
+                    ? "border-purple-500 bg-purple-500/10"
+                    : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                )}
+              >
+                <Icone className={cn("h-5 w-5 shrink-0", ativo ? "text-purple-300" : "text-zinc-500")} />
+                <span className="min-w-0">
+                  <span className={cn("block text-sm font-semibold", ativo ? "text-zinc-50" : "text-zinc-300")}>
+                    {v}
+                  </span>
+                  <span className="block text-xs text-zinc-500">{rotulo}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </Campo>
+    )
+  }
+
   if (campo.tipo === "select" || campo.tipo === "bool") {
     const opcoes = campo.tipo === "bool" ? ["Sim", "Não"] : (campo.opcoes ?? [])
     return (
-      <Campo label={campo.label}>
+      <Campo label={campo.label} erro={erro}>
         <div className="relative">
           <select value={valor} onChange={(e) => onChange(e.target.value)} className={selectClass}>
             <option value="">Selecionar...</option>
@@ -511,26 +571,26 @@ function CampoDinamico({ campo, valor, onChange }: {
 
   if (campo.tipo === "textarea") {
     return (
-      <Campo label={campo.label}>
+      <Campo label={campo.label} obrigatorio={campo.mapeiaPara === "descricao"} erro={erro}>
         <textarea
           rows={4}
           value={valor}
           onChange={(e) => onChange(e.target.value)}
           placeholder={campo.placeholder}
-          className={cn(inputClass, "resize-none")}
+          className={cn(inputClass, "resize-y", erro && erroClass)}
         />
       </Campo>
     )
   }
 
   return (
-    <Campo label={campo.label}>
+    <Campo label={campo.label} erro={erro}>
       <input
         type={campo.tipo === "number" ? "number" : "text"}
         value={valor}
         onChange={(e) => onChange(e.target.value)}
         placeholder={campo.placeholder}
-        className={inputClass}
+        className={cn(inputClass, erro && erroClass)}
       />
     </Campo>
   )
