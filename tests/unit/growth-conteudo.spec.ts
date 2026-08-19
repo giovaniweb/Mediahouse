@@ -32,11 +32,57 @@ describe("carrossel — seletor de copy", () => {
   })
 
   it("campo sem dependência aparece sempre", () => {
-    expect(campoVisivel(chave("slides"), {})).toBe(true)
+    expect(campoVisivel(chave("formato"), {})).toBe(true)
+  })
+
+  it("não pede a quantidade de slides antes de a copy existir", () => {
+    // Quem escreve a copy é que descobre em quantos slides ela cabe. Pedir o
+    // número na abertura só cria um combinado para desobedecer depois.
+    expect(carrossel.campos.find((c) => c.key === "slides")).toBeUndefined()
   })
 })
 
 describe("catálogo", () => {
+  const chaves = (k: string) => tipoConteudoDe(k)!.campos.map((c) => c.key)
+
+  it("não repete o que o rodapé fixo já pede", () => {
+    // Arquivos, links de referência e link dos brutos são do rodapé. Campo aqui
+    // com o mesmo papel compete com ele e ninguém sabe qual preencher.
+    const duplicados = TIPOS_CONTEUDO.flatMap((t) =>
+      t.campos
+        .filter((c) => /refer[êe]ncia|anexo|arquivo|link|brutos/i.test(c.label))
+        .map((c) => `${t.key}.${c.key}`)
+    )
+    expect(duplicados).toEqual([])
+  })
+
+  it("tipos simples não têm miolo — o formulário esconde o bloco inteiro", () => {
+    for (const k of ["administrativo", "apresentacao", "atualizacao_drive", "atualizacao_materiais", "design"]) {
+      expect(tipoConteudoDe(k)!.campos, k).toEqual([])
+    }
+  })
+
+  it("formato é escolha fechada, com o tamanho em pixels junto", () => {
+    const esperado = ["4:5 (1080x1350)", "9:16 (1080x1920)", "1:1 (1080x1080)"]
+    for (const k of ["carrossel", "post"]) {
+      const formato = tipoConteudoDe(k)!.campos.find((c) => c.key === "formato")!
+      expect(formato.tipo, k).toBe("select")
+      expect(formato.opcoes, k).toEqual(esperado)
+    }
+  })
+
+  it("anúncio pergunta plataforma, público e dor — não 'canal' em texto livre", () => {
+    expect(chaves("anuncio")).toEqual(["plataforma", "publico", "dor"])
+    const plataforma = tipoConteudoDe("anuncio")!.campos[0]
+    expect(plataforma.opcoes).toEqual(["Meta Ads", "Google Ads", "TikTok", "LinkedIn", "Outro"])
+  })
+
+  it("email marketing fecha as duas linhas do grid de 2 colunas", () => {
+    const campos = tipoConteudoDe("email_marketing")!.campos
+    expect(campos).toHaveLength(4)
+    expect(campos.every((c) => c.largura !== "inteira")).toBe(true)
+  })
+
   it("todo campo select declara suas opções", () => {
     for (const tipo of TIPOS_CONTEUDO) {
       for (const campo of tipo.campos) {
@@ -50,9 +96,9 @@ describe("catálogo", () => {
 
   it("todo visivelSe aponta para um campo que existe no mesmo tipo", () => {
     for (const tipo of TIPOS_CONTEUDO) {
-      const chaves = new Set(tipo.campos.map((c) => c.key))
+      const doTipo = new Set(tipo.campos.map((c) => c.key))
       for (const campo of tipo.campos) {
-        if (campo.visivelSe) expect(chaves, `${tipo.key}.${campo.key}`).toContain(campo.visivelSe.campo)
+        if (campo.visivelSe) expect(doTipo, `${tipo.key}.${campo.key}`).toContain(campo.visivelSe.campo)
       }
     }
   })
