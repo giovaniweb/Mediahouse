@@ -16,7 +16,7 @@ import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
-import { resolveParaEditor } from "@/lib/equipe-resolver"
+import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -51,6 +51,8 @@ const criarDemandaSchema = z.object({
   referencia: z.string().optional(),
   localGravacao: z.string().optional(),
   linkBrutos: z.string().optional(),
+  // Proporção da entrega ("9:16" | "16:9" | "1:1")
+  formato: z.enum(["9:16", "16:9", "1:1"]).optional(),
   // Área (audiovisual padrão | design)
   area: z.enum(["audiovisual", "design"]).optional(),
   // Evento mestre vinculado (card criado a partir de um evento)
@@ -274,6 +276,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Mesmo tratamento para o slot de captação: /api/equipe-disponivel devolve
+  // token unificado nos dois papéis, e aqui o videomakerId entrava cru — quem
+  // escolhesse alguém vindo de Editor/Usuario gravaria um id que não existe em
+  // Videomaker. O formulário de criação nunca tinha oferecido o campo, então o
+  // caminho nunca chegou a ser exercitado.
+  let videomakerIdResolvido: string | undefined = data.videomakerId || undefined
+  if (videomakerIdResolvido?.includes(":")) {
+    try {
+      videomakerIdResolvido = await resolveParaVideomaker(videomakerIdResolvido)
+    } catch (e) {
+      return erroDeCampo("videomakerId", e instanceof Error ? e.message : "Não foi possível identificar o videomaker.")
+    }
+  }
+
   // Validar urgência
   if (data.prioridade === "urgente" && !data.motivoUrgencia) {
     return NextResponse.json(
@@ -373,7 +389,7 @@ export async function POST(req: NextRequest) {
       referencia: data.referencia,
       localGravacao: data.localGravacao,
       // Novos campos
-      videomakerId: data.videomakerId || undefined,
+      videomakerId: videomakerIdResolvido,
       // O seletor de equipe devolve token unificado (ed:/vm:/user:), igual ao da
       // edição. Sem resolver aqui, escolher o editor na CRIAÇÃO gravaria um id
       // inválido — por isso o campo nunca tinha sido oferecido nos formulários.
@@ -385,6 +401,7 @@ export async function POST(req: NextRequest) {
       eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
+      formato: data.formato || undefined,
       linkBrutos: data.linkBrutos || undefined,
       detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
     },

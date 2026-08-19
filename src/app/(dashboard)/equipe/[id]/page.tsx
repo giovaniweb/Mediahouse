@@ -233,7 +233,7 @@ export default function EditorDetalhePage() {
             {!editing ? (
               <>
                 <Link
-                  href={`/demandas/nova?editorId=${id}&editorNome=${encodeURIComponent(editor.nome)}`}
+                  href={`/demandas?nova=1&editorId=${encodeURIComponent(`ed:${id}`)}`}
                   className="flex items-center gap-1.5 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg px-3 py-2"
                 >
                   <Plus className="w-4 h-4" /> Nova Demanda

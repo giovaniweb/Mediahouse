@@ -2,24 +2,39 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { X, Plus, Trash2, Calendar, Link2, Loader2, Paperclip } from "lucide-react"
+import {
+  X, Plus, Calendar, Link2, Loader2, Paperclip, Smartphone, Monitor,
+  LayoutGrid, ClipboardList, Settings2, Users, Package, UploadCloud,
+  ChevronDown, FileText, MapPin, User,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
+import { hojeEmSaoPaulo } from "@/lib/datas"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
 
 
 interface Produto { id: string; nome: string }
+interface OpcaoEquipe { value: string; label: string; subtitle?: string }
 
 interface NovaDemandaModalProps {
   open: boolean
   onClose: () => void
+  /**
+   * Pessoa já escolhida ao abrir — vem do botão "Nova Demanda" na ficha de um
+   * videomaker ou de um editor. São tokens da equipe (`vm:<id>` / `ed:<id>`),
+   * os mesmos valores que /api/equipe-disponivel devolve.
+   */
+  prefill?: { videomakerId?: string; editorId?: string }
 }
 
-const inputClass = "w-full border border-zinc-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-zinc-800 text-zinc-200 placeholder-zinc-500 transition-colors"
-const selectClass = "w-full border border-zinc-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-zinc-800 text-zinc-200 transition-colors appearance-none"
+const inputClass =
+  "w-full rounded-xl border border-zinc-800 bg-zinc-900/70 px-3.5 py-2.5 text-sm text-zinc-200 " +
+  "placeholder-zinc-600 outline-none transition-colors focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/25"
+const selectClass = cn(inputClass, "appearance-none pr-10 cursor-pointer")
+const erroClass = "border-red-500/70 focus:border-red-500 focus:ring-red-500/25"
 
 const MOTIVOS_URGENCIA = [
   "Trend / Oportunidade de mercado",
@@ -29,7 +44,78 @@ const MOTIVOS_URGENCIA = [
   "Solicitação da diretoria",
 ]
 
-export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
+const COR_PRIORIDADE: Record<string, string> = {
+  normal: "bg-amber-400",
+  alta: "bg-orange-500",
+  urgente: "bg-red-500",
+}
+
+// ── Peças de layout ────────────────────────────────────────────────────────
+// A tela é uma grade de blocos, não uma pilha de campos: cada bloco tem um
+// título com ícone e ocupa metade da largura. Quem preenche lê "o que é",
+// "para quem", "quem faz" lado a lado em vez de rolar sete vezes.
+
+function Secao({ icone: Icone, titulo, children, className }: {
+  icone: React.ComponentType<{ className?: string }>
+  titulo: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={cn("min-w-0", className)}>
+      <div className="mb-4 flex items-center gap-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-purple-500/15 text-purple-400">
+          <Icone className="h-3.5 w-3.5" />
+        </span>
+        <h3 className="text-sm font-semibold text-zinc-100">{titulo}</h3>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  )
+}
+
+function Campo({ label, obrigatorio, opcional, erro, children }: {
+  label: string
+  obrigatorio?: boolean
+  opcional?: boolean
+  erro?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+        {label}
+        {obrigatorio && <span className="ml-1 text-purple-400">*</span>}
+        {opcional && <span className="ml-1 text-zinc-600">(opcional)</span>}
+      </label>
+      {children}
+      {erro && <p className="mt-1 text-xs text-red-400">{erro}</p>}
+    </div>
+  )
+}
+
+/** Select nativo com a seta desenhada por fora (appearance-none come a do sistema). */
+function Seta() {
+  return <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+}
+
+function Chip({ texto, onRemover }: { texto: string; onRemover: () => void }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-purple-500/12 px-2.5 py-1 text-xs font-medium text-purple-200 ring-1 ring-inset ring-purple-500/25">
+      <span className="truncate">{texto}</span>
+      <button
+        type="button"
+        onClick={onRemover}
+        aria-label={`Remover ${texto}`}
+        className="shrink-0 text-purple-300/70 transition-colors hover:text-red-300"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  )
+}
+
+export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalProps) {
   const router = useRouter()
   const overlayRef = useRef<HTMLDivElement>(null)
   // O gesto de clique começou no fundo? (ver comentário do backdrop, mais abaixo)
@@ -44,21 +130,31 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const [prioridade, setPrioridade] = useState<"normal" | "alta" | "urgente">("normal")
   const [motivoUrgencia, setMotivoUrgencia] = useState("")
   const [dataLimite, setDataLimite] = useState("")
-  const [produtoId, setProdutoId] = useState("")
+  const [produtoIds, setProdutoIds] = useState<string[]>([])
   const [classificacao, setClassificacao] = useState<"b2c" | "b2b" | "">("")
-  const [referencias, setReferencias] = useState<string[]>([""])
+  const [referencias, setReferencias] = useState<string[]>([])
+  const [novaReferencia, setNovaReferencia] = useState("")
 
   // ── Campos vídeo ─────────────────────────────────────────────────────────
   const [tipoVideo, setTipoVideo] = useState("")
+  const [formato, setFormato] = useState<"9:16" | "16:9" | "">("9:16")
 
   // ── Campos cobertura ─────────────────────────────────────────────────────
   const [cidade, setCidade] = useState("")
   const [localEvento, setLocalEvento] = useState("")
   const [dataEvento, setDataEvento] = useState("")
+  const [horaEvento, setHoraEvento] = useState("")
+  // Quem comprou o equipamento. Não é enfeite: /api/demandas/[id]/converter-evento
+  // usa clienteFinalNome como cliente do evento, e quem vai gravar precisa de um
+  // telefone para combinar a chegada na clínica.
+  const [clienteNome, setClienteNome] = useState("")
+  const [clienteTelefone, setClienteTelefone] = useState("")
+  const [clienteEmail, setClienteEmail] = useState("")
 
-  // ── Links ────────────────────────────────────────────────────────────────
+  // ── Equipe e links ───────────────────────────────────────────────────────
   const [linkBrutos, setLinkBrutos] = useState("")
-  // Token unificado da equipe (ed:/vm:/user:) — o POST resolve para o id real.
+  // Tokens unificados da equipe (ed:/vm:/user:) — o POST resolve para o id real.
+  const [videomakerId, setVideomakerId] = useState("")
   const [editorId, setEditorId] = useState("")
 
   // ── Estado do form ───────────────────────────────────────────────────────
@@ -68,6 +164,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   // só dá para enviá-los depois do POST.
   const [anexos, setAnexos] = useState<File[]>([])
   const [enviandoAnexos, setEnviandoAnexos] = useState(false)
+  const [arrastando, setArrastando] = useState(false)
   // Avisa que o formulário voltou preenchido, para a pessoa não achar que é lixo
   // de outra demanda.
   const [rascunhoRecuperado, setRascunhoRecuperado] = useState(false)
@@ -78,6 +175,9 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     fetcher
   )
   const produtos = dataProdutos?.produtos ?? []
+  const produtosSelecionados = produtoIds
+    .map((id) => produtos.find((p) => p.id === id))
+    .filter((p): p is Produto => !!p)
 
   // ── Tipos de vídeo (Configurações → Parâmetros) ──────────────────────────
   const { data: dataTipos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
@@ -86,8 +186,14 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   )
   const tiposVideo = dataTipos?.parametros ?? []
 
-  // ── Equipe de edição ─────────────────────────────────────────────────────
-  const { data: dataEdicao } = useSWR<{ opcoes: { value: string; label: string; subtitle?: string }[] }>(
+  // ── Equipe: captação e edição ────────────────────────────────────────────
+  const { data: dataCaptacao } = useSWR<{ opcoes: OpcaoEquipe[] }>(
+    open ? "/api/equipe-disponivel?papel=captacao" : null,
+    fetcher
+  )
+  const opcoesCaptacao = dataCaptacao?.opcoes ?? []
+
+  const { data: dataEdicao } = useSWR<{ opcoes: OpcaoEquipe[] }>(
     open ? "/api/equipe-disponivel?papel=edicao" : null,
     fetcher
   )
@@ -101,10 +207,11 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const RASCUNHO_KEY = "nuflow:rascunho-nova-demanda"
 
   const temConteudo = !!(
-    titulo.trim() || descricao.trim() || tipoVideo || produtoId || classificacao ||
+    titulo.trim() || descricao.trim() || tipoVideo || produtoIds.length > 0 || classificacao ||
     dataLimite || linkBrutos.trim() || cidade.trim() || localEvento.trim() ||
-    dataEvento || motivoUrgencia.trim() || anexos.length > 0 ||
-    referencias.some((r) => r.trim())
+    dataEvento || horaEvento || motivoUrgencia.trim() || anexos.length > 0 ||
+    videomakerId || editorId || referencias.length > 0 || novaReferencia.trim() ||
+    clienteNome.trim() || clienteTelefone.trim() || clienteEmail.trim()
   )
 
   function limparRascunho() {
@@ -129,8 +236,8 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
       if (e.key !== "Escape") return
       // ESC dentro de <select> ou <input type="date"> serve para fechar o
       // dropdown/calendário do próprio controle — e borbulhava até aqui,
-      // derrubando o modal inteiro. O modal tem 7 desses campos: é a explicação
-      // mais provável do "fecha sozinho e perde tudo".
+      // derrubando o modal inteiro. O formulário tem vários desses campos: é a
+      // explicação mais provável do "fecha sozinho e perde tudo".
       if (e.defaultPrevented) return
       const alvo = e.target as HTMLElement | null
       const tag = alvo?.tagName
@@ -147,12 +254,16 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   const gravarRascunho = useCallback(() => {
     if (typeof window === "undefined" || !temConteudo) return
     localStorage.setItem(RASCUNHO_KEY, JSON.stringify({
-      tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
-      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos, editorId,
+      tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoIds,
+      classificacao, referencias, tipoVideo, formato, cidade, localEvento, dataEvento,
+      horaEvento, linkBrutos, videomakerId, editorId,
+      clienteNome, clienteTelefone, clienteEmail,
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [temConteudo, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoId,
-      classificacao, referencias, tipoVideo, cidade, localEvento, dataEvento, linkBrutos, editorId])
+  }, [temConteudo, tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoIds,
+      classificacao, referencias, tipoVideo, formato, cidade, localEvento, dataEvento,
+      horaEvento, linkBrutos, videomakerId, editorId,
+      clienteNome, clienteTelefone, clienteEmail])
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return
@@ -180,6 +291,7 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     if (!open) return
     setErrors({})
     setAnexos([])
+    setNovaReferencia("")
 
     let salvo: Record<string, unknown> | null = null
     if (typeof window !== "undefined") {
@@ -192,27 +304,67 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     setPrioridade((salvo?.prioridade as "normal" | "alta" | "urgente") ?? "normal")
     setMotivoUrgencia((salvo?.motivoUrgencia as string) ?? "")
     setDataLimite((salvo?.dataLimite as string) ?? "")
-    setProdutoId((salvo?.produtoId as string) ?? "")
+    setProdutoIds((salvo?.produtoIds as string[]) ?? [])
     setClassificacao((salvo?.classificacao as "b2c" | "b2b" | "") ?? "")
-    setReferencias((salvo?.referencias as string[]) ?? [""])
+    setReferencias((salvo?.referencias as string[]) ?? [])
     setTipoVideo((salvo?.tipoVideo as string) ?? "")
+    setFormato((salvo?.formato as "9:16" | "16:9") ?? "9:16")
     setCidade((salvo?.cidade as string) ?? "")
     setLocalEvento((salvo?.localEvento as string) ?? "")
     setDataEvento((salvo?.dataEvento as string) ?? "")
+    setHoraEvento((salvo?.horaEvento as string) ?? "")
     setLinkBrutos((salvo?.linkBrutos as string) ?? "")
+    setVideomakerId((salvo?.videomakerId as string) ?? "")
     setEditorId((salvo?.editorId as string) ?? "")
+    setClienteNome((salvo?.clienteNome as string) ?? "")
+    setClienteTelefone((salvo?.clienteTelefone as string) ?? "")
+    setClienteEmail((salvo?.clienteEmail as string) ?? "")
     setRascunhoRecuperado(!!salvo)
   }, [open])
 
+  // ── Pessoa que veio pronta no link ───────────────────────────────────────
+  // Roda depois da recuperação do rascunho (e de novo quando a lista chega):
+  // quem clicou "Nova Demanda" na ficha de alguém quis aquela pessoa, não a que
+  // tinha sobrado do rascunho. Só aplica se o token estiver na lista carregada —
+  // um select apontando para quem saiu da equipe mostraria "Definir na triagem"
+  // e mesmo assim enviaria a pessoa: a tela diria uma coisa e o POST outra.
+  const prefillVideomaker = prefill?.videomakerId
+  const prefillEditor = prefill?.editorId
+
+  // A dependência é a resposta do SWR, e não a lista com `?? []`: o fallback cria
+  // um array novo a cada render e faria o efeito rodar sem parar.
+  useEffect(() => {
+    if (!open || !prefillVideomaker) return
+    if (dataCaptacao?.opcoes?.some(o => o.value === prefillVideomaker)) setVideomakerId(prefillVideomaker)
+  }, [open, prefillVideomaker, dataCaptacao])
+
+  useEffect(() => {
+    if (!open || !prefillEditor) return
+    if (dataEdicao?.opcoes?.some(o => o.value === prefillEditor)) setEditorId(prefillEditor)
+  }, [open, prefillEditor, dataEdicao])
+
   if (!open) return null
 
-  // ── Referências — helpers ────────────────────────────────────────────────
-  function setReferencia(index: number, value: string) {
-    setReferencias(prev => prev.map((r, i) => i === index ? value : r))
+  function limparCampo(campo: string) {
+    setErrors((prev) => (prev[campo] ? { ...prev, [campo]: "" } : prev))
   }
-  function addReferencia() { setReferencias(prev => [...prev, ""]) }
-  function removeReferencia(index: number) {
-    setReferencias(prev => prev.length === 1 ? [""] : prev.filter((_, i) => i !== index))
+
+  // ── Referências — vira chip ao confirmar ─────────────────────────────────
+  function adicionarReferencia() {
+    const valor = novaReferencia.trim()
+    if (!valor) return
+    setReferencias((prev) => (prev.includes(valor) ? prev : [...prev, valor]))
+    setNovaReferencia("")
+  }
+
+  // ── Anexos ───────────────────────────────────────────────────────────────
+  function receberArquivos(lista: FileList | File[]) {
+    const escolhidos = Array.from(lista)
+    const grandes = escolhidos.filter(documentoMuitoGrande)
+    if (grandes.length > 0) {
+      toast.error(`Acima de 25 MB: ${grandes.map((f) => f.name).join(", ")}`)
+    }
+    setAnexos((atuais) => [...atuais, ...escolhidos.filter((f) => !documentoMuitoGrande(f))])
   }
 
   // ── Validação ────────────────────────────────────────────────────────────
@@ -220,13 +372,17 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     const errs: Record<string, string> = {}
     if (!titulo.trim() || titulo.trim().length < 3) errs.titulo = "Mínimo 3 caracteres"
     if (!descricao.trim() || descricao.trim().length < 10) errs.descricao = "Mínimo 10 caracteres"
-    if (tipo === "video" && !tipoVideo) errs.tipoVideo = "Selecione o tipo de vídeo"
+    if (tipo === "video") {
+      if (!tipoVideo) errs.tipoVideo = "Selecione o tipo de vídeo"
+      if (!formato) errs.formato = "Selecione o formato"
+    }
     if (tipo === "cobertura") {
       if (!cidade.trim()) errs.cidade = "Cidade obrigatória"
       if (!localEvento.trim()) errs.localEvento = "Local obrigatório"
       if (!dataEvento) errs.dataEvento = "Data do evento obrigatória"
     }
-    if (!produtoId) errs.produtoId = "Selecione o equipamento/produto"
+    if (!dataLimite) errs.dataLimite = "Informe o prazo de entrega"
+    if (produtoIds.length === 0) errs.produtoIds = "Selecione ao menos um equipamento/produto"
     if (!classificacao) errs.classificacao = "Selecione B2C ou B2B"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Informe o motivo"
     setErrors(errs)
@@ -235,10 +391,20 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
 
   // ── Submit ───────────────────────────────────────────────────────────────
   async function handleSubmit() {
-    if (!validate()) return
+    if (!validate()) {
+      toast.error("Faltam campos obrigatórios.")
+      return
+    }
     setSaving(true)
     try {
-      const referencia = referencias.filter(r => r.trim()).join("\n") || undefined
+      // O link digitado e ainda não confirmado no botão conta: perder o que a
+      // pessoa acabou de colar por causa de um clique a menos é o tipo de
+      // detalhe que faz o campo parecer quebrado.
+      const pendente = novaReferencia.trim()
+      const todasReferencias = pendente && !referencias.includes(pendente)
+        ? [...referencias, pendente]
+        : referencias
+      const referencia = todasReferencias.join("\n") || undefined
       const departamento = tipo === "cobertura" ? "eventos" : "growth"
       const tipoVideoFinal = tipo === "cobertura" ? "cobertura_evento" : tipoVideo
 
@@ -251,13 +417,23 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
         prioridade,
         ...(motivoUrgencia && { motivoUrgencia }),
         ...(dataLimite && { dataLimite: new Date(dataLimite).toISOString() }),
-        produtoId,
+        produtoIds,
         classificacao,
+        ...(tipo === "video" && formato ? { formato } : {}),
         ...(referencia && { referencia }),
         ...(tipo === "cobertura" && { localEvento: localEvento.trim() }),
-        ...(tipo === "cobertura" && dataEvento && { dataEvento: new Date(dataEvento).toISOString() }),
+        // Com a data sozinha, `new Date("2026-08-20")` é meia-noite UTC — que em
+        // São Paulo ainda é dia 19. Compondo data+hora o horário é lido como
+        // local, e a gravação deixa de aparecer um dia antes na agenda.
+        ...(tipo === "cobertura" && dataEvento && {
+          dataEvento: new Date(`${dataEvento}T${horaEvento || "09:00"}`).toISOString(),
+        }),
         cobertura: tipo === "cobertura",
+        ...(tipo === "cobertura" && clienteNome.trim() ? { clienteFinalNome: clienteNome.trim() } : {}),
+        ...(tipo === "cobertura" && clienteTelefone.trim() ? { clienteFinalTelefone: clienteTelefone.trim() } : {}),
+        ...(tipo === "cobertura" && clienteEmail.trim() ? { clienteFinalEmail: clienteEmail.trim() } : {}),
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
+        ...(videomakerId ? { videomakerId } : {}),
         ...(editorId ? { editorId } : {}),
       }
 
@@ -309,6 +485,8 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
     }
   }
 
+  const ocupado = saving || enviandoAnexos
+
   // O evento `click` tem como alvo o ancestral comum do mousedown e do mouseup:
   // selecionar texto na descrição e soltar o mouse fora do card marcava o overlay
   // como alvo e fechava o modal. Por isso o fechamento exige que o gesto INTEIRO
@@ -316,31 +494,38 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onMouseDown={e => { pressionouNoFundo.current = e.target === overlayRef.current }}
       onClick={e => {
         if (e.target === overlayRef.current && pressionouNoFundo.current) fecharComConfirmacao()
         pressionouNoFundo.current = false
       }}
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/60">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
-          <h2 className="font-semibold text-zinc-100 text-base">+ Nova Demanda</h2>
-          <button onClick={fecharComConfirmacao} className="text-zinc-500 hover:text-zinc-200 transition-colors">
-            <X className="w-5 h-5" />
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/80 px-7 py-5">
+          <h2 className="flex items-center gap-2.5 text-lg font-semibold text-zinc-50">
+            <Plus className="h-5 w-5 text-purple-400" />
+            Nova Demanda
+          </h2>
+          <button
+            onClick={fecharComConfirmacao}
+            aria-label="Fechar"
+            className="text-zinc-500 transition-colors hover:text-zinc-200"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body (scrollável) */}
-        <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1">
+        {/* Corpo (scrollável) */}
+        <div className="flex-1 overflow-y-auto px-7 py-6">
 
           {/* O formulário voltou preenchido de uma sessão anterior — dizer isso
               evita que a pessoa ache que é resto de outra demanda e apague tudo. */}
           {rascunhoRecuperado && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2.5">
-              <p className="text-xs text-blue-200 flex-1 min-w-[14rem]">
+            <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3.5 py-2.5">
+              <p className="min-w-[14rem] flex-1 text-xs text-blue-200">
                 Recuperamos o que você tinha começado a escrever.
               </p>
               <button
@@ -349,336 +534,502 @@ export function NovaDemandaModal({ open, onClose }: NovaDemandaModalProps) {
                   if (!confirm("Descartar o rascunho e começar do zero?")) return
                   limparRascunho()
                   setTipo("video"); setTitulo(""); setDescricao(""); setPrioridade("normal")
-                  setMotivoUrgencia(""); setDataLimite(""); setProdutoId(""); setClassificacao("")
-                  setReferencias([""]); setTipoVideo(""); setCidade(""); setLocalEvento("")
-                  setDataEvento(""); setLinkBrutos(""); setAnexos([]); setRascunhoRecuperado(false)
+                  setMotivoUrgencia(""); setDataLimite(""); setProdutoIds([]); setClassificacao("")
+                  setReferencias([]); setNovaReferencia(""); setTipoVideo(""); setFormato("9:16")
+                  setCidade(""); setLocalEvento(""); setDataEvento(""); setHoraEvento("")
+                  setLinkBrutos(""); setVideomakerId(""); setEditorId("")
+                  setClienteNome(""); setClienteTelefone(""); setClienteEmail("")
+                  setAnexos([]); setRascunhoRecuperado(false)
                 }}
-                className="text-xs font-medium px-2.5 py-1 rounded-md border border-blue-500/40 text-blue-100 hover:bg-blue-500/20 transition-colors"
+                className="rounded-md border border-blue-500/40 px-2.5 py-1 text-xs font-medium text-blue-100 transition-colors hover:bg-blue-500/20"
               >
                 Começar do zero
               </button>
             </div>
           )}
 
-          {/* Tipo */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-2 block">Tipo de demanda</label>
-            <div className="flex gap-2">
-              {(["video", "cobertura"] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTipo(t)}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg text-sm font-medium border transition-colors",
-                    tipo === t
-                      ? "bg-purple-600 border-purple-600 text-white"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
-                  )}
-                >
-                  {t === "video" ? "🎬 Vídeo" : "📸 Cobertura / Entrega"}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* ── Bloco 1: o pedido ───────────────────────────────────────── */}
+          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
 
-          {/* Título */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-              Título <span className="text-red-400">*</span>
-            </label>
-            <input
-              value={titulo}
-              onChange={e => setTitulo(e.target.value)}
-              placeholder="Ex: Reels Mounjaro — Antes e Depois"
-              className={cn(inputClass, errors.titulo && "border-red-500 focus:ring-red-500")}
-            />
-            {errors.titulo && <p className="text-xs text-red-400 mt-1">{errors.titulo}</p>}
-          </div>
-
-          {/* Descrição */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-              Descrição <span className="text-red-400">*</span>
-            </label>
-            <textarea
-              rows={3}
-              value={descricao}
-              onChange={e => setDescricao(e.target.value)}
-              placeholder="Descreva o que precisa ser produzido, contexto, público-alvo..."
-              className={cn(inputClass, "resize-none", errors.descricao && "border-red-500 focus:ring-red-500")}
-            />
-            {errors.descricao && <p className="text-xs text-red-400 mt-1">{errors.descricao}</p>}
-          </div>
-
-          {/* Tipo de Vídeo (só para vídeo) */}
-          {tipo === "video" && (
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-                Tipo de vídeo <span className="text-red-400">*</span>
-              </label>
-              <select
-                value={tipoVideo}
-                onChange={e => setTipoVideo(e.target.value)}
-                className={cn(selectClass, errors.tipoVideo && "border-red-500 focus:ring-red-500")}
-              >
-                {/* Vem de Configurações → Parâmetros. A lista fixa que estava
-                    aqui gravava "institucional" e "ads", enquanto os parâmetros
-                    eram "video_institucional" e "video_meta_ads" — editar a tela
-                    não mudava nada neste formulário. */}
-                <option value="">Selecionar...</option>
-                {tiposVideo.map((t) => (
-                  <option key={t.valor} value={t.valor}>{t.label}</option>
-                ))}
-              </select>
-              {errors.tipoVideo && <p className="text-xs text-red-400 mt-1">{errors.tipoVideo}</p>}
-            </div>
-          )}
-
-          {/* Campos cobertura */}
-          {tipo === "cobertura" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Cidade <span className="text-red-400">*</span></label>
-                <input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="São Paulo" className={cn(inputClass, errors.cidade && "border-red-500")} />
-                {errors.cidade && <p className="text-xs text-red-400 mt-1">{errors.cidade}</p>}
-              </div>
-              <div>
-                <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Data do evento <span className="text-red-400">*</span></label>
-                <input type="date" value={dataEvento} onChange={e => setDataEvento(e.target.value)} className={cn(inputClass, errors.dataEvento && "border-red-500")} />
-                {errors.dataEvento && <p className="text-xs text-red-400 mt-1">{errors.dataEvento}</p>}
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Local <span className="text-red-400">*</span></label>
-                <input value={localEvento} onChange={e => setLocalEvento(e.target.value)} placeholder="Nome da clínica / endereço" className={cn(inputClass, errors.localEvento && "border-red-500")} />
-                {errors.localEvento && <p className="text-xs text-red-400 mt-1">{errors.localEvento}</p>}
-              </div>
-            </div>
-          )}
-
-          {/* Prioridade + Prazo */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Prioridade</label>
-              <div className="flex gap-1.5">
-                {(["normal", "alta", "urgente"] as const).map(p => (
+            <Secao icone={LayoutGrid} titulo="Tipo de demanda">
+              <div className="flex gap-3">
+                {(["video", "cobertura"] as const).map(t => (
                   <button
-                    key={p}
-                    onClick={() => { setPrioridade(p); if (p !== "urgente") setMotivoUrgencia("") }}
+                    key={t}
+                    type="button"
+                    onClick={() => setTipo(t)}
                     className={cn(
-                      "flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors",
-                      prioridade === p
-                        ? p === "urgente" ? "bg-red-600 border-red-600 text-white"
-                          : p === "alta" ? "bg-orange-500 border-orange-500 text-white"
-                          : "bg-zinc-700 border-zinc-700 text-white"
-                        : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                      "flex-1 rounded-xl border py-4 text-sm font-medium transition-colors",
+                      tipo === t
+                        ? "border-purple-500 bg-purple-600 text-white shadow-lg shadow-purple-900/30"
+                        : "border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                     )}
                   >
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                    {t === "video" ? "🎬 Vídeo" : "📸 Cobertura / Entrega"}
                   </button>
                 ))}
               </div>
-              {prioridade === "urgente" && (
-                <div className="mt-2">
-                  <select
-                    value={motivoUrgencia}
-                    onChange={e => setMotivoUrgencia(e.target.value)}
-                    className={cn(selectClass, "text-xs py-2", errors.motivoUrgencia && "border-red-500")}
-                  >
-                    <option value="">Motivo da urgência...</option>
-                    {MOTIVOS_URGENCIA.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  {errors.motivoUrgencia && <p className="text-xs text-red-400 mt-1">{errors.motivoUrgencia}</p>}
+            </Secao>
+
+            <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
+              <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
+                <input
+                  value={titulo}
+                  onChange={e => { setTitulo(e.target.value); limparCampo("titulo") }}
+                  placeholder="Ex.: Reels Mounjaro — Antes e Depois"
+                  className={cn(inputClass, errors.titulo && erroClass)}
+                />
+              </Campo>
+              <Campo label="Descrição / Objetivo" obrigatorio erro={errors.descricao}>
+                <textarea
+                  rows={4}
+                  value={descricao}
+                  onChange={e => { setDescricao(e.target.value); limparCampo("descricao") }}
+                  placeholder="Explique rapidamente o que precisa ser produzido, para quem é e qual resultado espera."
+                  className={cn(inputClass, "resize-none", errors.descricao && erroClass)}
+                />
+              </Campo>
+            </Secao>
+          </div>
+
+          <div className="my-7 border-t border-zinc-800/80" />
+
+          {/* ── Bloco 2: configuração + equipe ──────────────────────────── */}
+          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
+
+            <Secao
+              icone={Settings2}
+              titulo={tipo === "video" ? "Configuração do vídeo" : "Configuração da cobertura"}
+            >
+              {tipo === "video" ? (
+                <>
+                  <Campo label="Formato" obrigatorio erro={errors.formato}>
+                    <div className="flex gap-3">
+                      {([
+                        { valor: "9:16" as const, nome: "Vertical", Icone: Smartphone },
+                        { valor: "16:9" as const, nome: "Horizontal", Icone: Monitor },
+                      ]).map(({ valor, nome, Icone }) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          onClick={() => { setFormato(valor); limparCampo("formato") }}
+                          className={cn(
+                            "flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                            formato === valor
+                              ? "border-purple-500 bg-purple-500/10"
+                              : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                          )}
+                        >
+                          <Icone className={cn("h-5 w-5 shrink-0", formato === valor ? "text-purple-300" : "text-zinc-500")} />
+                          <span className="min-w-0">
+                            <span className={cn("block text-sm font-semibold", formato === valor ? "text-zinc-50" : "text-zinc-300")}>
+                              {valor}
+                            </span>
+                            <span className="block text-xs text-zinc-500">{nome}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </Campo>
+
+                  <Campo label="Tipo de vídeo" obrigatorio erro={errors.tipoVideo}>
+                    <div className="relative">
+                      {/* Vem de Configurações → Parâmetros. A lista fixa que estava
+                          aqui gravava "institucional" e "ads", enquanto os parâmetros
+                          eram "video_institucional" e "video_meta_ads" — editar a tela
+                          não mudava nada neste formulário. */}
+                      <select
+                        value={tipoVideo}
+                        onChange={e => { setTipoVideo(e.target.value); limparCampo("tipoVideo") }}
+                        className={cn(selectClass, errors.tipoVideo && erroClass)}
+                      >
+                        <option value="">Selecionar tipo...</option>
+                        {tiposVideo.map((t) => (
+                          <option key={t.valor} value={t.valor}>{t.label}</option>
+                        ))}
+                      </select>
+                      <Seta />
+                    </div>
+                  </Campo>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Campo label="Cidade" obrigatorio erro={errors.cidade}>
+                    <input
+                      value={cidade}
+                      onChange={e => { setCidade(e.target.value); limparCampo("cidade") }}
+                      placeholder="São Paulo"
+                      className={cn(inputClass, errors.cidade && erroClass)}
+                    />
+                  </Campo>
+                  <Campo label="Data e horário" obrigatorio erro={errors.dataEvento}>
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={dataEvento}
+                        onChange={e => { setDataEvento(e.target.value); limparCampo("dataEvento") }}
+                        className={cn(inputClass, "min-w-0 flex-1", errors.dataEvento && erroClass)}
+                      />
+                      {/* Sem horário a gravação entra às 9h — o padrão antigo.
+                          Quem sabe a hora da entrega informa e evita o telefonema. */}
+                      <input
+                        type="time"
+                        value={horaEvento}
+                        onChange={e => setHoraEvento(e.target.value)}
+                        className={cn(inputClass, "w-28 shrink-0 px-2")}
+                      />
+                    </div>
+                  </Campo>
+                  <div className="col-span-2">
+                    <Campo label="Local" obrigatorio erro={errors.localEvento}>
+                      <div className="relative">
+                        <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                        <input
+                          value={localEvento}
+                          onChange={e => { setLocalEvento(e.target.value); limparCampo("localEvento") }}
+                          placeholder="Nome da clínica / endereço"
+                          className={cn(inputClass, "pl-10", errors.localEvento && erroClass)}
+                        />
+                      </div>
+                    </Campo>
+                  </div>
+
+                  {/* Cliente final — só existe em cobertura/entrega. Vira o
+                      cliente do evento quando a demanda é convertida, e é o
+                      contato de quem vai gravar na clínica. */}
+                  <div className="col-span-2 space-y-4 border-t border-zinc-800/60 pt-4">
+                    <p className="flex items-center gap-2 text-xs font-medium text-zinc-400">
+                      <User className="h-3.5 w-3.5 text-zinc-500" />
+                      Cliente final <span className="text-zinc-600">(quem recebe o equipamento)</span>
+                    </p>
+                    <Campo label="Nome" opcional>
+                      <input
+                        value={clienteNome}
+                        onChange={e => setClienteNome(e.target.value)}
+                        placeholder="Dra. Solange Martins"
+                        className={inputClass}
+                      />
+                    </Campo>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Campo label="Telefone" opcional>
+                        <input
+                          value={clienteTelefone}
+                          onChange={e => setClienteTelefone(e.target.value)}
+                          placeholder="+55 85 99999-9999"
+                          className={inputClass}
+                        />
+                      </Campo>
+                      <Campo label="E-mail" opcional>
+                        <input
+                          type="email"
+                          value={clienteEmail}
+                          onChange={e => setClienteEmail(e.target.value)}
+                          placeholder="contato@clinica.com"
+                          className={inputClass}
+                        />
+                      </Campo>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Prazo de entrega</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-                <input type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)} className={cn(inputClass, "pl-9")} />
-              </div>
-            </div>
-          </div>
 
-          {/* Editor responsável — a API sempre aceitou `editorId` na criação, mas
-              nenhum formulário oferecia o campo: só dava para atribuir depois de
-              salvar e reabrir o card. É a queixa "não consigo criar o card e
-              colocar o editor responsável". */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-              Editor responsável <span className="text-zinc-600">(opcional)</span>
-            </label>
-            <select
-              value={editorId}
-              onChange={e => setEditorId(e.target.value)}
-              className={selectClass}
-            >
-              <option value="">Definir depois</option>
-              {opcoesEdicao.map(o => (
-                <option key={o.value} value={o.value}>
-                  {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Produto + Classificação */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-                Equipamento / Produto <span className="text-red-400">*</span>
-              </label>
-              <select
-                value={produtoId}
-                onChange={e => { setProdutoId(e.target.value); setErrors(prev => ({ ...prev, produtoId: "" })) }}
-                className={cn(selectClass, errors.produtoId && "border-red-500 focus:ring-red-500")}
-              >
-                <option value="">Selecione o equipamento…</option>
-                {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
-              {errors.produtoId && <p className="text-xs text-red-400 mt-1">{errors.produtoId}</p>}
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-                Classificação <span className="text-red-400">*</span>
-              </label>
-              <div className="flex gap-2">
-                {(["b2c", "b2b"] as const).map(c => (
-                  <button
-                    key={c}
-                    onClick={() => { setClassificacao(prev => prev === c ? "" : c); setErrors(prev => ({ ...prev, classificacao: "" })) }}
-                    className={cn(
-                      "flex-1 py-2.5 rounded-lg text-xs font-bold border transition-colors uppercase",
-                      classificacao === c
-                        ? c === "b2c" ? "bg-purple-600/20 border-purple-500 text-purple-300"
-                          : "bg-blue-600/20 border-blue-500 text-blue-300"
-                        : errors.classificacao
-                          ? "bg-zinc-800 border-red-500 text-zinc-500 hover:border-red-400"
-                          : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600"
-                    )}
-                  >
-                    {c.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              {errors.classificacao && <p className="text-xs text-red-400 mt-1">{errors.classificacao}</p>}
-            </div>
-          </div>
-
-          {/* Link dos Brutos */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-              Link dos Brutos <span className="text-zinc-600">(opcional)</span>
-            </label>
-            <div className="relative">
-              <Link2 className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-              <input
-                type="url"
-                value={linkBrutos}
-                onChange={e => setLinkBrutos(e.target.value)}
-                placeholder="https://drive.google.com/... ou link da pasta com os arquivos brutos"
-                className={cn(inputClass, "pl-9")}
-              />
-            </div>
-          </div>
-
-          {/* Anexos (briefing, contrato, planilha…) */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-1.5 block">
-              Anexos <span className="text-zinc-600">(PDF, Word, Excel, imagem — até 25 MB cada)</span>
-            </label>
-            <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-800 border border-dashed border-zinc-700 text-sm text-zinc-400 cursor-pointer hover:border-purple-500/50 hover:text-zinc-200 transition-colors">
-              <Paperclip className="w-4 h-4 shrink-0" />
-              <span>Escolher arquivos…</span>
-              <input
-                type="file"
-                multiple
-                accept={ACCEPT_DOCUMENTOS}
-                className="hidden"
-                onChange={(e) => {
-                  const escolhidos = Array.from(e.target.files ?? [])
-                  const grandes = escolhidos.filter(documentoMuitoGrande)
-                  if (grandes.length > 0) {
-                    toast.error(`Acima de 25 MB: ${grandes.map((f) => f.name).join(", ")}`)
-                  }
-                  setAnexos((atuais) => [...atuais, ...escolhidos.filter((f) => !documentoMuitoGrande(f))])
-                  e.target.value = ""
-                }}
-              />
-            </label>
-            {anexos.length > 0 && (
-              <ul className="mt-2 space-y-1.5">
-                {anexos.map((file, i) => (
-                  <li key={`${file.name}-${i}`} className="flex items-center gap-2 text-xs text-zinc-300 bg-zinc-800/60 rounded-md px-2.5 py-1.5">
-                    <Paperclip className="w-3 h-3 text-zinc-500 shrink-0" />
-                    <span className="truncate flex-1">{file.name}</span>
-                    <span className="text-zinc-500 shrink-0">{Math.max(1, Math.round(file.size / 1024))} KB</span>
-                    <button
-                      type="button"
-                      onClick={() => setAnexos((atuais) => atuais.filter((_, idx) => idx !== i))}
-                      className="text-zinc-500 hover:text-red-400 transition-colors shrink-0"
-                      aria-label={`Remover ${file.name}`}
+              <div className="grid grid-cols-2 gap-4">
+                <Campo label="Prioridade" obrigatorio>
+                  <div className="relative">
+                    <span className={cn("pointer-events-none absolute left-3.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full", COR_PRIORIDADE[prioridade])} />
+                    <select
+                      value={prioridade}
+                      onChange={e => {
+                        const p = e.target.value as "normal" | "alta" | "urgente"
+                        setPrioridade(p)
+                        if (p !== "urgente") { setMotivoUrgencia(""); limparCampo("motivoUrgencia") }
+                      }}
+                      className={cn(selectClass, "pl-8")}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <option value="normal">Normal</option>
+                      <option value="alta">Alta</option>
+                      <option value="urgente">Urgente</option>
+                    </select>
+                    <Seta />
+                  </div>
+                </Campo>
+
+                <Campo label="Prazo de entrega" obrigatorio erro={errors.dataLimite}>
+                  <div className="relative">
+                    <Calendar className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <input
+                      type="date"
+                      min={hojeEmSaoPaulo()}
+                      value={dataLimite}
+                      onChange={e => { setDataLimite(e.target.value); limparCampo("dataLimite") }}
+                      className={cn(inputClass, "pl-10", errors.dataLimite && erroClass)}
+                    />
+                  </div>
+                </Campo>
+              </div>
+
+              {prioridade === "urgente" && (
+                <Campo label="Motivo da urgência" obrigatorio erro={errors.motivoUrgencia}>
+                  <div className="relative">
+                    <select
+                      value={motivoUrgencia}
+                      onChange={e => { setMotivoUrgencia(e.target.value); limparCampo("motivoUrgencia") }}
+                      className={cn(selectClass, errors.motivoUrgencia && erroClass)}
+                    >
+                      <option value="">Selecionar motivo...</option>
+                      {MOTIVOS_URGENCIA.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <Seta />
+                  </div>
+                </Campo>
+              )}
+
+              <Campo label="Classificação" obrigatorio erro={errors.classificacao}>
+                <div className="flex gap-3">
+                  {(["b2c", "b2b"] as const).map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => { setClassificacao(prev => prev === c ? "" : c); limparCampo("classificacao") }}
+                      className={cn(
+                        "flex-1 rounded-xl border py-2.5 text-xs font-bold uppercase transition-colors",
+                        classificacao === c
+                          ? c === "b2c"
+                            ? "border-purple-500 bg-purple-600/20 text-purple-200"
+                            : "border-blue-500 bg-blue-600/20 text-blue-200"
+                          : cn(
+                              "bg-zinc-900/70 text-zinc-500 hover:text-zinc-300",
+                              errors.classificacao ? "border-red-500/70" : "border-zinc-800 hover:border-zinc-700"
+                            )
+                      )}
+                    >
+                      {c.toUpperCase()}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  ))}
+                </div>
+              </Campo>
+            </Secao>
+
+            {/* A API sempre aceitou videomaker e editor na criação, mas nenhum
+                formulário oferecia os campos: só dava para atribuir depois de
+                salvar e reabrir o card. Ficam opcionais de propósito — quem só
+                abre o pedido normalmente não sabe quem vai gravar, e a triagem
+                existe justamente para isso. */}
+            <Secao icone={Users} titulo="Equipe">
+              <Campo label="Videomaker da gravação" opcional>
+                <div className="relative">
+                  <select
+                    value={videomakerId}
+                    onChange={e => setVideomakerId(e.target.value)}
+                    className={cn(selectClass, "pl-10")}
+                  >
+                    <option value="">Definir na triagem</option>
+                    {opcoesCaptacao.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Seta />
+                </div>
+              </Campo>
+
+              <Campo label="Videomaker editor" opcional>
+                <div className="relative">
+                  <select
+                    value={editorId}
+                    onChange={e => setEditorId(e.target.value)}
+                    className={cn(selectClass, "pl-10")}
+                  >
+                    <option value="">Definir na triagem</option>
+                    {opcoesEdicao.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Seta />
+                </div>
+              </Campo>
+
+              <p className="text-xs text-zinc-600">
+                Deixe em branco e a demanda entra na fila de triagem para alguém assumir.
+              </p>
+            </Secao>
           </div>
 
-          {/* Referências múltiplas */}
-          <div>
-            <label className="text-xs font-medium text-zinc-400 mb-2 block">Referências (links)</label>
-            <div className="space-y-2">
-              {referencias.map((ref, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <div className="relative flex-1">
-                    <Link2 className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+          <div className="my-7 border-t border-zinc-800/80" />
+
+          {/* ── Bloco 3: produtos + arquivos ────────────────────────────── */}
+          <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
+
+            <Secao icone={Package} titulo="Equipamentos / Produtos">
+              <div className="relative">
+                <Plus className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <select
+                  value=""
+                  onChange={e => {
+                    const id = e.target.value
+                    if (!id) return
+                    setProdutoIds(prev => prev.includes(id) ? prev : [...prev, id])
+                    limparCampo("produtoIds")
+                  }}
+                  className={cn(selectClass, "pl-10", errors.produtoIds && erroClass)}
+                >
+                  <option value="">Adicionar equipamento / produto</option>
+                  {produtos
+                    .filter(p => !produtoIds.includes(p.id))
+                    .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+                <Seta />
+              </div>
+
+              {produtosSelecionados.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {produtosSelecionados.map(p => (
+                    <Chip
+                      key={p.id}
+                      texto={p.nome}
+                      onRemover={() => setProdutoIds(prev => prev.filter(id => id !== p.id))}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {errors.produtoIds
+                ? <p className="text-xs text-red-400">{errors.produtoIds}</p>
+                : <p className="text-xs text-zinc-600">Selecione um ou mais equipamentos/produtos envolvidos.</p>}
+            </Secao>
+
+            <Secao icone={Paperclip} titulo="Arquivos e referências">
+              {/* O anexo passa pela rota de documento: briefing, contrato, planilha,
+                  imagem de referência. Material bruto de vídeo não cabe aqui (25 MB)
+                  — vai por link, no campo logo abaixo. */}
+              <label
+                onDragOver={e => { e.preventDefault(); setArrastando(true) }}
+                onDragLeave={() => setArrastando(false)}
+                onDrop={e => {
+                  e.preventDefault()
+                  setArrastando(false)
+                  if (e.dataTransfer.files?.length) receberArquivos(e.dataTransfer.files)
+                }}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-7 text-center transition-colors",
+                  arrastando
+                    ? "border-purple-400 bg-purple-500/10"
+                    : "border-purple-500/40 bg-zinc-900/40 hover:border-purple-500/70 hover:bg-purple-500/5"
+                )}
+              >
+                <UploadCloud className="h-6 w-6 text-purple-400" />
+                <span className="text-sm font-medium text-zinc-200">Arraste arquivos para cá</span>
+                <span className="text-xs text-zinc-500">
+                  ou <span className="text-purple-400 underline underline-offset-2">clique para selecionar</span>
+                </span>
+                <span className="text-[11px] text-zinc-600">PDF, Word, Excel, PNG, JPG — até 25 MB cada</span>
+                <input
+                  type="file"
+                  multiple
+                  accept={ACCEPT_DOCUMENTOS}
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) receberArquivos(e.target.files)
+                    e.target.value = ""
+                  }}
+                />
+              </label>
+
+              {anexos.length > 0 && (
+                <ul className="space-y-1.5">
+                  {anexos.map((file, i) => (
+                    <li key={`${file.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-300">
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                      <span className="flex-1 truncate">{file.name}</span>
+                      <span className="shrink-0 text-zinc-500">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                      <button
+                        type="button"
+                        onClick={() => setAnexos((atuais) => atuais.filter((_, idx) => idx !== i))}
+                        className="shrink-0 text-zinc-500 transition-colors hover:text-red-400"
+                        aria-label={`Remover ${file.name}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <Campo label="Links de referência">
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                     <input
-                      value={ref}
-                      onChange={e => setReferencia(i, e.target.value)}
-                      placeholder="https://..."
-                      className={cn(inputClass, "pl-9")}
+                      value={novaReferencia}
+                      onChange={e => setNovaReferencia(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { e.preventDefault(); adicionarReferencia() }
+                      }}
+                      placeholder="Cole aqui links do Drive, Instagram, YouTube..."
+                      className={cn(inputClass, "pl-10")}
                     />
                   </div>
                   <button
-                    onClick={() => removeReferencia(i)}
-                    className="p-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-colors"
+                    type="button"
+                    onClick={adicionarReferencia}
+                    className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-purple-500/50 hover:text-purple-300"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Plus className="h-3.5 w-3.5" /> Adicionar link
                   </button>
                 </div>
-              ))}
-              <button
-                onClick={addReferencia}
-                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-purple-400 transition-colors mt-1"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar referência
-              </button>
-            </div>
-          </div>
+              </Campo>
 
+              {referencias.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {referencias.map(ref => (
+                    <Chip
+                      key={ref}
+                      texto={ref}
+                      onRemover={() => setReferencias(prev => prev.filter(r => r !== ref))}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <Campo label="Link dos brutos" opcional>
+                <div className="relative">
+                  <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="url"
+                    value={linkBrutos}
+                    onChange={e => setLinkBrutos(e.target.value)}
+                    placeholder="https://drive.google.com/... (pasta com o material bruto)"
+                    className={cn(inputClass, "pl-10")}
+                  />
+                </div>
+              </Campo>
+            </Secao>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 shrink-0">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-800/80 px-7 py-4">
           <button
             onClick={fecharComConfirmacao}
-            className="px-4 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:bg-zinc-800 transition-colors"
+            className="rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-900"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving || enviandoAnexos}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-60"
+            disabled={ocupado}
+            className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-900/30 transition-colors hover:bg-purple-500 disabled:opacity-60"
           >
             {enviandoAnexos
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando anexos...</>
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando anexos...</>
               : saving
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Criando...</>
-              : "Criar Demanda →"}
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando...</>
+              : <>Criar Demanda <span aria-hidden>→</span></>}
           </button>
         </div>
 

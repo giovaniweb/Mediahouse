@@ -424,6 +424,9 @@ model Demanda {
   riscoAtraso    Boolean       @default(false)
 
   classificacao     String?    // "b2c" | "b2b" — classification of the video
+  // Proporção da entrega: "9:16" | "16:9" | "1:1". Nulo nas demandas antigas,
+  // criadas antes de o formulário perguntar.
+  formato           String?
 
   // Dados extras por departamento
   campanha          String?
