@@ -54,21 +54,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const vm = await prisma.videomaker.findUnique({
     where: { id },
-    // Os campos sensíveis saem do perfil global e passam a vir das tabelas por
-    // empresa, abaixo — assim uma empresa nunca lê o CPF/PIX que outra cadastrou.
-    omit: {
-      cpfCnpj: true,
-      chavePix: true,
-      dadosBancarios: true,
-      razaoSocial: true,
-      nomeFantasia: true,
-      representante: true,
-      endereco: true,
-      listaNegraMotivo: true,
-      valorDiaria: true,
-      emListaNegra: true,
-      observacoes: true,
-    },
     include: {
       // Só as demandas DESTA empresa: antes, o perfil do videomaker era uma
       // janela para o pipeline de todos os clientes que já o contrataram.
@@ -148,7 +133,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
       areasAtuacao: body.areasAtuacao,
       portfolio: body.portfolio,
     },
-    omit: { cpfCnpj: true, chavePix: true, dadosBancarios: true },
   })
 
   const comercial = {

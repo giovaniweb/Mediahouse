@@ -35,10 +35,10 @@ enum StatusUsuario {
 // (vivem em UsuarioOrganizacao). categoria = quem é a pessoa; funcaoProfissional = o
 // que faz; areas = onde atua. Papel/acesso continua em UsuarioOrganizacao.papel.
 enum CategoriaPessoa {
-  interna      // equipe interna que opera a empresa
-  solicitante  // pede/acompanha demandas
-  externo      // videomaker/editor/freelancer externo
-  sistema      // usuários de teste/automação/registros técnicos
+  interna // equipe interna que opera a empresa
+  solicitante // pede/acompanha demandas
+  externo // videomaker/editor/freelancer externo
+  sistema // usuários de teste/automação/registros técnicos
 }
 
 enum AreaAtuacao {
@@ -170,34 +170,34 @@ enum OrigemIdeia {
 // ─────────────────────────────────────────────
 
 model Usuario {
-  id        String        @id @default(cuid())
-  nome      String
-  email     String?       @unique
-  telefone  String?
-  tipo      TipoUsuario   @default(solicitante)
-  status    StatusUsuario @default(ativo)
-  senhaHash String
-  avatarUrl String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  superAdmin Boolean      @default(false)  // gestão global de organizações (SaaS)
+  id         String        @id @default(cuid())
+  nome       String
+  email      String?       @unique
+  telefone   String?
+  tipo       TipoUsuario   @default(solicitante)
+  status     StatusUsuario @default(ativo)
+  senhaHash  String
+  avatarUrl  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  superAdmin Boolean       @default(false) // gestão global de organizações (SaaS)
 
-  organizacoes    UsuarioOrganizacao[]
-  demandasCriadas Demanda[]         @relation("Solicitante")
-  demandasGeridas Demanda[]         @relation("Gestor")
-  demandasResponsavel Demanda[]     @relation("Responsavel")
-  responsavelEm   DemandaResponsavel[]
-  historicos      HistoricoStatus[]
-  comentarios     Comentario[]
-  sessions        Session[]
-  eventos         Evento[]
-  permissoes      PermissaoUsuario[]
-  videomakerRef   Videomaker?       // link para videomaker externo (quando tipo=videomaker)
-  editorRef       Editor?           // link para editor/videomaker interno (quando tipo=editor)
-  designerRef     Designer?         // link para designer (quando tipo=designer)
-  ideias          IdeiaVideo[]
-  coberturasCriadas EventoCobertura[] @relation("CoberturasCreadas")
-  coberturaEquipe EventoCoberturaEquipe[]
+  organizacoes        UsuarioOrganizacao[]
+  demandasCriadas     Demanda[]               @relation("Solicitante")
+  demandasGeridas     Demanda[]               @relation("Gestor")
+  demandasResponsavel Demanda[]               @relation("Responsavel")
+  responsavelEm       DemandaResponsavel[]
+  historicos          HistoricoStatus[]
+  comentarios         Comentario[]
+  sessions            Session[]
+  eventos             Evento[]
+  permissoes          PermissaoUsuario[]
+  videomakerRef       Videomaker? // link para videomaker externo (quando tipo=videomaker)
+  editorRef           Editor? // link para editor/videomaker interno (quando tipo=editor)
+  designerRef         Designer? // link para designer (quando tipo=designer)
+  ideias              IdeiaVideo[]
+  coberturasCriadas   EventoCobertura[]       @relation("CoberturasCreadas")
+  coberturaEquipe     EventoCoberturaEquipe[]
   eventosResponsavel  EventoGestao[]          @relation("EventoGestaoResponsavel")
   eventosCriados      EventoGestao[]          @relation("EventoGestaoCriador")
   eventoChecklistResp EventoGestaoChecklist[]
@@ -216,48 +216,48 @@ model Session {
   @@map("sessions")
 }
 
+// PERFIL GLOBAL da rede de profissionais — compartilhado entre as empresas e,
+// sob RLS, legível por qualquer organização. Só pode conter dado público.
+//
+// O que é de UMA empresa mora em:
+//   VideomakerOrganizacao  → valorDiaria, emListaNegra, listaNegraMotivo, observacoes, status
+//   VideomakerDadosFiscais → cpfCnpj, razaoSocial, nomeFantasia, representante,
+//                            endereco, chavePix e dadosBancarios (os dois últimos cifrados)
+//
+// Não devolva nenhum desses campos para cá. `scripts/auditar-perfil-global.mjs`
+// roda na CI e reprova — leia por src/lib/videomaker-vinculo.ts e escreva por
+// src/lib/videomaker-dados.ts.
 model Videomaker {
-  id               String           @id @default(cuid())
-  nome             String
-  cidade           String?
-  estado           String?
-  telefone         String?
-  email            String?
-  cpfCnpj          String?
-  razaoSocial      String?
-  nomeFantasia     String?
-  representante    String?
-  endereco         String?
-  chavePix         String?
-  redesSociais     String[]
-  valorDiaria      Float?
-  dadosBancarios   String?
-  status           StatusVideomaker @default(ativo)
-  avaliacao        Float?           @default(5.0)
-  observacoes      String?
-  areasAtuacao     String[]
-  habilidades      String[]         // tags: "Edição", "3D", "Drone" etc.
-  equipamentos     String[]         // câmeras, lentes, drones, iluminação etc.
-  portfolio        String?
-  emListaNegra     Boolean          @default(false)
-  listaNegraMotivo String?
-  podeEditar       Boolean          @default(false)
-  tipoContrato     String           @default("externo")  // "externo" (freelance) | "interno" (fulltime)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id           String           @id @default(cuid())
+  nome         String
+  cidade       String?
+  estado       String?
+  telefone     String?
+  email        String?
+  redesSociais String[]
+  status       StatusVideomaker @default(ativo)
+  avaliacao    Float?           @default(5.0)
+  areasAtuacao String[]
+  habilidades  String[] // tags: "Edição", "3D", "Drone" etc.
+  equipamentos String[] // câmeras, lentes, drones, iluminação etc.
+  portfolio    String?
+  podeEditar   Boolean          @default(false)
+  tipoContrato String           @default("externo") // "externo" (freelance) | "interno" (fulltime)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
-  usuarioId  String?    @unique  // link para Usuario (portal login)
-  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
+  usuarioId String?  @unique // link para Usuario (portal login)
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
 
-  demandas       Demanda[]
-  eventos        Evento[]
-  custos         CustoVideomaker[]
-  avaliacoes     AvaliacaoVideomaker[]
-  convites         ConviteVideomaker[]
-  notasFiscais     NotaFiscalUpload[]
-  coberturaEquipe  EventoCoberturaEquipe[]
-  vinculos         VideomakerOrganizacao[]
-  dadosFiscais     VideomakerDadosFiscais[]
+  demandas        Demanda[]
+  eventos         Evento[]
+  custos          CustoVideomaker[]
+  avaliacoes      AvaliacaoVideomaker[]
+  convites        ConviteVideomaker[]
+  notasFiscais    NotaFiscalUpload[]
+  coberturaEquipe EventoCoberturaEquipe[]
+  vinculos        VideomakerOrganizacao[]
+  dadosFiscais    VideomakerDadosFiscais[]
 
   @@map("videomakers")
 }
@@ -306,8 +306,8 @@ model VideomakerDadosFiscais {
   nomeFantasia   String?
   representante  String?
   endereco       String?
-  dadosBancarios String?  // cifrado
-  chavePix       String?  // cifrado
+  dadosBancarios String? // cifrado
+  chavePix       String? // cifrado
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -320,17 +320,17 @@ model VideomakerDadosFiscais {
 }
 
 model Editor {
-  organizacaoId String?
-  id            String        @id @default(cuid())
-  nome          String
-  telefone      String?
-  whatsapp      String?       // número WhatsApp (pode ser igual ao telefone)
-  email         String?
-  avatarUrl     String?       // foto de perfil
-  especialidade String[]
-  habilidades   String[]      // tags abertas de habilidades
-  cargaLimite   Int           @default(5)
-  status        StatusUsuario @default(ativo)
+  organizacaoId    String?
+  id               String        @id @default(cuid())
+  nome             String
+  telefone         String?
+  whatsapp         String? // número WhatsApp (pode ser igual ao telefone)
+  email            String?
+  avatarUrl        String? // foto de perfil
+  especialidade    String[]
+  habilidades      String[] // tags abertas de habilidades
+  cargaLimite      Int           @default(5)
+  status           StatusUsuario @default(ativo)
   avaliacao        Float?        @default(5.0)
   cidade           String?
   estado           String?
@@ -341,32 +341,32 @@ model Editor {
   endereco         String?
   chavePix         String?
   redesSociais     String[]
-  salario          Float?           // ONLY visible to admin/gestor
+  salario          Float? // ONLY visible to admin/gestor
   dadosBancarios   String?
   observacoes      String?
   areasAtuacao     String[]
   equipamentos     String[]
   portfolio        String?
-  emListaNegra     Boolean          @default(false)
+  emListaNegra     Boolean       @default(false)
   listaNegraMotivo String?
-  fazCaptacao      Boolean          @default(false)
-  tipoContrato     String           @default("interno")  // "interno" (fulltime) | "externo" (freelance)
+  fazCaptacao      Boolean       @default(false)
+  tipoContrato     String        @default("interno") // "interno" (fulltime) | "externo" (freelance)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  usuarioId  String?    @unique  // link para Usuario (portal login)
-  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
+  usuarioId String?  @unique // link para Usuario (portal login)
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
 
-  demandas   Demanda[]
-  avaliacoes AvaliacaoEditor[]
-  eventos    Evento[]
-  coberturaEquipe  EventoCoberturaEquipe[]
+  demandas        Demanda[]
+  avaliacoes      AvaliacaoEditor[]
+  eventos         Evento[]
+  coberturaEquipe EventoCoberturaEquipe[]
 
   @@map("editores")
 }
 
 model Designer {
-  organizacaoId String?
+  organizacaoId    String?
   id               String        @id @default(cuid())
   nome             String
   cidade           String?
@@ -388,32 +388,32 @@ model Designer {
   status           StatusUsuario @default(ativo)
   avaliacao        Float?        @default(5.0)
   observacoes      String?
-  especialidade    String[]      // "Social", "Impresso", "Motion", "3D"
+  especialidade    String[] // "Social", "Impresso", "Motion", "3D"
   habilidades      String[]
   equipamentos     String[]
   portfolio        String?
   emListaNegra     Boolean       @default(false)
   listaNegraMotivo String?
-  tipoContrato     String        @default("externo")  // "interno" | "externo"
+  tipoContrato     String        @default("externo") // "interno" | "externo"
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  usuarioId  String?    @unique  // link para Usuario (portal login)
-  usuario    Usuario?   @relation(fields: [usuarioId], references: [id])
+  usuarioId String?  @unique // link para Usuario (portal login)
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
 
-  demandas   Demanda[]
+  demandas Demanda[]
 
   @@map("designers")
 }
 
 model Demanda {
-  organizacaoId String?
+  organizacaoId  String?
   id             String        @id @default(cuid())
   codigo         String        @unique
   titulo         String
   descricao      String
-  departamento   String        // validado contra ConfigParametro (grupo "departamentos")
-  area           AreaDemanda   @default(audiovisual)  // audiovisual | design
+  departamento   String // validado contra ConfigParametro (grupo "departamentos")
+  area           AreaDemanda   @default(audiovisual) // audiovisual | design
   tipoVideo      String
   cidade         String
   prioridade     Prioridade    @default(normal)
@@ -423,10 +423,10 @@ model Demanda {
   pesoDemanda    Float         @default(1)
   riscoAtraso    Boolean       @default(false)
 
-  classificacao     String?    // "b2c" | "b2b" — classification of the video
+  classificacao String? // "b2c" | "b2b" — classification of the video
   // Proporção da entrega: "9:16" | "16:9" | "1:1". Nulo nas demandas antigas,
   // criadas antes de o formulário perguntar.
-  formato           String?
+  formato       String?
 
   // Dados extras por departamento
   campanha          String?
@@ -442,26 +442,26 @@ model Demanda {
   detalhesEntrega   Json?
 
   // Links operacionais
-  linkBrutos      String?
-  linkFinal       String?
-  linkPostagem    String?
-  postagemTipo    String?   // "feed" | "story" | "reels" | "youtube" | "outro"
-  linkCliente     String?
+  linkBrutos          String?
+  linkFinal           String?
+  linkPostagem        String?
+  postagemTipo        String? // "feed" | "story" | "reels" | "youtube" | "outro"
+  linkCliente         String?
   // Link público de acompanhamento (somente leitura), gerado sob demanda pelo
   // botão "Compartilhar". Opt-in de propósito: sem @default, nenhuma demanda
   // nasce compartilhável. Revogar = publicTokenAtivo = false.
-  publicToken        String?   @unique
-  publicTokenAtivo   Boolean   @default(false)
+  publicToken         String?   @unique
+  publicTokenAtivo    Boolean   @default(false)
   publicTokenExpiraEm DateTime?
-  localGravacao   String?
-  referencia      String?
+  localGravacao       String?
+  referencia          String?
 
   // Impedimento
   motivoImpedimento String?
 
   // Solicitante externo (capturado via WhatsApp para follow-up)
   telefoneSolicitante String?
-  nomeSolicitante     String?    // Nome de quem realmente pediu (pode ser externo)
+  nomeSolicitante     String? // Nome de quem realmente pediu (pode ser externo)
 
   // Cliente final (cobertura/entrega de equipamento)
   clienteFinalNome     String?
@@ -472,29 +472,29 @@ model Demanda {
   notaFiscalUrl  String?
   notaFiscalNome String?
 
-  posicaoKanban     Int?               // posição dentro da coluna (para reordenação)
-  trelloCardId      String?  @unique  // Trello card ID to prevent re-import
+  posicaoKanban Int? // posição dentro da coluna (para reordenação)
+  trelloCardId  String? @unique // Trello card ID to prevent re-import
 
   // Pastas Google Drive (cobertura)
-  linkFolderBrutos     String?    // pasta [Material Bruto] no Drive
-  linkFolderFinal      String?    // pasta [Material Pronto] no Drive
+  linkFolderBrutos String? // pasta [Material Bruto] no Drive
+  linkFolderFinal  String? // pasta [Material Pronto] no Drive
 
   // Thumbnail gerada no cliente e salva no Supabase
-  thumbnailUrl         String?    // JPEG em /storage/v1/object/public/uploads/thumbnails/...
+  thumbnailUrl String? // JPEG em /storage/v1/object/public/uploads/thumbnails/...
 
   // Controle de limpeza pós-finalização
-  finalizadaEm         DateTime?  // setado automaticamente quando statusVisivel = "finalizado"
-  limpezaNotificadaEm  DateTime?  // quando foi enviado aviso de 20 dias
-  limpezaExecutadaEm   DateTime?  // quando foi removida a referência de brutos
+  finalizadaEm        DateTime? // setado automaticamente quando statusVisivel = "finalizado"
+  limpezaNotificadaEm DateTime? // quando foi enviado aviso de 20 dias
+  limpezaExecutadaEm  DateTime? // quando foi removida a referência de brutos
 
   // Relações de usuários (FKs)
-  solicitanteId String
-  gestorId      String?
-  videomakerId  String?
-  editorId      String?
-  socialId      String?
-  designerId    String?   // profissional de design (quando area=design)
-  responsavelId String?   // responsável/executor interno (Growth) — Usuario da org
+  solicitanteId  String
+  gestorId       String?
+  videomakerId   String?
+  editorId       String?
+  socialId       String?
+  designerId     String? // profissional de design (quando area=design)
+  responsavelId  String? // responsável/executor interno (Growth) — Usuario da org
   // Segmentação genérica multiempresa (linha de conteúdo / projeto / marca / cliente /
   // unidade / produto). NUNCA hardcoded por empresa. Usado p/ filtrar e, no futuro, permissões.
   // `linhaProjeto` (texto) mantido p/ compat/backfill; a referência principal é linhaProjetoId.
@@ -511,37 +511,37 @@ model Demanda {
   updatedAt          DateTime  @updatedAt
 
   // Relações
-  solicitante        Usuario            @relation("Solicitante", fields: [solicitanteId], references: [id])
-  gestor             Usuario?           @relation("Gestor", fields: [gestorId], references: [id])
-  videomaker         Videomaker?        @relation(fields: [videomakerId], references: [id])
-  editor             Editor?            @relation(fields: [editorId], references: [id])
-  designer           Designer?          @relation(fields: [designerId], references: [id])
-  responsavel        Usuario?           @relation("Responsavel", fields: [responsavelId], references: [id])
-  linhaProjetoRef    LinhaProjeto?      @relation(fields: [linhaProjetoId], references: [id])
-  arquivos           Arquivo[]
-  historicos         HistoricoStatus[]
-  comentarios        Comentario[]
-  alertas            AlertaIA[]
-  aprovacoesVideo    AprovacaoVideo[]
-  mensagensWhatsapp  MensagemWhatsapp[]
-  logsAutomacao      LogAutomacao[]
-  eventos            Evento[]
-  custos             CustoVideomaker[]
-  produtos           DemandaProduto[]
-  responsaveis       DemandaResponsavel[]
-  checklistItens     ChecklistItem[]
-  convites           ConviteVideomaker[]
-  notasFiscais       NotaFiscalUpload[]
-  ideia              IdeiaVideo?
-  emailsEntrada      EmailEntrada[]
+  solicitante       Usuario              @relation("Solicitante", fields: [solicitanteId], references: [id])
+  gestor            Usuario?             @relation("Gestor", fields: [gestorId], references: [id])
+  videomaker        Videomaker?          @relation(fields: [videomakerId], references: [id])
+  editor            Editor?              @relation(fields: [editorId], references: [id])
+  designer          Designer?            @relation(fields: [designerId], references: [id])
+  responsavel       Usuario?             @relation("Responsavel", fields: [responsavelId], references: [id])
+  linhaProjetoRef   LinhaProjeto?        @relation(fields: [linhaProjetoId], references: [id])
+  arquivos          Arquivo[]
+  historicos        HistoricoStatus[]
+  comentarios       Comentario[]
+  alertas           AlertaIA[]
+  aprovacoesVideo   AprovacaoVideo[]
+  mensagensWhatsapp MensagemWhatsapp[]
+  logsAutomacao     LogAutomacao[]
+  eventos           Evento[]
+  custos            CustoVideomaker[]
+  produtos          DemandaProduto[]
+  responsaveis      DemandaResponsavel[]
+  checklistItens    ChecklistItem[]
+  convites          ConviteVideomaker[]
+  notasFiscais      NotaFiscalUpload[]
+  ideia             IdeiaVideo?
+  emailsEntrada     EmailEntrada[]
 
   // Evento de cobertura vinculado (quando convertida)
-  coberturaId        String?
-  coberturaEvento    EventoCobertura?   @relation(fields: [coberturaId], references: [id])
+  coberturaId     String?
+  coberturaEvento EventoCobertura? @relation(fields: [coberturaId], references: [id])
 
   // Evento mestre (Nuflow Eventos) que gerou esta peça audiovisual
-  eventoGestaoId     String?
-  eventoGestao       EventoGestao?      @relation(fields: [eventoGestaoId], references: [id])
+  eventoGestaoId String?
+  eventoGestao   EventoGestao? @relation(fields: [eventoGestaoId], references: [id])
 
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
@@ -552,9 +552,9 @@ model Demanda {
 
 model ChecklistTemplate {
   id        String                  @id @default(cuid())
-  nome      String                  // "Entrega Equipamento - VM Externo"
-  tipoVideo String?                 // match automático ao criar demanda
-  papel     String?                 // "videomaker_externo" | "editor" | "social" | "geral"
+  nome      String // "Entrega Equipamento - VM Externo"
+  tipoVideo String? // match automático ao criar demanda
+  papel     String? // "videomaker_externo" | "editor" | "social" | "geral"
   ativo     Boolean                 @default(true)
   itens     ChecklistTemplateItem[]
   createdAt DateTime                @default(now())
@@ -581,7 +581,7 @@ model ChecklistItem {
   concluidoEm  DateTime?
   concluidoPor String?
   ordem        Int       @default(0)
-  grupo        String?   // "videomaker_externo", "editor", "social", "geral"
+  grupo        String? // "videomaker_externo", "editor", "social", "geral"
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -591,18 +591,18 @@ model ChecklistItem {
 }
 
 model Arquivo {
-  id           String      @id @default(cuid())
-  demandaId    String
-  tipoArquivo  TipoArquivo
-  nomeArquivo  String
-  url          String
-  tamanho      Int?
-  origem       String?
-  sequencia    Int?        // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
-  thumbnailUrl String?     // JPEG thumbnail no Supabase (gerado no cliente)
-  transcodeStatus String?  // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
-  originalUrl  String?     // backup da URL original (HEVC) antes de trocar para MP4
-  createdAt    DateTime    @default(now())
+  id              String      @id @default(cuid())
+  demandaId       String
+  tipoArquivo     TipoArquivo
+  nomeArquivo     String
+  url             String
+  tamanho         Int?
+  origem          String?
+  sequencia       Int? // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
+  thumbnailUrl    String? // JPEG thumbnail no Supabase (gerado no cliente)
+  transcodeStatus String? // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
+  originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
+  createdAt       DateTime    @default(now())
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
@@ -641,18 +641,18 @@ model Comentario {
 
 model AlertaIA {
   organizacaoId String?
-  id           String           @id @default(cuid())
-  demandaId    String?
-  usuarioId    String?
-  tipoAlerta   String
-  mensagem     String
-  severidade   SeveridadeAlerta @default(aviso)
-  status       StatusAlerta     @default(ativo)
-  lida         Boolean          @default(false)
-  acaoSugerida String?
-  createdAt    DateTime         @default(now())
-  resolvedAt   DateTime?
-  snoozeAte    DateTime?        // TDAH: silenciar temporariamente
+  id            String           @id @default(cuid())
+  demandaId     String?
+  usuarioId     String?
+  tipoAlerta    String
+  mensagem      String
+  severidade    SeveridadeAlerta @default(aviso)
+  status        StatusAlerta     @default(ativo)
+  lida          Boolean          @default(false)
+  acaoSugerida  String?
+  createdAt     DateTime         @default(now())
+  resolvedAt    DateTime?
+  snoozeAte     DateTime? // TDAH: silenciar temporariamente
 
   demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
@@ -662,17 +662,17 @@ model AlertaIA {
 }
 
 model AprovacaoVideo {
-  id           String   @id @default(cuid())
-  demandaId    String
-  token        String   @unique @default(cuid())
-  nomeVideo    String?
-  urlVideo     String
-  status       String   @default("pendente")
-  aprovadoPor  String?
-  comentario   String?
-  expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String    @id @default(cuid())
+  demandaId   String
+  token       String    @unique @default(cuid())
+  nomeVideo   String?
+  urlVideo    String
+  status      String    @default("pendente")
+  aprovadoPor String?
+  comentario  String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
 
@@ -681,11 +681,11 @@ model AprovacaoVideo {
 
 model ConfigWhatsapp {
   id                String    @id @default(cuid())
-  organizacaoId     String?   @unique  // 1 WhatsApp por empresa
-  instanceUrl       String             // (Bloco 8: virá do env da Evolution gerenciada)
-  apiKey            String             // (Bloco 8: virá do env da Evolution gerenciada)
+  organizacaoId     String?   @unique // 1 WhatsApp por empresa
+  instanceUrl       String // (Bloco 8: virá do env da Evolution gerenciada)
+  apiKey            String // (Bloco 8: virá do env da Evolution gerenciada)
   instanceId        String    @unique
-  instanceName      String?            // ex: nuflow_contourline
+  instanceName      String? // ex: nuflow_contourline
   // Segredo que a Evolution devolve no webhook (header x-webhook-secret ou ?s=).
   // Cifrado em repouso. Quando presente, o webhook passa a EXIGIR — é o que
   // impede terceiro de injetar mensagem falsa e acionar as ferramentas da IA.
@@ -703,22 +703,22 @@ model ConfigWhatsapp {
 
 model MensagemWhatsapp {
   organizacaoId String?
-  id           String          @id @default(cuid())
-  demandaId    String?
-  telefone     String
-  tipoMensagem String          // "text" | "image" | "video" | "audio" | "document"
-  conteudo     String
-  mediaUrl     String?         // URL do arquivo no Supabase Storage (se mídia)
-  mediaType    String?         // MIME type (ex: "image/jpeg", "audio/ogg")
-  direcao      DirecaoWhatsapp @default(saida)
-  status       String          @default("enviado")
+  id            String          @id @default(cuid())
+  demandaId     String?
+  telefone      String
+  tipoMensagem  String // "text" | "image" | "video" | "audio" | "document"
+  conteudo      String
+  mediaUrl      String? // URL do arquivo no Supabase Storage (se mídia)
+  mediaType     String? // MIME type (ex: "image/jpeg", "audio/ogg")
+  direcao       DirecaoWhatsapp @default(saida)
+  status        String          @default("enviado")
   // O motivo da falha, vindo da Evolution. Sem isto, `status: "falhou"` era tudo
   // que ficava registrado: em 15/08/2026 foram 21 falhas seguidas sem uma linha
   // dizendo o porquê, e o diagnóstico levou horas para chegar a "a sessão do
   // WhatsApp morreu" — informação que a Evolution devolvia em cada resposta.
-  erro         String?
-  tentativas   Int             @default(1)
-  createdAt    DateTime        @default(now())
+  erro          String?
+  tentativas    Int             @default(1)
+  createdAt     DateTime        @default(now())
 
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
@@ -729,13 +729,13 @@ model MensagemWhatsapp {
 
 model ContatoWhatsApp {
   organizacaoId String?
-  id        String   @id @default(cuid())
-  telefone  String
-  nome      String
-  tipo      String   @default("externo")  // externo | videomaker | editor | usuario
-  referenciaId String?                    // ID do videomaker/editor/usuario se vinculado
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  telefone      String
+  nome          String
+  tipo          String   @default("externo") // externo | videomaker | editor | usuario
+  referenciaId  String? // ID do videomaker/editor/usuario se vinculado
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([organizacaoId, telefone])
   @@map("contatos_whatsapp")
@@ -744,13 +744,13 @@ model ContatoWhatsApp {
 // Cache de resolução @lid → JID real (evita atribuição errada de mensagens)
 model MapaLidWhatsApp {
   organizacaoId String?
-  id        String   @id @default(cuid())
-  lidJid    String                        // ex: "123456789@lid"
-  realJid   String                        // ex: "5531991900114@s.whatsapp.net"
-  telefone  String                        // ex: "5531991900114"
-  pushName  String?                       // nome de exibição no WhatsApp
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  lidJid        String // ex: "123456789@lid"
+  realJid       String // ex: "5531991900114@s.whatsapp.net"
+  telefone      String // ex: "5531991900114"
+  pushName      String? // nome de exibição no WhatsApp
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([organizacaoId, lidJid])
   @@index([telefone])
@@ -787,10 +787,10 @@ enum TipoEvento {
 }
 
 enum ContextoEvento {
-  contourline  // prioridade máxima — empresa principal
-  freelance    // serviços externos
-  pessoal      // agenda particular do admin
-  sistema      // gerado automaticamente por demanda
+  contourline // prioridade máxima — empresa principal
+  freelance // serviços externos
+  pessoal // agenda particular do admin
+  sistema // gerado automaticamente por demanda
 }
 
 enum StatusEvento {
@@ -803,30 +803,30 @@ enum StatusEvento {
 
 model Evento {
   organizacaoId String?
-  id           String         @id @default(cuid())
-  titulo       String
-  descricao    String?
-  inicio       DateTime
-  fim          DateTime
-  diaTodo      Boolean        @default(false)
-  tipo         TipoEvento     @default(outro)
-  contexto     ContextoEvento @default(sistema)
-  status       StatusEvento   @default(agendado)
-  cor          String?        // hex, ex: #ef4444
-  local        String?
-  privado      Boolean        @default(false)
+  id            String         @id @default(cuid())
+  titulo        String
+  descricao     String?
+  inicio        DateTime
+  fim           DateTime
+  diaTodo       Boolean        @default(false)
+  tipo          TipoEvento     @default(outro)
+  contexto      ContextoEvento @default(sistema)
+  status        StatusEvento   @default(agendado)
+  cor           String? // hex, ex: #ef4444
+  local         String?
+  privado       Boolean        @default(false)
 
   // Relações opcionais
   demandaId    String?
-  usuarioId    String?        // admin/gestor
-  videomakerId String?        // agenda do videomaker externo
-  editorId     String?        // agenda do videomaker interno (editor)
+  usuarioId    String? // admin/gestor
+  videomakerId String? // agenda do videomaker externo
+  editorId     String? // agenda do videomaker interno (editor)
 
-  lembreteMinutos Int            @default(60)    // TDAH: minutos antes do evento para enviar WA
-  lembreteEnviado Boolean        @default(false) // TDAH: lembrete já enviado?
+  lembreteMinutos Int     @default(60) // TDAH: minutos antes do evento para enviar WA
+  lembreteEnviado Boolean @default(false) // TDAH: lembrete já enviado?
 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   demanda    Demanda?    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
   usuario    Usuario?    @relation(fields: [usuarioId], references: [id])
@@ -852,15 +852,15 @@ enum TipoCusto {
 }
 
 enum StatusPagamento {
-  pendente_nf          // aguardando videomaker enviar nota fiscal
-  nf_enviada           // NF recebida, aguardando aprovação interna
+  pendente_nf // aguardando videomaker enviar nota fiscal
+  nf_enviada // NF recebida, aguardando aprovação interna
   aguardando_pagamento // aprovado → e-mail enviado ao financeiro
-  pago                 // confirmado pago
-  contestado           // em disputa
+  pago // confirmado pago
+  contestado // em disputa
 }
 
 model CustoVideomaker {
-  organizacaoId String?
+  organizacaoId     String?
   id                String          @id @default(cuid())
   videomakerId      String
   demandaId         String?
@@ -871,12 +871,12 @@ model CustoVideomaker {
   pago              Boolean         @default(false)
   dataPagamento     DateTime?
   comprovante       String?
-  notaFiscalUrl     String?         // URL da NF enviada pelo videomaker
+  notaFiscalUrl     String? // URL da NF enviada pelo videomaker
   statusPagamento   StatusPagamento @default(pendente_nf)
-  emailFinanceiroAt DateTime?       // quando o e-mail foi enviado ao financeiro
-  dataVencimento    DateTime?       // TDAH: prazo para cobrança automática
-  ultimaCobrancaEm  DateTime?       // TDAH: última vez que enviou cobrança WA
-  qtdCobranças      Int             @default(0) // TDAH: quantas cobranças já foram enviadas
+  emailFinanceiroAt DateTime? // quando o e-mail foi enviado ao financeiro
+  dataVencimento    DateTime? // TDAH: prazo para cobrança automática
+  ultimaCobrancaEm  DateTime? // TDAH: última vez que enviou cobrança WA
+  qtdCobranças     Int             @default(0) // TDAH: quantas cobranças já foram enviadas
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -905,13 +905,13 @@ enum TipoRelatorio {
 
 model RelatorioIA {
   organizacaoId String?
-  id         String        @id @default(cuid())
-  tipo       TipoRelatorio
-  periodo    String        // ex: "2025-W01", "2025-03", "realtime"
-  conteudo   Json          // resposta estruturada da IA
-  tokens     Int?          // tokens consumidos
-  modelo     String        @default("claude-haiku-4-5")
-  createdAt  DateTime      @default(now())
+  id            String        @id @default(cuid())
+  tipo          TipoRelatorio
+  periodo       String // ex: "2025-W01", "2025-03", "realtime"
+  conteudo      Json // resposta estruturada da IA
+  tokens        Int? // tokens consumidos
+  modelo        String        @default("claude-haiku-4-5")
+  createdAt     DateTime      @default(now())
 
   @@map("relatorios_ia")
 }
@@ -921,7 +921,7 @@ model RelatorioIA {
 // ─────────────────────────────────────────────
 
 model ConfigEmail {
-  organizacaoId String?
+  organizacaoId    String?
   id               String   @id @default(cuid())
   apiKey           String   @default("") // Resend API Key
   senderEmail      String   @default("onboarding@resend.dev")
@@ -937,31 +937,31 @@ model ConfigEmail {
 // Caixa de entrada conectada diretamente ao provedor de e-mail.
 // A mensagem e salva antes do parsing para permitir retomada e auditoria.
 model ConfigEmailEntrada {
-  id                           String   @id @default(cuid())
-  organizacaoId                String   @unique
-  provedor                     String   @default("microsoft365")
-  emailCaixa                   String?
-  tenantId                     String?
-  refreshTokenCriptografado    String?  @db.Text
-  remetenteFiltro              String?
-  assuntoFiltro                String?
-  criarDemandaAutomaticamente Boolean  @default(false)
-  solicitantePadraoId          String?
-  ativo                        Boolean  @default(false)
-  conectadoEm                  DateTime?
-  ultimaSincronizacaoEm        DateTime?
-  ultimoErro                   String?  @db.Text
-  createdAt                    DateTime @default(now())
-  updatedAt                    DateTime @updatedAt
+  id                          String    @id @default(cuid())
+  organizacaoId               String    @unique
+  provedor                    String    @default("microsoft365")
+  emailCaixa                  String?
+  tenantId                    String?
+  refreshTokenCriptografado   String?   @db.Text
+  remetenteFiltro             String?
+  assuntoFiltro               String?
+  criarDemandaAutomaticamente Boolean   @default(false)
+  solicitantePadraoId         String?
+  ativo                       Boolean   @default(false)
+  conectadoEm                 DateTime?
+  ultimaSincronizacaoEm       DateTime?
+  ultimoErro                  String?   @db.Text
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
-  organizacao Organizacao  @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  organizacao Organizacao    @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
   emails      EmailEntrada[]
 
   @@map("config_email_entrada")
 }
 
 model EmailEntrada {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   organizacaoId      String
   configId           String
   mensagemProvedorId String
@@ -972,20 +972,20 @@ model EmailEntrada {
   destinatarios      String[]
   assunto            String
   recebidoEm         DateTime
-  corpoTexto         String   @db.Text
-  corpoHtml          String?  @db.Text
-  possuiAnexos       Boolean  @default(false)
-  anexos              Json?
-  dadosExtraidos      Json?
-  status              String   @default("pendente") // pendente | pronto | processando | criado | revisao | ignorado | erro
-  erro                String?  @db.Text
-  tentativas          Int      @default(0)
-  demandaId           String?
-  processadoEm        DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  corpoTexto         String    @db.Text
+  corpoHtml          String?   @db.Text
+  possuiAnexos       Boolean   @default(false)
+  anexos             Json?
+  dadosExtraidos     Json?
+  status             String    @default("pendente") // pendente | pronto | processando | criado | revisao | ignorado | erro
+  erro               String?   @db.Text
+  tentativas         Int       @default(0)
+  demandaId          String?
+  processadoEm       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  organizacao Organizacao       @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  organizacao Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
   config      ConfigEmailEntrada @relation(fields: [configId], references: [id], onDelete: Cascade)
   demanda     Demanda?           @relation(fields: [demandaId], references: [id], onDelete: SetNull)
 
@@ -1000,14 +1000,14 @@ model EmailEntrada {
 // ─────────────────────────────────────────────
 
 model AvaliacaoVideomaker {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   videomakerId String
-  nota         Int        // 1-5
+  nota         Int // 1-5
   comentario   String?
-  avaliadorId  String?    // null se via QR (avaliação pública)
+  avaliadorId  String? // null se via QR (avaliação pública)
   demandaId    String?
-  origem       String     @default("interno") // "interno" | "qr_publico"
-  createdAt    DateTime   @default(now())
+  origem       String   @default("interno") // "interno" | "qr_publico"
+  createdAt    DateTime @default(now())
 
   videomaker Videomaker @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
 
@@ -1019,17 +1019,17 @@ model AvaliacaoVideomaker {
 // ─────────────────────────────────────────────
 
 model AvaliacaoEditor {
-  id          String   @id @default(cuid())
-  editorId    String
-  nota        Int      // 1-5
-  comentario  String?
-  atendeuDemandas  Boolean?   // checklist: atendeu as demandas?
-  foiAtencioso     Boolean?   // foi atencioso?
+  id                   String   @id @default(cuid())
+  editorId             String
+  nota                 Int // 1-5
+  comentario           String?
+  atendeuDemandas      Boolean? // checklist: atendeu as demandas?
+  foiAtencioso         Boolean? // foi atencioso?
   contratariaNovamente Boolean? // contrataria novamente?
-  avaliadorId String?          // null se via QR público
-  demandaId   String?
-  origem      String   @default("interno") // "interno" | "qr_publico"
-  createdAt   DateTime @default(now())
+  avaliadorId          String? // null se via QR público
+  demandaId            String?
+  origem               String   @default("interno") // "interno" | "qr_publico"
+  createdAt            DateTime @default(now())
 
   editor Editor @relation(fields: [editorId], references: [id], onDelete: Cascade)
 
@@ -1042,14 +1042,14 @@ model AvaliacaoEditor {
 
 model ConfigParametro {
   organizacaoId String?
-  id        String   @id @default(cuid())
-  grupo     String   // "departamentos" | "tipos_video" | "habilidades" | "areas_atuacao"
-  valor     String   // valor interno (ex: "growth")
-  label     String   // label de exibição (ex: "Growth")
-  ordem     Int      @default(0)
-  ativo     Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  grupo         String // "departamentos" | "tipos_video" | "habilidades" | "areas_atuacao"
+  valor         String // valor interno (ex: "growth")
+  label         String // label de exibição (ex: "Growth")
+  ordem         Int      @default(0)
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // A unicidade tem que ser por empresa: sem organizacaoId aqui, a primeira
   // empresa a cadastrar "crm" impediria todas as outras de ter o mesmo valor.
@@ -1063,8 +1063,8 @@ model ConfigParametro {
 
 model ChatIAMensagem {
   id        String   @id @default(cuid())
-  sessionId String   // identificador da sessão de chat (gerado no frontend)
-  role      String   // "user" | "assistant"
+  sessionId String // identificador da sessão de chat (gerado no frontend)
+  role      String // "user" | "assistant"
   conteudo  String   @db.Text
   tokens    Int?
   createdAt DateTime @default(now())
@@ -1075,14 +1075,14 @@ model ChatIAMensagem {
 
 model AgenteExecucao {
   id             String    @id @default(cuid())
-  agente         String    // "triagem" | "monitor" | "gerar_alertas" | "custos" | "whatsapp"
+  agente         String // "triagem" | "monitor" | "gerar_alertas" | "custos" | "whatsapp"
   status         String    @default("executando") // "executando" | "concluido" | "erro"
   resultado      Json?
   tokens         Int?
   alertasGerados Int       @default(0)
-  ferramentas    String[]  // ferramentas usadas
+  ferramentas    String[] // ferramentas usadas
   erro           String?
-  criadoPor      String?   // userId que acionou
+  criadoPor      String? // userId que acionou
   finishedAt     DateTime?
   createdAt      DateTime  @default(now())
 
@@ -1120,36 +1120,36 @@ model Fabricante {
 }
 
 model Produto {
-  organizacaoId String?
-  id              String      @id @default(cuid())
-  nome            String
-  descricao       String?
-  categoria       String?     // legacy — use fabricanteId
-  fabricanteId    String?
-  peso            Float       @default(1.0)    // 1-10 priority weight
-  ativo           Boolean     @default(true)
-  alertaDias      Int         @default(30)     // alert if no content in X days
-  ultimoConteudo  DateTime?                  // denormalized: last content date
-  totalConteudos  Int       @default(0)      // denormalized: total content count
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  organizacaoId  String?
+  id             String    @id @default(cuid())
+  nome           String
+  descricao      String?
+  categoria      String? // legacy — use fabricanteId
+  fabricanteId   String?
+  peso           Float     @default(1.0) // 1-10 priority weight
+  ativo          Boolean   @default(true)
+  alertaDias     Int       @default(30) // alert if no content in X days
+  ultimoConteudo DateTime? // denormalized: last content date
+  totalConteudos Int       @default(0) // denormalized: total content count
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  fabricante      Fabricante?      @relation(fields: [fabricanteId], references: [id])
-  demandas    DemandaProduto[]
-  ideias      IdeiaVideo[]
-  coberturas  EventoCobertura[]
+  fabricante Fabricante?       @relation(fields: [fabricanteId], references: [id])
+  demandas   DemandaProduto[]
+  ideias     IdeiaVideo[]
+  coberturas EventoCobertura[]
 
   @@map("produtos")
 }
 
 model DemandaProduto {
-  id         String   @id @default(cuid())
-  demandaId  String
-  produtoId  String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  demandaId String
+  produtoId String
+  createdAt DateTime @default(now())
 
-  demanda    Demanda  @relation(fields: [demandaId], references: [id], onDelete: Cascade)
-  produto    Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 
   @@unique([demandaId, produtoId])
   @@map("demanda_produto")
@@ -1157,13 +1157,13 @@ model DemandaProduto {
 
 // Growth: múltiplos responsáveis por demanda (Usuario interno da org).
 model DemandaResponsavel {
-  id         String   @id @default(cuid())
-  demandaId  String
-  usuarioId  String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  demandaId String
+  usuarioId String
+  createdAt DateTime @default(now())
 
-  demanda    Demanda  @relation(fields: [demandaId], references: [id], onDelete: Cascade)
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@unique([demandaId, usuarioId])
   @@map("demanda_responsavel")
@@ -1174,20 +1174,20 @@ model DemandaResponsavel {
 // ─────────────────────────────────────────────
 
 model IdeiaVideo {
-  organizacaoId String?
-  id              String       @id @default(cuid())
-  titulo          String
-  descricao       String?      @db.Text
-  linkReferencia  String?
-  mediaUrl        String?
-  mediaType       String?
-  origem          OrigemIdeia  @default(manual)
-  plataforma      String?      // auto-detected: instagram, tiktok, youtube
-  status          StatusIdeia  @default(nova)
-  classificacao   String?      // b2c, b2b
+  organizacaoId  String?
+  id             String      @id @default(cuid())
+  titulo         String
+  descricao      String?     @db.Text
+  linkReferencia String?
+  mediaUrl       String?
+  mediaType      String?
+  origem         OrigemIdeia @default(manual)
+  plataforma     String? // auto-detected: instagram, tiktok, youtube
+  status         StatusIdeia @default(nova)
+  classificacao  String? // b2c, b2b
 
   // IA Analysis
-  scoreIA            Float?    // 0-100
+  scoreIA            Float? // 0-100
   analiseIA          String?   @db.Text
   sugestaoTipo       String?
   sugestaoPrioridade String?
@@ -1227,7 +1227,7 @@ model ConfigTrello {
   token       String
   boardId     String
   ativo       Boolean  @default(true)
-  listMapping Json?    // { "trello_list_id": "entrada", ... }
+  listMapping Json? // { "trello_list_id": "entrada", ... }
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1245,42 +1245,42 @@ model ConfigTrello {
 // admin da empresa A concedendo `verCustos` concedia também na B. É a mesma
 // classe de vazamento que `UsuarioOrganizacao.papel` resolveu para o papel.
 model PermissaoUsuario {
-  id            String  @id @default(cuid())
+  id            String @id @default(cuid())
   usuarioId     String
   organizacaoId String
 
   // Páginas visíveis (checklist)
-  verDashboard    Boolean @default(true)
-  verDemandas     Boolean @default(true)
-  verAprovacoes   Boolean @default(false)
-  verAprovacoesGrowth Boolean @default(false)
-  verAgenda       Boolean @default(false)
-  verProdutos     Boolean @default(false)
-  verVideomakers  Boolean @default(false)
-  verEquipe       Boolean @default(false)
-  verCustos       Boolean @default(false)
-  verIA           Boolean @default(false)
-  verAlertas      Boolean @default(false)
-  verRelatorios   Boolean @default(false)
-  verUsuarios     Boolean @default(false)
-  verConfiguracoes Boolean @default(false)
-  verIdeias        Boolean @default(false)
-  verEventos       Boolean @default(false)
-  verCoberturas        Boolean @default(false)
-  verFinanceiroEvento  Boolean @default(false)
+  verDashboard          Boolean @default(true)
+  verDemandas           Boolean @default(true)
+  verAprovacoes         Boolean @default(false)
+  verAprovacoesGrowth   Boolean @default(false)
+  verAgenda             Boolean @default(false)
+  verProdutos           Boolean @default(false)
+  verVideomakers        Boolean @default(false)
+  verEquipe             Boolean @default(false)
+  verCustos             Boolean @default(false)
+  verIA                 Boolean @default(false)
+  verAlertas            Boolean @default(false)
+  verRelatorios         Boolean @default(false)
+  verUsuarios           Boolean @default(false)
+  verConfiguracoes      Boolean @default(false)
+  verIdeias             Boolean @default(false)
+  verEventos            Boolean @default(false)
+  verCoberturas         Boolean @default(false)
+  verFinanceiroEvento   Boolean @default(false)
   gerenciarFornecedores Boolean @default(false)
-  verDesign            Boolean @default(false)
-  gerenciarDesigners   Boolean @default(false)
+  verDesign             Boolean @default(false)
+  gerenciarDesigners    Boolean @default(false)
 
   // Ações em demandas
-  criarDemanda    Boolean @default(false)
-  editarDemanda   Boolean @default(false)
-  excluirDemanda  Boolean @default(false)
-  moverKanban     Boolean @default(false)
+  criarDemanda   Boolean @default(false)
+  editarDemanda  Boolean @default(false)
+  excluirDemanda Boolean @default(false)
+  moverKanban    Boolean @default(false)
 
   // Visão de demandas
   verTodasDemandas Boolean @default(false) // false = só as próprias
-  verKanban        Boolean @default(true)  // false = visualização em cards
+  verKanban        Boolean @default(true) // false = visualização em cards
 
   // Admin
   gerenciarUsuarios Boolean @default(false)
@@ -1289,8 +1289,8 @@ model PermissaoUsuario {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  organizacao Organizacao  @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@unique([usuarioId, organizacaoId])
   @@index([organizacaoId])
@@ -1326,7 +1326,7 @@ model NotaFiscalUpload {
   demandaId    String
   videomakerId String
   token        String   @unique @default(cuid())
-  url          String?        // Supabase Storage URL após upload
+  url          String? // Supabase Storage URL após upload
   nomeArquivo  String?
   status       String   @default("pendente") // pendente | enviada | aprovada | rejeitada
   createdAt    DateTime @default(now())
@@ -1344,7 +1344,7 @@ model NotaFiscalUpload {
 
 model ConfigEmpresa {
   organizacaoId String?
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   cnpj          String?
   razaoSocial   String?
   nomeFantasia  String?
@@ -1355,18 +1355,18 @@ model ConfigEmpresa {
   cep           String?
   email         String?
   telefone      String?
-  pixKey        String?   // CNPJ, email, celular ou chave aleatória
-  pixTipo       String?   // "cnpj" | "email" | "telefone" | "aleatoria"
-  observacoesNF String?   // instrução para videomakers ao emitir NF
+  pixKey        String? // CNPJ, email, celular ou chave aleatória
+  pixTipo       String? // "cnpj" | "email" | "telefone" | "aleatoria"
+  observacoesNF String? // instrução para videomakers ao emitir NF
 
   // Google Drive — OAuth2 (refresh token da conta pessoal do usuário)
   googleRefreshToken     String?
   googleDriveEmail       String?
   googleDriveConnectedAt DateTime?
-  googleDriveFolderId    String?   // ID da pasta onde os vídeos são salvos
+  googleDriveFolderId    String? // ID da pasta onde os vídeos são salvos
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("config_empresa")
 }
@@ -1434,7 +1434,7 @@ enum TipoMomento {
 }
 
 model EventoCobertura {
-  organizacaoId String?
+  organizacaoId       String?
   id                  String          @id @default(cuid())
   titulo              String
   slug                String          @unique
@@ -1456,14 +1456,14 @@ model EventoCobertura {
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  produto    Produto?                   @relation(fields: [produtoId], references: [id])
-  createdBy  Usuario                    @relation("CoberturasCreadas", fields: [createdById], references: [id])
-  equipe     EventoCoberturaEquipe[]
-  checklist  EventoCoberturaChecklist[]
-  uploads    EventoCoberturaUpload[]
-  album      EventoCoberturaAlbum[]
-  log        EventoCoberturaLog[]
-  demandas   Demanda[]
+  produto      Produto?                   @relation(fields: [produtoId], references: [id])
+  createdBy    Usuario                    @relation("CoberturasCreadas", fields: [createdById], references: [id])
+  equipe       EventoCoberturaEquipe[]
+  checklist    EventoCoberturaChecklist[]
+  uploads      EventoCoberturaUpload[]
+  album        EventoCoberturaAlbum[]
+  log          EventoCoberturaLog[]
+  demandas     Demanda[]
   eventoGestao EventoGestao?
 
   @@index([organizacaoId])
@@ -1483,10 +1483,10 @@ model EventoCoberturaEquipe {
   valorDiaria      Float?
   createdAt        DateTime     @default(now())
 
-  cobertura  EventoCobertura       @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
-  videomaker Videomaker?           @relation(fields: [videomakerId], references: [id])
-  editor     Editor?               @relation(fields: [editorId], references: [id])
-  usuario    Usuario?              @relation(fields: [usuarioId], references: [id])
+  cobertura  EventoCobertura         @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  videomaker Videomaker?             @relation(fields: [videomakerId], references: [id])
+  editor     Editor?                 @relation(fields: [editorId], references: [id])
+  usuario    Usuario?                @relation(fields: [usuarioId], references: [id])
   uploads    EventoCoberturaUpload[]
 
   @@map("coberturas_equipe")
@@ -1533,7 +1533,7 @@ model EventoCoberturaUpload {
 model EventoFaceDescriptor {
   id         String   @id @default(cuid())
   uploadId   String
-  descriptor Json     // Float32Array serializada como number[] (128 floats)
+  descriptor Json // Float32Array serializada como number[] (128 floats)
   createdAt  DateTime @default(now())
 
   upload EventoCoberturaUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
@@ -1707,60 +1707,60 @@ enum TipoAprovacao {
 }
 
 model EventoGestao {
-  organizacaoId String?
-  id                 String             @id @default(cuid())
-  codigo             String             @unique
-  nome               String
-  tipo               TipoEventoGestao   @default(outro)
-  status             StatusEventoGestao @default(planejamento)
-  descricao          String?            @db.Text
-  objetivo           String?            @db.Text
-  publicoAlvo        String?
-  observacoes        String?            @db.Text
-  cidade             String?
-  estado             String?
-  local              String?
-  dataInicio         DateTime
-  dataFim            DateTime
-  responsavelId      String?
-  orcamentoPrevisto  Float?
-  orcamentoAprovado  Float?
-  percentualConclusao Int               @default(0)
-  linkDrive          String?
-  coberturaId        String?            @unique
-  createdById        String
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  organizacaoId       String?
+  id                  String             @id @default(cuid())
+  codigo              String             @unique
+  nome                String
+  tipo                TipoEventoGestao   @default(outro)
+  status              StatusEventoGestao @default(planejamento)
+  descricao           String?            @db.Text
+  objetivo            String?            @db.Text
+  publicoAlvo         String?
+  observacoes         String?            @db.Text
+  cidade              String?
+  estado              String?
+  local               String?
+  dataInicio          DateTime
+  dataFim             DateTime
+  responsavelId       String?
+  orcamentoPrevisto   Float?
+  orcamentoAprovado   Float?
+  percentualConclusao Int                @default(0)
+  linkDrive           String?
+  coberturaId         String?            @unique
+  createdById         String
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  responsavel  Usuario?         @relation("EventoGestaoResponsavel", fields: [responsavelId], references: [id])
-  createdBy    Usuario          @relation("EventoGestaoCriador", fields: [createdById], references: [id])
-  cobertura    EventoCobertura? @relation(fields: [coberturaId], references: [id])
-  demandas     Demanda[]
-  checklist    EventoGestaoChecklist[]
-  documentos   EventoGestaoDocumento[]
-  custos       CustoEvento[]
-  aprovacoes   EventoGestaoAprovacao[]
-  logs         EventoGestaoLog[]
+  responsavel Usuario?                @relation("EventoGestaoResponsavel", fields: [responsavelId], references: [id])
+  createdBy   Usuario                 @relation("EventoGestaoCriador", fields: [createdById], references: [id])
+  cobertura   EventoCobertura?        @relation(fields: [coberturaId], references: [id])
+  demandas    Demanda[]
+  checklist   EventoGestaoChecklist[]
+  documentos  EventoGestaoDocumento[]
+  custos      CustoEvento[]
+  aprovacoes  EventoGestaoAprovacao[]
+  logs        EventoGestaoLog[]
 
   @@index([organizacaoId])
   @@map("eventos_gestao")
 }
 
 model EventoGestaoChecklist {
-  id               String           @id @default(cuid())
-  eventoId         String
-  titulo           String
-  descricao        String?
-  categoria        String?
-  responsavelId    String?
-  prazo            DateTime?
-  status           StatusTarefa     @default(pendente)
-  prioridade       PrioridadeTarefa @default(media)
-  uploadObrigatorio Boolean         @default(false)
-  custoEventoId    String?
-  concluido        Boolean          @default(false)
-  concluidoEm      DateTime?
-  createdAt        DateTime         @default(now())
+  id                String           @id @default(cuid())
+  eventoId          String
+  titulo            String
+  descricao         String?
+  categoria         String?
+  responsavelId     String?
+  prazo             DateTime?
+  status            StatusTarefa     @default(pendente)
+  prioridade        PrioridadeTarefa @default(media)
+  uploadObrigatorio Boolean          @default(false)
+  custoEventoId     String?
+  concluido         Boolean          @default(false)
+  concluidoEm       DateTime?
+  createdAt         DateTime         @default(now())
 
   evento      EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
   responsavel Usuario?     @relation(fields: [responsavelId], references: [id])
@@ -1789,7 +1789,7 @@ model EventoGestaoDocumento {
 }
 
 model Fornecedor {
-  organizacaoId String?
+  organizacaoId  String?
   id             String              @id @default(cuid())
   nome           String
   contato        String?
@@ -1861,14 +1861,14 @@ model CustoEvento {
 }
 
 model EventoGestaoAprovacao {
-  id         String        @id @default(cuid())
-  eventoId   String
-  tipo       TipoAprovacao
-  status     String        @default("pendente") // pendente | aprovado | reprovado
+  id          String        @id @default(cuid())
+  eventoId    String
+  tipo        TipoAprovacao
+  status      String        @default("pendente") // pendente | aprovado | reprovado
   aprovadoPor String?
-  observacao String?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  observacao  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   evento EventoGestao @relation(fields: [eventoId], references: [id], onDelete: Cascade)
 
@@ -1892,14 +1892,14 @@ model EventoGestaoLog {
 // Por competência (ano*100+mes), área e categoria (ex: "Linha Med", "Linha Estética").
 model ProducaoManual {
   organizacaoId String?
-  id          String   @id @default(cuid())
-  competencia Int      // ano*100 + mes (ex: 202606)
-  area        String   @default("audiovisual")
-  grupo       String   @default("producao")  // "producao" (vídeos) | "presencial" (frentes)
-  categoria   String
-  quantidade  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  competencia   Int // ano*100 + mes (ex: 202606)
+  area          String   @default("audiovisual")
+  grupo         String   @default("producao") // "producao" (vídeos) | "presencial" (frentes)
+  categoria     String
+  quantidade    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([competencia, area, grupo, categoria])
   @@index([organizacaoId])
@@ -1908,18 +1908,18 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
-  id        String   @id @default(cuid())
-  nome      String
-  slug      String   @unique  // ex: "contourline" (preparado p/ subdomínio futuro)
-  logoUrl   String?
-  ativo     Boolean  @default(true)
+  id             String   @id @default(cuid())
+  nome           String
+  slug           String   @unique // ex: "contourline" (preparado p/ subdomínio futuro)
+  logoUrl        String?
+  ativo          Boolean  @default(true)
   // Token opt-in para leitura externa do Relatório Executivo (página pública + MCP).
   // Sem token, os endpoints públicos não resolvem organização e respondem 401/404.
-  relatorioToken String? @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  relatorioToken String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  membros UsuarioOrganizacao[]
+  membros            UsuarioOrganizacao[]
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
@@ -1950,14 +1950,14 @@ model LinhaProjeto {
 }
 
 model UsuarioOrganizacao {
-  id            String      @id @default(cuid())
-  usuarioId     String
-  organizacaoId String
-  papel         TipoUsuario @default(solicitante)  // nível de acesso/autoridade na org
+  id                 String          @id @default(cuid())
+  usuarioId          String
+  organizacaoId      String
+  papel              TipoUsuario     @default(solicitante) // nível de acesso/autoridade na org
   // Pessoas & Acessos — dimensões por organização (aditivas, compat com `tipo` legado)
   categoria          CategoriaPessoa @default(interna)
-  funcaoProfissional String?         // o que a pessoa faz (Social Media, Designer, etc.)
-  areas              AreaAtuacao[]   // onde atua (audiovisual, growth, eventos)
+  funcaoProfissional String? // o que a pessoa faz (Social Media, Designer, etc.)
+  areas              AreaAtuacao[] // onde atua (audiovisual, growth, eventos)
   liderAudiovisual   Boolean         @default(false) // líder do audiovisual: aprova + é notificado de novas demandas
   // Recebe todo aviso da operação no WhatsApp, independente do cargo. Antes isso
   // era efeito colateral de ser admin/gestor — quem quisesse só acompanhar
@@ -1966,9 +1966,9 @@ model UsuarioOrganizacao {
   // "No que estou agora": mora aqui, e não na demanda, porque foco é da PESSOA
   // numa empresa — cada um tem um de cada vez. Sem FK de propósito: se a demanda
   // sumir, a leitura simplesmente não encontra e limpa, em vez de exigir cascade.
-  demandaEmFocoId String?
-  focoDesde       DateTime?
-  createdAt     DateTime    @default(now())
+  demandaEmFocoId    String?
+  focoDesde          DateTime?
+  createdAt          DateTime        @default(now())
 
   usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
