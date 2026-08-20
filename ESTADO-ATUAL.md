@@ -155,8 +155,25 @@ Rodadas 4 e 5, tudo mergeado em `main` (PRs #13, #14, #15) e em produção.
 
 - **`tenancy-allowlist.json` com 33 arquivos.** Meta é zero. A tarefa **F3.3 — wrapper api-guard + leitura agregada** (única pendente da fase antiga) derrubaria um bloco.
 - **Subir `next-auth` de versão** (está em `5.0.0-beta.30`). Mexe na autenticação inteira; merece janela própria com login testado em todos os papéis. É o que destrava 3 das 6 CVEs do `SEGURANCA.md`.
+  - ⛔ **PRÉ-REQUISITO BLOQUEANTE: definir `EMAIL_ENCRYPTION_KEY` antes.** Sem ela,
+    `src/lib/secret-crypto.ts` deriva a chave do `NEXTAUTH_SECRET` — é o fallback, e é o
+    que está valendo hoje. Subir o next-auth costuma rotacionar esse segredo, e rotacionar
+    torna **ilegível todo dado já cifrado**: chave PIX e dados bancários de videomaker,
+    além das credenciais de e-mail de entrada. A migração SaaS aumentou o que há a perder —
+    os fiscais que viviam soltos no perfil global foram cifrados e movidos para
+    `videomaker_dados_fiscais`.
+    Ordem obrigatória: **1)** definir `EMAIL_ENCRYPTION_KEY` no ambiente; **2)** re-gravar
+    o que já está cifrado (decifra com o segredo velho, cifra com a chave nova — script
+    próprio, com backup conferido antes); **3)** só então mexer no next-auth.
+    Inverter a ordem é perda de dado irreversível.
 - **151 avisos de lint** (0 erros). A CI só falha em erro. A maioria é ruído.
-- **Apagar as colunas antigas de `Videomaker`** (`valorDiaria` e afins no perfil global). Depois da R4.1 não são mais lidas, mas o DROP é irreversível — janela própria, com backup conferido.
+- **Apagar as colunas antigas de `Videomaker`** (`valorDiaria` e afins no perfil global).
+  ⚠️ **A afirmação "depois da R4.1 não são mais lidas" está errada** — auditado em 19/08/2026.
+  A R4.1 corrigiu a tela de edição e o `ia-tools-executor`; fora deles havia **3 caminhos de
+  escrita** (cadastro público, criação pelo admin, fluxo de pagamento — este gravava PIX em
+  texto puro) e **9 de leitura**. As escritas e 2 leituras já foram corrigidas; o resto está
+  mapeado no adendo de `DIAGNOSTICO-SAAS.md`. O DROP não é limpeza: é migração de 12 pontos,
+  e continua irreversível — janela própria, com backup conferido.
 - **`/api/urgencias` ainda consta como rota congelada** em `modulos.ts` sem existir. Inofensivo, mas é sujeira.
 - **Página de detalhe da demanda:** auditada, já é o mockup na estrutura. Reescrever seria churn.
 
