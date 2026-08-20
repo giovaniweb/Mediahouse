@@ -6,6 +6,7 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { requireDemandaOrg } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
+import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 
 // Validação de chave PIX
 function validarChavePix(chave: string): boolean {
@@ -95,11 +96,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
     }
 
-    // Atualizar chave PIX no cadastro do videomaker se divergir
+    // Chave PIX é dado fiscal de UMA empresa, não do perfil global da rede: vai
+    // para VideomakerDadosFiscais, cifrada. Antes gravava em texto puro no perfil
+    // global — legível por qualquer empresa e sem cifra nenhuma.
     if (demanda.videomakerId && chavePix) {
-      await prisma.videomaker.update({
-        where: { id: demanda.videomakerId },
-        data: { chavePix },
+      await gravarDadosPrivadosVideomaker({
+        videomakerId: demanda.videomakerId,
+        organizacaoId,
+        fiscal: { chavePix },
       })
     }
 
