@@ -177,9 +177,43 @@ Rodadas 4 e 5, tudo mergeado em `main` (PRs #13, #14, #15) e em produção.
 - **`/api/urgencias` ainda consta como rota congelada** em `modulos.ts` sem existir. Inofensivo, mas é sujeira.
 - **Página de detalhe da demanda:** auditada, já é o mockup na estrutura. Reescrever seria churn.
 
+**Como migration vai para produção (mudou em 20/08/2026)**
+
+Migration **não roda no build**. O `buildCommand` do `vercel.json` faz só
+`prisma generate && next build` — o build gera artefato, não muda banco.
+
+O caminho é `.github/workflows/release-migrations.yml`:
+
+1. Merge em `main` com arquivo novo em `prisma/migrations/` dispara o workflow.
+2. Job `revisar` imprime o SQL que vai rodar. Não usa credencial — o SQL está no repo.
+3. Job `aplicar` **fica parado** até alguém aprovar no GitHub Environment `producao`.
+4. **Aprove só depois de confirmar que o deploy da Vercel está no ar.**
+
+**A regra de ordem: deploy primeiro, migration depois.** Toda migration precisa ser
+compatível com o código que **ainda está rodando** (expand/contract). A Fase A é o
+exemplo: os PRs #22, #24 e #25 pararam de usar as colunas e subiram; o DROP veio
+depois, sem janela de quebra.
+
+Para rodar à mão, fora do workflow: `PERMITIR_BANCO_PRODUCAO=sim npm run db:deploy`.
+
+**Por que mudou — incidente de 20/08/2026.** O `buildCommand` tinha
+`prisma migrate deploy`. Um `git push` numa branch **não mergeada** disparou um build
+de **preview**, e o preview aplicou um `DROP COLUMN` irreversível no banco real. Sem
+revisão, sem aprovação, sem ninguém saber. Nenhum dado se perdeu — a própria migration
+carregava uma trava transacional que conferiu que os 211 valores privados tinham
+destino nas tabelas por empresa antes de apagar (verificado depois contra o backup de
+19/08: 211 de 211). Foi engenharia defensiva dentro da migration que salvou, não
+controle de processo.
+
+Duas travas ficaram: `scripts/guarda-banco.mjs` bloqueia **sempre** quando detecta
+`VERCEL` (sem variável de escape) e exige `RELEASE_AUTORIZADO=sim` para escrever em
+produção a partir do GitHub Actions. E os ambientes de Preview da Vercel deixaram de
+apontar para o banco de produção.
+
 **Práticas a manter (custaram caro para aprender)**
 
 - Conferir o destino antes de escrever no banco — Prisma aponta para produção por padrão (incidente de 14/08).
+- **Todo `git push` de branch com migration alcançava produção pelo preview da Vercel** (incidente de 20/08). Estruturalmente resolvido, mas o hábito vale: antes de subir branch que mexe em schema, saber o que o CI/CD vai fazer com ela.
 - Teste em produção usa `empresa-teste`, nunca Contourline. Apagar os artefatos e **rotacionar a senha do `teste-admin@nuflow.local` para valor aleatório não registrado** ao terminar.
 - Turbopack serve CSS velho: quando o estilo não chega no navegador, `rm -rf .next`.
 - Pedido só de Growth = não tocar audiovisual nem arquivo compartilhado que o sirva.

@@ -1,0 +1,114 @@
+# Passo de RELEASE do banco — o único lugar autorizado a aplicar migration em produção.
+#
+# Por que existe: até 20/08/2026 a migration rodava dentro do `buildCommand` do
+# vercel.json. Naquele dia um `git push` numa branch NÃO MERGEADA disparou um build
+# de preview, e o preview aplicou um DROP COLUMN irreversível no banco real — sem
+# revisão, sem aprovação, sem ninguém saber. Não houve perda de dado por causa de
+# uma trava dentro da própria migration, não por controle de processo.
+#
+# A Vercel não tem release phase: tem Install e Build, e nada entre o build e o
+# tráfego entrar. Por isso o release mora aqui.
+#
+# ORDEM QUE VALE COMO REGRA: DEPLOY PRIMEIRO, MIGRATION DEPOIS.
+# Aprove o job `aplicar` só depois de confirmar que o deploy da Vercel está no ar.
+# Toda migration precisa ser compatível com o código que AINDA está rodando —
+# padrão expand/contract. Foi assim que a Fase A funcionou sem janela de quebra: os
+# PRs #22, #24 e #25 pararam de usar as colunas, subiram, e só então veio o DROP.
+#
+# Pré-requisito no GitHub (Settings, feito uma vez):
+#   Environment `producao`, com Required reviewers  ← é isto que cria o gate
+#   e, DENTRO dele, os secrets:
+#       DIRECT_URL_PRODUCAO    porta 5432, usada para DDL
+#       DATABASE_URL_PRODUCAO  pooler, 6543
+#   No environment, os secrets só existem para o job que passou pela aprovação.
+
+name: Release — migrations
+
+on:
+  push:
+    branches: [main]
+    # Só incomoda quando há migration de verdade. Merge sem migration não pede nada.
+    paths: ["prisma/migrations/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-migrations
+  # Nunca cancelar: uma migration pela metade é pior que uma fila.
+  cancel-in-progress: false
+
+jobs:
+  # Sem gate e SEM credencial: o SQL que vai rodar está no próprio repositório.
+  # Serve para você ler o DDL antes de aprovar — com um job só, a aprovação viria
+  # às cegas. Não toca no banco, então não precisa de secret nem de environment.
+  revisar:
+    name: SQL que vai rodar
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mostrar as migrations deste push
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Disparo manual — mostrando a migration mais recente do repositório."
+            ALVOS=$(ls -d prisma/migrations/*/ | sort | tail -1)
+          else
+            ALVOS=$(git diff --name-only --diff-filter=A \
+              "${{ github.event.before }}" "${{ github.sha }}" \
+              -- 'prisma/migrations/*/migration.sql' || true)
+          fi
+
+          if [ -z "$ALVOS" ]; then
+            echo "Nenhuma migration nova neste push."
+            exit 0
+          fi
+
+          for alvo in $ALVOS; do
+            arquivo="$alvo"
+            [ -d "$alvo" ] && arquivo="${alvo}migration.sql"
+            echo "::group::$arquivo"
+            cat "$arquivo"
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "⚠️  Confirme que o deploy da Vercel já está no ar ANTES de aprovar."
+          echo "    A regra é deploy primeiro, migration depois."
+
+  aplicar:
+    name: Aplicar em produção
+    needs: revisar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # O gate. O job fica parado aqui até um reviewer aprovar no GitHub.
+    environment: producao
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCAO }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL_PRODUCAO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+
+      - name: Estado antes
+        run: npx prisma migrate status || true
+
+      # Via `npm run db:deploy`, não `npx prisma migrate deploy`: assim o
+      # scripts/guarda-banco.mjs fica no caminho. Foi justamente por chamar o
+      # prisma direto que o buildCommand passou por cima do guarda.
+      - name: prisma migrate deploy
+        env:
+          PERMITIR_BANCO_PRODUCAO: "sim"
+          # Só este workflow define isto. O guarda barra qualquer outro job do CI
+          # que tente escrever em produção, mesmo com PERMITIR_BANCO_PRODUCAO=sim.
+          RELEASE_AUTORIZADO: "sim"
+        run: npm run db:deploy
+
+      - name: Banco ficou idêntico ao schema
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code

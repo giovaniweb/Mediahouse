@@ -44,12 +44,66 @@ try {
   host = url.slice(0, 40)
 }
 
+// ── Build da Vercel: NUNCA migra. Não há variável que libere. ────────────────
+//
+// Em 20/08/2026 um push numa branch não mergeada aplicou um DROP COLUMN em
+// produção: o push disparou um build de PREVIEW, e o buildCommand tinha
+// `prisma migrate deploy` apontando para o banco real. Ninguém revisou, ninguém
+// aprovou, e a operação era irreversível.
+//
+// A correção estrutural foi tirar a migration do buildCommand (vercel.json).
+// Esta trava é a segunda linha: se alguém devolver a migration para o build um
+// dia, ela não roda. Sem escape de propósito — build gera artefato, release
+// muda banco, e o release mora em .github/workflows/release-migrations.yml.
+if (process.env.VERCEL) {
+  console.error(`
+╔════════════════════════════════════════════════════════════════════╗
+║  🛑 BUILD DA VERCEL NÃO MIGRA BANCO                                ║
+╚════════════════════════════════════════════════════════════════════╝
+
+   Destino que seria atingido: ${host}
+   Ambiente Vercel: ${process.env.VERCEL_ENV ?? "desconhecido"}
+
+   Migration é passo de RELEASE, não de build. Um build de preview de
+   qualquer branch chega ao banco — foi assim que um DROP COLUMN entrou
+   em produção sem revisão em 20/08/2026.
+
+   Aplique por .github/workflows/release-migrations.yml, que exige
+   aprovação humana. Não existe variável para liberar aqui.
+`)
+  process.exit(1)
+}
+
 const ehLocal = /localhost|127\.0\.0\.1|prisma\+postgres/.test(url)
 const ehProducao = !ehLocal && PISTAS_PRODUCAO.some((p) => url.includes(p))
 
 if (!ehProducao) {
   console.log(`✅ Banco local (${host}) — pode seguir.`)
   process.exit(0)
+}
+
+// ── CI tocando produção: exige o marcador do workflow de release ─────────────
+//
+// PERMITIR_BANCO_PRODUCAO=sim é a liberação de quem está no teclado e sabe o
+// que vai rodar. Num runner não há ninguém no teclado, então ela sozinha não
+// basta: o workflow de release define também RELEASE_AUTORIZADO=sim, e ele é o
+// único que passa pelo gate de aprovação do GitHub Environment.
+if (process.env.GITHUB_ACTIONS && process.env.RELEASE_AUTORIZADO !== "sim") {
+  console.error(`
+╔════════════════════════════════════════════════════════════════════╗
+║  🛑 CI NÃO ESCREVE EM PRODUÇÃO SEM PASSAR PELO RELEASE             ║
+╚════════════════════════════════════════════════════════════════════╝
+
+   Destino: ${host}
+   Workflow: ${process.env.GITHUB_WORKFLOW ?? "?"}
+
+   Só o workflow de release define RELEASE_AUTORIZADO=sim, e ele fica
+   parado até alguém aprovar no GitHub Environment "producao".
+
+   Se este passo precisa mesmo escrever em produção, ele deveria estar
+   em .github/workflows/release-migrations.yml — não aqui.
+`)
+  process.exit(1)
 }
 
 if (process.env.PERMITIR_BANCO_PRODUCAO === "sim") {
