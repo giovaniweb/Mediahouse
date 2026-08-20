@@ -257,8 +257,23 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
     >
       {rascunhoRecuperado && <BannerRascunho aoDescartar={descartar} />}
 
-      {/* ── Bloco 1: o pedido ─────────────────────────────────────────── */}
+      {/* ── Bloco 1: o pedido ───────────────────────────────────────────
+          O título vem primeiro porque é o que a pessoa já sabe quando abre o
+          formulário — categorizar vem depois de nomear. A ordem do CÓDIGO é
+          também a ordem em que o grid empilha no celular, então o campo certo
+          fica no topo nas duas larguras sem precisar de `order-*`. */}
       <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
+
+        <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
+          <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
+            <input
+              value={titulo}
+              onChange={(e) => { setTitulo(e.target.value); limparCampo("titulo") }}
+              placeholder="Ex.: Carrossel Mounjaro — 5 mitos"
+              className={cn(inputClass, errors.titulo && erroClass)}
+            />
+          </Campo>
+        </Secao>
 
         <Secao icone={LayoutGrid} titulo="Tipo de demanda">
           <Campo label="Tipo" obrigatorio>
@@ -330,17 +345,6 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
               </div>
             </Campo>
           )}
-        </Secao>
-
-        <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
-          <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
-            <input
-              value={titulo}
-              onChange={(e) => { setTitulo(e.target.value); limparCampo("titulo") }}
-              placeholder="Ex.: Carrossel Mounjaro — 5 mitos"
-              className={cn(inputClass, errors.titulo && erroClass)}
-            />
-          </Campo>
         </Secao>
       </div>
 
