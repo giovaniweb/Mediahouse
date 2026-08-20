@@ -36,7 +36,6 @@
     "src/app/api/relatorios/route.ts",
     "src/app/api/transcode/callback/route.ts",
     "src/app/api/videomakers/[id]/avaliar/route.ts",
-    "src/app/api/videomakers/[id]/performance/route.ts",
     "src/lib/eventos-conclusao.ts",
     "src/lib/usuario-vinculos.ts"
   ]

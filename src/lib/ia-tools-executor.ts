@@ -154,7 +154,12 @@ async function buscarVideomakers(input: Record<string, unknown>, organizacaoId?:
       })
     : []
 
-  if (organizacaoId && vinculos.length === 0) {
+  // Sem organização não existe resposta certa: a alternativa era varrer a rede
+  // inteira e misturar profissional de outra empresa na resposta da IA. Todos os
+  // chamadores passam a org hoje, então o ramo era defensivo — e defensivo do
+  // jeito errado, porque o "seguro" dele vazava. Com ele sai também o último uso
+  // de `emListaNegra` do perfil global.
+  if (!organizacaoId || vinculos.length === 0) {
     return JSON.stringify({ total: 0, videomakers: [], nota: "Nenhum videomaker vinculado a esta empresa." })
   }
 
@@ -163,12 +168,7 @@ async function buscarVideomakers(input: Record<string, unknown>, organizacaoId?:
 
   // Perfil: só o que é da rede. Diária e status saem do vínculo, abaixo.
   const videomakers = await prisma.videomaker.findMany({
-    where: {
-      ...(organizacaoId ? { id: { in: idsDaEmpresa } } : {}),
-      ...(apenasAtivos && !organizacaoId
-        ? { status: { in: ["ativo", "preferencial"] }, emListaNegra: false }
-        : {}),
-    },
+    where: { id: { in: idsDaEmpresa } },
     select: {
       id: true,
       nome: true,

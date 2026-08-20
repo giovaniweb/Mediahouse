@@ -64,6 +64,13 @@ jobs:
       - name: Isolamento multiempresa (auditor estático)
         run: npm run auditar:tenancy
 
+      # O perfil global de videomaker é a tabela da REDE — sob RLS, legível por
+      # qualquer empresa. Diária, lista negra, CPF e PIX vivem nas tabelas por
+      # organização. Limpar uma vez não basta: a R4.1 limpou e 26 usos voltaram,
+      # porque nada impedia. Depois do DROP, cada um quebra em produção.
+      - name: Perfil global sem dado privado (auditor estático)
+        run: npm run auditar:perfil-global
+
       - name: Migrations aplicam num banco limpo
         run: npx prisma migrate deploy
 

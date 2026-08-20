@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
       videomakerId: true,
       editorId: true,
       linkFinal: true,
-      videomaker: { select: { id: true, nome: true, valorDiaria: true } },
+      videomaker: { select: { id: true, nome: true } },
       editor: { select: { id: true, nome: true, salario: true } },
     },
     orderBy: { updatedAt: "desc" },
@@ -140,8 +141,11 @@ export async function GET(req: NextRequest) {
     const vm = d.videomaker; if (!vm) return
     const ex = vmMap.get(vm.id)
     if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
-    else vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA, valorDiaria: vm.valorDiaria ?? null })
+    else vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA, valorDiaria: null })
   })
+  // Diária do vínculo desta empresa, em uma consulta só para todos os do mapa.
+  const diarias = await diariasDaEmpresa([...vmMap.keys()], organizacaoId)
+  for (const [id, v] of vmMap) v.valorDiaria = diarias.get(id) ?? null
   // Custo real pago a cada videomaker externo no período
   const custosVm = await prisma.custoVideomaker.groupBy({
     by: ["videomakerId"],

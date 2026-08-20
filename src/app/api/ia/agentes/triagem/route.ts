@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { analisarComClaude, MODELO_POTENTE, extrairJSON } from "@/lib/claude"
 import { requireDemandaOrg } from "@/lib/org"
 import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
+import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 
 export const maxDuration = 60
 
@@ -54,7 +55,6 @@ export async function POST(req: NextRequest) {
         id: true,
         nome: true,
         cidade: true,
-        valorDiaria: true,
         avaliacao: true,
         areasAtuacao: true,
         habilidades: true,
@@ -83,13 +83,16 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // A diária que a IA usa para recomendar é a que ESTA empresa paga, não a
+    // do perfil global da rede.
+    const diarias = await diariasDaEmpresa(videomakers.map(v => v.id), organizacaoId)
     const vmDisponivel = videomakers
       .filter(vm => vm.demandas.length < 3)
       .map(vm => ({
         id: vm.id,
         nome: vm.nome,
         cidade: vm.cidade,
-        valorDiaria: vm.valorDiaria,
+        valorDiaria: diarias.get(vm.id) ?? null,
         avaliacao: vm.avaliacao,
         habilidades: vm.habilidades,
         areas: vm.areasAtuacao,

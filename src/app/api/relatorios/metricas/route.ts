@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { getOrgId, semOrg } from "@/lib/org"
 
 const VALOR_POR_DEMANDA = 200
@@ -166,14 +167,17 @@ export async function GET(req: NextRequest) {
   const topVideomakersIds = custosPorVideomaker.map((c) => c.videomakerId)
   const topVideomakers = await prisma.videomaker.findMany({
     where: { id: { in: topVideomakersIds } },
-    select: { id: true, nome: true, valorDiaria: true },
+    select: { id: true, nome: true },
   })
   const vmMap = Object.fromEntries(topVideomakers.map((v) => [v.id, v]))
+  // Diária é do vínculo desta empresa — o relatório de uma não pode exibir o
+  // preço que a outra negociou com o mesmo profissional.
+  const diariasTop = await diariasDaEmpresa(topVideomakersIds, organizacaoId)
 
   const topVideomakersDetalhado = custosPorVideomaker.map((c) => ({
     id: c.videomakerId,
     nome: vmMap[c.videomakerId]?.nome ?? "Desconhecido",
-    valorDiaria: vmMap[c.videomakerId]?.valorDiaria ?? 0,
+    valorDiaria: diariasTop.get(c.videomakerId) ?? 0,
     totalGasto: c._sum.valor ?? 0,
     qtdServicos: c._count.id,
     mediaServico: c._sum.valor && c._count.id ? c._sum.valor / c._count.id : 0,
@@ -205,14 +209,15 @@ export async function GET(req: NextRequest) {
   const topVmIds = videomakersComDemandas.map((v) => v.videomakerId as string)
   const topVmInfo = await prisma.videomaker.findMany({
     where: { id: { in: topVmIds } },
-    select: { id: true, nome: true, avaliacao: true, valorDiaria: true },
+    select: { id: true, nome: true, avaliacao: true },
   })
   const topVmInfoMap = Object.fromEntries(topVmInfo.map((v) => [v.id, v]))
+  const diariasVm = await diariasDaEmpresa(topVmIds, organizacaoId)
   const videomakersTop = videomakersComDemandas.map((v) => ({
     id: v.videomakerId!,
     nome: topVmInfoMap[v.videomakerId!]?.nome ?? "Desconhecido",
     avaliacao: topVmInfoMap[v.videomakerId!]?.avaliacao ?? 0,
-    valorDiaria: topVmInfoMap[v.videomakerId!]?.valorDiaria ?? 0,
+    valorDiaria: diariasVm.get(v.videomakerId!) ?? 0,
     demandasMes: v._count.id,
   }))
 

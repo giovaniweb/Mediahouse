@@ -33,7 +33,7 @@ export async function GET(
               finalizadaEm: true,
               updatedAt: true,
               linkFinal: true,
-              videomaker: { select: { id: true, nome: true, valorDiaria: true } },
+              videomaker: { select: { id: true, nome: true } },
             },
           },
         },

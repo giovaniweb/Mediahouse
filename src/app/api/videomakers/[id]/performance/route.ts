@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
+import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
 
 export async function GET(
   _req: NextRequest,
@@ -9,17 +11,22 @@ export async function GET(
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const { id } = await params
 
-  const videomaker = await prisma.videomaker.findUnique({
+  // O perfil é da rede; a diária é do vínculo desta empresa.
+  const perfil = await prisma.videomaker.findUnique({
     where: { id },
-    select: { id: true, nome: true, valorDiaria: true },
+    select: { id: true, nome: true },
   })
-  if (!videomaker) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
+  if (!perfil) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
+  const videomaker = { ...perfil, valorDiaria: await diariaDaEmpresa(id, organizacaoId) }
 
   // All demands
   const demandas = await prisma.demanda.findMany({
-    where: { videomakerId: id },
+    where: { videomakerId: id, organizacaoId },
     select: {
       id: true,
       statusVisivel: true,
@@ -45,7 +52,7 @@ export async function GET(
 
   // Costs
   const custos = await prisma.custoVideomaker.aggregate({
-    where: { videomakerId: id },
+    where: { videomakerId: id, organizacaoId },
     _sum: { valor: true },
     _count: true,
   })
