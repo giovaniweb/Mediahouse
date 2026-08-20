@@ -64,11 +64,13 @@ jobs:
       - name: Isolamento multiempresa (auditor estático)
         run: npm run auditar:tenancy
 
-      # O perfil global de videomaker é a tabela da REDE — sob RLS, legível por
-      # qualquer empresa. Diária, lista negra, CPF e PIX vivem nas tabelas por
-      # organização. Limpar uma vez não basta: a R4.1 limpou e 26 usos voltaram,
-      # porque nada impedia. Depois do DROP, cada um quebra em produção.
-      - name: Perfil global sem dado privado (auditor estático)
+      # Videomaker, Editor e Designer são a REDE de profissionais — sob RLS, o
+      # perfil é legível por qualquer empresa. Salário, diária, lista negra, CPF
+      # e PIX vivem nas tabelas por organização. Limpar uma vez não basta: as
+      # colunas do Videomaker foram esvaziadas na R4.1 e 26 usos voltaram, porque
+      # nada impedia. Editor e Designer ainda não migraram: a dívida está em
+      # scripts/perfil-global-allowlist.json e SÓ PODE ENCOLHER.
+      - name: Perfis globais sem dado privado (auditor estático)
         run: npm run auditar:perfil-global
 
       - name: Migrations aplicam num banco limpo
