@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
 
 // GET /api/equipe-disponivel?papel=captacao|edicao
 // Lista unificada e deduplicada de pessoas atribuíveis a um papel.
@@ -43,9 +44,18 @@ export async function GET(req: NextRequest) {
   }
 
   if (papel === "captacao") {
-    // Fonte primária: Videomakers
+    // Fonte primária: Videomakers.
+    //
+    // O bloqueio é de QUEM CONSULTA, não da rede: antes o filtro era
+    // `emListaNegra` do perfil global, coluna com zero registros — bloquear
+    // alguém não o tirava desta lista. E se alguém marcasse ali, o profissional
+    // sumiria para todas as empresas de uma vez.
+    const bloqueados = await bloqueadosDaEmpresa(organizacaoId)
     const vms = await prisma.videomaker.findMany({
-      where: { status: { not: "inativo" }, emListaNegra: false },
+      where: {
+        status: { not: "inativo" },
+        ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
+      },
       select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true },
       orderBy: { nome: "asc" },
     })

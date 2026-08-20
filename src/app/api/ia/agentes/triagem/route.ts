@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, MODELO_POTENTE, extrairJSON } from "@/lib/claude"
+import { requireDemandaOrg } from "@/lib/org"
+import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
 
 export const maxDuration = 60
 
@@ -13,6 +15,13 @@ export async function POST(req: NextRequest) {
 
   const { demandaId } = await req.json()
   if (!demandaId) return NextResponse.json({ error: "demandaId obrigatório" }, { status: 400 })
+
+  // Resolve a organização E confere que a demanda é dela. A rota buscava a
+  // demanda por id sem checar dono, então bastava trocar o id para triar (e
+  // pagar a chamada de IA de) demanda de outra empresa.
+  const guard = await requireDemandaOrg(session, demandaId)
+  if (guard instanceof NextResponse) return guard
+  const { organizacaoId } = guard
 
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "triagem", status: "executando", criadoPor: session.user?.id },
@@ -29,9 +38,18 @@ export async function POST(req: NextRequest) {
     })
     if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-    // Busca videomakers disponíveis para matching
+    // Busca videomakers disponíveis para matching.
+    //
+    // O bloqueio é de QUEM CONSULTA: `emListaNegra` do perfil global tem zero
+    // registros e valeria para a rede inteira, então filtrar por ele não
+    // escondia ninguém — e esconderia de todas as empresas se alguém marcasse.
+    // A lista negra que vale é a do vínculo desta organização.
+    const bloqueados = await bloqueadosDaEmpresa(organizacaoId)
     const videomakers = await prisma.videomaker.findMany({
-      where: { status: { in: ["ativo", "preferencial"] }, emListaNegra: false },
+      where: {
+        status: { in: ["ativo", "preferencial"] },
+        ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
+      },
       select: {
         id: true,
         nome: true,
