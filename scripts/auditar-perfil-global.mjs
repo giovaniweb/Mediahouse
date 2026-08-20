@@ -80,11 +80,18 @@ function ocorrencias(caminho, textoOriginal) {
   const reDireta = /prisma\.videomaker\.(findMany|findUnique|findFirst|findUniqueOrThrow|findFirstOrThrow|create|update|upsert|updateMany|aggregate|groupBy)\s*\(/g
   for (const m of texto.matchAll(reDireta)) {
     const bloco = blocoBalanceado(texto, m.index + m[0].length - 1)
-    // `omit:` é a forma CORRETA de excluir as colunas — não conta como uso.
-    const semOmit = bloco.replace(/omit\s*:\s*\{[^}]*\}/g, "")
+    // `omit:` também conta. Ele parecia a forma correta de excluir a coluna —
+    // e era, enquanto ela existia. Depois do DROP, `omit` de coluna inexistente
+    // é erro de tipo. O tsc pegou 5 casos que este auditor tinha liberado, e um
+    // gate que diz "seguro" para código que quebra é pior que gate nenhum.
     for (const col of COLUNAS_PRIVADAS) {
-      if (new RegExp(`\\b${col}\\s*:`).test(semOmit)) {
-        achados.push({ linha: linhaDe(texto, m.index), col, forma: `prisma.videomaker.${m[1]}` })
+      if (new RegExp(`\\b${col}\\s*:`).test(bloco)) {
+        const emOmit = new RegExp(`omit\\s*:\\s*\\{[^}]*\\b${col}\\s*:`, "s").test(bloco)
+        achados.push({
+          linha: linhaDe(texto, m.index),
+          col,
+          forma: emOmit ? `omit em prisma.videomaker.${m[1]}` : `prisma.videomaker.${m[1]}`,
+        })
       }
     }
   }

@@ -13,25 +13,13 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get("status")
   const usuarioId = searchParams.get("usuarioId")
 
-  // `omit` em vez de devolver o registro inteiro: sem isto, a listagem entregava
-  // CPF/CNPJ, chave PIX, dados bancários e a lista negra de TODOS os
-  // profissionais da rede para qualquer usuário logado de qualquer empresa.
-  // Esses campos agora vivem em videomaker_dados_fiscais / videomaker_organizacao,
-  // por empresa, e são lidos só onde há vínculo.
+  // O `omit` que existia aqui virou desnecessário: as colunas sensíveis não
+  // moram mais no perfil global. Elas vivem em videomaker_dados_fiscais e
+  // videomaker_organizacao, por empresa, e são lidas só onde há vínculo.
   const videomakers = await prisma.videomaker.findMany({
     where: {
       ...(status ? { status: status as "ativo" | "inativo" | "preferencial" } : {}),
       ...(usuarioId ? { usuarioId } : {}),
-    },
-    omit: {
-      cpfCnpj: true,
-      chavePix: true,
-      dadosBancarios: true,
-      razaoSocial: true,
-      nomeFantasia: true,
-      representante: true,
-      endereco: true,
-      listaNegraMotivo: true,
     },
     include: {
       _count: { select: { demandas: true } },
