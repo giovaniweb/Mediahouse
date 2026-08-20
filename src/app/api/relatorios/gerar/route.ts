@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO, extrairJSON } from "@/lib/claude"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -44,19 +45,19 @@ export async function POST(req: NextRequest) {
           dataLimite: true,
           createdAt: true,
           updatedAt: true,
-          videomaker: { select: { id: true, nome: true, valorDiaria: true } },
+          videomaker: { select: { id: true, nome: true } },
           editor: { select: { id: true, nome: true } },
         },
       }),
       prisma.custoVideomaker.findMany({
         where: { organizacaoId, dataReferencia: { gte: dataInicio } },
-        include: { videomaker: { select: { id: true, nome: true, valorDiaria: true } } },
+        include: { videomaker: { select: { id: true, nome: true } } },
       }),
       // Videomaker é GLOBAL; mas as demandas aninhadas são escopadas à org do relatório.
       prisma.videomaker.findMany({
         where: { status: { in: ["ativo", "preferencial"] } },
         select: {
-          id: true, nome: true, valorDiaria: true, avaliacao: true, areasAtuacao: true,
+          id: true, nome: true, avaliacao: true, areasAtuacao: true,
           demandas: {
             where: { organizacaoId, createdAt: { gte: dataInicio } },
             select: { id: true, tipoVideo: true, statusInterno: true },
@@ -112,12 +113,16 @@ export async function POST(req: NextRequest) {
     const porStatus: Record<string, number> = {}
     demandas.forEach(d => { porStatus[d.statusInterno] = (porStatus[d.statusInterno] || 0) + 1 })
 
+    // Diária do vínculo desta empresa — o relatório de uma não exibe o preço
+    // que a outra negociou com o mesmo profissional.
+    const diariasVm = await diariasDaEmpresa(videomakers.map(v => v.id), organizacaoId)
+
     // Videomakers mais ativos
     const vmAtividade = videomakers
       .map(vm => ({
         nome: vm.nome,
         demandasPeriodo: vm.demandas.length,
-        valorDiaria: vm.valorDiaria ?? 0,
+        valorDiaria: diariasVm.get(vm.id) ?? 0,
         avaliacao: vm.avaliacao ?? 0,
         custoTotal: custos.filter(c => c.videomakerId === vm.id).reduce((s, c) => s + c.valor, 0),
       }))
@@ -193,7 +198,7 @@ RETORNE JSON com esta estrutura exata:
         const totalVm = custosVm.reduce((s, c) => s + c.valor, 0)
         return {
           nome: vm.nome,
-          valorDiaria: vm.valorDiaria ?? 0,
+          valorDiaria: diariasVm.get(vm.id) ?? 0,
           avaliacao: vm.avaliacao ?? 0,
           demandasPeriodo: vm.demandas.length,
           demandasConcluidas: vm.demandas.filter(d =>

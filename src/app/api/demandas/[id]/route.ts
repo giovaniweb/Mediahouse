@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
@@ -193,9 +194,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
         if (!jaExiste) {
           const demandaFull = await prisma.demanda.findUnique({
             where: { id },
-            select: { codigo: true, titulo: true, videomaker: { select: { valorDiaria: true } } },
+            select: { codigo: true, titulo: true },
           })
-          const valor = demandaFull?.videomaker?.valorDiaria ?? 0
+          // Terceiro lugar do sistema que cria custo, e o terceiro que lia a
+          // diária do perfil global. Ela é do vínculo desta empresa; sem valor
+          // combinado o custo entra zerado, mas avisando em vez de calado.
+          const valor = await diariaDaEmpresa(demandaAtual.videomakerId, guard.organizacaoId)
+          if (valor === null) {
+            console.warn(
+              `[Demanda] ${demandaFull?.codigo}: sem diária no vínculo do VM ${demandaAtual.videomakerId} ` +
+                `com a org ${guard.organizacaoId} — custo criado zerado, precisa de valor manual.`
+            )
+          }
 
           await prisma.custoVideomaker.create({
             data: {
@@ -203,7 +213,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
               videomakerId: demandaAtual.videomakerId,
               demandaId: id,
               tipo: "projeto",
-              valor,
+              valor: valor ?? 0,
               descricao: `Serviço: ${demandaFull?.codigo} — ${demandaFull?.titulo}`,
               dataReferencia: new Date(),
               pago: false,

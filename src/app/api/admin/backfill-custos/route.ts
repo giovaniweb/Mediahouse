@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
 
 // POST /api/admin/backfill-custos
 // Cria CustoVideomaker retroativamente para demandas finalizadas sem custo vinculado.
@@ -26,7 +27,6 @@ export async function POST(req: NextRequest) {
       codigo: true,
       titulo: true,
       videomakerId: true,
-      videomaker: { select: { valorDiaria: true } },
       finalizadaEm: true,
       updatedAt: true,
     },
@@ -50,7 +50,17 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      const valor = demanda.videomaker?.valorDiaria ?? 0
+      // Quarto lugar que cria custo, mesma regra dos outros três: a diária é
+      // do vínculo desta empresa. Sem valor combinado o backfill NÃO inventa
+      // zero — pula e diz por quê, porque é exatamente esse zero silencioso que
+      // encheu a base de custos R$ 0.
+      const diaria = await diariaDaEmpresa(demanda.videomakerId!, organizacaoId)
+      if (diaria === null) {
+        pulados++
+        detalhes.push({ codigo: demanda.codigo, status: "pulado", detalhe: "Sem diária no vínculo — precisa de valor manual" })
+        continue
+      }
+      const valor = diaria
       const dataRef = demanda.finalizadaEm ?? demanda.updatedAt
 
       await prisma.custoVideomaker.create({

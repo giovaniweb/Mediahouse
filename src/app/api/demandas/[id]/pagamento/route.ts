@@ -7,6 +7,7 @@ import { requireDemandaOrg } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
+import { diariaDaEmpresa, fiscaisDaEmpresa } from "@/lib/videomaker-vinculo"
 
 // Validação de chave PIX
 function validarChavePix(chave: string): boolean {
@@ -27,10 +28,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
 
+  const { organizacaoId } = guard
+
   const custo = await prisma.custoVideomaker.findFirst({
     where: { demandaId: id },
     orderBy: { createdAt: "desc" },
-    include: { videomaker: { select: { id: true, nome: true, chavePix: true, email: true, valorDiaria: true } } },
+    include: { videomaker: { select: { id: true, nome: true, email: true } } },
   })
 
   const demanda = await prisma.demanda.findUnique({
@@ -38,7 +41,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     select: { id: true, codigo: true, titulo: true, statusInterno: true, videomakerId: true },
   })
 
-  return NextResponse.json({ custo, demanda })
+  // PIX e diária vêm das tabelas por empresa, não do perfil global da rede. A
+  // forma da resposta é mantida (`custo.videomaker.chavePix`) para as telas que
+  // já a consomem não precisarem mudar junto.
+  const fiscais = custo ? await fiscaisDaEmpresa(custo.videomakerId, organizacaoId) : null
+  const diaria = custo ? await diariaDaEmpresa(custo.videomakerId, organizacaoId) : null
+
+  return NextResponse.json({
+    custo: custo && {
+      ...custo,
+      videomaker: { ...custo.videomaker, chavePix: fiscais?.chavePix ?? null, valorDiaria: diaria },
+    },
+    demanda,
+  })
 }
 
 // POST /api/demandas/[id]/pagamento
@@ -55,7 +70,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
-    select: { id: true, codigo: true, titulo: true, statusInterno: true, videomakerId: true, videomaker: true },
+    select: {
+      id: true, codigo: true, titulo: true, statusInterno: true, videomakerId: true,
+      // Antes era `videomaker: true` — a linha global inteira, com diária e PIX
+      // de outra empresa junto. Só o que é da rede e o que esta rota usa.
+      videomaker: { select: { id: true, nome: true, telefone: true, email: true } },
+    },
   })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
@@ -80,15 +100,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { notaFiscalUrl, statusPagamento: "nf_enviada" },
       })
     } else {
-      // Criar custo automaticamente com valor da diária do videomaker
-      const vm = demanda.videomaker
+      // Diária vem do vínculo desta empresa — mesma regra do custo criado ao
+      // finalizar a demanda. Sem valor combinado, entra zerado mas avisando.
+      const diaria = await diariaDaEmpresa(demanda.videomakerId!, organizacaoId)
+      if (diaria === null) {
+        console.warn(
+          `[Pagamento] ${demanda.codigo}: sem diária no vínculo do VM ${demanda.videomakerId} ` +
+            `com a org ${organizacaoId} — custo criado zerado, precisa de valor manual.`
+        )
+      }
       custo = await prisma.custoVideomaker.create({
         data: {
           organizacaoId,
           videomakerId: demanda.videomakerId!,
           demandaId: id,
           tipo: "diaria",
-          valor: vm?.valorDiaria ?? 0,
+          valor: diaria ?? 0,
           dataReferencia: new Date(),
           notaFiscalUrl,
           statusPagamento: "nf_enviada",
@@ -145,9 +172,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const custo = await prisma.custoVideomaker.findFirst({
       where: { demandaId: id, statusPagamento: "nf_enviada" },
-      include: { videomaker: true, demanda: { select: { codigo: true, titulo: true } } },
+      include: {
+        videomaker: { select: { id: true, nome: true } },
+        demanda: { select: { codigo: true, titulo: true } },
+      },
     })
     if (!custo) return NextResponse.json({ error: "Nenhum custo com NF pendente encontrado" }, { status: 404 })
+
+    // CPF e PIX dos fiscais desta empresa, decifrados — mesma regra da rota
+    // custos-videomaker/[id]/aprovar, que faz exatamente este fluxo.
+    const fiscais = await fiscaisDaEmpresa(custo.videomakerId, organizacaoId)
+    if (!fiscais?.chavePix) {
+      return NextResponse.json(
+        { error: `Sem chave PIX cadastrada para ${custo.videomaker.nome} nesta empresa. Cadastre antes de aprovar.` },
+        { status: 422 }
+      )
+    }
 
     await prisma.custoVideomaker.update({
       where: { id: custo.id },
@@ -157,9 +197,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Enviar e-mail ao financeiro
     const emailResult = await sendEmailFinanceiro({
       nomeVideomaker: custo.videomaker.nome,
-      cpfCnpj: custo.videomaker.cpfCnpj,
+      cpfCnpj: fiscais.cpfCnpj ?? undefined,
       valorDiaria: custo.valor,
-      chavePix: custo.videomaker.chavePix ?? "",
+      chavePix: fiscais.chavePix,
       notaFiscalUrl: custo.notaFiscalUrl,
       codigoDemanda: custo.demanda?.codigo ?? demanda.codigo,
       tituloDemanda: custo.demanda?.titulo ?? demanda.titulo,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { diariasDaEmpresa, fiscaisDaEmpresaEmLote } from "@/lib/videomaker-vinculo"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
       ...(ate && { dataReferencia: { lte: new Date(ate) } }),
     },
     include: {
-      videomaker: { select: { id: true, nome: true, cidade: true, valorDiaria: true } },
+      videomaker: { select: { id: true, nome: true, cidade: true } },
       demanda: { select: { id: true, codigo: true, titulo: true, tipoVideo: true } },
     },
     orderBy: { dataReferencia: "desc" },
@@ -52,8 +53,29 @@ export async function GET(req: NextRequest) {
     porVideomaker[vid.id].count += 1
   }
 
+  // Diária e fiscais vêm das tabelas por empresa, em UMA consulta cada — a lista
+  // tem dezenas de linhas e uma consulta por linha viraria N+1 justamente na tela
+  // mais pesada. A forma do JSON é preservada (`custo.videomaker.chavePix`,
+  // `.cpfCnpj`, `.valorDiaria`) para Custos e Aprovações não mudarem junto.
+  const ids = custos.map((c) => c.videomakerId)
+  const [diarias, fiscais] = await Promise.all([
+    diariasDaEmpresa(ids, organizacaoId),
+    fiscaisDaEmpresaEmLote(ids, organizacaoId),
+  ])
+
   return NextResponse.json({
-    custos,
+    custos: custos.map((c) => {
+      const f = fiscais.get(c.videomakerId)
+      return {
+        ...c,
+        videomaker: {
+          ...c.videomaker,
+          valorDiaria: diarias.get(c.videomakerId) ?? null,
+          cpfCnpj: f?.cpfCnpj ?? null,
+          chavePix: f?.chavePix ?? null,
+        },
+      }
+    }),
     resumo: { totalGasto, totalPago, totalPendente },
     porVideomaker: Object.entries(porVideomaker)
       .map(([id, data]) => ({ id, ...data }))

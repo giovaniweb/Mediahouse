@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "auditar:tenancy": "node scripts/auditar-tenancy.mjs",
+    "auditar:perfil-global": "node scripts/auditar-perfil-global.mjs",
     "db:migrate": "node scripts/guarda-banco.mjs && prisma migrate dev",
     "db:deploy": "node scripts/guarda-banco.mjs && prisma migrate deploy",
     "db:status": "prisma migrate status",
