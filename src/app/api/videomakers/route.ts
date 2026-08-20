@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId } from "@/lib/org"
+import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
+  // O perfil global só recebe o que é público (a rede inteira enxerga). Diária,
+  // observação, CPF e banco são da empresa que cadastrou e vão para o vínculo.
   const videomaker = await prisma.videomaker.create({
     data: {
       nome: body.nome,
@@ -57,16 +60,26 @@ export async function POST(req: NextRequest) {
       estado: body.estado,
       telefone: body.telefone,
       email: body.email,
-      cpfCnpj: body.cpfCnpj,
-      valorDiaria: body.valorDiaria ? parseFloat(body.valorDiaria) : undefined,
-      dadosBancarios: body.dadosBancarios,
       status: body.status ?? "ativo",
-      observacoes: body.observacoes,
       areasAtuacao: body.areasAtuacao ?? [],
       portfolio: body.portfolio,
       podeEditar: body.podeEditar ?? false,
+      ...(body.tipoContrato ? { tipoContrato: body.tipoContrato } : {}),
       ...(body.usuarioId ? { usuarioId: body.usuarioId } : {}),
     },
+  })
+
+  await gravarDadosPrivadosVideomaker({
+    videomakerId: videomaker.id,
+    organizacaoId,
+    tipoContrato: body.tipoContrato,
+    comercial: {
+      valorDiaria: body.valorDiaria ? parseFloat(body.valorDiaria) : undefined,
+      observacoes: body.observacoes,
+      status: body.status ?? "ativo",
+      podeEditar: body.podeEditar ?? false,
+    },
+    fiscal: { cpfCnpj: body.cpfCnpj, dadosBancarios: body.dadosBancarios },
   })
 
   // Se usuarioId já foi fornecido, o usuário já existe — apenas vincula o Videomaker ao usuário

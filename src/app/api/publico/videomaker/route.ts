@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { contourlineOrgId } from "@/lib/whatsapp"
+import { orgPublica } from "@/lib/org"
+import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { z } from "zod"
 
 // Rota pública — não requer autenticação
@@ -33,45 +34,66 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Verifica se já tem cadastro com mesmo e-mail ou CNPJ
-  const existente = await prisma.videomaker.findFirst({
-    where: { OR: [{ email: data.email }, { cpfCnpj: data.cpfCnpj }] },
-  })
+  // Duplicidade: e-mail vive no perfil global; CPF/CNPJ mora nos dados fiscais
+  // por empresa desde que o perfil global parou de guardar dado privado.
+  const [porEmail, porDocumento] = await Promise.all([
+    data.email ? prisma.videomaker.findFirst({ where: { email: data.email }, select: { id: true } }) : null,
+    data.cpfCnpj
+      ? prisma.videomakerDadosFiscais.findFirst({ where: { cpfCnpj: data.cpfCnpj }, select: { id: true } })
+      : null,
+  ])
 
-  if (existente) {
+  if (porEmail || porDocumento) {
     return NextResponse.json({ error: "Já existe um cadastro com este e-mail ou CNPJ/CPF." }, { status: 409 })
   }
 
+  // A organização que vai receber e aprovar este cadastro. Vem do `?org=` do
+  // formulário; sem ele, `orgPublica` cai na Contourline (legado). É a MESMA org
+  // que recebe o alerta logo abaixo — antes o alerta tinha dono e o dado não.
+  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+
+  // Só o que é público entra no perfil global — ele é a rede compartilhada e vai
+  // ser legível por qualquer empresa sob RLS. CPF, endereço, PIX e diária são
+  // dados de quem contrata: vão para o vínculo, com PIX cifrado.
   const videomaker = await prisma.videomaker.create({
     data: {
       nome: data.nome,
-      cpfCnpj: data.cpfCnpj,
-      razaoSocial: data.razaoSocial,
-      nomeFantasia: data.nomeFantasia,
-      representante: data.representante,
       email: data.email,
       telefone: data.telefone,
       cidade: data.cidade,
       estado: data.estado,
-      endereco: data.endereco,
-      chavePix: data.chavePix,
-      valorDiaria: data.valorDiaria,
       redesSociais: data.redesSociais,
       portfolio: data.portfolio || null,
       areasAtuacao: data.areasAtuacao,
-      observacoes: data.observacoes,
       status: "pendente", // Aguarda aprovação interna
     },
     select: { id: true, nome: true, email: true },
   })
 
-  // Cria alerta interno para a equipe revisar.
-  // Videomaker é GLOBAL; o cadastro público não tem org. FALLBACK LEGADO (Fase 1):
-  // o alerta de aprovação vai para a Contourline, que gerencia a rede de videomakers.
-  const orgAlerta = await contourlineOrgId()
+  const gravou = await gravarDadosPrivadosVideomaker({
+    videomakerId: videomaker.id,
+    organizacaoId,
+    comercial: { valorDiaria: data.valorDiaria, observacoes: data.observacoes, status: "pendente" },
+    fiscal: {
+      cpfCnpj: data.cpfCnpj,
+      razaoSocial: data.razaoSocial,
+      nomeFantasia: data.nomeFantasia,
+      representante: data.representante,
+      endereco: data.endereco,
+      chavePix: data.chavePix,
+    },
+  })
+  if (!gravou) {
+    console.error("[publico/videomaker] Cadastro sem organização — dado fiscal perdido:", videomaker.id)
+  }
+
+  // Alerta para a equipe revisar — vai para a MESMA organização que ficou com o
+  // vínculo e os dados fiscais. Antes o alerta resolvia a org por um caminho
+  // (Contourline fixa) e o dado por outro (nenhum), então quem era avisado não
+  // era necessariamente quem tinha o cadastro.
   await prisma.alertaIA.create({
     data: {
-      ...(orgAlerta ? { organizacaoId: orgAlerta } : {}),
+      ...(organizacaoId ? { organizacaoId } : {}),
       tipoAlerta: "novo_videomaker_pendente",
       mensagem: `Novo videomaker cadastrado: ${data.nome} — aguarda análise e aprovação.`,
       severidade: "info",
