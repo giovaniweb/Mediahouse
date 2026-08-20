@@ -319,6 +319,106 @@ model VideomakerDadosFiscais {
   @@map("videomaker_dados_fiscais")
 }
 
+// ─── Editor / Designer: mesmas 3 camadas do Videomaker ───────────────────────
+//
+// Perfil (`editores`, `designers`) é da REDE: nome, habilidades, portfólio,
+// avaliação, `fazCaptacao` — o que qualquer empresa pode ver sob RLS.
+// Vínculo é da EMPRESA: quanto ela paga, quanta carga aloca, se bloqueou.
+// Fiscais é da EMPRESA e cifrado nos campos de pagamento.
+//
+// Enquanto a migração da Fase B não termina, `editores.organizacaoId` continua
+// existindo e é a ORIGEM do backfill. Ele só é apagado no passo final.
+
+model EditorOrganizacao {
+  id               String        @id @default(cuid())
+  organizacaoId    String
+  editorId         String
+  status           StatusUsuario @default(ativo)
+  salario          Float?
+  valorDiaria      Float?
+  // Capacidade é o quanto ESTA empresa aloca para a pessoa, não um traço dela.
+  cargaLimite      Int           @default(5)
+  observacoes      String?
+  emListaNegra     Boolean       @default(false)
+  listaNegraMotivo String?
+  tipoContrato     String        @default("interno")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  editor      Editor      @relation(fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, editorId])
+  @@index([editorId])
+  @@map("editor_organizacao")
+}
+
+model EditorDadosFiscais {
+  id             String   @id @default(cuid())
+  organizacaoId  String
+  editorId       String
+  cpfCnpj        String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  representante  String?
+  endereco       String?
+  dadosBancarios String? // cifrado
+  chavePix       String? // cifrado
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  editor      Editor      @relation(fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, editorId])
+  @@index([editorId])
+  @@map("editor_dados_fiscais")
+}
+
+model DesignerOrganizacao {
+  id               String        @id @default(cuid())
+  organizacaoId    String
+  designerId       String
+  status           StatusUsuario @default(ativo)
+  salario          Float?
+  valorDiaria      Float?
+  observacoes      String?
+  emListaNegra     Boolean       @default(false)
+  listaNegraMotivo String?
+  tipoContrato     String        @default("externo")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  designer    Designer    @relation(fields: [designerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, designerId])
+  @@index([designerId])
+  @@map("designer_organizacao")
+}
+
+model DesignerDadosFiscais {
+  id             String   @id @default(cuid())
+  organizacaoId  String
+  designerId     String
+  cpfCnpj        String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  representante  String?
+  endereco       String?
+  dadosBancarios String? // cifrado
+  chavePix       String? // cifrado
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  designer    Designer    @relation(fields: [designerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, designerId])
+  @@index([designerId])
+  @@map("designer_dados_fiscais")
+}
+
 model Editor {
   organizacaoId    String?
   id               String        @id @default(cuid())
@@ -356,6 +456,9 @@ model Editor {
 
   usuarioId String?  @unique // link para Usuario (portal login)
   usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  vinculos EditorOrganizacao[]
+  fiscais  EditorDadosFiscais[]
 
   demandas        Demanda[]
   avaliacoes      AvaliacaoEditor[]
@@ -400,6 +503,9 @@ model Designer {
 
   usuarioId String?  @unique // link para Usuario (portal login)
   usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  vinculos DesignerOrganizacao[]
+  fiscais  DesignerDadosFiscais[]
 
   demandas Demanda[]
 
@@ -1924,6 +2030,10 @@ model Organizacao {
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
   videomakerVinculos VideomakerOrganizacao[]
+  editorVinculos     EditorOrganizacao[]
+  editorFiscais      EditorDadosFiscais[]
+  designerVinculos   DesignerOrganizacao[]
+  designerFiscais    DesignerDadosFiscais[]
   permissoes         PermissaoUsuario[]
   videomakerFiscais  VideomakerDadosFiscais[]
 
