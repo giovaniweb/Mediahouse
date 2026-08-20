@@ -8,6 +8,7 @@ import { requireDemandaOrg } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
+import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -254,17 +255,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
           })
           if (!jaExiste) {
-            const vm = await prisma.videomaker.findUnique({
-              where: { id: demandaAtual.videomakerId! },
-              select: { valorDiaria: true },
-            })
+            // A diária vem do vínculo DESTA empresa, nunca do perfil global — o
+            // global é da rede inteira e não vale para dinheiro. Sem vínculo ou
+            // sem valor combinado, o custo entra zerado para aparecer na tela de
+            // pagamento e alguém preencher; o aviso abaixo é o que impede isso
+            // de passar em silêncio, como passava antes.
+            const diaria = await diariaDaEmpresa(demandaAtual.videomakerId!, organizacaoId)
+            if (diaria === null) {
+              console.warn(
+                `[Status] ${demandaAtual.codigo}: sem diária no vínculo do VM ${demandaAtual.videomakerId} ` +
+                  `com a org ${organizacaoId} — custo lançado zerado, precisa de valor manual.`
+              )
+            }
             await prisma.custoVideomaker.create({
               data: {
                 organizacaoId,
                 videomakerId: demandaAtual.videomakerId!,
                 demandaId: id,
                 tipo: "projeto",
-                valor: vm?.valorDiaria ?? 0,
+                valor: diaria ?? 0,
                 descricao: `Serviço: ${demandaAtual.codigo} — ${demandaAtual.titulo}`,
                 dataReferencia: new Date(),
                 pago: false,
