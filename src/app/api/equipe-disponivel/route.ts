@@ -71,7 +71,12 @@ export async function GET(req: NextRequest) {
     }
     // Editores que captam
     const eds = await prisma.editor.findMany({
-      where: { organizacaoId, fazCaptacao: true, status: "ativo" },
+      // `fazCaptacao` é do perfil (habilidade da pessoa); status e bloqueio são
+      // do vínculo. Mesmo tratamento que o videomaker já recebe nesta tela.
+      where: {
+        fazCaptacao: true,
+        vinculos: { some: { organizacaoId, status: "ativo", emListaNegra: false } },
+      },
       select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true },
       orderBy: { nome: "asc" },
     })
@@ -88,7 +93,7 @@ export async function GET(req: NextRequest) {
   } else {
     // Fonte primária: Editores
     const eds = await prisma.editor.findMany({
-      where: { organizacaoId, status: "ativo" },
+      where: { vinculos: { some: { organizacaoId, status: "ativo", emListaNegra: false } } },
       select: { id: true, nome: true, especialidade: true, tipoContrato: true, usuarioId: true },
       orderBy: { nome: "asc" },
     })
