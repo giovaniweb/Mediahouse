@@ -659,7 +659,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
     // Editor interno é privado da organização
     prisma.editor.findFirst({
       where: {
-        organizacaoId: orgId,
+        vinculos: { some: { organizacaoId: orgId } },
         OR: [
           { telefone: { contains: tel8 } },
           { whatsapp: { contains: tel8 } },

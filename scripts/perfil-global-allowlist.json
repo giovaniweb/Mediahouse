@@ -7,17 +7,5 @@
     "regra 'escopo'   = filtra o perfil por organizacaoId; a coluna vai sumir."
   ],
   "_gerado_em": "2026-08-21",
-  "permitidas": {
-    "src/app/api/dashboard/metrics/route.ts::editor::escopo": 1,
-    "src/app/api/demandas/[id]/route.ts::editor::escopo": 1,
-    "src/app/api/demandas/route.ts::designer::escopo": 1,
-    "src/app/api/equipe-disponivel/route.ts::editor::escopo": 2,
-    "src/app/api/producao/route.ts::editor::privadas": 1,
-    "src/app/api/usuarios/route.ts::editor::escopo": 1,
-    "src/app/api/whatsapp/webhook/route.ts::editor::escopo": 1,
-    "src/lib/equipe-resolver.ts::editor::escopo": 1,
-    "src/lib/escopo-demanda.ts::designer::escopo": 1,
-    "src/lib/escopo-demanda.ts::editor::escopo": 1,
-    "src/lib/historico.ts::editor::escopo": 1
-  }
+  "permitidas": {}
 }

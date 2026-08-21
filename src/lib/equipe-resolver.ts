@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
 
 // Token opaco para identificar a origem de uma pessoa atribuível:
 //   "vm:<id>"   → registro Videomaker
@@ -79,26 +80,42 @@ async function findOrCreateEditor(opts: {
   tipoContrato: string
   organizacaoId?: string | null
 }): Promise<string> {
+  // O perfil é da REDE, o vínculo é da empresa. Os três caminhos abaixo podem
+  // devolver um perfil que existe — mas devolver um id que a empresa não enxerga
+  // deixaria a demanda apontando para alguém invisível na tela dela. Por isso
+  // todo caminho termina garantindo o vínculo, e não só encontrando o perfil.
+  const garantirVinculo = async (editorId: string) => {
+    await gravarDadosPrivadosEditor({
+      editorId,
+      organizacaoId: opts.organizacaoId,
+      tipoContrato: opts.tipoContrato,
+      comercial: { status: "ativo" },
+    })
+    return editorId
+  }
+
   if (opts.usuarioId) {
+    // Busca global de propósito: `usuarioId` é único na tabela inteira, então
+    // filtrar por empresa aqui criaria um perfil duplicado para a mesma pessoa.
     const existente = await prisma.editor.findUnique({
       where: { usuarioId: opts.usuarioId },
       select: { id: true },
     })
-    if (existente) return existente.id
+    if (existente) return garantirVinculo(existente.id)
   }
-  // Reaproveita espelho por nome apenas dentro da mesma organização
+  // Reaproveita espelho por nome apenas entre quem já tem vínculo com a empresa:
+  // casar por nome na rede inteira juntaria homônimos de clientes diferentes.
   const porNome = await prisma.editor.findFirst({
     where: {
       nome: { equals: opts.nome, mode: "insensitive" },
-      ...(opts.organizacaoId ? { organizacaoId: opts.organizacaoId } : {}),
+      ...(opts.organizacaoId ? { vinculos: { some: { organizacaoId: opts.organizacaoId } } } : {}),
     },
     select: { id: true },
   })
-  if (porNome) return porNome.id
+  if (porNome) return garantirVinculo(porNome.id)
   try {
     const novo = await prisma.editor.create({
       data: {
-        organizacaoId: opts.organizacaoId ?? undefined,
         nome: opts.nome,
         usuarioId: opts.usuarioId ?? undefined,
         telefone: opts.telefone ?? undefined,
@@ -110,14 +127,14 @@ async function findOrCreateEditor(opts: {
       },
       select: { id: true },
     })
-    return novo.id
+    return garantirVinculo(novo.id)
   } catch {
     if (opts.usuarioId) {
       const conflito = await prisma.editor.findUnique({
         where: { usuarioId: opts.usuarioId },
         select: { id: true },
       })
-      if (conflito) return conflito.id
+      if (conflito) return garantirVinculo(conflito.id)
     }
     throw new Error("Não foi possível criar/vincular o editor")
   }

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
+import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
       editorId: true,
       linkFinal: true,
       videomaker: { select: { id: true, nome: true } },
-      editor: { select: { id: true, nome: true, salario: true } },
+      editor: { select: { id: true, nome: true } },
     },
     orderBy: { updatedAt: "desc" },
   })
@@ -122,8 +123,12 @@ export async function GET(req: NextRequest) {
     const ed = d.editor; if (!ed) return
     const ex = editorMap.get(ed.id)
     if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
-    else editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA, salario: ed.salario ?? null })
+    else editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA, salario: null })
   })
+  // Salário do vínculo desta empresa, numa consulta só. O relatório de uma
+  // empresa não pode exibir o que a outra paga pela mesma pessoa.
+  const vincEd = await vinculosDaEmpresa([...editorMap.keys()], organizacaoId)
+  for (const [id, e] of editorMap) e.salario = vincEd.get(id)?.salario ?? null
   const maxEdDemandas = Math.max(...Array.from(editorMap.values()).map(e => e.demandas), 1)
   const porEditor = Array.from(editorMap.values())
     .map(e => ({
