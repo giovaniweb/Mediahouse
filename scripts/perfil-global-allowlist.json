@@ -6,16 +6,11 @@
     "regra 'privadas' = usa coluna que vira do vínculo.",
     "regra 'escopo'   = filtra o perfil por organizacaoId; a coluna vai sumir."
   ],
-  "_gerado_em": "2026-08-20",
+  "_gerado_em": "2026-08-21",
   "permitidas": {
     "src/app/api/dashboard/metrics/route.ts::editor::escopo": 1,
     "src/app/api/demandas/[id]/route.ts::editor::escopo": 1,
     "src/app/api/demandas/route.ts::designer::escopo": 1,
-    "src/app/api/editores/[id]/performance/route.ts::editor::privadas": 1,
-    "src/app/api/editores/[id]/route.ts::editor::escopo": 1,
-    "src/app/api/editores/[id]/route.ts::editor::privadas": 10,
-    "src/app/api/editores/route.ts::editor::escopo": 1,
-    "src/app/api/editores/route.ts::editor::privadas": 10,
     "src/app/api/equipe-disponivel/route.ts::editor::escopo": 2,
     "src/app/api/producao/route.ts::editor::privadas": 1,
     "src/app/api/usuarios/route.ts::editor::escopo": 1,
