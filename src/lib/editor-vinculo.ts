@@ -69,6 +69,20 @@ export async function editoresDaEmpresa(
   return vinculos.map((v) => v.editorId)
 }
 
+/**
+ * Vínculo completo de UM editor com esta empresa. Devolve `null` quando não há
+ * vínculo — que é também a resposta para "esta empresa não enxerga essa pessoa".
+ */
+export async function vinculoDaEmpresa(editorId: string, organizacaoId: string) {
+  return prisma.editorOrganizacao.findUnique({
+    where: { organizacaoId_editorId: { organizacaoId, editorId } },
+    select: {
+      salario: true, valorDiaria: true, cargaLimite: true, status: true,
+      observacoes: true, emListaNegra: true, listaNegraMotivo: true, tipoContrato: true,
+    },
+  })
+}
+
 /** Vínculos completos, em lote — evita N+1 nas listas de equipe e produção. */
 export async function vinculosDaEmpresa(editorIds: string[], organizacaoId: string) {
   if (editorIds.length === 0) return new Map<string, { salario: number | null; cargaLimite: number; status: string; emListaNegra: boolean }>()
