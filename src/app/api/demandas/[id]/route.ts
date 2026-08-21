@@ -544,7 +544,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
   if (body.editorId) {
     const editor = await prisma.editor.findFirst({
-      where: { id: body.editorId, organizacaoId: guard.organizacaoId },
+      where: { id: body.editorId, vinculos: { some: { organizacaoId: guard.organizacaoId } } },
       select: { id: true },
     })
     if (!editor) return NextResponse.json({ error: "Editor inválido para esta organização" }, { status: 400 })

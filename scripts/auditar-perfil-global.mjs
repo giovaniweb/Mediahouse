@@ -99,7 +99,7 @@ function blocoBalanceado(texto, inicio) {
  * migrado e tem que marcar zero. Gate que aponta falso é gate ignorado.
  */
 function usaColunaDireta(bloco, coluna) {
-  for (const chave of ["where", "data", "create", "update"]) {
+  for (const chave of ["where", "data", "create", "update", "select", "omit"]) {
     const m = new RegExp(`\\b${chave}\\s*:\\s*\\{`).exec(bloco)
     if (!m) continue
     const obj = blocoBalanceado(bloco, m.index + m[0].length - 1)
@@ -136,11 +136,16 @@ function ocorrencias(rel, bruto) {
       const linha = linhaDe(texto, m.index)
 
       for (const col of cfg.privadas) {
-        if (new RegExp(`\\b${col}\\s*:`).test(bloco)) {
-          // `omit:` também conta. Ele parecia a forma correta de excluir a
-          // coluna — e era, enquanto ela existia. Depois do DROP, `omit` de
-          // coluna inexistente é erro de tipo. O tsc pegou 5 casos que uma
-          // versão anterior deste auditor tinha liberado dizendo "seguro".
+        // Mesma consciência de profundidade da regra de escopo, e pelo mesmo
+        // motivo: `vinculos: { some: { emListaNegra: false } }` é campo do
+        // VÍNCULO — é justamente o padrão certo — enquanto
+        // `select: { salario: true }` é a coluna do perfil que vai sumir.
+        // Sem isto o auditor acusa a própria correção que pede.
+        if (usaColunaDireta(bloco, col)) {
+          // `omit:` também conta. Parecia a forma correta de excluir a coluna —
+          // e era, enquanto ela existia. Depois do DROP, `omit` de coluna
+          // inexistente é erro de tipo; o tsc pegou 5 casos que uma versão
+          // anterior deste auditor tinha liberado dizendo "seguro".
           const emOmit = new RegExp(`omit\\s*:\\s*\\{[^}]*\\b${col}\\s*:`, "s").test(bloco)
           achados.push({ rel, modelo, regra: "privadas", linha, col,
             forma: `${emOmit ? "omit em " : ""}prisma.${modelo}.${m[1]}` })

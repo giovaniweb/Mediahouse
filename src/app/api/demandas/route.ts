@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
     const primeiro = membros.find((m) => m.id === responsavelId)
     if (primeiro?.tipo === "designer" && !designerIdResolvido) {
       const designer = await prisma.designer.findFirst({
-        where: { usuarioId: primeiro.id, organizacaoId },
+        where: { usuarioId: primeiro.id, vinculos: { some: { organizacaoId } } },
         select: { id: true },
       })
       if (designer) designerIdResolvido = designer.id
