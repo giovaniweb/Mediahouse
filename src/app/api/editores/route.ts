@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
     const v = vinculos.get(e.id)
     return {
       ...e,
-      cargaLimite: v?.cargaLimite ?? e.cargaLimite,
+      // Sem fallback para o perfil: as colunas não existem mais lá. Sem vínculo
+      // o editor nem apareceria nesta lista, então o padrão é só defesa.
+      cargaLimite: v?.cargaLimite ?? 5,
       status: (v?.status as "ativo" | "inativo") ?? e.status,
       _count: { demandas: e.demandas.length },
     }
