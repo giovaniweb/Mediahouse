@@ -17,6 +17,7 @@
     "_comment_db_push": "db:push NÃO versiona schema — use só em protótipo local. Mudança que vai para produção entra por db:migrate.",
     "db:push": "node scripts/guarda-banco.mjs && prisma db push",
     "db:seed": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
+    "criar:organizacao": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/criar-organizacao.ts",
     "db:studio": "prisma studio",
   "sanear:perfil-global": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/sanear-perfil-global.ts",
   "faxina:alertas": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/faxina-alertas.ts",

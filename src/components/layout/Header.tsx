@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { NotificationBell } from "@/components/layout/NotificationBell"
+import { SeletorOrganizacao } from "@/components/layout/SeletorOrganizacao"
 import { UserProfileModal } from "@/components/layout/UserProfileModal"
 import Link from "next/link"
 
@@ -62,6 +63,7 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
           )}
 
           {/* Sininho de notificações */}
+          <SeletorOrganizacao />
           <NotificationBell />
 
           {/* Avatar com dropdown */}

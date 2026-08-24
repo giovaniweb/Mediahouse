@@ -14,11 +14,40 @@ type SessionUser = { id?: string; organizacaoId?: string | null }
 // SessionLike narrowados (ex.: requireEventoAccess) que só carregam user.id.
 type SessionShape = { user?: SessionUser | { id: string; tipo?: string } } | null | undefined
 
-// Resolve a organização ativa da sessão. Se o token for antigo (sem organizacaoId),
-// faz fallback resolvendo a membership pelo usuário — evita forçar re-login.
+/** Cookie com a organização ativa. É um PALPITE do cliente — sempre revalidado. */
+export const COOKIE_ORG_ATIVA = "org_ativa"
+
+/**
+ * Resolve a organização ativa da sessão.
+ *
+ * Ordem: cookie escolhido pela pessoa → organização do token → primeira
+ * membership (token antigo, evita forçar re-login).
+ *
+ * Por que o cookie e não o JWT: o `jwt` callback vive em `auth.config.ts`, que é
+ * edge-safe e não pode falar com o Prisma — não daria para validar a membership
+ * lá dentro. Aqui, do lado Node, o cookie é só o palpite: quem decide é a
+ * consulta abaixo. Cookie forjado, membership removida ou empresa de outra
+ * pessoa simplesmente não casa, e a resolução cai no padrão.
+ *
+ * Antes disto, quem tivesse duas empresas ficava preso na mais antiga por
+ * `createdAt` — não havia como entrar na segunda.
+ */
 export async function getOrgId(session: SessionShape): Promise<string | null> {
   const u = session?.user as SessionUser | undefined
   if (!u) return null
+
+  if (u.id) {
+    const escolhida = await organizacaoEscolhida()
+    if (escolhida) {
+      // A autoridade é o banco: só vale se a pessoa for MESMO membro dela.
+      const m = await prisma.usuarioOrganizacao.findUnique({
+        where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: escolhida } },
+        select: { organizacaoId: true },
+      })
+      if (m) return m.organizacaoId
+    }
+  }
+
   if (u.organizacaoId) return u.organizacaoId
   if (!u.id) return null
   const m = await prisma.usuarioOrganizacao.findFirst({
@@ -27,6 +56,20 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
     select: { organizacaoId: true },
   })
   return m?.organizacaoId ?? null
+}
+
+/**
+ * Lê o cookie da organização ativa. Fora de um contexto de requisição (cron,
+ * job em segundo plano) `cookies()` lança — ali não há escolha de ninguém para
+ * respeitar, e o retorno nulo faz a resolução seguir pelo caminho normal.
+ */
+async function organizacaoEscolhida(): Promise<string | null> {
+  try {
+    const { cookies } = await import("next/headers")
+    return (await cookies()).get(COOKIE_ORG_ATIVA)?.value?.trim() || null
+  } catch {
+    return null
+  }
 }
 
 /**
