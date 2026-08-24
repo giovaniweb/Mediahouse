@@ -239,7 +239,15 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
   )
 }
 
-export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
+export function DemandaDetalhe({ demandaId, mode = "page", onClose, abrirEnvioAprovacao = false }: {
+  demandaId: string
+  mode?: "page" | "modal"
+  onClose?: () => void
+  /** Abre direto o envio para aprovação (upload/URL da arte). Usado pelo kanban
+   *  de Growth: soltar o card em "Para aprovação" sem peça abre este passo em
+   *  vez de recusar o movimento e deixar a pessoa procurar onde anexar. */
+  abrirEnvioAprovacao?: boolean
+}) {
   const id = demandaId
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -708,6 +716,17 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     setUrlVideoInput("")
     setShowLinkModal(true)
   }
+
+  // Abertura automática vinda do kanban de Growth. Espera a demanda carregar
+  // (o modal precisa do título e do tipo) e roda uma vez só — reabrir depois de
+  // a pessoa fechar seria uma armadilha, não uma ajuda.
+  const envioAprovacaoAberto = useRef(false)
+  useEffect(() => {
+    if (!abrirEnvioAprovacao || !demanda || envioAprovacaoAberto.current) return
+    envioAprovacaoAberto.current = true
+    abrirModalUpload("final")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirEnvioAprovacao, demanda])
 
   async function gerarLinkAprovacao() {
     if (linkModalTab === "upload" && !linkModalFile) return

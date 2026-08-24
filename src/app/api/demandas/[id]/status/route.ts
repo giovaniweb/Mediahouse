@@ -5,6 +5,7 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
+import { erroDeCampo } from "@/lib/erros-api"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
@@ -82,9 +83,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     demandaAtual.area === "design" &&
     demandaAtual._count.arquivos === 0
   ) {
-    return NextResponse.json(
-      { error: "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio. Abra a demanda e use a seção \"Arquivos e Aprovação\"." },
-      { status: 400 }
+    // O campo `arteFinal` é o que o kanban de Growth lê para abrir o passo de
+    // anexar em vez de só mostrar o toast. Contrato de sempre ({ error, campos }),
+    // então quem não conhece a regra continua exibindo a frase e nada quebra.
+    return erroDeCampo(
+      "arteFinal",
+      "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio."
     )
   }
 
