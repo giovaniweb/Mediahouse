@@ -16,6 +16,7 @@ import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
+import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
 
@@ -99,7 +100,14 @@ export default function GrowthKanbanPage() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ statusInterno, origem: "kanban" }),
     })
-    if (!res.ok) { mutate(); toast.error("Erro ao mover") } else mutate()
+    if (!res.ok) {
+      // "Erro ao mover" escondia a instrução que a API tinha mandado. A recusa
+      // mais comum aqui é a de mandar para aprovação sem arte anexada, e o
+      // texto dela diz exatamente o que fazer — quem via só "Erro ao mover"
+      // achava que era falta de permissão e ficava tentando de novo.
+      mutate()
+      toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
+    } else mutate()
   }, [mutate])
 
   const handleDelete = useCallback(async (id: string) => {

@@ -44,7 +44,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       responsaveis: { select: { usuario: { select: { telefone: true } } } },
       designer: { select: { telefone: true, whatsapp: true } },
       // Para a checagem de "não mandar para aprovação sem peça anexada".
-      _count: { select: { arquivos: true } },
+      // Conta só a arte FINAL: a tela do cliente (ArteViewer) exibe apenas
+      // `tipoArquivo: "final"`, então um briefing em PDF anexado não é peça —
+      // contar qualquer arquivo deixava passar o card que manda link vazio.
+      _count: { select: { arquivos: { where: { tipoArquivo: "final" } } } },
     },
   })
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
@@ -69,13 +72,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   //
   // Mesmo princípio que o audiovisual já aplica ao exigir o link do vídeo final
   // para sair da edição.
+  //
+  // A contagem é da arte FINAL, não de arquivo qualquer. Enquanto era
+  // `_count.arquivos`, um briefing em PDF satisfazia a regra que fala em "arte
+  // final" — e em 24/08/2026 havia 6 demandas de Growth nessa situação, uma
+  // delas já parada em "Para aprovação" sem nada para o cliente ver.
   if (
     statusInterno === "revisao_pendente" &&
     demandaAtual.area === "design" &&
     demandaAtual._count.arquivos === 0
   ) {
     return NextResponse.json(
-      { error: "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio." },
+      { error: "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio. Abra a demanda e use a seção \"Arquivos e Aprovação\"." },
       { status: 400 }
     )
   }
