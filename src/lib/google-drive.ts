@@ -11,7 +11,6 @@
 
 import crypto from "crypto"
 import { prisma } from "@/lib/prisma"
-import { contourlineOrgId } from "@/lib/whatsapp"
 
 // ── Cache do access_token (válido por ~1 hora) ──────────────────────────────
 let cachedToken: { token: string; expiresAt: number } | null = null
@@ -27,9 +26,14 @@ async function getAccessTokenFromOAuth(organizacaoId?: string | null): Promise<s
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
   if (!clientId || !clientSecret) return null
 
-  const orgId = organizacaoId ?? (await contourlineOrgId())
+  // Sem organização, não opera. O `where: {}` que existia aqui casava com a
+  // config de QUALQUER empresa — o arquivo subiria no Drive de outro cliente.
+  if (!organizacaoId) {
+    console.error("[Drive] sem organização — operação cancelada. Passe organizacaoId.")
+    return null
+  }
   const config = await prisma.configEmpresa.findFirst({
-    where: orgId ? { organizacaoId: orgId } : {},
+    where: { organizacaoId },
     select: { googleRefreshToken: true },
   })
   if (!config?.googleRefreshToken) return null
@@ -152,10 +156,10 @@ export async function criarSessaoUploadDrive(opts: {
   fileSize: number
   contentType: string
 }, organizacaoId?: string | null): Promise<DriveUploadSession> {
-  const orgId = organizacaoId ?? (await contourlineOrgId())
+  if (!organizacaoId) throw new Error("Drive: sem organização — não é possível decidir em qual conta subir o arquivo.")
   // Prioridade: banco (configurado pelo admin, por org) > variável de ambiente
   const config = await prisma.configEmpresa.findFirst({
-    where: orgId ? { organizacaoId: orgId } : {},
+    where: { organizacaoId },
     select: { googleDriveFolderId: true },
   })
   const folderId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -163,7 +167,7 @@ export async function criarSessaoUploadDrive(opts: {
     throw new Error("Pasta do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }
 
-  const token = await getAccessToken(orgId)
+  const token = await getAccessToken(organizacaoId)
 
   // ── Passo 1: Cria o arquivo com metadata (sem conteúdo) → garante fileId ──
   // O endpoint de upload resumável nem sempre devolve o id no body; criar
@@ -256,9 +260,9 @@ async function tornarPublico(fileId: string, token: string): Promise<void> {
  * Best-effort: lança erro se o Drive não estiver configurado/conectado.
  */
 export async function criarPastaDrive(nome: string, organizacaoId?: string | null): Promise<{ folderId: string; folderUrl: string }> {
-  const orgId = organizacaoId ?? (await contourlineOrgId())
+  if (!organizacaoId) throw new Error("Drive: sem organização — não é possível decidir em qual conta criar a pasta.")
   const config = await prisma.configEmpresa.findFirst({
-    where: orgId ? { organizacaoId: orgId } : {},
+    where: { organizacaoId },
     select: { googleDriveFolderId: true },
   })
   const parentId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -266,7 +270,7 @@ export async function criarPastaDrive(nome: string, organizacaoId?: string | nul
     throw new Error("Pasta raiz do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }
 
-  const token = await getAccessToken(orgId)
+  const token = await getAccessToken(organizacaoId)
 
   const res = await fetch("https://www.googleapis.com/drive/v3/files", {
     method: "POST",

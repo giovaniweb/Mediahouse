@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, Play, ExternalLink, Loader2, Download, Sparkles, Film } from "lucide-react"
+import { sufixoOrg } from "@/lib/org-publica-cliente"
 
 interface Video {
   id: string
@@ -340,7 +341,7 @@ export default function GaleriaPage() {
 
   // Buscar produtos para o filtro (público)
   useEffect(() => {
-    fetch("/api/publico/produtos")
+    fetch(`/api/publico/produtos${sufixoOrg()}`)
       .then((r) => r.json())
       .then((d) => setProdutos(d.produtos ?? []))
       .catch(() => {})
@@ -359,7 +360,7 @@ export default function GaleriaPage() {
       if (q) params.set("search", q)
       if (t) params.set("tipo", t)
       if (pid) params.set("produtoId", pid)
-      const res = await fetch(`/api/publico/galeria?${params}`)
+      const res = await fetch(`/api/publico/galeria?${params}${sufixoOrg("&")}`)
       if (!res.ok) {
         console.error("[galeria] API error:", res.status)
         return
