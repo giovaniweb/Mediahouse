@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
+import { resolverParaAssinada } from "@/lib/midia"
 
 // GET /api/publico/galeria?org=<slug> — vídeos finalizados/para_postar (sem auth)
 // Query params: org, page, limit, tipo, search, produtoId
@@ -147,11 +148,23 @@ export async function GET(req: NextRequest) {
   const totalLegacy = total - totalDemandasComArquivos
   const totalVideos = totalArquivosFinais + totalLegacy
 
+  // A galeria é vitrine pública por decisão de produto — mas o arquivo mora em
+  // bucket privado. Como é este endpoint que decide o que é exibível, ele assina
+  // no servidor e entrega pronto. Não há token aqui, e não deve haver: o
+  // recorte já é `orgPublica`. URL do acervo antigo passa intacta.
+  const videosResolvidos = await Promise.all(
+    videos.map(async (v) => ({
+      ...v,
+      linkFinal: (await resolverParaAssinada(v.linkFinal)) ?? v.linkFinal,
+      thumbnailUrl: (await resolverParaAssinada(v.thumbnailUrl)) ?? v.thumbnailUrl,
+    }))
+  )
+
   return NextResponse.json({
     total: totalVideos,
     page,
     limit,
     totalPages: Math.ceil(total / limit),
-    videos,
+    videos: videosResolvidos,
   })
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
-import { createClient } from "@supabase/supabase-js"
+import { caminhoMidia, urlDeUpload } from "@/lib/midia"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -50,61 +50,27 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `tipo deve ser: ${TIPOS_VALIDOS.join(", ")}` }, { status: 400 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Storage não configurado (env vars ausentes)" }, { status: 500 })
-  }
-
   const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
   const ext = EXT_MAPA[contentType] ?? (tipo === "thumbnail" ? "jpg" : tipo === "documento" ? "pdf" : "mp4")
-  // Thumbnails ficam em pasta separada; documentos em docs/{id}/; vídeos em videos/{id}/{tipo}/
-  const objectPath = tipo === "thumbnail"
-    ? `thumbnails/${id}/${Date.now()}.${ext}`
-    : tipo === "documento"
-    ? `docs/${id}/${Date.now()}.${ext}`
-    : `videos/${id}/${tipo}/${Date.now()}.${ext}`
-  const bucket = "uploads"
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
-  // Garantir que o bucket existe — tenta criar sem fileSizeLimit (usa o limite do plano Supabase)
-  // fileSizeLimit: 500MB causava erro "object exceeded maximum allowed size" no plano Free
-  const { error: createBucketError } = await supabase.storage.createBucket(bucket, {
-    public: true,
+  // Bucket PRIVADO, caminho com a organização dona. O bucket antigo era público:
+  // briefing e vídeo de cliente ficavam legíveis por qualquer um com a URL.
+  const caminho = caminhoMidia({
+    organizacaoId: guard.organizacaoId,
+    tipo: tipo === "thumbnail" ? "thumbnails" : tipo === "documento" ? "docs" : "videos",
+    id,
+    ext,
   })
-  if (createBucketError && !createBucketError.message.toLowerCase().includes("already exist")) {
-    console.error("[upload-url] Falha ao criar bucket:", createBucketError.message)
-    return NextResponse.json(
-      { error: `Bucket '${bucket}' não pôde ser criado: ${createBucketError.message}` },
-      { status: 500 }
-    )
-  }
 
-  // Usa o SDK oficial — trata auth e headers corretamente
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUploadUrl(objectPath)
-
-  if (error || !data?.signedUrl) {
-    const msg = error?.message ?? "Resposta inválida do Supabase"
-    console.error("[upload-url] Supabase SDK error:", msg)
-    return NextResponse.json(
-      { error: `Erro ao gerar URL de upload: ${msg}` },
-      { status: 500 }
-    )
-  }
-
-  // signedUrl já inclui a URL base do Supabase
-  const uploadUrl = data.signedUrl
-  const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(objectPath)
+  const midia = await urlDeUpload(caminho)
+  if (!midia) return NextResponse.json({ error: "Storage indisponível" }, { status: 502 })
 
   return NextResponse.json({
-    uploadUrl,
-    publicUrl: pubData.publicUrl,
+    uploadUrl: midia.uploadUrl,
+    // Quem chama grava isto no banco. É URL do nosso app: as telas seguem
+    // usando <img src> e <video src> sem mudar, e o acesso passa a ser conferido.
+    publicUrl: midia.url,
     contentType,
   })
 }

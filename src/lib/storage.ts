@@ -1,79 +1,40 @@
 /**
- * Supabase Storage — upload de arquivos recebidos via WhatsApp
+ * Upload de mídia recebida por WhatsApp e de anexo público.
+ *
+ * Reescrito em 24/08/2026 para usar o bucket PRIVADO. O código anterior criava
+ * um bucket `whatsapp-media` com `public: true` — mais uma porta aberta, além do
+ * `uploads`.
+ *
+ * Vale registrar um bug que veio junto: ele lia `process.env.SUPABASE_URL`, e a
+ * variável que existe é `NEXT_PUBLIC_SUPABASE_URL`. O bucket nunca foi criado e
+ * este caminho estava quebrado em silêncio — mídia de WhatsApp não era salva.
+ * Corrigido aqui de passagem; conferir em produção se o recebimento volta.
  */
-
-import { createClient, SupabaseClient } from "@supabase/supabase-js"
-
-let _supabase: SupabaseClient | null = null
-
-function getSupabase(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!
-    )
-  }
-  return _supabase
-}
-
-const BUCKET = "whatsapp-media"
+import { caminhoMidia, subirArquivo } from "@/lib/midia"
 
 /**
- * Garante que o bucket existe (cria se não existir)
- */
-async function ensureBucket() {
-  const sb = getSupabase()
-  const { data } = await sb.storage.getBucket(BUCKET)
-  if (!data) {
-    await sb.storage.createBucket(BUCKET, {
-      public: true,
-      fileSizeLimit: 50 * 1024 * 1024, // 50MB
-    })
-  }
-}
-
-/**
- * Faz upload de um buffer para o Supabase Storage
- * @returns URL pública do arquivo
+ * Sobe um buffer e devolve a URL do nosso app (`/api/midia/...`).
+ *
+ * Precisa de `organizacaoId`: sem ele não há como decidir de quem é o arquivo,
+ * e o caminho privado é escopado por empresa. Sem organização, não sobe —
+ * mesma regra de falha fechada dos outros canais.
  */
 export async function uploadMedia(
   buffer: Buffer,
   fileName: string,
-  contentType: string
+  contentType: string,
+  organizacaoId?: string | null
 ): Promise<string | null> {
-  try {
-    await ensureBucket()
-
-    const sb = getSupabase()
-    const path = `${Date.now()}-${fileName}`
-
-    const { error } = await sb.storage
-      .from(BUCKET)
-      .upload(path, buffer, {
-        contentType,
-        upsert: false,
-      })
-
-    if (error) {
-      console.error("[Storage] Erro no upload:", error)
-      return null
-    }
-
-    const { data: urlData } = sb.storage
-      .from(BUCKET)
-      .getPublicUrl(path)
-
-    console.log(`[Storage] Upload OK: ${path} (${contentType})`)
-    return urlData.publicUrl
-  } catch (e) {
-    console.error("[Storage] Erro:", e)
+  if (!organizacaoId) {
+    console.error("[storage] uploadMedia sem organização — upload cancelado:", fileName)
     return null
   }
+  const ext = fileName.includes(".") ? fileName.split(".").pop()! : "bin"
+  const caminho = caminhoMidia({ organizacaoId, tipo: "docs", id: "whatsapp", ext })
+  return subirArquivo(caminho, buffer, contentType)
 }
 
-/**
- * Baixa mídia da Evolution API via base64
- */
+/** Baixa a mídia da Evolution API. Inalterada — só mudou onde o arquivo é salvo. */
 export async function downloadEvolutionMedia(
   instanceUrl: string,
   instanceId: string,

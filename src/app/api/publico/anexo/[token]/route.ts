@@ -93,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .replace(/[^\w.\-]/g, "_")
     .slice(-80)
 
-  const url = await uploadMedia(buffer, `publico/${demandaId}/${nomeLimpo}`, arquivo.type)
+  const url = await uploadMedia(buffer, nomeLimpo, arquivo.type, demanda.organizacaoId)
   if (!url) {
     return NextResponse.json({ error: "Falha ao guardar o arquivo. Tente novamente." }, { status: 502 })
   }
