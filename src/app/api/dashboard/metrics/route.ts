@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { calcularCargaTotal, avaliarSobrecarga } from "@/lib/peso-demanda"
 import { getOrgId, semOrg } from "@/lib/org"
 import { inicioDoDia } from "@/lib/datas"
@@ -114,13 +115,20 @@ export async function GET() {
     0
   )
 
-  const cargaEditores = editores.map((editor) => ({
-    id: editor.id,
-    nome: editor.nome,
-    cargaAtual: editor.demandas.length,
-    cargaLimite: editor.cargaLimite,
-    status: avaliarSobrecarga(calcularCargaTotal(editor.demandas), editor.cargaLimite),
-  }))
+  // Carga do vínculo desta empresa. O `tsc` foi quem achou este uso: a consulta
+  // não tinha `select`, então trazia todas as colunas do perfil e o auditor não
+  // tinha nome nenhum para marcar. Auditor estático não enxerga select implícito.
+  const cargasEd = await vinculosDaEmpresa(editores.map((e) => e.id), organizacaoId)
+  const cargaEditores = editores.map((editor) => {
+    const limite = cargasEd.get(editor.id)?.cargaLimite ?? 5
+    return {
+      id: editor.id,
+      nome: editor.nome,
+      cargaAtual: editor.demandas.length,
+      cargaLimite: limite,
+      status: avaliarSobrecarga(calcularCargaTotal(editor.demandas), limite),
+    }
+  })
 
   return NextResponse.json({
     metricas: {

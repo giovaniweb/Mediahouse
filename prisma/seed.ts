@@ -90,7 +90,6 @@ async function main() {
       nome: "João Paulo",
       email: "joao@videoops.com",
       especialidade: ["institucional", "motion", "aftermovie"],
-      cargaLimite: 5,
       status: "ativo",
     },
   })
@@ -103,7 +102,6 @@ async function main() {
       nome: "Cristiano",
       email: "cristiano@videoops.com",
       especialidade: ["social_media", "reels", "ads"],
-      cargaLimite: 6,
       status: "ativo",
     },
   })
@@ -116,7 +114,6 @@ async function main() {
       nome: "Paula",
       email: "paula@videoops.com",
       especialidade: ["vsl", "ads", "institucional"],
-      cargaLimite: 4,
       status: "ativo",
     },
   })

@@ -419,40 +419,40 @@ model DesignerDadosFiscais {
   @@map("designer_dados_fiscais")
 }
 
+// PERFIL GLOBAL da rede — compartilhado entre empresas e, sob RLS, legível por
+// qualquer organização. Só o que é público mora aqui.
+//
+// O que é de UMA empresa vive em:
+//   EditorOrganizacao   → salario, valorDiaria, cargaLimite, bloqueio, observações, status
+//   EditorDadosFiscais  → cpfCnpj, razaoSocial, nomeFantasia, representante,
+//                          endereco, chavePix e dadosBancarios (os dois cifrados)
+//
+// Não devolva nenhum desses campos para cá, nem `organizacaoId`. O escopo por
+// empresa é `vinculos: { some: { organizacaoId } }`.
+// `scripts/auditar-perfil-global.mjs` roda na CI e reprova — leia por
+// src/lib/editor-vinculo.ts e escreva por src/lib/editor-dados.ts.
 model Editor {
-  organizacaoId    String?
-  id               String        @id @default(cuid())
-  nome             String
-  telefone         String?
-  whatsapp         String? // número WhatsApp (pode ser igual ao telefone)
-  email            String?
-  avatarUrl        String? // foto de perfil
-  especialidade    String[]
-  habilidades      String[] // tags abertas de habilidades
-  cargaLimite      Int           @default(5)
-  status           StatusUsuario @default(ativo)
-  avaliacao        Float?        @default(5.0)
-  cidade           String?
-  estado           String?
-  cpfCnpj          String?
-  razaoSocial      String?
-  nomeFantasia     String?
-  representante    String?
-  endereco         String?
-  chavePix         String?
-  redesSociais     String[]
-  salario          Float? // ONLY visible to admin/gestor
-  dadosBancarios   String?
-  observacoes      String?
-  areasAtuacao     String[]
-  equipamentos     String[]
-  portfolio        String?
-  emListaNegra     Boolean       @default(false)
-  listaNegraMotivo String?
-  fazCaptacao      Boolean       @default(false)
-  tipoContrato     String        @default("interno") // "interno" (fulltime) | "externo" (freelance)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  nome          String
+  telefone      String?
+  whatsapp      String? // número WhatsApp (pode ser igual ao telefone)
+  email         String?
+  avatarUrl     String? // foto de perfil
+  especialidade String[]
+  habilidades   String[] // tags abertas de habilidades
+  status        StatusUsuario @default(ativo)
+  avaliacao     Float?        @default(5.0)
+  cidade        String?
+  estado        String?
+  redesSociais  String[]
+  areasAtuacao  String[]
+  equipamentos  String[]
+  portfolio     String?
+  // Habilidade da PESSOA, não do contrato: fica no perfil de propósito.
+  fazCaptacao   Boolean       @default(false)
+  tipoContrato  String        @default("interno") // "interno" (fulltime) | "externo" (freelance)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   usuarioId String?  @unique // link para Usuario (portal login)
   usuario   Usuario? @relation(fields: [usuarioId], references: [id])
@@ -468,38 +468,37 @@ model Editor {
   @@map("editores")
 }
 
+// PERFIL GLOBAL da rede — compartilhado entre empresas e, sob RLS, legível por
+// qualquer organização. Só o que é público mora aqui.
+//
+// O que é de UMA empresa vive em:
+//   DesignerOrganizacao   → salario, valorDiaria, bloqueio, observações, status
+//   DesignerDadosFiscais  → cpfCnpj, razaoSocial, nomeFantasia, representante,
+//                          endereco, chavePix e dadosBancarios (os dois cifrados)
+//
+// Não devolva nenhum desses campos para cá, nem `organizacaoId`. O escopo por
+// empresa é `vinculos: { some: { organizacaoId } }`.
+// `scripts/auditar-perfil-global.mjs` roda na CI e reprova — leia por
+// src/lib/designer-vinculo.ts e escreva por src/lib/designer-dados.ts.
 model Designer {
-  organizacaoId    String?
-  id               String        @id @default(cuid())
-  nome             String
-  cidade           String?
-  estado           String?
-  telefone         String?
-  whatsapp         String?
-  email            String?
-  avatarUrl        String?
-  cpfCnpj          String?
-  razaoSocial      String?
-  nomeFantasia     String?
-  representante    String?
-  endereco         String?
-  chavePix         String?
-  redesSociais     String[]
-  valorDiaria      Float?
-  salario          Float?
-  dadosBancarios   String?
-  status           StatusUsuario @default(ativo)
-  avaliacao        Float?        @default(5.0)
-  observacoes      String?
-  especialidade    String[] // "Social", "Impresso", "Motion", "3D"
-  habilidades      String[]
-  equipamentos     String[]
-  portfolio        String?
-  emListaNegra     Boolean       @default(false)
-  listaNegraMotivo String?
-  tipoContrato     String        @default("externo") // "interno" | "externo"
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  nome          String
+  cidade        String?
+  estado        String?
+  telefone      String?
+  whatsapp      String?
+  email         String?
+  avatarUrl     String?
+  redesSociais  String[]
+  status        StatusUsuario @default(ativo)
+  avaliacao     Float?        @default(5.0)
+  especialidade String[] // "Social", "Impresso", "Motion", "3D"
+  habilidades   String[]
+  equipamentos  String[]
+  portfolio     String?
+  tipoContrato  String        @default("externo") // "interno" | "externo"
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   usuarioId String?  @unique // link para Usuario (portal login)
   usuario   Usuario? @relation(fields: [usuarioId], references: [id])
