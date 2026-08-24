@@ -1,20 +1,41 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId } from "@/lib/org"
+import { videomakerDoUsuario, organizacoesDoVideomaker } from "@/lib/campo-escopo"
 
-// GET /api/campo/ranking
-// Ranking semanal de uploads por videomaker (últimos 7 dias)
+// GET /api/campo/ranking — uploads dos últimos 7 dias.
+//
+// A consulta não tinha escopo: o ranking somava uploads de TODAS as empresas e
+// devolvia os nomes de quem trabalha para cada uma. Com uma empresa só era um
+// placar do time; com duas, é a lista de profissionais de um cliente aparecendo
+// para o outro.
+//
+// Agora o placar é das empresas que a pessoa atende — que também é o único
+// recorte em que comparar faz sentido.
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
+  const vmSessao = await videomakerDoUsuario(session.user.id)
+  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
+  let orgs: string[]
+  if (vmSessao && !isAdmin) {
+    orgs = await organizacoesDoVideomaker(vmSessao.id)
+  } else {
+    const ativa = await getOrgId(session)
+    orgs = ativa ? [ativa] : []
+  }
+  if (orgs.length === 0) return NextResponse.json({ ranking: [], minhaPosicao: null, meuTotal: 0 })
+
   // Contar uploads por videomakerId nos últimos 7 dias
   const uploads = await prisma.eventoCoberturaUpload.findMany({
     where: {
       createdAt: { gte: seteDiasAtras },
       membro: { videomakerId: { not: null } },
+      cobertura: { organizacaoId: { in: orgs } },
     },
     select: {
       membro: {
@@ -57,10 +78,7 @@ export async function GET() {
     .slice(0, 10)
 
   // Encontrar posição do usuário logado (mesmo se não está no top 10)
-  const vm = await prisma.videomaker.findFirst({
-    where: { usuarioId: session.user.id },
-    select: { id: true },
-  })
+  const vm = vmSessao
 
   let minhaPosicao: number | null = null
   let meuTotal = 0

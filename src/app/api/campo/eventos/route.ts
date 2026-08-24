@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId } from "@/lib/org"
+import { etiquetasDeOrganizacao } from "@/lib/campo-escopo"
 
 // GET /api/campo/eventos
 // Retorna eventos em que o usuário logado está escalado (via Videomaker.usuarioId)
@@ -47,9 +49,13 @@ export async function GET() {
       orderBy: { dataInicio: "asc" },
     })
   } else {
-    // Admin/gestor (ou usuário sem videomaker) → mostra todos os eventos ativos
+    // Admin/gestor (ou usuário sem videomaker) → eventos ativos DA EMPRESA
+    // ATIVA. Antes varria todas as empresas da plataforma.
+    const organizacaoId = await getOrgId(session)
+    if (!organizacaoId) return NextResponse.json({ coberturas: [], multiempresa: false })
     coberturas = await prisma.eventoCobertura.findMany({
       where: {
+        organizacaoId,
         status: { in: ["planejamento", "em_andamento"] },
       },
       include: {
@@ -71,5 +77,17 @@ export async function GET() {
     })
   }
 
-  return NextResponse.json({ coberturas, videomakerId: vm?.id ?? null })
+  // Etiqueta com a empresa dona: o videomaker recebe coberturas de mais de uma
+  // e precisa saber para quem está gravando.
+  const etiquetas = await etiquetasDeOrganizacao(
+    coberturas.map((c) => c.organizacaoId).filter(Boolean) as string[]
+  )
+  return NextResponse.json({
+    coberturas: coberturas.map((c) => ({
+      ...c,
+      empresa: c.organizacaoId ? etiquetas.get(c.organizacaoId) ?? null : null,
+    })),
+    videomakerId: vm?.id ?? null,
+    multiempresa: new Set(coberturas.map((c) => c.organizacaoId).filter(Boolean)).size > 1,
+  })
 }
