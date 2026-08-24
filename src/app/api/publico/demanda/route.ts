@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { emSegundoPlano } from "@/lib/notificar"
 import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
-import { sendWhatsappMessage, contourlineOrgId } from "@/lib/whatsapp"
+import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { orgPublica } from "@/lib/org"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
@@ -111,8 +112,11 @@ export async function POST(req: NextRequest) {
 
   // TEMPORÁRIO (Fase 1): o formulário público é fixado na organização Contourline.
   // Futuro: o formulário deve receber slug/token da empresa para multiempresa real.
-  const organizacaoId = await contourlineOrgId()
-  if (!organizacaoId) return NextResponse.json({ error: "Organização padrão não configurada" }, { status: 500 })
+  // `?org=<slug>` identifica a empresa dona do formulário; sem ele, a padrão.
+  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+  if (!organizacaoId) {
+    return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })
+  }
 
   // Garante a membership do solicitante na organização (categoria=solicitante).
   // Sem isso, a pessoa nasceria sem vínculo org e não apareceria em Pessoas & Acessos.

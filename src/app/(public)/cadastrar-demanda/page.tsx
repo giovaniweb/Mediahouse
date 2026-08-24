@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { AreaReferencia } from "@/components/publico/AreaReferencia"
 import { formatarBR } from "@/lib/datas"
+import { sufixoOrg } from "@/lib/org-publica-cliente"
 
 /* ═══════════════════════════════════════════════════════════════════════
    STYLES
@@ -125,9 +126,9 @@ export default function CadastrarDemandaPage() {
   const [tiposCriativo, setTiposCriativo] = useState<{ valor: string; label: string }[]>([])
 
   useEffect(() => {
-    fetch("/api/publico/parametros?grupo=tipos_video")
+    fetch(`/api/publico/parametros?grupo=tipos_video${sufixoOrg()}`)
       .then(r => r.json()).then(d => setTiposVideo(d.parametros ?? [])).catch(() => {})
-    fetch("/api/publico/parametros?grupo=tipos_criativo")
+    fetch(`/api/publico/parametros?grupo=tipos_criativo${sufixoOrg()}`)
       .then(r => r.json()).then(d => setTiposCriativo(d.parametros ?? [])).catch(() => {})
   }, [])
 
@@ -254,7 +255,7 @@ export default function CadastrarDemandaPage() {
         clienteFinalTelefone: clienteTelefone || undefined,
         clienteFinalEmail: clienteEmail || undefined,
       }
-      const res = await fetch("/api/publico/demanda", {
+      const res = await fetch(`/api/publico/demanda${sufixoOrg()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

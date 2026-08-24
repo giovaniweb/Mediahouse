@@ -5,33 +5,47 @@
 import { prisma } from "@/lib/prisma"
 
 // ─── Resolução de organização (SaaS multiempresa) ────────────────────────────
-// Cache do id da org Contourline — usado APENAS como fallback legado/temporário
-// quando não há contexto de organização (ver resolverOrgEnvio).
-let _contourlineOrgId: string | null = null
-export async function contourlineOrgId(): Promise<string | null> {
-  if (_contourlineOrgId) return _contourlineOrgId
-  const org = await prisma.organizacao.findUnique({ where: { slug: "contourline" }, select: { id: true } })
-  _contourlineOrgId = org?.id ?? null
-  return _contourlineOrgId
+// Organização que recebe tráfego PÚBLICO sem `?org=` — formulários e links que
+// já circulam sem identificar a empresa. Deixou de ser "contourline" cravado no
+// código: agora é `ORG_PUBLICA_PADRAO`, para que a segunda empresa não herde os
+// links da primeira nem o contrário.
+//
+// Este helper NÃO serve mais de fallback para envio de notificação. Mandar
+// WhatsApp pelo número de outra empresa é pior que não mandar — ver
+// getWhatsappConfig e resolverOrgEnvio, que agora falham fechado.
+let _orgPadraoId: string | null = null
+export async function orgPadraoPublica(): Promise<string | null> {
+  if (_orgPadraoId) return _orgPadraoId
+  const slug = process.env.ORG_PUBLICA_PADRAO || "contourline"
+  const org = await prisma.organizacao.findUnique({ where: { slug }, select: { id: true } })
+  if (!org) console.error(`[org] ORG_PUBLICA_PADRAO="${slug}" não existe no banco.`)
+  _orgPadraoId = org?.id ?? null
+  return _orgPadraoId
 }
 
-// Config de WhatsApp de uma organização. Sem org → fallback Contourline (legado).
-// Nunca mais usa findFirst({ ativo: true }) global.
+// Config de WhatsApp de uma organização. Sem org, não envia.
 export async function getWhatsappConfig(organizacaoId?: string | null) {
-  const orgId = organizacaoId ?? (await contourlineOrgId())
-  if (!orgId) return null
-  if (!organizacaoId) console.warn("[WhatsApp] getWhatsappConfig sem org — fallback Contourline (legado/temporário)")
-  return prisma.configWhatsapp.findFirst({ where: { organizacaoId: orgId, ativo: true } })
+  // Sem organização não há resposta certa: usar a config de outra empresa manda
+  // a mensagem pelo número dela, com o nome dela, para o contato dela. Falha
+  // fechado — não enviar é recuperável, enviar pelo remetente errado não é.
+  if (!organizacaoId) {
+    console.error("[WhatsApp] getWhatsappConfig sem organização — envio cancelado. Passe organizacaoId.")
+    return null
+  }
+  return prisma.configWhatsapp.findFirst({ where: { organizacaoId, ativo: true } })
 }
 
-// Resolve a org de um envio: organizacaoId explícito → demandaId → fallback Contourline.
+// Resolve a org de um envio: organizacaoId explícito → organização da demanda.
+// Não há mais terceiro degrau: sem nenhum dos dois, o envio é cancelado.
 async function resolverOrgEnvio(demandaId?: string, organizacaoId?: string | null): Promise<string | null> {
   if (organizacaoId) return organizacaoId
   if (demandaId) {
     const d = await prisma.demanda.findUnique({ where: { id: demandaId }, select: { organizacaoId: true } }).catch(() => null)
     if (d?.organizacaoId) return d.organizacaoId
   }
-  return contourlineOrgId() // fallback legado/temporário
+  // Sem demanda e sem org explícita, não dá para saber por qual empresa enviar.
+  console.error("[WhatsApp] resolverOrgEnvio sem organização — envio cancelado.")
+  return null
 }
 
 /**

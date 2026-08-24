@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { orgPublica, SLUG_ORG_LEGADA } from "@/lib/org"
+import { orgPublica } from "@/lib/org"
 import { TIPOS_VIDEO_SEED, TIPOS_CRIATIVO_SEED, GRUPO_VIDEO, GRUPO_CRIATIVO } from "@/lib/tipos-demanda"
 
 // Relatório e formulários públicos precisam ler o vocabulário de tipos, mas
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   // O formulário público sempre pertenceu à organização legada; `org` permite
   // que outra empresa use o mesmo formulário sem herdar a lista da primeira.
-  const organizacaoId = await orgPublica(sp.get("org") ?? SLUG_ORG_LEGADA)
+  const organizacaoId = await orgPublica(sp.get("org"))
 
   const parametros = organizacaoId
     ? await prisma.configParametro.findMany({
