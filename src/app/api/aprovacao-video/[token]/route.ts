@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { comToken, resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -67,9 +68,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       })
     : null
 
-  // `expirado` avisa a tela interna que o link público já não abre para o cliente,
-  // para que ela possa oferecer a renovação.
-  return NextResponse.json({ aprovacao, expirado, versaoAnterior })
+  // A mídia nova vive em bucket privado. Quem abre esta página não tem conta —
+  // a credencial dela é o token, e ele passa a valer para o ARQUIVO também.
+  // Anexado aqui, no servidor, para a página não precisar mudar.
+  // URL do acervo antigo (pública) passa intacta.
+  return NextResponse.json({
+    aprovacao: { ...aprovacao, urlVideo: comToken(aprovacao.urlVideo, token) ?? aprovacao.urlVideo },
+    expirado,
+    versaoAnterior: versaoAnterior
+      ? { ...versaoAnterior, urlVideo: comToken(versaoAnterior.urlVideo, token) ?? versaoAnterior.urlVideo }
+      : null,
+  })
 }
 
 // PATCH /api/aprovacao-video/[token] — renova a validade do link do cliente.
@@ -186,7 +195,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         const fileName = `${parts.join("_")}_${seqStr}.${ext}`
 
         // Stream direto: Supabase → Drive (sem buffer intermediário — server-to-server, sem CORS)
-        const supaRes = await fetch(urlVideo)
+        // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
+        // o servidor não consegue buscá-la direto. Assina aqui, com validade de
+        // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
+        // não bastam para vídeo grande.
+        const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
+        const supaRes = await fetch(origem)
         if (!supaRes.ok || !supaRes.body) {
           console.error("[AprovacaoVideo] Falha ao buscar vídeo do Supabase:", supaRes.status)
           return

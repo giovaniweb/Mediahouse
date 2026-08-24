@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { comToken } from "@/lib/midia"
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -59,5 +60,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
     : null
 
   const { publicTokenAtivo: _a, publicTokenExpiraEm: _e, organizacaoId: _o, ...publico } = demanda
-  return NextResponse.json({ demanda: { ...publico, organizacao } })
+  // Mesma regra da aprovação: o token é a credencial de quem não tem conta, e
+  // passa a valer também para a thumbnail que vive no bucket privado.
+  return NextResponse.json({
+    demanda: {
+      ...publico,
+      thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
+      organizacao,
+    },
+  })
 }

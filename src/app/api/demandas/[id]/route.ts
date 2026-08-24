@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
@@ -144,7 +145,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.
   try {
     if (typeof body.videomakerId === "string" && body.videomakerId.includes(":")) {
-      body.videomakerId = await resolveParaVideomaker(body.videomakerId)
+      body.videomakerId = await resolveParaVideomaker(body.videomakerId, guard.organizacaoId)
     }
     if (typeof body.editorId === "string" && body.editorId.includes(":")) {
       body.editorId = await resolveParaEditor(body.editorId, guard.organizacaoId)
@@ -343,7 +344,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
                 const fileName = `${parts.join("_")}_${seqStr}.${ext}`
 
                 // Stream: Supabase → Drive (server-to-server)
-                const supaRes = await fetch(urlVideo)
+                // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
+                // o servidor não consegue buscá-la direto. Assina aqui, com validade de
+                // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
+                // não bastam para vídeo grande.
+                const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
+                const supaRes = await fetch(origem)
                 if (!supaRes.ok || !supaRes.body) {
                   console.error(`[ParaPostar] Falha ao buscar vídeo ${seqStr} do Supabase:`, supaRes.status)
                   continue

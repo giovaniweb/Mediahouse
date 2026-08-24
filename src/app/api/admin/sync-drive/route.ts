@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -64,7 +65,12 @@ export async function POST(req: NextRequest) {
         const fileName = `${parts.join("_")}_${seqStr}.${ext}`
 
         // Stream: buscar do Supabase
-        const supaRes = await fetch(urlVideo)
+        // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
+        // o servidor não consegue buscá-la direto. Assina aqui, com validade de
+        // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
+        // não bastam para vídeo grande.
+        const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
+        const supaRes = await fetch(origem)
         if (!supaRes.ok || !supaRes.body) {
           erros++
           detalhes.push({ codigo: dem.codigo, status: "erro", detalhe: `Supabase retornou ${supaRes.status}` })

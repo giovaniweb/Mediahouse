@@ -14,11 +14,40 @@ type SessionUser = { id?: string; organizacaoId?: string | null }
 // SessionLike narrowados (ex.: requireEventoAccess) que só carregam user.id.
 type SessionShape = { user?: SessionUser | { id: string; tipo?: string } } | null | undefined
 
-// Resolve a organização ativa da sessão. Se o token for antigo (sem organizacaoId),
-// faz fallback resolvendo a membership pelo usuário — evita forçar re-login.
+/** Cookie com a organização ativa. É um PALPITE do cliente — sempre revalidado. */
+export const COOKIE_ORG_ATIVA = "org_ativa"
+
+/**
+ * Resolve a organização ativa da sessão.
+ *
+ * Ordem: cookie escolhido pela pessoa → organização do token → primeira
+ * membership (token antigo, evita forçar re-login).
+ *
+ * Por que o cookie e não o JWT: o `jwt` callback vive em `auth.config.ts`, que é
+ * edge-safe e não pode falar com o Prisma — não daria para validar a membership
+ * lá dentro. Aqui, do lado Node, o cookie é só o palpite: quem decide é a
+ * consulta abaixo. Cookie forjado, membership removida ou empresa de outra
+ * pessoa simplesmente não casa, e a resolução cai no padrão.
+ *
+ * Antes disto, quem tivesse duas empresas ficava preso na mais antiga por
+ * `createdAt` — não havia como entrar na segunda.
+ */
 export async function getOrgId(session: SessionShape): Promise<string | null> {
   const u = session?.user as SessionUser | undefined
   if (!u) return null
+
+  if (u.id) {
+    const escolhida = await organizacaoEscolhida()
+    if (escolhida) {
+      // A autoridade é o banco: só vale se a pessoa for MESMO membro dela.
+      const m = await prisma.usuarioOrganizacao.findUnique({
+        where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: escolhida } },
+        select: { organizacaoId: true },
+      })
+      if (m) return m.organizacaoId
+    }
+  }
+
   if (u.organizacaoId) return u.organizacaoId
   if (!u.id) return null
   const m = await prisma.usuarioOrganizacao.findFirst({
@@ -29,14 +58,42 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
   return m?.organizacaoId ?? null
 }
 
-export const SLUG_ORG_LEGADA = "contourline"
+/**
+ * Lê o cookie da organização ativa. Fora de um contexto de requisição (cron,
+ * job em segundo plano) `cookies()` lança — ali não há escolha de ninguém para
+ * respeitar, e o retorno nulo faz a resolução seguir pelo caminho normal.
+ */
+async function organizacaoEscolhida(): Promise<string | null> {
+  try {
+    const { cookies } = await import("next/headers")
+    return (await cookies()).get(COOKIE_ORG_ATIVA)?.value?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Organização que recebe tráfego público sem `?org=`.
+ *
+ * Deixou de ser "contourline" cravado no código: agora é `ORG_PUBLICA_PADRAO`.
+ * A diferença importa quando existe uma segunda empresa — sem isso, todo link
+ * público sem slug continuaria caindo na primeira, para sempre.
+ *
+ * Por que ainda existe um padrão em vez de 404: nenhuma página pública passa
+ * `?org=` hoje, então exigir o slug tiraria do ar os formulários que já estão
+ * em uso. A propagação do slug nas páginas é o que permite aposentá-lo.
+ */
+export const SLUG_ORG_PADRAO = process.env.ORG_PUBLICA_PADRAO || "contourline"
 
 // Resolve a organização de uma rota PÚBLICA (sem sessão) a partir de `?org=<slug>`.
-// Sem slug, cai na organização legada (Contourline) — mesmo contrato do formulário
-// público de demanda. O ponto é nunca consultar sem organização nenhuma, que era o
-// que fazia as vitrines públicas agregarem dados de todas as empresas.
+// Sem slug, cai na SLUG_ORG_PADRAO. O ponto é nunca consultar sem organização
+// nenhuma, que era o que fazia as vitrines públicas agregarem dados de todas as
+// empresas.
 export async function orgPublica(slug: string | null | undefined): Promise<string | null> {
-  const alvo = slug?.trim() || SLUG_ORG_LEGADA
+  const alvo = slug?.trim() || SLUG_ORG_PADRAO
+  if (!slug?.trim()) {
+    console.warn(`[org] rota pública sem ?org= — usando o padrão "${SLUG_ORG_PADRAO}".`)
+  }
   const org = await prisma.organizacao.findUnique({
     where: { slug: alvo },
     select: { id: true, ativo: true },

@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Film, CheckCircle2, ArrowLeft, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { sufixoOrg } from "@/lib/org-publica-cliente"
 
 const AREAS = ["Casamento", "Eventos Corporativos", "Clipes Musicais", "Documentário", "Publicidade", "Redes Sociais / Reels", "Institucional", "Esportes", "Gastronomia", "Moda & Beauty", "Imóveis", "Jornalismo"]
 
@@ -52,7 +53,7 @@ export default function CadastrarVideomakerdPage() {
     setLoading(true)
     setErro(null)
     try {
-      const res = await fetch("/api/publico/videomaker", {
+      const res = await fetch(`/api/publico/videomaker${sufixoOrg()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

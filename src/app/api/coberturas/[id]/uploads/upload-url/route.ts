@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { createClient } from "@supabase/supabase-js"
+import { requireCoberturaOrg } from "@/lib/org"
+import { caminhoMidia, urlDeUpload } from "@/lib/midia"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -29,40 +30,21 @@ export async function GET(req: NextRequest, { params }: Params) {
   const contentType = sp.get("contentType") ?? "video/mp4"
   const dia = sp.get("dia") ?? "1"
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Storage não configurado (env vars ausentes)" }, { status: 500 })
-  }
+  // Confere que a cobertura é DESTA empresa. A rota subia arquivo em qualquer
+  // cobertura pela id, sem checar dono — bastava trocar o id na URL.
+  const guard = await requireCoberturaOrg(session, id)
+  if (guard instanceof NextResponse) return guard
 
   const ext = EXT_MAPA[contentType] ?? (tipo === "thumbnail" ? "jpg" : "mp4")
-  const objectPath =
-    tipo === "thumbnail"
-      ? `coberturas/${id}/thumbnails/${Date.now()}.jpg`
-      : `coberturas/${id}/dia-${dia}/${tipo}/${Date.now()}.${ext}`
-  const bucket = "uploads"
+  const caminho = caminhoMidia({
+    organizacaoId: guard.organizacaoId,
+    tipo: tipo === "thumbnail" ? "thumbnails" : "coberturas",
+    id: tipo === "thumbnail" ? id : `${id}/dia-${dia}/${tipo}`,
+    ext,
+  })
 
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const midia = await urlDeUpload(caminho)
+  if (!midia) return NextResponse.json({ error: "Storage indisponível" }, { status: 502 })
 
-  const { error: createBucketError } = await supabase.storage.createBucket(bucket, { public: true })
-  if (createBucketError && !createBucketError.message.toLowerCase().includes("already exist")) {
-    console.error("[coberturas/upload-url] Falha ao criar bucket:", createBucketError.message)
-    return NextResponse.json(
-      { error: `Bucket '${bucket}' não pôde ser criado: ${createBucketError.message}` },
-      { status: 500 }
-    )
-  }
-
-  const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(objectPath)
-
-  if (error || !data?.signedUrl) {
-    const msg = error?.message ?? "Resposta inválida do Supabase"
-    console.error("[coberturas/upload-url] Supabase error:", msg)
-    return NextResponse.json({ error: `Erro ao gerar URL de upload: ${msg}` }, { status: 500 })
-  }
-
-  const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(objectPath)
-
-  return NextResponse.json({ uploadUrl: data.signedUrl, publicUrl: pubData.publicUrl, contentType })
+  return NextResponse.json({ uploadUrl: midia.uploadUrl, publicUrl: midia.url, contentType })
 }

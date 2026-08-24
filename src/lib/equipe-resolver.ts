@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
 
 // Token opaco para identificar a origem de uma pessoa atribuível:
@@ -141,10 +142,32 @@ async function findOrCreateEditor(opts: {
 }
 
 // ─── Resolver token → Videomaker.id (slot de captação) ────────────────────────
-export async function resolveParaVideomaker(token: string): Promise<string> {
+/**
+ * Resolve o token de atribuição para um id de Videomaker, garantindo o VÍNCULO
+ * com a empresa que está alocando.
+ *
+ * Sem o vínculo, a pessoa executa a demanda mas some da agenda, do ranking e da
+ * lista de equipe daquela empresa — e, sob RLS, o perfil dela deixaria de ser
+ * visível ali. Foi o que apareceu no primeiro teste cross-company: alocar
+ * alguém numa demanda não bastava para a empresa passar a enxergá-lo.
+ *
+ * Mesmo tratamento que `resolveParaEditor` já dava com `garantirVinculo`.
+ */
+export async function resolveParaVideomaker(token: string, organizacaoId?: string | null): Promise<string> {
   const { origem, id } = parseToken(token)
 
-  if (origem === "vm") return id
+  const comVinculo = async (videomakerId: string) => {
+    if (organizacaoId) {
+      await gravarDadosPrivadosVideomaker({
+        videomakerId,
+        organizacaoId,
+        comercial: { status: "ativo" },
+      })
+    }
+    return videomakerId
+  }
+
+  if (origem === "vm") return comVinculo(id)
 
   if (origem === "ed") {
     const ed = await prisma.editor.findUnique({
@@ -152,14 +175,14 @@ export async function resolveParaVideomaker(token: string): Promise<string> {
       select: { nome: true, usuarioId: true, telefone: true, cidade: true, estado: true },
     })
     if (!ed) throw new Error("Editor não encontrado")
-    return findOrCreateVideomaker({
+    return comVinculo(await findOrCreateVideomaker({
       usuarioId: ed.usuarioId,
       nome: ed.nome,
       telefone: ed.telefone,
       cidade: ed.cidade,
       estado: ed.estado,
       tipoContrato: "interno", // editor mirrorado → pessoa interna
-    })
+    }))
   }
 
   // origem === "user"
@@ -168,12 +191,12 @@ export async function resolveParaVideomaker(token: string): Promise<string> {
     select: { nome: true, telefone: true },
   })
   if (!user) throw new Error("Usuário não encontrado")
-  return findOrCreateVideomaker({
+  return comVinculo(await findOrCreateVideomaker({
     usuarioId: id,
     nome: user.nome,
     telefone: user.telefone,
     tipoContrato: "interno",
-  })
+  }))
 }
 
 // ─── Resolver token → Editor.id (slot de edição) ──────────────────────────────

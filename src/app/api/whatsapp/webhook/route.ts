@@ -584,7 +584,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
 
         if (downloaded) {
           // Upload para Supabase Storage
-          mediaUrl = await uploadMedia(downloaded.buffer, downloaded.fileName, downloaded.mimetype)
+          mediaUrl = await uploadMedia(downloaded.buffer, downloaded.fileName, downloaded.mimetype, orgId)
 
           // Se é áudio, transcrever
           if (midia.tipo === "audio") {

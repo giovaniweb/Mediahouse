@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
-import { createClient } from "@supabase/supabase-js"
+import { getOrgId, semOrg } from "@/lib/org"
+import { caminhoMidia, urlDeUpload } from "@/lib/midia"
 
 const EXT_MAPA: Record<string, string> = {
   "video/mp4": "mp4",
@@ -23,44 +24,13 @@ export async function GET(req: NextRequest) {
 
   const contentType = req.nextUrl.searchParams.get("contentType") ?? "video/mp4"
   const ext = EXT_MAPA[contentType] ?? "mp4"
-  const objectPath = `depoimentos/${Date.now()}.${ext}`
-  const bucket = "uploads"
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const caminho = caminhoMidia({ organizacaoId, tipo: "depoimentos", id: "geral", ext })
 
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Storage não configurado (env vars ausentes)" }, { status: 500 })
-  }
+  const midia = await urlDeUpload(caminho)
+  if (!midia) return NextResponse.json({ error: "Storage indisponível" }, { status: 502 })
 
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
-  // Garante que o bucket existe — mesmo padrão do upload-url de demandas
-  const { error: createBucketError } = await supabase.storage.createBucket(bucket, { public: true })
-  if (createBucketError && !createBucketError.message.toLowerCase().includes("already exist")) {
-    console.error("[depoimentos/upload-url] Falha ao criar bucket:", createBucketError.message)
-    return NextResponse.json(
-      { error: `Bucket '${bucket}' não pôde ser criado: ${createBucketError.message}` },
-      { status: 500 }
-    )
-  }
-
-  const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(objectPath)
-
-  if (error || !data?.signedUrl) {
-    const msg = error?.message ?? "resposta inválida do Supabase"
-    console.error("[depoimentos/upload-url] createSignedUploadUrl error:", msg)
-    return NextResponse.json(
-      { error: `Erro ao gerar URL de upload: ${msg}` },
-      { status: 500 }
-    )
-  }
-
-  const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(objectPath)
-
-  return NextResponse.json({
-    uploadUrl: data.signedUrl,
-    publicUrl: pubData.publicUrl,
-    contentType,
-  })
+  return NextResponse.json({ uploadUrl: midia.uploadUrl, publicUrl: midia.url, contentType })
 }

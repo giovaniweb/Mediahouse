@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { caminhoMidia, subirArquivo } from "@/lib/midia"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 
 type Params = { params: Promise<{ token: string }> }
@@ -51,20 +52,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!allowedExts.includes(ext)) return NextResponse.json({ error: "Envie PDF, PNG ou JPG." }, { status: 400 })
   if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "Máximo 20MB." }, { status: 400 })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseKey) return NextResponse.json({ error: "Storage não configurado" }, { status: 500 })
-
-  const path = `fornecedores/${fornecedor.id}/${custoId}/${Date.now()}.${ext}`
+  // Nota fiscal de fornecedor: mesmo tratamento da NF de videomaker — vai para
+  // o bucket privado, sem convivência. Documento fiscal não fica público.
+  if (!fornecedor.organizacaoId) {
+    return NextResponse.json({ error: "Fornecedor sem organização" }, { status: 500 })
+  }
   const arrayBuffer = await file.arrayBuffer()
-  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/uploads/${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${supabaseKey}`, "Content-Type": file.type || "application/octet-stream" },
-    body: arrayBuffer,
+  const caminho = caminhoMidia({
+    organizacaoId: fornecedor.organizacaoId,
+    tipo: "nf",
+    id: `fornecedor-${fornecedor.id}-${custoId}`,
+    ext,
   })
-  if (!uploadRes.ok) return NextResponse.json({ error: "Falha no upload. Tente novamente." }, { status: 500 })
-
-  const url = `${supabaseUrl}/storage/v1/object/public/uploads/${path}`
+  const url = await subirArquivo(caminho, arrayBuffer, file.type || "application/octet-stream")
+  if (!url) return NextResponse.json({ error: "Falha no upload. Tente novamente." }, { status: 500 })
   await prisma.custoEvento.update({
     where: { id: custoId },
     data: { notaFiscalUrl: url, statusPagamento: "nf_enviada" },

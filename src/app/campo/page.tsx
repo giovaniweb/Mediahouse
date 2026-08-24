@@ -93,6 +93,9 @@ interface Demanda {
   linkFolderBrutos: string | null
   linkFolderFinal: string | null
   produtos: { produto: { nome: string } }[]
+  // A empresa dona da demanda. O videomaker é da REDE: recebe trabalho de mais
+  // de uma, e sem a etiqueta a lista vira uma pilha sem dono.
+  empresa: { nome: string; slug: string } | null
 }
 
 interface AgendaEvento {
@@ -1801,6 +1804,9 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {demandas.map((d) => {
+          // Etiqueta só quando há mais de uma empresa na lista: com uma só, o
+          // rótulo se repetiria em toda linha sem informar nada.
+          const multiempresa = new Set(demandas.map((x) => x.empresa?.slug).filter(Boolean)).size > 1
           const isVencida = prazoVencido(d.dataLimite)
           const pill = STATUS_PILL[d.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
           return (
@@ -1832,7 +1838,22 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
                 )}
               </div>
 
-              <p style={{ fontSize: 10, color: MUTED, fontFamily: "monospace", marginBottom: 2 }}>{d.codigo}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
+                <p style={{ fontSize: 10, color: MUTED, fontFamily: "monospace", margin: 0 }}>{d.codigo}</p>
+                {multiempresa && d.empresa && (
+                  <span
+                    title={`Demanda de ${d.empresa.nome}`}
+                    style={{
+                      fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
+                      background: "rgba(59,130,246,0.12)", color: "#93c5fd",
+                      border: "1px solid rgba(59,130,246,0.25)", maxWidth: "12rem",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.empresa.nome}
+                  </span>
+                )}
+              </div>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: TEXT, margin: "0 0 4px", lineHeight: 1.3 }}>{d.titulo}</h3>
 
               {d.produtos?.[0] && (
@@ -2573,6 +2594,9 @@ export default function CampoPage() {
   // Fetch demandas
   const { data: demandasData } = useSWR<{
     demandas: Demanda[]
+    // Só há etiqueta a mostrar quando há mais de uma empresa em jogo — com uma
+    // só, o rótulo se repetiria em toda linha sem informar nada.
+    multiempresa: boolean
   }>("/api/campo/demandas", fetcher, { refreshInterval: 30000 })
 
   // Fetch agenda

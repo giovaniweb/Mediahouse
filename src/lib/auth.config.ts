@@ -78,6 +78,11 @@ export const authConfig: NextAuthConfig = {
         "/api/mcp",           // servidor MCP remoto (autenticado por Bearer token da org)
         "/d",                 // acompanhamento público de demanda (token opt-in, read-only)
         "/api/health",        // liveness p/ monitoramento — não devolve dado de negócio
+        // Mídia privada. Passa pelo middleware porque a página pública de
+        // aprovação (sem conta) precisa alcançá-la com `?token=`. A rota NÃO é
+        // aberta: ela exige sessão da empresa dona OU token válido, e devolve
+        // 404 para todo o resto.
+        "/api/midia",
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")

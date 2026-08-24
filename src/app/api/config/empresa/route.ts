@@ -4,18 +4,20 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { getPermissoes } from "@/lib/permissoes-server"
-import { contourlineOrgId } from "@/lib/whatsapp"
+import { orgPublica } from "@/lib/org"
 
-// GET /api/config/empresa — retorna dados da empresa (público para videomakers)
-// FALLBACK LEGADO (Fase 1): rota pública sem contexto de org. Para não devolver
-// dados de outra empresa de forma aleatória, fixa em Contourline de forma
-// determinística. Multiempresa real: o consumo público deve resolver a org por
-// token/demanda (NF upload, portal) — débito técnico documentado.
-export async function GET() {
-  const orgId = await contourlineOrgId()
-  const empresa = orgId
-    ? await prisma.configEmpresa.findFirst({ where: { organizacaoId: orgId } })
-    : await prisma.configEmpresa.findFirst()
+// GET /api/config/empresa — dados da empresa, público para videomakers.
+//
+// Aceita `?org=<slug>`. Sem ele, cai na ORG_PUBLICA_PADRAO: os links que já
+// circulam não identificam empresa, e quebrá-los agora tiraria do ar os
+// formulários em uso. O que mudou é que o destino deixou de ser "contourline"
+// cravado no código e virou configuração — a segunda empresa não herda os links
+// da primeira. O `findFirst()` global saiu: ele devolvia dados de QUALQUER
+// empresa quando a padrão não existisse.
+export async function GET(req: NextRequest) {
+  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+  if (!organizacaoId) return NextResponse.json({ empresa: null }, { status: 404 })
+  const empresa = await prisma.configEmpresa.findFirst({ where: { organizacaoId } })
   return NextResponse.json({ empresa })
 }
 

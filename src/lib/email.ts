@@ -5,14 +5,18 @@
 
 import { Resend } from "resend"
 import { prisma } from "@/lib/prisma"
-import { contourlineOrgId } from "@/lib/whatsapp"
 
-// Config de e-mail da organização. Sem org → fallback Contourline (legado/temporário).
+// Config de e-mail da organização. Sem org, NÃO envia.
+//
+// Antes caía na Contourline e, se nem ela existisse, num findFirst global — ou
+// seja, na config de qualquer empresa. O e-mail sairia com o remetente e a
+// assinatura de outro cliente. Falha fechado: não enviar é recuperável.
 async function getConfig(organizacaoId?: string | null) {
-  const orgId = organizacaoId ?? (await contourlineOrgId())
-  if (!orgId) return prisma.configEmail.findFirst({ orderBy: { createdAt: "desc" } })
-  if (!organizacaoId) console.warn("[Email] getConfig sem org — fallback Contourline (legado)")
-  return prisma.configEmail.findFirst({ where: { organizacaoId: orgId }, orderBy: { createdAt: "desc" } })
+  if (!organizacaoId) {
+    console.error("[Email] getConfig sem organização — envio cancelado. Passe organizacaoId.")
+    return null
+  }
+  return prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
 }
 
 async function createClient(organizacaoId?: string | null) {
