@@ -64,7 +64,9 @@ export async function POST(
 
   const convite = await prisma.conviteVideomaker.findUnique({
     where: { token },
-    include: { demanda: true, videomaker: true },
+    // `videomaker: true` trazia diária, CPF e PIX do perfil global para dentro
+    // de uma rota PÚBLICA por token. Só o que o convite precisa mostrar.
+    include: { demanda: true, videomaker: { select: { id: true, nome: true, telefone: true, email: true } } },
   })
 
   if (!convite) return NextResponse.json({ error: "Convite não encontrado" }, { status: 404 })

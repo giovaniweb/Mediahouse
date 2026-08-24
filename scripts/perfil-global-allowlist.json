@@ -1,0 +1,11 @@
+{
+  "_comentario": [
+    "Dívida conhecida dos perfis globais (Editor/Designer ainda não migrados).",
+    "Chave: arquivo::modelo::regra → quantidade tolerada.",
+    "Esta lista SÓ PODE ENCOLHER. Cada arquivo migrado sai daqui.",
+    "regra 'privadas' = usa coluna que vira do vínculo.",
+    "regra 'escopo'   = filtra o perfil por organizacaoId; a coluna vai sumir."
+  ],
+  "_gerado_em": "2026-08-21",
+  "permitidas": {}
+}

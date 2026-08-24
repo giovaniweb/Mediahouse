@@ -16,8 +16,8 @@ export async function filtroMinhasDemandas(
 ): Promise<Prisma.DemandaWhereInput> {
   const [videomaker, editor, designer] = await Promise.all([
     prisma.videomaker.findFirst({ where: { usuarioId }, select: { id: true } }),
-    prisma.editor.findFirst({ where: { usuarioId, organizacaoId }, select: { id: true } }),
-    prisma.designer.findFirst({ where: { usuarioId, organizacaoId }, select: { id: true } }),
+    prisma.editor.findFirst({ where: { usuarioId, vinculos: { some: { organizacaoId } } }, select: { id: true } }),
+    prisma.designer.findFirst({ where: { usuarioId, vinculos: { some: { organizacaoId } } }, select: { id: true } }),
   ])
 
   const alternativas: Prisma.DemandaWhereInput[] = [

@@ -21,7 +21,6 @@
     "src/app/api/configuracoes/trello/sync/route.ts",
     "src/app/api/editores/[id]/avaliar/route.ts",
     "src/app/api/fabricantes/seed/route.ts",
-    "src/app/api/ia/agentes/triagem/route.ts",
     "src/app/api/ia/analisar-demanda/route.ts",
     "src/app/api/kpi/b2c-b2b/route.ts",
     "src/app/api/me/nf-token/route.ts",
@@ -37,7 +36,6 @@
     "src/app/api/relatorios/route.ts",
     "src/app/api/transcode/callback/route.ts",
     "src/app/api/videomakers/[id]/avaliar/route.ts",
-    "src/app/api/videomakers/[id]/performance/route.ts",
     "src/lib/eventos-conclusao.ts",
     "src/lib/usuario-vinculos.ts"
   ]

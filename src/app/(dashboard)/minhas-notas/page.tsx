@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/Header"
 import { cn } from "@/lib/utils"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 import { fetcher } from "@/lib/fetcher"
+import { formatarData } from "@/lib/datas"
 
 
 const NF_STATUS: Record<string, { label: string; color: string }> = {
@@ -216,7 +217,7 @@ export default function MinhasNotasPage() {
                       ) : d.dataCaptacao ? (
                         <p className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          Captação: {format(new Date(d.dataCaptacao), "dd/MM/yyyy", { locale: ptBR })}
+                          Captação: {formatarData(d.dataCaptacao)}
                         </p>
                       ) : (
                         <p className="text-[11px] text-zinc-600 mt-1">

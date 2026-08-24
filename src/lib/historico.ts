@@ -133,7 +133,7 @@ export async function registrarTrocaExecutor(
           select: { nome: true },
         }).catch(() => null)
       : await prisma.editor.findFirst({
-          where: { id, organizacaoId },
+          where: { id, vinculos: { some: { organizacaoId } } },
           select: { nome: true },
         }).catch(() => null)
     return registro?.nome ?? "(removido)"

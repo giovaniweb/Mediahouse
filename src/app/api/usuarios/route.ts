@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
     orderBy: { nome: "asc" },
   })
   const editores = await prisma.editor.findMany({
-    where: { organizacaoId },
+    where: { vinculos: { some: { organizacaoId } } },
     select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true, usuarioId: true },
     orderBy: { nome: "asc" },
   })

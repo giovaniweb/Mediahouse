@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "auditar:tenancy": "node scripts/auditar-tenancy.mjs",
+    "auditar:perfil-global": "node scripts/auditar-perfil-global.mjs",
     "db:migrate": "node scripts/guarda-banco.mjs && prisma migrate dev",
     "db:deploy": "node scripts/guarda-banco.mjs && prisma migrate deploy",
     "db:status": "prisma migrate status",
@@ -17,6 +18,8 @@
     "db:push": "node scripts/guarda-banco.mjs && prisma db push",
     "db:seed": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "db:studio": "prisma studio",
+  "migrar:editor-designer": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/migrar-editor-designer.ts",
+  "sanear:perfil-global": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/sanear-perfil-global.ts",
   "faxina:alertas": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/faxina-alertas.ts",
     "_comment_guarda_banco": "Comandos que escrevem no banco passam por scripts/guarda-banco.mjs. Produção exige PERMITIR_BANCO_PRODUCAO=sim — ver o cabeçalho do script."
   },

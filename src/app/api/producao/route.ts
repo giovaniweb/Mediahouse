@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
+import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -57,8 +59,8 @@ export async function GET(req: NextRequest) {
       videomakerId: true,
       editorId: true,
       linkFinal: true,
-      videomaker: { select: { id: true, nome: true, valorDiaria: true } },
-      editor: { select: { id: true, nome: true, salario: true } },
+      videomaker: { select: { id: true, nome: true } },
+      editor: { select: { id: true, nome: true } },
     },
     orderBy: { updatedAt: "desc" },
   })
@@ -121,8 +123,12 @@ export async function GET(req: NextRequest) {
     const ed = d.editor; if (!ed) return
     const ex = editorMap.get(ed.id)
     if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
-    else editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA, salario: ed.salario ?? null })
+    else editorMap.set(ed.id, { id: ed.id, nome: ed.nome, demandas: 1, valor: VALOR_POR_DEMANDA, salario: null })
   })
+  // Salário do vínculo desta empresa, numa consulta só. O relatório de uma
+  // empresa não pode exibir o que a outra paga pela mesma pessoa.
+  const vincEd = await vinculosDaEmpresa([...editorMap.keys()], organizacaoId)
+  for (const [id, e] of editorMap) e.salario = vincEd.get(id)?.salario ?? null
   const maxEdDemandas = Math.max(...Array.from(editorMap.values()).map(e => e.demandas), 1)
   const porEditor = Array.from(editorMap.values())
     .map(e => ({
@@ -140,8 +146,11 @@ export async function GET(req: NextRequest) {
     const vm = d.videomaker; if (!vm) return
     const ex = vmMap.get(vm.id)
     if (ex) { ex.demandas++; ex.valor += VALOR_POR_DEMANDA }
-    else vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA, valorDiaria: vm.valorDiaria ?? null })
+    else vmMap.set(vm.id, { id: vm.id, nome: vm.nome, demandas: 1, valor: VALOR_POR_DEMANDA, valorDiaria: null })
   })
+  // Diária do vínculo desta empresa, em uma consulta só para todos os do mapa.
+  const diarias = await diariasDaEmpresa([...vmMap.keys()], organizacaoId)
+  for (const [id, v] of vmMap) v.valorDiaria = diarias.get(id) ?? null
   // Custo real pago a cada videomaker externo no período
   const custosVm = await prisma.custoVideomaker.groupBy({
     by: ["videomakerId"],

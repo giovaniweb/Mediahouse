@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { getOrgId, semOrg } from "@/lib/org"
+import { salarioDaEmpresa } from "@/lib/editor-vinculo"
 
 export async function GET(
   _req: NextRequest,
@@ -14,11 +15,15 @@ export async function GET(
 
   const { id } = await params
 
-  const editor = await prisma.editor.findUnique({
-    where: { id },
-    select: { id: true, nome: true, salario: true, organizacaoId: true },
+  // O perfil é da REDE; quem define se ESTA empresa enxerga é o vínculo — e o
+  // salário sai dele, não do perfil. `findFirst` com o vínculo no where resolve
+  // as duas coisas: sem vínculo, não encontra, e devolve 404.
+  const perfil = await prisma.editor.findFirst({
+    where: { id, vinculos: { some: { organizacaoId } } },
+    select: { id: true, nome: true },
   })
-  if (!editor || !pertenceAOrg(editor, organizacaoId)) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
+  if (!perfil) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
+  const editor = { ...perfil, salario: await salarioDaEmpresa(id, organizacaoId) }
 
   // All demands assigned to this editor
   const demandas = await prisma.demanda.findMany({

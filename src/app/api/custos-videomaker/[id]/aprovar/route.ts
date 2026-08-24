@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailFinanceiro } from "@/lib/email"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { fiscaisDaEmpresa } from "@/lib/videomaker-vinculo"
 
 // POST /api/custos-videomaker/[id]/aprovar
 // Aprova ou contesta um custo diretamente pelo custoId (sem precisar do demandaId)
@@ -25,10 +26,13 @@ export async function POST(
   const body = await req.json()
   const { acao } = body // "aprovar_pagamento" | "contestar"
 
+  // `videomaker: true` trazia a linha inteira do perfil global — inclusive dado
+  // que é de outra empresa. Aqui só o que é da rede; CPF e PIX saem dos fiscais
+  // desta organização, decifrados.
   const custo = await prisma.custoVideomaker.findUnique({
     where: { id: custoId },
     include: {
-      videomaker: true,
+      videomaker: { select: { id: true, nome: true, email: true, telefone: true } },
       demanda: { select: { id: true, codigo: true, titulo: true } },
     },
   })
@@ -37,6 +41,16 @@ export async function POST(
 
   // ── Aprovar pagamento ──────────────────────────────────────────────────────
   if (acao === "aprovar_pagamento") {
+    const fiscais = await fiscaisDaEmpresa(custo.videomakerId, organizacaoId)
+    if (!fiscais?.chavePix) {
+      // Antes ia e-mail com chavePix vazia e o financeiro descobria na hora de
+      // pagar. Falhar aqui é mais barato que um pagamento travado lá na frente.
+      return NextResponse.json(
+        { error: `Sem chave PIX cadastrada para ${custo.videomaker.nome} nesta empresa. Cadastre antes de aprovar.` },
+        { status: 422 }
+      )
+    }
+
     await prisma.custoVideomaker.update({
       where: { id: custoId },
       data: { statusPagamento: "aguardando_pagamento", emailFinanceiroAt: new Date() },
@@ -44,9 +58,9 @@ export async function POST(
 
     const emailResult = await sendEmailFinanceiro({
       nomeVideomaker: custo.videomaker.nome,
-      cpfCnpj: custo.videomaker.cpfCnpj ?? undefined,
+      cpfCnpj: fiscais.cpfCnpj ?? undefined,
       valorDiaria: custo.valor,
-      chavePix: custo.videomaker.chavePix ?? "",
+      chavePix: fiscais.chavePix,
       notaFiscalUrl: custo.notaFiscalUrl ?? undefined,
       codigoDemanda: custo.demanda?.codigo ?? "S/D",
       tituloDemanda: custo.demanda?.titulo ?? "Sem demanda",

@@ -76,7 +76,9 @@ export async function GET() {
       take: 10,
     }),
     prisma.editor.findMany({
-      where: { status: "ativo", organizacaoId },
+      // Ativo NESTA empresa: o status mora no vínculo desde a Fase B, então
+      // quem está inativo aqui some da métrica mesmo estando ativo em outra.
+      where: { vinculos: { some: { organizacaoId, status: "ativo" } } },
       include: {
         demandas: {
           where: { statusVisivel: { notIn: ["finalizado"] } },
