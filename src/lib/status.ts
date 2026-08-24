@@ -1,4 +1,5 @@
 import type { StatusInterno, StatusVisivel } from "@prisma/client"
+import { dataCalendario, diasEntre, ehHoje, hojeEmSaoPaulo, prazoVencido } from "./datas"
 
 // Mapeamento: StatusInterno → StatusVisivel (coluna kanban)
 export const STATUS_PARA_COLUNA: Record<StatusInterno, StatusVisivel> = {
@@ -87,11 +88,24 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
 // ele o card pulsava vermelho na coluna Concluído).
 export const STATUS_PRAZO_PAUSADO = ["aprovacao", "para_postar", "finalizado"]
 
-/** Regra única de atraso — usada pelo card e pela ordenação do kanban. */
+/**
+ * Regra única de atraso — usada pelo card e pela ordenação do kanban.
+ *
+ * Comparação por DIA, não por instante. O prazo é gravado como meia-noite UTC,
+ * então `new Date(prazo) < new Date()` dizia "atrasada" às 6h da manhã do
+ * próprio dia de entrega. Quem vence hoje tem o dia inteiro.
+ */
 export function estaAtrasada(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): boolean {
   if (!d.dataLimite) return false
   if (STATUS_PRAZO_PAUSADO.includes(d.statusVisivel ?? "")) return false
-  return new Date(d.dataLimite) < new Date()
+  return prazoVencido(d.dataLimite)
+}
+
+/** Vence exatamente hoje — ainda no prazo, mas é o último dia. */
+export function venceHoje(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): boolean {
+  if (!d.dataLimite) return false
+  if (STATUS_PRAZO_PAUSADO.includes(d.statusVisivel ?? "")) return false
+  return ehHoje(d.dataLimite)
 }
 
 /**
@@ -101,7 +115,9 @@ export function estaAtrasada(d: { dataLimite?: string | Date | null; statusVisiv
  */
 export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): number | null {
   if (!estaAtrasada(d)) return null
-  const dias = Math.floor((Date.now() - new Date(d.dataLimite!).getTime()) / 86_400_000)
+  const prazo = dataCalendario(d.dataLimite!)
+  if (!prazo) return null
+  const dias = diasEntre(prazo, hojeEmSaoPaulo())
   return dias > 0 && dias < 3650 ? dias : null
 }
 

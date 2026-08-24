@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Check, X, Loader2, Calendar, MapPin, Film, AlertTriangle, Clock, DollarSign } from "lucide-react"
+import { formatarData } from "@/lib/datas"
 
 interface ConviteData {
   id: string
@@ -195,7 +196,7 @@ export default function ConvitePage() {
                 <Calendar className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-400">Data:</span>
                 <span className="text-zinc-200">
-                  {new Date(d.dataEvento || d.dataCaptacao!).toLocaleDateString("pt-BR", {
+                  {formatarData(d.dataEvento || d.dataCaptacao!, {
                     day: "2-digit",
                     month: "long",
                     year: "numeric",

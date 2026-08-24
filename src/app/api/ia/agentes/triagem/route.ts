@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, MODELO_POTENTE, extrairJSON } from "@/lib/claude"
+import { formatarData } from "@/lib/datas"
 import { requireDemandaOrg } from "@/lib/org"
 import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
@@ -110,7 +111,7 @@ DEMANDA PARA TRIAGEM:
 - Cidade: ${demanda.cidade}
 - Motivo de urgência: ${demanda.motivoUrgencia ?? "N/A"}
 - Solicitante: ${demanda.solicitante.nome} (${demanda.solicitante.tipo})
-- Data limite: ${demanda.dataLimite ? demanda.dataLimite.toLocaleDateString("pt-BR") : "Não definida"}
+- Data limite: ${formatarData(demanda.dataLimite) || "Não definida"}
 
 VIDEOMAKERS DISPONÍVEIS (carga < 3 demandas):
 ${JSON.stringify(vmDisponivel, null, 2)}

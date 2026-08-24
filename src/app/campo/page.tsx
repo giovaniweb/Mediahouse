@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
+import { formatarData, prazoVencido } from "@/lib/datas"
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 const NAV_BG = "#06142E"
@@ -146,8 +147,10 @@ const STATUS_COLOR: Record<string, string> = {
   finalizado: "bg-green-900/70 text-green-300",
 }
 
+// Prazo, início e fim de cobertura são data de calendário — formatar com
+// `new Date(...)` mostraria o dia anterior no fuso de Brasília.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+  return formatarData(iso, { day: "2-digit", month: "short" })
 }
 
 function formatTime(iso: string) {
@@ -1623,7 +1626,7 @@ const STATUS_PILL: Record<string, { bg: string; color: string }> = {
 
 // ─── Demanda Detail Bottom Sheet ──────────────────────────────────────────────
 function DemandaSheet({ demanda, onClose }: { demanda: Demanda; onClose: () => void }) {
-  const isVencida = demanda.dataLimite && new Date(demanda.dataLimite) < new Date()
+  const isVencida = prazoVencido(demanda.dataLimite)
   const pill = STATUS_PILL[demanda.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
 
   return (
@@ -1798,7 +1801,7 @@ function TabDemandas({ demandas }: { demandas: Demanda[] }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {demandas.map((d) => {
-          const isVencida = d.dataLimite && new Date(d.dataLimite) < new Date()
+          const isVencida = prazoVencido(d.dataLimite)
           const pill = STATUS_PILL[d.statusVisivel] ?? { bg: "rgba(234,244,244,.08)", color: MUTED }
           return (
             <div

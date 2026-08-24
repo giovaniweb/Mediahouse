@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 import { fetcher } from "@/lib/fetcher"
+import { formatarData, formatarDataCurta, prazoVencido } from "@/lib/datas"
 
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -265,7 +266,7 @@ export function VideomakerDashboard() {
                   {d.dataCaptacao && (
                     <p className="text-xs text-zinc-400 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {format(new Date(d.dataCaptacao), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      {formatarData(d.dataCaptacao, { day: "2-digit", month: "long", year: "numeric" })}
                     </p>
                   )}
                 </div>
@@ -325,7 +326,7 @@ export function VideomakerDashboard() {
               <div className="space-y-2">
                 {demandasAtivas.map((d) => {
                   const st = STATUS_LABELS[d.statusVisivel] ?? STATUS_LABELS.entrada
-                  const isOverdue = d.dataLimite && new Date(d.dataLimite) < new Date()
+                  const isOverdue = prazoVencido(d.dataLimite)
                   const isUrgent = d.prioridade === "urgente"
                   // Brutos entregues: mostrar botão se ainda não foram marcados
                   const brutosJaEntregues = [
@@ -360,7 +361,7 @@ export function VideomakerDashboard() {
                             )}>
                               {isOverdue && <AlertTriangle className="w-2.5 h-2.5" />}
                               {!isOverdue && <Clock className="w-2.5 h-2.5" />}
-                              {format(new Date(d.dataLimite), "dd/MM", { locale: ptBR })}
+                              {formatarDataCurta(d.dataLimite)}
                             </span>
                           )}
                         </div>
@@ -368,7 +369,7 @@ export function VideomakerDashboard() {
                       {d.dataCaptacao && (
                         <p className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1">
                           <Calendar className="w-2.5 h-2.5" />
-                          Captação: {format(new Date(d.dataCaptacao), "dd 'de' MMMM", { locale: ptBR })}
+                          Captação: {formatarData(d.dataCaptacao, { day: "2-digit", month: "long" })}
                         </p>
                       )}
                       {/* Botão Brutos Entregues */}

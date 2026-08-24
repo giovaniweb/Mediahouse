@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
-import { janelaDoDiaSeguinte } from "@/lib/datas"
+import { hojeEmSaoPaulo, inicioDoDia, janelaDoDiaSeguinte, somarDias } from "@/lib/datas"
 import { resolverAlertas } from "@/lib/alertas"
 import { resumirParados, textoDeParados, DIAS_PARA_COBRAR } from "@/lib/parados"
 
@@ -421,9 +421,7 @@ async function rodarAgenteBriefing(organizacaoId: string) {
   inicioDia.setHours(0, 0, 0, 0)
   const fimDia = new Date(agora)
   fimDia.setHours(23, 59, 59, 999)
-  const fimAmanha = new Date(agora)
-  fimAmanha.setDate(fimAmanha.getDate() + 1)
-  fimAmanha.setHours(23, 59, 59, 999)
+  const hoje = hojeEmSaoPaulo(agora)
 
   // Quem recebe o briefing. Além de admin/gestor, entra o líder audiovisual:
   // triagem é trabalho dele também, e o briefing passou a cobrar justamente as
@@ -458,7 +456,9 @@ async function rodarAgenteBriefing(organizacaoId: string) {
     prisma.demanda.count({
       where: {
         organizacaoId,
-        dataLimite: { gte: inicioDia, lte: fimAmanha },
+        // Prazo é gravado como meia-noite UTC — a janela "hoje e amanhã"
+        // precisa ser por dia, não pelo relógio do servidor.
+        dataLimite: { gte: inicioDoDia(hoje), lte: inicioDoDia(somarDias(hoje, 1)) },
         statusVisivel: { notIn: ["finalizado"] },
       },
     }),
@@ -479,7 +479,7 @@ async function rodarAgenteBriefing(organizacaoId: string) {
       where: {
         organizacaoId,
         statusVisivel: { not: "finalizado" },
-        dataLimite: { lt: agora },
+        dataLimite: { lt: inicioDoDia(hoje) },
       },
     }),
   ])

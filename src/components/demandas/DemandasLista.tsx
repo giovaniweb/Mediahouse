@@ -7,6 +7,7 @@ import {
   estaAtrasada, diasDeAtraso, LABEL_STATUS,
 } from "./tipos-visao"
 import { iniciais } from "@/lib/pessoas-ui"
+import { formatarDataCurta } from "@/lib/datas"
 
 // Visão Lista: agrupada por urgência, não por coluna do kanban. Quem abre aqui
 // quer saber o que fazer agora — e "atrasada" e "vence hoje" respondem isso
@@ -21,7 +22,7 @@ const TOM_GRUPO = {
 
 function dataCurta(iso?: string | null) {
   if (!iso) return null
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  return formatarDataCurta(iso)
 }
 
 function Linha({ d, onAbrir }: { d: DemandaLista; onAbrir: (id: string) => void }) {

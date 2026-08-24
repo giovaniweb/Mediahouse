@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import {
   type DemandaLista, responsavelResumo, estaAtrasada, diasDeAtraso, LABEL_STATUS,
 } from "./tipos-visao"
-import { hojeEmSaoPaulo } from "@/lib/datas"
+import { formatarData, hojeEmSaoPaulo } from "@/lib/datas"
 
 // Visão Tabela: denso, ordenável e exportável. Existe para quem se organiza em
 // planilha — em vez de manter uma paralela no Excel e ficar sincronizando na mão,
@@ -56,7 +56,7 @@ function paraCsv(demandas: DemandaLista[]): string {
   ]
 
   const escapar = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`
-  const data = (v?: string | null) => (v ? new Date(v).toLocaleDateString("pt-BR") : "")
+  const data = (v?: string | null) => formatarData(v)
 
   const linhas = demandas.map((d) => {
     // Todos os responsáveis: a M2M primeiro, com o escalar como reserva para
@@ -187,7 +187,7 @@ export function DemandasTabela({ demandas, onAbrir }: {
                   <td className={cn("px-3 py-2.5 whitespace-nowrap",
                     atrasada ? "text-red-400 font-semibold" : "text-zinc-400")}>
                     {atrasada && <AlertTriangle className="w-3 h-3 inline mr-1 align-[-1px]" />}
-                    {d.dataLimite ? new Date(d.dataLimite).toLocaleDateString("pt-BR") : "—"}
+                    {d.dataLimite ? formatarData(d.dataLimite) : "—"}
                     {atrasada && dias ? <span className="text-[10px] ml-1">({dias}d)</span> : null}
                   </td>
                 </tr>

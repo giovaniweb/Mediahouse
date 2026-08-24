@@ -29,6 +29,7 @@ import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { extrairCopy } from "@/lib/copy-criativo"
+import { formatarData, prazoVencido } from "@/lib/datas"
 
 const STATUS_LABELS: Record<string, string> = {
   pedido_criado: "Pedido Criado",
@@ -327,21 +328,32 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   }, [dataMe, searchParams, podeEditar])
 
   // ── Sincroniza campos ao carregar demanda ─────────────────────────────────
+  //
+  // O gate era só `!editMode`, e isso quebrava o atalho `?edit=true` do kanban:
+  // `/api/me` responde antes de `/api/demandas/[id]` (vem do cache do SWR), o
+  // editMode ligava com a demanda ainda vazia, e a sincronização nunca rodava.
+  // O formulário abria em branco e o Salvar mandava tudo vazio — a API barrava
+  // no título ("deve ter pelo menos 3 caracteres") e, se não barrasse, teria
+  // apagado cidade, links e local de gravação. Agora a demanda é sincronizada
+  // pelo menos uma vez, mesmo se o editMode chegar primeiro; depois disso o
+  // editMode segura a revalidação para não atropelar o que a pessoa digitou.
+  const idSincronizado = useRef<string | null>(null)
   useEffect(() => {
-    if (demanda && !editMode) {
-      setTitulo(demanda.titulo ?? "")
-      setDescricao(demanda.descricao ?? "")
-      setCidade(demanda.cidade ?? "")
-      setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-      setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
-      setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
-      setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
-      setLinkBrutos(demanda.linkBrutos ?? "")
-      setLinkFinal(demanda.linkFinal ?? "")
-      setLocalGravacao(demanda.localGravacao ?? "")
-      setClassificacao(demanda.classificacao ?? "")
-      setProdutoId(demanda.produtos?.[0]?.produtoId ?? "")
-    }
+    if (!demanda) return
+    if (editMode && idSincronizado.current === demanda.id) return
+    idSincronizado.current = demanda.id
+    setTitulo(demanda.titulo ?? "")
+    setDescricao(demanda.descricao ?? "")
+    setCidade(demanda.cidade ?? "")
+    setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
+    setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+    setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
+    setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
+    setLinkBrutos(demanda.linkBrutos ?? "")
+    setLinkFinal(demanda.linkFinal ?? "")
+    setLocalGravacao(demanda.localGravacao ?? "")
+    setClassificacao(demanda.classificacao ?? "")
+    setProdutoId(demanda.produtos?.[0]?.produtoId ?? "")
   }, [demanda, editMode])
 
   // ── Salvar edição ─────────────────────────────────────────────────────────
@@ -352,7 +364,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          titulo, descricao, cidade,
+          // Título e descrição NÃO entram: este formulário não tem campo para
+          // eles (quem edita é o InlineEdit, sempre disponível). Mandá-los daqui
+          // só criava a chance de reenviar um valor velho — ou vazio.
+          cidade,
           dataLimite: dataLimite || null,
           dataCaptacao: dataCaptacao || null,
           videomakerId: videomakerId || null,
@@ -369,9 +384,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       setEditMode(false)
       mutate()
     } catch (e) {
-      // Título, descrição e prazo não têm input neste formulário (são editados
-      // pelo InlineEdit, que mostra o erro no próprio campo). Aqui o toast já
-      // carrega a mensagem específica da API, não um "erro ao salvar" genérico.
+      // Título, descrição e prazo são editados pelo InlineEdit, que mostra o
+      // erro no próprio campo. Aqui o toast já carrega a mensagem específica da
+      // API, não um "erro ao salvar" genérico.
       toast.error(mensagemDeErro(e, "Não foi possível salvar a demanda."))
     } finally {
       setSaving(false)
@@ -2085,7 +2100,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   placeholder="—"
                   onSave={(v) => salvarCampo({ dataLimite: v || null })}
                   display={demanda.dataLimite
-                    ? <span className={cn("font-medium", new Date(demanda.dataLimite) < new Date() ? "text-red-400" : "text-zinc-200")}>{format(new Date(demanda.dataLimite), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    ? <span className={cn("font-medium", prazoVencido(demanda.dataLimite) ? "text-red-400" : "text-zinc-200")}>{formatarData(demanda.dataLimite)}</span>
                     : <span className="text-zinc-600 text-xs">—</span>}
                 />
               </div>
@@ -2098,7 +2113,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   placeholder="—"
                   onSave={(v) => salvarCampo({ dataCaptacao: v || null })}
                   display={demanda.dataCaptacao
-                    ? <span className="font-medium text-zinc-200">{format(new Date(demanda.dataCaptacao), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    ? <span className="font-medium text-zinc-200">{formatarData(demanda.dataCaptacao)}</span>
                     : <span className="text-zinc-600 text-xs">—</span>}
                 />
               </div>

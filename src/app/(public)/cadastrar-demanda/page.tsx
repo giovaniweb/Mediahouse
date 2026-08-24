@@ -7,6 +7,7 @@ import {
   Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles,
 } from "lucide-react"
 import { AreaReferencia } from "@/components/publico/AreaReferencia"
+import { formatarBR } from "@/lib/datas"
 
 /* ═══════════════════════════════════════════════════════════════════════
    STYLES
@@ -737,7 +738,7 @@ export default function CadastrarDemandaPage() {
                     <div><span className="text-zinc-500">Data:</span> <span className="text-white">{dataEvento} {horaEvento && `às ${horaEvento}`}</span></div>
                   </>
                 )}
-                {dataLimite && <div><span className="text-zinc-500">Prazo:</span> <span className="text-white">{dataLimite}</span></div>}
+                {dataLimite && <div><span className="text-zinc-500">Prazo:</span> <span className="text-white">{formatarBR(dataLimite)}</span></div>}
                 {referencia && <div><span className="text-zinc-500">Referência:</span> <span className="text-white break-all">{referencia}</span></div>}
               </div>
 

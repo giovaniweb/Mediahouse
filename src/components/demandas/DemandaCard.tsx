@@ -1,12 +1,11 @@
 "use client"
 
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
 import { AlertTriangle, Calendar, Trash2, User, Video, Pencil, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { formatarDataCurta } from "@/lib/datas"
 
 const prioridadeConfig = {
   urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -200,7 +199,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
               isNearDeadline && "text-amber-400"
             )}>
               {isOverdue ? <AlertTriangle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-              <span>{format(new Date(demanda.dataLimite), "dd/MM", { locale: ptBR })}</span>
+              <span>{formatarDataCurta(demanda.dataLimite)}</span>
             </div>
           )}
         </div>

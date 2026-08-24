@@ -145,3 +145,75 @@ export function janelaDoDiaSeguinte(agora: Date = new Date()): { inicio: Date; f
     fim: new Date(`${dia}T23:59:59.999-03:00`),
   }
 }
+
+// ── Exibição e comparação de DATA DE CALENDÁRIO ────────────────────────────
+//
+// Prazo, captação e evento são DIA, não instante. São gravados como meia-noite
+// UTC (`new Date("2026-08-21")`). Formatar isso com `toLocaleDateString` ou com
+// o `format` do date-fns lê o instante no fuso do NAVEGADOR: em Brasília
+// (UTC-3), 21/08 00:00Z vira 20/08 21:00 — e a tela mostra o dia anterior ao
+// que a pessoa pediu. É o mesmo motivo pelo qual comparar com `new Date()`
+// marca como atrasada, logo de manhã, a demanda que vence hoje.
+//
+// Tudo que exibe ou compara prazo passa por aqui. Nada de `new Date(prazo)`
+// solto na tela.
+
+const OPCOES_DATA_PADRAO: Intl.DateTimeFormatOptions = {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+}
+
+/**
+ * Formata uma data de calendário para exibição, sempre no dia que a pessoa
+ * escolheu — independente do fuso de quem está olhando.
+ *
+ * Devolve "" para ausente ou inválido, para o chamador cair no seu próprio "—".
+ */
+export function formatarData(
+  valor: string | Date | null | undefined,
+  opcoes: Intl.DateTimeFormatOptions = OPCOES_DATA_PADRAO
+): string {
+  if (valor === null || valor === undefined || valor === "") return ""
+  const dia = dataCalendario(valor)
+  if (!dia) return ""
+  // Meio-dia UTC: qualquer arredondamento de formatação continua no mesmo dia.
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", ...opcoes }).format(
+    new Date(`${dia}T12:00:00.000Z`)
+  )
+}
+
+/** "DD/MM" — para cartão de kanban, lista e outros lugares apertados. */
+export function formatarDataCurta(valor: string | Date | null | undefined): string {
+  return formatarData(valor, { day: "2-digit", month: "2-digit" })
+}
+
+/** Meia-noite UTC do dia informado — a forma como prazo é gravado no banco.
+ *  Use em consulta de "vencidas": `{ dataLimite: { lt: inicioDoDia(hoje) } }`. */
+export function inicioDoDia(dia: string = hojeEmSaoPaulo()): Date {
+  return new Date(`${dia}T00:00:00.000Z`)
+}
+
+/** O prazo já passou? Vencer HOJE não é vencido — é o último dia. */
+export function prazoVencido(
+  valor: string | Date | null | undefined,
+  referencia: string = hojeEmSaoPaulo()
+): boolean {
+  if (valor === null || valor === undefined || valor === "") return false
+  const dia = dataCalendario(valor)
+  return !!dia && dia < referencia
+}
+
+/** A data cai no dia de hoje (no fuso de São Paulo)? */
+export function ehHoje(
+  valor: string | Date | null | undefined,
+  referencia: string = hojeEmSaoPaulo()
+): boolean {
+  if (valor === null || valor === undefined || valor === "") return false
+  return dataCalendario(valor) === referencia
+}
+
+/** Dias inteiros entre duas datas de calendário ("YYYY-MM-DD"). */
+export function diasEntre(de: string, ate: string): number {
+  return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
+}

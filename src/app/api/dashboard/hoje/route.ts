@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { hojeEmSaoPaulo, inicioDoDia, somarDias } from "@/lib/datas"
 
 // GET /api/dashboard/hoje — dados para o painel "Hoje em Foco" (TDAH)
 export async function GET() {
@@ -15,10 +16,7 @@ export async function GET() {
   inicioDia.setHours(0, 0, 0, 0)
   const fimDia = new Date(agora)
   fimDia.setHours(23, 59, 59, 999)
-  const amanha = new Date(agora)
-  amanha.setDate(amanha.getDate() + 1)
-  const fimAmanha = new Date(amanha)
-  fimAmanha.setHours(23, 59, 59, 999)
+  const hoje = hojeEmSaoPaulo(agora)
 
   // Para videomakers externos: filtrar por videomakerId deles
   let videomakerId: string | undefined
@@ -52,7 +50,7 @@ export async function GET() {
     prisma.demanda.findMany({
       where: {
         organizacaoId,
-        dataLimite: { gte: inicioDia, lte: fimAmanha },
+        dataLimite: { gte: inicioDoDia(hoje), lte: inicioDoDia(somarDias(hoje, 1)) },
         statusVisivel: { notIn: ["finalizado"] },
         // Filtrar por videomaker se for videomaker externo
         ...(videomakerId ? { videomakerId } : {}),

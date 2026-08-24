@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { calcularCargaTotal, avaliarSobrecarga } from "@/lib/peso-demanda"
 import { getOrgId, semOrg } from "@/lib/org"
+import { inicioDoDia } from "@/lib/datas"
 
 export async function GET() {
   const session = await auth()
@@ -51,7 +52,7 @@ export async function GET() {
     prisma.demanda.count({
       where: {
         area: "audiovisual", organizacaoId,
-        dataLimite: { lt: new Date() },
+        dataLimite: { lt: inicioDoDia() },
         statusVisivel: { notIn: ["finalizado", "aprovacao", "para_postar"] },
       },
     }),

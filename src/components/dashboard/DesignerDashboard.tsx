@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Palette, Loader2, Clock } from "lucide-react"
 import { TIPO_ARTE_LABEL } from "@/lib/design-pecas"
 import { fetcher } from "@/lib/fetcher"
+import { formatarData } from "@/lib/datas"
 
 
 const STATUS: { id: string; label: string; color: string }[] = [
@@ -59,7 +60,7 @@ export function DesignerDashboard() {
                         <p className="text-xs text-zinc-500">{a.codigo} · {TIPO_ARTE_LABEL[a.tipoVideo] ?? a.tipoVideo}</p>
                       </div>
                       {a.dataLimite && (
-                        <span className="text-[10px] text-zinc-500 flex items-center gap-1 shrink-0"><Clock className="w-3 h-3" /> {new Date(a.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
+                        <span className="text-[10px] text-zinc-500 flex items-center gap-1 shrink-0"><Clock className="w-3 h-3" /> {formatarData(a.dataLimite, { day: "2-digit", month: "short" })}</span>
                       )}
                     </Link>
                   ))}

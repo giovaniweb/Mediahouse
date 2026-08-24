@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { getOrgId, semOrg } from "@/lib/org"
+import { inicioDoDia } from "@/lib/datas"
 
 const VALOR_POR_DEMANDA = 200
 
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
     prisma.demanda.count({ where: { area, organizacaoId,statusVisivel: { notIn: ["finalizado"] } } }),
     prisma.demanda.count({ where: { area, organizacaoId,createdAt: { gte: deDate, lte: ateDate } } }),
     prisma.demanda.count({ where: { area, organizacaoId,prioridade: "urgente", statusVisivel: { notIn: ["finalizado"] } } }),
-    prisma.demanda.count({ where: { area, organizacaoId,dataLimite: { lt: agora }, statusVisivel: { notIn: ["finalizado"] } } }),
+    prisma.demanda.count({ where: { area, organizacaoId,dataLimite: { lt: inicioDoDia() }, statusVisivel: { notIn: ["finalizado"] } } }),
     prisma.demanda.count({ where: { area, organizacaoId,statusInterno: { in: ["aguardando_aprovacao_interna", "urgencia_pendente_aprovacao"] } } }),
     prisma.demanda.count({ where: { area, organizacaoId,statusInterno: { in: ["editor_atribuido", "fila_edicao", "editando"] } } }),
   ])
