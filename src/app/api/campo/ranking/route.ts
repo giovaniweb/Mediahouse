@@ -20,9 +20,12 @@ export async function GET() {
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const vmSessao = await videomakerDoUsuario(session.user.id)
-  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
   let orgs: string[]
-  if (vmSessao && !isAdmin) {
+    // Quem tem perfil de videomaker vê O PRÓPRIO trabalho aqui, mesmo sendo admin
+  // ou gestor. `/campo` é o app de quem está executando; a visão macro da
+  // empresa é o dashboard. Antes, `!isAdmin` excluía justamente quem acumula os
+  // dois papéis — e essa pessoa nunca via as demandas dela.
+if (vmSessao) {
     orgs = await organizacoesDoVideomaker(vmSessao.id)
   } else {
     const ativa = await getOrgId(session)

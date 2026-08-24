@@ -18,11 +18,14 @@ export async function GET() {
   })
 
   // Admin/gestor sempre vê tudo (mesmo que tenha perfil de videomaker)
-  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
 
   let coberturas
 
-  if (vm && !isAdmin) {
+    // Quem tem perfil de videomaker vê O PRÓPRIO trabalho aqui, mesmo sendo admin
+  // ou gestor. `/campo` é o app de quem está executando; a visão macro da
+  // empresa é o dashboard. Antes, `!isAdmin` excluía justamente quem acumula os
+  // dois papéis — e essa pessoa nunca via as demandas dela.
+if (vm) {
     // Usuário tem perfil de videomaker → mostra só os eventos em que está na equipe
     coberturas = await prisma.eventoCobertura.findMany({
       where: {

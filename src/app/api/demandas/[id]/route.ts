@@ -144,7 +144,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.
   try {
     if (typeof body.videomakerId === "string" && body.videomakerId.includes(":")) {
-      body.videomakerId = await resolveParaVideomaker(body.videomakerId)
+      body.videomakerId = await resolveParaVideomaker(body.videomakerId, guard.organizacaoId)
     }
     if (typeof body.editorId === "string" && body.editorId.includes(":")) {
       body.editorId = await resolveParaEditor(body.editorId, guard.organizacaoId)
