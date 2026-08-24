@@ -6,7 +6,7 @@
 // prefere lista agrupada; quem já se acostumou com o quadro fica no kanban. É a
 // mesma consulta e o mesmo conjunto de dados — muda só o desenho.
 
-import { estaAtrasada, diasDeAtraso } from "@/lib/status"
+import { estaAtrasada, diasDeAtraso, venceHoje } from "@/lib/status"
 
 export type Visao = "kanban" | "lista" | "tabela"
 export type AbaRapida = "todos" | "minhas" | "criadas" | "atrasadas"
@@ -71,13 +71,6 @@ export const GRUPOS_LISTA = [
   { id: "concluidas", titulo: "Concluídas recentes", tom: "verde" as const },
 ]
 
-function venceHoje(d: DemandaLista): boolean {
-  if (!d.dataLimite) return false
-  const prazo = new Date(d.dataLimite)
-  const hoje = new Date()
-  return prazo.toDateString() === hoje.toDateString()
-}
-
 export function grupoDaDemanda(d: DemandaLista): string {
   if (d.statusVisivel === "finalizado") return "concluidas"
   if (estaAtrasada(d)) return "atrasadas"
@@ -103,4 +96,4 @@ export function calcularKpis(demandas: DemandaLista[]) {
   }
 }
 
-export { estaAtrasada, diasDeAtraso }
+export { estaAtrasada, diasDeAtraso, venceHoje }

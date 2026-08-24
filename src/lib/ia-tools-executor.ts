@@ -8,6 +8,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { listarDepartamentos } from "@/lib/departamentos"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { inicioDoDia, prazoVencido } from "@/lib/datas"
 
 // ─── Executor principal ───────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ async function buscarDemandas(input: Record<string, unknown>, organizacaoId?: st
     where.prioridade = input.prioridade
   }
   if (input.em_atraso) {
-    where.dataLimite = { lt: hoje }
+    where.dataLimite = { lt: inicioDoDia() }
     where.statusVisivel = {
       notIn: ["aprovacao", "para_postar", "finalizado"],
     }
@@ -121,7 +122,7 @@ async function buscarDemandas(input: Record<string, unknown>, organizacaoId?: st
   const demandasFormatadas = demandas.map(d => ({
     ...d,
     diasSemAtualizacao: Math.floor((hoje.getTime() - d.updatedAt.getTime()) / 86400000),
-    emAtraso: d.dataLimite ? d.dataLimite < hoje : false,
+    emAtraso: prazoVencido(d.dataLimite),
     horasParaPrazo: d.dataLimite
       ? Math.floor((d.dataLimite.getTime() - hoje.getTime()) / 3600000)
       : null,

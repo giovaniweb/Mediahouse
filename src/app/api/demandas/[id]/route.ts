@@ -7,7 +7,7 @@ import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
-import { validarPrazo, mesmoDia } from "@/lib/datas"
+import { validarPrazo, mesmoDia, formatarData, formatarDataCurta } from "@/lib/datas"
 import { erroDeCampo } from "@/lib/erros-api"
 import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } from "@/lib/historico"
 import type { Session } from "next-auth"
@@ -425,9 +425,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         select: { nome: true, telefone: true },
       })
       if (novoVm?.telefone && demandaAntes) {
-        const dataFmt = body.dataCaptacao || demandaAntes.dataCaptacao
-          ? new Date(body.dataCaptacao ?? demandaAntes!.dataCaptacao!).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-          : "A confirmar"
+        const dataFmt = formatarData(body.dataCaptacao ?? demandaAntes.dataCaptacao) || "A confirmar"
 
         const isCobertura = demandaAntes.tipoVideo?.toLowerCase().includes("cobertura")
 
@@ -624,9 +622,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           where: { id: { in: novos }, status: "ativo", telefone: { not: null } },
           select: { telefone: true },
         })
-        const prazo = demanda.dataLimite
-          ? new Date(demanda.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
-          : null
+        const prazo = demanda.dataLimite ? formatarDataCurta(demanda.dataLimite) : null
         const msg = templates.responsavelAtribuido(demanda.codigo, demanda.titulo, prazo)
         await Promise.allSettled(
           pessoas.map((p) => sendWhatsappMessage(p.telefone!, msg, id, guard.organizacaoId))

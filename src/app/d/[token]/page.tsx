@@ -4,6 +4,7 @@ import useSWR from "swr"
 import { useParams } from "next/navigation"
 import { Loader2, CalendarDays, CheckCircle2, Clock, Film, Sparkles, Download } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
+import { formatarData } from "@/lib/datas"
 
 // Acompanhamento público de uma demanda (somente leitura). Quem abre não tem
 // conta no sistema — vê o andamento e o material final, nada além disso.
@@ -38,7 +39,7 @@ const ETAPAS = [
 
 function fmt(d: string | null) {
   if (!d) return null
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
+  return formatarData(d, { day: "2-digit", month: "short", year: "numeric" }) || null
 }
 
 export default function DemandaPublicaPage() {

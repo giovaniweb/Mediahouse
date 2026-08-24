@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso } from "@/lib/status"
 import { fetcher } from "@/lib/fetcher"
+import { formatarDataCurta } from "@/lib/datas"
 
 
 // Painel recolhível no canto: em que a pessoa está agora e o que atacar depois.
@@ -49,7 +50,7 @@ function Prazo({ d }: { d: DemandaFoco }) {
   if (!d.dataLimite) return <span className="text-[10px] text-zinc-600">sem prazo</span>
   return (
     <span className="text-[10px] text-zinc-500">
-      até {new Date(d.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+      até {formatarDataCurta(d.dataLimite)}
     </span>
   )
 }

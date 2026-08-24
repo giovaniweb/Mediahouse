@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { validarPrazo, hojeEmSaoPaulo, dataEmSaoPaulo, dataCalendario, mesmoDia, somarDias, somarMeses, janelaDoDiaSeguinte } from "@/lib/datas"
+import { validarPrazo, hojeEmSaoPaulo, dataEmSaoPaulo, dataCalendario, mesmoDia, somarDias, somarMeses, janelaDoDiaSeguinte, formatarData, formatarDataCurta, prazoVencido, ehHoje, inicioDoDia, diasEntre } from "@/lib/datas"
 
 afterEach(() => vi.useRealTimers())
 
@@ -160,5 +160,77 @@ describe("janelaDoDiaSeguinte", () => {
   it("vira o mês corretamente", () => {
     const { dia } = janelaDoDiaSeguinte(new Date("2026-08-31T15:00:00Z"))
     expect(dia).toBe("2026-09-01")
+  })
+})
+
+describe("formatarData", () => {
+  it("mostra o dia que a pessoa escolheu, não o anterior", () => {
+    // O bug relatado: pedido de um dia para o outro. O prazo é gravado como
+    // meia-noite UTC; `new Date(prazo).toLocaleDateString("pt-BR")` num
+    // navegador de Brasília lê 20/08 21:00 e imprime 20/08.
+    expect(formatarData("2026-08-21T00:00:00.000Z")).toBe("21/08/2026")
+    expect(formatarData(new Date("2026-08-21T00:00:00.000Z"))).toBe("21/08/2026")
+  })
+
+  it("aceita data pura e formato curto", () => {
+    expect(formatarData("2026-08-21")).toBe("21/08/2026")
+    expect(formatarDataCurta("2026-08-21T00:00:00.000Z")).toBe("21/08")
+  })
+
+  it("devolve vazio para ausente ou inválido — o chamador põe o próprio traço", () => {
+    expect(formatarData(null)).toBe("")
+    expect(formatarData(undefined)).toBe("")
+    expect(formatarData("")).toBe("")
+    expect(formatarData("abacaxi")).toBe("")
+  })
+})
+
+describe("prazoVencido e ehHoje", () => {
+  it("quem vence hoje tem o dia inteiro — não está vencido", () => {
+    expect(prazoVencido("2026-08-21T00:00:00.000Z", "2026-08-21")).toBe(false)
+    expect(ehHoje("2026-08-21T00:00:00.000Z", "2026-08-21")).toBe(true)
+  })
+
+  it("ontem está vencido, amanhã não", () => {
+    expect(prazoVencido("2026-08-20", "2026-08-21")).toBe(true)
+    expect(prazoVencido("2026-08-22", "2026-08-21")).toBe(false)
+  })
+
+  it("sem prazo não é atraso", () => {
+    expect(prazoVencido(null)).toBe(false)
+    expect(prazoVencido(undefined)).toBe(false)
+  })
+
+  it("não escorrega às 22h de Brasília", () => {
+    // 21/08 22:00 BRT = 22/08 01:00 UTC. Se a referência viesse de UTC, o prazo
+    // de amanhã (22/08) já apareceria como "hoje".
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-22T01:00:00.000Z"))
+    expect(ehHoje("2026-08-21")).toBe(true)
+    expect(prazoVencido("2026-08-21")).toBe(false)
+    expect(prazoVencido("2026-08-20")).toBe(true)
+  })
+})
+
+describe("inicioDoDia", () => {
+  it("é a meia-noite UTC — a mesma forma em que o prazo é gravado", () => {
+    expect(inicioDoDia("2026-08-21").toISOString()).toBe("2026-08-21T00:00:00.000Z")
+  })
+
+  it("um prazo de hoje NÃO entra na consulta de vencidas", () => {
+    const hoje = inicioDoDia("2026-08-21")
+    const prazoDeHoje = new Date("2026-08-21T00:00:00.000Z")
+    expect(prazoDeHoje.getTime() < hoje.getTime()).toBe(false)
+  })
+})
+
+describe("diasEntre", () => {
+  it("conta dias inteiros de calendário", () => {
+    expect(diasEntre("2026-08-21", "2026-08-24")).toBe(3)
+    expect(diasEntre("2026-08-21", "2026-08-21")).toBe(0)
+  })
+
+  it("atravessa o mês sem perder um dia", () => {
+    expect(diasEntre("2026-08-30", "2026-09-02")).toBe(3)
   })
 })

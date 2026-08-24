@@ -4,6 +4,7 @@ import { Calendar, Clock, AlertTriangle, CreditCard, CheckCircle } from "lucide-
 import Link from "next/link"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
+import { dataCalendario, formatarDataCurta, hojeEmSaoPaulo, prazoVencido, somarDias } from "@/lib/datas"
 
 
 function Skeleton({ className }: { className?: string }) {
@@ -56,14 +57,15 @@ function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 }
 
+// Prazo é dia, não instante: comparar e formatar pelo calendário, senão
+// "vence amanhã" aparece como "Hoje" para quem está em Brasília.
 function formatData(iso: string) {
-  const d = new Date(iso)
-  const hoje = new Date()
-  if (d.toDateString() === hoje.toDateString()) return "Hoje"
-  const amanha = new Date(hoje)
-  amanha.setDate(hoje.getDate() + 1)
-  if (d.toDateString() === amanha.toDateString()) return "Amanhã"
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  const hoje = hojeEmSaoPaulo()
+  const dia = dataCalendario(iso)
+  if (!dia) return ""
+  if (dia === hoje) return "Hoje"
+  if (dia === somarDias(hoje, 1)) return "Amanhã"
+  return formatarDataCurta(iso)
 }
 
 function formatValor(v: number) {
@@ -71,7 +73,7 @@ function formatValor(v: number) {
 }
 
 function isVencido(iso: string) {
-  return new Date(iso) < new Date()
+  return prazoVencido(iso)
 }
 
 export function HojeEmFoco() {

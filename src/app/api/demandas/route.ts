@@ -14,7 +14,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
-import { validarPrazo } from "@/lib/datas"
+import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 
@@ -186,7 +186,10 @@ export async function GET(req: NextRequest) {
   // a lista inteira sem filtro nenhum.
   if (searchParams.get("atrasadas") === "1") {
     and.push({
-      dataLimite: { lt: new Date() },
+      // `lt: inicioDoDia()` e não `lt: new Date()`: prazo é dia, e quem vence
+      // hoje ainda tem o dia inteiro — antes entrava na lista de atrasadas de
+      // manhã cedo, no mesmo dia da entrega.
+      dataLimite: { lt: inicioDoDia() },
       statusVisivel: { notIn: STATUS_PRAZO_PAUSADO as never[] },
     })
   }
@@ -441,9 +444,7 @@ export async function POST(req: NextRequest) {
         where: { id: { in: novos }, status: "ativo", telefone: { not: null } },
         select: { telefone: true },
       })
-      const prazo = demanda.dataLimite
-        ? new Date(demanda.dataLimite).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
-        : null
+      const prazo = demanda.dataLimite ? formatarDataCurta(demanda.dataLimite) : null
       const msg = templates.responsavelAtribuido(demanda.codigo, demanda.titulo, prazo)
       await Promise.allSettled(
         pessoas.map((p) => sendWhatsappMessage(p.telefone!, msg, demanda.id, organizacaoId))
