@@ -1,9 +1,12 @@
+
 // Integração com o worker de transcodificação (HEVC/.mov → MP4 H.264).
 // O worker roda separado (Railway/Render) — ver pasta worker-transcode/.
 // Se as env vars não estiverem configuradas, tudo vira no-op (degrada gracioso).
 
 // Vídeos .mov/.qt são candidatos a conversão. O worker decide via ffprobe se
 // realmente precisa (HEVC → re-encode; H.264 em .mov → remux; senão skip).
+import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
+
 export function precisaTranscode(url: string | null | undefined): boolean {
   if (!url) return false
   const limpa = url.split("?")[0].toLowerCase()
@@ -31,7 +34,9 @@ export async function precisaTranscodeConferindo(url: string | null | undefined)
   if (EXTENSOES_WEB.some((e) => limpa.endsWith(e))) return false
 
   try {
-    const r = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(8000) })
+    // URL do bucket privado não responde a um HEAD anônimo. Assina antes.
+    const alvo = (await resolverParaAssinada(url, VALIDADE_MAQUINA_SEGUNDOS)) ?? url
+    const r = await fetch(alvo, { method: "HEAD", signal: AbortSignal.timeout(8000) })
     const tipo = r.headers.get("content-type")?.toLowerCase() ?? ""
     return tipo.includes("quicktime") || tipo.includes("x-m4v")
   } catch {
@@ -53,6 +58,9 @@ export async function enqueueTranscode(opts: {
   demandaId: string
   sourceUrl: string
 }): Promise<boolean> {
+  // O worker é externo e não tem como se autenticar no nosso app: recebe uma URL
+  // assinada de 2h, tempo de baixar e converter um vídeo grande.
+  const sourceUrl = (await resolverParaAssinada(opts.sourceUrl, VALIDADE_MAQUINA_SEGUNDOS)) ?? opts.sourceUrl
   const worker = process.env.TRANSCODE_WORKER_URL?.replace(/\/$/, "")
   const secret = process.env.TRANSCODE_SECRET
   if (!worker || !secret) {
@@ -63,7 +71,8 @@ export async function enqueueTranscode(opts: {
     const res = await fetch(`${worker}/transcode`, {
       method: "POST",
       headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-      body: JSON.stringify(opts),
+      // `opts` com a sourceUrl já assinada — o worker baixa direto do Supabase.
+      body: JSON.stringify({ ...opts, sourceUrl }),
     })
     console.info("[transcode] enfileirado", opts.demandaId, "→", res.status)
     return res.ok

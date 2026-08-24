@@ -114,13 +114,23 @@ export async function subirArquivo(
   return urlDaMidia(caminho)
 }
 
-/** URL assinada para LER. Curta: quem recebe é quem já passou pela checagem. */
-export async function urlAssinadaDeLeitura(caminho: string): Promise<string | null> {
+/**
+ * Validade longa, para consumidor que é MÁQUINA: worker de transcode, cópia
+ * para o Drive, montagem de ZIP. Dez minutos bastam para um navegador começar a
+ * tocar o vídeo, mas não para um worker baixar 2 GB e converter.
+ */
+export const VALIDADE_MAQUINA_SEGUNDOS = 60 * 120
+
+/** URL assinada para LER. Curta por padrão: quem recebe já passou pela checagem. */
+export async function urlAssinadaDeLeitura(
+  caminho: string,
+  segundos: number = VALIDADE_URL_SEGUNDOS
+): Promise<string | null> {
   const sb = cliente()
   if (!sb) return null
   const { data, error } = await sb.storage
     .from(BUCKET_PRIVADO)
-    .createSignedUrl(caminho, VALIDADE_URL_SEGUNDOS)
+    .createSignedUrl(caminho, segundos)
   if (error || !data?.signedUrl) {
     console.error("[midia] Falha ao assinar leitura:", error?.message)
     return null
@@ -149,9 +159,12 @@ export function comToken(url: string | null | undefined, token: string): string 
  * decidiu que aquele item é público — então assina no servidor e entrega. URL
  * que não é do bucket privado passa direto.
  */
-export async function resolverParaAssinada(url: string | null | undefined): Promise<string | null> {
+export async function resolverParaAssinada(
+  url: string | null | undefined,
+  segundos: number = VALIDADE_URL_SEGUNDOS
+): Promise<string | null> {
   if (!url) return null
   const caminho = caminhoDaUrl(url)
   if (!caminho) return url
-  return (await urlAssinadaDeLeitura(caminho)) ?? null
+  return (await urlAssinadaDeLeitura(caminho, segundos)) ?? null
 }

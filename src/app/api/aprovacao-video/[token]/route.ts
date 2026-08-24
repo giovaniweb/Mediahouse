@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { comToken } from "@/lib/midia"
+import { comToken, resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -195,7 +195,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         const fileName = `${parts.join("_")}_${seqStr}.${ext}`
 
         // Stream direto: Supabase → Drive (sem buffer intermediário — server-to-server, sem CORS)
-        const supaRes = await fetch(urlVideo)
+        // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
+        // o servidor não consegue buscá-la direto. Assina aqui, com validade de
+        // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
+        // não bastam para vídeo grande.
+        const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
+        const supaRes = await fetch(origem)
         if (!supaRes.ok || !supaRes.body) {
           console.error("[AprovacaoVideo] Falha ao buscar vídeo do Supabase:", supaRes.status)
           return

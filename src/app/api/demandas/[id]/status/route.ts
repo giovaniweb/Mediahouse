@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
@@ -162,7 +163,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 parts.push(dem.codigo)
                 const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
                 const fileName = `${parts.join("_")}_${seqStr}.${ext}`
-                const supaRes = await fetch(urlVideo)
+                // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
+                // o servidor não consegue buscá-la direto. Assina aqui, com validade de
+                // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
+                // não bastam para vídeo grande.
+                const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
+                const supaRes = await fetch(origem)
                 if (!supaRes.ok || !supaRes.body) continue
                 const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
                 if (fileSize <= 0) continue

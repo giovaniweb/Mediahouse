@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { resolverParaAssinada } from "@/lib/midia"
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -54,5 +55,19 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Remover senha do response
   const { senhaDownload: _, ...coberturaPublica } = cobertura
 
-  return NextResponse.json({ cobertura: coberturaPublica })
+  // A página /e/[slug] não tem sessão nem token: a credencial dela é o slug mais
+  // a senha, já conferidos acima. Como é este endpoint que decide o acesso, ele
+  // assina as URLs no servidor e entrega prontas. Arquivo do acervo antigo
+  // (público) passa intacto.
+  const uploadsAssinados = await Promise.all(
+    coberturaPublica.uploads.map(async (u) => ({
+      ...u,
+      url: (await resolverParaAssinada(u.url)) ?? u.url,
+      ...("thumbnailUrl" in u
+        ? { thumbnailUrl: (await resolverParaAssinada(u.thumbnailUrl as string | null)) ?? u.thumbnailUrl }
+        : {}),
+    }))
+  )
+
+  return NextResponse.json({ cobertura: { ...coberturaPublica, uploads: uploadsAssinados } })
 }
