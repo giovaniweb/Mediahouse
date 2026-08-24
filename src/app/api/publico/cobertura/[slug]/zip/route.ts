@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const archiver = require("archiver") as typeof import("archiver")
 import { Readable } from "stream"
@@ -81,7 +82,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     const contadores: Record<number, number> = {}
     for (const upload of cobertura.uploads) {
       try {
-        const res = await fetch(upload.url)
+        // O ZIP é montado no servidor: ele baixa cada arquivo. A URL guardada é
+        // do nosso app e exige credencial — aqui não há sessão nem token, então
+        // a assinatura é feita direto, com validade de máquina.
+        const origem = (await resolverParaAssinada(upload.url, VALIDADE_MAQUINA_SEGUNDOS)) ?? upload.url
+        const res = await fetch(origem)
         if (!res.ok || !res.body) continue
 
         const dia = upload.dia
