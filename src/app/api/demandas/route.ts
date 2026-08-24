@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
   let videomakerIdResolvido: string | undefined = data.videomakerId || undefined
   if (videomakerIdResolvido?.includes(":")) {
     try {
-      videomakerIdResolvido = await resolveParaVideomaker(videomakerIdResolvido)
+      videomakerIdResolvido = await resolveParaVideomaker(videomakerIdResolvido, organizacaoId)
     } catch (e) {
       return erroDeCampo("videomakerId", e instanceof Error ? e.message : "Não foi possível identificar o videomaker.")
     }

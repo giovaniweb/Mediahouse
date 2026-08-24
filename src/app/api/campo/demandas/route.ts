@@ -41,10 +41,13 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const vm = await videomakerDoUsuario(session.user.id)
-  const isAdmin = ["admin", "gestor"].includes((session.user as { tipo?: string }).tipo ?? "")
 
   let demandas
-  if (vm && !isAdmin) {
+    // Quem tem perfil de videomaker vê O PRÓPRIO trabalho aqui, mesmo sendo admin
+  // ou gestor. `/campo` é o app de quem está executando; a visão macro da
+  // empresa é o dashboard. Antes, `!isAdmin` excluía justamente quem acumula os
+  // dois papéis — e essa pessoa nunca via as demandas dela.
+if (vm) {
     demandas = await prisma.demanda.findMany({
       where: { videomakerId: vm.id, statusVisivel: { notIn: ["finalizado"] } },
       select: CAMPOS,
