@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { caminhoMidia, subirArquivo } from "@/lib/midia"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
@@ -67,37 +68,25 @@ export async function POST(
     )
   }
 
-  // Upload para Supabase Storage
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Storage não configurado" }, { status: 500 })
+  // Nota fiscal é o dado de maior risco aqui: tem CPF, valor e dados de
+  // pagamento. Vai direto para o bucket PRIVADO, sem período de convivência —
+  // NF nunca deveria ter sido pública.
+  const organizacaoId = nf.demanda?.organizacaoId
+  if (!organizacaoId) {
+    return NextResponse.json({ error: "Demanda sem organização" }, { status: 500 })
   }
-
-  const path = `notas-fiscais/${nf.demandaId}/${nf.videomakerId}/${Date.now()}.${ext || "pdf"}`
 
   const arrayBuffer = await file.arrayBuffer()
-  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/uploads/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${supabaseKey}`,
-      "Content-Type": file.type || "application/octet-stream",
-    },
-    body: arrayBuffer,
+  const caminho = caminhoMidia({
+    organizacaoId,
+    tipo: "nf",
+    id: `${nf.demandaId}-${nf.videomakerId}`,
+    ext: ext || "pdf",
   })
-
-  // CORRIGIDO: Se upload falha, retorna erro em vez de continuar com URL vazia
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text().catch(() => "Erro desconhecido")
-    console.error("Erro upload supabase:", errText)
-    return NextResponse.json(
-      { error: "Falha ao fazer upload do arquivo. Tente novamente." },
-      { status: 500 }
-    )
+  const url = await subirArquivo(caminho, arrayBuffer, file.type || "application/octet-stream")
+  if (!url) {
+    return NextResponse.json({ error: "Falha ao fazer upload do arquivo. Tente novamente." }, { status: 500 })
   }
-
-  const url = `${supabaseUrl}/storage/v1/object/public/uploads/${path}`
 
   // Atualizar NF
   await prisma.notaFiscalUpload.update({

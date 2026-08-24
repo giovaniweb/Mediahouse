@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { precisaTranscodeConferindo, enqueueTranscode } from "@/lib/transcode"
 import { requireDemandaOrg } from "@/lib/org"
+import { caminhoMidia, subirArquivo } from "@/lib/midia"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -171,25 +172,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const ext = EXT_MAPA[file.type] ?? "mp4"
-  const path = `videos/${id}/${tipo}/${Date.now()}.${ext}`
-
+  // Bucket privado, com a organização no caminho.
+  const caminho = caminhoMidia({ organizacaoId: guard.organizacaoId, tipo: "videos", id: `${id}/${tipo}`, ext })
   const arrayBuffer = await file.arrayBuffer()
-  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/uploads/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${supabaseKey}`,
-      "Content-Type": file.type || "video/mp4",
-    },
-    body: arrayBuffer,
-  })
-
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text().catch(() => "Erro desconhecido")
-    console.error("[upload-video] Erro Supabase:", errText)
-    return NextResponse.json({ error: "Falha ao fazer upload. Tente novamente." }, { status: 500 })
-  }
-
-  const url = `${supabaseUrl}/storage/v1/object/public/uploads/${path}`
+  const url = await subirArquivo(caminho, arrayBuffer, file.type || "video/mp4")
+  if (!url) return NextResponse.json({ error: "Falha ao fazer upload. Tente novamente." }, { status: 500 })
 
   // Atualiza o campo correto na demanda
   const campo = tipo === "final" ? "linkFinal" : "linkBrutos"
