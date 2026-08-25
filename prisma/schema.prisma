@@ -1213,14 +1213,28 @@ model PasswordResetToken {
 // PRODUTOS & CONTEÚDO
 // ─────────────────────────────────────────────
 
+// Fabricante do item de catálogo — de UMA empresa.
+//
+// Era tabela global, sem organizacaoId: os 7 fabricantes cadastrados pela
+// Contourline apareciam para qualquer outro cliente da plataforma. Mesmo padrão
+// que videomaker, editor e designer tinham, e pelo mesmo motivo — a tabela
+// nasceu quando havia uma empresa só.
+//
+// O `nome` era único GLOBALMENTE, o que impediria duas empresas de terem um
+// fabricante homônimo. Agora é único por empresa.
 model Fabricante {
-  id        String    @id @default(cuid())
-  nome      String    @unique
-  ativo     Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  produtos  Produto[]
+  id            String    @id @default(cuid())
+  organizacaoId String?
+  nome          String
+  ativo         Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  produtos      Produto[]
 
+  organizacao Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, nome])
+  @@index([organizacaoId])
   @@map("fabricantes")
 }
 
@@ -1463,6 +1477,17 @@ model ConfigEmpresa {
   pixKey        String? // CNPJ, email, celular ou chave aleatória
   pixTipo       String? // "cnpj" | "email" | "telefone" | "aleatoria"
   observacoesNF String? // instrução para videomakers ao emitir NF
+
+  // O catálogo mostra o campo "Fabricante"?
+  //
+  // Ele só faz sentido para quem vende produto físico. Empresa de serviço
+  // cadastra "Captação de Vídeo" e "Edição de Reels" — fabricante ali é campo
+  // vazio pedindo para ser preenchido com nada.
+  //
+  // Padrão FALSE, e empresa sem linha de ConfigEmpresa também conta como false:
+  // cliente novo nunca vê o campo, e quem já usa (31 produtos na Contourline)
+  // recebe `true` no backfill desta migration.
+  catalogoMostrarFabricante Boolean @default(false)
 
   // Google Drive — OAuth2 (refresh token da conta pessoal do usuário)
   googleRefreshToken     String?
@@ -2036,6 +2061,7 @@ model Organizacao {
   permissoes         PermissaoUsuario[]
   videomakerFiscais  VideomakerDadosFiscais[]
   modulos            ModuloOrganizacao[]
+  fabricantes        Fabricante[]
 
   @@map("organizacoes")
 }
