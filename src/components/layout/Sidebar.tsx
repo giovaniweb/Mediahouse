@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   DollarSign,
   UserCog,
+  Building2,
   Home,
   BrainCircuit,
   Package,
@@ -102,6 +103,16 @@ const sections = [
       // Era item fixo do audiovisual: um relatório de diagnóstico promovido ao menu
       // principal. Continua acessível, mas junto dos outros relatórios.
       { href: "/relatorios/finalizadas-sem-video", label: "Entregas sem vídeo", icon: VideoOff },
+    ],
+  },
+  {
+    // Acima das empresas: só aparece para quem administra a PLATAFORMA. A
+    // autorização de verdade está no servidor (requireSuperAdmin + notFound na
+    // página); esconder o link é conveniência, não proteção.
+    label: "Plataforma",
+    superAdmin: true,
+    items: [
+      { href: "/admin/organizacoes", label: "Organizações", icon: Building2 },
     ],
   },
   {
@@ -197,6 +208,8 @@ export function Sidebar() {
           if (section.label === "Growth" && !GROWTH_ATIVO) return null
           if (section.label === "Eventos" && !EVENTOS_ATIVO) return null
 
+          // Seção da plataforma some para quem não administra a plataforma.
+          if (section.superAdmin && !me?.superAdmin) return null
           const visibleItems = section.items.filter((item) => canSee(item.href))
           if (visibleItems.length === 0) return null
 

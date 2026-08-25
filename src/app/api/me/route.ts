@@ -20,6 +20,10 @@ export async function GET() {
       tipo: true,
       status: true,
       avatarUrl: true,
+      // Quem administra a plataforma (acima das empresas). O front usa isto para
+      // mostrar o painel de organizações — a autorização de verdade continua em
+      // requireSuperAdmin, no servidor: esconder o menu não protege nada.
+      superAdmin: true,
       permissoes: true,
       organizacoes: {
         where: organizacaoId ? { organizacaoId } : undefined,

@@ -10,6 +10,8 @@ export interface MeData {
   tipo: string
   status: string
   avatarUrl: string | null
+  /** Administra a plataforma inteira, acima das empresas. */
+  superAdmin: boolean
   videomakerRef: { id: string; nome: string; avaliacao: number } | null
   membership: {
     organizacaoId: string
