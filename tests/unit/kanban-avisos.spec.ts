@@ -212,10 +212,47 @@ describe("texto das mensagens", () => {
   it("link de aprovação só aparece quando é URL de verdade", () => {
     const comLink = mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", "https://nuflow.space/a/xyz")
     expect(comLink).toContain("https://nuflow.space/a/xyz")
+    // Observação escrita à mão não é link: sem link não há mensagem nenhuma
+    // (ver o teste seguinte), então ela não tem por onde vazar.
+    expect(mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", "cliente pediu pressa")).toBeNull()
+  })
 
-    const semLink = mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", "cliente pediu pressa")
-    expect(semLink).toContain("Acesse o sistema")
-    expect(semLink).not.toContain("cliente pediu pressa")
+  // Antes, sem link, saía "Acesse o sistema para aprovar ou pedir ajustes" — e
+  // quem acessava não encontrava nada, porque não havia peça nem link. Anunciar
+  // entrega que não existe gasta a confiança de quem pediu.
+  it("sem nada para abrir, o solicitante NÃO é avisado de revisão", () => {
+    expect(mensagemKanban("revisao_pendente", "V-1", "T", "solicitante")).toBeNull()
+    expect(mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", "cliente pediu pressa")).toBeNull()
+  })
+
+  it("mas o gestor é avisado do mesmo jeito — é ele quem precisa notar", () => {
+    expect(mensagemKanban("revisao_pendente", "V-1", "T", "gestor")).toContain("aguardando aprovação")
+  })
+
+  it("o link explícito vence a observação — uma não apaga o outro", () => {
+    // `extra` carrega observação E link, nessa ordem. Enquanto o link saía só
+    // dali, escrever uma observação ao mover fazia o link sumir do aviso.
+    const m = mensagemKanban(
+      "revisao_pendente", "V-1", "T", "solicitante",
+      "cliente pediu pressa", false, "https://nuflow.space/aprovar/tok"
+    )
+    expect(m).toContain("https://nuflow.space/aprovar/tok")
+    expect(m).not.toContain("cliente pediu pressa")
+  })
+
+  it("Growth fala em arte; audiovisual fala em vídeo", () => {
+    const link = "https://nuflow.space/aprovar/tok"
+    const arte = mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", undefined, true, link)
+    const video = mensagemKanban("revisao_pendente", "V-1", "T", "solicitante", undefined, false, link)
+    expect(arte).toContain("arte")
+    expect(arte).not.toContain("vídeo")
+    expect(video).toContain("vídeo")
+  })
+
+  it("o mesmo vale quando a edição termina", () => {
+    const arte = mensagemKanban("edicao_finalizada", "V-1", "T", "solicitante", undefined, true)
+    expect(arte).not.toContain("edição")
+    expect(mensagemKanban("edicao_finalizada", "V-1", "T", "solicitante", undefined, false)).toContain("edição")
   })
 
   it("impedimento leva o motivo para quem executa", () => {
