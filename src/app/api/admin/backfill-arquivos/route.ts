@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/admin/backfill-arquivos
 // Cria registros Arquivo(tipoArquivo="final") a partir de linkFinal para demandas
@@ -14,9 +15,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Apenas admins podem executar o backfill" }, { status: 401 })
   }
 
+  // Escopo obrigatório: sem ele, o admin de UMA empresa disparava um backfill
+  // que criava registros de Arquivo nas demandas de TODAS — dado escrito na
+  // operação de outro cliente, sem ninguém pedir.
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   // Busca demandas com linkFinal que estão finalizadas/para_postar
   const demandas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       statusVisivel: { in: ["finalizado", "para_postar"] },
       linkFinal: { not: null },
     },

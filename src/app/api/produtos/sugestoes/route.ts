@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import Anthropic from "@anthropic-ai/sdk"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const produtos = await prisma.produto.findMany({
-    where: { ativo: true },
+    where: { ativo: true, organizacaoId },
     include: {
       _count: { select: { demandas: true } },
     },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireDemandaOrg } from "@/lib/org"
 import { analisarComClaude, extrairJSON } from "@/lib/claude"
 
 export async function POST(req: NextRequest) {
@@ -8,6 +9,12 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { demandaId } = await req.json()
+
+  // Mesmo IDOR que a triagem tinha: buscava a demanda por id sem conferir dono,
+  // então bastava trocar o id para analisar — e pagar a chamada de IA de —
+  // demanda de outra empresa.
+  const guard = await requireDemandaOrg(session, demandaId)
+  if (guard instanceof NextResponse) return guard
 
   const demanda = await prisma.demanda.findUnique({
     where: { id: demandaId },
