@@ -8,7 +8,7 @@
 // máquina de alguém. Isso fazia de cada cliente novo uma tarefa de engenharia.
 import { useState } from "react"
 import useSWR from "swr"
-import { Building2, Plus, Power, UserPlus, X, Users } from "lucide-react"
+import { Building2, Plus, Power, UserPlus, X, Users, ToggleLeft } from "lucide-react"
 import { toast } from "sonner"
 import { fetcher } from "@/lib/fetcher"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -29,10 +29,21 @@ type Membro = {
 
 const PAPEIS = ["admin", "gestor", "videomaker", "editor", "designer", "social", "solicitante"] as const
 
+type ModuloDaOrg = {
+  chave: string
+  nome: string
+  descricao: string
+  ativo: boolean
+  disponivelNaPlataforma: boolean
+  padrao: boolean
+  origem: "padrao" | "escolhido"
+}
+
 export function PainelOrganizacoes() {
   const { data, mutate, isLoading } = useSWR<{ organizacoes: Org[] }>("/api/admin/organizacoes", fetcher)
   const [criando, setCriando] = useState(false)
   const [aberta, setAberta] = useState<Org | null>(null)
+  const [modulosDe, setModulosDe] = useState<Org | null>(null)
   const orgs = data?.organizacoes ?? []
 
   async function alternarAtivo(org: Org) {
@@ -106,6 +117,12 @@ export function PainelOrganizacoes() {
                   <Users className="h-3.5 w-3.5" /> Pessoas
                 </button>
                 <button
+                  onClick={() => setModulosDe(org)}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  <ToggleLeft className="h-3.5 w-3.5" /> Módulos
+                </button>
+                <button
                   onClick={() => alternarAtivo(org)}
                   title={org.ativo ? "Desligar empresa" : "Ligar empresa"}
                   className={`rounded-lg border px-3 py-1.5 text-xs ${
@@ -124,6 +141,7 @@ export function PainelOrganizacoes() {
 
       {criando && <ModalNovaEmpresa onClose={() => setCriando(false)} onCriada={() => { setCriando(false); mutate() }} />}
       {aberta && <ModalPessoas org={aberta} onClose={() => { setAberta(null); mutate() }} />}
+      {modulosDe && <ModalModulos org={modulosDe} onClose={() => setModulosDe(null)} />}
     </div>
   )
 }
@@ -270,6 +288,68 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
             <UserPlus className="h-4 w-4" /> Vincular
           </button>
         </div>
+      </div>
+    </Overlay>
+  )
+}
+
+function ModalModulos({ org, onClose }: { org: Org; onClose: () => void }) {
+  const { data, mutate } = useSWR<{ modulos: ModuloDaOrg[] }>(`/api/admin/organizacoes/${org.id}/modulos`, fetcher)
+  const modulos = data?.modulos ?? []
+
+  async function alternar(m: ModuloDaOrg) {
+    try {
+      const res = await fetch(`/api/admin/organizacoes/${org.id}/modulos`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modulo: m.chave, ativo: !m.ativo }),
+      })
+      if (!res.ok) throw await erroDaResposta(res)
+      mutate()
+    } catch (e) {
+      toast.error(mensagemDeErro(e, "Não foi possível alterar o módulo."))
+    }
+  }
+
+  return (
+    <Overlay titulo={`Módulos · ${org.nome}`} onClose={onClose}>
+      <p className="text-xs text-zinc-500">
+        O que esta empresa enxerga. Mudança vale no próximo carregamento de página.
+      </p>
+      <div className="space-y-2">
+        {modulos.map((m) => (
+          <div key={m.chave} className="rounded-lg bg-zinc-800/40 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-zinc-200">{m.nome}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">{m.descricao}</p>
+                {!m.disponivelNaPlataforma && (
+                  /* Chave geral por cima da decisão comercial: não adianta
+                     "vender" o que a plataforma ainda não entrega. */
+                  <p className="mt-1 text-[11px] text-amber-500/80">
+                    Indisponível na plataforma — não pode ser ligado para ninguém ainda.
+                  </p>
+                )}
+                {m.disponivelNaPlataforma && m.origem === "padrao" && (
+                  <p className="mt-1 text-[11px] text-zinc-600">
+                    Seguindo o padrão ({m.padrao ? "ligado" : "desligado"}) — nunca foi decidido para esta empresa.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => alternar(m)}
+                disabled={!m.disponivelNaPlataforma}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  m.ativo
+                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                    : "bg-zinc-700/50 text-zinc-400 hover:bg-zinc-700"
+                }`}
+              >
+                {m.ativo ? "Ligado" : "Desligado"}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </Overlay>
   )

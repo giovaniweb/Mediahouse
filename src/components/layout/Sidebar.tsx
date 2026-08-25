@@ -40,7 +40,6 @@ import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
-import { GROWTH_ATIVO, EVENTOS_ATIVO, IDEIAS_ATIVO, MENSAGENS_ATIVO } from "@/lib/modulos"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
 
@@ -131,6 +130,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const { data: me } = useMe()
 
+  const mods = me?.modulos
   const isAdmin = me?.tipo === "admin" || me?.tipo === "gestor"
   const atuaEmGrowth = me?.membership?.areas?.includes("growth") ?? false
   const podeVerGrowth = atuaEmGrowth || !!me?.permissoes?.verDesign
@@ -139,8 +139,11 @@ export function Sidebar() {
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
     // Itens de módulos congelados — ocultos para todos (ver src/lib/modulos.ts)
-    if (href === "/ideias" && !IDEIAS_ATIVO) return false
-    if (href === "/mensagens" && !MENSAGENS_ATIVO) return false
+    // Módulo que esta empresa não tem some do menu. A verdade é do servidor
+    // (/api/me devolve os módulos da empresa ativa); enquanto carrega, `mods`
+    // fica indefinido e nada é escondido — piscar item é melhor que piscar menu.
+    if (mods && href === "/ideias" && !mods.ideias) return false
+    if (mods && href === "/mensagens" && !mods.mensagens) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
     if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
@@ -205,8 +208,8 @@ export function Sidebar() {
 
         {me?.tipo !== "videomaker" && sections.map((section) => {
           // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
-          if (section.label === "Growth" && !GROWTH_ATIVO) return null
-          if (section.label === "Eventos" && !EVENTOS_ATIVO) return null
+          if (section.label === "Growth" && mods && !mods.growth) return null
+          if (section.label === "Eventos" && mods && !mods.eventos) return null
 
           // Seção da plataforma some para quem não administra a plataforma.
           if (section.superAdmin && !me?.superAdmin) return null

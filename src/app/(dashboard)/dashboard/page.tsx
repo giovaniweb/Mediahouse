@@ -12,8 +12,8 @@ import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
 import { Header } from "@/components/layout/Header"
 import { Activity, AlertTriangle, CheckCircle, Clock, Film, Users, TrendingUp, TrendingDown, Minus, BarChart3, Lightbulb } from "lucide-react"
-import { IDEIAS_ATIVO } from "@/lib/modulos"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
 
 // Mini SVG bar chart
 function MiniBarChart({ data, color = "#3b82f6" }: { data: number[]; color?: string }) {
@@ -42,11 +42,13 @@ function TrendBadge({ delta }: { delta: number }) {
 
 // Dashboard interno (equipe, admin, gestor, etc.)
 function InternalDashboard() {
+  // Módulos desta empresa — antes eram constantes iguais para todas.
+  const { data: me } = useMe()
   const { data, isLoading } = useSWR("/api/dashboard/metrics", fetcher, {
     refreshInterval: 30000,
   })
   const { data: kpiB2c } = useSWR("/api/kpi/b2c-b2b", fetcher, { refreshInterval: 60000 })
-  const { data: kpiIdeias } = useSWR(IDEIAS_ATIVO ? "/api/ideias/kpi" : null, fetcher, { refreshInterval: 60000 })
+  const { data: kpiIdeias } = useSWR(me?.modulos?.ideias ? "/api/ideias/kpi" : null, fetcher, { refreshInterval: 60000 })
 
   const m = data?.metricas
   const tendencia: Array<{ criadas: number; concluidas: number }> = data?.tendencia ?? []
@@ -165,7 +167,7 @@ function InternalDashboard() {
         )}
 
         {/* Banco de Ideias */}
-        {IDEIAS_ATIVO && kpiIdeias && kpiIdeias.totalIdeias > 0 && (
+        {me?.modulos?.ideias && kpiIdeias && kpiIdeias.totalIdeias > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

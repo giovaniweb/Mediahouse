@@ -21,6 +21,9 @@ export interface MeData {
     areas: string[]
   } | null
   permissoes: Record<string, boolean> & { id: string; usuarioId: string }
+  /** Módulos que ESTA empresa tem. Antes eram constantes compiladas no bundle,
+   *  iguais para todo mundo — ver src/lib/modulos.ts. */
+  modulos: Record<"growth" | "eventos" | "ideias" | "mensagens", boolean>
 }
 
 export function useMe() {

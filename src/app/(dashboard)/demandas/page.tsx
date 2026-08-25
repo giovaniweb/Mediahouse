@@ -13,8 +13,8 @@ import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
-import { EVENTOS_ATIVO } from "@/lib/modulos"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
 
 
 interface Videomaker { id: string; nome: string }
@@ -33,6 +33,8 @@ export default function DemandasPage() {
 }
 
 function DemandasKanban() {
+  // Módulos desta empresa — antes eram constantes iguais para todas.
+  const { data: me } = useMe()
   const { data: session } = useSession()
   const router = useRouter()
   const [search, setSearch] = useState("")
@@ -94,7 +96,7 @@ function DemandasKanban() {
   const { data: dataVMs } = useSWR<{ videomakers: Videomaker[] }>("/api/videomakers?status=ativo&limit=200", fetcher)
   const { data: dataEds } = useSWR<{ editores: Editor[] }>("/api/editores?status=ativo&limit=200", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
-  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(EVENTOS_ATIVO ? "/api/eventos" : null, fetcher)
+  const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(me?.modulos?.eventos ? "/api/eventos" : null, fetcher)
   const { data: dataResp } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis?area=audiovisual", fetcher)
   const { data: dataDeptos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
     "/api/configuracoes/parametros?grupo=departamentos", fetcher
@@ -348,7 +350,7 @@ function DemandasKanban() {
           <option value="">Todos responsáveis</option>
           {responsaveis.map(r => (<option key={r.id} value={r.id}>{r.label}</option>))}
         </select>
-        {EVENTOS_ATIVO && (
+        {me?.modulos?.eventos && (
           <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
             className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
             <option value="">Todos eventos</option>

@@ -2035,8 +2035,38 @@ model Organizacao {
   designerFiscais    DesignerDadosFiscais[]
   permissoes         PermissaoUsuario[]
   videomakerFiscais  VideomakerDadosFiscais[]
+  modulos            ModuloOrganizacao[]
 
   @@map("organizacoes")
+}
+
+// Módulo ligado ou desligado POR EMPRESA — a base dos planos.
+//
+// Antes, `src/lib/modulos.ts` tinha quatro booleanos em código, iguais para
+// todas as empresas: para desligar Eventos de um cliente era preciso desligar
+// de todos, e subir deploy. Com o SaaS, cada assinatura compra um conjunto
+// diferente.
+//
+// A AUSÊNCIA de linha significa "use o padrão do catálogo" — ver
+// PADRAO_MODULOS em src/lib/modulos.ts. Só o que é decidido explicitamente para
+// uma empresa vira linha aqui, então empresa nova nasce com o padrão sem
+// precisar de nenhum INSERT.
+model ModuloOrganizacao {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  /**
+   * Chave do catálogo: "growth", "eventos", "ideias", "mensagens".
+   */
+  modulo        String
+  ativo         Boolean
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, modulo])
+  @@index([organizacaoId])
+  @@map("modulo_organizacao")
 }
 
 // Linha/Projeto (segmentação do Growth) — por organização. Substitui o texto livre.

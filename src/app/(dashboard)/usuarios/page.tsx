@@ -17,7 +17,6 @@ import { mensagemDeErro } from "@/lib/erro-cliente"
 import { PainelPessoa } from "@/components/pessoas/PainelPessoa"
 import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
 import { AbaPerfis } from "@/components/pessoas/AbaPerfis"
-import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
 import {
   type PessoaLista, type PerfilAcesso,
   vinculoDe, VINCULO_LABEL, VINCULO_COR, nivelDe, NIVEL_LABEL, NIVEL_COR, NIVEIS,
@@ -177,8 +176,8 @@ const FUNCAO_FORM_LABEL: Record<string, string> = {
 }
 const AREAS = [
   { value: "audiovisual", label: "Audiovisual" },
-  ...(GROWTH_ATIVO ? [{ value: "growth", label: "Growth / Conteúdos" }] : []),
-  ...(EVENTOS_ATIVO ? [{ value: "eventos", label: "Coberturas de Eventos" }] : []),
+  { value: "growth", label: "Growth / Conteúdos" },
+  { value: "eventos", label: "Coberturas de Eventos" },
 ]
 
 function ModalEditarUsuario({
@@ -606,8 +605,8 @@ export default function PessoasAcessosPage() {
 
   const equipesDisponiveis = [
     "audiovisual",
-    ...(GROWTH_ATIVO ? ["growth"] : []),
-    ...(EVENTOS_ATIVO ? ["eventos"] : []),
+    "growth",
+    "eventos",
   ]
 
   function perfilProfissionalHref(id: string): string | null {
