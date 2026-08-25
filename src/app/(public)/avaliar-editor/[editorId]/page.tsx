@@ -30,11 +30,14 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
   useEffect(() => {
     params.then(({ editorId: id }) => {
       setEditorId(id)
-      fetch(`/api/editores/${id}/avaliar`)
+      // Rota pública dedicada. Antes apontava para /api/editores/[id]/avaliar,
+      // que o middleware nunca liberou sem sessão: esta tela levava 401 e
+      // mostrava "erro ao carregar dados" para todo mundo que lia o QR.
+      fetch(`/api/publico/avaliar-editor?id=${id}`)
         .then(r => r.json())
         .then(data => {
           if (data.editor) setEditor(data.editor)
-          else setErro("Videomaker não encontrado")
+          else setErro("Editor não encontrado")
         })
         .catch(() => setErro("Erro ao carregar dados"))
         .finally(() => setLoading(false))
@@ -45,16 +48,17 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
     if (nota === 0) return
     setEnviando(true)
     try {
-      const res = await fetch(`/api/editores/${editorId}/avaliar`, {
+      const res = await fetch("/api/publico/avaliar-editor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          editorId,
           nota,
           comentario: comentario || undefined,
           atendeuDemandas: atendeuDemandas ?? undefined,
           foiAtencioso: foiAtencioso ?? undefined,
           contratariaNovamente: contratariaNovamente ?? undefined,
-          origem: "qr_publico",
+          // `origem` não vai mais no corpo: a rota pública decide sozinha.
         }),
       })
       if (!res.ok) throw new Error("Erro ao enviar avaliação")

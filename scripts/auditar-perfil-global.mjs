@@ -98,22 +98,45 @@ function blocoBalanceado(texto, inicio) {
  * Sem esta distinção o auditor acusava 4 falsos no videomaker, que já está
  * migrado e tem que marcar zero. Gate que aponta falso é gate ignorado.
  */
+const CHAVES_DE_CONSULTA = ["where", "data", "create", "update", "select", "omit"]
+
+/** `coluna` como filho DIRETO do objeto — não de uma relação aninhada dentro dele. */
+function noPrimeiroNivel(obj, coluna) {
+  let profundidade = 0
+  for (let i = 0; i < obj.length; i++) {
+    const c = obj[i]
+    if (c === "{") profundidade++
+    else if (c === "}") profundidade--
+    else if (profundidade === 1 && obj.startsWith(coluna, i)) {
+      const depois = obj.slice(i + coluna.length).match(/^\s*[:,}]/)
+      const antes = i === 0 || /[{,\s]/.test(obj[i - 1])
+      if (depois && antes) return true
+    }
+  }
+  return false
+}
+
 function usaColunaDireta(bloco, coluna) {
-  for (const chave of ["where", "data", "create", "update", "select", "omit"]) {
-    const m = new RegExp(`\\b${chave}\\s*:\\s*\\{`).exec(bloco)
-    if (!m) continue
-    const obj = blocoBalanceado(bloco, m.index + m[0].length - 1)
-    // Profundidade 1 = filho direto do objeto. Mais fundo = relação aninhada.
-    let profundidade = 0
-    for (let i = 0; i < obj.length; i++) {
-      const c = obj[i]
-      if (c === "{") profundidade++
-      else if (c === "}") profundidade--
-      else if (profundidade === 1 && obj.startsWith(coluna, i)) {
-        const depois = obj.slice(i + coluna.length).match(/^\s*[:,}]/)
-        const antes = i === 0 || /[{,\s]/.test(obj[i - 1])
-        if (depois && antes) return true
-      }
+  // As chaves também precisam estar no primeiro nível DA CONSULTA. A busca era
+  // pela primeira ocorrência de `select:` em qualquer profundidade, e num
+  // `include: { demandas: { select: { organizacaoId: true } } }` ela encontrava
+  // o select da RELAÇÃO — acusando escopo por coluna do perfil onde o perfil
+  // nem era filtrado. Mesmo erro da versão que confundia relação com coluna,
+  // um nível acima.
+  let profundidade = 0
+  for (let i = 0; i < bloco.length; i++) {
+    const c = bloco[i]
+    if (c === "{") { profundidade++; continue }
+    if (c === "}") { profundidade--; continue }
+    if (profundidade !== 1) continue
+
+    for (const chave of CHAVES_DE_CONSULTA) {
+      if (!bloco.startsWith(chave, i)) continue
+      const antes = i === 0 || /[{,\s]/.test(bloco[i - 1])
+      const abertura = /^\s*:\s*\{/.exec(bloco.slice(i + chave.length))
+      if (!antes || !abertura) continue
+      const inicioObj = i + chave.length + abertura[0].length - 1
+      if (noPrimeiroNivel(blocoBalanceado(bloco, inicioObj), coluna)) return true
     }
   }
   return false

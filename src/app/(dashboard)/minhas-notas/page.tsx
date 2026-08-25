@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 import { fetcher } from "@/lib/fetcher"
 import { formatarData } from "@/lib/datas"
+import { EtiquetaEmpresa, temMaisDeUmaEmpresa, type EmpresaEtiqueta } from "@/components/EtiquetaEmpresa"
 
 
 const NF_STATUS: Record<string, { label: string; color: string }> = {
@@ -44,7 +45,7 @@ interface NotaFiscal {
   token: string
   url?: string | null
   createdAt: string
-  demanda?: { codigo: string; titulo: string } | null
+  demanda?: { codigo: string; titulo: string; empresa?: EmpresaEtiqueta } | null
 }
 
 interface Demanda {
@@ -59,6 +60,8 @@ interface Demanda {
   dataCaptacao?: string | null
   finalizadaEm?: string | null
   createdAt: string
+  // O videomaker é da rede: a lista pode misturar demanda de empresas diferentes.
+  empresa?: EmpresaEtiqueta
 }
 
 function AnexarNFButton({
@@ -149,6 +152,8 @@ export default function MinhasNotasPage() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
 
+  const multiempresa = temMaisDeUmaEmpresa(demandasOrdenadas)
+
   return (
     <>
       {nfModalToken && (
@@ -201,6 +206,7 @@ export default function MinhasNotasPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-[10px] font-mono text-zinc-500">{d.codigo}</span>
+                        <EtiquetaEmpresa empresa={d.empresa} mostrar={multiempresa} />
                         <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", stColor)}>
                           {STATUS_LABELS[d.statusVisivel] ?? d.statusVisivel}
                         </span>
