@@ -16,7 +16,6 @@ import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandasTabela } from "@/components/demandas/DemandasTabela"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
-import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
@@ -27,8 +26,6 @@ export default function GrowthKanbanPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
-  // Demanda que o kanban mandou para o passo de anexar a arte (ver handleMove).
-  const [envioAprovacaoId, setEnvioAprovacaoId] = useState<string | null>(null)
   const [showImportar, setShowImportar] = useState(false)
 
   // Filtros — adaptados às peculiaridades do Growth (pessoas/responsável,
@@ -104,20 +101,10 @@ export default function GrowthKanbanPage() {
       body: JSON.stringify({ statusInterno, origem: "kanban" }),
     })
     if (!res.ok) {
-      // Desfaz o movimento otimista antes de qualquer coisa: o card não pode
-      // ficar na coluna nova enquanto o passo que falta não for cumprido.
+      // Desfaz o movimento otimista e mostra a mensagem que a API mandou —
+      // "Erro ao mover" escondia a instrução e fazia parecer falta de permissão.
       mutate()
-      const erro = await erroDaResposta(res)
-      // Falta a arte: em vez de recusar e mandar a pessoa procurar onde anexar,
-      // abre o próprio passo de envio (upload ou URL) já na demanda certa. É o
-      // mesmo fluxo do botão "Enviar para aprovação" da tela de detalhe — que
-      // anexa a peça, gera o link do cliente e move o card. Nenhuma regra foi
-      // afrouxada: sem peça continua sem passar.
-      if (erro.campos.arteFinal) {
-        setEnvioAprovacaoId(demandaId)
-        return
-      }
-      toast.error(mensagemDeErro(erro, "Não foi possível mover o card."))
+      toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
     } else mutate()
   }, [mutate])
 
@@ -229,14 +216,6 @@ export default function GrowthKanbanPage() {
         open={showNova}
         onClose={() => setShowNova(false)}
         onCreated={() => { setShowNova(false); mutate() }}
-      />
-
-      {/* Soltou em "Para aprovação" sem peça: a demanda abre já no envio. Ao
-          fechar, revalida — se a arte foi anexada, o card aparece na coluna. */}
-      <DemandaModal
-        demandaId={envioAprovacaoId}
-        abrirEnvioAprovacao
-        onClose={() => { setEnvioAprovacaoId(null); mutate() }}
       />
     </div>
   )

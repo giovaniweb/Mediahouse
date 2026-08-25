@@ -6,9 +6,6 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
-import { erroDeCampo } from "@/lib/erros-api"
-import { entregaPecaVisual } from "@/lib/growth-conteudo"
-import { motivoAceitavel, descreverMotivo } from "@/lib/aprovacao-por-fora"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
@@ -47,11 +44,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       responsavel: { select: { telefone: true } },
       responsaveis: { select: { usuario: { select: { telefone: true } } } },
       designer: { select: { telefone: true, whatsapp: true } },
-      // Para a checagem de "não mandar para aprovação sem peça anexada".
-      // Conta só a arte FINAL: a tela do cliente (ArteViewer) exibe apenas
-      // `tipoArquivo: "final"`, então um briefing em PDF anexado não é peça —
-      // contar qualquer arquivo deixava passar o card que manda link vazio.
-      _count: { select: { arquivos: { where: { tipoArquivo: "final" } } } },
     },
   })
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
@@ -69,46 +61,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (statusInterno === "impedimento" && !observacao && !demandaAtual.motivoImpedimento) {
     return NextResponse.json({ error: "Motivo do impedimento obrigatório." }, { status: 400 })
   }
-  // Growth: "Para aprovação" sem arte anexada é um card que não tem o que
-  // aprovar. Em 16/08/2026 as três demandas de Growth nessa coluna estavam
-  // assim — nenhuma com peça, nenhuma com link de aprovação. Quem movia achava
-  // que tinha mandado para o cliente; o cliente nunca recebeu nada.
+  // Growth: NÃO se exige a arte para mover para "Para aprovação".
   //
-  // Mesmo princípio que o audiovisual já aplica ao exigir o link do vídeo final
-  // para sair da edição.
+  // A regra existiu de 16 a 25/08/2026 e foi retirada depois de duas medições.
+  // A primeira: o cliente nunca esteve em risco — /api/aprovacao-video exige o
+  // arquivo para criar o link, então link vazio é impossível por construção. O
+  // que a trava protegia era a leitura interna do quadro, não o cliente.
   //
-  // A contagem é da arte FINAL, não de arquivo qualquer. Enquanto era
-  // `_count.arquivos`, um briefing em PDF satisfazia a regra que fala em "arte
-  // final" — e em 24/08/2026 havia 6 demandas de Growth nessa situação, uma
-  // delas já parada em "Para aprovação" sem nada para o cliente ver.
+  // A segunda: ela caía sobre o caminho normal, não sobre a exceção. Dos 10
+  // cards em "Fazendo", 10 estavam sem arte. Uma trava na maioria dos
+  // movimentos é vivida como sistema quebrado, e vira contorno — foi o que
+  // aconteceu com as tarefas de CRM criadas como "post".
   //
-  // E só vale para tipo que entrega peça. Campanha de e-mail, landing page e
-  // tarefa administrativa não terminam num arquivo — cobrar arte delas travava
-  // trabalho legítimo (8 demandas ativas presas assim em 24/08/2026).
-  //
-  // A saída: quando a aprovação já aconteceu (ou vai acontecer) por fora, quem
-  // move diz QUAL é o caso. Não é um "continuar mesmo assim" — o motivo vai
-  // para o histórico com autor e data, e o card fica marcado. Ver
-  // lib/aprovacao-por-fora.ts.
-  const porFora = motivoAceitavel(body.aprovacaoPorFora, body.aprovacaoPorForaDetalhe)
-    ? descreverMotivo(body.aprovacaoPorFora as string, body.aprovacaoPorForaDetalhe as string | undefined)
-    : null
-
-  if (
-    statusInterno === "revisao_pendente" &&
-    demandaAtual.area === "design" &&
-    entregaPecaVisual(demandaAtual.tipoVideo) &&
-    demandaAtual._count.arquivos === 0 &&
-    !porFora
-  ) {
-    // O campo `arteFinal` é o que o kanban de Growth lê para abrir o passo de
-    // anexar em vez de só mostrar o toast. Contrato de sempre ({ error, campos }),
-    // então quem não conhece a regra continua exibindo a frase e nada quebra.
-    return erroDeCampo(
-      "arteFinal",
-      "Anexe a arte final antes de mandar para aprovação — sem peça, o cliente recebe um link vazio."
-    )
-  }
+  // O que ficou no lugar: o card diz a verdade. Quem está em "Para aprovação"
+  // sem link do cliente aparece marcado no kanban (ver naoEnviadoAoCliente em
+  // lib/growth-kanban.ts). A coluna para de mentir porque o card fala, não
+  // porque o sistema recusa.
 
   const novoStatusVisivel = STATUS_PARA_COLUNA[statusInterno as StatusInterno]
   if (!novoStatusVisivel) {
@@ -140,11 +108,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           statusNovo: statusInterno,
           usuarioId: session.user.id,
           origem,
-          // O motivo da aprovação por fora entra no histórico junto com a
-          // observação que já existia. É o rastro: quem dispensou a arte, quando
-          // e por quê — sem isso a exceção seria invisível, que é o defeito da
-          // caixa de "continuar mesmo assim".
-          observacao: [observacao, porFora].filter(Boolean).join(" · ") || null,
+          observacao,
         },
       }),
     ])

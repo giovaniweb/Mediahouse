@@ -52,7 +52,11 @@ interface RascunhoGrowth {
 }
 
 const PADRAO: RascunhoGrowth = {
-  titulo: "", tipoVideo: "post", prioridade: "normal", motivoUrgencia: "",
+  // tipoVideo SEM padrão de propósito: ele decide quais campos o formulário
+  // pergunta E se a demanda é peça ou tarefa. Enquanto o padrão era "post",
+  // quem não mexia no campo criava peça gráfica — foi assim que "CONFIGURAÇÃO
+  // DE LEAD SCORING" e "AJUSTES DE CAMPOS PERSONALIZADOS NO CRM" viraram post.
+  titulo: "", tipoVideo: "", prioridade: "normal", motivoUrgencia: "",
   dataLimite: "", classificacao: "", linhaProjetoId: "", responsavelIds: [], produtoIds: [],
   detalhes: {}, referencias: [], novaReferencia: "", linkBrutos: "",
 }
@@ -151,6 +155,9 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   function validate() {
     const errs: Record<string, string> = {}
     if (titulo.trim().length < 3) errs.titulo = "Mínimo 3 caracteres"
+    // Sem padrão, o tipo precisa ser escolhido. É o campo que decide o resto do
+    // formulário — herdar "post" no silêncio fazia tarefa de CRM nascer peça.
+    if (!tipoVideo) errs.tipoVideo = "Escolha o tipo"
     // A coluna Demanda.descricao é NOT NULL e alimenta a triagem por IA: sem
     // este campo a demanda nem chega ao servidor.
     if (descricao.trim().length < 10) errs.descricao = "Mínimo 10 caracteres"
@@ -276,7 +283,7 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
         </Secao>
 
         <Secao icone={LayoutGrid} titulo="Tipo de demanda">
-          <Campo label="Tipo" obrigatorio>
+          <Campo label="Tipo" obrigatorio erro={errors.tipoVideo}>
             <div className="relative">
               <select
                 value={tipoVideo}
@@ -290,6 +297,7 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
                 }}
                 className={selectClass}
               >
+                <option value="" disabled>Escolha o tipo…</option>
                 {TIPOS_CONTEUDO.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
               <Seta />

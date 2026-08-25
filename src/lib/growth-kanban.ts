@@ -5,6 +5,7 @@
 // `statusInterno` (rico: 27 valores), agrupando-os nas 8 colunas do Growth.
 // O audiovisual segue intacto (kanban por statusVisivel).
 import type { StatusInterno } from "@prisma/client"
+import { entregaPecaVisual } from "./growth-conteudo"
 
 export type GrowthColunaId =
   | "backlog" | "conteudos" | "para_fazer" | "fazendo"
@@ -78,4 +79,28 @@ export const STATUS_INTERNO_PARA_GROWTH_COLUNA: Record<StatusInterno, GrowthColu
 // Resolve a coluna de Growth de uma demanda a partir do seu statusInterno.
 export function growthColunaDe(statusInterno: string): GrowthColunaId {
   return STATUS_INTERNO_PARA_GROWTH_COLUNA[statusInterno as StatusInterno] ?? "backlog"
+}
+
+// ── O card que não foi enviado ao cliente ──────────────────────────────────
+//
+// Substitui a trava que exigia a arte antes de "Para aprovação" (16–25/08/2026).
+// A trava caía sobre o caminho normal — 10 dos 10 cards em "Fazendo" estavam sem
+// arte — e travar a maioria é vivido como sistema quebrado, não como cuidado.
+//
+// O problema real que ela tentava resolver era outro: um card em "Para
+// aprovação" que ninguém mandou parecia igual a um que foi mandado. Isso não
+// precisa de recusa, precisa de sinal. Um card sem `linkCliente` é, por
+// definição, um que não saiu por aqui — e esse dado já chega na tela.
+//
+// Só vale para tipo que entrega peça: campanha de e-mail e landing page nunca
+// geram link de aprovação, então marcá-las seria marcar todo mundo, que é o
+// mesmo que não marcar ninguém.
+export function naoEnviadoAoCliente(d: {
+  statusInterno?: string | null
+  tipoVideo?: string | null
+  linkCliente?: string | null
+}): boolean {
+  if (!["revisao_pendente", "edicao_finalizada"].includes(d.statusInterno ?? "")) return false
+  if (!entregaPecaVisual(d.tipoVideo)) return false
+  return !d.linkCliente
 }
