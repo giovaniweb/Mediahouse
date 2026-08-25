@@ -77,9 +77,18 @@ export async function GET(req: NextRequest) {
   const b2bTotal = classificacaoCounts.find((c) => c.classificacao === "b2b")?._count.id ?? 0
   const semClassificacao = classificacaoCounts.find((c) => c.classificacao === null)?._count.id ?? 0
 
+  // O campo "Fabricante" só faz sentido para quem vende produto físico. A tela
+  // lê isto para decidir se mostra a coluna e o seletor. Empresa sem linha de
+  // ConfigEmpresa conta como false — cliente novo nunca vê o campo.
+  const config = await prisma.configEmpresa.findFirst({
+    where: { organizacaoId },
+    select: { catalogoMostrarFabricante: true },
+  })
+
   return NextResponse.json({
     produtos: produtosComputados,
     classificacao: { b2c: b2cTotal, b2b: b2bTotal, sem_classificacao: semClassificacao },
+    mostrarFabricante: config?.catalogoMostrarFabricante ?? false,
   })
 }
 

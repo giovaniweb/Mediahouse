@@ -56,7 +56,11 @@ export default function ProdutosPage() {
   const [toggling, setToggling] = useState(false)
 
   const { data, mutate } = useSWR("/api/produtos?all=true", fetcher)
-  const { data: fabData } = useSWR("/api/fabricantes", fetcher)
+  // "Fabricante" só faz sentido para quem vende produto físico. A empresa de
+  // serviço cadastra "Captação de Vídeo" — o campo ali é um vazio pedindo para
+  // ser preenchido com nada. Quem decide é ConfigEmpresa, por empresa.
+  const mostrarFabricante: boolean = data?.mostrarFabricante ?? false
+  const { data: fabData } = useSWR(mostrarFabricante ? "/api/fabricantes" : null, fetcher)
   const { data: kpiData } = useSWR("/api/kpi/b2c-b2b", fetcher)
   const produtos: Produto[] = data?.produtos ?? []
   const fabricantes: Fabricante[] = fabData ?? []
@@ -254,9 +258,11 @@ export default function ProdutosPage() {
                   <th className="text-left px-4 py-3 font-medium cursor-pointer hover:text-zinc-300" onClick={() => handleSort("nome")}>
                     <span className="flex items-center gap-1.5">Nome do Produto <SortIcon col="nome" /></span>
                   </th>
-                  <th className="text-left px-4 py-3 font-medium cursor-pointer hover:text-zinc-300" onClick={() => handleSort("fabricante")}>
-                    <span className="flex items-center gap-1.5">Fabricante <SortIcon col="fabricante" /></span>
-                  </th>
+                  {mostrarFabricante && (
+                    <th className="text-left px-4 py-3 font-medium cursor-pointer hover:text-zinc-300" onClick={() => handleSort("fabricante")}>
+                      <span className="flex items-center gap-1.5">Fabricante <SortIcon col="fabricante" /></span>
+                    </th>
+                  )}
                   <th className="text-center px-4 py-3 font-medium cursor-pointer hover:text-zinc-300" onClick={() => handleSort("peso")}>
                     <span className="flex items-center justify-center gap-1.5">Peso <SortIcon col="peso" /></span>
                   </th>
@@ -286,7 +292,10 @@ export default function ProdutosPage() {
                       </div>
                     </td>
 
-                    {/* Fabricante — inline dropdown */}
+                    {/* Fabricante — inline dropdown. Some inteiro para quem não
+                        vende produto físico: coluna vazia é pior que coluna
+                        ausente, porque parece dado faltando. */}
+                    {mostrarFabricante && (
                     <td className="px-4 py-3">
                       {canEdit ? (
                         <InlineFabricante
@@ -300,6 +309,7 @@ export default function ProdutosPage() {
                         </span>
                       )}
                     </td>
+                    )}
 
                     {/* Peso — inline select */}
                     <td className="px-4 py-3 text-center">
@@ -422,7 +432,7 @@ export default function ProdutosPage() {
 
       {/* Product Form Modal */}
       {showForm && (
-        <ProdutoFormModal produto={editingProduct} fabricantes={fabricantes} onClose={() => { setShowForm(false); setEditingProduct(null); mutate() }} />
+        <ProdutoFormModal produto={editingProduct} fabricantes={fabricantes} mostrarFabricante={mostrarFabricante} onClose={() => { setShowForm(false); setEditingProduct(null); mutate() }} />
       )}
     </>
   )
@@ -588,8 +598,8 @@ function InlineFabricante({
 
 /* ─── Product Form Modal ─── */
 function ProdutoFormModal({
-  produto, fabricantes, onClose
-}: { produto: Produto | null; fabricantes: Fabricante[]; onClose: () => void }) {
+  produto, fabricantes, mostrarFabricante, onClose
+}: { produto: Produto | null; fabricantes: Fabricante[]; mostrarFabricante: boolean; onClose: () => void }) {
   const [loading, setLoading] = useState(false)
   const [novoFab, setNovoFab] = useState("")
   const [form, setForm] = useState({
@@ -662,7 +672,8 @@ function ProdutoFormModal({
             <textarea placeholder="Descrição do produto..." value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} rows={2} className={cn(inp, "resize-none")} />
           </div>
 
-          {/* Fabricante dropdown + criar novo */}
+          {/* Fabricante — só para quem vende produto físico. Ver ConfigEmpresa. */}
+          {mostrarFabricante && (
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Fabricante</label>
             <select
@@ -688,6 +699,7 @@ function ProdutoFormModal({
               </button>
             </div>
           </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

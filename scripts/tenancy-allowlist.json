@@ -16,7 +16,6 @@
     "src/app/api/configuracoes/trello/lists/route.ts",
     "src/app/api/configuracoes/trello/sync/route.ts",
     "src/app/api/editores/[id]/avaliar/route.ts",
-    "src/app/api/fabricantes/seed/route.ts",
     "src/app/api/ia/analisar-demanda/route.ts",
     "src/app/api/kpi/b2c-b2b/route.ts",
     "src/app/api/me/nf-token/route.ts",
