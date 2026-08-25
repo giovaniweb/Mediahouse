@@ -51,6 +51,18 @@ export async function POST(req: NextRequest) {
   // formulário; sem ele, `orgPublica` cai na Contourline (legado). É a MESMA org
   // que recebe o alerta logo abaixo — antes o alerta tinha dono e o dado não.
   const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+  if (!organizacaoId) {
+    // Sem empresa não há para quem mandar o cadastro. Antes o perfil era criado
+    // assim mesmo e o dado fiscal — CPF, endereço, PIX — era descartado com um
+    // console.error: a pessoa preenchia tudo, via "cadastro enviado" e o que
+    // importava não existia em lugar nenhum. Falhar aqui devolve o formulário
+    // preenchido para ela tentar de novo.
+    console.error("[publico/videomaker] Nenhuma organização resolvida — cadastro recusado.")
+    return NextResponse.json(
+      { error: "Cadastro indisponível no momento. Tente novamente em instantes." },
+      { status: 503 }
+    )
+  }
 
   // Só o que é público entra no perfil global — ele é a rede compartilhada e vai
   // ser legível por qualquer empresa sob RLS. CPF, endereço, PIX e diária são
@@ -93,7 +105,7 @@ export async function POST(req: NextRequest) {
   // era necessariamente quem tinha o cadastro.
   await prisma.alertaIA.create({
     data: {
-      ...(organizacaoId ? { organizacaoId } : {}),
+      organizacaoId,
       tipoAlerta: "novo_videomaker_pendente",
       mensagem: `Novo videomaker cadastrado: ${data.nome} — aguarda análise e aprovação.`,
       severidade: "info",

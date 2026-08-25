@@ -512,7 +512,7 @@ model Designer {
 }
 
 model Demanda {
-  organizacaoId  String?
+  organizacaoId  String
   id             String        @id @default(cuid())
   codigo         String        @unique
   titulo         String
@@ -648,6 +648,8 @@ model Demanda {
   eventoGestaoId String?
   eventoGestao   EventoGestao? @relation(fields: [eventoGestaoId], references: [id])
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
   @@map("demandas")
@@ -665,6 +667,11 @@ model ChecklistTemplate {
   createdAt DateTime                @default(now())
   updatedAt DateTime                @updatedAt
 
+  /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
+  organizacaoId String?
+  organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("checklist_templates")
 }
 
@@ -745,7 +752,7 @@ model Comentario {
 }
 
 model AlertaIA {
-  organizacaoId String?
+  organizacaoId String
   id            String           @id @default(cuid())
   demandaId     String?
   usuarioId     String?
@@ -760,6 +767,8 @@ model AlertaIA {
   snoozeAte     DateTime? // TDAH: silenciar temporariamente
 
   demanda Demanda? @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
   @@index([organizacaoId, status])
@@ -786,7 +795,7 @@ model AprovacaoVideo {
 
 model ConfigWhatsapp {
   id                String    @id @default(cuid())
-  organizacaoId     String?   @unique // 1 WhatsApp por empresa
+  organizacaoId     String    @unique // 1 WhatsApp por empresa
   instanceUrl       String // (Bloco 8: virá do env da Evolution gerenciada)
   apiKey            String // (Bloco 8: virá do env da Evolution gerenciada)
   instanceId        String    @unique
@@ -803,11 +812,13 @@ model ConfigWhatsapp {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@map("config_whatsapp")
 }
 
 model MensagemWhatsapp {
-  organizacaoId String?
+  organizacaoId String
   id            String          @id @default(cuid())
   demandaId     String?
   telefone      String
@@ -827,13 +838,15 @@ model MensagemWhatsapp {
 
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@index([organizacaoId])
   @@index([organizacaoId, createdAt])
   @@map("mensagens_whatsapp")
 }
 
 model ContatoWhatsApp {
-  organizacaoId String?
+  organizacaoId String
   id            String   @id @default(cuid())
   telefone      String
   nome          String
@@ -842,13 +855,15 @@ model ContatoWhatsApp {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@unique([organizacaoId, telefone])
   @@map("contatos_whatsapp")
 }
 
 // Cache de resolução @lid → JID real (evita atribuição errada de mensagens)
 model MapaLidWhatsApp {
-  organizacaoId String?
+  organizacaoId String
   id            String   @id @default(cuid())
   lidJid        String // ex: "123456789@lid"
   realJid       String // ex: "5531991900114@s.whatsapp.net"
@@ -856,6 +871,8 @@ model MapaLidWhatsApp {
   pushName      String? // nome de exibição no WhatsApp
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@unique([organizacaoId, lidJid])
   @@index([telefone])
@@ -907,7 +924,7 @@ enum StatusEvento {
 }
 
 model Evento {
-  organizacaoId String?
+  organizacaoId String
   id            String         @id @default(cuid())
   titulo        String
   descricao     String?
@@ -938,6 +955,8 @@ model Evento {
   videomaker Videomaker? @relation(fields: [videomakerId], references: [id])
   editor     Editor?     @relation(fields: [editorId], references: [id])
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@index([organizacaoId])
   @@index([organizacaoId, inicio])
   @@map("eventos")
@@ -965,7 +984,7 @@ enum StatusPagamento {
 }
 
 model CustoVideomaker {
-  organizacaoId     String?
+  organizacaoId     String
   id                String          @id @default(cuid())
   videomakerId      String
   demandaId         String?
@@ -988,6 +1007,8 @@ model CustoVideomaker {
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
   demanda    Demanda?   @relation(fields: [demandaId], references: [id])
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@index([organizacaoId])
   @@index([organizacaoId, pago])
   @@map("custos_videomaker")
@@ -1009,7 +1030,7 @@ enum TipoRelatorio {
 }
 
 model RelatorioIA {
-  organizacaoId String?
+  organizacaoId String
   id            String        @id @default(cuid())
   tipo          TipoRelatorio
   periodo       String // ex: "2025-W01", "2025-03", "realtime"
@@ -1018,6 +1039,9 @@ model RelatorioIA {
   modelo        String        @default("claude-haiku-4-5")
   createdAt     DateTime      @default(now())
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("relatorios_ia")
 }
 
@@ -1026,7 +1050,7 @@ model RelatorioIA {
 // ─────────────────────────────────────────────
 
 model ConfigEmail {
-  organizacaoId    String?
+  organizacaoId    String
   id               String   @id @default(cuid())
   apiKey           String   @default("") // Resend API Key
   senderEmail      String   @default("onboarding@resend.dev")
@@ -1036,6 +1060,9 @@ model ConfigEmail {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("config_email")
 }
 
@@ -1116,6 +1143,11 @@ model AvaliacaoVideomaker {
 
   videomaker Videomaker @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
 
+  /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
+  organizacaoId String?
+  organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("avaliacoes_videomaker")
 }
 
@@ -1138,6 +1170,11 @@ model AvaliacaoEditor {
 
   editor Editor @relation(fields: [editorId], references: [id], onDelete: Cascade)
 
+  /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
+  organizacaoId String?
+  organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("avaliacoes_editor")
 }
 
@@ -1146,7 +1183,7 @@ model AvaliacaoEditor {
 // ─────────────────────────────────────────────
 
 model ConfigParametro {
-  organizacaoId String?
+  organizacaoId String
   id            String   @id @default(cuid())
   grupo         String // "departamentos" | "tipos_video" | "habilidades" | "areas_atuacao"
   valor         String // valor interno (ex: "growth")
@@ -1158,6 +1195,8 @@ model ConfigParametro {
 
   // A unicidade tem que ser por empresa: sem organizacaoId aqui, a primeira
   // empresa a cadastrar "crm" impediria todas as outras de ter o mesmo valor.
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@unique([organizacaoId, grupo, valor])
   @@map("config_parametros")
 }
@@ -1224,14 +1263,14 @@ model PasswordResetToken {
 // fabricante homônimo. Agora é único por empresa.
 model Fabricante {
   id            String    @id @default(cuid())
-  organizacaoId String?
+  organizacaoId String
   nome          String
   ativo         Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   produtos      Produto[]
 
-  organizacao Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@unique([organizacaoId, nome])
   @@index([organizacaoId])
@@ -1239,7 +1278,7 @@ model Fabricante {
 }
 
 model Produto {
-  organizacaoId  String?
+  organizacaoId  String
   id             String    @id @default(cuid())
   nome           String
   descricao      String?
@@ -1258,6 +1297,9 @@ model Produto {
   ideias     IdeiaVideo[]
   coberturas EventoCobertura[]
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("produtos")
 }
 
@@ -1293,7 +1335,7 @@ model DemandaResponsavel {
 // ─────────────────────────────────────────────
 
 model IdeiaVideo {
-  organizacaoId  String?
+  organizacaoId  String
   id             String      @id @default(cuid())
   titulo         String
   descricao      String?     @db.Text
@@ -1332,6 +1374,8 @@ model IdeiaVideo {
   produto Produto? @relation(fields: [produtoId], references: [id])
   demanda Demanda? @relation(fields: [demandaId], references: [id])
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
   @@index([organizacaoId])
   @@map("ideias_video")
 }
@@ -1350,6 +1394,11 @@ model ConfigTrello {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
+  organizacaoId String?
+  organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("config_trello")
 }
 
@@ -1462,7 +1511,7 @@ model NotaFiscalUpload {
 // ─────────────────────────────────────────────
 
 model ConfigEmpresa {
-  organizacaoId String?
+  organizacaoId String
   id            String  @id @default(cuid())
   cnpj          String?
   razaoSocial   String?
@@ -1498,6 +1547,9 @@ model ConfigEmpresa {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("config_empresa")
 }
 
@@ -1513,6 +1565,11 @@ model Depoimento {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
+  organizacaoId String?
+  organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("depoimentos")
 }
 
@@ -1564,7 +1621,7 @@ enum TipoMomento {
 }
 
 model EventoCobertura {
-  organizacaoId       String?
+  organizacaoId       String
   id                  String          @id @default(cuid())
   titulo              String
   slug                String          @unique
@@ -1595,6 +1652,8 @@ model EventoCobertura {
   log          EventoCoberturaLog[]
   demandas     Demanda[]
   eventoGestao EventoGestao?
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
   @@map("coberturas")
@@ -1837,7 +1896,7 @@ enum TipoAprovacao {
 }
 
 model EventoGestao {
-  organizacaoId       String?
+  organizacaoId       String
   id                  String             @id @default(cuid())
   codigo              String             @unique
   nome                String
@@ -1871,6 +1930,8 @@ model EventoGestao {
   custos      CustoEvento[]
   aprovacoes  EventoGestaoAprovacao[]
   logs        EventoGestaoLog[]
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
   @@map("eventos_gestao")
@@ -1919,7 +1980,7 @@ model EventoGestaoDocumento {
 }
 
 model Fornecedor {
-  organizacaoId  String?
+  organizacaoId  String
   id             String              @id @default(cuid())
   nome           String
   contato        String?
@@ -1941,6 +2002,9 @@ model Fornecedor {
   produtos ProdutoServicoEvento[]
   custos   CustoEvento[]
 
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("fornecedores")
 }
 
@@ -2021,7 +2085,7 @@ model EventoGestaoLog {
 // Produção lançada manualmente (vídeos feitos que não viraram card no NuFlow)
 // Por competência (ano*100+mes), área e categoria (ex: "Linha Med", "Linha Estética").
 model ProducaoManual {
-  organizacaoId String?
+  organizacaoId String
   id            String   @id @default(cuid())
   competencia   Int // ano*100 + mes (ex: 202606)
   area          String   @default("audiovisual")
@@ -2030,6 +2094,8 @@ model ProducaoManual {
   quantidade    Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@unique([competencia, area, grupo, categoria])
   @@index([organizacaoId])
@@ -2062,6 +2128,30 @@ model Organizacao {
   videomakerFiscais  VideomakerDadosFiscais[]
   modulos            ModuloOrganizacao[]
   fabricantes        Fabricante[]
+
+  demandas             Demanda[]
+  alertas              AlertaIA[]
+  configsWhatsapp      ConfigWhatsapp[]
+  mensagensWhatsapp    MensagemWhatsapp[]
+  contatosWhatsapp     ContatoWhatsApp[]
+  mapasLidWhatsapp     MapaLidWhatsApp[]
+  eventos              Evento[]
+  custosVideomaker     CustoVideomaker[]
+  relatorios           RelatorioIA[]
+  configsEmail         ConfigEmail[]
+  parametros           ConfigParametro[]
+  produtos             Produto[]
+  ideiasVideo          IdeiaVideo[]
+  configsEmpresa       ConfigEmpresa[]
+  coberturas           EventoCobertura[]
+  eventosGestao        EventoGestao[]
+  fornecedores         Fornecedor[]
+  producoesManuais     ProducaoManual[]
+  depoimentos          Depoimento[]
+  checklistTemplates   ChecklistTemplate[]
+  configsTrello        ConfigTrello[]
+  avaliacoesVideomaker AvaliacaoVideomaker[]
+  avaliacoesEditor     AvaliacaoEditor[]
 
   @@map("organizacoes")
 }

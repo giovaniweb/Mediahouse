@@ -475,7 +475,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
           severidade: "critico",
           acaoSugerida: "Acessar /configuracoes e reconectar o WhatsApp",
           status: "ativo",
-          ...(organizacaoId && { organizacaoId }),
+          organizacaoId,
         },
       }).catch(() => null)
     }
@@ -499,7 +499,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
             severidade: horasDePe !== null && horasDePe < 6 ? "aviso" : "info",
             acaoSugerida: "Reinícios frequentes derrubam mensagens de entrada — verificar memória/estabilidade do servidor da Evolution",
             status: "ativo",
-            ...(organizacaoId && { organizacaoId }),
+            organizacaoId,
           },
         }).catch(() => null)
       }
@@ -524,7 +524,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   // ── Deduplicação ──────────────────────────────────────────────────────
   if (messageId) {
     const jaProcessado = await prisma.mensagemWhatsapp.findFirst({
-      where: { conteudo: { startsWith: `[id:${messageId}]` }, ...(organizacaoId && { organizacaoId }) },
+      where: { conteudo: { startsWith: `[id:${messageId}]` }, organizacaoId },
     }).catch(() => null)
     if (jaProcessado) {
       console.log(`[WH-DEDUP] ${messageId} já processada`)
@@ -605,7 +605,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   // Busca histórico recente ANTES de salvar
   const historicoRecente = await prisma.mensagemWhatsapp.findMany({
     where: {
-      ...(organizacaoId && { organizacaoId }),
+      organizacaoId,
       telefone: { contains: telefone.slice(-8) },
       direcao: { in: ["entrada", "saida"] },
     },
@@ -626,7 +626,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
       mediaType: mediaType ?? undefined,
       direcao: "entrada",
       status: "recebido",
-      ...(organizacaoId && { organizacaoId }),
+      organizacaoId,
     },
   }).catch(() => null)
 

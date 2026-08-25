@@ -118,7 +118,7 @@ export async function POST(
 /**
  * Notifica gestores/admins que uma NF foi enviada pelo videomaker
  */
-async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string, organizacaoId?: string | null) {
+async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string, organizacaoId: string) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
 
@@ -132,13 +132,13 @@ async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomake
 
     // Cria alerta in-app também
     const demanda = await prisma.demanda.findFirst({
-      where: { codigo, ...(organizacaoId && { organizacaoId }) },
+      where: { codigo, organizacaoId },
       select: { id: true },
     })
     if (demanda) {
       await prisma.alertaIA.create({
         data: {
-          ...(organizacaoId && { organizacaoId }),
+          organizacaoId,
           demandaId: demanda.id,
           tipoAlerta: "nf_recebida",
           mensagem: `📄 Nota fiscal recebida de ${nomeVideomaker} para ${codigo}. Aguardando aprovação do pagamento.`,

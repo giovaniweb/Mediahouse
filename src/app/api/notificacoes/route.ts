@@ -1,23 +1,32 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId } from "@/lib/org"
+import { getOrgId, semOrg } from "@/lib/org"
+import type { Prisma } from "@prisma/client"
 
-// GET /api/notificacoes — alertas não lidos: broadcast (usuarioId null) + direcionados
-// ao usuário logado, escopados à org ativa (mantém legado sem org).
+// GET /api/notificacoes — alertas não lidos: broadcast (usuarioId null) +
+// direcionados ao usuário logado, da empresa ativa.
+//
+// O filtro de empresa era CONDICIONAL: `...(organizacaoId ? [filtro] : [])`.
+// Quem não tinha empresa ativa não caía numa lista vazia — caía numa consulta
+// SEM filtro nenhum, e recebia o sino de notificações com o alerta de todas as
+// empresas da plataforma. O ramo que parecia "tolerar o legado" era o que abria
+// a porta.
+//
+// O `{ organizacaoId: null }` também sai: alerta sem dono deixou de existir
+// quando a coluna virou NOT NULL.
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const organizacaoId = await getOrgId(session)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {
+  if (!organizacaoId) return semOrg()
+
+  const where: Prisma.AlertaIAWhereInput = {
     status: "ativo",
     lida: false,
-    AND: [
-      { OR: [{ usuarioId: null }, { usuarioId: session.user.id }] },
-      ...(organizacaoId ? [{ OR: [{ organizacaoId }, { organizacaoId: null }] }] : []),
-    ],
+    organizacaoId,
+    OR: [{ usuarioId: null }, { usuarioId: session.user.id }],
   }
 
   const alertas = await prisma.alertaIA.findMany({
@@ -41,7 +50,8 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
 
-  const organizacaoIdPatch = await getOrgId(session)
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   if (body.id) {
     // Marca uma específica como lida — só se for do próprio usuário (ou
@@ -50,24 +60,19 @@ export async function PATCH(req: NextRequest) {
     await prisma.alertaIA.updateMany({
       where: {
         id: body.id,
-        AND: [
-          { OR: [{ usuarioId: null }, { usuarioId: session.user.id }] },
-          ...(organizacaoIdPatch ? [{ OR: [{ organizacaoId: organizacaoIdPatch }, { organizacaoId: null }] }] : []),
-        ],
+        organizacaoId,
+        OR: [{ usuarioId: null }, { usuarioId: session.user.id }],
       },
       data: { lida: true },
     })
   } else {
     // Marca como lidas só as do próprio usuário + broadcast (não as direcionadas a outros)
-    const organizacaoId = await getOrgId(session)
     await prisma.alertaIA.updateMany({
       where: {
         status: "ativo",
         lida: false,
-        AND: [
-          { OR: [{ usuarioId: null }, { usuarioId: session.user.id }] },
-          ...(organizacaoId ? [{ OR: [{ organizacaoId }, { organizacaoId: null }] }] : []),
-        ],
+        organizacaoId,
+        OR: [{ usuarioId: null }, { usuarioId: session.user.id }],
       },
       data: { lida: true },
     })

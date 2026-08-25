@@ -7,23 +7,13 @@
     "Regenerar: node scripts/auditar-tenancy.mjs --gerar"
   ],
   "_gerado_em": "2026-08-25",
-  "permitidas": {
-    "src/app/api/admin/depoimentos/[id]/route.ts": "Depoimento não tem coluna de organização — a lista do admin é a mesma para toda empresa. Fecha na Fase 2, com a coluna e o backfill.",
-    "src/app/api/admin/depoimentos/route.ts": "Idem: sem coluna em `depoimentos`, criar e listar é global. Fase 2.",
-    "src/app/api/publico/depoimentos/route.ts": "A vitrine pública mostra os depoimentos de todas as empresas. Depende da mesma coluna. Fase 2.",
-    "src/app/api/checklist-templates/route.ts": "ChecklistTemplate não tem coluna de organização: o template criado por uma empresa aparece para as outras. Fase 2.",
-    "src/app/api/checklist-templates/seed/route.ts": "Semeia os templates padrão para a instalação inteira, e ainda por token fixo no código. Vira seed por empresa na Fase 2.",
-    "src/app/api/videomakers/[id]/avaliar/route.ts": "A nota agregada é global de propósito, mas o GET devolve os COMENTÁRIOS de todas as empresas. Separar exige coluna em `avaliacoes_videomaker`. Fase 2.",
-    "src/app/api/editores/[id]/avaliar/route.ts": "Mesma história em `avaliacoes_editor`: comentário interno de quem contratou, legível por qualquer empresa. Fase 2."
-  },
+  "permitidas": {},
   "justificadas": {
     "src/app/api/me/nf-token/route.ts": "Idem: o token de NF sai do cruzamento usuário logado × demanda atribuída a ele. Recortar por empresa esconderia trabalho que é dele.",
-    "src/app/api/publico/avaliar/route.ts": "Avaliação por QR, sem sessão: não há empresa a consultar. Grava nota e recalcula a média agregada, que é global por desenho.",
-    "src/app/api/publico/avaliar-editor/route.ts": "Idem para editor. Devolve só o perfil público (nome, avatar, especialidade, média) e nenhum comentário.",
-    "src/app/api/publico/videomaker-info/[id]/route.ts": "Perfil público da rede na tela de QR: nome, cidade e estado. Nada privado, nada por empresa.",
+    "src/app/api/publico/cobertura/[slug]/face-search/route.ts": "Busca por rosto dentro dos descritores daquela cobertura. O recorte é o evento.",
     "src/app/api/publico/cobertura/[slug]/route.ts": "A credencial é o slug do evento, e o slug pertence a uma cobertura, que pertence a uma empresa. Quem tem o link vê aquele evento e só ele.",
     "src/app/api/publico/cobertura/[slug]/zip/route.ts": "Mesmo slug, mesma cobertura — o ZIP não sai do evento pedido.",
-    "src/app/api/publico/cobertura/[slug]/face-search/route.ts": "Busca por rosto dentro dos descritores daquela cobertura. O recorte é o evento.",
+    "src/app/api/publico/videomaker-info/[id]/route.ts": "Perfil público da rede na tela de QR: nome, cidade e estado. Nada privado, nada por empresa.",
     "src/app/api/transcode/callback/route.ts": "Worker externo, autenticado por TRANSCODE_SECRET com comparação em tempo constante. O alvo sai da demanda do próprio arquivo, não do corpo da requisição.",
     "src/lib/avaliacao.ts": "A média de estrelas é o ativo do profissional na rede: ele carrega a reputação de uma empresa para a outra. É calculada sobre todas as avaliações de propósito.",
     "src/lib/eventos-conclusao.ts": "Recalcula o percentual de UM evento, recebido por id. Quem chama já provou a posse do evento; o helper não escolhe alvo.",

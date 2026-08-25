@@ -125,7 +125,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     where: { id: aprovacao.demandaId },
     select: { organizacaoId: true },
   })
-  const organizacaoId = demandaOrg?.organizacaoId ?? null
+  // A demanda é a credencial deste token. Se ela sumiu, não há empresa a quem
+  // atribuir a aprovação nem quem avisar — e o alerta que este fluxo cria
+  // nasceria órfão, invisível para todas as telas.
+  if (!demandaOrg) {
+    return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
+  }
+  const organizacaoId = demandaOrg.organizacaoId
 
   if (aprovacao.expiresAt && aprovacao.expiresAt < new Date() && !(await ehAcessoInterno(organizacaoId))) {
     return NextResponse.json({ error: "Link expirado" }, { status: 410 })

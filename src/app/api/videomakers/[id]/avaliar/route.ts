@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recalcularMediaVideomaker } from "@/lib/avaliacao"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // Avaliação INTERNA de videomaker — quem contratou dando a nota.
 //
@@ -18,6 +19,8 @@ import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
   const body = await req.json()
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // interno — quem avalia é quem está logado.
       origem: "interno",
       avaliadorId: session.user.id,
+      organizacaoId,
     },
   })
 
@@ -50,19 +54,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // GET /api/videomakers/[id]/avaliar — listar avaliações
 //
-// DÍVIDA CONHECIDA (Fase 2): a lista devolve os comentários de TODAS as
-// empresas. A nota agregada é global de propósito, mas o comentário é
-// observação interna de quem contratou. Separar exige coluna de organização em
-// `avaliacoes_videomaker`.
+// Duas coisas com regras diferentes na mesma tela:
+//
+//   a NOTA agregada é da REDE — é a reputação que o profissional carrega de uma
+//   empresa para a outra, e é o que dá valor ao marketplace. Calculada sobre
+//   todas as avaliações, sem recorte.
+//
+//   o COMENTÁRIO é de quem contratou. "Sumiu no dia da gravação" é observação
+//   interna, e até a Fase 2 qualquer empresa que abrisse o perfil lia o que a
+//   outra tinha escrito. Agora a lista traz o que é desta empresa mais o que
+//   veio por QR público — que não tem dono porque é o cliente final falando, e
+//   isso pertence à rede.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id } = await params
 
   const [avaliacoes, { _avg, _count }] = await Promise.all([
     prisma.avaliacaoVideomaker.findMany({
-      where: { videomakerId: id },
+      where: {
+        videomakerId: id,
+        OR: [{ organizacaoId }, { organizacaoId: null }],
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
@@ -73,9 +89,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }),
   ])
 
-  // Média e total sobre TUDO, não só sobre as 50 primeiras — antes o `take: 50`
-  // silenciosamente virava o universo do cálculo, e a média da tela divergia da
-  // do perfil assim que o profissional passava de 50 avaliações.
+  // Média e total sobre TUDO — todas as empresas, sem o `take: 50`. Antes o
+  // limite silenciosamente virava o universo do cálculo, e a média da tela
+  // divergia da do perfil assim que o profissional passava de 50 avaliações.
   return NextResponse.json({
     avaliacoes,
     media: Math.round((_avg.nota ?? 0) * 10) / 10,

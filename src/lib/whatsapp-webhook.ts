@@ -25,8 +25,10 @@ export interface ResultadoWebhook {
 
 export interface ConfigParaWebhook {
   id: string
-  /** Escopo do update do segredo — o auditor de isolamento exige, e com razão. */
-  organizacaoId: string | null
+  /** Escopo do update do segredo — o auditor de isolamento exige, e com razão.
+   *  Deixou de ser nulável junto com a coluna: config de WhatsApp sem empresa
+   *  não tem por qual número enviar. */
+  organizacaoId: string
   instanceUrl: string
   apiKey: string
   instanceId: string

@@ -9,18 +9,41 @@
 # A Vercel não tem release phase: tem Install e Build, e nada entre o build e o
 # tráfego entrar. Por isso o release mora aqui.
 #
-# ORDEM QUE VALE COMO REGRA: DEPLOY PRIMEIRO, MIGRATION DEPOIS.
-# Aprove o job `aplicar` só depois de confirmar que o deploy da Vercel está no ar.
-# Toda migration precisa ser compatível com o código que AINDA está rodando —
-# padrão expand/contract. Foi assim que a Fase A funcionou sem janela de quebra: os
-# PRs #22, #24 e #25 pararam de usar as colunas, subiram, e só então veio o DROP.
+# ORDEM, e ela DEPENDE DO TIPO DA MIGRATION (expand/contract):
+#
+#   CONTRAI (DROP COLUMN, NOT NULL, remover índice único)
+#     → DEPLOY PRIMEIRO, MIGRATION DEPOIS.
+#       O código que ainda está no ar não pode depender do que vai sumir. Foi
+#       assim que a Fase A funcionou sem janela de quebra: os PRs #22, #24 e #25
+#       pararam de usar as colunas, subiram, e só então veio o DROP.
+#
+#   EXPANDE (ADD COLUMN nulável, criar índice, criar tabela)
+#     → MIGRATION PRIMEIRO, DEPLOY DEPOIS.
+#       Coluna nova é invisível para o código antigo — o Prisma seleciona
+#       colunas explicitamente. Mas o código NOVO quebra se a coluna ainda não
+#       existir, então ela precisa chegar antes.
+#
+#   A migration que faz as duas coisas se divide em dois PRs. Sempre.
+#
+# O GATE — leia isto antes de mexer:
+#
+#   O job `aplicar` roda SOMENTE em disparo manual (workflow_dispatch). Um merge
+#   na main mostra o SQL e para: ninguém aplica DDL em produção sem alguém
+#   clicar. Isso é deliberado e não depende de configuração no painel do GitHub.
+#
+#   Havia um gate por `environment: producao` com Required reviewers. Ele foi
+#   configurado, mas a API do GitHub devolve `protection_rules: []` — o
+#   environment existe e não tem regra nenhuma, então o job passava direto.
+#   Um gate que parece existir e não existe é pior que nenhum: foi exatamente a
+#   confiança nele que deixou a Fase 2 a um merge de aplicar DDL sozinha.
+#   O `environment` continua declarado abaixo: se as Required reviewers forem
+#   configuradas um dia, vira uma segunda tranca em cima desta.
 #
 # Pré-requisito no GitHub (Settings, feito uma vez):
-#   Environment `producao`, com Required reviewers  ← é isto que cria o gate
-#   e, DENTRO dele, os secrets:
+#   Environment `producao` com os secrets:
 #       DIRECT_URL_PRODUCAO    porta 5432, usada para DDL
 #       DATABASE_URL_PRODUCAO  pooler, 6543
-#   No environment, os secrets só existem para o job que passou pela aprovação.
+#   No environment, os secrets só existem para o job que o declara.
 
 name: Release — migrations
 
@@ -30,6 +53,11 @@ on:
     # Só incomoda quando há migration de verdade. Merge sem migration não pede nada.
     paths: ["prisma/migrations/**"]
   workflow_dispatch:
+    inputs:
+      confirmo:
+        description: 'Digite "aplicar" para confirmar que o DDL vai para PRODUÇÃO'
+        required: true
+        default: ""
 
 concurrency:
   group: release-migrations
@@ -74,15 +102,24 @@ jobs:
           done
 
           echo ""
-          echo "⚠️  Confirme que o deploy da Vercel já está no ar ANTES de aprovar."
-          echo "    A regra é deploy primeiro, migration depois."
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "ℹ️  Nada foi aplicado. Este job só MOSTRA o SQL."
+            echo "    Para aplicar: Actions → Release — migrations → Run workflow,"
+            echo "    digitando \"aplicar\" na confirmação."
+          fi
+          echo "⚠️  Confira a ordem antes de aplicar (ver cabeçalho do workflow):"
+          echo "    migration que CONTRAI → deploy primeiro."
+          echo "    migration que EXPANDE → migration primeiro."
 
   aplicar:
     name: Aplicar em produção
     needs: revisar
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # O gate. O job fica parado aqui até um reviewer aprovar no GitHub.
+    # O GATE: só disparo manual, e com a palavra digitada. Merge na main nunca
+    # chega aqui — mostra o SQL no job `revisar` e para.
+    if: github.event_name == 'workflow_dispatch' && inputs.confirmo == 'aplicar'
+    # Segunda tranca, se e quando as Required reviewers forem configuradas.
     environment: producao
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCAO }}

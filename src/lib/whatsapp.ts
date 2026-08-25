@@ -85,6 +85,16 @@ function enviarTexto(
 
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null) {
   const orgId = await resolverOrgEnvio(demandaId, organizacaoId)
+
+  // Sem empresa não há o que registrar. A linha de log nascia sem dono e ficava
+  // invisível para TODAS as telas — inclusive /mensagens, que filtra por
+  // empresa. Era lixo com aparência de rastro: ninguém encontrava, e quem
+  // procurasse a mensagem perdida concluiria que ela nunca foi tentada.
+  if (!orgId) {
+    console.error("[WhatsApp] Envio sem organização — nada enviado e nada registrado.", { telefone, demandaId })
+    return null
+  }
+
   const config = await getWhatsappConfig(orgId)
   if (!config) {
     // Org sem WhatsApp conectado — NÃO quebra o fluxo: registra a tentativa e segue.
@@ -96,7 +106,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         conteudo: mensagem,
         direcao: "saida",
         status: "sem_config",
-        ...(orgId && { organizacaoId: orgId }),
+        organizacaoId: orgId,
         ...(demandaId && { demandaId }),
       },
     }).catch(() => null)
@@ -167,7 +177,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         status: res.ok ? "enviado" : "falhou",
         ...(motivo && { erro: motivo }),
         tentativas: alternativo && !res.ok ? 2 : 1,
-        ...(orgId && { organizacaoId: orgId }),
+        organizacaoId: orgId,
         ...(demandaId && { demandaId }),
       },
     }).catch(e => console.error("[WhatsApp] Erro ao salvar msg:", e))
@@ -190,7 +200,7 @@ export async function sendWhatsappMessage(telefone: string, mensagem: string, de
         // Timeout e queda de rede são o sintoma da instância morta. Sem o texto
         // do erro, essa falha era indistinguível de "número inválido".
         erro: (e instanceof Error ? `${e.name}: ${e.message}` : String(e)).slice(0, 400),
-        ...(orgId && { organizacaoId: orgId }),
+        organizacaoId: orgId,
         ...(demandaId && { demandaId }),
       },
     }).catch(err => console.error("[WhatsApp] Erro ao salvar msg falhada:", err))
