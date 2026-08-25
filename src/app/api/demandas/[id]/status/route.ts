@@ -327,6 +327,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // impedimento escrito à mão é mais útil que um link que a mensagem
       // do papel já carrega quando precisa.
       extra: observacao ?? demandaAtual.motivoImpedimento ?? body.linkFinal ?? demandaAtual.linkFinal,
+      // Growth muda o substantivo do aviso: quem pediu uma arte recebia
+      // "Seu vídeo está pronto".
+      isGrowth: demandaAtual.area === "design",
+      // O que o solicitante abre. A página de aprovação primeiro; o arquivo
+      // final como reserva. Sem nenhum dos dois, o aviso de "pronto para
+      // revisão" não é enviado — ver revisao_pendente em lib/kanban-avisos.ts.
+      linkAprovacao: demandaAtual.linkCliente ?? body.linkFinal ?? demandaAtual.linkFinal ?? null,
     }), "mudanca-kanban")
 
     return NextResponse.json(demanda)

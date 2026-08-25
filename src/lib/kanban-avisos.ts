@@ -60,14 +60,26 @@ export function mensagemKanban(
   codigo: string,
   titulo: string,
   destinatario: DestinatarioKanban,
-  extra?: string
+  extra?: string,
+  /** Demanda de Growth (arte, não vídeo). Muda o substantivo do aviso. */
+  isGrowth = false,
+  /** O que o solicitante vai abrir: a página de aprovação ou o arquivo final.
+   *  Vem explícito porque `extra` também carrega observação — e uma observação
+   *  escrita à mão fazia o link sumir da mensagem. */
+  linkAprovacao?: string | null
 ): string | null {
   // Identifica a demanda no meio da frase, não como bloco de campos rotulados.
   const ref = `${titulo} (${codigo})`
   // `extra` chega como observação OU como link final (ver chamador). Só vale
   // como link se de fato for uma URL — senão viraria uma observação apresentada
   // como se fosse clicável.
-  const link = extra && /^https?:\/\//i.test(extra) ? extra : null
+  const ehUrl = (v?: string | null) => !!v && /^https?:\/\//i.test(v)
+  const link = ehUrl(linkAprovacao) ? linkAprovacao! : (ehUrl(extra) ? extra! : null)
+  // "Seu vídeo" chegava a quem pediu uma arte. O aviso é o único texto do
+  // sistema que o solicitante lê, e chamar a peça dele de vídeo é dizer que
+  // ninguém olhou o pedido.
+  const aPeca = isGrowth ? "A sua arte" : "O seu vídeo"
+  const oQueFazer = isGrowth ? "Confira e aprove" : "Assista e aprove"
   // Semente por demanda + estado: a mesma demanda no mesmo ponto devolve sempre
   // a mesma frase, então reenviar não parece um aviso novo. Demandas diferentes
   // é que soam diferentes.
@@ -109,7 +121,9 @@ export function mensagemKanban(
       executor: `▶️ ${ref} está em execução com você.`,
     },
     edicao_finalizada: {
-      solicitante: `🎥 A edição de ${ref} ficou pronta. Já já mandamos o link para você aprovar.`,
+      solicitante: isGrowth
+        ? `🎨 ${ref} ficou pronta. Já já mandamos o link para você aprovar.`
+        : `🎥 A edição de ${ref} ficou pronta. Já já mandamos o link para você aprovar.`,
       gestor: `🎥 ${ref} editado, aguardando aprovação do cliente.`,
       editor: v(ENTREGUE_QUEM_FEZ(ref)),
       executor: v(ENTREGUE_QUEM_FEZ(ref)),
@@ -117,8 +131,18 @@ export function mensagemKanban(
     // Antes esta mensagem morava em "aguardando_aprovacao_cliente", que não
     // existe no enum StatusInterno — ou seja, o aviso com o link de aprovação
     // nunca chegou a ser enviado. O status real desta etapa é revisao_pendente.
+    //
+    // Sem link, o solicitante NÃO é avisado. A mensagem antiga caía num "acesse
+    // o sistema para aprovar" — e quem acessava não encontrava nada, porque não
+    // havia peça nem link. Anunciar entrega que não existe é pior do que ficar
+    // quieto: gasta a confiança de quem pediu e gera a cobrança de volta.
+    //
+    // O gestor continua sendo avisado nos dois casos: para ele o card na coluna
+    // já é informação, e é ele quem precisa notar o que ficou pelo caminho.
     revisao_pendente: {
-      solicitante: `👀 Seu vídeo de ${ref} está pronto para revisão.\n\n${link ? `Assista e aprove — ou peça ajustes — por aqui:\n${link}` : "Acesse o sistema para aprovar ou pedir ajustes."}`,
+      solicitante: link
+        ? `👀 ${aPeca} de ${ref} está pronto para revisão.\n\n${oQueFazer} — ou peça ajustes — por aqui:\n${link}`
+        : null,
       gestor: `👀 ${ref} aguardando aprovação do cliente.`,
     },
     aprovado: {
@@ -190,6 +214,10 @@ export interface DadosAvisoKanban {
   autorNome: string
   autorEhGestor: boolean
   extra?: string | null
+  /** Demanda de Growth: o aviso fala em arte, não em vídeo. */
+  isGrowth?: boolean
+  /** Página de aprovação (ou o arquivo final) — o que o solicitante abre. */
+  linkAprovacao?: string | null
 }
 
 export interface AvisoDestinatario {
@@ -229,7 +257,8 @@ export function destinatariosDoAviso(d: DadosAvisoKanban): AvisoDestinatario[] {
     saida.push({ telefone, mensagem, papel })
   }
 
-  const texto = (papel: DestinatarioKanban) => mensagemKanban(statusNovo, codigo, titulo, papel, extra)
+  const texto = (papel: DestinatarioKanban) =>
+    mensagemKanban(statusNovo, codigo, titulo, papel, extra, d.isGrowth ?? false, d.linkAprovacao)
 
   // Quem produz primeiro — é a mensagem mais acionável das três.
   add(d.telefoneVideomaker, texto("videomaker"), "videomaker")
