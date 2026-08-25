@@ -6,6 +6,7 @@ import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { formatarDataCurta } from "@/lib/datas"
+import { naoEnviadoAoCliente } from "@/lib/growth-kanban"
 
 const prioridadeConfig = {
   urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -72,13 +73,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   const isCobertura = demanda.tipoVideo?.toLowerCase().includes("cobertura")
   const aguardandoVM = isCobertura && demanda.statusInterno === "videomaker_notificado"
   const semVM = isCobertura && !demanda.videomakerId && ["entrada", "producao"].includes(demanda.statusVisivel ?? "")
-  // Na coluna de aprovação sem link do cliente: a peça não saiu por aqui. Pode
-  // ser aprovação combinada por fora (WhatsApp, e-mail, reunião) — legítimo —, e
-  // pode ser um card que alguém empurrou e esqueceu. Os dois casos precisam ser
-  // distinguíveis de um envio real, senão a coluna volta a mentir, que foi o
-  // problema de 16/08/2026.
-  const aprovacaoForaDoSistema =
-    ["revisao_pendente", "edicao_finalizada"].includes(demanda.statusInterno) && !demanda.linkCliente
+  // Está na coluna de aprovação mas não saiu por aqui. Pode ser aprovação
+  // combinada por fora (WhatsApp, reunião) — legítimo — ou um card que alguém
+  // empurrou e esqueceu. Os dois precisam ser distinguíveis de um envio real:
+  // é este sinal que substitui a trava que exigia a arte para mover.
+  const semEnvioAoCliente = naoEnviadoAoCliente(demanda)
 
   const handleClick = () => {
     if (onOpen) onOpen(demanda.id)
@@ -171,12 +170,12 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
               </span>
             )
           })()}
-          {aprovacaoForaDoSistema && (
+          {semEnvioAoCliente && (
             <span
-              title="Não foi enviado pelo NuFlow — o cliente não recebeu link daqui. Veja o motivo no histórico da demanda."
+              title="Nenhum link de aprovação foi gerado — o cliente não recebeu nada pelo NuFlow. Pode ter sido combinado por fora, ou ter ficado para trás."
               className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30"
             >
-              ✔️ Por fora
+              ⚠️ Não enviado
             </span>
           )}
           {aguardandoVM && (
