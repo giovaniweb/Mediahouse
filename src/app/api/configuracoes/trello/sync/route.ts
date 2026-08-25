@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { syncDemandaTrello } from "@/lib/trello"
 
 export async function POST() {
@@ -20,8 +21,13 @@ export async function POST() {
 
   const cfg = { apiKey, token, boardId }
 
+  // O board do Trello é de uma empresa; a consulta trazia demanda de todas.
+  // Sincronizar assim publica o pipeline de um cliente no quadro de outro.
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const demandas = await prisma.demanda.findMany({
-    where: { statusInterno: { notIn: ["encerrado", "expirado"] } },
+    where: { organizacaoId, statusInterno: { notIn: ["encerrado", "expirado"] } },
     select: { id: true, codigo: true, titulo: true, descricao: true, statusVisivel: true },
     orderBy: { createdAt: "desc" },
     take: 50,

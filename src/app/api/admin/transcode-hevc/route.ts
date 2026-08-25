@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { enqueueTranscode } from "@/lib/transcode"
 
 // POST /api/admin/transcode-hevc
@@ -12,9 +13,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
   }
 
+  // `Arquivo` não tem coluna de empresa — e não precisa: ele pertence à demanda,
+  // e a demanda tem dono. O escopo vem daí.
+  //
+  // Sem isso, o admin de uma empresa disparava conversão dos vídeos de TODAS:
+  // marcava `processing` em arquivo alheio e mandava a URL para o worker.
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   // Arquivos finais .mov/.qt ainda não convertidos (transcodeStatus != done)
   const arquivos = await prisma.arquivo.findMany({
     where: {
+      demanda: { organizacaoId },
       tipoArquivo: "final",
       OR: [{ url: { endsWith: ".mov" } }, { url: { endsWith: ".MOV" } }, { url: { endsWith: ".qt" } }],
       NOT: { transcodeStatus: "done" },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 import { dataEmSaoPaulo, somarDias } from "@/lib/datas"
 
 // Evento com hora vai em UTC com sufixo Z — formato absoluto, que todo cliente
@@ -29,8 +30,15 @@ export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
+
   const eventos = await prisma.evento.findMany({
     where: {
+      // O `videomakerId: null` (eventos "de sistema") trazia os de todas as
+      // empresas para dentro do .ics — o calendário de uma pessoa acabava com
+      // compromisso de cliente que ela não atende.
+      organizacaoId,
       OR: [
         { usuarioId: session.user?.id },
         { videomakerId: null }, // sistema

@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 })
+  // O KPI somava as demandas de TODAS as empresas: o percentual B2C/B2B que a
+  // Contourline via incluía as demandas da empresa-teste e do Nuflow.
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const demandas = await prisma.demanda.findMany({
+    where: { organizacaoId },
     select: {
       classificacao: true,
       produtos: {
