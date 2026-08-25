@@ -6,10 +6,25 @@
 // próxima: a allowlist começa com o que já existe hoje e só encolhe. Se alguém
 // escrever uma consulta nova sem escopo, o CI reprova.
 //
+// A allowlist tem DUAS seções, e a diferença importa:
+//
+//   permitidas   — dívida real. Deveria escopar por empresa e não escopa. Cada
+//                  entrada diz o que falta para fechar. A meta destas é zero.
+//   justificadas — global de propósito: perfil público da rede, callback de
+//                  worker autenticado por segredo, rota escopada por uma chave
+//                  MAIS estreita que a empresa (o usuário logado, o slug do
+//                  evento). Estas nunca vão para zero, e tudo bem.
+//
+// Uma lista só, achatada, dizia "18 pendências" quando metade delas está certa e
+// vai continuar. O número virava ruído, e a meta "zero" virava mentira.
+//
+// Toda entrada, nas duas seções, precisa de motivo escrito. Entrada sem motivo
+// reprova o CI — é o que impede a allowlist de virar depósito.
+//
 // Uso:
 //   node scripts/auditar-tenancy.mjs            # falha se houver violação fora da allowlist
-//   node scripts/auditar-tenancy.mjs --listar    # imprime todas as violações (para popular a allowlist)
-//   node scripts/auditar-tenancy.mjs --gerar     # regrava a allowlist com o estado atual
+//   node scripts/auditar-tenancy.mjs --listar    # imprime todas as violações
+//   node scripts/auditar-tenancy.mjs --gerar     # regrava a allowlist preservando os motivos
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs"
 import { join, relative } from "node:path"
 
@@ -177,35 +192,60 @@ if (args.includes("--listar")) {
   process.exit(0)
 }
 
+function carregarAllowlist() {
+  if (!existsSync(ALLOWLIST_PATH)) return { permitidas: {}, justificadas: {} }
+  const bruto = JSON.parse(readFileSync(ALLOWLIST_PATH, "utf8"))
+  // Formato antigo: `permitidas` era um array de caminhos, sem motivo.
+  const permitidas = Array.isArray(bruto.permitidas)
+    ? Object.fromEntries(bruto.permitidas.map((c) => [c, ""]))
+    : bruto.permitidas ?? {}
+  return { permitidas, justificadas: bruto.justificadas ?? {} }
+}
+
 if (args.includes("--gerar")) {
-  const chaves = [...new Set(violacoes.map(chaveDe))].sort()
+  const atual = carregarAllowlist()
+  const caminhos = [...new Set(violacoes.map(chaveDe))].sort()
+
+  // Preserva a classificação e o motivo do que já estava listado; o que é novo
+  // entra como dívida SEM motivo, e o CI cobra a justificativa de quem escreveu.
+  const permitidas = {}
+  const justificadas = {}
+  for (const c of caminhos) {
+    if (c in atual.justificadas) justificadas[c] = atual.justificadas[c]
+    else permitidas[c] = atual.permitidas[c] ?? ""
+  }
+
   writeFileSync(
     ALLOWLIST_PATH,
     JSON.stringify(
       {
         _comentario: [
-          "Arquivos que consultam o banco sem nenhuma referência a organização — dívida conhecida.",
-          "Esta lista SÓ PODE ENCOLHER: cada rota corrigida sai daqui.",
-          "Não adicione entrada nova sem justificar — o auditor existe para barrar a próxima violação.",
+          "Arquivos que consultam o banco sem nenhuma referência a organização.",
+          "permitidas   = dívida real. O motivo diz o que falta para fechar. Meta: zero.",
+          "justificadas = global de propósito. O motivo diz por quê. Não vai para zero.",
+          "Toda entrada precisa de motivo escrito — sem motivo, o CI reprova.",
+          "Regenerar: node scripts/auditar-tenancy.mjs --gerar",
         ],
         _gerado_em: new Date().toISOString().slice(0, 10),
-        permitidas: chaves,
+        permitidas,
+        justificadas,
       },
       null,
       2
     ) + "\n"
   )
-  console.log(`Allowlist regravada com ${chaves.length} entrada(s).`)
+  console.log(
+    `Allowlist regravada: ${Object.keys(permitidas).length} dívida(s), ` +
+      `${Object.keys(justificadas).length} justificada(s).`
+  )
   process.exit(0)
 }
 
 // Modo CI: reprova o que não está na allowlist.
-const allowlist = existsSync(ALLOWLIST_PATH)
-  ? new Set(JSON.parse(readFileSync(ALLOWLIST_PATH, "utf8")).permitidas)
-  : new Set()
+const { permitidas, justificadas } = carregarAllowlist()
+const listadas = new Set([...Object.keys(permitidas), ...Object.keys(justificadas)])
 
-const novas = violacoes.filter((v) => !allowlist.has(chaveDe(v)))
-const cobertas = violacoes.length - novas.length
+const novas = violacoes.filter((v) => !listadas.has(chaveDe(v)))
 
 if (novas.length > 0) {
   console.error(`\n❌ ${novas.length} arquivo(s) NOVO(s) consultando o banco sem escopo de organização:\n`)
@@ -215,7 +255,35 @@ if (novas.length > 0) {
   }
   console.error(
     `\nEscope por organizacaoId (veja src/lib/org.ts: getOrgId, pertenceAOrg, requireDemandaOrg).` +
-      `\nSe for global de propósito, justifique e rode: node scripts/auditar-tenancy.mjs --gerar\n`
+      `\nSe for global de propósito, rode --gerar e mova a entrada para "justificadas" com o motivo.\n`
+  )
+  process.exit(1)
+}
+
+// Entrada que sobrou na lista depois de a rota ser corrigida. Não é perigo, é
+// mentira: a lista passa a dizer que há dívida onde já não há.
+const presentes = new Set(violacoes.map(chaveDe))
+const obsoletas = [...listadas].filter((c) => !presentes.has(c))
+if (obsoletas.length > 0) {
+  console.error(`\n❌ ${obsoletas.length} entrada(s) obsoleta(s) na allowlist — a rota já escopa:\n`)
+  for (const c of obsoletas) console.error(`   ${c}`)
+  console.error(`\nRode: node scripts/auditar-tenancy.mjs --gerar\n`)
+  process.exit(1)
+}
+
+// Motivo é obrigatório nas duas seções. É o que separa "sabemos e está mapeado"
+// de "alguém silenciou o auditor e foi embora".
+const semMotivo = [
+  ...Object.entries(permitidas),
+  ...Object.entries(justificadas),
+].filter(([, motivo]) => !String(motivo ?? "").trim())
+
+if (semMotivo.length > 0) {
+  console.error(`\n❌ ${semMotivo.length} entrada(s) na allowlist sem motivo escrito:\n`)
+  for (const [c] of semMotivo) console.error(`   ${c}`)
+  console.error(
+    `\nEm "permitidas", diga o que falta para fechar.` +
+      `\nEm "justificadas", diga por que a consulta é global de propósito.\n`
   )
   process.exit(1)
 }
@@ -232,5 +300,7 @@ if (ignorados.length > 0) {
   process.exit(1)
 }
 
-console.log(`✅ Nenhuma consulta nova sem escopo. (${cobertas} conhecida(s) na allowlist — meta: zero)`)
+console.log(`✅ Nenhuma consulta nova sem escopo.`)
+console.log(`   ${Object.keys(permitidas).length} dívida(s) conhecida(s) — meta: zero.`)
+console.log(`   ${Object.keys(justificadas).length} global(is) de propósito, com motivo.`)
 console.log(`✅ Nenhuma função recebe organizacaoId e ignora.`)

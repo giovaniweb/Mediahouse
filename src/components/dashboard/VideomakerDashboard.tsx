@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 import { fetcher } from "@/lib/fetcher"
+import { EtiquetaEmpresa, temMaisDeUmaEmpresa, type EmpresaEtiqueta } from "@/components/EtiquetaEmpresa"
 import { formatarData, formatarDataCurta, prazoVencido } from "@/lib/datas"
 
 
@@ -140,11 +141,16 @@ export function VideomakerDashboard() {
     linkBrutos?: string | null; linkFinal?: string | null;
     linkFolderBrutos?: string | null; linkFolderFinal?: string | null;
     finalizadaEm?: string | null; createdAt: string; updatedAt?: string;
+    // O videomaker é da rede: a lista pode misturar empresas.
+    empresa?: EmpresaEtiqueta;
   }> = vm?.demandas ?? []
   const notasFiscais: Array<{
     id: string; status: string; nomeArquivo?: string | null; token: string; createdAt: string;
-    demanda?: { codigo: string; titulo: string } | null;
+    demanda?: { codigo: string; titulo: string; empresa?: EmpresaEtiqueta } | null;
   }> = vm?.notasFiscais ?? []
+  // Etiqueta só quando há mais de uma empresa em jogo — com uma só, ela se
+  // repetiria em toda linha sem informar nada.
+  const multiempresa = temMaisDeUmaEmpresa(demandas)
 
   // Separar demandas: ativas vs coberturas (para pastas)
   const demandasAtivas = demandas.filter(d => d.statusVisivel !== "finalizado")
@@ -261,6 +267,7 @@ export function VideomakerDashboard() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] font-mono text-zinc-500">{d.codigo}</span>
+                    <EtiquetaEmpresa empresa={d.empresa} mostrar={multiempresa} />
                     <span className="text-sm font-semibold text-zinc-100 truncate">{d.titulo}</span>
                   </div>
                   {d.dataCaptacao && (
@@ -346,6 +353,7 @@ export function VideomakerDashboard() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">{d.codigo}</span>
+                          <EtiquetaEmpresa empresa={d.empresa} mostrar={multiempresa} />
                           <Link href={`/demandas/${d.id}`}
                             className="text-sm font-medium text-zinc-200 hover:text-white truncate">
                             {d.titulo}
@@ -412,6 +420,7 @@ export function VideomakerDashboard() {
                   <div key={d.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono text-zinc-500">{d.codigo}</span>
+                      <EtiquetaEmpresa empresa={d.empresa} mostrar={multiempresa} />
                       <span className="text-sm font-medium text-zinc-200 truncate">{d.titulo}</span>
                     </div>
                     <div className="space-y-1.5 pl-1">
@@ -547,9 +556,14 @@ export function VideomakerDashboard() {
                   return (
                     <div key={nf.id} className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs text-zinc-300 truncate">
-                          {nf.demanda?.codigo ?? "—"} · {nf.demanda?.titulo ?? "Demanda"}
-                        </p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-xs text-zinc-300 truncate">
+                            {nf.demanda?.codigo ?? "—"} · {nf.demanda?.titulo ?? "Demanda"}
+                          </p>
+                          {/* Para QUEM é esta nota. Sem isso o videomaker cobra
+                              da empresa errada e nem sabe. */}
+                          <EtiquetaEmpresa empresa={nf.demanda?.empresa} mostrar={multiempresa} />
+                        </div>
                         <p className="text-[10px] text-zinc-500">
                           {format(new Date(nf.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                         </p>

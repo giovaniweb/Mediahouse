@@ -4,6 +4,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { syncDemandaTrello } from "@/lib/trello"
+import { configTrelloDaOrg } from "@/lib/trello-config"
 
 export async function POST() {
   const session = await auth()
@@ -11,20 +12,16 @@ export async function POST() {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
-  const apiKey = process.env.TRELLO_API_KEY
-  const token = process.env.TRELLO_TOKEN
-  const boardId = process.env.TRELLO_BOARD_ID
-
-  if (!apiKey || !token || !boardId) {
-    return NextResponse.json({ ok: false, error: "Credenciais Trello não configuradas nas variáveis de ambiente" })
-  }
-
-  const cfg = { apiKey, token, boardId }
-
-  // O board do Trello é de uma empresa; a consulta trazia demanda de todas.
-  // Sincronizar assim publica o pipeline de um cliente no quadro de outro.
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+
+  // O lote 1 escopou a CONSULTA de demandas, mas o destino continuava sendo o
+  // board único das variáveis de ambiente: as demandas certas iam para o quadro
+  // errado. O board tem dono, e só ele sincroniza.
+  const conf = await configTrelloDaOrg(organizacaoId)
+  if (!conf.ok) return NextResponse.json({ ok: false, error: conf.erro }, { status: conf.status })
+
+  const cfg = conf.cfg
 
   const demandas = await prisma.demanda.findMany({
     where: { organizacaoId, statusInterno: { notIn: ["encerrado", "expirado"] } },

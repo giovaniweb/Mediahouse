@@ -4,6 +4,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getBoardLists, getBoardCards } from "@/lib/trello"
 import { getOrgId, semOrg } from "@/lib/org"
+import { configTrelloDaOrg } from "@/lib/trello-config"
 
 // Reverse mapping: Trello list name → StatusVisivel
 const LIST_NAME_TO_STATUS: Record<string, string> = {
@@ -77,19 +78,15 @@ export async function POST(req: NextRequest) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  // Get config
-  const dbConfig = await prisma.configTrello.findFirst({ where: { ativo: true } }).catch(() => null)
-  const apiKey = dbConfig?.apiKey ?? process.env.TRELLO_API_KEY
-  const token = dbConfig?.token ?? process.env.TRELLO_TOKEN
-  const boardId = dbConfig?.boardId ?? process.env.TRELLO_BOARD_ID
+  // A config vinha de `findFirst({ ativo: true })` e caía nas variáveis de
+  // ambiente quando a tabela estava vazia. Nos dois caminhos, o gestor de uma
+  // empresa qualquer importava os cards do board de OUTRA como demandas dele.
+  const conf = await configTrelloDaOrg(organizacaoId)
+  if (!conf.ok) return NextResponse.json({ error: conf.erro }, { status: conf.status })
 
-  if (!apiKey || !token || !boardId) {
-    return NextResponse.json({ error: "Trello não configurado" }, { status: 400 })
-  }
-
-  const cfg = { apiKey, token, boardId }
+  const cfg = conf.cfg
   const body = await req.json().catch(() => ({}))
-  const customMapping = (body.mapping as Record<string, string>) ?? (dbConfig?.listMapping as Record<string, string> | null) ?? null
+  const customMapping = (body.mapping as Record<string, string>) ?? conf.listMapping
 
   try {
     const [lists, cards] = await Promise.all([
@@ -166,23 +163,22 @@ export async function GET() {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
-  const dbConfig = await prisma.configTrello.findFirst({ where: { ativo: true } }).catch(() => null)
-  const apiKey = dbConfig?.apiKey ?? process.env.TRELLO_API_KEY
-  const token = dbConfig?.token ?? process.env.TRELLO_TOKEN
-  const boardId = dbConfig?.boardId ?? process.env.TRELLO_BOARD_ID
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
-  if (!apiKey || !token || !boardId) {
-    return NextResponse.json({ error: "Trello não configurado" }, { status: 400 })
-  }
+  const conf = await configTrelloDaOrg(organizacaoId)
+  if (!conf.ok) return NextResponse.json({ error: conf.erro }, { status: conf.status })
 
   try {
     const [lists, cards] = await Promise.all([
-      getBoardLists({ apiKey, token, boardId }),
-      getBoardCards({ apiKey, token, boardId }),
+      getBoardLists(conf.cfg),
+      getBoardCards(conf.cfg),
     ])
 
+    // "Já importado" é por empresa. Sem o recorte, o card importado por outra
+    // organização contava como importado aqui e sumia da prévia.
     const existingCardIds = await prisma.demanda.findMany({
-      where: { trelloCardId: { not: null } },
+      where: { organizacaoId, trelloCardId: { not: null } },
       select: { trelloCardId: true },
     })
     const importedSet = new Set(existingCardIds.map(d => d.trelloCardId))

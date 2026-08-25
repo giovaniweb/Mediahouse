@@ -30,11 +30,26 @@ export async function POST(req: NextRequest) {
 
   // Sucesso: troca a URL do vídeo pelo MP4 em todos os lugares
   if (status === "done" && mp4Url && arquivoId) {
-    const arq = await prisma.arquivo.findUnique({ where: { id: arquivoId } })
+    const arq = await prisma.arquivo.findUnique({
+      where: { id: arquivoId },
+      select: { url: true, nomeArquivo: true, demandaId: true },
+    })
     if (!arq) return NextResponse.json({ error: "arquivo não encontrado" }, { status: 404 })
 
     const urlAntiga = arq.url
     const nomeMp4 = (arq.nomeArquivo ?? "video").replace(/\.[^./]+$/, "") + ".mp4"
+
+    // A demanda que vale é a do arquivo, não a que veio no corpo. O worker é
+    // autenticado pelo segredo, mas o `demandaId` do payload é só um texto — e
+    // ele mandava um UPDATE. Vindo do arquivo, o alvo é o dono de verdade, e o
+    // escopo de empresa vem junto pela demanda.
+    const alvoDemandaId = arq.demandaId
+    if (demandaId && demandaId !== alvoDemandaId) {
+      console.warn(
+        `[transcode] callback do arquivo ${arquivoId} veio com demandaId ${demandaId}, ` +
+          `mas o arquivo é da demanda ${alvoDemandaId} — usando a do arquivo.`
+      )
+    }
 
     // 1) Arquivo: guarda backup do original e aponta para o MP4
     await prisma.arquivo.update({
@@ -43,17 +58,17 @@ export async function POST(req: NextRequest) {
     })
 
     // 2) Demanda.linkFinal (se apontava para o vídeo antigo)
-    if (demandaId) {
-      await prisma.demanda.updateMany({
-        where: { id: demandaId, linkFinal: urlAntiga },
-        data: { linkFinal: mp4Url },
-      })
-      // thumbnail antiga continua válida; nada a fazer
-    }
+    await prisma.demanda.updateMany({
+      where: { id: alvoDemandaId, linkFinal: urlAntiga },
+      data: { linkFinal: mp4Url },
+    })
+    // thumbnail antiga continua válida; nada a fazer
 
-    // 3) AprovacaoVideo pendente que usava o vídeo antigo → passa a mostrar o MP4
+    // 3) AprovacaoVideo pendente que usava o vídeo antigo → passa a mostrar o MP4.
+    // O filtro era só a URL: uma varredura na tabela inteira, de todas as
+    // empresas. Agora não sai da demanda do arquivo.
     await prisma.aprovacaoVideo.updateMany({
-      where: { urlVideo: urlAntiga, status: "pendente" },
+      where: { demandaId: alvoDemandaId, urlVideo: urlAntiga, status: "pendente" },
       data: { urlVideo: mp4Url },
     })
 
