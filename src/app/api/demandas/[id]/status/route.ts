@@ -7,6 +7,7 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
 import { erroDeCampo } from "@/lib/erros-api"
+import { entregaPecaVisual } from "@/lib/growth-conteudo"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
@@ -79,9 +80,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // `_count.arquivos`, um briefing em PDF satisfazia a regra que fala em "arte
   // final" — e em 24/08/2026 havia 6 demandas de Growth nessa situação, uma
   // delas já parada em "Para aprovação" sem nada para o cliente ver.
+  //
+  // E só vale para tipo que entrega peça. Campanha de e-mail, landing page e
+  // tarefa administrativa não terminam num arquivo — cobrar arte delas travava
+  // trabalho legítimo (8 demandas ativas presas assim em 24/08/2026).
   if (
     statusInterno === "revisao_pendente" &&
     demandaAtual.area === "design" &&
+    entregaPecaVisual(demandaAtual.tipoVideo) &&
     demandaAtual._count.arquivos === 0
   ) {
     // O campo `arteFinal` é o que o kanban de Growth lê para abrir o passo de
