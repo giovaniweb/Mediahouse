@@ -172,3 +172,50 @@ export const TIPOS_CONTEUDO: TipoConteudo[] = [
 export function tipoConteudoDe(key: string): TipoConteudo | undefined {
   return TIPOS_CONTEUDO.find((t) => t.key === key)
 }
+
+// ── Que tipo entrega uma PEÇA para o cliente aprovar olhando? ───────────────
+//
+// Nem toda demanda de Growth termina num arquivo. Campanha de e-mail vive no
+// RD, landing page é uma URL, tarefa administrativa não tem entregável nenhum.
+// Exigir "arte final" desses tipos para mandar para aprovação trava trabalho
+// legítimo — medido em 24/08/2026: 8 demandas ativas presas assim, entre elas
+// "CRIAÇÃO DE NOVO CRM", "Campanha de Reativação de Leads – HIPRO" e quatro
+// landing pages. Na história inteira da base, `email_marketing` (9 aprovações),
+// `landing_page` (4), `landing_copy` (4) e `administrativo` (3) NUNCA tiveram
+// uma arte final anexada — não é descuido da equipe, é a natureza do trabalho.
+//
+// O mapa é explícito e fechado de propósito. Tipo novo no catálogo sem entrada
+// aqui quebra o teste em `tests/unit/growth-peca.spec.ts`, obrigando quem
+// adiciona a decidir — em vez de herdar um default que trava ou libera calado.
+const ENTREGA_PECA: Record<string, boolean> = {
+  // Entregam peça: o cliente aprova olhando o arquivo.
+  post:                   true,
+  carrossel:              true,
+  anuncio:                true,
+  design:                 true,
+  apresentacao:           true,
+  // Legado ainda vivo na base (não estão em TIPOS_CONTEUDO, mas existem em
+  // demandas antigas): material_grafico são 34 demandas, story 1.
+  material_grafico:       true,
+  story:                  true,
+
+  // Não entregam peça: a entrega é um link, um disparo ou uma configuração.
+  email_marketing:        false,
+  landing_page:           false,
+  landing_copy:           false,
+  administrativo:         false,
+  atualizacao_drive:      false,
+  atualizacao_materiais:  false,
+}
+
+/**
+ * A demanda entrega uma peça visual que o cliente aprova olhando?
+ *
+ * Só para esses tipos faz sentido exigir a arte antes de "Para aprovação".
+ * Tipo desconhecido devolve `false` — na dúvida, não travar: uma peça que passa
+ * sem arte é um card que alguém corrige, e um trabalho travado sem explicação é
+ * alguém parado sem saber por quê.
+ */
+export function entregaPecaVisual(tipo: string | null | undefined): boolean {
+  return ENTREGA_PECA[tipo ?? ""] ?? false
+}
