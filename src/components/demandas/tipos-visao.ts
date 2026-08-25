@@ -34,6 +34,9 @@ export interface DemandaLista {
   solicitante?: { id: string; nome: string } | null
   produtos?: { produto: { nome: string } }[]
   eventoGestao?: { id: string; nome: string } | null
+  /** Link de aprovação do cliente. Já vinha da API (a consulta usa `include`);
+   *  o kanban usa a AUSÊNCIA dele para marcar o card que não saiu por aqui. */
+  linkCliente?: string | null
   _count?: { comentarios: number; arquivos: number }
 }
 

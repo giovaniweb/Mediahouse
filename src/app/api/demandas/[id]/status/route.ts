@@ -8,6 +8,7 @@ import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { requireDemandaOrg } from "@/lib/org"
 import { erroDeCampo } from "@/lib/erros-api"
 import { entregaPecaVisual } from "@/lib/growth-conteudo"
+import { motivoAceitavel, descreverMotivo } from "@/lib/aprovacao-por-fora"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
@@ -84,11 +85,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // E só vale para tipo que entrega peça. Campanha de e-mail, landing page e
   // tarefa administrativa não terminam num arquivo — cobrar arte delas travava
   // trabalho legítimo (8 demandas ativas presas assim em 24/08/2026).
+  //
+  // A saída: quando a aprovação já aconteceu (ou vai acontecer) por fora, quem
+  // move diz QUAL é o caso. Não é um "continuar mesmo assim" — o motivo vai
+  // para o histórico com autor e data, e o card fica marcado. Ver
+  // lib/aprovacao-por-fora.ts.
+  const porFora = motivoAceitavel(body.aprovacaoPorFora, body.aprovacaoPorForaDetalhe)
+    ? descreverMotivo(body.aprovacaoPorFora as string, body.aprovacaoPorForaDetalhe as string | undefined)
+    : null
+
   if (
     statusInterno === "revisao_pendente" &&
     demandaAtual.area === "design" &&
     entregaPecaVisual(demandaAtual.tipoVideo) &&
-    demandaAtual._count.arquivos === 0
+    demandaAtual._count.arquivos === 0 &&
+    !porFora
   ) {
     // O campo `arteFinal` é o que o kanban de Growth lê para abrir o passo de
     // anexar em vez de só mostrar o toast. Contrato de sempre ({ error, campos }),
@@ -129,7 +140,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           statusNovo: statusInterno,
           usuarioId: session.user.id,
           origem,
-          observacao,
+          // O motivo da aprovação por fora entra no histórico junto com a
+          // observação que já existia. É o rastro: quem dispensou a arte, quando
+          // e por quê — sem isso a exceção seria invisível, que é o defeito da
+          // caixa de "continuar mesmo assim".
+          observacao: [observacao, porFora].filter(Boolean).join(" · ") || null,
         },
       }),
     ])

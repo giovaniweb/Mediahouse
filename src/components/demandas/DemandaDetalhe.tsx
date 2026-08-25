@@ -29,6 +29,7 @@ import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { extrairCopy } from "@/lib/copy-criativo"
+import { MOTIVOS_APROVACAO_POR_FORA, motivoAceitavel, motivoDe } from "@/lib/aprovacao-por-fora"
 import { formatarData, prazoVencido } from "@/lib/datas"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -264,7 +265,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose, abrirEnvioAp
   const [linkGerado, setLinkGerado] = useState("")
   const [urlVideoInput, setUrlVideoInput] = useState("")
   const [gerandoLink, setGerandoLink] = useState(false)
-  const [linkModalTab, setLinkModalTab] = useState<"upload" | "url">("upload")
+  const [linkModalTab, setLinkModalTab] = useState<"upload" | "url" | "por_fora">("upload")
+  // Aprovação que aconteceu fora do NuFlow — ver lib/aprovacao-por-fora.ts.
+  const [motivoPorFora, setMotivoPorFora] = useState("")
+  const [detalhePorFora, setDetalhePorFora] = useState("")
+  const [marcandoPorFora, setMarcandoPorFora] = useState(false)
   const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
   const [linkModalTipo, setLinkModalTipo] = useState<"final" | "brutos">("final")
   const [uploadProgress, setUploadProgress] = useState(0) // 0-100 durante upload Drive
@@ -714,7 +719,37 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose, abrirEnvioAp
     setLinkModalFile(null)
     setLinkGerado("")
     setUrlVideoInput("")
+    setMotivoPorFora("")
+    setDetalhePorFora("")
     setShowLinkModal(true)
+  }
+
+  // Move para "Para aprovação" sem peça, dizendo por quê. O motivo vai para o
+  // histórico; o card fica marcado como não enviado pelo NuFlow (não tem
+  // linkCliente), então a coluna continua contando a verdade.
+  async function marcarAprovacaoPorFora() {
+    if (!motivoAceitavel(motivoPorFora, detalhePorFora)) return
+    setMarcandoPorFora(true)
+    try {
+      const res = await fetch(`/api/demandas/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statusInterno: "revisao_pendente",
+          origem: "manual",
+          aprovacaoPorFora: motivoPorFora,
+          aprovacaoPorForaDetalhe: detalhePorFora,
+        }),
+      })
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível mover a demanda.")
+      toast.success("Movido para Para aprovação, com o motivo registrado no histórico.")
+      setShowLinkModal(false)
+      mutate()
+    } catch (e) {
+      toast.error(mensagemDeErro(e, "Não foi possível mover a demanda."))
+    } finally {
+      setMarcandoPorFora(false)
+    }
   }
 
   // Abertura automática vinda do kanban de Growth. Espera a demanda carregar
@@ -2267,6 +2302,16 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose, abrirEnvioAp
               >
                 🔗 URL Externa
               </button>
+              {/* A aprovação já aconteceu por fora? Só faz sentido no envio da
+                  peça do Growth — é lá que a arte é exigida. */}
+              {isGrowth && linkModalTipo === "final" && (
+                <button
+                  onClick={() => setLinkModalTab("por_fora")}
+                  className={cn("flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium", linkModalTab === "por_fora" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                >
+                  ✔️ Por fora
+                </button>
+              )}
             </div>
 
             {linkGerado ? (
@@ -2287,6 +2332,55 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose, abrirEnvioAp
                 >
                   Fechar
                 </button>
+              </div>
+            ) : linkModalTab === "por_fora" ? (
+              /* Aba "Por fora" — a aprovação aconteceu (ou vai acontecer) fora
+                 do NuFlow. Motivo em vez de um "continuar mesmo assim": o "ok"
+                 não diz qual é o caso e some sem deixar rastro. */
+              <div className="space-y-3">
+                <p className="text-xs text-zinc-400">
+                  A demanda vai para <b>Para aprovação</b> sem peça anexada. O motivo
+                  fica no histórico, e o card aparece marcado como não enviado pelo NuFlow.
+                </p>
+                <div className="space-y-1.5">
+                  {MOTIVOS_APROVACAO_POR_FORA.map((m) => (
+                    <button
+                      key={m.valor}
+                      onClick={() => setMotivoPorFora(m.valor)}
+                      className={cn(
+                        "w-full text-left text-xs px-3 py-2 rounded-xl border transition-colors",
+                        motivoPorFora === m.valor
+                          ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
+                          : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {motivoDe(motivoPorFora)?.exigeDetalhe && (
+                  <textarea
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600 text-zinc-200 placeholder:text-zinc-500"
+                    rows={2}
+                    placeholder="Como o solicitante vai verificar?"
+                    value={detalhePorFora}
+                    onChange={(e) => setDetalhePorFora(e.target.value)}
+                  />
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={marcarAprovacaoPorFora}
+                    disabled={marcandoPorFora || !motivoAceitavel(motivoPorFora, detalhePorFora)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-amber-600 text-white text-sm py-2 rounded-xl hover:bg-amber-500 disabled:opacity-50 font-medium"
+                  >
+                    {marcandoPorFora
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Movendo…</>
+                      : <><Check className="w-3.5 h-3.5" /> Mover sem peça</>}
+                  </button>
+                  <button onClick={() => setShowLinkModal(false)} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                    Cancelar
+                  </button>
+                </div>
               </div>
             ) : linkModalTab === "upload" ? (
               /* Aba Upload */

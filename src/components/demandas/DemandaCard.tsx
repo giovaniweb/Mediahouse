@@ -36,6 +36,7 @@ interface DemandaCardProps {
     statusInterno: string
     statusVisivel?: string
     linkFinal?: string | null
+    linkCliente?: string | null
     dataLimite?: string | null
     videomakerId?: string | null
     editor?: { nome: string } | null
@@ -71,6 +72,13 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   const isCobertura = demanda.tipoVideo?.toLowerCase().includes("cobertura")
   const aguardandoVM = isCobertura && demanda.statusInterno === "videomaker_notificado"
   const semVM = isCobertura && !demanda.videomakerId && ["entrada", "producao"].includes(demanda.statusVisivel ?? "")
+  // Na coluna de aprovação sem link do cliente: a peça não saiu por aqui. Pode
+  // ser aprovação combinada por fora (WhatsApp, e-mail, reunião) — legítimo —, e
+  // pode ser um card que alguém empurrou e esqueceu. Os dois casos precisam ser
+  // distinguíveis de um envio real, senão a coluna volta a mentir, que foi o
+  // problema de 16/08/2026.
+  const aprovacaoForaDoSistema =
+    ["revisao_pendente", "edicao_finalizada"].includes(demanda.statusInterno) && !demanda.linkCliente
 
   const handleClick = () => {
     if (onOpen) onOpen(demanda.id)
@@ -163,6 +171,14 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
               </span>
             )
           })()}
+          {aprovacaoForaDoSistema && (
+            <span
+              title="Não foi enviado pelo NuFlow — o cliente não recebeu link daqui. Veja o motivo no histórico da demanda."
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30"
+            >
+              ✔️ Por fora
+            </span>
+          )}
           {aguardandoVM && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30">
               ⏳ Aguardando VM
