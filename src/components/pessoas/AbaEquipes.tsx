@@ -12,7 +12,6 @@
 
 import { Film, Sparkles, CalendarRange, Users, UserX } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { GROWTH_ATIVO, EVENTOS_ATIVO } from "@/lib/modulos"
 import {
   type PessoaLista, AREA_LABEL, AREA_ACENTO, AREA_PONTO, nivelDe,
   iniciais, corAvatar,
@@ -27,8 +26,8 @@ const ICONE_AREA: Record<string, React.ElementType> = {
 function areasVisiveis(): string[] {
   return [
     "audiovisual",
-    ...(GROWTH_ATIVO ? ["growth"] : []),
-    ...(EVENTOS_ATIVO ? ["eventos"] : []),
+    "growth",
+    "eventos",
   ]
 }
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { PRESETS } from "@/lib/permissoes"
 import { setPermissoes } from "@/lib/permissoes-server"
 import { getOrgId } from "@/lib/org"
+import { modulosDaOrganizacao } from "@/lib/modulos-org"
 
 // GET /api/me — retorna dados do usuário logado + permissões
 export async function GET() {
@@ -52,9 +53,15 @@ export async function GET() {
     permissoes = await setPermissoes(usuario.id, organizacaoId, preset)
   }
 
+  // Módulos da empresa ATIVA. O cliente lia constantes compiladas no bundle —
+  // iguais para todas as empresas e impossíveis de mudar sem deploy. Agora vêm
+  // daqui, junto do resto do "quem sou eu nesta empresa".
+  const modulos = await modulosDaOrganizacao(organizacaoId)
+
   return NextResponse.json({
     ...usuarioSemOrganizacoes,
     membership: organizacoes[0] ?? null,
     permissoes,
+    modulos,
   })
 }

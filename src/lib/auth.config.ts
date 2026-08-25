@@ -1,7 +1,7 @@
 import type { NextAuthConfig } from "next-auth"
 import { SignJWT, jwtVerify } from "jose"
 import type { JWT } from "next-auth/jwt"
-import { rotaCongelada } from "@/lib/modulos"
+import { rotaIndisponivelNaPlataforma } from "@/lib/modulos"
 
 // Gera uma chave de 32 bytes a partir do secret (compatível com HS256)
 function getSecretKey(secret: string | Uint8Array) {
@@ -112,9 +112,11 @@ export const authConfig: NextAuthConfig = {
         return false // página: next-auth redireciona para a tela de login
       }
 
-      // Módulos congelados (Growth/Design e Eventos) — bloqueados para todos.
-      // Ver src/lib/modulos.ts. Não apaga nada; só desativa o acesso.
-      if (rotaCongelada(pathname)) {
+      // Módulo que não existe como produto — desligado para TODO MUNDO, ver
+      // DISPONIVEL_NA_PLATAFORMA. É só o que o middleware consegue conferir:
+      // ele roda no edge e não alcança o banco. O desligado por EMPRESA (planos)
+      // é conferido do lado Node, em src/lib/modulos-org.ts.
+      if (rotaIndisponivelNaPlataforma(pathname)) {
         if (pathname.startsWith("/api/")) {
           return new Response(
             JSON.stringify({ error: "Módulo desativado" }),
