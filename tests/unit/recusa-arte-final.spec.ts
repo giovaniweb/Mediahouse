@@ -40,3 +40,30 @@ describe("recusa por falta de arte final", () => {
     expect(erroDeCorpo(null, 500, "").campos.arteFinal).toBeUndefined()
   })
 })
+
+// ── O que os testes acima NÃO cobrem ─────────────────────────────────────────
+//
+// Eles alimentam `erroDeCorpo` com um literal escrito aqui. Isso prova que o
+// PARSER lê o campo — mas não prova que a ROTA o envia. Verificado: trocando o
+// `erroDeCampo` da rota por um `NextResponse.json({ error })` solto, os quatro
+// passam do mesmo jeito, e o kanban volta a só reclamar em silêncio.
+//
+// Este teste fecha a ponta que faltava: olha o código da rota. É estático como
+// os auditores do projeto, e pelo mesmo motivo — a alternativa seria montar
+// sessão, organização e demanda para exercitar um `if`.
+describe("a rota realmente manda o campo que o kanban lê", () => {
+  it("recusa a falta de arte com erroDeCampo(\"arteFinal\")", async () => {
+    const { readFileSync } = await import("node:fs")
+    const rota = readFileSync("src/app/api/demandas/[id]/status/route.ts", "utf8")
+
+    // O bloco que recusa por falta de arte final.
+    const bloco = rota.slice(rota.indexOf('demandaAtual.area === "design"'))
+    const recusa = bloco.slice(0, bloco.indexOf("\n  }"))
+
+    expect(recusa).toContain('erroDeCampo(')
+    expect(recusa).toContain('"arteFinal"')
+    // Um NextResponse.json solto aqui devolve a recusa certa e mata a abertura
+    // do envio — o defeito é invisível em produção até alguém reclamar.
+    expect(recusa).not.toContain("NextResponse.json(")
+  })
+})
