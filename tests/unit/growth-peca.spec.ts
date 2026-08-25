@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { TIPOS_CONTEUDO, entregaPecaVisual } from "@/lib/growth-conteudo"
+import { TIPOS_CONTEUDO, entregaPecaVisual, temDecisaoDePeca } from "@/lib/growth-conteudo"
 
 // Nem toda demanda de Growth termina num arquivo. Só os tipos que entregam peça
 // visual são cobrados pela arte final antes de "Para aprovação" — cobrar dos
@@ -8,7 +8,7 @@ import { TIPOS_CONTEUDO, entregaPecaVisual } from "@/lib/growth-conteudo"
 
 describe("entregaPecaVisual", () => {
   it("cobra arte de quem entrega peça", () => {
-    for (const tipo of ["post", "carrossel", "anuncio", "design", "apresentacao"]) {
+    for (const tipo of ["post", "carrossel", "anuncio"]) {
       expect(entregaPecaVisual(tipo), tipo).toBe(true)
     }
   })
@@ -17,6 +17,14 @@ describe("entregaPecaVisual", () => {
     for (const tipo of ["email_marketing", "landing_page", "landing_copy", "administrativo", "atualizacao_drive", "atualizacao_materiais"]) {
       expect(entregaPecaVisual(tipo), tipo).toBe(false)
     }
+  })
+
+  it("apresentação e design saem por link do Canva/Drive — não se cobra arquivo", () => {
+    // Havia arte em parte deles na base (design 4 de 9), o que faria a leitura
+    // ingênua do dado colocá-los do outro lado. Quem opera decidiu que o
+    // entregável é o link; anexar continua permitido, a obrigação é que sai.
+    expect(entregaPecaVisual("apresentacao")).toBe(false)
+    expect(entregaPecaVisual("design")).toBe(false)
   })
 
   it("cobre o legado que ainda vive na base", () => {
@@ -39,15 +47,19 @@ describe("entregaPecaVisual", () => {
   // peça. Sem isto, o tipo novo herda o `false` calado e nunca seria cobrado —
   // ou, se o default fosse o contrário, nasceria travado sem ninguém entender.
   it("todo tipo do catálogo tem decisão explícita sobre entregar peça", () => {
-    const semDecisao = TIPOS_CONTEUDO
-      .map((t) => t.key)
-      .filter((key) => {
-        // Reproduz a checagem "existe entrada no mapa?" sem exportá-lo: um tipo
-        // ausente devolve o mesmo `false` de um tipo marcado como false, então
-        // o teste compara contra a lista conhecida de não-peça.
-        const naoPeca = ["email_marketing", "landing_page", "landing_copy", "administrativo", "atualizacao_drive", "atualizacao_materiais"]
-        return !entregaPecaVisual(key) && !naoPeca.includes(key)
-      })
+    // Pergunta pela PRESENÇA no mapa, não pelo valor: "false" e "ausente"
+    // devolvem o mesmo de entregaPecaVisual, então comparar por valor deixaria
+    // um tipo novo passar batido — que é justamente o que este teste existe
+    // para pegar.
+    const semDecisao = TIPOS_CONTEUDO.map((t) => t.key).filter((key) => !temDecisaoDePeca(key))
     expect(semDecisao, `tipos sem decisão em ENTREGA_PECA: ${semDecisao.join(", ")}`).toEqual([])
+  })
+
+  it("e o alarme realmente dispara — um tipo sem entrada é detectado", () => {
+    // Sem esta asserção o teste acima passaria mesmo que temDecisaoDePeca
+    // devolvesse true para tudo, e o alarme seria enfeite.
+    expect(temDecisaoDePeca("tipo_inventado_agora")).toBe(false)
+    expect(temDecisaoDePeca("post")).toBe(true)
+    expect(temDecisaoDePeca("design")).toBe(true)
   })
 })

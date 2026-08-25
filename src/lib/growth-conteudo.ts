@@ -192,8 +192,6 @@ const ENTREGA_PECA: Record<string, boolean> = {
   post:                   true,
   carrossel:              true,
   anuncio:                true,
-  design:                 true,
-  apresentacao:           true,
   // Legado ainda vivo na base (não estão em TIPOS_CONTEUDO, mas existem em
   // demandas antigas): material_grafico são 34 demandas, story 1.
   material_grafico:       true,
@@ -206,6 +204,20 @@ const ENTREGA_PECA: Record<string, boolean> = {
   administrativo:         false,
   atualizacao_drive:      false,
   atualizacao_materiais:  false,
+  // Apresentação e design saem por link do Canva ou do Drive, não por arquivo
+  // subido aqui. Na base havia arte em parte deles (design 4 de 9, apresentação
+  // 1 de 1), o que faria a leitura ingênua colocá-los do outro lado — mas o dado
+  // mostra o que às vezes acontece, não o que o processo exige. Quem opera
+  // decidiu, em 24/08/2026: o entregável é o link. Anexar continua permitido;
+  // o que sai é a obrigação.
+  apresentacao:           false,
+  design:                 false,
+}
+
+/** O tipo tem decisão registrada acima? Usado pelo teste que impede tipo novo
+ *  de nascer sem alguém dizer de que lado ele fica. */
+export function temDecisaoDePeca(tipo: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ENTREGA_PECA, tipo)
 }
 
 /**
