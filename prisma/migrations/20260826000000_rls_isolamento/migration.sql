@@ -357,11 +357,22 @@ CREATE POLICY "demanda_responsavel_por_org" ON "demanda_responsavel" TO "app_use
                    AND p."organizacaoId" = current_setting('app.org_id', true)))
   WITH CHECK (EXISTS (SELECT 1 FROM "demandas" p WHERE p."id" = "demanda_responsavel"."demandaId"
                    AND p."organizacaoId" = current_setting('app.org_id', true)));
+-- Esta é NETA, não filha: o pai (`coberturas_uploads`) também não tem coluna de
+-- empresa — ele mesmo pende de `coberturas`. A política sobe dois níveis.
+-- O gerador tratou todas as filhas igual e produziu `p."organizacaoId"` num pai
+-- que não tem a coluna; o CI recusou a migration num banco limpo antes de isso
+-- chegar perto de produção.
 CREATE POLICY "evento_face_descriptors_por_org" ON "evento_face_descriptors" TO "app_user"
-  USING (EXISTS (SELECT 1 FROM "coberturas_uploads" p WHERE p."id" = "evento_face_descriptors"."uploadId"
-                   AND p."organizacaoId" = current_setting('app.org_id', true)))
-  WITH CHECK (EXISTS (SELECT 1 FROM "coberturas_uploads" p WHERE p."id" = "evento_face_descriptors"."uploadId"
-                   AND p."organizacaoId" = current_setting('app.org_id', true)));
+  USING (EXISTS (
+    SELECT 1 FROM "coberturas_uploads" u
+    JOIN "coberturas" cob ON cob."id" = u."coberturaId"
+    WHERE u."id" = "evento_face_descriptors"."uploadId"
+      AND cob."organizacaoId" = current_setting('app.org_id', true)))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM "coberturas_uploads" u
+    JOIN "coberturas" cob ON cob."id" = u."coberturaId"
+    WHERE u."id" = "evento_face_descriptors"."uploadId"
+      AND cob."organizacaoId" = current_setting('app.org_id', true)));
 CREATE POLICY "eventos_gestao_aprovacoes_por_org" ON "eventos_gestao_aprovacoes" TO "app_user"
   USING (EXISTS (SELECT 1 FROM "eventos_gestao" p WHERE p."id" = "eventos_gestao_aprovacoes"."eventoId"
                    AND p."organizacaoId" = current_setting('app.org_id', true)))

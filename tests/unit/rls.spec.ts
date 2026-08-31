@@ -48,6 +48,21 @@ describe("as políticas", () => {
     expect(sql).toContain("RAISE EXCEPTION")
   })
 
+  it("toda política que pergunta ao PAI usa um pai que tem a coluna", () => {
+    // `evento_face_descriptors` é NETA: o pai dela (`coberturas_uploads`) também
+    // não tem coluna de empresa. O gerador tratou todas as filhas igual e
+    // produziu `p."organizacaoId"` num pai que não tem a coluna — a migration
+    // quebrou no CI, num banco limpo, antes de chegar perto de produção.
+    const schema = ler("prisma/schema.prisma")
+    const pais = [...sql.matchAll(/FROM "(\w+)" p WHERE/g)].map((m) => m[1])
+    expect(pais.length).toBeGreaterThan(0)
+    for (const tabela of new Set(pais)) {
+      const modelo = new RegExp(`^model\\s+\\w+\\s*\\{([\\s\\S]*?)@@map\\("${tabela}"\\)`, "m").exec(schema)
+      expect(modelo, `sem modelo para ${tabela}`).not.toBeNull()
+      expect(modelo![1], `${tabela} não tem organizacaoId`).toMatch(/^\s*organizacaoId\s+String/m)
+    }
+  })
+
   it("o role de login só alcança o que o login precisa", () => {
     expect(sql).toContain('GRANT SELECT ON "usuarios", "usuario_organizacao", "organizacoes" TO "app_auth"')
     // Nada de dado de cliente para o caminho de autenticação.
