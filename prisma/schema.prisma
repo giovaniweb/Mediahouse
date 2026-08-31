@@ -1230,6 +1230,14 @@ model AgenteExecucao {
   finishedAt     DateTime?
   createdAt      DateTime  @default(now())
 
+  /// Empresa dona da execução. Nulável: as 523 execuções históricas são de cron
+  /// com `criadoPor` nulo e não têm de onde inferir o dono. Sob RLS elas ficam
+  /// invisíveis para a aplicação, que é o certo para log antigo.
+  organizacaoId String?
+
+  organizacao Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
   @@map("agente_execucoes")
 }
 
@@ -2152,6 +2160,8 @@ model Organizacao {
   configsTrello        ConfigTrello[]
   avaliacoesVideomaker AvaliacaoVideomaker[]
   avaliacoesEditor     AvaliacaoEditor[]
+
+  execucoesAgente AgenteExecucao[]
 
   @@map("organizacoes")
 }

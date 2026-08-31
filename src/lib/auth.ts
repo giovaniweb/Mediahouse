@@ -1,6 +1,10 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { prisma } from "@/lib/prisma"
+// O login lê `usuarios` ANTES de existir empresa — é a ordem do problema, não
+// um atalho. Sob RLS o cliente normal filtraria por uma empresa que ainda não foi
+// descoberta e devolveria vazio: "senha inválida" para quem digitou a certa, para
+// todo mundo, de uma vez. Ver src/lib/prisma-auth.ts.
+import { prismaAuth } from "@/lib/prisma-auth"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { authConfig } from "./auth.config"
@@ -46,7 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           // Buscar por qualquer variação do telefone
-          usuario = await prisma.usuario.findFirst({
+          usuario = await prismaAuth.usuario.findFirst({
             where: {
               OR: possibleNumbers.map((num) => ({
                 telefone: { contains: num },
@@ -56,7 +60,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else {
           // Buscar por email (email pode ser null no banco, findUnique ignora null)
           const emailInput = input.toLowerCase().trim()
-          usuario = await prisma.usuario.findUnique({
+          usuario = await prismaAuth.usuario.findUnique({
             where: { email: emailInput },
           })
         }
@@ -69,7 +73,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         limparRateLimit(chaveLimite)
 
         // Organização ativa (Fase 1: a primeira/única membership do usuário)
-        const membership = await prisma.usuarioOrganizacao.findFirst({
+        const membership = await prismaAuth.usuarioOrganizacao.findFirst({
           where: { usuarioId: usuario.id },
           orderBy: { createdAt: "asc" },
           select: { organizacaoId: true, papel: true },

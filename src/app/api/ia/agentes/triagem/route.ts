@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const { organizacaoId } = guard
 
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "triagem", status: "executando", criadoPor: session.user?.id },
+    data: { agente: "triagem", organizacaoId, status: "executando", criadoPor: session.user?.id },
   })
 
   try {

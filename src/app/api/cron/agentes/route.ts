@@ -81,10 +81,14 @@ export async function GET(req: NextRequest) {
  */
 async function rodarComRegistro(
   agente: string,
+  organizacaoId: string,
   executar: () => Promise<{ resposta: string; tokens: number; ferramentasUsadas: string[] }>
 ): Promise<{ resposta: string; tokens: number }> {
+  // O registro da execução guarda o resultado da IA sobre as demandas de UMA
+  // empresa. Ele nascia sem dono, num balaio único — e as 523 linhas históricas
+  // continuam lá, sem como saber de quem eram.
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente, status: "executando" },
+    data: { agente, organizacaoId, status: "executando" },
   })
 
   try {
@@ -178,7 +182,7 @@ async function rodarAgenteAlertas(organizacaoId: string) {
 
 Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das ações.`
 
-  const { tokens } = await rodarComRegistro("gerar-alertas-cron", () =>
+  const { tokens } = await rodarComRegistro("gerar-alertas-cron", organizacaoId, () =>
     executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_RAPIDO, 8)
   )
 
@@ -199,7 +203,7 @@ async function rodarAgentePrazos(organizacaoId: string) {
 
 Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissional.`
 
-  const { tokens } = await rodarComRegistro("prazos-cron", () =>
+  const { tokens } = await rodarComRegistro("prazos-cron", organizacaoId, () =>
     executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
   )
 
@@ -218,7 +222,7 @@ async function rodarAgenteVistoria(organizacaoId: string) {
 Envie um resumo executivo completo para cada gestor usando enviar_whatsapp.
 Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomakers.`
 
-  const { resposta, tokens } = await rodarComRegistro("vistoria-cron", () =>
+  const { resposta, tokens } = await rodarComRegistro("vistoria-cron", organizacaoId, () =>
     executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
   )
 

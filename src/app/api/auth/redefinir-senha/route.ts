@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+// Recuperação de senha é caminho de autenticação: acontece sem sessão e sem
+// empresa. Ver src/lib/prisma-auth.ts.
+import { prismaAuth as prisma } from "@/lib/prisma-auth"
 import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 

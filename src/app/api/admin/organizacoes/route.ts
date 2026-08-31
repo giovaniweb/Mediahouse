@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+// Painel de Super Admin: lista TODAS as empresas, por definição. Atravessa o
+// isolamento pela conexão de dono, atrás de `requireSuperAdmin`.
+// Ver src/lib/prisma-admin.ts.
+import { prismaAdmin as prisma } from "@/lib/prisma-admin"
 import { requireSuperAdmin } from "@/lib/org"
 import type { TipoUsuario } from "@prisma/client"
 

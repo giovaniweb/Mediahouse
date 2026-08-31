@@ -19,7 +19,7 @@ export async function POST() {
   if (!organizacaoId) return semOrg()
 
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "prazos", status: "executando", criadoPor: session.user?.id },
+    data: { agente: "prazos", organizacaoId, status: "executando", criadoPor: session.user?.id },
   })
 
   try {
