@@ -123,7 +123,11 @@ try {
   async function comoRole(nomeRole, orgId, sql, params = []) {
     await c.query("SAVEPOINT sp")
     await c.query(`SET LOCAL ROLE ${nomeRole}`)
-    if (orgId !== null) await c.query(`SELECT set_config('app.org_id', $1, true)`, [orgId])
+    // `SET LOCAL` vale até o fim da TRANSAÇÃO, e RELEASE SAVEPOINT não o desfaz:
+    // sem limpar aqui, a empresa da chamada anterior continuava valendo e o
+    // teste do "sem empresa declarada" herdava a de antes. Foi o verificador
+    // pegando um erro no próprio verificador.
+    await c.query(`SELECT set_config('app.org_id', $1, true)`, [orgId ?? ""])
     try {
       return await c.query(sql, params)
     } finally {
@@ -133,24 +137,26 @@ try {
   }
   const comoApp = (orgId, sql, params) => comoRole("app_user", orgId, sql, params)
 
-  // 1. Coluna direta
-  let r = await comoApp(A, `SELECT codigo FROM demandas WHERE codigo LIKE 'RLS-%' ORDER BY codigo`)
+  // 1. Antes de qualquer coisa: sem empresa declarada, nada sai. É a falha
+  // fechada, e testar isso PRIMEIRO garante que nenhuma declaração anterior
+  // esteja mascarando o resultado.
+  let r = await comoApp(null, `SELECT count(*)::int n FROM demandas`)
+  conferir(r.rows[0].n === 0, "sem app.org_id declarado: zero linhas — falha fechada")
+
+  // 2. Coluna direta
+  r = await comoApp(A, `SELECT codigo FROM demandas WHERE codigo LIKE 'RLS-%' ORDER BY codigo`)
   const vistos = r.rows.map((x) => x.codigo)
   conferir(
     vistos.length === 1 && vistos[0] === "RLS-A-1",
     `demandas: a empresa A vê ${JSON.stringify(vistos)} e não a da B`
   )
 
-  // 2. Política por PAI — a filha não tem coluna de empresa
+  // 3. Política por PAI — a filha não tem coluna de empresa
   r = await comoApp(A, `SELECT id FROM historico_status WHERE id LIKE 'rls-hist-%'`)
   conferir(
     r.rows.length === 1 && r.rows[0].id === "rls-hist-a",
     "historico_status: a filha segue o dono do pai"
   )
-
-  // 3. Sem declarar empresa: nada. É a falha fechada.
-  r = await comoApp(null, `SELECT count(*)::int n FROM demandas`)
-  conferir(r.rows[0].n === 0, "sem app.org_id declarado: zero linhas — falha fechada")
 
   // 4. Escrever na empresa dos outros
   let recusou = false
