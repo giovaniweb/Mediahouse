@@ -47,6 +47,42 @@ if (role.rolbypassrls) {
   process.exit(1)
 }
 
+// Preenche sozinho as colunas obrigatórias que o teste não citou. Sem isto, o
+// dia em que alguém tornar mais uma coluna NOT NULL quebra a verificação de RLS
+// por um motivo que não tem nada a ver com RLS — e um gate que falha por motivo
+// errado é um gate que as pessoas aprendem a ignorar.
+async function inserir(tabela, valores) {
+  const { rows: obrigatorias } = await c.query(
+    `SELECT column_name, data_type, udt_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=$1
+        AND is_nullable='NO' AND column_default IS NULL`,
+    [tabela]
+  )
+  const completo = { ...valores }
+  for (const { column_name: col, data_type: tipo, udt_name: udt } of obrigatorias) {
+    if (col in completo) continue
+    if (tipo === "USER-DEFINED") {
+      // Enum: qualquer rótulo serve, mas tem que ser um que exista.
+      const { rows: [e] } = await c.query(
+        `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+          WHERE t.typname = $1 ORDER BY e.enumsortorder LIMIT 1`, [udt]
+      )
+      completo[col] = e?.enumlabel ?? "teste"
+    }
+    else if (tipo.includes("timestamp")) completo[col] = new Date()
+    else if (tipo.includes("char") || tipo === "text") completo[col] = "teste"
+    else if (tipo.includes("int") || tipo.includes("numeric") || tipo === "double precision") completo[col] = 0
+    else if (tipo === "boolean") completo[col] = false
+    else if (tipo === "ARRAY") completo[col] = []
+  }
+  const cols = Object.keys(completo)
+  await c.query(
+    `INSERT INTO "${tabela}" (${cols.map((k) => `"${k}"`).join(", ")})
+     VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")})`,
+    cols.map((k) => completo[k])
+  )
+}
+
 console.log("\n── Isolamento, com dado de mentira numa transação desfeita ──\n")
 
 await c.query("BEGIN")
@@ -54,28 +90,18 @@ try {
   const A = "rls-teste-org-a"
   const B = "rls-teste-org-b"
   for (const [id, slug] of [[A, "rls-teste-a"], [B, "rls-teste-b"]]) {
-    await c.query(
-      `INSERT INTO organizacoes (id, nome, slug, "updatedAt") VALUES ($1, $2, $3, now())`,
-      [id, `RLS Teste ${slug}`, slug]
-    )
+    await inserir("organizacoes", { id, nome: `RLS Teste ${slug}`, slug })
   }
-  for (const [org, cod, id] of [[A, "RLS-A-1", "rls-dem-a"], [B, "RLS-B-1", "rls-dem-b"]]) {
-    await c.query(
-      `INSERT INTO demandas (id, codigo, titulo, descricao, departamento, "tipoVideo", "organizacaoId", "updatedAt")
-       VALUES ($1, $2, 'teste', 'teste', 'growth', 'reels', $3, now())`,
-      [id, cod, org]
-    )
+  for (const [org, codigo, id] of [[A, "RLS-A-1", "rls-dem-a"], [B, "RLS-B-1", "rls-dem-b"]]) {
+    await inserir("demandas", { id, codigo, organizacaoId: org })
   }
   // Filhas, para provar que a política que pergunta ao PAI também segura.
-  await c.query(`INSERT INTO historico_status (id, "demandaId", "statusNovo") VALUES ('rls-hist-a', 'rls-dem-a', 'entrada')`)
-  await c.query(`INSERT INTO historico_status (id, "demandaId", "statusNovo") VALUES ('rls-hist-b', 'rls-dem-b', 'entrada')`)
+  await inserir("historico_status", { id: "rls-hist-a", demandaId: "rls-dem-a", statusNovo: "entrada" })
+  await inserir("historico_status", { id: "rls-hist-b", demandaId: "rls-dem-b", statusNovo: "entrada" })
   // Um perfil da rede e uma pessoa, para os testes 6 e 7 valerem também num
   // banco vazio — é assim que o CI roda esta verificação.
-  await c.query(`INSERT INTO videomakers (id, nome, "updatedAt") VALUES ('rls-vm-1', 'RLS Teste VM', now())`)
-  await c.query(
-    `INSERT INTO usuarios (id, nome, email, "senhaHash", "updatedAt")
-     VALUES ('rls-user-1', 'RLS Teste', 'rls-teste@exemplo.invalido', 'x', now())`
-  )
+  await inserir("videomakers", { id: "rls-vm-1", nome: "RLS Teste VM" })
+  await inserir("usuarios", { id: "rls-user-1", nome: "RLS Teste", email: "rls-teste@exemplo.invalido", senhaHash: "x" })
 
   async function comoRole(nomeRole, orgId, sql, params = []) {
     await c.query("SAVEPOINT sp")
@@ -123,15 +149,19 @@ try {
   // 5. INSERT carimbando outra empresa
   let bloqueou = false
   try {
-    await comoApp(
-      A,
-      `INSERT INTO demandas (id, codigo, titulo, descricao, departamento, "tipoVideo", "organizacaoId", "updatedAt")
-       VALUES ('rls-dem-x', 'RLS-X-1', 't', 't', 'growth', 'reels', $1, now())`,
-      [B]
-    )
+    await c.query("SAVEPOINT sp_ins")
+    await c.query("SET LOCAL ROLE app_user")
+    await c.query(`SELECT set_config('app.org_id', $1, true)`, [A])
+    try {
+      await inserir("demandas", { id: "rls-dem-x", codigo: "RLS-X-1", organizacaoId: B })
+    } finally {
+      await c.query("RESET ROLE")
+    }
   } catch {
     bloqueou = true
+    await c.query("ROLLBACK TO SAVEPOINT sp_ins")
   }
+  await c.query("RELEASE SAVEPOINT sp_ins")
   conferir(bloqueou, "INSERT carimbando a empresa alheia é recusado (WITH CHECK)")
 
   // 6. A rede continua legível — é o marketplace
