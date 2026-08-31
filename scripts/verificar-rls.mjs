@@ -58,9 +58,26 @@ async function inserir(tabela, valores) {
         AND is_nullable='NO' AND column_default IS NULL`,
     [tabela]
   )
+  // Coluna obrigatória que é chave estrangeira não pode ser inventada: "teste"
+  // não existe na tabela apontada. Nesses casos o teste tem que fornecer o
+  // valor, e a mensagem diz qual.
+  const { rows: fks } = await c.query(
+    `SELECT kcu.column_name FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+      WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_name=$1`,
+    [tabela]
+  )
+  const chavesEstrangeiras = new Set(fks.map((f) => f.column_name))
+
   const completo = { ...valores }
   for (const { column_name: col, data_type: tipo, udt_name: udt } of obrigatorias) {
     if (col in completo) continue
+    if (chavesEstrangeiras.has(col)) {
+      throw new Error(
+        `verificar-rls: "${tabela}"."${col}" é obrigatória e é chave estrangeira — ` +
+          `o teste precisa passar um id válido para ela.`
+      )
+    }
     if (tipo === "USER-DEFINED") {
       // Enum: qualquer rótulo serve, mas tem que ser um que exista.
       const { rows: [e] } = await c.query(
@@ -92,16 +109,16 @@ try {
   for (const [id, slug] of [[A, "rls-teste-a"], [B, "rls-teste-b"]]) {
     await inserir("organizacoes", { id, nome: `RLS Teste ${slug}`, slug })
   }
+  // A pessoa vem antes: `demandas.solicitanteId` é obrigatória e aponta para ela.
+  await inserir("usuarios", { id: "rls-user-1", nome: "RLS Teste", email: "rls-teste@exemplo.invalido", senhaHash: "x" })
+  await inserir("videomakers", { id: "rls-vm-1", nome: "RLS Teste VM" })
+
   for (const [org, codigo, id] of [[A, "RLS-A-1", "rls-dem-a"], [B, "RLS-B-1", "rls-dem-b"]]) {
-    await inserir("demandas", { id, codigo, organizacaoId: org })
+    await inserir("demandas", { id, codigo, organizacaoId: org, solicitanteId: "rls-user-1" })
   }
   // Filhas, para provar que a política que pergunta ao PAI também segura.
   await inserir("historico_status", { id: "rls-hist-a", demandaId: "rls-dem-a", statusNovo: "entrada" })
   await inserir("historico_status", { id: "rls-hist-b", demandaId: "rls-dem-b", statusNovo: "entrada" })
-  // Um perfil da rede e uma pessoa, para os testes 6 e 7 valerem também num
-  // banco vazio — é assim que o CI roda esta verificação.
-  await inserir("videomakers", { id: "rls-vm-1", nome: "RLS Teste VM" })
-  await inserir("usuarios", { id: "rls-user-1", nome: "RLS Teste", email: "rls-teste@exemplo.invalido", senhaHash: "x" })
 
   async function comoRole(nomeRole, orgId, sql, params = []) {
     await c.query("SAVEPOINT sp")
@@ -153,7 +170,7 @@ try {
     await c.query("SET LOCAL ROLE app_user")
     await c.query(`SELECT set_config('app.org_id', $1, true)`, [A])
     try {
-      await inserir("demandas", { id: "rls-dem-x", codigo: "RLS-X-1", organizacaoId: B })
+      await inserir("demandas", { id: "rls-dem-x", codigo: "RLS-X-1", organizacaoId: B, solicitanteId: "rls-user-1" })
     } finally {
       await c.query("RESET ROLE")
     }
