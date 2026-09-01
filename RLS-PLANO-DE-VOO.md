@@ -88,15 +88,33 @@ palpite em lista.
 Cada passo tem um critério de parada. Se ele não for atingido, o passo anterior
 volta e ninguém segue.
 
-**Passo 1 — aplicar a migration.** Inerte (seção 1). Depois:
+**Passo 1 — aplicar a migration. ✅ FEITO em 01/09/2026.**
 
-```bash
-node scripts/verificar-rls.mjs
-```
+Inerte, como previsto (seção 1). `scripts/verificar-rls.mjs` rodou contra o banco
+de produção e as onze verificações passaram, incluindo "sem `app.org_id`: zero
+linhas" e "`app_auth` não alcança demandas".
 
-*Critério:* todas as verificações verdes, incluindo "sem `app.org_id`: zero
-linhas" e "`app_auth` não alcança demandas". Se qualquer uma falhar, a política
-está errada e nada mais acontece. **Nenhum deploy até aqui.**
+Com dado real, virando o role para cada empresa:
+
+| tabela | total | contourline | empresa-teste | giovani |
+|---|---|---|---|---|
+| demandas | 597 | 591 | **6** | 0 |
+| alertas_ia | 956 | 872 | 84 | 0 |
+| historico_status | 2.006 | 2.006 | 0 | 0 |
+| produtos | 35 | 32 | 2 | 1 |
+| relatorios_ia | 35 | 25 | 9 | 1 |
+| mensagens_whatsapp | 4.426 | 4.410 | 0 | 16 |
+
+As somas fecham exatamente com o total em toda linha: nenhuma linha aparece para
+duas empresas, nenhuma some. É a prova que o diagnóstico pedia desde o começo —
+sob RLS, a `empresa-teste` lê **6 demandas, não 597**.
+
+*Descoberta do caminho:* o `postgres` do Supabase **não é superusuário**, e o
+Postgres só permite `SET ROLE` para role do qual você é membro. A verificação
+funcionava no banco descartável do CI (onde `postgres` é super) e falhava com
+42501 justamente no banco onde importa. Resolvido pela migration
+`20260901000000_rls_verificavel`, que torna o dono membro dos dois roles — sem
+conceder privilégio novo, já que ambos têm privilégios estritamente menores.
 
 **Passo 2 — dar credencial ao role.** No SQL editor do Supabase, fora do
 repositório:
