@@ -10,6 +10,7 @@ import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, TOOLS_WHATSAPP
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { downloadEvolutionMedia, uploadMedia } from "@/lib/storage"
 import { transcreverAudio } from "@/lib/transcription"
+import { declararOrg } from "@/lib/org-contexto"
 
 export const maxDuration = 60
 
@@ -440,6 +441,11 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
 
   const orgId: string = cfg.organizacaoId  // garantido não-nulo daqui pra frente
   const organizacaoId: string = orgId       // alias usado pelo restante do fluxo
+
+  // A empresa vem da configuração que casou com a instância da Evolution. O
+  // webhook não tem sessão, então sob RLS ela precisa ser declarada aqui — senão
+  // nenhuma mensagem recebida encontra a demanda a que pertence.
+  declararOrg(organizacaoId)
 
   // ── Evento de conexão ──────────────────────────────────────────────────
   if (eventNorm === "connection.update") {

@@ -34,6 +34,28 @@ export function comOrg<T>(organizacaoId: string | null, fn: () => Promise<T>): P
   return armazenamento.run({ organizacaoId }, fn)
 }
 
+/**
+ * Declara a empresa para o RESTO da requisição em curso, sem envolver nada.
+ *
+ * `comOrg` exige um callback, e envolver o corpo inteiro de vinte handlers
+ * públicos significaria reindentar vinte arquivos — um diff que ninguém revisa
+ * de verdade, para uma mudança que precisa ser revisada de verdade.
+ * `enterWith` entra no contexto a partir daqui e persiste pelas chamadas
+ * assíncronas seguintes, o que dá uma linha por rota:
+ *
+ *   const organizacaoId = await orgPorCredencial("nota_fiscal", token)
+ *   if (!organizacaoId) return NextResponse.json({ error: "..." }, { status: 404 })
+ *   declararOrg(organizacaoId)
+ *
+ * Cabe em rota HTTP porque cada requisição roda no próprio contexto assíncrono:
+ * o que é declarado aqui não escapa para a requisição do vizinho. Para código
+ * que NÃO nasce numa requisição — cron, worker, script —, use `comOrg`, que
+ * delimita o escopo explicitamente em vez de depender de quem chamou.
+ */
+export function declararOrg(organizacaoId: string): void {
+  armazenamento.enterWith({ organizacaoId })
+}
+
 /** Empresa declarada explicitamente por `comOrg`, se houver. */
 export function orgDeclarada(): string | null {
   return armazenamento.getStore()?.organizacaoId ?? null

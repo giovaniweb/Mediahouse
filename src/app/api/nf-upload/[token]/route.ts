@@ -4,6 +4,8 @@ import { caminhoMidia, subirArquivo } from "@/lib/midia"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 // GET /api/nf-upload/[token] — dados da NF (página pública)
 export async function GET(
@@ -11,6 +13,18 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
+
+  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
+  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
+  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
+  // banco que devolve só o id da empresa, sem abrir a tabela.
+  //
+  // O 404 aqui responde igual para credencial inválida e para credencial de
+  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
+  // um oráculo.
+  const orgDaCredencial = await orgPorCredencial("nota_fiscal", token)
+  if (!orgDaCredencial) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
+  declararOrg(orgDaCredencial)
 
   const nf = await prisma.notaFiscalUpload.findUnique({
     where: { token },
@@ -31,6 +45,18 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
+
+  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
+  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
+  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
+  // banco que devolve só o id da empresa, sem abrir a tabela.
+  //
+  // O 404 aqui responde igual para credencial inválida e para credencial de
+  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
+  // um oráculo.
+  const orgDaCredencial = await orgPorCredencial("nota_fiscal", token)
+  if (!orgDaCredencial) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
+  declararOrg(orgDaCredencial)
 
   const nf = await prisma.notaFiscalUpload.findUnique({
     where: { token },

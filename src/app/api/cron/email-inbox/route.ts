@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { syncAllEmailInboxes } from "@/lib/email-inbox"
-import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -16,33 +14,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
 
-  // Deixa rastro mesmo quando não há e-mail novo — este cron não escrevia nada
-  // ao rodar em vazio, e "ele chegou a ser registrado na Vercel?" só tinha
-  // resposta no painel da Vercel. Ver o comentário em /api/cron/agentes.
-  const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "email-inbox-cron", status: "executando" },
-  })
-
-  try {
-    const results = await syncAllEmailInboxes()
-    await prisma.agenteExecucao.update({
-      where: { id: execucao.id },
-      data: {
-        status: "concluido",
-        resultado: { caixas: results.length } as Prisma.InputJsonObject,
-        finishedAt: new Date(),
-      },
-    })
-    return NextResponse.json({ ok: true, caixas: results.length, results })
-  } catch (e) {
-    await prisma.agenteExecucao.update({
-      where: { id: execucao.id },
-      data: {
-        status: "erro",
-        erro: e instanceof Error ? e.message : String(e),
-        finishedAt: new Date(),
-      },
-    }).catch((err) => console.error("[Cron] Falha ao registrar erro de email-inbox:", err))
-    throw e
-  }
+  // O rastro da execução é gravado por EMPRESA dentro de syncAllEmailInboxes.
+  // Antes era uma linha só, de plataforma, sem dono: sob RLS ela não seria
+  // legível de volta por ninguém, e o `resultado` misturaria empresas
+  // diferentes. Aqui sobrou a autenticação do cron e o repasse do resultado.
+  const results = await syncAllEmailInboxes()
+  return NextResponse.json({ ok: true, caixas: results.length, results })
 }
