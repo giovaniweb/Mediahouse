@@ -6,16 +6,11 @@
     "Toda entrada precisa de motivo escrito — sem motivo, o CI reprova.",
     "Regenerar: node scripts/auditar-tenancy.mjs --gerar"
   ],
-  "_gerado_em": "2026-08-25",
+  "_gerado_em": "2026-09-01",
   "permitidas": {},
   "justificadas": {
     "src/app/api/me/nf-token/route.ts": "Idem: o token de NF sai do cruzamento usuário logado × demanda atribuída a ele. Recortar por empresa esconderia trabalho que é dele.",
-    "src/app/api/publico/cobertura/[slug]/face-search/route.ts": "Busca por rosto dentro dos descritores daquela cobertura. O recorte é o evento.",
-    "src/app/api/publico/cobertura/[slug]/route.ts": "A credencial é o slug do evento, e o slug pertence a uma cobertura, que pertence a uma empresa. Quem tem o link vê aquele evento e só ele.",
-    "src/app/api/publico/cobertura/[slug]/zip/route.ts": "Mesmo slug, mesma cobertura — o ZIP não sai do evento pedido.",
     "src/app/api/publico/videomaker-info/[id]/route.ts": "Perfil público da rede na tela de QR: nome, cidade e estado. Nada privado, nada por empresa.",
-    "src/app/api/transcode/callback/route.ts": "Worker externo, autenticado por TRANSCODE_SECRET com comparação em tempo constante. O alvo sai da demanda do próprio arquivo, não do corpo da requisição.",
-    "src/lib/avaliacao.ts": "A média de estrelas é o ativo do profissional na rede: ele carrega a reputação de uma empresa para a outra. É calculada sobre todas as avaliações de propósito.",
     "src/lib/eventos-conclusao.ts": "Recalcula o percentual de UM evento, recebido por id. Quem chama já provou a posse do evento; o helper não escolhe alvo.",
     "src/lib/usuario-vinculos.ts": "A pergunta é global por natureza: dá para apagar este Usuario da plataforma inteira? Contar só os vínculos de uma empresa daria o número errado e apagaria dado de outra."
   }

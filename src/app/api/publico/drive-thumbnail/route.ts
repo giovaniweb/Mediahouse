@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAccessToken } from "@/lib/google-drive"
 import { prisma } from "@/lib/prisma"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 // GET /api/publico/drive-thumbnail?fileId={id}
 // Rota pública: retorna thumbnail de arquivo do Drive usando service account.
@@ -13,6 +15,13 @@ export async function GET(req: NextRequest) {
   if (!fileId || !/^[a-zA-Z0-9_-]{10,}$/.test(fileId)) {
     return NextResponse.json({ error: "fileId inválido" }, { status: 400 })
   }
+
+  // A credencial é o próprio id do arquivo no Drive, que está dentro da URL
+  // guardada. Sem declarar a empresa, a busca abaixo volta vazia sob RLS e a
+  // miniatura some da galeria pública.
+  const organizacaoId = await orgPorCredencial("arquivo_por_url", fileId)
+  if (!organizacaoId) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 })
+  declararOrg(organizacaoId)
 
   try {
     const arq = await prisma.arquivo.findFirst({

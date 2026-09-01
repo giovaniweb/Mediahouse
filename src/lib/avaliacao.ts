@@ -7,37 +7,35 @@
 // avaliações, sem recorte de empresa.
 //
 // O COMENTÁRIO é outra história — "sumiu no dia da gravação" é observação
-// interna de quem contratou, não da rede. Ele mora na mesma linha, mas desde a
-// Fase 2 a linha tem dono: as rotas de leitura devolvem o comentário desta
-// empresa mais o das avaliações por QR público, que nascem sem dono porque são
-// o cliente final falando. Este arquivo continua sem recorte de propósito — ele
-// só calcula a média, e a média é da rede.
-import { prisma } from "@/lib/prisma"
-
-function arredondar(media: number | null): number {
-  return Math.round((media ?? 0) * 10) / 10
-}
+// interna de quem contratou. Desde a Fase 2 a linha tem dono, e as rotas de
+// leitura devolvem o comentário desta empresa mais o das avaliações por QR
+// público, que nascem sem dono porque são o cliente final falando.
+//
+// ── Por que isto virou chamada de função no banco ───────────────────────────
+//
+// Sob RLS, escrever no perfil exige vínculo com a empresa ativa — senão a
+// empresa A renomearia o profissional da empresa B na rede inteira. Só que o
+// recálculo da média precisa acontecer também na avaliação por QR PÚBLICO, que
+// não tem empresa nenhuma. E RLS decide por LINHA, não por coluna: não há como
+// dizer "pode atualizar `avaliacao` e mais nada".
+//
+// A saída é uma função SECURITY DEFINER que escreve UMA coluna, com um valor que
+// ela mesma calcula a partir das avaliações. Ela não aceita a nota de fora, então
+// não dá para gravar uma média inventada por ela.
+import { prismaBase } from "@/lib/prisma"
 
 /** Recalcula e grava a média do videomaker. Devolve a nova média. */
 export async function recalcularMediaVideomaker(videomakerId: string): Promise<number> {
-  // `aggregate` em vez de carregar as linhas: o cálculo é do banco, e a rota
-  // parava de trazer todas as avaliações para a memória só para somar.
-  const { _avg } = await prisma.avaliacaoVideomaker.aggregate({
-    where: { videomakerId },
-    _avg: { nota: true },
-  })
-  const media = arredondar(_avg.nota)
-  await prisma.videomaker.update({ where: { id: videomakerId }, data: { avaliacao: media } })
-  return media
+  const linhas = await prismaBase.$queryRaw<{ media: number | null }[]>`
+    SELECT public.recalcular_media_videomaker(${videomakerId}) AS media
+  `
+  return linhas[0]?.media ?? 0
 }
 
 /** Recalcula e grava a média do editor. Devolve a nova média. */
 export async function recalcularMediaEditor(editorId: string): Promise<number> {
-  const { _avg } = await prisma.avaliacaoEditor.aggregate({
-    where: { editorId },
-    _avg: { nota: true },
-  })
-  const media = arredondar(_avg.nota)
-  await prisma.editor.update({ where: { id: editorId }, data: { avaliacao: media } })
-  return media
+  const linhas = await prismaBase.$queryRaw<{ media: number | null }[]>`
+    SELECT public.recalcular_media_editor(${editorId}) AS media
+  `
+  return linhas[0]?.media ?? 0
 }

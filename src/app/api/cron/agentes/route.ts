@@ -8,6 +8,7 @@ import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { hojeEmSaoPaulo, inicioDoDia, janelaDoDiaSeguinte, somarDias } from "@/lib/datas"
 import { resolverAlertas } from "@/lib/alertas"
 import { resumirParados, textoDeParados, DIAS_PARA_COBRAR } from "@/lib/parados"
+import { comOrg } from "@/lib/org-contexto"
 
 // As versões manuais destes mesmos agentes declaram 120-180s; a versão cron, que
 // roda para TODAS as organizações em série, não declarava nada e herdava o
@@ -52,14 +53,19 @@ export async function GET(req: NextRequest) {
 
   for (const org of orgs) {
     try {
-      let r: Record<string, unknown>
-      if (agente === "prazos") r = await rodarAgentePrazos(org.id)
-      else if (agente === "vistoria") r = await rodarAgenteVistoria(org.id)
-      else if (agente === "cobranca") r = await registrarExecucao("cobranca-cron", () => rodarAgenteCobranca(org.id))
-      else if (agente === "lembretes") r = await registrarExecucao("lembretes-cron", () => rodarAgenteLembretes(org.id))
-      else if (agente === "briefing") r = await registrarExecucao("briefing-cron", () => rodarAgenteBriefing(org.id))
-      else if (agente === "limpeza") r = await registrarExecucao("limpeza-cron", () => rodarAgenteLimpeza(org.id))
-      else r = await rodarAgenteAlertas(org.id)
+      // `comOrg` e não `declararOrg`: aqui o laço passa por VÁRIAS empresas na
+      // mesma execução. Declarar sem delimitar deixaria a empresa da volta
+      // anterior valendo na seguinte — o pior tipo de vazamento, porque o dado
+      // sai carimbado com o dono errado.
+      const r = await comOrg(org.id, async (): Promise<Record<string, unknown>> => {
+        if (agente === "prazos") return await rodarAgentePrazos(org.id)
+        else if (agente === "vistoria") return await rodarAgenteVistoria(org.id)
+        else if (agente === "cobranca") return await registrarExecucao("cobranca-cron", org.id, () => rodarAgenteCobranca(org.id))
+        else if (agente === "lembretes") return await registrarExecucao("lembretes-cron", org.id, () => rodarAgenteLembretes(org.id))
+        else if (agente === "briefing") return await registrarExecucao("briefing-cron", org.id, () => rodarAgenteBriefing(org.id))
+        else if (agente === "limpeza") return await registrarExecucao("limpeza-cron", org.id, () => rodarAgenteLimpeza(org.id))
+        return await rodarAgenteAlertas(org.id)
+      })
       resultados.push({ organizacaoId: org.id, ...r })
     } catch (e) {
       console.error(`[Cron] Erro org ${org.id}:`, e)
@@ -130,10 +136,13 @@ async function rodarComRegistro(
  */
 async function registrarExecucao<T extends Record<string, unknown>>(
   agente: string,
+  organizacaoId: string,
   executar: () => Promise<T>
 ): Promise<T> {
+  // O registro é da execução de UMA empresa. Sem o dono, sob RLS o próprio
+  // INSERT é recusado — a política exige que a linha nasça na empresa declarada.
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente, status: "executando" },
+    data: { agente, organizacaoId, status: "executando" },
   })
 
   try {
