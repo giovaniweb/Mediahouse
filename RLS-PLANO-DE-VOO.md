@@ -111,6 +111,10 @@ As somas fecham exatamente com o total em toda linha: nenhuma linha aparece para
 duas empresas, nenhuma some. É a prova que o diagnóstico pedia desde o começo —
 sob RLS, a `empresa-teste` lê **6 demandas, não 597**.
 
+*Critério: todas as verificações do `verificar-rls.mjs` verdes, incluindo "sem
+`app.org_id`: zero linhas" e "`app_auth` não alcança demandas".* **Atingido** —
+onze de onze, contra o banco de produção.
+
 *Descoberta do caminho:* o `postgres` do Supabase **não é superusuário**, e o
 Postgres só permite `SET ROLE` para role do qual você é membro. A verificação
 funcionava no banco descartável do CI (onde `postgres` é super) e falhava com
@@ -193,6 +197,11 @@ pontual — contratar quem já trabalhou para outra empresa é o que dá valor a
 marketplace. Fica registrado que `editores` diverge disso e filtra por vínculo;
 alinhar os dois é decisão de produto, não de segurança.
 
+*Critério: nenhuma tela vazia que não deveria estar vazia.* **Atingido** — todas
+as contagens conferidas contra o banco, uma a uma, nas duas empresas. As
+divergências que apareceram tinham explicação (dois quadros, módulo desligado,
+regra de negócio da rota); nenhuma era o RLS escondendo dado legítimo.
+
 **Passo 4 — medir o custo. ✅ FEITO em 01/09/2026. E o número diz para NÃO virar ainda.**
 
 A/B no mesmo banco, com os mesmos dados, mudando só a camada: conexão de dono
@@ -270,6 +279,13 @@ Guarde o valor antigo antes de trocar.
 sentido quando ninguém mais conecta como dono em runtime — hoje o Super Admin
 conecta, então este passo **depende** de mover aquele painel para `app_user` com
 uma política própria.
+
+*Critério: o `verificar-rls.mjs` continua verde DEPOIS do FORCE, e o painel de
+Super Admin continua listando todas as empresas.* Se o painel quebrar, o FORCE
+volta atrás — ele é a última tranca, não vale derrubar a operação por ela.
+
+Este passo estava sem critério de parada nenhum, o que é o mesmo que não ter fim:
+ninguém saberia dizer se deu certo.
 
 ---
 
