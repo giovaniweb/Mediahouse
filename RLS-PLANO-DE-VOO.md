@@ -140,15 +140,72 @@ configurações · WhatsApp · Super Admin.
 um item do passo 3 da seção anterior — anote, corrija com `comOrg`, repita. É
 esta lista que eu não quis adivinhar.
 
-**Passo 4 — medir o custo.** Cada consulta vira `BEGIN` + `set_config` + consulta
-+ `COMMIT`. Comparar o tempo do dashboard e da lista de demandas com e sem
-`RLS_ATIVO`.
+**Passo 4 — medir o custo. ✅ FEITO em 01/09/2026. E o número diz para NÃO virar ainda.**
 
-*Critério:* se a degradação for inaceitável, o caminho é declarar a empresa uma
-vez por requisição em vez de por consulta — mais invasivo, e a decisão deve ser
-tomada com o número na mão, não antes.
+A/B no mesmo banco, com os mesmos dados, mudando só a camada: conexão de dono
+sem a extensão contra `app_user` com ela.
 
-**Passo 5 — virar em produção, em janela combinada.** Trocar as três variáveis e
+| endpoint | sem RLS | com RLS | |
+|---|---|---|---|
+| `/api/health` (uma consulta, SQL cru) | 193ms | 190ms | — |
+| `/api/demandas?limit=25` | 538ms | **1827ms** | 3,4× |
+| `/api/produtos` | 652ms | **1718ms** | 2,6× |
+| `/api/notificacoes` | 418ms | **1112ms** | 2,7× |
+
+Medianas de sete amostras. `/api/health` não muda porque usa SQL cru, que a
+extensão deixa passar direto — o que confirma que o custo é da transação, não do
+RLS em si: a política custa um índice-lookup, e isso não aparece.
+
+**Uma otimização foi tentada e não funcionou.** Trocar a transação interativa
+(`BEGIN` → `set_config` → consulta → `COMMIT`, cada uma esperando a anterior)
+por transação em LOTE, na esperança de virar uma ida só: **1841ms contra 1827ms**,
+diferença nenhuma. O Prisma continua mandando `BEGIN` e `COMMIT` como viagens
+separadas.
+
+Então o custo é estrutural: **duas viagens extras por consulta**. Com a aplicação
+em `gru1` e o banco nos Estados Unidos, cada viagem é da ordem de 120ms, e uma
+rota que faz cinco consultas paga cinco vezes isso.
+
+*Critério do passo, aplicado:* **a degradação é inaceitável.** Mais de um segundo
+a mais na lista de demandas é visível para o usuário, e a lista de demandas é a
+tela onde as pessoas passam o dia.
+
+### O que fazer antes de virar
+
+O caminho previsto era "declarar a empresa uma vez por REQUISIÇÃO em vez de por
+consulta". Concretamente, as opções, em ordem de preferência:
+
+1. **Conexão por empresa, com o ajuste no nível da SESSÃO.** Um pool por
+   organização, cada um abrindo a conexão com `app.org_id` já definido. Elimina a
+   transação por consulta inteira — volta ao custo de hoje. Exige o pooler em modo
+   SESSÃO (5432), o que limita o número de conexões, e funciona bem com dezenas de
+   inquilinos, não com milhares. É o desenho certo para o tamanho atual.
+
+2. **Aproximar o banco da aplicação.** Parte dos 120ms é geografia, não RLS.
+   Vale medir com banco e aplicação na mesma região antes de culpar a arquitetura.
+
+3. **Reduzir o número de consultas por rota.** Independe do RLS e ajuda de todo
+   jeito, mas é o mais trabalhoso.
+
+### O que o passo 4 encontrou de quebra, e era mais grave que a lentidão
+
+A aplicação usa `$transaction` em **nove lugares** — mudança de status, mesclagem
+de usuário, webhook do WhatsApp. A extensão abria uma transação POR CONSULTA:
+cada operação dentro dessas transações abriria a própria, aninhada.
+
+O passeio do passo 3 não pegou isso porque **caminho feliz não pega**: as escritas
+funcionaram. O que quebraria é o dia em que uma delas falha no meio — as
+anteriores já teriam sido gravadas fora da transação de quem chamou, e o rollback
+não as alcançaria. Perda silenciosa de atomicidade.
+
+A extensão passou a interceptar `$transaction` nos dois formatos, declarando a
+empresa uma vez no começo da transação de quem chamou. Verificado contra a cópia:
+rollback desfaz tudo, o lote bem-sucedido devolve os resultados na ordem certa, a
+transação interativa enxerga as 6 demandas da empresa e **não** enxerga as das
+outras.
+
+**Passo 5 — virar em produção, em janela combinada. ⛔ BLOQUEADO pelo passo 4.**
+Não vire enquanto a lista de demandas custar 1,8s. Trocar as três variáveis e
 redeployar. Ficar olhando: login, dashboard, uma demanda, o WhatsApp recebendo.
 
 *Critério de reversão:* qualquer tela vazia ou login recusado → `DATABASE_URL`
