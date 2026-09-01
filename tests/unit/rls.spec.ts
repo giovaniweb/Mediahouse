@@ -116,6 +116,25 @@ describe("a extensão que declara a empresa", () => {
     expect(p).toContain("dentroDaTransacao")
   })
 
+  it("intercepta o $transaction da aplicação", () => {
+    // A aplicação usa `$transaction` em nove lugares. Sem interceptar, cada
+    // operação DENTRO dessas transações passaria pela extensão e abriria a
+    // própria — aninhamento que o Prisma recusa, ou pior, escrita que escapa do
+    // rollback e fica gravada quando a transação falha. Perda de atomicidade não
+    // aparece em teste feliz: aparece no dia em que algo falha no meio.
+    expect(p).toContain("async $transaction(")
+    expect(p).toContain("dentroDaTransacao.run(true")
+    // Os dois formatos: lista e callback.
+    expect(p).toContain("Array.isArray(arg)")
+  })
+
+  it("descarta o resultado do set_config antes de devolver o do chamador", () => {
+    // O `set_config` entra como primeira operação do lote; devolver o resultado
+    // dele junto deslocaria todos os índices de quem chamou `$transaction([a,b])`.
+    expect(p).toContain("saida.slice(1)")
+    expect(p).toContain("([, resultado])")
+  })
+
   it("expõe um cliente sem RLS para quem resolve a empresa", () => {
     expect(p).toContain("export const prismaBase")
   })
