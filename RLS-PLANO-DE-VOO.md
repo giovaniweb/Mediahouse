@@ -40,6 +40,8 @@ Os roles nascem `NOLOGIN`: senha não entra em repositório.
 | Saída do Super Admin | `src/lib/prisma-admin.ts` | pronto |
 | `SET LOCAL app.org_id` por transação | `src/lib/prisma.ts`, atrás de `RLS_ATIVO` | pronto |
 | Prova de isolamento | `scripts/verificar-rls.mjs`, roda no CI | pronto |
+| Declaração da empresa nas 20 rotas sem sessão | `declararOrg` / `comOrg`, PR #57 | pronto |
+| Ambiente de preview isolado, com RLS ligado | branch `preview/rls`, banco próprio | pronto |
 
 ### As três decisões que valem revisão
 
@@ -116,8 +118,8 @@ funcionava no banco descartável do CI (onde `postgres` é super) e falhava com
 `20260901000000_rls_verificavel`, que torna o dono membro dos dois roles — sem
 conceder privilégio novo, já que ambos têm privilégios estritamente menores.
 
-**Passo 2 — dar credencial ao role.** No SQL editor do Supabase, fora do
-repositório:
+**Passo 2 — dar credencial ao role. ✅ FEITO em 01/09/2026** (produção e cópia).
+No SQL editor do Supabase, fora do repositório:
 
 ```sql
 ALTER ROLE app_user WITH LOGIN PASSWORD '<senha forte>';
@@ -127,18 +129,69 @@ ALTER ROLE app_auth WITH LOGIN PASSWORD '<outra senha forte>';
 *Critério:* conectar manualmente com cada uma e conferir que `app_user` vê a
 própria empresa e nada mais.
 
-**Passo 3 — exercitar com o role certo, fora de produção.** Um deploy de preview
-com `DATABASE_URL` = `app_user`, `AUTH_DATABASE_URL` = `app_auth`, `RLS_ATIVO=sim`,
-apontando para um **banco de cópia**, não o de produção.
+**Passo 3 — exercitar com o role certo, fora de produção. ✅ FEITO em 01/09/2026.**
 
-Percorrer, logado como `empresa-teste`: login · dashboard · lista de demandas ·
-abrir uma demanda · criar demanda · Kanban · agenda · `/campo` · aprovação
-pública por link · upload de NF por link · página `/e/[slug]` · relatórios ·
-configurações · WhatsApp · Super Admin.
+Projeto Supabase novo e isolado, schema por `migrate deploy` (22 migrations) e
+dados copiados de produção: **68 tabelas, 11.335 linhas dos dois lados, zero
+divergência**. Deploy de preview com `DATABASE_URL` = `app_user`,
+`AUTH_DATABASE_URL` = `app_auth` e `RLS_ATIVO=sim`, escopados **por branch**
+(`preview/rls`) para não encostar em nada que já existia.
 
-*Critério:* **nenhuma tela vazia que não deveria estar vazia.** Cada tela vazia é
-um item do passo 3 da seção anterior — anote, corrija com `comOrg`, repita. É
-esta lista que eu não quis adivinhar.
+*Resultado: nenhuma tela vazia que não deveria estar vazia.*
+
+| | `empresa-teste` | Contourline |
+|---|---|---|
+| demandas (audiovisual + design) | 1 + 5 = **6** | **590** |
+| produtos · pessoas · coberturas | 2 · 4 · 1 | — |
+| dashboard | 0 ativas | 22 ativas, 38 atrasadas |
+
+Todos conferidos contra o banco, um a um. O "1 demanda" no Kanban assusta até
+lembrar que são **dois quadros**: 1 no audiovisual, 5 no de design.
+
+**Escrita**, que leitura nenhuma provaria: comentário `201` e mudança de status
+`200`, ambos confirmados no banco depois. São gravações em `comentarios` e
+`historico_status` — tabelas filhas cuja política pergunta ao pai.
+
+**IDOR**: quatro tentativas de alcançar uma demanda da Contourline estando na
+`empresa-teste` (GET, PATCH de status, POST de comentário, GET de pagamento) →
+**404 nas quatro**.
+
+**Super Admin** enxerga as 3 empresas pela conexão de dono, enquanto a rota
+normal do MESMO usuário devolve 590. A escapatória funciona, e é a única.
+
+### O que o passo 3 descobriu e o desenho não previa
+
+**`SET LOCAL` sobrevive ao pooler.** Era a maior incógnita: o Supavisor em modo
+transação fixa a conexão pela duração da transação, então `set_config(..., true)`
+vale para a consulta e some no COMMIT. Confirmado com as três empresas, e
+confirmado que **não vaza para fora da transação**. Se isto tivesse falhado, o
+desenho inteiro não teria como funcionar em produção.
+
+**O host direto do Supabase é IPv6-only** (`db.*.supabase.co` não tem registro A)
+e a Vercel só fala IPv4. O preview subiu com `banco: indisponivel` até trocar
+para o pooler. Qualquer ambiente novo precisa da URL do pooler, nunca da direta.
+
+**`NEXTAUTH_URL` e `NEXTAUTH_SECRET` existiam só em Production.** Nenhum preview
+jamais teve login funcionando — nada a ver com RLS, mas impedia o passo 3 antes
+mesmo de começar.
+
+**`DATABASE_URL` e `DIRECT_URL` continuam com escopo `Production, Preview`.**
+Todo preview de qualquer outra branch ainda aponta para o BANCO DE PRODUÇÃO —
+a mesma condição que causou o incidente de 20/08, que se acreditava desfeita. O
+conserto é um clique no painel (editar a variável, desmarcar "Preview") e não
+pelo CLI, porque é um registro só servindo os dois ambientes: removê-lo derruba
+o valor de Production junto. **Pendente.**
+
+### Uma diferença de comportamento, decidida e não corrigida
+
+`/api/videomakers` devolve os 66 perfis da rede inteira; `/api/editores` devolve
+só quem tem vínculo com a empresa. Não é regressão do RLS — já era assim, e sob
+RLS a política dos três perfis globais é `SELECT USING (true)` de propósito.
+
+Decisão de 01/09/2026: **a rede inteira aparece mesmo.** É o modelo de logística
+pontual — contratar quem já trabalhou para outra empresa é o que dá valor ao
+marketplace. Fica registrado que `editores` diverge disso e filtra por vínculo;
+alinhar os dois é decisão de produto, não de segurança.
 
 **Passo 4 — medir o custo.** Cada consulta vira `BEGIN` + `set_config` + consulta
 + `COMMIT`. Comparar o tempo do dashboard e da lista de demandas com e sem
