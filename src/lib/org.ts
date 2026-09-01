@@ -7,6 +7,13 @@
 //   ...ownership: if (!pertenceAOrg(record, organizacaoId)) return NextResponse.json(..., { status: 404 })
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+// As consultas que RESOLVEM a empresa usam o cliente de autenticação, não o
+// normal. Sob RLS o normal filtra por `app.org_id` — e perguntar "em qual
+// empresa eu estou" filtrando pela empresa em que estou é circular: a resposta
+// viria vazia e ninguém teria empresa nenhuma. `prismaAuth` enxerga só
+// usuarios, usuario_organizacao e organizacoes, que é exatamente o necessário
+// para responder isso e nada mais.
+import { prismaAuth } from "@/lib/prisma-auth"
 import type { Session } from "next-auth"
 
 type SessionUser = { id?: string; organizacaoId?: string | null }
@@ -40,7 +47,7 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
     const escolhida = await organizacaoEscolhida()
     if (escolhida) {
       // A autoridade é o banco: só vale se a pessoa for MESMO membro dela.
-      const m = await prisma.usuarioOrganizacao.findUnique({
+      const m = await prismaAuth.usuarioOrganizacao.findUnique({
         where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: escolhida } },
         select: { organizacaoId: true },
       })
@@ -50,7 +57,7 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
 
   if (u.organizacaoId) return u.organizacaoId
   if (!u.id) return null
-  const m = await prisma.usuarioOrganizacao.findFirst({
+  const m = await prismaAuth.usuarioOrganizacao.findFirst({
     where: { usuarioId: u.id },
     orderBy: { createdAt: "asc" },
     select: { organizacaoId: true },
@@ -94,7 +101,7 @@ export async function orgPublica(slug: string | null | undefined): Promise<strin
   if (!slug?.trim()) {
     console.warn(`[org] rota pública sem ?org= — usando o padrão "${SLUG_ORG_PADRAO}".`)
   }
-  const org = await prisma.organizacao.findUnique({
+  const org = await prismaAuth.organizacao.findUnique({
     where: { slug: alvo },
     select: { id: true, ativo: true },
   })
@@ -114,7 +121,7 @@ export async function requireSuperAdmin(
 ): Promise<{ usuarioId: string } | NextResponse> {
   const u = session?.user as SessionUser | undefined
   if (!u?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const usuario = await prisma.usuario.findUnique({ where: { id: u.id }, select: { superAdmin: true } })
+  const usuario = await prismaAuth.usuario.findUnique({ where: { id: u.id }, select: { superAdmin: true } })
   if (!usuario?.superAdmin) return NextResponse.json({ error: "Requer super-admin" }, { status: 403 })
   return { usuarioId: u.id }
 }

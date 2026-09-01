@@ -7,10 +7,11 @@
 // avaliações, sem recorte de empresa.
 //
 // O COMENTÁRIO é outra história — "sumiu no dia da gravação" é observação
-// interna de quem contratou, não da rede. Hoje ele mora na mesma linha, sem
-// dono, e qualquer empresa que abra o perfil lê o que a outra escreveu. Fechar
-// isso exige uma coluna em `avaliacoes_videomaker` e `avaliacoes_editor`, que é
-// Fase 2. Até lá, o dado agregado está certo e o comentário está em dívida.
+// interna de quem contratou, não da rede. Ele mora na mesma linha, mas desde a
+// Fase 2 a linha tem dono: as rotas de leitura devolvem o comentário desta
+// empresa mais o das avaliações por QR público, que nascem sem dono porque são
+// o cliente final falando. Este arquivo continua sem recorte de propósito — ele
+// só calcula a média, e a média é da rede.
 import { prisma } from "@/lib/prisma"
 
 function arredondar(media: number | null): number {

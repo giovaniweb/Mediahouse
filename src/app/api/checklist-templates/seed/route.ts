@@ -1,13 +1,24 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
+import { getOrgId, semOrg } from "@/lib/org"
 
-// POST — seed dos templates padrão (idempotente, protegido por token simples)
-export async function POST(req: NextRequest) {
-  const { searchParams } = req.nextUrl
-  const token = searchParams.get("token")
-  if (token !== "nfseed2026") {
-    return NextResponse.json({ error: "Token inválido" }, { status: 403 })
+// POST — semeia os templates padrão NA EMPRESA de quem chama. Idempotente.
+//
+// Duas coisas mudaram. A credencial era um token fixo no código-fonte
+// ("nfseed2026"), público para qualquer um que lesse o repositório ou o bundle;
+// agora é a sessão de um gestor, como em todo o resto do painel. E os templates
+// nasciam sem empresa, num balaio único: rodar o seed servia a instalação
+// inteira, e a segunda empresa a chamar não criava nada, porque os nomes já
+// existiam para outra.
+export async function POST() {
+  const session = await auth()
+  if (!session || !ehGestor(session)) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const templates = [
     {
@@ -51,11 +62,12 @@ export async function POST(req: NextRequest) {
   const criados: string[] = []
 
   for (const t of templates) {
-    const existente = await prisma.checklistTemplate.findFirst({ where: { nome: t.nome } })
+    const existente = await prisma.checklistTemplate.findFirst({ where: { organizacaoId, nome: t.nome } })
     if (existente) continue
 
     await prisma.checklistTemplate.create({
       data: {
+        organizacaoId,
         nome: t.nome,
         tipoVideo: t.tipoVideo,
         papel: t.papel,

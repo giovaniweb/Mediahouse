@@ -17,7 +17,7 @@ export async function POST() {
 
   // Registra execução
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "gerar_alertas", status: "executando", criadoPor: session.user?.id },
+    data: { agente: "gerar_alertas", organizacaoId, status: "executando", criadoPor: session.user?.id },
   })
 
   try {

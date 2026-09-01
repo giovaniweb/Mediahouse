@@ -396,3 +396,65 @@ que a trava na migration não é zelo excessivo: é a última linha quando o pro
 **Detalhe que vale registrar:** endurecer o guarda **não teria impedido** o incidente. O
 `buildCommand` chamava `prisma migrate deploy` direto, não `npm run db:deploy` — o guarda
 nunca esteve no caminho. Trava só protege o que ela consegue interceptar.
+
+---
+
+## Adendo — 25/08/2026: a fundação do banco (Fase 2 do plano de isolamento)
+
+As Fases 1 deste trabalho (PRs #50 e #52) fecharam 26 rotas que consultavam sem escopo.
+Isso resolveu o sintoma. A causa continuava: **o isolamento existia só no código**.
+`organizacaoId` era `TEXT` nulável e, em 18 das 19 tabelas, sem chave estrangeira. O
+banco aceitava um id inventado, um id de empresa já apagada ou `NULL` sem reclamar. Toda
+a garantia estava em alguém lembrar de escrever `where` — e o histórico mostra o que
+acontece quando alguém esquece.
+
+**O que foi medido antes.** `scripts/checar-fundacao.mjs` (novo, somente leitura):
+zero nulos e zero órfãos nas 19 tabelas. As travas entraram sobre dado limpo, e o número
+foi conferido antes de o primeiro `ALTER` ser escrito, não descoberto no meio dele.
+
+**O que a migration fez.**
+
+- `NOT NULL` em 19 colunas · 23 chaves estrangeiras novas (`ON DELETE CASCADE`) ·
+  10 índices — porque FK no Postgres não cria índice, e cada política de RLS vai começar
+  por `organizacaoId`.
+- Coluna nova em 5 tabelas que a Fase 1 não teve como escopar: `depoimentos`,
+  `checklist_templates`, `config_trello`, `avaliacoes_videomaker`, `avaliacoes_editor`.
+- Trava de entrada e trava de saída (`RAISE EXCEPTION`): a transação aborta se houver
+  nulo/órfão antes, ou se alguma coluna escapar depois.
+
+**A divergência com o plano escrito, e o porquê.** O passo 1.1 previa `organizacaoId`
+nas 12 tabelas filhas, com backfill pelo pai. **Não foi feito, de propósito.** Todas elas
+já têm FK para o pai (`historico_status → demandas`, `coberturas_checklist → coberturas`,
+e assim por diante) — a cadeia de posse já é imposta pelo banco. Denormalizar a empresa
+para dentro delas cria uma coluna que pode discordar do pai, e a classe de bug que ela
+introduz é exatamente a que se quer evitar: dado que parece de uma empresa e é de outra.
+Na Fase 3, a policy dessas tabelas usa `EXISTS` no pai; nos volumes atuais (a maior tem
+1.958 linhas) o custo é irrelevante, e a verdade fica num lugar só.
+
+**O que o `NOT NULL` encontrou no código.** Vinte e três pontos onde a aplicação admitia
+dado sem dono — cada um deles uma linha que nasceria invisível para todas as telas. O
+padrão dominante era este:
+
+```ts
+...(organizacaoId && { organizacaoId })
+```
+
+Parece defensivo. É o contrário: quando a organização falta, a consulta sai **sem filtro
+nenhum**. Estava em 32 pontos de `src/lib/ia-tools-executor.ts` — o executor de
+ferramentas da IA, que lê demandas, custos, videomakers e telefone de gestor — e no sino
+de notificações, onde um usuário sem empresa ativa recebia o alerta de todas as empresas
+da plataforma. `organizacaoId` passou a ser obrigatório na assinatura; sem empresa, a
+ferramenta não roda.
+
+**O portão de migration.** O `environment: producao` com Required reviewers **nunca
+esteve ativo**: a API do GitHub devolve `protection_rules: []`. O job `aplicar` passava
+direto no merge. O gate agora está no próprio workflow — `aplicar` só roda em disparo
+manual com confirmação digitada —, onde não depende de configuração de painel. Um gate
+que parece existir e não existe é pior que nenhum.
+
+**Dívida de escopo: zero.** `scripts/tenancy-allowlist.json` não tem mais nenhuma entrada
+em `permitidas`. As 9 que restam são globais por desenho, cada uma com o motivo escrito.
+
+**O que a Fase 3 (RLS) ainda precisa:** role `app_user` sem `BYPASSRLS`, `SET LOCAL
+app.org_id` por transação, e um caminho de autenticação separado — `authorize()` lê
+`senhaHash` antes de existir contexto de organização.

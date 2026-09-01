@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recalcularMediaEditor } from "@/lib/avaliacao"
+import { getOrgId, semOrg } from "@/lib/org"
 import { z } from "zod"
 
 // Avaliação INTERNA de editor — quem trabalhou com ele dando a nota.
@@ -31,6 +32,8 @@ const schema = z.object({
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id: editorId } = await params
   const body = await req.json()
@@ -57,6 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // interna. Ambos saem da sessão agora, e `avaliadorId` deixou o schema.
       avaliadorId: session.user.id,
       origem: "interno",
+      organizacaoId,
     },
   })
 
@@ -66,12 +70,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // GET /api/editores/[id]/avaliar — listar avaliações + info do editor
 //
-// DÍVIDA CONHECIDA (Fase 2): devolve os comentários de todas as empresas. Mesma
-// história da avaliação de videomaker — a nota agregada é global de propósito,
-// o comentário não deveria ser. Precisa de coluna em `avaliacoes_editor`.
+// Mesma separação da avaliação de videomaker: a NOTA agregada é da rede, o
+// COMENTÁRIO é de quem contratou. A lista traz o desta empresa mais o que veio
+// por QR público, que não tem dono.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { id: editorId } = await params
 
@@ -83,7 +89,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const [avaliacoes, { _avg, _count }] = await Promise.all([
     prisma.avaliacaoEditor.findMany({
-      where: { editorId },
+      where: {
+        editorId,
+        OR: [{ organizacaoId }, { organizacaoId: null }],
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),

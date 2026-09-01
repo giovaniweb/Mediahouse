@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
       nota: parseInt(nota),
       comentario: comentarioFinal,
       origem: "qr_publico",
+      // Sem dono, e de propósito: quem avalia aqui é o cliente final com o
+      // celular na mão, não a empresa que contratou. O comentário vale para a
+      // rede inteira — é a reputação pública do profissional — e é a única
+      // avaliação que toda empresa enxerga.
+      organizacaoId: null,
     },
   })
 

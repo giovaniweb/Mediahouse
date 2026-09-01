@@ -14,16 +14,19 @@ const countMembership = vi.fn()
 const updateOrg = vi.fn()
 const findUniqueUsuario = vi.fn()
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    usuarioOrganizacao: {
-      findUnique: (...a: unknown[]) => findUniqueMembership(...a),
-      count: (...a: unknown[]) => countMembership(...a),
-    },
-    organizacao: { update: (...a: unknown[]) => updateOrg(...a) },
-    usuario: { findUnique: (...a: unknown[]) => findUniqueUsuario(...a) },
+// O painel de Super Admin passou a usar `prismaAdmin` (conexão de dono) e a
+// checagem de super-admin usa `prismaAuth`. Os três apontam para o mesmo fake.
+const clienteFake = {
+  usuarioOrganizacao: {
+    findUnique: (...a: unknown[]) => findUniqueMembership(...a),
+    count: (...a: unknown[]) => countMembership(...a),
   },
-}))
+  organizacao: { update: (...a: unknown[]) => updateOrg(...a) },
+  usuario: { findUnique: (...a: unknown[]) => findUniqueUsuario(...a) },
+}
+vi.mock("@/lib/prisma", () => ({ prisma: clienteFake, prismaBase: clienteFake }))
+vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: clienteFake }))
+vi.mock("@/lib/prisma-admin", () => ({ prismaAdmin: clienteFake }))
 vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: "u-1" } }) }))
 
 const { PATCH } = await import("@/app/api/admin/organizacoes/[id]/route")

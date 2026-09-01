@@ -14,14 +14,21 @@ const findUnique = vi.fn()
 const findFirst = vi.fn()
 let cookieValor: string | undefined
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    usuarioOrganizacao: {
-      findUnique: (...a: unknown[]) => findUnique(...a),
-      findFirst: (...a: unknown[]) => findFirst(...a),
-    },
+// A resolução de empresa passou a usar `prismaAuth`, e não o cliente normal:
+// sob RLS, perguntar "em qual empresa eu estou" pelo cliente que filtra por
+// empresa é circular. Os dois ficam mockados — se a resolução voltar para o
+// cliente normal um dia, o teste continua verde, então o `rls.spec.ts` guarda
+// essa parte por leitura do fonte.
+const clienteFake = {
+  usuarioOrganizacao: {
+    findUnique: (...a: unknown[]) => findUnique(...a),
+    findFirst: (...a: unknown[]) => findFirst(...a),
   },
-}))
+  organizacao: { findUnique: async () => null },
+  usuario: { findUnique: async () => null },
+}
+vi.mock("@/lib/prisma", () => ({ prisma: clienteFake, prismaBase: clienteFake }))
+vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: clienteFake }))
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (n: string) => (n === "org_ativa" && cookieValor ? { value: cookieValor } : undefined) }),
 }))

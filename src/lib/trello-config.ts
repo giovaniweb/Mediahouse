@@ -25,14 +25,33 @@ export type ConfigTrelloResolvida =
   | { ok: true; cfg: CredenciaisTrello; listMapping: Record<string, string> | null }
   | { ok: false; erro: string; status: number }
 
+// Dono do board declarado por variável, para o caso de a config ainda não estar
+// no banco. Continua existindo porque `config_trello` está vazia em produção: a
+// integração roda pelas variáveis de ambiente, que são de uma empresa só.
 const SLUG_DONO = process.env.TRELLO_ORG || SLUG_ORG_PADRAO
 
 /**
- * Devolve as credenciais do Trello se — e só se — a organização informada for a
- * dona do board. Qualquer outra recebe "não configurada", nunca as credenciais
- * de terceiros.
+ * Devolve as credenciais do Trello desta organização.
+ *
+ * Ordem: a configuração DELA no banco vem primeiro — desde a Fase 2 a tabela
+ * tem coluna de empresa, então cada uma pode ter o próprio board. Sem linha no
+ * banco, sobra a queda para as variáveis de ambiente, que valem só para a
+ * empresa declarada em TRELLO_ORG. Qualquer outra recebe "não configurada" —
+ * nunca a credencial de terceiros.
  */
 export async function configTrelloDaOrg(organizacaoId: string): Promise<ConfigTrelloResolvida> {
+  const doBanco = await prisma.configTrello
+    .findFirst({ where: { organizacaoId, ativo: true }, orderBy: { createdAt: "desc" } })
+    .catch(() => null)
+
+  if (doBanco) {
+    return {
+      ok: true,
+      cfg: { apiKey: doBanco.apiKey, token: doBanco.token, boardId: doBanco.boardId },
+      listMapping: (doBanco.listMapping as Record<string, string> | null) ?? null,
+    }
+  }
+
   const dona = await prisma.organizacao.findUnique({
     where: { slug: SLUG_DONO },
     select: { id: true },
@@ -44,25 +63,17 @@ export async function configTrelloDaOrg(organizacaoId: string): Promise<ConfigTr
       status: 400,
       erro:
         "Integração com o Trello não configurada para esta empresa. " +
-        "O board atual pertence a outra organização.",
+        "Conecte um board em Configurações → Trello.",
     }
   }
 
-  const dbConfig = await prisma.configTrello
-    .findFirst({ where: { ativo: true }, orderBy: { createdAt: "desc" } })
-    .catch(() => null)
-
-  const apiKey = dbConfig?.apiKey ?? process.env.TRELLO_API_KEY
-  const token = dbConfig?.token ?? process.env.TRELLO_TOKEN
-  const boardId = dbConfig?.boardId ?? process.env.TRELLO_BOARD_ID
+  const apiKey = process.env.TRELLO_API_KEY
+  const token = process.env.TRELLO_TOKEN
+  const boardId = process.env.TRELLO_BOARD_ID
 
   if (!apiKey || !token || !boardId) {
     return { ok: false, status: 400, erro: "Trello não configurado" }
   }
 
-  return {
-    ok: true,
-    cfg: { apiKey, token, boardId },
-    listMapping: (dbConfig?.listMapping as Record<string, string> | null) ?? null,
-  }
+  return { ok: true, cfg: { apiKey, token, boardId }, listMapping: null }
 }

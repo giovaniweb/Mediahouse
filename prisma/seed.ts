@@ -20,6 +20,20 @@ async function main() {
   await prisma.editor.deleteMany()
   await prisma.videomaker.deleteMany()
   await prisma.usuario.deleteMany()
+  await prisma.organizacao.deleteMany({ where: { slug: "demo" } })
+
+  // ─── ORGANIZAÇÃO ──────────────────────────────────────────
+  //
+  // O seed é anterior à multiempresa: criava usuário e demanda soltos, sem
+  // empresa nenhuma. Quem clonava o repositório subia um ambiente onde nenhuma
+  // tela com escopo mostrava nada — e desde que `organizacaoId` virou NOT NULL
+  // ele nem roda. Agora nasce uma empresa e todo mundo é membro dela.
+  const org = await prisma.organizacao.upsert({
+    where: { slug: "demo" },
+    update: {},
+    create: { nome: "Empresa Demo", slug: "demo" },
+  })
+  const organizacaoId = org.id
 
   // ─── USUÁRIOS ──────────────────────────────────────────────
   const senhaHash = await bcrypt.hash("videoops123", 10)
@@ -79,7 +93,17 @@ async function main() {
     },
   })
 
-  console.log("✅ Usuários criados")
+  // Sem vínculo a pessoa loga e não enxerga empresa nenhuma: `getOrgId` devolve
+  // null e as rotas respondem "sem organização".
+  for (const u of [gestor, operacao, growth, eventos, social]) {
+    await prisma.usuarioOrganizacao.upsert({
+      where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId } },
+      update: {},
+      create: { usuarioId: u.id, organizacaoId, papel: u.tipo },
+    })
+  }
+
+  console.log("✅ Usuários criados e vinculados à Empresa Demo")
 
   // ─── EDITORES ─────────────────────────────────────────────
   const editorJoao = await prisma.editor.upsert({
@@ -168,6 +192,7 @@ async function main() {
   // Demanda urgente em Entrada
   const d1 = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: "VOP-25-0001",
       titulo: "Trend Instagram — Lançamento Equipamento",
       descricao: "Vídeo rápido da trend do Instagram sobre o lançamento do novo equipamento da linha Pro.",
@@ -196,6 +221,7 @@ async function main() {
 
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       demandaId: d1.id,
       tipoAlerta: "urgencia_pendente",
       mensagem: `Nova urgência: "${d1.titulo}" aguarda aprovação do gestor.`,
@@ -207,6 +233,7 @@ async function main() {
   // Demanda em Produção
   const d2 = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: "VOP-25-0002",
       titulo: "Aftermovie — Evento Anual 2025",
       descricao: "Cobertura completa do evento anual + aftermovie para redes sociais e site institucional.",
@@ -237,6 +264,7 @@ async function main() {
   // Demanda em Edição
   const d3 = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: "VOP-25-0003",
       titulo: "VSL — Campanha Performance Q2",
       descricao: "VSL de 3 minutos para campanha de performance no Meta. Tom direto, foco em conversão.",
@@ -269,6 +297,7 @@ async function main() {
   // Demanda em Aprovação
   const d4 = await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: "VOP-25-0004",
       titulo: "Vídeo Institucional — Nova Sede",
       descricao: "Vídeo institucional de apresentação da nova sede. 2 minutos, tom corporativo.",
@@ -289,6 +318,7 @@ async function main() {
 
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       demandaId: d4.id,
       tipoAlerta: "aprovacao_parada",
       mensagem: `"${d4.titulo}" está aguardando aprovação há mais de 48h.`,
@@ -300,6 +330,7 @@ async function main() {
   // Demanda Para Postar
   await prisma.demanda.create({
     data: {
+      organizacaoId,
       codigo: "VOP-25-0005",
       titulo: "Reels — Cultura da Empresa",
       descricao: "Série de 3 reels mostrando o dia a dia da equipe e a cultura da empresa.",
@@ -321,6 +352,7 @@ async function main() {
   // Alerta de sobrecarga
   await prisma.alertaIA.create({
     data: {
+      organizacaoId,
       tipoAlerta: "sobrecarga_editor",
       mensagem: "João Paulo está com carga acima do limite recomendado (3 demandas ativas, peso 8/5).",
       severidade: "aviso",
@@ -336,6 +368,7 @@ async function main() {
   console.log("  growth@videoops.com        → Solicitante Growth")
   console.log("  eventos@videoops.com       → Solicitante Eventos")
   console.log("  social@videoops.com        → Social Media")
+  console.log("\nTodos são membros da organização \"Empresa Demo\" (slug: demo).")
 }
 
 main()

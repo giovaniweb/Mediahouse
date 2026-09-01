@@ -1,11 +1,19 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { orgPublica } from "@/lib/org"
 
-// GET /api/publico/depoimentos — público, sem auth
-export async function GET() {
+// GET /api/publico/depoimentos — vitrine pública, sem auth.
+//
+// A consulta não tinha recorte: a página /sobre de qualquer empresa mostrava os
+// depoimentos de todas. Agora a empresa vem do `?org=` (mesmo padrão dos outros
+// formulários públicos) e, sem ele, da organização padrão da instalação.
+export async function GET(req: NextRequest) {
   try {
+    const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+    if (!organizacaoId) return NextResponse.json({ depoimentos: [] })
+
     const depoimentos = await prisma.depoimento.findMany({
-      where: { ativo: true },
+      where: { organizacaoId, ativo: true },
       orderBy: { ordem: "asc" },
       select: {
         id: true,
