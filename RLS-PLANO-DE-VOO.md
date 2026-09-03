@@ -237,14 +237,35 @@ tela onde as pessoas passam o dia.
 O caminho previsto era "declarar a empresa uma vez por REQUISIÇÃO em vez de por
 consulta". Concretamente, as opções, em ordem de preferência:
 
-1. **Conexão por empresa, com o ajuste no nível da SESSÃO.** Um pool por
-   organização, cada um abrindo a conexão com `app.org_id` já definido. Elimina a
-   transação por consulta inteira — volta ao custo de hoje. Exige o pooler em modo
-   SESSÃO (5432), o que limita o número de conexões, e funciona bem com dezenas de
-   inquilinos, não com milhares. É o desenho certo para o tamanho atual.
+1. ~~**Conexão por empresa, com o ajuste no nível da SESSÃO.**~~ **TENTADO E
+   DESCARTADO em 03/09/2026.** Implementado e testado: isolava certo, em série e
+   em paralelo, com um pool dedicado por empresa. Não sobrevive ao serverless.
 
-2. **Aproximar o banco da aplicação.** Parte dos 120ms é geografia, não RLS.
-   Vale medir com banco e aplicação na mesma região antes de culpar a arquitetura.
+   Cada instância de função cria o próprio pool e congela as conexões junto com
+   a instância. O Supavisor limita **15 clientes em modo sessão**
+   (`EMAXCONNSESSION ... pool_size: 15`), e o `app_user` chegou a 16 conexões
+   presas em minutos — **todas as requisições passaram a devolver 500**. Pior: a
+   medição feita antes de perceber isso estava cronometrando respostas de ERRO, e
+   parecia ótima.
+
+   Só volta a fazer sentido se a aplicação sair do serverless para um processo
+   longo, onde o número de pools é previsível.
+
+2. **Aproximar o banco da aplicação. ← É AQUI QUE ESTÁ O PROBLEMA.** Medido em
+   03/09/2026: `/api/health` faz UMA consulta (`SELECT 1`) e reporta, do lado do
+   servidor, **~172ms** em produção. Esse é o custo de uma ida ao banco entre a
+   Vercel em `gru1` (São Paulo) e o Supabase em `us-west-1`.
+
+   As duas viagens extras da transação custam, então, ~340ms POR CONSULTA — e uma
+   rota com quatro consultas paga 1,4s. É exatamente o que a tabela acima mostra.
+
+   **A sobrecarga do RLS é geografia, não arquitetura.** Com banco e aplicação na
+   mesma região, uma ida custa poucos milissegundos e o desenho por transação fica
+   praticamente de graça.
+
+   E isso vale independentemente do RLS: a aplicação já paga 172ms por consulta
+   hoje, em toda tela. Aproximar os dois é a melhoria de desempenho mais barata
+   disponível, e ela destrava o passo 5 de quebra.
 
 3. **Reduzir o número de consultas por rota.** Independe do RLS e ajuda de todo
    jeito, mas é o mais trabalhoso.

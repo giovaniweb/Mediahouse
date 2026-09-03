@@ -140,6 +140,17 @@ describe("a extensão que declara a empresa", () => {
   })
 })
 
+describe("comOrg executa dentro do próprio escopo", () => {
+  it("aguarda por dentro, porque promessa do Prisma é preguiçosa", () => {
+    // `comOrg(org, () => prisma.demanda.count())` devolveria a promessa sem
+    // executá-la: o `await` cairia FORA do contexto, a extensão não acharia
+    // empresa e a consulta voltaria VAZIA — sem erro, que é o pior jeito.
+    // Foi assim que um teste de isolamento inteiro voltou zero.
+    const ctx = ler("src/lib/org-contexto.ts")
+    expect(ctx).toContain("async () => await fn()")
+  })
+})
+
 describe("o plano de voo existe e é executável", () => {
   const plano = ler("RLS-PLANO-DE-VOO.md")
   it("diz como desfazer", () => {
