@@ -2,7 +2,6 @@ import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { orgAtual } from "@/lib/org-contexto"
-import { clienteDaOrg } from "@/lib/prisma-por-org"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -55,6 +54,14 @@ function propriedadeDoModelo(model: string): string {
 
 type ClienteBruto = Record<string, Record<string, (a: unknown) => unknown>>
 
+/** Declara a empresa e executa, tudo numa transação em LOTE — uma ida ao banco. */
+function emLote<T>(organizacaoId: string, operacao: unknown): Promise<T> {
+  const declarar = base.$executeRaw`SELECT set_config('app.org_id', ${organizacaoId}, true)`
+  return base
+    .$transaction([declarar, operacao as ReturnType<typeof base.$executeRaw>])
+    .then(([, resultado]) => resultado as T)
+}
+
 function comRls(cliente: PrismaClient) {
   return cliente.$extends({
     name: "rls-por-organizacao",
@@ -70,13 +77,6 @@ function comRls(cliente: PrismaClient) {
       // A empresa é declarada UMA vez, no começo da transação de quem chamou, e
       // a marca em `dentroDaTransacao` faz as operações internas passarem
       // direto — elas já estão na conexão certa, com o ajuste certo.
-      //
-      // Isto continua no cliente BASE, e não no pool da empresa, por um motivo
-      // técnico: as operações que chegam aqui foram construídas a partir do
-      // cliente base, e o Prisma recusa um lote com promessas de clientes
-      // diferentes. Como `$transaction` explícito aparece em nove lugares e não
-      // no caminho quente, pagar o `set_config` por transação aqui não move o
-      // ponteiro da latência.
       async $transaction(this: unknown, arg: unknown, opcoes?: unknown) {
         const organizacaoId = await orgAtual()
         const chamar = (a: unknown, o?: unknown) =>
@@ -122,11 +122,9 @@ function comRls(cliente: PrismaClient) {
         // incapaz de vazar.
         if (!organizacaoId) return query(args)
 
-        // Caminho quente: cliente DEDICADO à empresa, cujas conexões já nascem
-        // com `app.org_id` definido no nível da sessão. Uma ida ao banco, sem
-        // BEGIN nem COMMIT — que era o custo medido no passo 4.
-        const cliente = clienteDaOrg(organizacaoId) as unknown as ClienteBruto
-        return cliente[propriedadeDoModelo(model)][operation](args) as Promise<unknown>
+        const modelo = (base as unknown as ClienteBruto)[propriedadeDoModelo(model)]
+        const operacao = dentroDaTransacao.run(true, () => modelo[operation](args))
+        return emLote(organizacaoId, operacao)
       },
     },
   }) as unknown as PrismaClient
