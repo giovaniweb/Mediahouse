@@ -31,7 +31,16 @@ const armazenamento = new AsyncLocalStorage<{ organizacaoId: string | null }>()
  * precedência.
  */
 export function comOrg<T>(organizacaoId: string | null, fn: () => Promise<T>): Promise<T> {
-  return armazenamento.run({ organizacaoId }, fn)
+  // O `await` aqui dentro não é decoração: as promessas do Prisma são
+  // PREGUIÇOSAS. `comOrg(org, () => prisma.demanda.count())` devolveria a
+  // promessa sem executá-la, o `await` aconteceria FORA deste escopo, e a
+  // extensão não acharia empresa nenhuma — a consulta sairia sem declarar e
+  // voltaria vazia. Silenciosamente, porque vazio não é erro.
+  //
+  // Custou um teste de isolamento inteiro voltando zero para descobrir. Com o
+  // `await` aqui, a execução acontece dentro do contexto mesmo quando quem
+  // chamou esquece de esperar por dentro.
+  return armazenamento.run({ organizacaoId }, async () => await fn())
 }
 
 /**

@@ -43,6 +43,8 @@ Os roles nascem `NOLOGIN`: senha não entra em repositório.
 | Saída do Super Admin | `src/lib/prisma-admin.ts` | pronto |
 | `SET LOCAL app.org_id` por transação | `src/lib/prisma.ts`, atrás de `RLS_ATIVO` | pronto |
 | Prova de isolamento | `scripts/verificar-rls.mjs`, roda no CI | pronto |
+| Declaração da empresa nas 20 rotas sem sessão | `declararOrg` / `comOrg`, PR #57 | pronto |
+| Ambiente de preview isolado, com RLS ligado | branch `preview/rls`, banco próprio | pronto |
 
 ### As três decisões que valem revisão
 
@@ -112,6 +114,10 @@ As somas fecham exatamente com o total em toda linha: nenhuma linha aparece para
 duas empresas, nenhuma some. É a prova que o diagnóstico pedia desde o começo —
 sob RLS, a `empresa-teste` lê **6 demandas, não 597**.
 
+*Critério: todas as verificações do `verificar-rls.mjs` verdes, incluindo "sem
+`app.org_id`: zero linhas" e "`app_auth` não alcança demandas".* **Atingido** —
+onze de onze, contra o banco de produção.
+
 *Descoberta do caminho:* o `postgres` do Supabase **não é superusuário**, e o
 Postgres só permite `SET ROLE` para role do qual você é membro. A verificação
 funcionava no banco descartável do CI (onde `postgres` é super) e falhava com
@@ -119,8 +125,8 @@ funcionava no banco descartável do CI (onde `postgres` é super) e falhava com
 `20260901000000_rls_verificavel`, que torna o dono membro dos dois roles — sem
 conceder privilégio novo, já que ambos têm privilégios estritamente menores.
 
-**Passo 2 — dar credencial ao role.** No SQL editor do Supabase, fora do
-repositório:
+**Passo 2 — dar credencial ao role. ✅ FEITO em 01/09/2026** (produção e cópia).
+No SQL editor do Supabase, fora do repositório:
 
 ```sql
 ALTER ROLE app_user WITH LOGIN PASSWORD '<senha forte>';
@@ -130,33 +136,162 @@ ALTER ROLE app_auth WITH LOGIN PASSWORD '<outra senha forte>';
 *Critério:* conectar manualmente com cada uma e conferir que `app_user` vê a
 própria empresa e nada mais.
 
-**Passo 3 — exercitar com o role certo, fora de produção.** Um deploy de preview
-com `DATABASE_URL` = `app_user`, `AUTH_DATABASE_URL` = `app_auth`, `RLS_ATIVO=sim`,
-apontando para um **banco de cópia**, não o de produção.
+**Passo 3 — exercitar com o role certo, fora de produção. ✅ FEITO em 01/09/2026.**
 
-Percorrer, logado como `empresa-teste`: login · dashboard · lista de demandas ·
-abrir uma demanda · criar demanda · Kanban · agenda · `/campo` · aprovação
-pública por link · upload de NF por link · página `/e/[slug]` · relatórios ·
-configurações · WhatsApp · Super Admin.
+Projeto Supabase novo e isolado, schema por `migrate deploy` (22 migrations) e
+dados copiados de produção: **68 tabelas, 11.335 linhas dos dois lados, zero
+divergência**. Deploy de preview com `DATABASE_URL` = `app_user`,
+`AUTH_DATABASE_URL` = `app_auth` e `RLS_ATIVO=sim`, escopados **por branch**
+(`preview/rls`) para não encostar em nada que já existia.
 
-*Critério:* **nenhuma tela vazia que não deveria estar vazia.** Cada tela vazia é
-um item do passo 3 da seção anterior — anote, corrija com `comOrg`, repita. É
-esta lista que eu não quis adivinhar.
+*Resultado: nenhuma tela vazia que não deveria estar vazia.*
 
-**Passo 4 — medir o custo.** Cada consulta vira `BEGIN` + `set_config` + consulta
-+ `COMMIT`. Comparar o tempo do dashboard e da lista de demandas com e sem
-`RLS_ATIVO`.
+| | `empresa-teste` | Contourline |
+|---|---|---|
+| demandas (audiovisual + design) | 1 + 5 = **6** | **590** |
+| produtos · pessoas · coberturas | 2 · 4 · 1 | — |
+| dashboard | 0 ativas | 22 ativas, 38 atrasadas |
 
-*Critério:* se a degradação for inaceitável, o caminho é declarar a empresa uma
-vez por requisição em vez de por consulta — mais invasivo, e a decisão deve ser
-tomada com o número na mão, não antes.
+Todos conferidos contra o banco, um a um. O "1 demanda" no Kanban assusta até
+lembrar que são **dois quadros**: 1 no audiovisual, 5 no de design.
 
-> **Executado em 03/09/2026 — e o número apontou para outro lugar.** A
-> degradação era distância, não política: banco em `us-west-1`, aplicação em
-> `gru1`. Ver **seção 7**. O passo 5 passa a depender da mudança de região.
+**Escrita**, que leitura nenhuma provaria: comentário `201` e mudança de status
+`200`, ambos confirmados no banco depois. São gravações em `comentarios` e
+`historico_status` — tabelas filhas cuja política pergunta ao pai.
 
-**Passo 5 — virar em produção, em janela combinada.** *Só depois da mudança de
-região (seção 7).* Trocar as três variáveis e
+**IDOR**: quatro tentativas de alcançar uma demanda da Contourline estando na
+`empresa-teste` (GET, PATCH de status, POST de comentário, GET de pagamento) →
+**404 nas quatro**.
+
+**Super Admin** enxerga as 3 empresas pela conexão de dono, enquanto a rota
+normal do MESMO usuário devolve 590. A escapatória funciona, e é a única.
+
+### O que o passo 3 descobriu e o desenho não previa
+
+**`SET LOCAL` sobrevive ao pooler.** Era a maior incógnita: o Supavisor em modo
+transação fixa a conexão pela duração da transação, então `set_config(..., true)`
+vale para a consulta e some no COMMIT. Confirmado com as três empresas, e
+confirmado que **não vaza para fora da transação**. Se isto tivesse falhado, o
+desenho inteiro não teria como funcionar em produção.
+
+**O host direto do Supabase é IPv6-only** (`db.*.supabase.co` não tem registro A)
+e a Vercel só fala IPv4. O preview subiu com `banco: indisponivel` até trocar
+para o pooler. Qualquer ambiente novo precisa da URL do pooler, nunca da direta.
+
+**`NEXTAUTH_URL` e `NEXTAUTH_SECRET` existiam só em Production.** Nenhum preview
+jamais teve login funcionando — nada a ver com RLS, mas impedia o passo 3 antes
+mesmo de começar.
+
+**`DATABASE_URL` e `DIRECT_URL` continuam com escopo `Production, Preview`.**
+Todo preview de qualquer outra branch ainda aponta para o BANCO DE PRODUÇÃO —
+a mesma condição que causou o incidente de 20/08, que se acreditava desfeita. O
+conserto é um clique no painel (editar a variável, desmarcar "Preview") e não
+pelo CLI, porque é um registro só servindo os dois ambientes: removê-lo derruba
+o valor de Production junto. **Pendente.**
+
+### Uma diferença de comportamento, decidida e não corrigida
+
+`/api/videomakers` devolve os 66 perfis da rede inteira; `/api/editores` devolve
+só quem tem vínculo com a empresa. Não é regressão do RLS — já era assim, e sob
+RLS a política dos três perfis globais é `SELECT USING (true)` de propósito.
+
+Decisão de 01/09/2026: **a rede inteira aparece mesmo.** É o modelo de logística
+pontual — contratar quem já trabalhou para outra empresa é o que dá valor ao
+marketplace. Fica registrado que `editores` diverge disso e filtra por vínculo;
+alinhar os dois é decisão de produto, não de segurança.
+
+*Critério: nenhuma tela vazia que não deveria estar vazia.* **Atingido** — todas
+as contagens conferidas contra o banco, uma a uma, nas duas empresas. As
+divergências que apareceram tinham explicação (dois quadros, módulo desligado,
+regra de negócio da rota); nenhuma era o RLS escondendo dado legítimo.
+
+**Passo 4 — medir o custo. ✅ FEITO em 01/09/2026. E o número diz para NÃO virar ainda.**
+
+A/B no mesmo banco, com os mesmos dados, mudando só a camada: conexão de dono
+sem a extensão contra `app_user` com ela.
+
+| endpoint | sem RLS | com RLS | |
+|---|---|---|---|
+| `/api/health` (uma consulta, SQL cru) | 193ms | 190ms | — |
+| `/api/demandas?limit=25` | 538ms | **1827ms** | 3,4× |
+| `/api/produtos` | 652ms | **1718ms** | 2,6× |
+| `/api/notificacoes` | 418ms | **1112ms** | 2,7× |
+
+Medianas de sete amostras. `/api/health` não muda porque usa SQL cru, que a
+extensão deixa passar direto — o que confirma que o custo é da transação, não do
+RLS em si: a política custa um índice-lookup, e isso não aparece.
+
+**Uma otimização foi tentada e não funcionou.** Trocar a transação interativa
+(`BEGIN` → `set_config` → consulta → `COMMIT`, cada uma esperando a anterior)
+por transação em LOTE, na esperança de virar uma ida só: **1841ms contra 1827ms**,
+diferença nenhuma. O Prisma continua mandando `BEGIN` e `COMMIT` como viagens
+separadas.
+
+Então o custo é estrutural: **duas viagens extras por consulta**. Com a aplicação
+em `gru1` e o banco nos Estados Unidos, cada viagem é da ordem de 120ms, e uma
+rota que faz cinco consultas paga cinco vezes isso.
+
+*Critério do passo, aplicado:* **a degradação é inaceitável.** Mais de um segundo
+a mais na lista de demandas é visível para o usuário, e a lista de demandas é a
+tela onde as pessoas passam o dia.
+
+### O que fazer antes de virar
+
+O caminho previsto era "declarar a empresa uma vez por REQUISIÇÃO em vez de por
+consulta". Concretamente, as opções, em ordem de preferência:
+
+1. ~~**Conexão por empresa, com o ajuste no nível da SESSÃO.**~~ **TENTADO E
+   DESCARTADO em 03/09/2026.** Implementado e testado: isolava certo, em série e
+   em paralelo, com um pool dedicado por empresa. Não sobrevive ao serverless.
+
+   Cada instância de função cria o próprio pool e congela as conexões junto com
+   a instância. O Supavisor limita **15 clientes em modo sessão**
+   (`EMAXCONNSESSION ... pool_size: 15`), e o `app_user` chegou a 16 conexões
+   presas em minutos — **todas as requisições passaram a devolver 500**. Pior: a
+   medição feita antes de perceber isso estava cronometrando respostas de ERRO, e
+   parecia ótima.
+
+   Só volta a fazer sentido se a aplicação sair do serverless para um processo
+   longo, onde o número de pools é previsível.
+
+2. **Aproximar o banco da aplicação. ← É AQUI QUE ESTÁ O PROBLEMA.** Medido em
+   03/09/2026: `/api/health` faz UMA consulta (`SELECT 1`) e reporta, do lado do
+   servidor, **~172ms** em produção. Esse é o custo de uma ida ao banco entre a
+   Vercel em `gru1` (São Paulo) e o Supabase em `us-west-1`.
+
+   As duas viagens extras da transação custam, então, ~340ms POR CONSULTA — e uma
+   rota com quatro consultas paga 1,4s. É exatamente o que a tabela acima mostra.
+
+   **A sobrecarga do RLS é geografia, não arquitetura.** Com banco e aplicação na
+   mesma região, uma ida custa poucos milissegundos e o desenho por transação fica
+   praticamente de graça.
+
+   E isso vale independentemente do RLS: a aplicação já paga 172ms por consulta
+   hoje, em toda tela. Aproximar os dois é a melhoria de desempenho mais barata
+   disponível, e ela destrava o passo 5 de quebra.
+
+3. **Reduzir o número de consultas por rota.** Independe do RLS e ajuda de todo
+   jeito, mas é o mais trabalhoso.
+
+### O que o passo 4 encontrou de quebra, e era mais grave que a lentidão
+
+A aplicação usa `$transaction` em **nove lugares** — mudança de status, mesclagem
+de usuário, webhook do WhatsApp. A extensão abria uma transação POR CONSULTA:
+cada operação dentro dessas transações abriria a própria, aninhada.
+
+O passeio do passo 3 não pegou isso porque **caminho feliz não pega**: as escritas
+funcionaram. O que quebraria é o dia em que uma delas falha no meio — as
+anteriores já teriam sido gravadas fora da transação de quem chamou, e o rollback
+não as alcançaria. Perda silenciosa de atomicidade.
+
+A extensão passou a interceptar `$transaction` nos dois formatos, declarando a
+empresa uma vez no começo da transação de quem chamou. Verificado contra a cópia:
+rollback desfaz tudo, o lote bem-sucedido devolve os resultados na ordem certa, a
+transação interativa enxerga as 6 demandas da empresa e **não** enxerga as das
+outras.
+
+**Passo 5 — virar em produção, em janela combinada. ⛔ BLOQUEADO pelo passo 4.**
+Não vire enquanto a lista de demandas custar 1,8s. Trocar as três variáveis e
 redeployar. Ficar olhando: login, dashboard, uma demanda, o WhatsApp recebendo.
 
 *Critério de reversão:* qualquer tela vazia ou login recusado → `DATABASE_URL`
@@ -168,6 +303,13 @@ Guarde o valor antigo antes de trocar.
 sentido quando ninguém mais conecta como dono em runtime — hoje o Super Admin
 conecta, então este passo **depende** de mover aquele painel para `app_user` com
 uma política própria.
+
+*Critério: o `verificar-rls.mjs` continua verde DEPOIS do FORCE, e o painel de
+Super Admin continua listando todas as empresas.* Se o painel quebrar, o FORCE
+volta atrás — ele é a última tranca, não vale derrubar a operação por ela.
+
+Este passo estava sem critério de parada nenhum, o que é o mesmo que não ter fim:
+ninguém saberia dizer se deu certo.
 
 ---
 
@@ -299,6 +441,13 @@ servidor de arquivos.** Quem for "limpar projeto que não usa" precisa ler isto
 antes.
 
 ### 7.2 A medição do Passo 1 — 03/09/2026
+
+> **Nota de leitura.** O Passo 4 acima já tinha chegado ao mesmo diagnóstico em
+> 01–03/09, com A/B por endpoint e com o `/api/health` a ~172 ms. O que segue
+> **não é descoberta, é confirmação por outro ângulo**: medição direta no
+> protocolo, isolando o pedágio de rede do trabalho do banco. Serve para
+> quantificar o que a mudança de região devolve — que ela é necessária, o Passo 4
+> já tinha provado.
 
 Medido do terminal do Giovani contra o banco de produção (`us-west-1`), somente
 leitura, 30 repetições por cenário. O preview está na mesma região: o pedágio de
