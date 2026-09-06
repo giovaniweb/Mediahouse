@@ -605,29 +605,20 @@ tinha dado 6 ms para São Paulo. De `gru1` é ainda melhor.
 **O que falta é humano:** percorrer as telas do preview procurando tela vazia que
 não deveria estar vazia — a lista do Passo 3, que nenhuma medição substitui.
 
-### 7.6 ⚠️ Achado de segurança: preview sem escopo próprio fala com a PRODUÇÃO
+### 7.6 O preview que fala com a produção: pendência antiga, agora com prova
 
-O `ESTADO-ATUAL.md` afirma, no relato do incidente de 20/08:
+Isto **já estava registrado** em "O que o passo 3 descobriu", e continua pendente:
+`DATABASE_URL` e `DIRECT_URL` seguem no escopo `Production, Preview`, e o conserto
+é no painel, não pelo CLI — é um registro só servindo os dois ambientes, e
+removê-lo pela linha de comando derrubaria o valor de Production junto.
 
-> Os ambientes de Preview da Vercel deixaram de apontar para o banco de produção.
+O que esta sessão acrescenta é a **prova empírica**, que antes era leitura do
+cadastro. O push da branch `saas/rls-set-role-verificador` gerou um preview sem
+escopo próprio, e `GET /api/health` nele responde **172 ms** — a assinatura de
+US-West. O preview de `preview/rls`, escopado para São Paulo, responde **3 ms**.
 
-**Isso não é verdade hoje.** `DATABASE_URL` e `DIRECT_URL` estão cadastradas no
-escopo **"Production, Preview"**. Só as branches com override próprio
-(hoje, apenas `preview/rls`) escapam. Qualquer outra branch que receba um push
-sobe um preview ligado ao banco de produção.
-
-**Medido, não deduzido.** O push da branch `saas/rls-set-role-verificador` gerou
-um preview. `GET /api/health` nele responde **172 ms** — a assinatura de US-West.
-São Paulo responde 3 ms. Ele está falando com a produção.
-
-Hoje isso não aplica DDL (o `buildCommand` não roda mais migration, e o
-`guarda-banco.mjs` barra sob `VERCEL`). Mas o preview de uma branch **não
-revisada** lê e escreve dado real de cliente pela aplicação. É a mesma fresta do
-incidente de 20/08, num tamanho menor.
-
-**Não corrigi**: mudar essas duas variáveis para "Production" apenas afeta todos
-os previews do projeto, e isso é decisão de operação, não de execução. Mas
-precisa de dono e de data.
+Não é mais inferência do painel: é o preview de uma branch não revisada dizendo,
+pelo relógio, com qual banco está falando.
 
 ### O preview de US-West: medir antes de apagar
 
