@@ -577,6 +577,49 @@ reaproveitadas na virada de produção.** No Passo 5, senha nova, gerada com
 `openssl rand -base64 24`, aplicada só no SQL editor. A senha do `postgres` do
 projeto de preview também deve ser rotacionada quando o preview for descartado.
 
+### 7.5 O preview de São Paulo no ar — medição de ponta a ponta, 03/09/2026
+
+Variáveis aplicadas no escopo `preview` / branch `preview/rls`
+(`DATABASE_URL` e `AUTH_DATABASE_URL` pelo pooler de `sa-east-1`, `DIRECT_URL`
+direto, `RLS_ATIVO=sim`). `NEXT_PUBLIC_SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY` **não foram tocadas** — continuam no projeto antigo,
+que é a arquitetura dividida da seção 7.1.
+
+Deploy: `videoops-git-preview-rls-fluidas-projects.vercel.app`
+
+**A medição que fecha a conta.** `GET /api/health` faz `SELECT 1` e devolve a
+latência medida **de dentro da função**, em `gru1`. Oito chamadas em cada:
+
+| | mediana | mín | máx |
+|---|---|---|---|
+| Preview — banco em **São Paulo** | **3 ms** | 2 | 3 |
+| Produção — banco em **US-West** | **175 ms** | 174 | 176 |
+
+**58x.** E agora é o número real da Vercel, não a estimativa do laptop — que
+tinha dado 6 ms para São Paulo. De `gru1` é ainda melhor.
+
+**A última incógnita caiu junto:** `banco: "ok"`. O Prisma com o adapter
+`PrismaPg` atravessa o Supavisor em modo transaction sem erro de
+`prepared statement`. Não foi preciso `?pgbouncer=true`.
+
+**O que falta é humano:** percorrer as telas do preview procurando tela vazia que
+não deveria estar vazia — a lista do Passo 3, que nenhuma medição substitui.
+
+### 7.6 O preview que fala com a produção: pendência antiga, agora com prova
+
+Isto **já estava registrado** em "O que o passo 3 descobriu", e continua pendente:
+`DATABASE_URL` e `DIRECT_URL` seguem no escopo `Production, Preview`, e o conserto
+é no painel, não pelo CLI — é um registro só servindo os dois ambientes, e
+removê-lo pela linha de comando derrubaria o valor de Production junto.
+
+O que esta sessão acrescenta é a **prova empírica**, que antes era leitura do
+cadastro. O push da branch `saas/rls-set-role-verificador` gerou um preview sem
+escopo próprio, e `GET /api/health` nele responde **172 ms** — a assinatura de
+US-West. O preview de `preview/rls`, escopado para São Paulo, responde **3 ms**.
+
+Não é mais inferência do painel: é o preview de uma branch não revisada dizendo,
+pelo relógio, com qual banco está falando.
+
 ### O preview de US-West: medir antes de apagar
 
 O projeto `nuflow-preview` em `us-west-1` **não é lixo — é o grupo de controle.**
