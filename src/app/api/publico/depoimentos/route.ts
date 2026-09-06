@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
+import { declararOrg } from "@/lib/org-contexto"
 
 // GET /api/publico/depoimentos — vitrine pública, sem auth.
 //
@@ -11,6 +12,10 @@ export async function GET(req: NextRequest) {
   try {
     const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
     if (!organizacaoId) return NextResponse.json({ depoimentos: [] })
+
+    // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão
+    // de onde deduzi-la, e sem declaração o banco devolve vazio.
+    declararOrg(organizacaoId)
 
     const depoimentos = await prisma.depoimento.findMany({
       where: { organizacaoId, ativo: true },

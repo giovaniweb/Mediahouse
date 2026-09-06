@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
 import { resolverParaAssinada } from "@/lib/midia"
+import { declararOrg } from "@/lib/org-contexto"
 
 // GET /api/publico/galeria?org=<slug> — vídeos finalizados/para_postar (sem auth)
 // Query params: org, page, limit, tipo, search, produtoId
@@ -14,6 +15,10 @@ export async function GET(req: NextRequest) {
   if (!organizacaoId) {
     return NextResponse.json({ total: 0, page, limit, totalPages: 0, videos: [] })
   }
+
+  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
+  // onde deduzi-la, e sem declaração o banco devolve vazio.
+  declararOrg(organizacaoId)
   const tipo = sp.get("tipo") ?? ""
   const search = sp.get("search") ?? ""
   const produtoId = sp.get("produtoId") ?? ""

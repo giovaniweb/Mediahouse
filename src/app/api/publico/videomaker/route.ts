@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { z } from "zod"
+import { declararOrg } from "@/lib/org-contexto"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
       { status: 503 }
     )
   }
+
+  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
+  // onde deduzi-la, e sem declaração o banco devolve vazio.
+  declararOrg(organizacaoId)
 
   // Só o que é público entra no perfil global — ele é a rede compartilhada e vai
   // ser legível por qualquer empresa sob RLS. CPF, endereço, PIX e diária são

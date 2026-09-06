@@ -6,6 +6,8 @@ import { calcularPeso } from "@/lib/peso-demanda"
 import { fetchMicrosoftMessages, refreshMicrosoftAccessToken } from "@/lib/microsoft-mail"
 import { htmlToPlainText, parseInboundEmail, type EmailParseResult } from "@/lib/email-inbox-parser"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { comOrg } from "@/lib/org-contexto"
+import { prismaAuth } from "@/lib/prisma-auth"
 
 function filterParts(value?: string | null): string[] {
   return (value ?? "")
@@ -304,24 +306,54 @@ export async function syncEmailInbox(configId: string): Promise<{
   }
 }
 
+/**
+ * Varre a caixa de entrada de todas as empresas.
+ *
+ * Percorre EMPRESA a empresa, cada uma no próprio `comOrg`. Antes era uma
+ * consulta só, atravessando todas — o que sob RLS devolveria zero configurações
+ * e o cron rodaria em silêncio, sem sincronizar nada e sem erro nenhum.
+ *
+ * O registro da execução também mora aqui, e por empresa. Um log de plataforma
+ * sem dono não seria legível de volta por ninguém, e o `resultado` dele
+ * misturaria empresas diferentes numa linha só.
+ */
 export async function syncAllEmailInboxes() {
-  const configs = await prisma.configEmailEntrada.findMany({
-    where: { ativo: true, refreshTokenCriptografado: { not: null } },
-    select: { id: true, organizacaoId: true },
+  const orgs = await prismaAuth.organizacao.findMany({
+    where: { ativo: true },
+    select: { id: true },
   })
   const results: Array<Record<string, unknown>> = []
-  for (const config of configs) {
-    try {
-      results.push({
-        organizacaoId: config.organizacaoId,
-        ...(await syncEmailInbox(config.id)),
+
+  for (const org of orgs) {
+    await comOrg(org.id, async () => {
+      const configs = await prisma.configEmailEntrada.findMany({
+        where: { ativo: true, refreshTokenCriptografado: { not: null } },
+        select: { id: true },
       })
-    } catch (error) {
-      results.push({
-        organizacaoId: config.organizacaoId,
-        erro: error instanceof Error ? error.message : String(error),
+      if (configs.length === 0) return
+
+      const execucao = await prisma.agenteExecucao.create({
+        data: { agente: "email-inbox-cron", organizacaoId: org.id, status: "executando" },
       })
-    }
+      const daEmpresa: Array<Record<string, unknown>> = []
+      for (const config of configs) {
+        try {
+          daEmpresa.push({ organizacaoId: org.id, ...(await syncEmailInbox(config.id)) })
+        } catch (error) {
+          daEmpresa.push({
+            organizacaoId: org.id,
+            erro: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      await prisma.agenteExecucao.update({
+        where: { id: execucao.id },
+        data: { status: "concluido", resultado: { caixas: daEmpresa.length }, finishedAt: new Date() },
+      })
+      results.push(...daEmpresa)
+    })
   }
+
   return results
 }
+

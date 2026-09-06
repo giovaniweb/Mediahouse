@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 // POST /api/transcode/callback — chamado pelo worker de transcodificação (sem sessão).
 // Protegido pelo header Authorization: Bearer $TRANSCODE_SECRET.
@@ -27,6 +29,15 @@ export async function POST(req: NextRequest) {
   const { arquivoId, demandaId, mp4Url, status } = body
 
   if (!status) return NextResponse.json({ error: "status obrigatório" }, { status: 400 })
+
+  // O worker é autenticado por segredo, mas não tem sessão: a empresa vem do
+  // arquivo que ele está reportando. Sem isso, sob RLS o callback não acharia
+  // nada e o vídeo transcodificado nunca substituiria o original.
+  if (arquivoId) {
+    const organizacaoId = await orgPorCredencial("arquivo", arquivoId)
+    if (!organizacaoId) return NextResponse.json({ error: "arquivo não encontrado" }, { status: 404 })
+    declararOrg(organizacaoId)
+  }
 
   // Sucesso: troca a URL do vídeo pelo MP4 em todos os lugares
   if (status === "done" && mp4Url && arquivoId) {

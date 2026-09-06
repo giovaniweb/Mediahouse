@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { comToken } from "@/lib/midia"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -13,6 +15,18 @@ type Params = { params: Promise<{ token: string }> }
 // Não use `include` nem espalhe a demanda inteira nesta resposta.
 export async function GET(_req: NextRequest, { params }: Params) {
   const { token } = await params
+
+  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
+  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
+  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
+  // banco que devolve só o id da empresa, sem abrir a tabela.
+  //
+  // O 404 aqui responde igual para credencial inválida e para credencial de
+  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
+  // um oráculo.
+  const organizacaoId = await orgPorCredencial("demanda_publica", token)
+  if (!organizacaoId) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
+  declararOrg(organizacaoId)
   if (!token || token.length < 16) {
     return NextResponse.json({ error: "Link inválido" }, { status: 404 })
   }

@@ -4,6 +4,8 @@ import { uploadMedia } from "@/lib/storage"
 import { lerTokenAnexo } from "@/lib/anexo-token"
 import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
 import { erroDeCampo } from "@/lib/erros-api"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 // POST /api/publico/anexo/[token] — anexa UM arquivo a uma demanda criada pelo
 // formulário público. Quem preenche não tem sessão, então a autorização vem do
@@ -53,6 +55,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       { status: 403 }
     )
   }
+
+  // O token assinado já provou a posse da demanda; aqui só descobrimos de qual
+  // empresa ela é, porque sob RLS a leitura abaixo precisa disso declarado.
+  const organizacaoId = await orgPorCredencial("demanda", demandaId)
+  if (!organizacaoId) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
+  declararOrg(organizacaoId)
 
   const demanda = await prisma.demanda.findUnique({
     where: { id: demandaId },

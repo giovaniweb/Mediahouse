@@ -31,7 +31,38 @@ const armazenamento = new AsyncLocalStorage<{ organizacaoId: string | null }>()
  * precedência.
  */
 export function comOrg<T>(organizacaoId: string | null, fn: () => Promise<T>): Promise<T> {
-  return armazenamento.run({ organizacaoId }, fn)
+  // O `await` aqui dentro não é decoração: as promessas do Prisma são
+  // PREGUIÇOSAS. `comOrg(org, () => prisma.demanda.count())` devolveria a
+  // promessa sem executá-la, o `await` aconteceria FORA deste escopo, e a
+  // extensão não acharia empresa nenhuma — a consulta sairia sem declarar e
+  // voltaria vazia. Silenciosamente, porque vazio não é erro.
+  //
+  // Custou um teste de isolamento inteiro voltando zero para descobrir. Com o
+  // `await` aqui, a execução acontece dentro do contexto mesmo quando quem
+  // chamou esquece de esperar por dentro.
+  return armazenamento.run({ organizacaoId }, async () => await fn())
+}
+
+/**
+ * Declara a empresa para o RESTO da requisição em curso, sem envolver nada.
+ *
+ * `comOrg` exige um callback, e envolver o corpo inteiro de vinte handlers
+ * públicos significaria reindentar vinte arquivos — um diff que ninguém revisa
+ * de verdade, para uma mudança que precisa ser revisada de verdade.
+ * `enterWith` entra no contexto a partir daqui e persiste pelas chamadas
+ * assíncronas seguintes, o que dá uma linha por rota:
+ *
+ *   const organizacaoId = await orgPorCredencial("nota_fiscal", token)
+ *   if (!organizacaoId) return NextResponse.json({ error: "..." }, { status: 404 })
+ *   declararOrg(organizacaoId)
+ *
+ * Cabe em rota HTTP porque cada requisição roda no próprio contexto assíncrono:
+ * o que é declarado aqui não escapa para a requisição do vizinho. Para código
+ * que NÃO nasce numa requisição — cron, worker, script —, use `comOrg`, que
+ * delimita o escopo explicitamente em vez de depender de quem chamou.
+ */
+export function declararOrg(organizacaoId: string): void {
+  armazenamento.enterWith({ organizacaoId })
 }
 
 /** Empresa declarada explicitamente por `comOrg`, se houver. */

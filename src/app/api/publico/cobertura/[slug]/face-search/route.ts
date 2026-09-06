@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 // POST /api/publico/cobertura/[slug]/face-search
 // Busca fotos/vídeos onde o rosto aparece via distância euclidiana
@@ -9,6 +11,18 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params
+
+  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
+  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
+  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
+  // banco que devolve só o id da empresa, sem abrir a tabela.
+  //
+  // O 404 aqui responde igual para credencial inválida e para credencial de
+  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
+  // um oráculo.
+  const organizacaoId = await orgPorCredencial("cobertura", slug)
+  if (!organizacaoId) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  declararOrg(organizacaoId)
 
   let body: { descriptor?: number[]; threshold?: number } = {}
   try {

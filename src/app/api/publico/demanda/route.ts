@@ -9,6 +9,7 @@ import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
+import { declararOrg } from "@/lib/org-contexto"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -117,6 +118,10 @@ export async function POST(req: NextRequest) {
   if (!organizacaoId) {
     return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })
   }
+
+  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
+  // onde deduzi-la, e sem declaração o banco devolve vazio.
+  declararOrg(organizacaoId)
 
   // Garante a membership do solicitante na organização (categoria=solicitante).
   // Sem isso, a pessoa nasceria sem vínculo org e não apareceria em Pessoas & Acessos.

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
 import { TIPOS_VIDEO_SEED, TIPOS_CRIATIVO_SEED, GRUPO_VIDEO, GRUPO_CRIATIVO } from "@/lib/tipos-demanda"
+import { declararOrg } from "@/lib/org-contexto"
 
 // Relatório e formulários públicos precisam ler o vocabulário de tipos, mas
 // /api/configuracoes/parametros exige sessão. Este endpoint expõe SÓ os grupos
@@ -23,6 +24,11 @@ export async function GET(req: NextRequest) {
   // O formulário público sempre pertenceu à organização legada; `org` permite
   // que outra empresa use o mesmo formulário sem herdar a lista da primeira.
   const organizacaoId = await orgPublica(sp.get("org"))
+
+  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
+  // onde deduzi-la, e sem declaração o banco devolve vazio. O ternário abaixo já
+  // tratava a ausência de empresa, então a declaração acompanha a mesma condição.
+  if (organizacaoId) declararOrg(organizacaoId)
 
   const parametros = organizacaoId
     ? await prisma.configParametro.findMany({

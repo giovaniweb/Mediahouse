@@ -4,6 +4,8 @@ import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const archiver = require("archiver") as typeof import("archiver")
 import { Readable } from "stream"
+import { declararOrg } from "@/lib/org-contexto"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
 
 /** Convert a Web ReadableStream to a Node.js Readable */
 function webStreamToNodeReadable(webStream: ReadableStream<Uint8Array>): Readable {
@@ -33,6 +35,18 @@ type Params = { params: Promise<{ slug: string }> }
 // GET /api/publico/cobertura/[slug]/zip — stream ZIP sem auth
 export async function GET(req: NextRequest, { params }: Params) {
   const { slug } = await params
+
+  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
+  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
+  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
+  // banco que devolve só o id da empresa, sem abrir a tabela.
+  //
+  // O 404 aqui responde igual para credencial inválida e para credencial de
+  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
+  // um oráculo.
+  const organizacaoId = await orgPorCredencial("cobertura", slug)
+  if (!organizacaoId) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+  declararOrg(organizacaoId)
   const senha = req.nextUrl.searchParams.get("senha")
 
   const cobertura = await prisma.eventoCobertura.findUnique({
