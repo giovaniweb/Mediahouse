@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "virada": "node scripts/virada/virada.mjs",
+    "conferir:copia": "node scripts/conferir-copia.mjs",
     "dev": "NODE_OPTIONS='--max-http-header-size=32768' next dev",
     "build": "next build",
     "start": "next start",
