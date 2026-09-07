@@ -13,6 +13,7 @@ import {
   CalendarDays,
   CalendarRange,
   ClipboardCheck,
+  ClipboardList,
   DollarSign,
   UserCog,
   Building2,
@@ -58,6 +59,7 @@ const sections = [
   {
     label: "Audiovisual",
     items: [
+      { href: "/jobs", label: "Jobs", icon: ClipboardList },
       { href: "/demandas", label: "Demandas", icon: Film },
       { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
