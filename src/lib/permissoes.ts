@@ -322,6 +322,9 @@ export const PRESETS: Record<string, PresetPerms> = {
 export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/dashboard": "verDashboard",
   "/demandas": "verDemandas",
+  // O quadro de Jobs lê a mesma coisa que /demandas; reusa a permissão em vez
+  // de criar uma chave nova que ninguém teria marcada.
+  "/jobs": "verDemandas",
   "/aprovacoes": "verAprovacoes",
   "/aprovacoes/growth": "verAprovacoesGrowth",
   "/agenda": "verAgenda",
@@ -344,4 +347,116 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/galeria-artes": "verDesign",
   "/growth/equipe": "gerenciarDesigners",
   "/configuracoes/linhas-projetos": "gerenciarDesigners",
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERMISSÃO EFETIVA — a resolução única de "o que esta pessoa pode nesta empresa"
+//
+// Antes disto havia três respostas diferentes para a mesma pergunta:
+//
+//   /api/me              materializava o preset de `usuario.tipo` (GLOBAL)
+//   /api/permissoes      materializava o preset de `membro.papel` (POR EMPRESA)
+//   job-transicoes       lia a tabela direto e tratava ausência como negação
+//
+// A auditoria de 07/09/2026 mediu o estrago: 19 das 103 memberships não têm
+// linha em `permissoes_usuario`, e nenhuma delas é negação deliberada — é login
+// que ainda não aconteceu, porque a linha nasce sozinha na primeira carga do
+// app. Tratar `null` como "não pode" era negar por acidente de cadastro.
+//
+// A regra, agora em um lugar só:
+//
+//     registro explícito  →  vence sempre
+//     sem registro        →  preset de membro.papel
+//     não dá para saber   →  NEGA (devolve null)
+//
+// `usuario.tipo` não participa. É coluna global: promover alguém a admin numa
+// empresa o tornava admin em todas as outras — exatamente o que
+// `src/lib/papel.ts` foi criado para fechar. A base tem 1 pessoa com
+// `tipo = admin` e `papel = videomaker`; pelo caminho antigo do /api/me, um
+// registro faltante lhe daria ALL_TRUE numa empresa onde ela é videomaker.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MapaPermissoes = PresetPerms
+
+/** O vínculo da pessoa com a empresa. É daqui que sai a autoridade. */
+export type MembroOrg = {
+  /** `UsuarioOrganizacao.papel` — nunca `Usuario.tipo`. */
+  papel: string | null | undefined
+  /** A empresa deste vínculo, conferida contra a empresa ativa. */
+  organizacaoId: string | null | undefined
+  /** `Usuario.status`. Inativo não recebe autorização, preset nenhum. */
+  statusUsuario: string | null | undefined
+}
+
+/**
+ * A permissão efetiva, ou `null` quando não se pode determinar com segurança.
+ *
+ * `null` significa NEGAR. É o tipo que força o chamador a decidir — um
+ * `MapaPermissoes` com tudo falso seria confundível com "papel sem acesso", e
+ * as duas coisas merecem tratamento diferente no log.
+ *
+ * Nega quando falta organização, falta vínculo, o vínculo é de outra empresa,
+ * a pessoa está inativa, não há papel, ou o papel não tem preset conhecido.
+ */
+export function permissaoEfetiva(entrada: {
+  membro: MembroOrg | null | undefined
+  /** A linha de `permissoes_usuario`, quando existe. Tem precedência total. */
+  permissaoExplicita?: Partial<MapaPermissoes> | null
+  /** A empresa ativa da requisição. */
+  organizacaoId: string | null | undefined
+}): MapaPermissoes | null {
+  const { membro, permissaoExplicita, organizacaoId } = entrada
+
+  // ── Fail-closed: os quatro "não dá para saber" ────────────────────────────
+  if (!organizacaoId) return null
+  if (!membro) return null
+  // Vínculo de OUTRA empresa não autoriza nada aqui. Sem esta conferência, quem
+  // participa de duas empresas levaria o papel da errada — é a mesma classe de
+  // vazamento que o `papel` por empresa resolveu.
+  if (membro.organizacaoId !== organizacaoId) return null
+  // Inativo não recebe autorização, venha de preset ou de registro explícito.
+  if (membro.statusUsuario !== "ativo") return null
+  if (!membro.papel) return null
+
+  const preset = PRESETS[membro.papel]
+  // Papel sem preset conhecido não vira "tudo liberado" nem "tudo negado por
+  // omissão": vira recusa explícita, para aparecer no log em vez de passar.
+  if (!preset) return null
+
+  // ── Precedência: o registro explícito vence ───────────────────────────────
+  // A auditoria achou 8 concessões que divergem do preset (2 videomakers, 2
+  // designers, 2 gestor_eventos, 1 gestor_trafego, 1 auxiliar_admin). Os 2
+  // designers com `moverKanban: true` são quem move 92 cards no quadro do
+  // Growth. Deixar o preset sobrescrever isso pararia o quadro.
+  if (permissaoExplicita) {
+    // Merge sobre o preset para tolerar registro de época anterior, a que
+    // faltem chaves criadas depois. As chaves presentes mandam.
+    return { ...preset, ...somenteBooleanos(permissaoExplicita) }
+  }
+
+  return preset
+}
+
+/**
+ * Fica só com as chaves de permissão booleanas.
+ *
+ * `PermissaoUsuario` do Prisma carrega `id`, `usuarioId`, `organizacaoId` e
+ * datas junto dos checkboxes. Espalhar o registro inteiro por cima do preset
+ * injetaria esses campos no mapa de permissões.
+ */
+function somenteBooleanos(registro: Partial<MapaPermissoes>): Partial<MapaPermissoes> {
+  const limpo: Partial<MapaPermissoes> = {}
+  for (const chave of Object.keys(BASE_FALSE) as PermissaoKey[]) {
+    const valor = (registro as Record<string, unknown>)[chave]
+    if (typeof valor === "boolean") limpo[chave] = valor
+  }
+  return limpo
+}
+
+/** Atalho para uma permissão só. `null` (indeterminado) é negação. */
+export function podePermissao(
+  efetiva: MapaPermissoes | null,
+  chave: PermissaoKey
+): boolean {
+  return efetiva?.[chave] === true
 }

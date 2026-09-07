@@ -10,6 +10,8 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
 import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
+import { podeTransicionar } from "@/lib/job-transicoes"
+import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { StatusInterno } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -49,17 +51,65 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
   if (!demandaAtual) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  // Validações de regras de negócio
-  // Aceita linkBrutos OU linkFolderBrutos (videomakers externos usam pasta do Drive)
-  const temBrutos = demandaAtual.linkBrutos || body.linkBrutos || demandaAtual.linkFolderBrutos
-  if (statusInterno === "brutos_enviados" && !temBrutos) {
-    return NextResponse.json({ error: "Link dos brutos obrigatório para avançar. Adicione o link da pasta ou do arquivo antes de marcar como entregue." }, { status: 400 })
+  // ── GUARDA DE TRANSIÇÃO ────────────────────────────────────────────────────
+  // Antes daqui a rota aceitava qualquer StatusInterno de qualquer pessoa
+  // autenticada da empresa: `requireDemandaOrg` confere a EMPRESA, não o papel.
+  // As precondições de negócio (brutos, link final, impedimento) moram agora
+  // dentro da guarda, com o mesmo texto e o mesmo 400 de antes.
+  //
+  // Ver src/lib/job-transicoes.ts para por que a sequência é REGISTRADA e não
+  // recusada: `TRANSICOES_VALIDAS` bloquearia 84,5% da operação real.
+  const [vinculo, perfilVideomaker] = await Promise.all([
+    // Permissão EFETIVA: registro explícito vence; sem registro, preset do
+    // papel na empresa; sem como determinar, `null` — e `null` nega.
+    // Devolve também o papel LIDO DO BANCO: a sessão não serve como autoridade
+    // aqui, porque `auth.ts` faz `papel ?? usuario.tipo` ao emitir o token.
+    permissoesEfetivas(session.user.id, organizacaoId),
+    prisma.videomaker.findFirst({ where: { usuarioId: session.user.id }, select: { id: true } }).catch(() => null),
+  ])
+
+  const veredito = podeTransicionar({
+    statusAtual: demandaAtual.statusInterno,
+    novoStatus: statusInterno,
+    usuario: {
+      id: session.user.id,
+      papel: vinculo?.papel ?? null,
+      permissoes: vinculo?.permissoes ?? null,
+      videomakerId: perfilVideomaker?.id ?? null,
+    },
+    demanda: {
+      videomakerId: demandaAtual.videomakerId,
+      editorId: demandaAtual.editorId,
+      linkBrutos: demandaAtual.linkBrutos,
+      linkFolderBrutos: demandaAtual.linkFolderBrutos,
+      linkFinal: demandaAtual.linkFinal,
+      motivoImpedimento: demandaAtual.motivoImpedimento,
+    },
+    entrada: { linkBrutos: body.linkBrutos, linkFinal: body.linkFinal, observacao },
+  })
+
+  if (!veredito.ok) {
+    // Precondição continua 400 (é dado que falta); autoridade é 403.
+    const http = veredito.codigo === "precondicao" || veredito.codigo === "status_inexistente" ? 400 : 403
+    return NextResponse.json({ error: veredito.motivo }, { status: http })
   }
-  if (statusInterno === "edicao_finalizada" && !demandaAtual.linkFinal && !body.linkFinal) {
-    return NextResponse.json({ error: "Link do vídeo final obrigatório." }, { status: 400 })
+
+  // Telemetria da sequência: é assim que se descobre qual é a matriz verdadeira
+  // antes de um dia ligá-la como porta.
+  for (const aviso of veredito.avisos) {
+    console.info(`[Transicao] ${demandaAtual.codigo} ${demandaAtual.statusInterno}->${statusInterno} ${aviso} (autor ${session.user.id})`)
   }
-  if (statusInterno === "impedimento" && !observacao && !demandaAtual.motivoImpedimento) {
-    return NextResponse.json({ error: "Motivo do impedimento obrigatório." }, { status: 400 })
+
+  // Pedir o que já vale não é erro, mas também não pode disparar histórico novo
+  // nem repetir notificação (§53). Antes, `revisao_pendente -> revisao_pendente`
+  // mandava WhatsApp de novo — são 46 casos desses na base.
+  if (veredito.noop) {
+    // Mesma forma que o caminho normal devolve (a demanda, sem as relações que
+    // o `include` acima carregou para as notificações) — duas formas na mesma
+    // rota é armadilha para quem um dia ler este corpo.
+    const { videomaker: _v, solicitante: _s, editor: _e, responsavel: _r,
+            responsaveis: _rs, designer: _d, ...semRelacoes } = demandaAtual
+    return NextResponse.json(semRelacoes)
   }
   // Growth: NÃO se exige a arte para mover para "Para aprovação".
   //
