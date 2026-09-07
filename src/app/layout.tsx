@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import "./globals.css"
 
 // Fonte via stack CSS (globals.css) — sem next/font/google, p/ o build NÃO depender
@@ -33,7 +34,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        {children}
+        <SpeedInsights />
+      </body>
     </html>
   )
 }
