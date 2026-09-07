@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { PRESETS } from "@/lib/permissoes"
-import { setPermissoes } from "@/lib/permissoes-server"
+import { permissaoEfetiva } from "@/lib/permissoes"
 import { getOrgId } from "@/lib/org"
 import { modulosDaOrganizacao } from "@/lib/modulos-org"
 
@@ -47,11 +46,29 @@ export async function GET() {
   // Permissões desta pessoa NA EMPRESA ATIVA. A relação virou lista quando as
   // permissões passaram a ser por empresa — antes era uma linha só por usuário,
   // então quem participava de duas empresas levava os mesmos acessos às duas.
-  let permissoes = usuario.permissoes.find((p) => p.organizacaoId === organizacaoId) ?? null
-  if (!permissoes && organizacaoId) {
-    const preset = PRESETS[usuario.tipo] || PRESETS.solicitante
-    permissoes = await setPermissoes(usuario.id, organizacaoId, preset)
-  }
+  //
+  // ESCALADA DE PRIVILÉGIO CORRIGIDA EM 07/09/2026. Este ponto resolvia o preset
+  // por `usuario.tipo` — a coluna GLOBAL — e gravava o resultado. A base tem uma
+  // pessoa com `tipo = admin` e `papel = videomaker`: faltando o registro, ela
+  // recebia ALL_TRUE numa empresa onde é videomaker. É a mesma classe de falha
+  // que `src/lib/papel.ts` foi criado para fechar.
+  //
+  // Agora a resolução é a mesma do resto do app (lib/permissoes.ts):
+  // registro explícito vence; sem registro, preset de `membro.papel`; sem como
+  // determinar, `null` — e `null` aqui significa "sem permissão", não "todas".
+  //
+  // Também deixou de ESCREVER. Materializar preset num GET era efeito colateral
+  // escondido numa leitura, e era o que tornava a falha acima permanente: o
+  // registro errado ficava gravado. A ausência de registro agora se resolve por
+  // herança em tempo de leitura, sem gravar nada.
+  const membro = organizacoes[0] ?? null
+  const permissoes = permissaoEfetiva({
+    membro: membro
+      ? { papel: membro.papel, organizacaoId: membro.organizacaoId, statusUsuario: usuario.status }
+      : null,
+    permissaoExplicita: usuario.permissoes.find((p) => p.organizacaoId === organizacaoId) ?? null,
+    organizacaoId,
+  })
 
   // Módulos da empresa ATIVA. O cliente lia constantes compiladas no bundle —
   // iguais para todas as empresas e impossíveis de mudar sem deploy. Agora vêm
