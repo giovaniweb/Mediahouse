@@ -58,7 +58,13 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
   urgencia_aprovada:           ["planejamento"],
   planejamento:                ["videomaker_notificado", "editor_atribuido"],
   videomaker_notificado:       ["videomaker_aceitou", "videomaker_recusou", "captacao_agendada"],
-  videomaker_aceitou:          ["captacao_agendada"],
+  // `captacao_realizada` entrou em 07/09/2026: o início da captação virou EVENTO
+  // de histórico (EVENTO_CAPTACAO_INICIADA abaixo), não status, então o caminho
+  // normal do videomaker é aceitar e depois fechar a captação — sem passar por
+  // `captacao_agendada`, que é agendamento e nunca foi usado em produção.
+  // Sem esta aresta, toda finalização de captação registrava
+  // `sequencia_fora_da_matriz` no log da guarda, num caminho que é o esperado.
+  videomaker_aceitou:          ["captacao_agendada", "captacao_realizada"],
   videomaker_recusou:          ["videomaker_notificado"],
   captacao_agendada:           ["captacao_realizada"],
   captacao_realizada:          ["brutos_enviados"],
