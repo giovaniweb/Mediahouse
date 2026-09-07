@@ -368,3 +368,82 @@ export function nivelDeRisco(job: {
   if (venceHoje(job)) return "attention"
   return "on_time"
 }
+
+// ── O QUE ENTRA NO QUADRO DE JOBS ────────────────────────────────────────────
+//
+// Três responsabilidades separadas, e o quadro de Jobs é a terceira:
+//
+//   DEMANDAS    o Kanban geral do audiovisual, como já existe hoje
+//   APROVAÇÕES  a caixa de entrada das solicitações de cobertura
+//   JOBS        a operação das coberturas JÁ APROVADAS
+//
+// Nada disso precisou de tabela nova. A auditoria de 07/09/2026 mostrou que a
+// estrutura atual já representa as três: a solicitação de cobertura É uma
+// Demanda, e a aprovação já é um portão de status pelo qual toda demanda passa.
+//
+// `EventoCobertura` (tabela `coberturas`, 9 linhas) foi descartada como fonte:
+// é o módulo de evento multi-dia, com equipe, checklist, álbum e uploads —
+// outra coisa. Só 1 demanda em 650 aponta para ela.
+
+/**
+ * Marca de solicitação de cobertura.
+ *
+ * O formulário público grava as duas coisas juntas quando a pessoa escolhe
+ * "cobertura" (`cadastrar-demanda/page.tsx:245` e `publico/demanda/route.ts:108`):
+ * `tipoVideo = "cobertura_evento"` e `departamento = "eventos"`. Na base as duas
+ * marcas coincidem exatamente — 28 demandas por qualquer um dos critérios.
+ *
+ * O tipo é o que foi PEDIDO; o departamento é para onde foi ROTEADO. Aceitar os
+ * dois cobre também a criação interna, onde a pessoa escolhe os campos separados
+ * e pode marcar só um.
+ */
+export const TIPO_COBERTURA = "cobertura_evento"
+export const DEPARTAMENTO_COBERTURA = "eventos"
+
+export function ehSolicitacaoDeCobertura(job: {
+  tipoVideo?: string | null
+  departamento?: string | null
+}): boolean {
+  return job.tipoVideo === TIPO_COBERTURA || job.departamento === DEPARTAMENTO_COBERTURA
+}
+
+/** Os dois estados em que a solicitação ainda espera decisão do Admin. */
+export const AGUARDANDO_APROVACAO: StatusInterno[] = [
+  "aguardando_aprovacao_interna",
+  "urgencia_pendente_aprovacao",
+]
+
+/**
+ * A solicitação passou pelo portão de aprovação?
+ *
+ * Toda demanda nasce em `aguardando_aprovacao_interna` (ou
+ * `urgencia_pendente_aprovacao` quando urgente), tanto pelo formulário público
+ * quanto pela criação interna — o portão é universal. Aprovar move para
+ * `aguardando_triagem` ou `urgencia_aprovada`; recusar move para `encerrado`.
+ *
+ * A recusa tem assinatura própria: `api/demandas/[id]/aprovar` preserva a
+ * coluna ao recusar (`novoStatusVisivel = ... : demanda.statusVisivel`), então
+ * quem foi recusado fica `encerrado` AINDA NA COLUNA `entrada`. Na base, as 6
+ * demandas `encerrado` estão todas em `entrada` — nenhuma outra combinação.
+ *
+ * Sem essa segunda checagem, uma solicitação RECUSADA apareceria no quadro de
+ * Jobs, na coluna Entrada, como se fosse trabalho a fazer.
+ */
+export function foiAprovada(job: {
+  statusInterno: StatusInterno
+  statusVisivel?: string | null
+}): boolean {
+  if (AGUARDANDO_APROVACAO.includes(job.statusInterno)) return false
+  if (job.statusInterno === "encerrado" && job.statusVisivel === "entrada") return false
+  return true
+}
+
+/** O que o quadro de Jobs mostra: cobertura, e já aprovada. */
+export function ehJob(job: {
+  statusInterno: StatusInterno
+  statusVisivel?: string | null
+  tipoVideo?: string | null
+  departamento?: string | null
+}): boolean {
+  return ehSolicitacaoDeCobertura(job) && foiAprovada(job)
+}

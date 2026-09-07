@@ -380,3 +380,98 @@ describe("risco de prazo (§33)", () => {
     vi.useRealTimers()
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O QUE ENTRA NO QUADRO DE JOBS
+//
+// Três responsabilidades separadas: Demandas é o kanban geral, Aprovações é a
+// caixa de entrada das solicitações, e Jobs é a operação das coberturas já
+// aprovadas. Estes testes prendem essa fronteira.
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  AGUARDANDO_APROVACAO,
+  DEPARTAMENTO_COBERTURA,
+  TIPO_COBERTURA,
+  ehJob,
+  ehSolicitacaoDeCobertura,
+  foiAprovada,
+} from "@/lib/job-fase"
+
+describe("origem: só solicitação de cobertura", () => {
+  it("reconhece pelo tipo e pelo departamento", () => {
+    // O formulário público grava os dois juntos; a criação interna deixa
+    // escolher separado, então qualquer um dos dois marca.
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: TIPO_COBERTURA })).toBe(true)
+    expect(ehSolicitacaoDeCobertura({ departamento: DEPARTAMENTO_COBERTURA })).toBe(true)
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: TIPO_COBERTURA, departamento: "eventos" })).toBe(true)
+  })
+
+  it("deixa de fora o resto do audiovisual", () => {
+    // Os tipos que dominam a base: reels (182) e video_institucional (173).
+    // Nenhum deles é Job, e é essa a correção desta etapa.
+    for (const t of ["reels", "video_institucional", "youtube", "apresentacao_equipamento", "outro"]) {
+      expect(ehSolicitacaoDeCobertura({ tipoVideo: t, departamento: "audiovisual" }), t).toBe(false)
+    }
+    expect(ehSolicitacaoDeCobertura({})).toBe(false)
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: null, departamento: null })).toBe(false)
+  })
+})
+
+describe("portão de aprovação", () => {
+  it("o que ainda espera decisão não é Job", () => {
+    expect(AGUARDANDO_APROVACAO).toHaveLength(2)
+    for (const s of AGUARDANDO_APROVACAO) {
+      expect(foiAprovada({ statusInterno: s, statusVisivel: "entrada" }), s).toBe(false)
+    }
+  })
+
+  it("recusada não é Job — encerrado AINDA na coluna entrada", () => {
+    // Assinatura da recusa: api/demandas/[id]/aprovar preserva a coluna ao
+    // recusar. Na base, as 6 demandas `encerrado` estão todas em `entrada`.
+    // Sem esta regra, uma solicitação recusada apareceria no quadro como
+    // trabalho a fazer.
+    expect(foiAprovada({ statusInterno: "encerrado", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("encerrada DEPOIS de aprovada continua sendo Job", () => {
+    // Um job que andou e foi encerrado no fim não é o mesmo que uma
+    // solicitação recusada na porta.
+    expect(foiAprovada({ statusInterno: "encerrado", statusVisivel: "finalizado" })).toBe(true)
+  })
+
+  it("aprovada normal e aprovada por urgência entram", () => {
+    // Os dois destinos de `aprovar`: aguardando_triagem e urgencia_aprovada.
+    expect(foiAprovada({ statusInterno: "aguardando_triagem", statusVisivel: "entrada" })).toBe(true)
+    expect(foiAprovada({ statusInterno: "urgencia_aprovada", statusVisivel: "producao" })).toBe(true)
+  })
+
+  it("todo status fora do portão passa", () => {
+    const fora = TODOS.filter((s) => !AGUARDANDO_APROVACAO.includes(s) && s !== "encerrado")
+    for (const s of fora) {
+      expect(foiAprovada({ statusInterno: s, statusVisivel: "producao" }), s).toBe(true)
+    }
+  })
+})
+
+describe("ehJob — as duas condições juntas", () => {
+  const cobertura = { tipoVideo: TIPO_COBERTURA, departamento: DEPARTAMENTO_COBERTURA }
+
+  it("cobertura aprovada entra", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "videomaker_aceitou", statusVisivel: "producao" })).toBe(true)
+    expect(ehJob({ ...cobertura, statusInterno: "entregue_cliente", statusVisivel: "finalizado" })).toBe(true)
+  })
+
+  it("cobertura ainda em aprovação não entra — é da caixa de Aprovações", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("cobertura recusada não entra", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "encerrado", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("demanda comum aprovada não entra — é do quadro de Demandas", () => {
+    expect(
+      ehJob({ tipoVideo: "reels", departamento: "growth", statusInterno: "editando", statusVisivel: "edicao" })
+    ).toBe(false)
+  })
+})

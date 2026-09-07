@@ -29,8 +29,9 @@ export type JobDoQuadro = JobParaLeitura & {
   dataLimite?: string | Date | null
   statusVisivel?: string | null
   prioridade?: string | null
-  /** Alimenta o filtro de tipo do quadro; o card não o exibe (§34). */
+  /** Marcas de origem — usadas por `ehJob`; o card não as exibe (§34). */
   tipoVideo?: string | null
+  departamento?: string | null
 }
 
 /** Data + hora da captação, ou o prazo quando ainda não há captação marcada. */
