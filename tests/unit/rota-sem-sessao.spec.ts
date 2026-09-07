@@ -38,8 +38,6 @@ function rotas(dir: string, saida: string[] = []): string[] {
 
 // Exceções, cada uma com motivo. Esta lista SÓ PODE ENCOLHER.
 const DISPENSADAS: Record<string, string> = {
-  "src/app/api/auth/esqueci-senha/route.ts":
-    "caminho de autenticação: importa `prismaAuth as prisma`, não passa pela extensão",
   "src/app/api/publico/avaliar/route.ts":
     "avaliação por QR grava organizacaoId: null de propósito — a política aceita linha sem dono",
   "src/app/api/publico/avaliar-editor/route.ts":

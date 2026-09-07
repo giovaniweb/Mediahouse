@@ -57,15 +57,9 @@ export async function POST(req: NextRequest) {
       data: { email: usuario.email, token, expiresAt },
     })
 
-    // Resolve a organização do usuário de forma determinística (primeira membership)
-    // para usar a config de e-mail correta — sem cair em config global aleatória.
-    const membership = await prisma.usuarioOrganizacao.findFirst({
-      where: { usuarioId: usuario.id },
-      orderBy: { createdAt: "asc" },
-      select: { organizacaoId: true },
-    })
-
-    const resultado = await sendEmailResetSenha(usuario.email, usuario.nome, token, membership?.organizacaoId ?? null)
+    // Recuperação de senha é um fluxo global de autenticação. O remetente vem
+    // somente das variáveis globais, portanto não depende de uma organização.
+    const resultado = await sendEmailResetSenha(usuario.email, usuario.nome, token)
 
     if (resultado.ok) {
       return NextResponse.json({ ok: true, enviado: true })

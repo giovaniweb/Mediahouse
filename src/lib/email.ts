@@ -1,45 +1,105 @@
 /**
  * Serviço de e-mail — NuFlow
- * Usa Resend (resend.com) — simples, confiável, ideal para SaaS.
+ *
+ * A credencial e o remetente são globais, definidos exclusivamente nas variáveis
+ * de ambiente da implantação. Configurações por organização armazenam apenas os
+ * destinatários financeiros; nunca uma API key ou um remetente alternativo.
  */
 
 import { Resend } from "resend"
 import { prisma } from "@/lib/prisma"
 
-// Config de e-mail da organização. Sem org, NÃO envia.
-//
-// Antes caía na Contourline e, se nem ela existisse, num findFirst global — ou
-// seja, na config de qualquer empresa. O e-mail sairia com o remetente e a
-// assinatura de outro cliente. Falha fechado: não enviar é recuperável.
-async function getConfig(organizacaoId?: string | null) {
-  if (!organizacaoId) {
-    console.error("[Email] getConfig sem organização — envio cancelado. Passe organizacaoId.")
-    return null
-  }
-  return prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
+export type ResultadoEmail = { ok: boolean; error?: string; emailId?: string }
+
+type ClienteEmail = { resend: Resend; from: string }
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function emailNormalizado(valor: unknown): string | null {
+  if (typeof valor !== "string") return null
+  const email = valor.trim().toLowerCase()
+  return EMAIL_VALIDO.test(email) ? email : null
 }
 
-async function createClient(organizacaoId?: string | null) {
-  // Prioridade: variável de ambiente > configuração no banco
-  const envKey = process.env.RESEND_API_KEY
-  if (envKey) {
-    const config = await getConfig(organizacaoId).catch(() => null)
-    const senderEmail = config?.senderEmail || "onboarding@resend.dev"
-    const senderNome = config?.senderNome || "NuFlow"
-    return {
-      resend: new Resend(envKey),
-      from: `"${senderNome}" <${senderEmail}>`,
-      emailsFinanceiro: config?.emailsFinanceiro ?? [],
-    }
+function configuracaoGlobal() {
+  const apiKey = process.env.RESEND_API_KEY?.trim() || null
+  const senderEmail = emailNormalizado(process.env.RESEND_FROM_EMAIL)
+  // Não permite que uma variável mal configurada quebre o cabeçalho do e-mail.
+  const senderNome = (process.env.RESEND_FROM_NAME || "NuFlow")
+    .replace(/[\r\n"]/g, "")
+    .trim() || "NuFlow"
+
+  return { apiKey, senderEmail, senderNome }
+}
+
+/** Informações seguras para exibir no painel; a API key jamais sai do servidor. */
+export function statusEmailGlobal() {
+  const { apiKey, senderEmail, senderNome } = configuracaoGlobal()
+  return {
+    ativo: Boolean(apiKey && senderEmail),
+    senderEmail: senderEmail ?? "",
+    senderNome,
+  }
+}
+
+function createClient(): ClienteEmail | null {
+  const { apiKey, senderEmail, senderNome } = configuracaoGlobal()
+  if (!apiKey || !senderEmail) {
+    console.error("[Email] envio cancelado: defina RESEND_API_KEY e RESEND_FROM_EMAIL na implantação.")
+    return null
   }
 
-  // Fallback: configuração salva no banco
-  const config = await getConfig(organizacaoId)
-  if (!config || !config.ativo || !config.apiKey) return null
   return {
-    resend: new Resend(config.apiKey),
-    from: `"${config.senderNome || "NuFlow"}" <${config.senderEmail || "onboarding@resend.dev"}>`,
-    emailsFinanceiro: config.emailsFinanceiro,
+    resend: new Resend(apiKey),
+    from: `"${senderNome}" <${senderEmail}>`,
+  }
+}
+
+async function destinatariosFinanceiro(organizacaoId?: string | null): Promise<string[]> {
+  if (!organizacaoId) return []
+  const config = await prisma.configEmail.findFirst({
+    where: { organizacaoId },
+    orderBy: { createdAt: "desc" },
+    select: { emailsFinanceiro: true },
+  })
+  return (config?.emailsFinanceiro ?? [])
+    .map(emailNormalizado)
+    .filter((email): email is string => Boolean(email))
+}
+
+async function enviarEmail({
+  destinatarios,
+  assunto,
+  html,
+  evento,
+}: {
+  destinatarios: string[]
+  assunto: string
+  html: string
+  evento: string
+}): Promise<ResultadoEmail> {
+  const client = createClient()
+  if (!client) return { ok: false, error: "E-mail global não configurado" }
+  if (!destinatarios.length) return { ok: false, error: "Nenhum destinatário válido" }
+
+  try {
+    const { data, error } = await client.resend.emails.send({
+      from: client.from,
+      to: destinatarios,
+      subject: assunto,
+      html,
+    })
+    if (error) {
+      console.error("[Email] Resend recusou o envio", { evento, erro: error.message, destinatarios: destinatarios.length })
+      return { ok: false, error: error.message }
+    }
+
+    console.info("[Email] enviado", { evento, emailId: data?.id, destinatarios: destinatarios.length })
+    return { ok: true, emailId: data?.id }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err)
+    console.error("[Email] falha inesperada no envio", { evento, erro: error, destinatarios: destinatarios.length })
+    return { ok: false, error }
   }
 }
 
@@ -111,70 +171,74 @@ export interface PagamentoEmailData {
   tituloDemanda: string; custoId: string
 }
 
-export async function sendEmailFinanceiro(dados: PagamentoEmailData, organizacaoId?: string | null): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const client = await createClient(organizacaoId)
-    if (!client) return { ok: false, error: "E-mail não configurado ou inativo" }
-    if (!client.emailsFinanceiro.length) return { ok: false, error: "Nenhum e-mail do financeiro configurado" }
-    const linkConfirmacao = `${process.env.NEXTAUTH_URL}/custos?aprovar=${dados.custoId}`
-    const { error } = await client.resend.emails.send({
-      from: client.from,
-      to: client.emailsFinanceiro,
-      subject: `[NuFlow] Pagamento Pendente — ${dados.nomeVideomaker}`,
-      html: templateFinanceiro({ ...dados, linkConfirmacao }),
-    })
-    if (error) return { ok: false, error: error.message }
-    return { ok: true }
-  } catch (err) { return { ok: false, error: String(err) } }
+export async function sendEmailFinanceiro(dados: PagamentoEmailData, organizacaoId?: string | null): Promise<ResultadoEmail> {
+  const destinatarios = await destinatariosFinanceiro(organizacaoId)
+  if (!destinatarios.length) return { ok: false, error: "Nenhum e-mail do financeiro configurado" }
+
+  const baseUrl = process.env.NEXTAUTH_URL?.trim()
+  if (!baseUrl) return { ok: false, error: "NEXTAUTH_URL não configurada" }
+
+  const linkConfirmacao = `${baseUrl.replace(/\/$/, "")}/custos?aprovar=${dados.custoId}`
+  return enviarEmail({
+    destinatarios,
+    assunto: `[NuFlow] Pagamento Pendente — ${dados.nomeVideomaker}`,
+    html: templateFinanceiro({ ...dados, linkConfirmacao }),
+    evento: "financeiro-pagamento-pendente",
+  })
 }
 
 export async function sendEmailVideomakerNFRecebida(
-  email: string, nomeVideomaker: string, diasPrazo = 15, organizacaoId?: string | null
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const client = await createClient(organizacaoId)
-    if (!client) return { ok: false, error: "E-mail não configurado" }
-    const { error } = await client.resend.emails.send({
-      from: client.from,
-      to: [email],
-      subject: "[NuFlow] Nota Fiscal Recebida — Obrigado!",
-      html: templateNFRecebida(nomeVideomaker, diasPrazo),
-    })
-    if (error) return { ok: false, error: error.message }
-    return { ok: true }
-  } catch (err) { return { ok: false, error: String(err) } }
+  email: string, nomeVideomaker: string, diasPrazo = 15
+): Promise<ResultadoEmail> {
+  const destinatario = emailNormalizado(email)
+  if (!destinatario) return { ok: false, error: "Destinatário inválido" }
+
+  return enviarEmail({
+    destinatarios: [destinatario],
+    assunto: "[NuFlow] Nota Fiscal Recebida — Obrigado!",
+    html: templateNFRecebida(nomeVideomaker, diasPrazo),
+    evento: "nota-fiscal-recebida",
+  })
 }
 
-export async function sendEmailResetSenha(
-  destinatario: string, nome: string, token: string, organizacaoId?: string | null
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const client = await createClient(organizacaoId)
-    if (!client) return { ok: false, error: "E-mail não configurado" }
-    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-    const linkReset = `${baseUrl}/redefinir-senha/${token}`
-    const { error } = await client.resend.emails.send({
-      from: client.from,
-      to: [destinatario],
-      subject: "[NuFlow] Redefinição de Senha",
-      html: templateResetSenha(nome, linkReset),
-    })
-    if (error) return { ok: false, error: error.message }
-    return { ok: true }
-  } catch (err) { return { ok: false, error: String(err) } }
+export async function sendEmailResetSenha(destinatario: string, nome: string, token: string): Promise<ResultadoEmail> {
+  const email = emailNormalizado(destinatario)
+  if (!email) return { ok: false, error: "Destinatário inválido" }
+
+  const baseUrl = process.env.NEXTAUTH_URL?.trim()
+  if (!baseUrl) return { ok: false, error: "NEXTAUTH_URL não configurada" }
+
+  const linkReset = `${baseUrl.replace(/\/$/, "")}/redefinir-senha/${token}`
+  return enviarEmail({
+    destinatarios: [email],
+    assunto: "[NuFlow] Redefinição de Senha",
+    html: templateResetSenha(nome, linkReset),
+    evento: "redefinicao-senha",
+  })
 }
 
-export async function sendEmailTeste(destinatario: string, organizacaoId?: string | null): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const client = await createClient(organizacaoId)
-    if (!client) return { ok: false, error: "Resend não configurado ou inativo" }
-    const { error } = await client.resend.emails.send({
-      from: client.from,
-      to: [destinatario],
-      subject: "[NuFlow] Teste de E-mail ✅",
-      html: `<div style="font-family:sans-serif;padding:32px"><h2>🎉 E-mail funcionando!</h2><p>Resend configurado corretamente no NuFlow.</p></div>`,
-    })
-    if (error) return { ok: false, error: error.message }
-    return { ok: true }
-  } catch (err) { return { ok: false, error: String(err) } }
+/** Notificações transacionais que não dependem da configuração de uma organização. */
+export async function sendEmailNotificacao({
+  destinatario,
+  assunto,
+  html,
+  evento = "notificacao",
+}: {
+  destinatario: string
+  assunto: string
+  html: string
+  evento?: string
+}): Promise<ResultadoEmail> {
+  const email = emailNormalizado(destinatario)
+  if (!email) return { ok: false, error: "Destinatário inválido" }
+  return enviarEmail({ destinatarios: [email], assunto, html, evento })
+}
+
+export async function sendEmailTeste(destinatario: string): Promise<ResultadoEmail> {
+  return sendEmailNotificacao({
+    destinatario,
+    assunto: "[NuFlow] Teste de E-mail ✅",
+    html: `<div style="font-family:sans-serif;padding:32px"><h2>🎉 E-mail funcionando!</h2><p>O envio global do NuFlow está configurado corretamente.</p></div>`,
+    evento: "teste-configuracao",
+  })
 }
