@@ -3,9 +3,9 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
+import { sendEmailNotificacao } from "@/lib/email"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
-import { Resend } from "resend"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 
@@ -224,26 +224,21 @@ async function notificarSolicitante({
     }
   }
 
-  // E-mail via Resend — config estritamente escopada por organização (sem findFirst global).
-  // Sem org resolvível, não busca config nenhuma (evita usar credenciais de outra empresa).
-  try {
-    const config = organizacaoId
-      ? await prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
-      : null
-    const apiKey = config?.apiKey || process.env.RESEND_API_KEY
-    if (apiKey && solicitante?.email) {
-      const resend = new Resend(apiKey)
-      const from = config?.senderEmail
-        ? `${config.senderNome ?? "NuFlow"} <${config.senderEmail}>`
-        : "NuFlow <onboarding@resend.dev>"
-      await resend.emails.send({
-        from,
-        to: [solicitante.email],
-        subject: assuntos[tipo],
-        html: htmlsEmail[tipo],
+  if (solicitante?.email) {
+    const resultado = await sendEmailNotificacao({
+      destinatario: solicitante.email,
+      assunto: assuntos[tipo],
+      html: htmlsEmail[tipo],
+      evento: `demanda-${tipo}`,
+    })
+    if (!resultado.ok) {
+      // A aprovação permanece concluída, mas a falha deixa um rastro claro no
+      // log da função em vez de aparentar que o e-mail foi enviado.
+      console.error("[Demanda] notificação por e-mail não enviada", {
+        demandaId: demanda.id,
+        tipo,
+        erro: resultado.error,
       })
     }
-  } catch {
-    // silencia erro de email — notificação via WhatsApp já foi tentada
   }
 }

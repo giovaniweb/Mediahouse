@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect, Suspense } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, Eye, EyeOff, AlertCircle, AlertTriangle, Settings, Upload, FileJson, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play, Inbox } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play, Inbox } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -342,41 +342,27 @@ function TabWhatsapp() {
 
 function TabEmail() {
   const { data, mutate } = useSWR<{ config: {
-    apiKeyPreview: string; senderEmail: string; senderNome: string
-    emailsFinanceiro: string[]; ativo: boolean
+    senderEmail: string; senderNome: string; emailsFinanceiro: string[]; ativo: boolean
   } | null }>("/api/configuracoes/email", fetcher)
 
   const cfg = data?.config
-  const [form, setForm] = useState({
-    apiKey: "",
-    senderEmail: cfg?.senderEmail || "",
-    senderNome: cfg?.senderNome || "NuFlow",
-    emailsFinanceiro: (cfg?.emailsFinanceiro || []).join(", "),
-  })
+  const [emailsFinanceiroEditados, setEmailsFinanceiroEditados] = useState<string | null>(null)
+  const emailsFinanceiro = emailsFinanceiroEditados ?? (cfg?.emailsFinanceiro || []).join(", ")
   const [loading, setLoading] = useState(false)
   const [testEmail, setTestEmail] = useState("")
   const [loadingTest, setLoadingTest] = useState(false)
-  const [mostrarKey, setMostrarKey] = useState(false)
-  const [showDomainGuide, setShowDomainGuide] = useState(false)
 
   async function salvar() {
     setLoading(true)
     try {
-      const emails = form.emailsFinanceiro.split(",").map(e => e.trim()).filter(Boolean)
-      const body: Record<string, unknown> = {
-        senderEmail: form.senderEmail,
-        senderNome: form.senderNome,
-        emailsFinanceiro: emails,
-      }
-      if (form.apiKey) body.apiKey = form.apiKey
+      const emails = emailsFinanceiro.split(",").map(e => e.trim()).filter(Boolean)
       const res = await fetch("/api/configuracoes/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ emailsFinanceiro: emails }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success("Configuração Resend salva!")
-      setForm(f => ({ ...f, apiKey: "" }))
+      toast.success("Destinatários do financeiro salvos!")
       mutate()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro")
@@ -396,7 +382,7 @@ function TabEmail() {
       if (json.ok) toast.success("E-mail de teste enviado!")
       else {
         const textoErro = json.error ?? "Erro desconhecido"
-        const mensagemFriendly = textoErro.includes("testing emails") || textoErro.includes("You can only send testing emails")
+        const mensagemFriendly = textoErro.includes("testing emails") || textoErro.includes("Testing domain restriction") || textoErro.includes("You can only send testing emails")
           ? "Domínio de teste: só é possível enviar para o e-mail verificado no Resend. Configure um domínio próprio para enviar para qualquer destinatário."
           : textoErro.includes("Invalid") || textoErro.includes("invalid")
           ? "API Key inválida. Verifique se a chave está correta."
@@ -415,110 +401,36 @@ function TabEmail() {
         <div className="text-sm text-purple-300">
           <p className="font-semibold">Resend — envio de e-mail profissional</p>
           <p className="text-xs mt-1 text-purple-400">
-            Crie uma conta gratuita em{" "}
-            <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-purple-300 underline">resend.com</a>
-            , gere uma API Key e cole abaixo. Plano grátis: 3.000 e-mails/mês.
+            A chave e o remetente são globais e ficam protegidos nas variáveis de ambiente da plataforma.
+            Esta tela configura apenas quem recebe os avisos financeiros desta empresa.
           </p>
         </div>
       </div>
 
-      {/* Warning: onboarding@resend.dev restriction */}
-      {(!cfg?.senderEmail || cfg.senderEmail === "onboarding@resend.dev") && (
+      {!cfg?.ativo ? (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-amber-300 mb-1">
-              Emails não estão chegando para todos os usuários
-            </p>
+            <p className="text-sm font-semibold text-amber-300 mb-1">Envio global ainda não está pronto</p>
             <p className="text-xs text-amber-200/80 leading-relaxed">
-              O remetente atual é <code className="bg-amber-900/40 px-1 rounded">onboarding@resend.dev</code> — domínio de teste do Resend que só permite enviar para o e-mail do titular da conta.{" "}
-              <strong>Videomakers, solicitantes e colaboradores não receberão emails</strong> até que um domínio próprio seja verificado.
+              Um administrador da plataforma precisa configurar <code className="bg-amber-900/40 px-1 rounded">RESEND_API_KEY</code> e {" "}
+              <code className="bg-amber-900/40 px-1 rounded">RESEND_FROM_EMAIL</code> na implantação.
             </p>
-            <button
-              type="button"
-              onClick={() => setShowDomainGuide(v => !v)}
-              className="mt-2 text-xs text-amber-300 hover:text-amber-200 underline"
-            >
-              {showDomainGuide ? "Ocultar instruções" : "Ver como configurar um domínio →"}
-            </button>
-            {showDomainGuide && (
-              <div className="mt-3 space-y-2 text-xs text-amber-100/80">
-                <p className="font-semibold">Como configurar em 3 passos:</p>
-                <ol className="list-decimal list-inside space-y-1.5 pl-1">
-                  <li>Acesse <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="underline">resend.com/domains</a> e adicione seu domínio (ex: <code className="bg-amber-900/40 px-1 rounded">nuflow.space</code>)</li>
-                  <li>Adicione os registros DNS (TXT para SPF + CNAME para DKIM) no painel do seu provedor de DNS</li>
-                  <li>Volte aqui e defina o &quot;E-mail Remetente&quot; como <code className="bg-amber-900/40 px-1 rounded">noreply@nuflow.space</code></li>
-                </ol>
-                <a
-                  href="https://resend.com/docs/dashboard/domains/introduction"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-amber-300 underline mt-1"
-                >
-                  Documentação Resend →
-                </a>
-              </div>
-            )}
           </div>
         </div>
-      )}
-
-      {cfg?.ativo && (
+      ) : (
         <div className="flex items-center gap-2 text-xs font-medium text-green-400">
-          <CheckCircle2 className="w-4 h-4" /> Resend configurado e ativo
+          <CheckCircle2 className="w-4 h-4" />
+          Envio global ativo como {cfg.senderNome} &lt;{cfg.senderEmail}&gt;
         </div>
       )}
 
       <div className="space-y-3">
-        {/* API Key */}
-        <div>
-          <label className="text-xs text-zinc-400 block mb-1">
-            API Key {cfg?.ativo ? `— atual: ${cfg.apiKeyPreview} (deixe em branco para manter)` : "*"}
-          </label>
-          <div className="relative">
-            <input className={inp} type={mostrarKey ? "text" : "password"} value={form.apiKey}
-              onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
-              placeholder={cfg?.ativo ? "••••••••••••••••" : "re_xxxxxxxxxxxxxxxxxxxxxxxx"} />
-            <button type="button" onClick={() => setMostrarKey(v => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
-              {mostrarKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-600 mt-1">
-            Gere em:{" "}
-            <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-purple-400 hover:underline">resend.com/api-keys</a>
-          </p>
-        </div>
-
-        {/* Remetente */}
-        <div className="border-t border-zinc-800 pt-3">
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Remetente</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-zinc-400 block mb-1">Nome</label>
-              <input className={inp} value={form.senderNome}
-                onChange={e => setForm(f => ({ ...f, senderNome: e.target.value }))}
-                placeholder="NuFlow" />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 block mb-1">E-mail</label>
-              <input className={inp} type="text" value={form.senderEmail}
-                onChange={e => setForm(f => ({ ...f, senderEmail: e.target.value }))}
-                placeholder="onboarding@resend.dev" />
-            </div>
-          </div>
-          <p className="text-[11px] text-zinc-600 mt-2">
-            ⚠️ Sem domínio verificado: use <span className="font-mono text-zinc-500">onboarding@resend.dev</span> (só envia para o e-mail da sua conta Resend).
-            Para produção, verifique seu domínio em{" "}
-            <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="text-purple-400 hover:underline">resend.com/domains</a>.
-          </p>
-        </div>
-
         {/* E-mails Financeiro */}
         <div>
           <label className="text-xs text-zinc-400 block mb-1">E-mails do Financeiro</label>
-          <input className={inp} type="text" value={form.emailsFinanceiro}
-            onChange={e => setForm(f => ({ ...f, emailsFinanceiro: e.target.value }))}
+          <input className={inp} type="text" value={emailsFinanceiro}
+            onChange={e => setEmailsFinanceiroEditados(e.target.value)}
             placeholder="financeiro@empresa.com, contador@empresa.com" />
           <p className="text-[11px] text-zinc-600 mt-1">Separe por vírgula. Receberão as solicitações de pagamento.</p>
         </div>
@@ -527,7 +439,7 @@ function TabEmail() {
       <button onClick={salvar} disabled={loading}
         className="flex items-center gap-1.5 bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 disabled:opacity-50">
         {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-        Salvar Resend
+        Salvar destinatários
       </button>
 
       <div className="border-t border-zinc-800 pt-5">

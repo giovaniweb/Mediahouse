@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { sendEmailTeste } from "@/lib/email"
+import { sendEmailTeste, statusEmailGlobal } from "@/lib/email"
 import { getOrgId, semOrg } from "@/lib/org"
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function emailsValidos(valores: unknown): string[] | null {
+  if (!Array.isArray(valores) || valores.length > 20) return null
+  const emails = valores.map((valor) => typeof valor === "string" ? valor.trim().toLowerCase() : "")
+  if (emails.some((email) => !EMAIL_VALIDO.test(email))) return null
+  return [...new Set(emails)]
+}
 
 // GET /api/configuracoes/email
 export async function GET() {
@@ -11,17 +20,21 @@ export async function GET() {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  const config = await prisma.configEmail.findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
-  if (!config) return NextResponse.json({ config: null })
+  const config = await prisma.configEmail.findFirst({
+    where: { organizacaoId },
+    orderBy: { createdAt: "desc" },
+    select: { emailsFinanceiro: true },
+  })
+  const global = statusEmailGlobal()
 
-  // Nunca retorna a API key completa — mostra apenas os primeiros 8 chars para confirmar que existe
+  // API key e remetente não pertencem mais a uma organização e nunca são lidos
+  // do banco. A tela recebe apenas o estado global e os destinatários locais.
   return NextResponse.json({
     config: {
-      apiKeyPreview: config.apiKey ? config.apiKey.slice(0, 8) + "••••••••" : "",
-      senderEmail: config.senderEmail,
-      senderNome: config.senderNome,
-      emailsFinanceiro: config.emailsFinanceiro,
-      ativo: config.ativo,
+      senderEmail: global.senderEmail,
+      senderNome: global.senderNome,
+      emailsFinanceiro: config?.emailsFinanceiro ?? [],
+      ativo: global.ativo,
     },
   })
 }
@@ -38,42 +51,38 @@ export async function POST(req: NextRequest) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  const body = await req.json()
+  const body: unknown = await req.json()
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
 
   // Testar e-mail
-  if (body.acao === "testar") {
-    const resultado = await sendEmailTeste(body.destinatario, organizacaoId)
+  if ("acao" in body && body.acao === "testar") {
+    const destinatario = "destinatario" in body ? body.destinatario : null
+    if (typeof destinatario !== "string" || !EMAIL_VALIDO.test(destinatario.trim())) {
+      return NextResponse.json({ ok: false, error: "Informe um e-mail válido para teste" }, { status: 400 })
+    }
+    const resultado = await sendEmailTeste(destinatario)
     return NextResponse.json(resultado)
   }
 
-  // Salvar config Resend
-  const { apiKey, senderEmail, senderNome, emailsFinanceiro } = body
+  // A única preferência por organização é quem recebe os avisos financeiros.
+  // Credencial e remetente vêm exclusivamente das variáveis globais da Vercel.
+  const emails = "emailsFinanceiro" in body ? emailsValidos(body.emailsFinanceiro) : null
+  if (!emails) {
+    return NextResponse.json({ error: "Informe até 20 e-mails válidos, separados por vírgula" }, { status: 400 })
+  }
 
   const existing = await prisma.configEmail.findFirst({ where: { organizacaoId } })
 
-  const data: Record<string, unknown> = {}
-  if (apiKey) data.apiKey = apiKey           // só atualiza se fornecida
-  if (senderEmail !== undefined) data.senderEmail = senderEmail
-  if (senderNome !== undefined) data.senderNome = senderNome
-  if (emailsFinanceiro !== undefined) data.emailsFinanceiro = emailsFinanceiro
-
   if (existing) {
-    const atualizado = { ...existing, ...data }
-    data.ativo = !!atualizado.apiKey
-
-    const config = await prisma.configEmail.update({ where: { id: existing.id }, data })
-    return NextResponse.json({ ok: true, ativo: config.ativo })
+    await prisma.configEmail.update({ where: { id: existing.id }, data: { emailsFinanceiro: emails } })
   } else {
-    const config = await prisma.configEmail.create({
+    await prisma.configEmail.create({
       data: {
         organizacaoId,
-        apiKey: apiKey ?? "",
-        senderEmail: senderEmail ?? "onboarding@resend.dev",
-        senderNome: senderNome ?? "NuFlow",
-        emailsFinanceiro: emailsFinanceiro ?? [],
-        ativo: !!apiKey,
+        emailsFinanceiro: emails,
       },
     })
-    return NextResponse.json({ ok: true, ativo: config.ativo })
   }
+
+  return NextResponse.json({ ok: true, ...statusEmailGlobal() })
 }

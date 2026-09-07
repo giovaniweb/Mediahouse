@@ -157,7 +157,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // E-mail para o videomaker (se tiver e-mail)
     if (demanda.videomaker?.email) {
-      await sendEmailVideomakerNFRecebida(demanda.videomaker.email, demanda.videomaker.nome, 15, organizacaoId).catch(() => {})
+      const emailResult = await sendEmailVideomakerNFRecebida(
+        demanda.videomaker.email,
+        demanda.videomaker.nome,
+        15
+      )
+      if (!emailResult.ok) {
+        console.error("[Pagamento] e-mail de NF recebida não enviado", {
+          demandaId: id,
+          erro: emailResult.error,
+        })
+      }
     }
 
     return NextResponse.json({ ok: true, custo, mensagem: "Nota fiscal recebida! Você receberá o pagamento em até 15 dias úteis." })
