@@ -475,3 +475,115 @@ describe("ehJob — as duas condições juntas", () => {
     ).toBe(false)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AÇÕES DO VIDEOMAKER — a tela não pode oferecer o que o servidor recusaria
+// ─────────────────────────────────────────────────────────────────────────────
+import { acoesDoVideomaker, captacaoIniciada, rotuloDeEvento } from "@/lib/job-fase"
+import { EVENTO_CAPTACAO_INICIADA } from "@/lib/status"
+import { ACOES_DO_VIDEOMAKER, podeTransicionar } from "@/lib/job-transicoes"
+import { permissaoEfetiva } from "@/lib/permissoes"
+
+describe("ações do videomaker (§13)", () => {
+  it("oferece a ação certa em cada etapa dele", () => {
+    const esperado: Record<string, string[]> = {
+      videomaker_notificado: ["aceitar", "recusar"],
+      videomaker_aceitou:    ["iniciar_captacao"],
+      captacao_agendada:     ["finalizar_captacao"],
+      captacao_realizada:    ["enviar_material"],
+      brutos_enviados:       ["enviar_nf"],
+    }
+    for (const [status, chaves] of Object.entries(esperado)) {
+      expect(acoesDoVideomaker(status as StatusInterno).map((a) => a.chave), status).toEqual(chaves)
+    }
+  })
+
+  it("captação: iniciar é EVENTO, finalizar é status — e o status não muda entre os dois", () => {
+    // O §14 pede timestamp e evento para o início, não transição. Apontar
+    // "Iniciar captação" para `captacao_agendada` daria a "agendar" o sentido
+    // de "começar" — é a semântica falsa que esta correção remove.
+    const iniciar = acoesDoVideomaker("videomaker_aceitou")[0]
+    expect(iniciar.chave).toBe("iniciar_captacao")
+    expect(iniciar.ehEvento).toBe(true)
+    expect(iniciar.alvo).toBeNull()
+    expect(iniciar.alvo).not.toBe("captacao_agendada")
+
+    // Mesmo status, depois do evento: o que muda é a ação oferecida.
+    const depois = acoesDoVideomaker("videomaker_aceitou", { captacaoIniciada: true })
+    expect(depois.map((a) => a.chave)).toEqual(["finalizar_captacao"])
+    expect(depois[0].alvo).toBe("captacao_realizada")
+  })
+
+  it("nenhuma ação do videomaker aponta para captacao_agendada", () => {
+    // A trava contra a regressão: `captacao_agendada` é agendamento, e nunca
+    // foi usado uma vez em produção. Nenhum botão dele pode levar até lá.
+    for (const s of TODOS) {
+      for (const flag of [false, true]) {
+        for (const a of acoesDoVideomaker(s, { captacaoIniciada: flag })) {
+          expect(a.alvo, `${s} → ${a.chave}`).not.toBe("captacao_agendada")
+        }
+      }
+    }
+  })
+
+  it("captacaoIniciada lê o histórico, que é onde o fato mora", () => {
+    expect(captacaoIniciada([])).toBe(false)
+    expect(captacaoIniciada(null)).toBe(false)
+    expect(captacaoIniciada([{ statusNovo: "videomaker_aceitou" }])).toBe(false)
+    expect(captacaoIniciada([{ statusNovo: EVENTO_CAPTACAO_INICIADA }])).toBe(true)
+  })
+
+  it("a timeline nomeia o evento sem expor o slug", () => {
+    expect(rotuloDeEvento(EVENTO_CAPTACAO_INICIADA)).toBe("Captação iniciada")
+    // E o status homônimo mantém o sentido dele.
+    expect(rotuloDeEvento("captacao_agendada")).toBe("Captação agendada")
+    expect(rotuloDeEvento("captacao_realizada")).toBe("Captação finalizada")
+  })
+
+  it("nas demais etapas não oferece nada — a bola não é dele", () => {
+    const dele = ["videomaker_notificado", "videomaker_aceitou", "captacao_agendada", "captacao_realizada", "brutos_enviados"]
+    for (const s of TODOS.filter((s) => !dele.includes(s))) {
+      expect(acoesDoVideomaker(s), s).toEqual([])
+    }
+  })
+
+  it("recusa exige motivo (§6) e material exige link", () => {
+    const recusar = acoesDoVideomaker("videomaker_notificado").find((a) => a.chave === "recusar")!
+    expect(recusar.exigeMotivo).toBe(true)
+    const material = acoesDoVideomaker("captacao_realizada")[0]
+    expect(material.exigeLink).toBe(true)
+  })
+
+  it("todo alvo oferecido é uma transição que a guarda autoriza ao videomaker", () => {
+    // A trava que impede a tela de oferecer botão que o servidor recusa.
+    for (const s of TODOS) {
+      for (const acao of acoesDoVideomaker(s, { captacaoIniciada: true })) {
+        if (!acao.alvo) continue
+        expect(ACOES_DO_VIDEOMAKER, `${acao.chave} → ${acao.alvo}`).toContain(acao.alvo)
+      }
+    }
+  })
+
+  it("a guarda de fato aceita cada ação oferecida, para o videomaker dono", () => {
+    const permissoes = permissaoEfetiva({
+      membro: { papel: "videomaker", organizacaoId: "org-1", statusUsuario: "ativo" },
+      organizacaoId: "org-1",
+    })
+    for (const s of TODOS) {
+      for (const acao of acoesDoVideomaker(s, { captacaoIniciada: true })) {
+        if (!acao.alvo) continue
+        const r = podeTransicionar({
+          statusAtual: s,
+          novoStatus: acao.alvo,
+          usuario: { id: "u-vm", papel: "videomaker", videomakerId: "vm-1", permissoes },
+          demanda: {
+            videomakerId: "vm-1", editorId: null,
+            linkBrutos: "https://drive/brutos", linkFolderBrutos: null,
+            linkFinal: null, motivoImpedimento: null,
+          },
+        })
+        expect(r.ok, `${s} → ${acao.alvo} foi recusada: ${r.motivo}`).toBe(true)
+      }
+    }
+  })
+})

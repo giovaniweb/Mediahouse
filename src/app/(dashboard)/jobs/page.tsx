@@ -108,7 +108,9 @@ function Quadro() {
 
   const atrasados = jobs.filter(estaAtrasada).length
 
-  const abrir = (id: string) => router.push(`/demandas/${id}`)
+  // O card abre o Job, não a demanda: /jobs/[id] responde às perguntas do §64 e
+  // oferece a próxima ação. A tela de Demandas continua existindo para a gestão.
+  const abrir = (id: string) => router.push(`/jobs/${id}`)
 
   const selectClass =
     "bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600"

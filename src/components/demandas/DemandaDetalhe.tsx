@@ -40,6 +40,11 @@ const STATUS_LABELS: Record<string, string> = {
   videomaker_aceitou: "Videomaker Aceitou",
   videomaker_recusou: "Videomaker Recusou",
   captacao_agendada: "Captação Agendada",
+  // Não é status: é o marcador de início real da captação, gravado no mesmo
+  // histórico (EVENTO_CAPTACAO_INICIADA em lib/status.ts). Entra aqui só para
+  // esta timeline não exibir o slug cru quando um Job de cobertura for aberto
+  // por esta tela.
+  captacao_iniciada: "Captação Iniciada",
   captacao_realizada: "Captação Realizada",
   brutos_enviados: "Brutos Enviados",
   editor_atribuido: "Editor Atribuído",
