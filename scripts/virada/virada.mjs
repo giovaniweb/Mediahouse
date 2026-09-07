@@ -131,7 +131,10 @@ async function preflight() {
   const dep = deployProducaoAtual()
   conferir(Boolean(dep), `último deploy de produção: ${dep ?? "não encontrado"}`)
 
-  const saude = await medirSaude(1)
+  // Cinco amostras, não uma: a primeira chamada paga o cold start da função e
+  // sozinha vira uma linha de base falsa — foi o que fez o `verificar` da virada
+  // de 07/09 anunciar 187x quando o ganho real, pela mediana, é ~57x.
+  const saude = await medirSaude(5)
   conferir(saude.ok, `${DOMINIO}/api/health responde ok (banco ${saude.banco}, ${saude.mediana} ms)`)
 
   gravarEstado("preflight", {

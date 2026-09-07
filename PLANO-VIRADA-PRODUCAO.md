@@ -358,3 +358,61 @@ node scripts/virada/virada.mjs verificar
 Os quatro primeiros já rodaram hoje contra este destino, nesta ordem, com estes
 argumentos. O único que a janela estreia é o `apontar` — e ele é o único
 irreversível.
+
+---
+
+## 11. A virada, executada em 07/09/2026
+
+Janela combinada com a equipe avisada. **Aberta às 07:52:20, fechada às
+07:57:29 — 5 minutos e 9 segundos**, contra os 6 a 12 estimados.
+
+| horário | passo | resultado |
+|---|---|---|
+| 07:52:20 | `congelar` | três roles somente-leitura, 1 conexão derrubada, `25006` provado pelo pooler |
+| 07:54:24 | `dump` | 3,9 MB (completo) + 3,6 MB (`public`), SHA-256 `e78fc172…`, 667 entradas |
+| 07:54:50 | `restaurar --limpar-destino` + `conferir` | 667 entradas em transação única; **12.738 linhas idênticas nas 69 tabelas** |
+| 07:57:29 | `apontar` | `DATABASE_URL` e `DIRECT_URL` trocadas, redeploy concluído |
+
+**O resultado, medido de dentro da função em `gru1`, oito chamadas:**
+
+| | mediana |
+|---|---|
+| antes (`us-west-1`), medido às 07:45 de hoje | **172 ms** |
+| depois (`sa-east-1`) | **3 ms** |
+
+**57x.** O `verificar` anunciou "187x" na hora, e o número estava errado: a linha
+de base dele vinha de **uma única** chamada do preflight, que pagou o cold start
+da função e marcou 1.119 ms. O ganho real é contra a mediana de 172 ms. O
+`preflight` passou a tirar cinco amostras — uma amostra só não é uma medição, e
+esse erro estava a caminho de virar número em documento.
+
+**As seis linhas que a noite gravou.** O ensaio de ontem copiou 12.732 linhas; o
+dump de hoje levou 12.738. A diferença é dado real criado entre as duas
+execuções, e é exatamente o motivo de o `apontar` recusar cópia de ensaio.
+
+**Confirmado depois da virada, pelos dois lados:**
+
+- São Paulo **aceita** escrita pelo pooler que a aplicação usa;
+- `us-west-1` **recusa** com `25006`. O banco antigo continua congelado de
+  propósito: nenhum deploy esquecido consegue gravar nele e criar dois bancos com
+  verdades diferentes. Ele segue servindo os arquivos (§7.1).
+
+**Um risco que sobrou e foi fechado no mesmo dia:** o `.env.local` continuava
+apontando para o banco antigo. Como o `prisma.config.ts` carrega esse arquivo
+primeiro, **todo comando local de Prisma passaria a ler o banco abandonado** — e
+a responder com verdade velha, sem erro nenhum. Reapontado para São Paulo, com
+backup em `~/nuflow-virada/env-local-antes-da-virada.bak`.
+
+### O que ainda não foi feito
+
+1. **A passada humana pelas telas.** Nenhuma medição substitui: login, Kanban das
+   duas empresas, uma demanda aberta, uma mudança de status, o WhatsApp
+   recebendo.
+2. **A senha do `postgres` do projeto novo passou pelo chat** — de novo, agora a
+   rotacionada. Ela é a credencial de produção hoje. Rotacionar outra vez custa
+   um clique no painel e um `apontar` de trinta segundos, sem janela e sem
+   congelar nada, porque não move dado.
+3. **Migration `20260906000000`**, pelo caminho normal de release.
+4. **Virada B — ligar o RLS.** Agora ela é barata: a consulta com transação, que
+   custava 810 ms em US-West, custa ~27 ms aqui. `ligar-rls`, e `desligar-rls` se
+   qualquer tela vier vazia.
