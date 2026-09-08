@@ -11,14 +11,17 @@ import type { StatusInterno } from "@prisma/client"
 
 const findUniqueDemanda = vi.fn()
 const findFirstAresta = vi.fn()
+const findManyParceria = vi.fn()
 const getOrgId = vi.fn()
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     demanda: { findUnique: (...a: unknown[]) => findUniqueDemanda(...a) },
     demandaCompartilhamento: { findFirst: (...a: unknown[]) => findFirstAresta(...a) },
+    parceriaOrganizacao: { findMany: (...a: unknown[]) => findManyParceria(...a) },
   },
 }))
+vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: { organizacao: { findUnique: vi.fn() } } }))
 vi.mock("@/lib/org", () => ({
   getOrgId: (...a: unknown[]) => getOrgId(...a),
   semOrg: () => new Response(null, { status: 403 }),
@@ -30,12 +33,14 @@ const {
   requireDemandaAcesso,
 } = await import("@/lib/compartilhamento")
 const { podeTransicionar, STATUS_PERMITIDOS_AO_ESPELHO } = await import("@/lib/job-transicoes")
+const { parceriasDaEmpresa, ehGestaoDaEmpresa } = await import("@/lib/parceria")
 const { permissaoEfetiva } = await import("@/lib/permissoes")
 const { StatusInterno: ENUM_STATUS } = await import("@prisma/client")
 
 beforeEach(() => {
   findUniqueDemanda.mockReset()
   findFirstAresta.mockReset()
+  findManyParceria.mockReset()
   getOrgId.mockReset()
   getOrgId.mockResolvedValue("org-b")
 })
@@ -217,5 +222,50 @@ describe("a guarda de transição conhece o lado da mesa", () => {
     // Mesmo ator, mesma permissão de admin. A única diferença é de quem é o card.
     expect(guardar("aprovado", "dona").ok).toBe(true)
     expect(guardar("aprovado", "espelho").ok).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("parceriasDaEmpresa — a tela nunca precisa saber de que lado a empresa está", () => {
+  const linha = (over: Record<string, unknown> = {}) => ({
+    id: "par-1",
+    organizacaoConvidanteId: "org-a",
+    organizacaoConvidadaId: "org-b",
+    nomeConvidante: "Contourline",
+    nomeConvidada: "Produtora Parceira",
+    status: "aceita",
+    criadoEm: new Date("2026-09-01"),
+    respondidoEm: new Date("2026-09-02"),
+    ...over,
+  })
+
+  it("para quem convidou, o parceiro é a convidada", async () => {
+    findManyParceria.mockResolvedValue([linha()])
+    const [p] = await parceriasDaEmpresa("org-a")
+    expect(p).toMatchObject({ organizacaoId: "org-b", nome: "Produtora Parceira", papel: "convidante" })
+  })
+
+  it("para quem foi convidada, o parceiro é quem convidou", async () => {
+    findManyParceria.mockResolvedValue([linha()])
+    const [p] = await parceriasDaEmpresa("org-b")
+    // Inverter estes dois é o erro mais fácil de cometer aqui, e ele mostraria
+    // à produtora o nome dela mesma como parceira.
+    expect(p).toMatchObject({ organizacaoId: "org-a", nome: "Contourline", papel: "convidada" })
+  })
+
+  it("só a convidada tem papel que permite aceitar", async () => {
+    findManyParceria.mockResolvedValue([linha({ status: "pendente", respondidoEm: null })])
+    expect((await parceriasDaEmpresa("org-a"))[0].papel).toBe("convidante")
+    expect((await parceriasDaEmpresa("org-b"))[0].papel).toBe("convidada")
+  })
+})
+
+describe("quem decide parceria", () => {
+  it("é gestão da empresa, e mais ninguém", () => {
+    expect(ehGestaoDaEmpresa("admin")).toBe(true)
+    expect(ehGestaoDaEmpresa("gestor")).toBe(true)
+    for (const papel of ["videomaker", "editor", "social", "solicitante", "designer", null, undefined]) {
+      expect(ehGestaoDaEmpresa(papel), String(papel)).toBe(false)
+    }
   })
 })

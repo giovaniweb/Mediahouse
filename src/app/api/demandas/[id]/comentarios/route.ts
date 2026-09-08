@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { requireDemandaOrg } from "@/lib/org"
+import { requireDemandaAcesso } from "@/lib/compartilhamento"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 
@@ -23,9 +23,13 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
-  const guard = await requireDemandaOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const { organizacaoId } = guard
+  // O comentário é o canal entre as duas equipes quando o job é terceirizado —
+  // é uma das quatro tabelas filhas que a política deixa atravessar.
+  const acesso = await requireDemandaAcesso(session, id, "executar")
+  if (acesso instanceof NextResponse) return acesso
+  // Menção e aviso pertencem à empresa DONA do card: é lá que estão as pessoas
+  // que o `@` pode alcançar e a configuração de WhatsApp do fluxo.
+  const organizacaoId = acesso.donaId
   const { comentario } = await req.json()
 
   if (!comentario?.trim()) {
