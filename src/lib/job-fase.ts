@@ -593,3 +593,68 @@ export function rotuloDeEvento(statusNovo: string, observacao?: string | null): 
   if (statusNovo === EVENTO_RESPONSAVEL) return observacao ?? "Responsável alterado"
   return EVENTO_LABEL[statusNovo as StatusInterno] ?? statusNovo
 }
+
+// ── CONVERSÃO ENTRE DEMANDA E JOB ────────────────────────────────────────────
+//
+// Converter não cria registro novo: é o MESMO registro trocando de fluxo. Id,
+// solicitante, briefing, arquivos, comentários, histórico, datas e responsáveis
+// ficam exatamente onde estão — o que muda é só a classificação que
+// `ehSolicitacaoDeCobertura` lê.
+//
+// Nenhum campo novo, nenhuma migration: a classificação já existe e já é o que
+// o quadro de Jobs consulta.
+
+/** O departamento neutro do audiovisual, destino ao sair do fluxo de cobertura. */
+export const DEPARTAMENTO_AUDIOVISUAL = "audiovisual"
+/** Tipo neutro, quando a demanda perde a marca de cobertura e não há outra. */
+export const TIPO_NEUTRO = "outro"
+
+export type FluxoDoRegistro = "job" | "demanda"
+
+/** Em qual fluxo este registro está hoje. */
+export function fluxoAtual(job: { tipoVideo?: string | null; departamento?: string | null }): FluxoDoRegistro {
+  return ehSolicitacaoDeCobertura(job) ? "job" : "demanda"
+}
+
+/**
+ * Os campos a gravar para mover o registro de fluxo — ou `null` quando ele já
+ * está no fluxo pedido (converter duas vezes não pode fazer nada: §53).
+ *
+ * Ir para JOB marca as DUAS chaves. Voltar para DEMANDA limpa as duas, e é por
+ * isso que `ehSolicitacaoDeCobertura` ser um OR importa aqui: deixar uma delas
+ * para trás manteria o registro no quadro de Jobs, e a conversão pareceria não
+ * ter funcionado.
+ *
+ * `preferido` permite ao chamador dizer para onde a demanda volta. Sem ele, o
+ * destino é o audiovisual genérico — os valores originais não são adivinháveis,
+ * e por isso a conversão os registra na observação do histórico em vez de
+ * fingir que sabe recuperá-los.
+ */
+export function conversaoDeFluxo(
+  atual: { tipoVideo?: string | null; departamento?: string | null },
+  destino: FluxoDoRegistro,
+  preferido?: { tipoVideo?: string | null; departamento?: string | null }
+): { departamento: string; tipoVideo: string } | null {
+  if (fluxoAtual(atual) === destino) return null
+
+  if (destino === "job") {
+    return { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA }
+  }
+
+  // Saindo de cobertura: nenhuma das duas marcas pode sobreviver.
+  const departamento = preferido?.departamento?.trim() || DEPARTAMENTO_AUDIOVISUAL
+  const tipoVideo = preferido?.tipoVideo?.trim() || TIPO_NEUTRO
+  if (departamento === DEPARTAMENTO_COBERTURA || tipoVideo === TIPO_COBERTURA) return null
+  return { departamento, tipoVideo }
+}
+
+/** A frase que fica no histórico. Guarda de onde veio — é o que a troca apaga. */
+export function descricaoDaConversao(
+  anterior: { tipoVideo?: string | null; departamento?: string | null },
+  destino: FluxoDoRegistro
+): string {
+  const de = `${anterior.departamento ?? "—"} / ${anterior.tipoVideo ?? "—"}`
+  return destino === "job"
+    ? `Convertido em Job — cobertura (antes: ${de})`
+    : `Convertido em Demanda — fluxo audiovisual (antes: ${de})`
+}

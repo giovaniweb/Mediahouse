@@ -5,7 +5,7 @@ import { Header } from "@/components/layout/Header"
 import {
   CheckCircle2, XCircle, Clock, User, Zap, AlertCircle,
   RefreshCw, Sparkles, DollarSign, Video, FileText, Receipt,
-  ExternalLink, Copy,
+  ExternalLink, Copy, ArrowRightLeft,
 } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
@@ -15,6 +15,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { mensagemDeErro } from "@/lib/erro-cliente"
+import type { FluxoDoRegistro } from "@/lib/job-fase"
 import { fetcher } from "@/lib/fetcher"
 
 
@@ -22,7 +23,10 @@ import { fetcher } from "@/lib/fetcher"
 
 interface Demanda {
   id: string; codigo: string; titulo: string; descricao: string
-  departamento: string; prioridade: "normal" | "alta" | "urgente"
+  // `tipoVideo` entra junto de `departamento`: os dois formam a classificação
+  // que decide se a solicitação segue para /jobs ou para o Kanban de Demandas.
+  departamento: string; tipoVideo?: string | null
+  prioridade: "normal" | "alta" | "urgente"
   statusInterno: string; motivoUrgencia?: string; createdAt: string
   solicitante: { id: string; nome: string; email: string }
 }
@@ -110,9 +114,27 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
   // ─── Ações demandas ───────────────────────────────────────────────────────
 
-  async function agirDemanda(id: string, acao: "aprovar" | "recusar", motivoRecusa?: string) {
+  async function agirDemanda(
+    id: string,
+    acao: "aprovar" | "recusar",
+    motivoRecusa?: string,
+    fluxo?: FluxoDoRegistro
+  ) {
     setLoading(id)
     try {
+      // A classificação vem ANTES da aprovação, de propósito. Se a conversão
+      // falhar, o item continua na fila com a marca certa — visível e
+      // repetível. Na ordem inversa ele sairia da fila classificado errado,
+      // que é o estado difícil de perceber.
+      if (fluxo) {
+        const conv = await fetch(`/api/jobs/${id}/converter`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ para: fluxo }),
+        })
+        if (!conv.ok) throw new Error((await conv.json()).error)
+      }
+
       // Urgência e demanda comum vão pela mesma rota — ela distingue pelo status.
       const res = await fetch(`/api/demandas/${id}/aprovar`, {
         method: "POST",
@@ -120,7 +142,12 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
         body: JSON.stringify({ acao, motivo: motivoRecusa }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(acao === "aprovar" ? "Demanda aprovada!" : "Demanda recusada")
+      toast.success(
+        acao !== "aprovar" ? "Demanda recusada"
+          : fluxo === "job" ? "Aprovada como Job — está no quadro de Jobs"
+          : fluxo === "demanda" ? "Convertida em Demanda — está no Kanban do audiovisual"
+          : "Demanda aprovada!"
+      )
       mutateAll(); setModal(null); setMotivo("")
     } catch (err) {
       toast.error(mensagemDeErro(err))
@@ -233,7 +260,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             loading={loading}
             sugestaoIA={sugestaoIA}
             analisandoIA={analisandoIA}
-            onAprovar={(d) => agirDemanda(d.id, "aprovar")}
+            onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
             onRecusar={(d) => setModal({ id: d.id })}
             onIA={analisarIA}
             emptyMsg="Nenhuma demanda aguardando aprovação"
@@ -247,7 +274,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             loading={loading}
             sugestaoIA={sugestaoIA}
             analisandoIA={analisandoIA}
-            onAprovar={(d) => agirDemanda(d.id, "aprovar")}
+            onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
             onRecusar={(d) => setModal({ id: d.id })}
             onIA={analisarIA}
             emptyMsg="Nenhuma urgência pendente"
@@ -354,7 +381,7 @@ function DemandaList({
 }: {
   lista: Demanda[]; loading: string | null
   sugestaoIA: Record<string, string>; analisandoIA: string | null
-  onAprovar: (d: Demanda) => void; onRecusar: (d: Demanda) => void
+  onAprovar: (d: Demanda, fluxo: FluxoDoRegistro) => void; onRecusar: (d: Demanda) => void
   onIA: (d: Demanda) => void; emptyMsg: string; emptyIcon?: React.ReactNode
 }) {
   if (lista.length === 0) return (
@@ -419,13 +446,26 @@ function DemandaList({
             <Link href={`/demandas/${d.id}`} className="text-blue-400 hover:underline ml-auto">Ver detalhes →</Link>
           </div>
 
-          <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
+          {/* Dois destinos, não dois botões de "aprovar": a solicitação sai da
+              fila para a esteira certa. O primeiro é o caminho provável — se já
+              veio marcada como cobertura, aprovar como Job é o esperado. */}
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 pt-1 border-t border-zinc-800">
             <button
-              onClick={() => onAprovar(d)}
+              onClick={() => onAprovar(d, "job")}
               disabled={loading === d.id}
               className="flex-1 flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-              <CheckCircle2 className="w-4 h-4" /> Aprovar
+              <CheckCircle2 className="w-4 h-4" /> Aprovar como Job
             </button>
+            <button
+              onClick={() => onAprovar(d, "demanda")}
+              disabled={loading === d.id}
+              title="Aprova e manda para o Kanban do audiovisual, fora do fluxo de Jobs"
+              className="flex-1 flex items-center justify-center gap-1.5 border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
+              <ArrowRightLeft className="w-4 h-4" /> Converter em Demanda
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
               onClick={() => onRecusar(d)}
               disabled={loading === d.id}

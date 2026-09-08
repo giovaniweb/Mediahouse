@@ -587,3 +587,108 @@ describe("ações do videomaker (§13)", () => {
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSÃO ENTRE DEMANDA E JOB — o mesmo registro trocando de esteira
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  DEPARTAMENTO_AUDIOVISUAL,
+  TIPO_NEUTRO,
+  conversaoDeFluxo,
+  descricaoDaConversao,
+  fluxoAtual,
+} from "@/lib/job-fase"
+
+const umaDemanda = { departamento: "audiovisual", tipoVideo: "reels" }
+const umaCobertura = { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA }
+
+describe("fluxo atual do registro", () => {
+  it("lê a classificação que o quadro de Jobs já consulta", () => {
+    expect(fluxoAtual(umaDemanda)).toBe("demanda")
+    expect(fluxoAtual(umaCobertura)).toBe("job")
+    // Basta UMA das marcas para o registro estar no fluxo de Job.
+    expect(fluxoAtual({ departamento: "eventos", tipoVideo: "reels" })).toBe("job")
+    expect(fluxoAtual({ departamento: "audiovisual", tipoVideo: TIPO_COBERTURA })).toBe("job")
+  })
+})
+
+describe("Demanda → Job", () => {
+  it("marca as duas chaves", () => {
+    const m = conversaoDeFluxo(umaDemanda, "job")!
+    expect(m).toEqual({ departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA })
+    // E o resultado é, de fato, um Job.
+    expect(fluxoAtual(m)).toBe("job")
+  })
+
+  it("converter o que já é Job não faz nada (§53)", () => {
+    expect(conversaoDeFluxo(umaCobertura, "job")).toBeNull()
+  })
+})
+
+describe("Job → Demanda", () => {
+  it("limpa AS DUAS marcas — deixar uma manteria o card no quadro de Jobs", () => {
+    // É a armadilha do OR em `ehSolicitacaoDeCobertura`: trocar só o tipoVideo
+    // e esquecer o departamento faria a conversão parecer não ter funcionado.
+    const m = conversaoDeFluxo(umaCobertura, "demanda")!
+    expect(m.departamento).not.toBe(DEPARTAMENTO_COBERTURA)
+    expect(m.tipoVideo).not.toBe(TIPO_COBERTURA)
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+
+  it("cai no audiovisual genérico quando não dizem para onde", () => {
+    expect(conversaoDeFluxo(umaCobertura, "demanda")).toEqual({
+      departamento: DEPARTAMENTO_AUDIOVISUAL,
+      tipoVideo: TIPO_NEUTRO,
+    })
+  })
+
+  it("respeita o destino informado", () => {
+    const m = conversaoDeFluxo(umaCobertura, "demanda", { departamento: "growth", tipoVideo: "reels" })!
+    expect(m).toEqual({ departamento: "growth", tipoVideo: "reels" })
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+
+  it("recusa um destino que ainda seria cobertura", () => {
+    // Pedir para "sair de Job" mandando eventos/cobertura_evento é contradição;
+    // aplicar produziria um registro que a tela diria ter convertido e o quadro
+    // continuaria mostrando.
+    expect(conversaoDeFluxo(umaCobertura, "demanda", { departamento: "eventos" })).toBeNull()
+    expect(conversaoDeFluxo(umaCobertura, "demanda", { tipoVideo: TIPO_COBERTURA })).toBeNull()
+  })
+
+  it("converter o que já é Demanda não faz nada (§53)", () => {
+    expect(conversaoDeFluxo(umaDemanda, "demanda")).toBeNull()
+  })
+
+  it("uma marca só também sai do fluxo de Job", () => {
+    // Registro marcado só pelo departamento: converter tem que limpar mesmo
+    // assim, senão volta a aparecer no quadro.
+    const m = conversaoDeFluxo({ departamento: "eventos", tipoVideo: "reels" }, "demanda")!
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+})
+
+describe("ida e volta preserva o fluxo, não os valores", () => {
+  it("Demanda → Job → Demanda termina em Demanda", () => {
+    const paraJob = conversaoDeFluxo(umaDemanda, "job")!
+    const deVolta = conversaoDeFluxo(paraJob, "demanda")!
+    expect(fluxoAtual(deVolta)).toBe("demanda")
+  })
+
+  it("o histórico guarda de onde veio — é o que a troca apaga", () => {
+    const texto = descricaoDaConversao(umaDemanda, "job")
+    expect(texto).toContain("audiovisual")
+    expect(texto).toContain("reels")
+    expect(descricaoDaConversao(umaCobertura, "demanda")).toContain("Demanda")
+  })
+})
+
+describe("a conversão não muda o que o registro é", () => {
+  it("um Job convertido continua obedecendo ao portão de aprovação", () => {
+    // Converter classifica; não aprova. Uma solicitação convertida em Job que
+    // ainda espera decisão continua fora do quadro.
+    const m = conversaoDeFluxo(umaDemanda, "job")!
+    expect(ehJob({ ...m, statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })).toBe(false)
+    expect(ehJob({ ...m, statusInterno: "aguardando_triagem", statusVisivel: "entrada" })).toBe(true)
+  })
+})

@@ -14,9 +14,10 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, RefreshCw, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download, Eye,
+  CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft,
 } from "lucide-react"
 import Link from "next/link"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -326,6 +327,36 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const podeGerenciar = papelAtual === "admin" || papelAtual === "gestor"
   const podeEditar = podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda)
   const podeExcluir = podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda)
+
+  // ── Converter em Job (cobertura) ────────────────────────────────────────────
+  // Não duplica registro: a rota faz UPDATE da classificação nesta mesma
+  // demanda. Id, solicitante, briefing, arquivos, comentários, histórico, datas
+  // e responsáveis continuam onde estão — o que muda é de qual quadro ela é.
+  const [convertendo, setConvertendo] = useState(false)
+  const ehCobertura = ehSolicitacaoDeCobertura({
+    tipoVideo: demanda?.tipoVideo,
+    departamento: demanda?.departamento,
+  })
+
+  async function converterEmJob() {
+    if (!demanda) return
+    setConvertendo(true)
+    try {
+      const res = await fetch(`/api/jobs/${demanda.id}/converter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ para: "job" }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? "Não foi possível converter")
+      toast.success("Convertida em Job — agora aparece no quadro de Jobs")
+      mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao converter")
+    } finally {
+      setConvertendo(false)
+    }
+  }
 
   // O atalho ?edit=true só abre o formulário completo para quem realmente pode editar.
   useEffect(() => {
@@ -1068,6 +1099,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <Link2 className="w-3.5 h-3.5" /> {compartilhando ? "Gerando..." : "Compartilhar"}
               </button>
             )
+          )}
+          {/* Converter em Job: a MESMA demanda passa para a esteira de coberturas.
+              Nada é duplicado — muda só a classificação que o quadro de Jobs lê.
+              Só aparece para audiovisual que ainda não é cobertura; Growth tem
+              outro quadro e outro time. */}
+          {podeEditar && !isGrowth && !ehCobertura && (
+            <button
+              onClick={converterEmJob}
+              disabled={convertendo}
+              title="Move esta demanda para o fluxo de Jobs (cobertura). O registro é o mesmo."
+              className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em Job"}
+            </button>
           )}
           {podeEditar && (
             <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
