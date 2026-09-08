@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { estaAtrasada } from "@/lib/status"
 import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
+import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
 
 export type ColunaDef = { id: string; label: string; color: string; dot: string }
 
@@ -36,6 +37,7 @@ interface Demanda {
   editor?: { nome: string } | null
   solicitante?: { nome: string } | null
   eventoGestao?: { id: string; nome: string } | null
+  espelho?: EspelhoDoCard | null
 }
 
 interface KanbanBoardProps {
@@ -57,6 +59,14 @@ interface KanbanBoardProps {
 
 // Colunas que videomakers externos NÃO podem mover cards para lá (audiovisual)
 const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
+
+// Colunas fechadas para quem executa o card de OUTRA empresa. Aprovação,
+// publicação e encerramento são de quem responde ao cliente final.
+//
+// É dica visual, não segurança: a autoridade está em `podeTransicionar`
+// (STATUS_PERMITIDOS_AO_ESPELHO), no servidor. Foi confiar no `onDragEnd` que
+// deixou o drag-and-drop livre por tanto tempo — ver AUDITORIA-JOB-WORKFLOW §2.1.
+const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
 export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal" }: KanbanBoardProps) {
   const COLS = colunas ?? COLUNAS
@@ -106,6 +116,15 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     // Restrição para videomakers externos: só podem mover até "aprovacao"
     if (userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(destinoCol)) {
       return // silently block — the lock icon communicates the restriction
+    }
+
+    // Card executado por espelhamento: o servidor recusaria com 403, e um card
+    // que volta sozinho para a coluna anterior é pior de entender do que um card
+    // que não sai do lugar.
+    const arrastado = demandas.find((d) => d.id === result.draggableId)
+    if (arrastado?.espelho?.papel === "destino") {
+      if (arrastado.espelho.escopo === "acompanhar") return
+      if (COLUNAS_BLOQUEADAS_ESPELHO.includes(destinoCol)) return
     }
 
     // Intra-column reorder

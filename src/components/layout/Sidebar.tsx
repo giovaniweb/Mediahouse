@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   Inbox,
   Sparkles,
+  Handshake,
   Layers,
   VideoOff,
   ScrollText,
@@ -124,6 +125,9 @@ const sections = [
       // mudou ontem" nem "o que fulano fez". Restrito a gestor pela própria rota.
       { href: "/auditoria", label: "Registro de Auditoria", icon: ScrollText },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
+      // Terceirizar execução para outra empresa começa aqui: sem parceria
+      // aceita pelos dois lados, o botão de terceirizar nem aparece no card.
+      { href: "/parcerias", label: "Parcerias", icon: Handshake },
     ],
   },
 ]

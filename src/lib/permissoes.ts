@@ -338,6 +338,10 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/relatorios/finalizadas-sem-video": "verRelatorios",
   "/usuarios": "verUsuarios",
   "/configuracoes": "verConfiguracoes",
+  // Parceria entre empresas é ajuste da empresa, não módulo à parte. Reusa a
+  // permissão em vez de criar uma chave nova que ninguém teria marcada — o
+  // mesmo raciocínio de `/jobs` acima.
+  "/parcerias": "verConfiguracoes",
   "/ideias": "verIdeias",
   "/eventos": "verEventos",
   "/coberturas": "verCoberturas",
