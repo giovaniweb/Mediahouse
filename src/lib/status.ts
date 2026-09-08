@@ -58,7 +58,13 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
   urgencia_aprovada:           ["planejamento"],
   planejamento:                ["videomaker_notificado", "editor_atribuido"],
   videomaker_notificado:       ["videomaker_aceitou", "videomaker_recusou", "captacao_agendada"],
-  videomaker_aceitou:          ["captacao_agendada"],
+  // `captacao_realizada` entrou em 07/09/2026: o início da captação virou EVENTO
+  // de histórico (EVENTO_CAPTACAO_INICIADA abaixo), não status, então o caminho
+  // normal do videomaker é aceitar e depois fechar a captação — sem passar por
+  // `captacao_agendada`, que é agendamento e nunca foi usado em produção.
+  // Sem esta aresta, toda finalização de captação registrava
+  // `sequencia_fora_da_matriz` no log da guarda, num caminho que é o esperado.
+  videomaker_aceitou:          ["captacao_agendada", "captacao_realizada"],
   videomaker_recusou:          ["videomaker_notificado"],
   captacao_agendada:           ["captacao_realizada"],
   captacao_realizada:          ["brutos_enviados"],
@@ -128,3 +134,21 @@ export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisiv
 // Prisma, que não pode ir para o bundle do navegador.
 export const EVENTO_EDICAO = "edicao_campos"
 export const EVENTO_RESPONSAVEL = "responsavel_alterado"
+
+// Início real da captação (§14 do Job Workflow).
+//
+// Fica aqui, junto dos outros marcadores, pelo mesmo motivo: `statusNovo` é
+// String, então dá para registrar um FATO que não é etapa sem migração — e o
+// `createdAt` da linha É o `capture_started_at` que a especificação pede.
+//
+// Por que não virou status: começar a gravar não muda de quem é a bola nem em
+// que coluna o card está. O §14 pede timestamp e evento, não transição. E os
+// dois estados que existiam (`captacao_agendada`, `captacao_realizada`) nunca
+// foram usados uma vez sequer em 2.242 linhas de histórico — apontar "Iniciar
+// captação" para `captacao_agendada` daria ao verbo "agendar" o sentido de
+// "começar", que é falso.
+//
+// O FIM da captação continua sendo `captacao_realizada`: esse é um status de
+// verdade, com o significado certo, e o `createdAt` do histórico dele é o
+// `capture_finished_at`.
+export const EVENTO_CAPTACAO_INICIADA = "captacao_iniciada"

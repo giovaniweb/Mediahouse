@@ -10,19 +10,26 @@ import { fetcher } from "@/lib/fetcher"
 import { cn } from "@/lib/utils"
 import { ehHoje } from "@/lib/datas"
 import { estaAtrasada } from "@/lib/status"
+import { TIPO_COBERTURA, ehJob } from "@/lib/job-fase"
 import { Search } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
-// Consome `/api/demandas?area=audiovisual` — a mesma rota do quadro atual, sem
-// alteração nenhuma. Ela já devolve videomaker, editor, designer, responsável,
-// datas e status; tudo o que o card mostra é DERIVADO disso em `lib/job-fase.ts`.
-// Não havia motivo para rota nova, e rota nova seria a arquitetura paralela que
-// a especificação proíbe.
+// ESCOPO: só coberturas JÁ APROVADAS. As três responsabilidades são separadas —
+// /demandas é o kanban geral do audiovisual, /aprovacoes é a caixa de entrada
+// das solicitações, e este quadro é a operação do que passou pela aprovação.
+// A regra vive em `ehJob` (lib/job-fase.ts), com teste.
 //
-// Os recortes que a API entende (meus, atrasados, videomaker, editor, tipo) vão
-// na URL; "hoje" e "região" são filtrados aqui, sobre a lista já carregada,
-// para não mexer na rota nesta etapa.
+// A restrição de origem vai na URL (`tipoVideo=cobertura_evento`) para não
+// trazer as 467 demandas do audiovisual e mostrar 28. O portão de aprovação é
+// aplicado aqui, sobre a lista carregada: a API só faz igualdade em
+// `statusInterno`, e a regra precisa de "fora destes dois estados E não
+// recusada" — expressá-la no servidor exigiria mexer em /api/demandas, que
+// pertence ao módulo de Demandas e não pode ser alterado nesta etapa.
+//
+// Consome a mesma rota do quadro atual, sem alteração nenhuma nela. Ela já
+// devolve videomaker, editor, designer, responsável, datas e status; tudo o que
+// o card mostra é DERIVADO disso.
 
 type Aba = "todos" | "meus" | "hoje" | "atrasados"
 
@@ -51,10 +58,10 @@ function Quadro() {
   const [busca, setBusca] = useState("")
   const [videomakerId, setVideomakerId] = useState("")
   const [editorId, setEditorId] = useState("")
-  const [tipo, setTipo] = useState("")
   const [regiao, setRegiao] = useState("")
 
-  const params = new URLSearchParams({ area: "audiovisual" })
+  // A origem é fixa: este quadro não é o das demandas gerais.
+  const params = new URLSearchParams({ area: "audiovisual", tipoVideo: TIPO_COBERTURA })
   if (aba === "meus") params.set("mine", "1")
   if (aba === "atrasados") params.set("atrasadas", "1")
   if (busca.trim()) params.set("search", busca.trim())
@@ -80,30 +87,30 @@ function Quadro() {
 
   const todos = useMemo(() => data?.demandas ?? [], [data])
 
-  // Opções de tipo e região saem dos próprios jobs: sem cadastro paralelo, e a
-  // lista nunca oferece um filtro que não devolveria nada.
-  const tipos = useMemo(
-    () => [...new Set(todos.map((j) => j.tipoVideo).filter(Boolean))].sort() as string[],
-    [todos]
-  )
+  // As opções de região saem dos próprios jobs: sem cadastro paralelo, e a
+  // lista nunca oferece um filtro que não devolveria nada. Não há filtro de
+  // Tipo — todo Job aqui é cobertura, o seletor teria uma opção só.
   const regioes = useMemo(
     () => [...new Set(todos.map((j) => j.cidade).filter(Boolean))].sort() as string[],
     [todos]
   )
 
   const jobs = useMemo(() => {
-    let lista = todos
+    // O portão: fora as que ainda esperam decisão e as recusadas. Sem isto, a
+    // caixa de entrada de Aprovações vazaria para dentro do quadro de operação.
+    let lista = todos.filter(ehJob)
     // "Hoje" é a captação de hoje — a pergunta é "o que acontece hoje", não
     // "o que vence hoje". Quem quer prazo usa Atrasados.
     if (aba === "hoje") lista = lista.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao))
-    if (tipo) lista = lista.filter((j) => j.tipoVideo === tipo)
     if (regiao) lista = lista.filter((j) => j.cidade === regiao)
     return lista
-  }, [todos, aba, tipo, regiao])
+  }, [todos, aba, regiao])
 
   const atrasados = jobs.filter(estaAtrasada).length
 
-  const abrir = (id: string) => router.push(`/demandas/${id}`)
+  // O card abre o Job, não a demanda: /jobs/[id] responde às perguntas do §64 e
+  // oferece a próxima ação. A tela de Demandas continua existindo para a gestão.
+  const abrir = (id: string) => router.push(`/jobs/${id}`)
 
   const selectClass =
     "bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600"
@@ -158,11 +165,6 @@ function Quadro() {
           <select value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
             <option value="">Editor</option>
             {editores.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </select>
-
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={selectClass}>
-            <option value="">Tipo</option>
-            {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
 
           <select value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>

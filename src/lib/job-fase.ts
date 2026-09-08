@@ -20,7 +20,7 @@
 // Este módulo é importado por telas. Como `lib/status.ts`, usa import de TIPO —
 // o runtime do Prisma não pode ir para o bundle do navegador.
 import type { StatusInterno } from "@prisma/client"
-import { estaAtrasada, venceHoje } from "./status"
+import { EVENTO_CAPTACAO_INICIADA, EVENTO_EDICAO, EVENTO_RESPONSAVEL, estaAtrasada, venceHoje } from "./status"
 
 /** As seis fases do documento. */
 export type JobFase =
@@ -367,4 +367,294 @@ export function nivelDeRisco(job: {
   if (estaAtrasada(job)) return "overdue"
   if (venceHoje(job)) return "attention"
   return "on_time"
+}
+
+// ── O QUE ENTRA NO QUADRO DE JOBS ────────────────────────────────────────────
+//
+// Três responsabilidades separadas, e o quadro de Jobs é a terceira:
+//
+//   DEMANDAS    o Kanban geral do audiovisual, como já existe hoje
+//   APROVAÇÕES  a caixa de entrada das solicitações de cobertura
+//   JOBS        a operação das coberturas JÁ APROVADAS
+//
+// Nada disso precisou de tabela nova. A auditoria de 07/09/2026 mostrou que a
+// estrutura atual já representa as três: a solicitação de cobertura É uma
+// Demanda, e a aprovação já é um portão de status pelo qual toda demanda passa.
+//
+// `EventoCobertura` (tabela `coberturas`, 9 linhas) foi descartada como fonte:
+// é o módulo de evento multi-dia, com equipe, checklist, álbum e uploads —
+// outra coisa. Só 1 demanda em 650 aponta para ela.
+
+/**
+ * Marca de solicitação de cobertura.
+ *
+ * O formulário público grava as duas coisas juntas quando a pessoa escolhe
+ * "cobertura" (`cadastrar-demanda/page.tsx:245` e `publico/demanda/route.ts:108`):
+ * `tipoVideo = "cobertura_evento"` e `departamento = "eventos"`. Na base as duas
+ * marcas coincidem exatamente — 28 demandas por qualquer um dos critérios.
+ *
+ * O tipo é o que foi PEDIDO; o departamento é para onde foi ROTEADO. Aceitar os
+ * dois cobre também a criação interna, onde a pessoa escolhe os campos separados
+ * e pode marcar só um.
+ */
+export const TIPO_COBERTURA = "cobertura_evento"
+export const DEPARTAMENTO_COBERTURA = "eventos"
+
+export function ehSolicitacaoDeCobertura(job: {
+  tipoVideo?: string | null
+  departamento?: string | null
+}): boolean {
+  return job.tipoVideo === TIPO_COBERTURA || job.departamento === DEPARTAMENTO_COBERTURA
+}
+
+/** Os dois estados em que a solicitação ainda espera decisão do Admin. */
+export const AGUARDANDO_APROVACAO: StatusInterno[] = [
+  "aguardando_aprovacao_interna",
+  "urgencia_pendente_aprovacao",
+]
+
+/**
+ * A solicitação passou pelo portão de aprovação?
+ *
+ * Toda demanda nasce em `aguardando_aprovacao_interna` (ou
+ * `urgencia_pendente_aprovacao` quando urgente), tanto pelo formulário público
+ * quanto pela criação interna — o portão é universal. Aprovar move para
+ * `aguardando_triagem` ou `urgencia_aprovada`; recusar move para `encerrado`.
+ *
+ * A recusa tem assinatura própria: `api/demandas/[id]/aprovar` preserva a
+ * coluna ao recusar (`novoStatusVisivel = ... : demanda.statusVisivel`), então
+ * quem foi recusado fica `encerrado` AINDA NA COLUNA `entrada`. Na base, as 6
+ * demandas `encerrado` estão todas em `entrada` — nenhuma outra combinação.
+ *
+ * Sem essa segunda checagem, uma solicitação RECUSADA apareceria no quadro de
+ * Jobs, na coluna Entrada, como se fosse trabalho a fazer.
+ */
+export function foiAprovada(job: {
+  statusInterno: StatusInterno
+  statusVisivel?: string | null
+}): boolean {
+  if (AGUARDANDO_APROVACAO.includes(job.statusInterno)) return false
+  if (job.statusInterno === "encerrado" && job.statusVisivel === "entrada") return false
+  return true
+}
+
+/** O que o quadro de Jobs mostra: cobertura, e já aprovada. */
+export function ehJob(job: {
+  statusInterno: StatusInterno
+  statusVisivel?: string | null
+  tipoVideo?: string | null
+  departamento?: string | null
+}): boolean {
+  return ehSolicitacaoDeCobertura(job) && foiAprovada(job)
+}
+
+// ── AS AÇÕES DO VIDEOMAKER (§13) ─────────────────────────────────────────────
+//
+// "A interface deve ser extremamente objetiva." Em vez de oferecer uma lista de
+// status para escolher, o Job mostra a ação que cabe AGORA — no máximo duas.
+// Derivadas do estado, como o resto: o videomaker nunca escolhe um status, ele
+// executa uma ação de negócio e o status é consequência (§3).
+//
+// Cada `alvo` é uma transição que `job-transicoes.ts` já autoriza para o
+// videomaker dono do job (ACOES_DO_VIDEOMAKER), e cada uma respeita
+// TRANSICOES_VALIDAS. A tela não pode oferecer o que o servidor recusaria.
+
+export type AcaoVideomaker = {
+  chave: "aceitar" | "recusar" | "iniciar_captacao" | "finalizar_captacao" | "enviar_material" | "enviar_nf"
+  label: string
+  /**
+   * Status a gravar quando a ação É uma transição.
+   * `null` quando não é: a NF (fluxo de token) e o início da captação (evento
+   * de histórico, não mudança de etapa — ver EVENTO_CAPTACAO_INICIADA).
+   */
+  alvo: StatusInterno | null
+  /** Recusa sem motivo não entra (§6). */
+  exigeMotivo?: boolean
+  /** `brutos_enviados` sem link é recusado pelo servidor — peça antes. */
+  exigeLink?: boolean
+  /** Ação destrutiva/negativa: a tela pinta diferente. */
+  negativa?: boolean
+  /** Registra um evento de histórico em vez de mudar status (início da captação). */
+  ehEvento?: boolean
+}
+
+/**
+ * O que o videomaker pode fazer agora.
+ *
+ * COMO A CAPTAÇÃO É REPRESENTADA (§14). O documento pede `capture_started_at` e
+ * `capture_finished_at`, e NÃO pede mudança de status para nenhum dos dois —
+ * durante a captação a bola continua com o videomaker.
+ *
+ *   iniciar    evento de histórico (EVENTO_CAPTACAO_INICIADA). O status não
+ *              muda; o `createdAt` da linha é o `capture_started_at`. Por isso
+ *              `alvo: null` — não é transição.
+ *   finalizar  status `captacao_realizada`, que já existe e significa
+ *              exatamente isso. O `createdAt` do histórico dele é o
+ *              `capture_finished_at`.
+ *
+ * O que NÃO se fez: apontar "Iniciar captação" para `captacao_agendada`.
+ * Agendar é decidir quando; iniciar é começar a gravar. Usar um pelo outro
+ * inventaria semântica — e os dois estados de captação nunca foram usados uma
+ * vez em 2.242 linhas de histórico, então não havia nem costume a preservar.
+ *
+ * `captacaoIniciada` vem do histórico, porque é lá que o fato mora.
+ */
+export function acoesDoVideomaker(
+  statusInterno: StatusInterno,
+  opcoes: { captacaoIniciada?: boolean } = {}
+): AcaoVideomaker[] {
+  const finalizar: AcaoVideomaker = {
+    chave: "finalizar_captacao",
+    label: "Finalizar captação",
+    alvo: "captacao_realizada",
+  }
+
+  switch (statusInterno) {
+    case "videomaker_notificado":
+      return [
+        { chave: "aceitar", label: "Aceitar Job", alvo: "videomaker_aceitou" },
+        { chave: "recusar", label: "Recusar", alvo: "videomaker_recusou", exigeMotivo: true, negativa: true },
+      ]
+    case "videomaker_aceitou":
+      // O status é o mesmo antes e depois de começar a gravar; quem diz em que
+      // pé está é o evento no histórico.
+      return opcoes.captacaoIniciada
+        ? [finalizar]
+        : [{ chave: "iniciar_captacao", label: "Iniciar captação", alvo: null, ehEvento: true }]
+    case "captacao_agendada":
+      // Estado legado (nunca usado em produção). Se um card cair aqui, a ação
+      // que faz sentido é fechar a captação.
+      return [finalizar]
+    case "captacao_realizada":
+      return [{ chave: "enviar_material", label: "Enviar material", alvo: "brutos_enviados", exigeLink: true }]
+    case "brutos_enviados":
+      return [{ chave: "enviar_nf", label: "Enviar NF", alvo: null }]
+    default:
+      // Fora dessas etapas a bola não é dele — a tela mostra só leitura.
+      return []
+  }
+}
+
+/** A captação deste job já começou? O fato mora no histórico, não no status. */
+export function captacaoIniciada(historicos?: { statusNovo: string }[] | null): boolean {
+  return (historicos ?? []).some((h) => h.statusNovo === EVENTO_CAPTACAO_INICIADA)
+}
+
+// ── VOCABULÁRIO DA TIMELINE (§27) ────────────────────────────────────────────
+//
+// A timeline lê como uma sequência de FATOS ("João aceitou"), não como uma
+// lista de estados ("Videomaker Aceitou"). São coisas diferentes: um badge
+// descreve onde o job está, uma linha de histórico descreve o que aconteceu.
+//
+// Existe um mapa parecido em `DemandaDetalhe.tsx` (STATUS_LABELS), local e não
+// exportado, com rótulos de ESTADO. Não é reaproveitável aqui sem alterar o
+// módulo de Demandas, e o texto que ele guarda não serve para narrar evento.
+export const EVENTO_LABEL: Record<StatusInterno, string> = {
+  pedido_criado:                "Job criado",
+  aguardando_aprovacao_interna: "Enviado para aprovação",
+  aguardando_triagem:           "Aprovado — foi para triagem",
+  urgencia_pendente_aprovacao:  "Urgência enviada para aprovação",
+  urgencia_aprovada:            "Urgência aprovada",
+  planejamento:                 "Entrou em planejamento",
+  videomaker_notificado:        "Videomaker acionado",
+  videomaker_aceitou:           "Videomaker aceitou",
+  videomaker_recusou:           "Videomaker recusou",
+  captacao_agendada:            "Captação agendada",
+  captacao_realizada:           "Captação finalizada",
+  brutos_enviados:              "Material enviado",
+  editor_atribuido:             "Editor atribuído",
+  fila_edicao:                  "Entrou na fila de edição",
+  editando:                     "Edição iniciada",
+  edicao_finalizada:            "Edição finalizada",
+  revisao_pendente:             "Enviado para aprovação",
+  ajuste_solicitado:            "Ajuste solicitado",
+  impedimento:                  "Impedimento registrado",
+  aprovado:                     "Aprovado",
+  postagem_pendente:            "Liberado para publicação",
+  postado:                      "Publicado",
+  entregue_cliente:             "Entregue ao cliente",
+  contagem_15_dias_iniciada:    "Contagem de retenção iniciada",
+  lembrete_15_dias_enviado:     "Lembrete de retenção enviado",
+  expirado:                     "Expirado",
+  encerrado:                    "Encerrado",
+}
+
+/**
+ * Rótulo de uma linha do histórico.
+ *
+ * `HistoricoStatus.statusNovo` é String, e o projeto usa isso para marcar
+ * eventos que NÃO são status — edição de campos e troca de responsável
+ * (EVENTO_EDICAO / EVENTO_RESPONSAVEL em lib/status.ts). Nesses casos quem
+ * descreve o que houve é a observação, não um rótulo de etapa.
+ */
+export function rotuloDeEvento(statusNovo: string, observacao?: string | null): string {
+  if (statusNovo === EVENTO_CAPTACAO_INICIADA) return "Captação iniciada"
+  if (statusNovo === EVENTO_EDICAO) return observacao ?? "Job editado"
+  if (statusNovo === EVENTO_RESPONSAVEL) return observacao ?? "Responsável alterado"
+  return EVENTO_LABEL[statusNovo as StatusInterno] ?? statusNovo
+}
+
+// ── CONVERSÃO ENTRE DEMANDA E JOB ────────────────────────────────────────────
+//
+// Converter não cria registro novo: é o MESMO registro trocando de fluxo. Id,
+// solicitante, briefing, arquivos, comentários, histórico, datas e responsáveis
+// ficam exatamente onde estão — o que muda é só a classificação que
+// `ehSolicitacaoDeCobertura` lê.
+//
+// Nenhum campo novo, nenhuma migration: a classificação já existe e já é o que
+// o quadro de Jobs consulta.
+
+/** O departamento neutro do audiovisual, destino ao sair do fluxo de cobertura. */
+export const DEPARTAMENTO_AUDIOVISUAL = "audiovisual"
+/** Tipo neutro, quando a demanda perde a marca de cobertura e não há outra. */
+export const TIPO_NEUTRO = "outro"
+
+export type FluxoDoRegistro = "job" | "demanda"
+
+/** Em qual fluxo este registro está hoje. */
+export function fluxoAtual(job: { tipoVideo?: string | null; departamento?: string | null }): FluxoDoRegistro {
+  return ehSolicitacaoDeCobertura(job) ? "job" : "demanda"
+}
+
+/**
+ * Os campos a gravar para mover o registro de fluxo — ou `null` quando ele já
+ * está no fluxo pedido (converter duas vezes não pode fazer nada: §53).
+ *
+ * Ir para JOB marca as DUAS chaves. Voltar para DEMANDA limpa as duas, e é por
+ * isso que `ehSolicitacaoDeCobertura` ser um OR importa aqui: deixar uma delas
+ * para trás manteria o registro no quadro de Jobs, e a conversão pareceria não
+ * ter funcionado.
+ *
+ * `preferido` permite ao chamador dizer para onde a demanda volta. Sem ele, o
+ * destino é o audiovisual genérico — os valores originais não são adivinháveis,
+ * e por isso a conversão os registra na observação do histórico em vez de
+ * fingir que sabe recuperá-los.
+ */
+export function conversaoDeFluxo(
+  atual: { tipoVideo?: string | null; departamento?: string | null },
+  destino: FluxoDoRegistro,
+  preferido?: { tipoVideo?: string | null; departamento?: string | null }
+): { departamento: string; tipoVideo: string } | null {
+  if (fluxoAtual(atual) === destino) return null
+
+  if (destino === "job") {
+    return { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA }
+  }
+
+  // Saindo de cobertura: nenhuma das duas marcas pode sobreviver.
+  const departamento = preferido?.departamento?.trim() || DEPARTAMENTO_AUDIOVISUAL
+  const tipoVideo = preferido?.tipoVideo?.trim() || TIPO_NEUTRO
+  if (departamento === DEPARTAMENTO_COBERTURA || tipoVideo === TIPO_COBERTURA) return null
+  return { departamento, tipoVideo }
+}
+
+/** A frase que fica no histórico. Guarda de onde veio — é o que a troca apaga. */
+export function descricaoDaConversao(
+  anterior: { tipoVideo?: string | null; departamento?: string | null },
+  destino: FluxoDoRegistro
+): string {
+  const de = `${anterior.departamento ?? "—"} / ${anterior.tipoVideo ?? "—"}`
+  return destino === "job"
+    ? `Convertido em Job — cobertura (antes: ${de})`
+    : `Convertido em Demanda — fluxo audiovisual (antes: ${de})`
 }

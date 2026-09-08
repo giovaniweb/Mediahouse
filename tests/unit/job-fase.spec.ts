@@ -380,3 +380,315 @@ describe("risco de prazo (§33)", () => {
     vi.useRealTimers()
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O QUE ENTRA NO QUADRO DE JOBS
+//
+// Três responsabilidades separadas: Demandas é o kanban geral, Aprovações é a
+// caixa de entrada das solicitações, e Jobs é a operação das coberturas já
+// aprovadas. Estes testes prendem essa fronteira.
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  AGUARDANDO_APROVACAO,
+  DEPARTAMENTO_COBERTURA,
+  TIPO_COBERTURA,
+  ehJob,
+  ehSolicitacaoDeCobertura,
+  foiAprovada,
+} from "@/lib/job-fase"
+
+describe("origem: só solicitação de cobertura", () => {
+  it("reconhece pelo tipo e pelo departamento", () => {
+    // O formulário público grava os dois juntos; a criação interna deixa
+    // escolher separado, então qualquer um dos dois marca.
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: TIPO_COBERTURA })).toBe(true)
+    expect(ehSolicitacaoDeCobertura({ departamento: DEPARTAMENTO_COBERTURA })).toBe(true)
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: TIPO_COBERTURA, departamento: "eventos" })).toBe(true)
+  })
+
+  it("deixa de fora o resto do audiovisual", () => {
+    // Os tipos que dominam a base: reels (182) e video_institucional (173).
+    // Nenhum deles é Job, e é essa a correção desta etapa.
+    for (const t of ["reels", "video_institucional", "youtube", "apresentacao_equipamento", "outro"]) {
+      expect(ehSolicitacaoDeCobertura({ tipoVideo: t, departamento: "audiovisual" }), t).toBe(false)
+    }
+    expect(ehSolicitacaoDeCobertura({})).toBe(false)
+    expect(ehSolicitacaoDeCobertura({ tipoVideo: null, departamento: null })).toBe(false)
+  })
+})
+
+describe("portão de aprovação", () => {
+  it("o que ainda espera decisão não é Job", () => {
+    expect(AGUARDANDO_APROVACAO).toHaveLength(2)
+    for (const s of AGUARDANDO_APROVACAO) {
+      expect(foiAprovada({ statusInterno: s, statusVisivel: "entrada" }), s).toBe(false)
+    }
+  })
+
+  it("recusada não é Job — encerrado AINDA na coluna entrada", () => {
+    // Assinatura da recusa: api/demandas/[id]/aprovar preserva a coluna ao
+    // recusar. Na base, as 6 demandas `encerrado` estão todas em `entrada`.
+    // Sem esta regra, uma solicitação recusada apareceria no quadro como
+    // trabalho a fazer.
+    expect(foiAprovada({ statusInterno: "encerrado", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("encerrada DEPOIS de aprovada continua sendo Job", () => {
+    // Um job que andou e foi encerrado no fim não é o mesmo que uma
+    // solicitação recusada na porta.
+    expect(foiAprovada({ statusInterno: "encerrado", statusVisivel: "finalizado" })).toBe(true)
+  })
+
+  it("aprovada normal e aprovada por urgência entram", () => {
+    // Os dois destinos de `aprovar`: aguardando_triagem e urgencia_aprovada.
+    expect(foiAprovada({ statusInterno: "aguardando_triagem", statusVisivel: "entrada" })).toBe(true)
+    expect(foiAprovada({ statusInterno: "urgencia_aprovada", statusVisivel: "producao" })).toBe(true)
+  })
+
+  it("todo status fora do portão passa", () => {
+    const fora = TODOS.filter((s) => !AGUARDANDO_APROVACAO.includes(s) && s !== "encerrado")
+    for (const s of fora) {
+      expect(foiAprovada({ statusInterno: s, statusVisivel: "producao" }), s).toBe(true)
+    }
+  })
+})
+
+describe("ehJob — as duas condições juntas", () => {
+  const cobertura = { tipoVideo: TIPO_COBERTURA, departamento: DEPARTAMENTO_COBERTURA }
+
+  it("cobertura aprovada entra", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "videomaker_aceitou", statusVisivel: "producao" })).toBe(true)
+    expect(ehJob({ ...cobertura, statusInterno: "entregue_cliente", statusVisivel: "finalizado" })).toBe(true)
+  })
+
+  it("cobertura ainda em aprovação não entra — é da caixa de Aprovações", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("cobertura recusada não entra", () => {
+    expect(ehJob({ ...cobertura, statusInterno: "encerrado", statusVisivel: "entrada" })).toBe(false)
+  })
+
+  it("demanda comum aprovada não entra — é do quadro de Demandas", () => {
+    expect(
+      ehJob({ tipoVideo: "reels", departamento: "growth", statusInterno: "editando", statusVisivel: "edicao" })
+    ).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AÇÕES DO VIDEOMAKER — a tela não pode oferecer o que o servidor recusaria
+// ─────────────────────────────────────────────────────────────────────────────
+import { acoesDoVideomaker, captacaoIniciada, rotuloDeEvento } from "@/lib/job-fase"
+import { EVENTO_CAPTACAO_INICIADA } from "@/lib/status"
+import { ACOES_DO_VIDEOMAKER, podeTransicionar } from "@/lib/job-transicoes"
+import { permissaoEfetiva } from "@/lib/permissoes"
+
+describe("ações do videomaker (§13)", () => {
+  it("oferece a ação certa em cada etapa dele", () => {
+    const esperado: Record<string, string[]> = {
+      videomaker_notificado: ["aceitar", "recusar"],
+      videomaker_aceitou:    ["iniciar_captacao"],
+      captacao_agendada:     ["finalizar_captacao"],
+      captacao_realizada:    ["enviar_material"],
+      brutos_enviados:       ["enviar_nf"],
+    }
+    for (const [status, chaves] of Object.entries(esperado)) {
+      expect(acoesDoVideomaker(status as StatusInterno).map((a) => a.chave), status).toEqual(chaves)
+    }
+  })
+
+  it("captação: iniciar é EVENTO, finalizar é status — e o status não muda entre os dois", () => {
+    // O §14 pede timestamp e evento para o início, não transição. Apontar
+    // "Iniciar captação" para `captacao_agendada` daria a "agendar" o sentido
+    // de "começar" — é a semântica falsa que esta correção remove.
+    const iniciar = acoesDoVideomaker("videomaker_aceitou")[0]
+    expect(iniciar.chave).toBe("iniciar_captacao")
+    expect(iniciar.ehEvento).toBe(true)
+    expect(iniciar.alvo).toBeNull()
+    expect(iniciar.alvo).not.toBe("captacao_agendada")
+
+    // Mesmo status, depois do evento: o que muda é a ação oferecida.
+    const depois = acoesDoVideomaker("videomaker_aceitou", { captacaoIniciada: true })
+    expect(depois.map((a) => a.chave)).toEqual(["finalizar_captacao"])
+    expect(depois[0].alvo).toBe("captacao_realizada")
+  })
+
+  it("nenhuma ação do videomaker aponta para captacao_agendada", () => {
+    // A trava contra a regressão: `captacao_agendada` é agendamento, e nunca
+    // foi usado uma vez em produção. Nenhum botão dele pode levar até lá.
+    for (const s of TODOS) {
+      for (const flag of [false, true]) {
+        for (const a of acoesDoVideomaker(s, { captacaoIniciada: flag })) {
+          expect(a.alvo, `${s} → ${a.chave}`).not.toBe("captacao_agendada")
+        }
+      }
+    }
+  })
+
+  it("captacaoIniciada lê o histórico, que é onde o fato mora", () => {
+    expect(captacaoIniciada([])).toBe(false)
+    expect(captacaoIniciada(null)).toBe(false)
+    expect(captacaoIniciada([{ statusNovo: "videomaker_aceitou" }])).toBe(false)
+    expect(captacaoIniciada([{ statusNovo: EVENTO_CAPTACAO_INICIADA }])).toBe(true)
+  })
+
+  it("a timeline nomeia o evento sem expor o slug", () => {
+    expect(rotuloDeEvento(EVENTO_CAPTACAO_INICIADA)).toBe("Captação iniciada")
+    // E o status homônimo mantém o sentido dele.
+    expect(rotuloDeEvento("captacao_agendada")).toBe("Captação agendada")
+    expect(rotuloDeEvento("captacao_realizada")).toBe("Captação finalizada")
+  })
+
+  it("nas demais etapas não oferece nada — a bola não é dele", () => {
+    const dele = ["videomaker_notificado", "videomaker_aceitou", "captacao_agendada", "captacao_realizada", "brutos_enviados"]
+    for (const s of TODOS.filter((s) => !dele.includes(s))) {
+      expect(acoesDoVideomaker(s), s).toEqual([])
+    }
+  })
+
+  it("recusa exige motivo (§6) e material exige link", () => {
+    const recusar = acoesDoVideomaker("videomaker_notificado").find((a) => a.chave === "recusar")!
+    expect(recusar.exigeMotivo).toBe(true)
+    const material = acoesDoVideomaker("captacao_realizada")[0]
+    expect(material.exigeLink).toBe(true)
+  })
+
+  it("todo alvo oferecido é uma transição que a guarda autoriza ao videomaker", () => {
+    // A trava que impede a tela de oferecer botão que o servidor recusa.
+    for (const s of TODOS) {
+      for (const acao of acoesDoVideomaker(s, { captacaoIniciada: true })) {
+        if (!acao.alvo) continue
+        expect(ACOES_DO_VIDEOMAKER, `${acao.chave} → ${acao.alvo}`).toContain(acao.alvo)
+      }
+    }
+  })
+
+  it("a guarda de fato aceita cada ação oferecida, para o videomaker dono", () => {
+    const permissoes = permissaoEfetiva({
+      membro: { papel: "videomaker", organizacaoId: "org-1", statusUsuario: "ativo" },
+      organizacaoId: "org-1",
+    })
+    for (const s of TODOS) {
+      for (const acao of acoesDoVideomaker(s, { captacaoIniciada: true })) {
+        if (!acao.alvo) continue
+        const r = podeTransicionar({
+          statusAtual: s,
+          novoStatus: acao.alvo,
+          usuario: { id: "u-vm", papel: "videomaker", videomakerId: "vm-1", permissoes },
+          demanda: {
+            videomakerId: "vm-1", editorId: null,
+            linkBrutos: "https://drive/brutos", linkFolderBrutos: null,
+            linkFinal: null, motivoImpedimento: null,
+          },
+        })
+        expect(r.ok, `${s} → ${acao.alvo} foi recusada: ${r.motivo}`).toBe(true)
+      }
+    }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSÃO ENTRE DEMANDA E JOB — o mesmo registro trocando de esteira
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  DEPARTAMENTO_AUDIOVISUAL,
+  TIPO_NEUTRO,
+  conversaoDeFluxo,
+  descricaoDaConversao,
+  fluxoAtual,
+} from "@/lib/job-fase"
+
+const umaDemanda = { departamento: "audiovisual", tipoVideo: "reels" }
+const umaCobertura = { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA }
+
+describe("fluxo atual do registro", () => {
+  it("lê a classificação que o quadro de Jobs já consulta", () => {
+    expect(fluxoAtual(umaDemanda)).toBe("demanda")
+    expect(fluxoAtual(umaCobertura)).toBe("job")
+    // Basta UMA das marcas para o registro estar no fluxo de Job.
+    expect(fluxoAtual({ departamento: "eventos", tipoVideo: "reels" })).toBe("job")
+    expect(fluxoAtual({ departamento: "audiovisual", tipoVideo: TIPO_COBERTURA })).toBe("job")
+  })
+})
+
+describe("Demanda → Job", () => {
+  it("marca as duas chaves", () => {
+    const m = conversaoDeFluxo(umaDemanda, "job")!
+    expect(m).toEqual({ departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA })
+    // E o resultado é, de fato, um Job.
+    expect(fluxoAtual(m)).toBe("job")
+  })
+
+  it("converter o que já é Job não faz nada (§53)", () => {
+    expect(conversaoDeFluxo(umaCobertura, "job")).toBeNull()
+  })
+})
+
+describe("Job → Demanda", () => {
+  it("limpa AS DUAS marcas — deixar uma manteria o card no quadro de Jobs", () => {
+    // É a armadilha do OR em `ehSolicitacaoDeCobertura`: trocar só o tipoVideo
+    // e esquecer o departamento faria a conversão parecer não ter funcionado.
+    const m = conversaoDeFluxo(umaCobertura, "demanda")!
+    expect(m.departamento).not.toBe(DEPARTAMENTO_COBERTURA)
+    expect(m.tipoVideo).not.toBe(TIPO_COBERTURA)
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+
+  it("cai no audiovisual genérico quando não dizem para onde", () => {
+    expect(conversaoDeFluxo(umaCobertura, "demanda")).toEqual({
+      departamento: DEPARTAMENTO_AUDIOVISUAL,
+      tipoVideo: TIPO_NEUTRO,
+    })
+  })
+
+  it("respeita o destino informado", () => {
+    const m = conversaoDeFluxo(umaCobertura, "demanda", { departamento: "growth", tipoVideo: "reels" })!
+    expect(m).toEqual({ departamento: "growth", tipoVideo: "reels" })
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+
+  it("recusa um destino que ainda seria cobertura", () => {
+    // Pedir para "sair de Job" mandando eventos/cobertura_evento é contradição;
+    // aplicar produziria um registro que a tela diria ter convertido e o quadro
+    // continuaria mostrando.
+    expect(conversaoDeFluxo(umaCobertura, "demanda", { departamento: "eventos" })).toBeNull()
+    expect(conversaoDeFluxo(umaCobertura, "demanda", { tipoVideo: TIPO_COBERTURA })).toBeNull()
+  })
+
+  it("converter o que já é Demanda não faz nada (§53)", () => {
+    expect(conversaoDeFluxo(umaDemanda, "demanda")).toBeNull()
+  })
+
+  it("uma marca só também sai do fluxo de Job", () => {
+    // Registro marcado só pelo departamento: converter tem que limpar mesmo
+    // assim, senão volta a aparecer no quadro.
+    const m = conversaoDeFluxo({ departamento: "eventos", tipoVideo: "reels" }, "demanda")!
+    expect(fluxoAtual(m)).toBe("demanda")
+  })
+})
+
+describe("ida e volta preserva o fluxo, não os valores", () => {
+  it("Demanda → Job → Demanda termina em Demanda", () => {
+    const paraJob = conversaoDeFluxo(umaDemanda, "job")!
+    const deVolta = conversaoDeFluxo(paraJob, "demanda")!
+    expect(fluxoAtual(deVolta)).toBe("demanda")
+  })
+
+  it("o histórico guarda de onde veio — é o que a troca apaga", () => {
+    const texto = descricaoDaConversao(umaDemanda, "job")
+    expect(texto).toContain("audiovisual")
+    expect(texto).toContain("reels")
+    expect(descricaoDaConversao(umaCobertura, "demanda")).toContain("Demanda")
+  })
+})
+
+describe("a conversão não muda o que o registro é", () => {
+  it("um Job convertido continua obedecendo ao portão de aprovação", () => {
+    // Converter classifica; não aprova. Uma solicitação convertida em Job que
+    // ainda espera decisão continua fora do quadro.
+    const m = conversaoDeFluxo(umaDemanda, "job")!
+    expect(ehJob({ ...m, statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })).toBe(false)
+    expect(ehJob({ ...m, statusInterno: "aguardando_triagem", statusVisivel: "entrada" })).toBe(true)
+  })
+})

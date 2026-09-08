@@ -305,3 +305,24 @@ describe("precondições de negócio preservadas", () => {
     expect(mover("captacao_realizada", "brutos_enviados", bloqueado, semBrutos).codigo).toBe("sem_autoridade")
   })
 })
+
+describe("finalização da captação não registra desvio", () => {
+  it("videomaker_aceitou → captacao_realizada é caminho declarado", () => {
+    // O início da captação virou evento de histórico, não status, então o
+    // caminho normal pula `captacao_agendada`. Sem a aresta na matriz, toda
+    // finalização de captação sujava o log com `sequencia_fora_da_matriz` —
+    // num caminho que é o esperado, e é justamente o que a telemetria não
+    // deve apontar.
+    expect(TRANSICOES_VALIDAS["videomaker_aceitou"]).toContain("captacao_realizada")
+
+    const r = mover("videomaker_aceitou", "captacao_realizada", vmDono)
+    expect(r.ok).toBe(true)
+    expect(r.avisos.filter((a) => a.startsWith("sequencia"))).toEqual([])
+  })
+
+  it("o agendamento continua declarado — não foi trocado, foi somado", () => {
+    const r = mover("videomaker_aceitou", "captacao_agendada", vmDono)
+    expect(r.ok).toBe(true)
+    expect(r.avisos.filter((a) => a.startsWith("sequencia"))).toEqual([])
+  })
+})
