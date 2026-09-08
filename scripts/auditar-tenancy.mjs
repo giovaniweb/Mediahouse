@@ -57,6 +57,11 @@ const SINAIS_DE_ESCOPO = [
   "organizacaoId",
   "getOrgId",
   "requireDemandaOrg",
+  // Irmão de `requireDemandaOrg` que aceita demanda espelhada de outra empresa
+  // (src/lib/compartilhamento.ts). Resolve a empresa da sessão E confere a
+  // aresta ativa antes de devolver — é escopo, não ausência dele.
+  "requireDemandaAcesso",
+  "escopoComEspelho",
   "requireCoberturaOrg",
   "requireEventoGestaoOrg",
   "requireEventoAccess",

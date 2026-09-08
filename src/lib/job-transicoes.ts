@@ -64,6 +64,7 @@
 import type { StatusInterno } from "@prisma/client"
 import { STATUS_PARA_COLUNA, TRANSICOES_VALIDAS } from "./status"
 import { podePermissao, type MapaPermissoes } from "./permissoes"
+import type { PapelNoCard } from "./compartilhamento"
 
 /** Motivo da recusa, para a rota escolher o HTTP e a tela escolher a frase. */
 export type CodigoRecusa =
@@ -71,6 +72,7 @@ export type CodigoRecusa =
   | "sem_autoridade"
   | "nao_e_seu_job"
   | "fora_do_seu_papel"
+  | "fora_do_espelho"
   | "precondicao"
 
 export type ResultadoTransicao = {
@@ -109,6 +111,15 @@ export type ActorTransicao = {
   permissoes: MapaPermissoes | null
   /** `Videomaker.id` da pessoa, quando ela tem perfil de videomaker. */
   videomakerId: string | null
+  /**
+   * De que lado da mesa está a empresa ativa NESTE card — de `requireDemandaAcesso`.
+   *
+   * Obrigatório de propósito. Um campo de segurança com valor padrão permissivo
+   * é o mesmo "terceiro estado" que a auditoria de permissões condenou: quem
+   * esquecer de preencher tem que ser recusado pelo compilador, não atendido
+   * como dono.
+   */
+  origem: PapelNoCard
 }
 
 /** O que a guarda precisa saber sobre o job. */
@@ -133,6 +144,33 @@ export const ACOES_DO_VIDEOMAKER: StatusInterno[] = [
   "captacao_agendada",
   "captacao_realizada",
   "brutos_enviados",
+]
+
+/**
+ * O que a empresa que executa por ESPELHAMENTO pode fazer no card de outra.
+ *
+ * A régua não é o papel da pessoa, é a fronteira do contrato: quem executa
+ * capta, edita e entrega o material; quem é dona aprova, publica e encerra,
+ * porque é ela que responde ao cliente final (§24 e §38 do documento de Jobs,
+ * aplicados entre empresas em vez de entre papéis).
+ *
+ * Ficam de fora, e a ausência é a regra: `aprovado`, `postagem_pendente`,
+ * `postado`, `entregue_cliente`, `encerrado`, `expirado`.
+ */
+export const STATUS_PERMITIDOS_AO_ESPELHO: StatusInterno[] = [
+  "videomaker_notificado",
+  "videomaker_aceitou",
+  "videomaker_recusou",
+  "captacao_agendada",
+  "captacao_realizada",
+  "brutos_enviados",
+  "editor_atribuido",
+  "fila_edicao",
+  "editando",
+  "edicao_finalizada",
+  "revisao_pendente",
+  "ajuste_solicitado",
+  "impedimento",
 ]
 
 /** Quem administra a empresa passa por cima de tudo, como no resto do app. */
@@ -190,8 +228,24 @@ export function podeTransicionar(entrada: {
     }
   }
 
+  // ── 3.1 De que lado da mesa ────────────────────────────────────────────────
+  // Quem executa o card de outra empresa está preso à lista do executor, e o
+  // bypass de gestão NÃO alcança aqui: um admin da produtora terceirizada é
+  // gestão na empresa DELE, não no contrato que a origem tem com o cliente
+  // final. Sem esta seção, `ehGestao` deixaria esse admin marcar
+  // `entregue_cliente` num card que não é da empresa dele.
+  if (usuario.origem === "espelho" && !STATUS_PERMITIDOS_AO_ESPELHO.includes(alvo)) {
+    return {
+      ok: false,
+      codigo: "fora_do_espelho",
+      motivo:
+        "Esta demanda é executada por espelhamento. Aprovação, publicação e encerramento são da empresa de origem.",
+      avisos,
+    }
+  }
+
   const podeMover = podePermissao(usuario.permissoes, "moverKanban")
-  const gestao = ehGestao(usuario.papel)
+  const gestao = ehGestao(usuario.papel) && usuario.origem === "dona"
   const ehAcaoDeVideomaker = ACOES_DO_VIDEOMAKER.includes(alvo)
   // "Este job é meu" — a relação exigida pelo §52.
   const jobEhDele =

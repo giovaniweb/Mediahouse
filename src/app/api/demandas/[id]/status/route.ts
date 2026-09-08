@@ -76,6 +76,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       papel: vinculo?.papel ?? null,
       permissoes: vinculo?.permissoes ?? null,
       videomakerId: perfilVideomaker?.id ?? null,
+      // Esta rota ainda entra por `requireDemandaOrg`, que só deixa passar a
+      // empresa DONA do card — então "dona" aqui é fato, não suposição. Quando
+      // ela passar a aceitar espelho (PR 3), o valor vem de
+      // `requireDemandaAcesso` e esta linha some.
+      origem: "dona",
     },
     demanda: {
       videomakerId: demandaAtual.videomakerId,
