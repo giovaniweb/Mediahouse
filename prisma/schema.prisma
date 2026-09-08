@@ -650,6 +650,9 @@ model Demanda {
 
   organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
+  /// Empresas que executam esta demanda por espelhamento. Ver ParceriaOrganizacao.
+  compartilhamentos DemandaCompartilhamento[]
+
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
   @@map("demandas")
@@ -2163,7 +2166,128 @@ model Organizacao {
 
   execucoesAgente AgenteExecucao[]
 
+  parceriasEnviadas  ParceriaOrganizacao[]     @relation("ParceriaConvite")
+  parceriasRecebidas ParceriaOrganizacao[]     @relation("ParceriaConvidada")
+  espelhosConcedidos DemandaCompartilhamento[] @relation("CompartilhamentoOrigem")
+  espelhosRecebidos  DemandaCompartilhamento[] @relation("CompartilhamentoDestino")
+
   @@map("organizacoes")
+}
+
+// ── Federação entre empresas ─────────────────────────────────────────────────
+//
+// Duas empresas do NuFlow podem operar juntas: a dona do contrato com o cliente
+// terceiriza a EXECUÇÃO de uma demanda para outra produtora, sem perder a posse
+// do card. O card continua UM registro em `demandas`, com o `organizacaoId` da
+// dona — espelhar é criar uma aresta, não uma cópia.
+//
+// São duas camadas, e a ordem entre elas É a segurança do recurso:
+//
+//   1. ParceriaOrganizacao      o aperto de mão. Uma por par de empresas, com
+//                               aceite dos DOIS lados, e pré-requisito de
+//                               qualquer compartilhamento.
+//   2. DemandaCompartilhamento  a aresta por demanda. Só nasce sob parceria
+//                               aceita.
+//
+// Sem a camada 1, qualquer empresa da plataforma jogaria card no Kanban de
+// qualquer outra. Decisão de 08/09/2026 — PLANO-ESPELHAMENTO-CROSS-TENANT.md §6.
+//
+// ⚠️ REGRA DE PAYLOAD: `origem`, `destino`, `demanda` são relações que
+// ATRAVESSAM a fronteira de empresa. Nunca as inclua num payload que vai para o
+// outro lado — use `nomeOrigem`/`nomeDestino`, que existem exatamente para isso.
+
+enum StatusParceria {
+  pendente
+  aceita
+  recusada
+  encerrada
+}
+
+/// O que a empresa de destino pode fazer no card espelhado.
+enum EscopoCompartilhamento {
+  /// Somente leitura: vê o card e a timeline, não muda nada.
+  acompanhar
+  /// Move status, comenta, envia material — dentro da lista branca da guarda.
+  executar
+}
+
+/// O aperto de mão entre duas empresas. Uma linha por PAR, não por direção:
+/// a simetria (B convida A quando A já convidou B) é recusada por gatilho,
+/// porque `@@unique` não enxerga par invertido.
+model ParceriaOrganizacao {
+  id String @id @default(cuid())
+
+  /// Quem convidou. Pode compartilhar assim que a parceria for aceita — mas
+  /// NÃO é quem aceita.
+  organizacaoConviteId   String
+  /// Quem foi convidada, e a única que pode levar o status a `aceita`.
+  organizacaoConvidadaId String
+
+  status StatusParceria @default(pendente)
+
+  /// `Usuario.id` de quem agiu. Sem chave estrangeira de propósito: é trilha de
+  /// auditoria (não deve impedir apagar um usuário) e não deve criar caminho de
+  /// `include` que atravesse a fronteira entre empresas.
+  criadoPorId     String
+  criadoEm        DateTime  @default(now())
+  respondidoPorId String?
+  respondidoEm    DateTime?
+  encerradaEm     DateTime?
+  encerradaPorId  String?
+
+  convite   Organizacao @relation("ParceriaConvite", fields: [organizacaoConviteId], references: [id], onDelete: Cascade)
+  convidada Organizacao @relation("ParceriaConvidada", fields: [organizacaoConvidadaId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoConviteId, organizacaoConvidadaId])
+  @@index([organizacaoConvidadaId, status])
+  @@index([organizacaoConviteId, status])
+  @@map("parceria_organizacao")
+}
+
+/// A aresta: esta demanda também é visível (e talvez operável) por outra empresa.
+model DemandaCompartilhamento {
+  id        String @id @default(cuid())
+  demandaId String
+
+  /// Copiado de `demandas.organizacaoId` por gatilho — NÃO é digitável.
+  ///
+  /// Denormalizar a empresa aqui contraria a regra da Fase 2 (coluna que pode
+  /// discordar do pai), e a exceção é obrigatória: a política de `demandas` vai
+  /// consultar ESTA tabela, e se esta consultasse `demandas` de volta para
+  /// descobrir a origem, o Postgres entraria em recursão de política. A aresta
+  /// precisa ser legível sem ler o vértice.
+  organizacaoOrigemId  String
+  organizacaoDestinoId String
+
+  /// Rótulos congelados no ato da criação, pelo mesmo gatilho.
+  ///
+  /// `organizacoes_a_propria` impede o destino de ler a linha da origem, e a
+  /// tag do Kanban precisa do nome. A alternativa era abrir `organizacoes` para
+  /// a contraparte — uma tabela que vai ganhar plano e assinatura — para
+  /// resolver um `<span>`. O preço deste caminho: renomear a empresa não
+  /// atualiza o rótulo até alguém recompartilhar.
+  nomeOrigem  String
+  nomeDestino String
+
+  escopo EscopoCompartilhamento @default(executar)
+
+  /// `Usuario.id`, sem FK — mesma razão de ParceriaOrganizacao.
+  criadoPorId   String
+  criadoEm      DateTime  @default(now())
+  /// Revogar é preencher a data, nunca apagar a linha: a prova de que o acesso
+  /// existiu é justamente o que uma auditoria de LGPD vai pedir. Consequência:
+  /// recompartilhar com a mesma empresa é REATIVAR esta linha, não criar outra.
+  revogadoEm    DateTime?
+  revogadoPorId String?
+
+  demanda Demanda     @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  origem  Organizacao @relation("CompartilhamentoOrigem", fields: [organizacaoOrigemId], references: [id], onDelete: Cascade)
+  destino Organizacao @relation("CompartilhamentoDestino", fields: [organizacaoDestinoId], references: [id], onDelete: Cascade)
+
+  @@unique([demandaId, organizacaoDestinoId])
+  @@index([organizacaoDestinoId, revogadoEm])
+  @@index([demandaId])
+  @@map("demanda_compartilhamento")
 }
 
 // Módulo ligado ou desligado POR EMPRESA — a base dos planos.

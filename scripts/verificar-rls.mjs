@@ -203,6 +203,132 @@ try {
     negou = true
   }
   conferir(negou, "app_auth não alcança demandas — o role está estreito")
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Espelhamento cross-tenant: a empresa B executa um job da empresa A.
+  //
+  // O que estas provas cobrem, e que nenhuma das oito acima cobria: agora
+  // EXISTE um caminho legítimo de uma empresa ver a linha de outra. Um caminho
+  // assim só é seguro se as bordas dele estiverem provadas — quem entra, quem
+  // NÃO entra, o que dá para escrever, e o que acontece quando se revoga.
+  // ─────────────────────────────────────────────────────────────────────────
+  const C = "rls-teste-org-c"
+  await inserir("organizacoes", { id: C, nome: "RLS Teste C", slug: "rls-teste-c" })
+  await inserir("custos_videomaker", {
+    id: "rls-custo-a", organizacaoId: A, demandaId: "rls-dem-a", videomakerId: "rls-vm-1", valor: 500,
+  })
+
+  // Erro esperado, com a transação inteira preservada. `SET LOCAL` e
+  // `set_config(..., true)` voltam junto com o savepoint, então não há
+  // vazamento de contexto para a prova seguinte.
+  async function erroComoApp(orgId, sql, params = []) {
+    await c.query("SAVEPOINT sp_erro")
+    try {
+      await c.query("SET LOCAL ROLE app_user")
+      await c.query(`SELECT set_config('app.org_id', $1, true)`, [orgId ?? ""])
+      await c.query(sql, params)
+      await c.query("RESET ROLE")
+      await c.query("RELEASE SAVEPOINT sp_erro")
+      return null
+    } catch (e) {
+      await c.query("ROLLBACK TO SAVEPOINT sp_erro")
+      await c.query("RELEASE SAVEPOINT sp_erro")
+      return String(e.message).split("\n")[0]
+    }
+  }
+
+  // 9. O aperto de mão é pré-requisito, e quem confere é o banco — não a rota.
+  let erro = await erroComoApp(A, `INSERT INTO demanda_compartilhamento
+    ("id","demandaId","organizacaoOrigemId","organizacaoDestinoId","nomeOrigem","nomeDestino","criadoPorId")
+    VALUES ('rls-esp-cedo','rls-dem-a','${A}','${B}','x','y','rls-user-1')`)
+  conferir(!!erro && /parceria aceita/.test(erro), "sem parceria aceita, compartilhar é recusado")
+
+  await inserir("parceria_organizacao", {
+    id: "rls-par-1", organizacaoConviteId: A, organizacaoConvidadaId: B,
+    status: "pendente", criadoPorId: "rls-user-1",
+  })
+
+  // 10. O par é um só. A→B e B→A seriam duas verdades sobre a mesma relação.
+  erro = await erroComoApp(B, `INSERT INTO parceria_organizacao
+    ("id","organizacaoConviteId","organizacaoConvidadaId","status","criadoPorId")
+    VALUES ('rls-par-2','${B}','${A}','pendente','rls-user-1')`)
+  conferir(!!erro, "parceria no sentido inverso é recusada — o par é um só")
+
+  // 11. Quem convida não aceita o próprio convite, senão o aceite é decoração.
+  erro = await erroComoApp(A, `UPDATE parceria_organizacao SET status='aceita' WHERE id='rls-par-1'`)
+  conferir(!!erro && /convidada/.test(erro), "quem convidou não aceita o próprio convite")
+
+  await comoApp(B, `UPDATE parceria_organizacao SET status='aceita' WHERE id='rls-par-1'`)
+  r = await c.query(`SELECT status FROM parceria_organizacao WHERE id='rls-par-1'`)
+  conferir(r.rows[0].status === "aceita", "a empresa convidada aceita a parceria")
+
+  // 12. A origem da aresta é DERIVADA do pai. Vai um valor mentiroso de
+  // propósito: se o gatilho não estivesse lá, a mentira ficaria gravada e a
+  // política de `demandas` passaria a confiar nela.
+  await inserir("demanda_compartilhamento", {
+    id: "rls-esp-1", demandaId: "rls-dem-a",
+    organizacaoOrigemId: "FORJADO", organizacaoDestinoId: B,
+    nomeOrigem: "MENTIRA", nomeDestino: "MENTIRA", criadoPorId: "rls-user-1",
+  })
+  r = await c.query(`SELECT "organizacaoOrigemId","nomeOrigem" FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
+  conferir(
+    r.rows[0].organizacaoOrigemId === A && r.rows[0].nomeOrigem !== "MENTIRA",
+    "a origem da aresta é derivada da demanda, não aceita do cliente"
+  )
+
+  // 13. Quem enxerga o card espelhado — e quem não.
+  r = await comoApp(B, `SELECT codigo FROM demandas WHERE codigo LIKE 'RLS-%' ORDER BY codigo`)
+  const vistosB = r.rows.map((x) => x.codigo)
+  conferir(
+    vistosB.length === 2 && vistosB.includes("RLS-A-1"),
+    `a empresa B vê o card espelhado da A junto com o dela: ${JSON.stringify(vistosB)}`
+  )
+  r = await comoApp(C, `SELECT count(*)::int n FROM demandas WHERE codigo LIKE 'RLS-%'`)
+  conferir(r.rows[0].n === 0, "a empresa C, fora da aresta, não vê nada — espelho não é vitrine")
+
+  // 14. O destino não se convida: a assimetria entre a política de leitura
+  // (dois lados) e a de escrita (só a origem) é a segurança do recurso.
+  erro = await erroComoApp(B, `INSERT INTO demanda_compartilhamento
+    ("id","demandaId","organizacaoOrigemId","organizacaoDestinoId","nomeOrigem","nomeDestino","criadoPorId")
+    VALUES ('rls-esp-2','rls-dem-a','${A}','${B}','x','y','rls-user-1')`)
+  conferir(!!erro, "o destino não cria aresta para si mesmo")
+  r = await comoApp(B, `DELETE FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
+  conferir(r.rowCount === 0, "o destino não apaga a própria restrição")
+
+  // 15. Quais COLUNAS o espelho move. É a pergunta que a RLS não responde —
+  // `WITH CHECK` só enxerga a linha nova —, e por isso mora num gatilho.
+  await comoApp(B, `UPDATE demandas
+    SET "statusInterno"='editando', titulo='SEQUESTRADO', "dataLimite"='2027-01-01'
+    WHERE codigo='RLS-A-1'`)
+  r = await c.query(`SELECT "statusInterno", titulo FROM demandas WHERE codigo='RLS-A-1'`)
+  conferir(r.rows[0].statusInterno === "editando", "o espelho move o status — é o trabalho dele")
+  conferir(r.rows[0].titulo !== "SEQUESTRADO", "o espelho NÃO muda o título: fora da lista branca, volta ao valor da dona")
+
+  erro = await erroComoApp(B, `UPDATE demandas SET "organizacaoId"='${B}' WHERE codigo='RLS-A-1'`)
+  conferir(!!erro && /posse/.test(erro), "o espelho não transfere a posse da demanda")
+
+  // E a dona não foi limitada por tabela: o gatilho sai pela porta quando quem
+  // age é o dono do card.
+  await comoApp(A, `UPDATE demandas SET titulo='A dona pode' WHERE codigo='RLS-A-1'`)
+  r = await c.query(`SELECT titulo FROM demandas WHERE codigo='RLS-A-1'`)
+  conferir(r.rows[0].titulo === "A dona pode", "a dona continua mudando tudo no card dela")
+
+  // 16. O que atravessa e o que não. A ausência de política é a decisão.
+  r = await comoApp(B, `SELECT count(*)::int n FROM custos_videomaker WHERE id='rls-custo-a'`)
+  conferir(r.rows[0].n === 0, "o espelho NÃO alcança custos_videomaker — o cache é da origem")
+  r = await comoApp(B, `SELECT count(*)::int n FROM historico_status WHERE id='rls-hist-a'`)
+  conferir(r.rows[0].n === 1, "o espelho alcança historico_status — sem isso não move card")
+  await comoApp(B, `INSERT INTO historico_status ("id","demandaId","statusNovo","origem")
+                    VALUES ('rls-hist-esp','rls-dem-a','editando','kanban')`)
+  r = await c.query(`SELECT count(*)::int n FROM historico_status WHERE id='rls-hist-esp'`)
+  conferir(r.rows[0].n === 1, "o espelho GRAVA na timeline do card que executa")
+
+  // 17. Revogar tira o acesso e preserva a prova de que ele existiu.
+  await comoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=now() WHERE id='rls-esp-1'`)
+  r = await comoApp(B, `SELECT count(*)::int n FROM demandas WHERE codigo='RLS-A-1'`)
+  conferir(r.rows[0].n === 0, "revogado: o destino deixa de ver o card")
+  r = await c.query(`SELECT count(*)::int n FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
+  conferir(r.rows[0].n === 1, "revogado: a aresta permanece — a prova do acesso não é apagada")
 } finally {
   await c.query("ROLLBACK")
 }
