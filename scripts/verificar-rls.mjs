@@ -137,6 +137,35 @@ try {
   }
   const comoApp = (orgId, sql, params) => comoRole("app_user", orgId, sql, params)
 
+  // Erro ESPERADO, com a transação preservada.
+  //
+  // `comoRole` não serve para isso: quando a consulta falha, o `RESET ROLE` do
+  // finally já morre com 25P02 (transação abortada), o erro real some, e todo
+  // comando seguinte morre junto. Enquanto a verificação que esperava erro era
+  // a ÚLTIMA do arquivo isso não aparecia — o `ROLLBACK` do finally limpava
+  // tudo logo depois. Bastou existir verificação depois dela para aparecer.
+  //
+  // `ROLLBACK TO SAVEPOINT` é o único comando que uma transação abortada aceita,
+  // e é ele que a devolve ao estado utilizável. Devolve também o `SET LOCAL
+  // ROLE` e o `app.org_id` ao que eram antes, então não há contexto vazando
+  // para a verificação seguinte.
+  async function erroComoRole(nomeRole, orgId, sql, params = []) {
+    await c.query("SAVEPOINT sp_erro")
+    try {
+      await c.query(`SET LOCAL ROLE ${nomeRole}`)
+      await c.query(`SELECT set_config('app.org_id', $1, true)`, [orgId ?? ""])
+      await c.query(sql, params)
+      await c.query("RESET ROLE")
+      await c.query("RELEASE SAVEPOINT sp_erro")
+      return null
+    } catch (e) {
+      await c.query("ROLLBACK TO SAVEPOINT sp_erro")
+      await c.query("RELEASE SAVEPOINT sp_erro")
+      return String(e.message).split("\n")[0]
+    }
+  }
+  const erroComoApp = (orgId, sql, params) => erroComoRole("app_user", orgId, sql, params)
+
   // 1. Antes de qualquer coisa: sem empresa declarada, nada sai. É a falha
   // fechada, e testar isso PRIMEIRO garante que nenhuma declaração anterior
   // esteja mascarando o resultado.
@@ -196,13 +225,8 @@ try {
   conferir(r.rows[0].n === 1, "app_auth lê usuarios — o login sobrevive ao RLS")
 
   // 8. E NÃO enxerga dado de cliente
-  let negou = false
-  try {
-    await comoRole("app_auth", null, `SELECT count(*) FROM demandas`)
-  } catch {
-    negou = true
-  }
-  conferir(negou, "app_auth não alcança demandas — o role está estreito")
+  const erroAuth = await erroComoRole("app_auth", null, `SELECT count(*) FROM demandas`)
+  conferir(!!erroAuth, "app_auth não alcança demandas — o role está estreito")
 
   // ─────────────────────────────────────────────────────────────────────────
   // Espelhamento cross-tenant: a empresa B executa um job da empresa A.
@@ -218,25 +242,6 @@ try {
     id: "rls-custo-a", organizacaoId: A, demandaId: "rls-dem-a", videomakerId: "rls-vm-1", valor: 500,
   })
 
-  // Erro esperado, com a transação inteira preservada. `SET LOCAL` e
-  // `set_config(..., true)` voltam junto com o savepoint, então não há
-  // vazamento de contexto para a prova seguinte.
-  async function erroComoApp(orgId, sql, params = []) {
-    await c.query("SAVEPOINT sp_erro")
-    try {
-      await c.query("SET LOCAL ROLE app_user")
-      await c.query(`SELECT set_config('app.org_id', $1, true)`, [orgId ?? ""])
-      await c.query(sql, params)
-      await c.query("RESET ROLE")
-      await c.query("RELEASE SAVEPOINT sp_erro")
-      return null
-    } catch (e) {
-      await c.query("ROLLBACK TO SAVEPOINT sp_erro")
-      await c.query("RELEASE SAVEPOINT sp_erro")
-      return String(e.message).split("\n")[0]
-    }
-  }
-
   // 9. O aperto de mão é pré-requisito, e quem confere é o banco — não a rota.
   let erro = await erroComoApp(A, `INSERT INTO demanda_compartilhamento
     ("id","demandaId","organizacaoOrigemId","organizacaoDestinoId","nomeOrigem","nomeDestino","criadoPorId")
@@ -244,14 +249,21 @@ try {
   conferir(!!erro && /parceria aceita/.test(erro), "sem parceria aceita, compartilhar é recusado")
 
   await inserir("parceria_organizacao", {
-    id: "rls-par-1", organizacaoConviteId: A, organizacaoConvidadaId: B,
+    id: "rls-par-1", organizacaoConvidanteId: A, organizacaoConvidadaId: B,
+    // Rótulos mentirosos de propósito: o gatilho tem que derivá-los.
+    nomeConvidante: "MENTIRA", nomeConvidada: "MENTIRA",
     status: "pendente", criadoPorId: "rls-user-1",
   })
+  r = await c.query(`SELECT "nomeConvidante" FROM parceria_organizacao WHERE id='rls-par-1'`)
+  conferir(
+    r.rows[0].nomeConvidante !== "MENTIRA",
+    "o nome do parceiro é derivado — nenhuma empresa lê a linha da outra em `organizacoes`"
+  )
 
   // 10. O par é um só. A→B e B→A seriam duas verdades sobre a mesma relação.
   erro = await erroComoApp(B, `INSERT INTO parceria_organizacao
-    ("id","organizacaoConviteId","organizacaoConvidadaId","status","criadoPorId")
-    VALUES ('rls-par-2','${B}','${A}','pendente','rls-user-1')`)
+    ("id","organizacaoConvidanteId","organizacaoConvidadaId","nomeConvidante","nomeConvidada","status","criadoPorId")
+    VALUES ('rls-par-2','${B}','${A}','x','y','pendente','rls-user-1')`)
   conferir(!!erro, "parceria no sentido inverso é recusada — o par é um só")
 
   // 11. Quem convida não aceita o próprio convite, senão o aceite é decoração.

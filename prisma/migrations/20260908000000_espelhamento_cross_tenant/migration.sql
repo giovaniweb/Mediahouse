@@ -31,8 +31,10 @@ CREATE TYPE "EscopoCompartilhamento" AS ENUM ('acompanhar', 'executar');
 -- ── 2) As duas tabelas ──────────────────────────────────────────────────────
 CREATE TABLE "parceria_organizacao" (
     "id" TEXT NOT NULL,
-    "organizacaoConviteId" TEXT NOT NULL,
+    "organizacaoConvidanteId" TEXT NOT NULL,
     "organizacaoConvidadaId" TEXT NOT NULL,
+    "nomeConvidante" TEXT NOT NULL,
+    "nomeConvidada" TEXT NOT NULL,
     "status" "StatusParceria" NOT NULL DEFAULT 'pendente',
     "criadoPorId" TEXT NOT NULL,
     "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,13 +63,13 @@ CREATE TABLE "demanda_compartilhamento" (
 );
 
 CREATE INDEX "parceria_organizacao_organizacaoConvidadaId_status_idx" ON "parceria_organizacao"("organizacaoConvidadaId", "status");
-CREATE INDEX "parceria_organizacao_organizacaoConviteId_status_idx" ON "parceria_organizacao"("organizacaoConviteId", "status");
-CREATE UNIQUE INDEX "parceria_organizacao_organizacaoConviteId_organizacaoConvid_key" ON "parceria_organizacao"("organizacaoConviteId", "organizacaoConvidadaId");
+CREATE INDEX "parceria_organizacao_organizacaoConvidanteId_status_idx" ON "parceria_organizacao"("organizacaoConvidanteId", "status");
+CREATE UNIQUE INDEX "parceria_organizacao_organizacaoConvidanteId_organizacaoCon_key" ON "parceria_organizacao"("organizacaoConvidanteId", "organizacaoConvidadaId");
 CREATE INDEX "demanda_compartilhamento_organizacaoDestinoId_revogadoEm_idx" ON "demanda_compartilhamento"("organizacaoDestinoId", "revogadoEm");
 CREATE INDEX "demanda_compartilhamento_demandaId_idx" ON "demanda_compartilhamento"("demandaId");
 CREATE UNIQUE INDEX "demanda_compartilhamento_demandaId_organizacaoDestinoId_key" ON "demanda_compartilhamento"("demandaId", "organizacaoDestinoId");
 
-ALTER TABLE "parceria_organizacao" ADD CONSTRAINT "parceria_organizacao_organizacaoConviteId_fkey" FOREIGN KEY ("organizacaoConviteId") REFERENCES "organizacoes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "parceria_organizacao" ADD CONSTRAINT "parceria_organizacao_organizacaoConvidanteId_fkey" FOREIGN KEY ("organizacaoConvidanteId") REFERENCES "organizacoes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "parceria_organizacao" ADD CONSTRAINT "parceria_organizacao_organizacaoConvidadaId_fkey" FOREIGN KEY ("organizacaoConvidadaId") REFERENCES "organizacoes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "demanda_compartilhamento" ADD CONSTRAINT "demanda_compartilhamento_demandaId_fkey" FOREIGN KEY ("demandaId") REFERENCES "demandas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "demanda_compartilhamento" ADD CONSTRAINT "demanda_compartilhamento_organizacaoOrigemId_fkey" FOREIGN KEY ("organizacaoOrigemId") REFERENCES "organizacoes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -93,10 +95,25 @@ DECLARE
   org_atual TEXT := NULLIF(current_setting('app.org_id', true), '');
   par_a TEXT;
   par_b TEXT;
+  nome_convidante TEXT;
+  nome_convidada TEXT;
 BEGIN
-  IF NEW."organizacaoConviteId" = NEW."organizacaoConvidadaId" THEN
+  IF NEW."organizacaoConvidanteId" = NEW."organizacaoConvidadaId" THEN
     RAISE EXCEPTION 'Uma empresa não faz parceria consigo mesma.';
   END IF;
+
+  -- Os rótulos são derivados, nunca digitados — mesma razão da aresta: cada
+  -- empresa só lê a PRÓPRIA linha em `organizacoes`, então quem insere não
+  -- consegue descobrir o nome da outra, e quem lê não consegue conferir o que
+  -- foi gravado. Derivar aqui é o que impede um convite de exibir o nome que o
+  -- convidante escolheu em vez do nome real do parceiro.
+  SELECT o.nome INTO nome_convidante FROM organizacoes o WHERE o.id = NEW."organizacaoConvidanteId";
+  SELECT o.nome INTO nome_convidada   FROM organizacoes o WHERE o.id = NEW."organizacaoConvidadaId";
+  IF nome_convidante IS NULL OR nome_convidada IS NULL THEN
+    RAISE EXCEPTION 'Organização inexistente na parceria.';
+  END IF;
+  NEW."nomeConvidante" := nome_convidante;
+  NEW."nomeConvidada"  := nome_convidada;
 
   IF TG_OP = 'INSERT' THEN
     -- A simetria que o `@@unique` não enxerga: A→B e B→A são o MESMO par, e
@@ -104,21 +121,21 @@ BEGIN
     -- verdade. O lock ordena o par para que dois convites simultâneos em
     -- direções opostas não passem os dois — sem ele a checagem abaixo é uma
     -- corrida, e corrida em regra de acesso é falha de segurança, não de dado.
-    par_a := LEAST(NEW."organizacaoConviteId", NEW."organizacaoConvidadaId");
-    par_b := GREATEST(NEW."organizacaoConviteId", NEW."organizacaoConvidadaId");
+    par_a := LEAST(NEW."organizacaoConvidanteId", NEW."organizacaoConvidadaId");
+    par_b := GREATEST(NEW."organizacaoConvidanteId", NEW."organizacaoConvidadaId");
     PERFORM pg_advisory_xact_lock(hashtext(par_a || '|' || par_b));
 
     IF EXISTS (
       SELECT 1 FROM parceria_organizacao p
-      WHERE p."organizacaoConviteId" = NEW."organizacaoConvidadaId"
-        AND p."organizacaoConvidadaId" = NEW."organizacaoConviteId"
+      WHERE p."organizacaoConvidanteId" = NEW."organizacaoConvidadaId"
+        AND p."organizacaoConvidadaId" = NEW."organizacaoConvidanteId"
     ) THEN
       RAISE EXCEPTION 'Já existe uma parceria entre estas duas empresas, no sentido inverso.';
     END IF;
   END IF;
 
   IF TG_OP = 'UPDATE' THEN
-    IF NEW."organizacaoConviteId" IS DISTINCT FROM OLD."organizacaoConviteId"
+    IF NEW."organizacaoConvidanteId" IS DISTINCT FROM OLD."organizacaoConvidanteId"
        OR NEW."organizacaoConvidadaId" IS DISTINCT FROM OLD."organizacaoConvidadaId" THEN
       RAISE EXCEPTION 'As empresas de uma parceria não mudam. Encerre e crie outra.';
     END IF;
@@ -178,8 +195,8 @@ BEGIN
     SELECT 1 FROM parceria_organizacao p
     WHERE p.status = 'aceita'
       AND p."encerradaEm" IS NULL
-      AND ((p."organizacaoConviteId" = org_dona AND p."organizacaoConvidadaId" = NEW."organizacaoDestinoId")
-        OR (p."organizacaoConvidadaId" = org_dona AND p."organizacaoConviteId" = NEW."organizacaoDestinoId"))
+      AND ((p."organizacaoConvidanteId" = org_dona AND p."organizacaoConvidadaId" = NEW."organizacaoDestinoId")
+        OR (p."organizacaoConvidadaId" = org_dona AND p."organizacaoConvidanteId" = NEW."organizacaoDestinoId"))
   ) THEN
     RAISE EXCEPTION 'Não há parceria aceita entre estas empresas. O compartilhamento exige o aceite dos dois lados.';
   END IF;
@@ -268,22 +285,22 @@ ALTER TABLE "demanda_compartilhamento" ENABLE ROW LEVEL SECURITY;
 -- A parceria é visível para os dois lados — senão a convidada não vê o convite.
 CREATE POLICY "parceria_leitura_dos_dois_lados" ON "parceria_organizacao"
   FOR SELECT TO "app_user"
-  USING ("organizacaoConviteId"   = current_setting('app.org_id', true)
-      OR "organizacaoConvidadaId" = current_setting('app.org_id', true));
+  USING ("organizacaoConvidanteId" = current_setting('app.org_id', true)
+      OR "organizacaoConvidadaId"  = current_setting('app.org_id', true));
 
 -- Convidar é ato de quem convida.
 CREATE POLICY "parceria_convite_da_convidante" ON "parceria_organizacao"
   FOR INSERT TO "app_user"
-  WITH CHECK ("organizacaoConviteId" = current_setting('app.org_id', true));
+  WITH CHECK ("organizacaoConvidanteId" = current_setting('app.org_id', true));
 
 -- Responder e encerrar: os dois lados podem. QUAL transição cada um pode fazer
 -- é a seção 3 — a política diz quais LINHAS, o gatilho diz quais MUDANÇAS.
 CREATE POLICY "parceria_resposta_dos_dois_lados" ON "parceria_organizacao"
   FOR UPDATE TO "app_user"
-  USING ("organizacaoConviteId"   = current_setting('app.org_id', true)
-      OR "organizacaoConvidadaId" = current_setting('app.org_id', true))
-  WITH CHECK ("organizacaoConviteId"   = current_setting('app.org_id', true)
-           OR "organizacaoConvidadaId" = current_setting('app.org_id', true));
+  USING ("organizacaoConvidanteId" = current_setting('app.org_id', true)
+      OR "organizacaoConvidadaId"  = current_setting('app.org_id', true))
+  WITH CHECK ("organizacaoConvidanteId" = current_setting('app.org_id', true)
+           OR "organizacaoConvidadaId"  = current_setting('app.org_id', true));
 
 -- Sem política de DELETE, de propósito: parceria encerrada vira `encerrada`,
 -- não desaparece. A prova de que o acesso existiu é o que uma auditoria pede.

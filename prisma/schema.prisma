@@ -2166,7 +2166,7 @@ model Organizacao {
 
   execucoesAgente AgenteExecucao[]
 
-  parceriasEnviadas  ParceriaOrganizacao[]     @relation("ParceriaConvite")
+  parceriasEnviadas  ParceriaOrganizacao[]     @relation("ParceriaConvidante")
   parceriasRecebidas ParceriaOrganizacao[]     @relation("ParceriaConvidada")
   espelhosConcedidos DemandaCompartilhamento[] @relation("CompartilhamentoOrigem")
   espelhosRecebidos  DemandaCompartilhamento[] @relation("CompartilhamentoDestino")
@@ -2219,9 +2219,18 @@ model ParceriaOrganizacao {
 
   /// Quem convidou. Pode compartilhar assim que a parceria for aceita — mas
   /// NÃO é quem aceita.
-  organizacaoConviteId   String
+  organizacaoConvidanteId String
   /// Quem foi convidada, e a única que pode levar o status a `aceita`.
-  organizacaoConvidadaId String
+  organizacaoConvidadaId  String
+
+  /// Rótulos congelados pelo gatilho, pela mesma razão da aresta: nenhuma das
+  /// duas empresas consegue LER a linha da outra em `organizacoes` — a política
+  /// `organizacoes_a_propria` devolve só a própria. Sem estes dois campos, a
+  /// tela de parcerias mostraria um id no lugar do nome do parceiro, e a saída
+  /// alternativa seria abrir `organizacoes` para a contraparte, que é
+  /// exatamente o que os rótulos existem para evitar.
+  nomeConvidante String
+  nomeConvidada  String
 
   status StatusParceria @default(pendente)
 
@@ -2235,12 +2244,12 @@ model ParceriaOrganizacao {
   encerradaEm     DateTime?
   encerradaPorId  String?
 
-  convite   Organizacao @relation("ParceriaConvite", fields: [organizacaoConviteId], references: [id], onDelete: Cascade)
-  convidada Organizacao @relation("ParceriaConvidada", fields: [organizacaoConvidadaId], references: [id], onDelete: Cascade)
+  convidante Organizacao @relation("ParceriaConvidante", fields: [organizacaoConvidanteId], references: [id], onDelete: Cascade)
+  convidada  Organizacao @relation("ParceriaConvidada", fields: [organizacaoConvidadaId], references: [id], onDelete: Cascade)
 
-  @@unique([organizacaoConviteId, organizacaoConvidadaId])
+  @@unique([organizacaoConvidanteId, organizacaoConvidadaId])
   @@index([organizacaoConvidadaId, status])
-  @@index([organizacaoConviteId, status])
+  @@index([organizacaoConvidanteId, status])
   @@map("parceria_organizacao")
 }
 
