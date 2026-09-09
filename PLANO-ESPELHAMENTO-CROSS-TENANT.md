@@ -6,10 +6,14 @@ produtora **sem duplicar o registro** e **sem afrouxar o isolamento**.
 Escrito em 08/09/2026 · decisão de produto tomada (Espelhamento, não Cópia) ·
 **parceria previamente aceita aprovada pelo Giovani em 08/09/2026** (§6.1).
 
-> **Estado:** PR 1 implementado — schema, migration, gatilhos, políticas e as
-> provas no `verificar-rls.mjs`. As 24 migrations aplicam num Postgres 18 limpo,
-> `migrate diff` diz *No difference detected*, e as 18 provas de isolamento
-> passam. PRs 2 a 4 pendentes (§7).
+> **Estado: os quatro PRs implementados** e no PR
+> [#68](https://github.com/giovaniweb/Mediahouse/pull/68), com o CI verde. As 24
+> migrations aplicam num Postgres 18 limpo, `migrate diff` diz *No difference
+> detected*, e o `verificar-rls.mjs` prova 22 verificações contra um Postgres 16
+> real — 9 delas novas, sobre a fronteira do espelho.
+>
+> **Falta o que nenhuma medição substitui:** a passada humana pelas telas, e a
+> ordem de release do §7.
 
 Documentos que este plano assume lidos: `RLS-PLANO-DE-VOO.md` (a política é
 `organizacaoId = current_setting('app.org_id')`), `AUDITORIA-PERMISSOES.md`
@@ -604,10 +608,19 @@ poderia ser ignorado.
 2. ~~**O aceite do destino, job a job.**~~ **Descartado, como recomendado:** a
    parceria já é o aceite, no nível certo. Pedir aceite por card somaria um
    estado para responder a mesma pergunta duas vezes.
-3. **Destino desativado ou parceria encerrada.** A aresta continua valendo ou
-   caduca junto? Recomendo caducar, e isso muda a política (§1.3 passa a conferir
-   `organizacoes.ativo`), o que custa um join a mais em toda leitura.
-4. **O cliente final aparece?** O plano corta `clienteFinalNome/Telefone/Email`
+3. **Destino desativado ou parceria encerrada.** ⚠️ **Implementado como "a
+   aresta continua valendo", que é o CONTRÁRIO do que eu havia recomendado** —
+   e a razão apareceu ao escrever a tela: encerrar a relação comercial no meio de
+   uma captação pararia um job real. Encerrar a parceria impede compartilhamentos
+   NOVOS (o gatilho exige `status = 'aceita'`) e não toca nos que já existem;
+   revogar card a card é ato separado, e a tela avisa isso ao confirmar.
+   Se você preferir que caduque junto, é uma política a mais e um join por leitura.
+4. **O custo do videomaker num card terceirizado.** Fora do escopo, de propósito.
+   `CustoVideomaker` só nasce em `finalizado`, que o espelho não alcança — então
+   hoje o custo continua sendo lançado pela dona, como sempre foi. Se a produtora
+   parceira passar a pagar o próprio videomaker por dentro do NuFlow, isso é
+   modelagem financeira nova, não um efeito colateral a ser descoberto depois.
+5. **O cliente final aparece?** O plano corta `clienteFinalNome/Telefone/Email`
    da lista branca (o destino não os edita), mas **não** os esconde da leitura —
    quem vai gravar precisa do endereço e do contato no local. Se a Contourline
    preferir intermediar o contato, esses campos saem do payload do espelho e
@@ -622,10 +635,21 @@ sozinho — o recurso só existe para o usuário no PR 4.
 
 | # | entrega | critério de parada | reversível? |
 |---|---|---|---|
-| **1** | Schema + migration: tabela, gatilhos, políticas, travas de saída. **Inerte** — sem UI, sem rota | `verificar-rls.mjs` verde, incluindo as 5 provas novas. `npm run db:deploy` num banco de cópia, duas vezes (idempotência) | sim, `DROP` da tabela |
-| **2** | `lib/compartilhamento.ts`, `requireDemandaAcesso`, `escopoComEspelho`, guarda de transição com o eixo `origem`. Ainda **sem rota que crie aresta** | testes unitários da guarda; auditor de tenancy limpo; nenhuma tela muda de comportamento (nenhuma aresta existe) | sim, código puro |
-| **3** | Rotas: criar/revogar aresta, adoção nas 5 rotas da §2.1, notificação cruzada | teste de ponta a ponta em `empresa-teste` ↔ `giovani`: compartilhar, mover pelo destino, ver o aviso chegar na origem, revogar, o card sumir | sim |
-| **4** | Interface: chip nas três visões, faixa no detalhe, ação de compartilhar, coluna bloqueada, aba "Terceirizados" | passada humana nas duas empresas; nenhum bloco de custo/NF/aprovação renderizando do lado espelho | sim |
+| **1** ✅ | Schema + migration: tabelas, gatilhos, políticas, travas de saída. **Inerte** | 22 verificações verdes no CI; `migrate diff` sem diferença | sim, `DROP` da tabela |
+| **2** ✅ | `lib/compartilhamento.ts`, `requireDemandaAcesso`, `escopoComEspelho`, guarda com o eixo `origem` | 589 testes; auditor em zero; trava de exaustividade provada por simulação nos dois sentidos | sim, código puro |
+| **3** ✅ | `/api/parcerias`, `/api/demandas/[id]/espelhar`, adoção em 5 rotas, aviso cruzado | build verde; a passada humana continua pendente | sim |
+| **4** ✅ | Chip nas três visões, faixa no detalhe, seção de terceirizar, `/parcerias`, coluna bloqueada | idem | sim |
+
+Duas correções de rumo que a execução impôs, registradas porque contradizem o
+que está escrito acima:
+
+- **`/compartilhar` já existia.** É o link público de acompanhamento
+  (`/d/[token]`), em uso. A rota do espelhamento virou
+  `/api/demandas/[id]/espelhar`. Os nomes são parecidos e os recursos não são.
+- **A aba "Terceirizados" não foi feita.** O chip já responde "de quem é este
+  card" nas três visões, e uma aba a mais para o mesmo dado é recurso que
+  ninguém pediu — se a operação sentir falta de filtrar por isso, vira um filtro
+  na barra que já existe, não uma aba.
 
 **Ordem obrigatória de release**, que este repositório aprendeu em 20/08: deploy
 do código **antes** da migration, e toda migration compatível com o código que
