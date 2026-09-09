@@ -416,3 +416,54 @@ backup em `~/nuflow-virada/env-local-antes-da-virada.bak`.
 4. **Virada B — ligar o RLS.** Agora ela é barata: a consulta com transação, que
    custava 810 ms em US-West, custa ~27 ms aqui. `ligar-rls`, e `desligar-rls` se
    qualquer tela vier vazia.
+
+---
+
+## 12. O que a virada esqueceu — 08/09/2026, 24 horas depois
+
+A Virada A trocou as variáveis **na Vercel**. Ninguém trocou os secrets **no
+GitHub**, e nada no processo pedia isso.
+
+Vinte e quatro horas depois, o primeiro release desde a mudança de região tentou
+aplicar uma migration e devolveu:
+
+```
+Error: ERROR: cannot execute INSERT in a read-only transaction
+  at migration_name="20260906000000_rls_set_role_para_o_verificador"
+  ... aws-1-us-west-1.pooler.supabase.com:5432
+```
+
+`us-west-1`. O release estava aplicando no banco **abandonado** — os secrets
+`DIRECT_URL_PRODUCAO` e `DATABASE_URL_PRODUCAO` do environment `producao` eram
+de **20/08**, dezoito dias antes da virada, e nunca foram reapontados.
+
+**O congelamento do §5 salvou a operação.** Ele existia para impedir "dois bancos
+com verdades diferentes", e foi exatamente isso que ele fez. Sem ele, o release
+teria aplicado a migration em `us-west-1` com sucesso, o Actions ficaria verde, e
+a produção continuaria sem as tabelas — uma falha silenciosa, do tipo que se
+descobre dias depois e não se explica.
+
+O custo real foi uma hora de Kanban vazio em produção, procurando defeito numa
+migration que não tinha defeito nenhum.
+
+### O que mudou
+
+`preflight` ganhou a seção **GitHub — os secrets do release**. Secret é
+write-only: não há como ler o valor e comparar com a URL do destino. O que dá
+para comparar é a **data** — um secret gravado antes do último `apontar` é, por
+construção, anterior à última troca de banco. Não prova que o valor está certo;
+prova que está velho, que é o caso que aconteceu.
+
+Verificado nos dois sentidos: com os secrets regravados em 09/09 o item fica
+verde; com a data real de 20/08, ele reprova e nomeia o secret.
+
+`apontar` passa a **avisar, no momento em que troca a Vercel**, que o GitHub
+continua apontando para o banco antigo, com os dois comandos de regravação
+prontos — que leem de `urls-destino.env` e não imprimem o valor na tela.
+
+### O que continua sem trava
+
+A senha do `postgres` de São Paulo agora vive em **três lugares**: Vercel,
+`.env.local` e os secrets do GitHub. O §11 já registrava que ela precisa ser
+rotacionada. Quando for, os três precisam mudar juntos — e o `preflight` só
+consegue reclamar da data, nunca do valor.
