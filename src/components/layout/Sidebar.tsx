@@ -31,7 +31,6 @@ import {
   Truck,
   Boxes,
   Image as ImageIcon,
-  Inbox,
   Sparkles,
   Handshake,
   Layers,
@@ -54,7 +53,6 @@ const sections = [
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
       { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
-      { href: "/caixa-entrada", label: "Caixa de Entrada", icon: Inbox },
     ],
   },
   {
