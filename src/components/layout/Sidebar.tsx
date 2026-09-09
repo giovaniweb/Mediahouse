@@ -36,11 +36,14 @@ import {
   Layers,
   VideoOff,
   ScrollText,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
+import { moduloDaRota } from "@/lib/modulos"
+import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
 
@@ -133,6 +136,7 @@ const sections = [
 export function Sidebar() {
   const pathname = usePathname()
   const { data: me } = useMe()
+  const { aberta, fechar } = useNavegacaoMovel()
 
   const mods = me?.modulos
   const isAdmin = me?.tipo === "admin" || me?.tipo === "gestor"
@@ -142,12 +146,17 @@ export function Sidebar() {
 
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
-    // Itens de módulos congelados — ocultos para todos (ver src/lib/modulos.ts)
     // Módulo que esta empresa não tem some do menu. A verdade é do servidor
     // (/api/me devolve os módulos da empresa ativa); enquanto carrega, `mods`
     // fica indefinido e nada é escondido — piscar item é melhor que piscar menu.
-    if (mods && href === "/ideias" && !mods.ideias) return false
-    if (mods && href === "/mensagens" && !mods.mensagens) return false
+    //
+    // A pergunta é feita pelo mesmo `moduloDaRota` que o middleware usa, e não
+    // por href escrito à mão. Era esse o buraco: `/ideias` e `/mensagens`
+    // tinham regra própria, `/eventos` era escondido pelo rótulo da seção, e
+    // `/coberturas` — que mora em "Audiovisual" e pertence a "eventos" — não
+    // batia em nenhuma das duas. Ficou meses no menu de um módulo desligado.
+    const modulo = moduloDaRota(href)
+    if (modulo && mods && !mods[modulo]) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
     if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
@@ -158,91 +167,81 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-56 min-h-screen bg-zinc-900 flex flex-col border-r border-zinc-800">
-      {/* Logo + WhatsApp Status */}
-      <div className="px-4 py-5 border-b border-zinc-800 space-y-3">
-        <div className="flex items-center gap-2.5">
-          <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-md shrink-0" />
-          <span className="text-white font-semibold tracking-tight">NuFlow</span>
-        </div>
-        <WhatsAppStatus />
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-        {/* Link Página Inicial */}
-        <Link
-          href="/sobre"
-          className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
-        >
-          <Home className="w-4 h-4 flex-shrink-0" />
-          Página Inicial
-        </Link>
-
-        {/* Link exclusivo para videomakers externos */}
-        {me?.tipo === "videomaker" && (
-          <div>
-            <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
-              Minha Área
-            </p>
-            <div className="space-y-0.5">
-              {[
-                { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
-                // O videomaker enxerga o quadro do audiovisual inteiro, não só o
-                // que é dele — o rótulo antigo prometia menos do que a tela entrega.
-                { href: "/demandas", label: "Demandas", icon: Film },
-                { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
-              ].map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
-                return (
-                  <Link key={item.href} href={item.href}
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
-                      isActive ? "bg-white text-zinc-900 font-medium" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                    )}>
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
+    <>
+      {/* Fundo escuro só no celular. Clicar fora fecha — é o gesto que a pessoa
+          tenta antes de procurar o X. */}
+      <div
+        onClick={fechar}
+        aria-hidden="true"
+        className={cn(
+          "md:hidden fixed inset-0 z-40 bg-black/60 transition-opacity duration-200",
+          aberta ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
+      />
 
-        {me?.tipo !== "videomaker" && sections.map((section) => {
-          // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
-          if (section.label === "Growth" && mods && !mods.growth) return null
-          if (section.label === "Eventos" && mods && !mods.eventos) return null
+      {/* Gaveta no celular, coluna permanente a partir de md.
+          `invisible` quando fechada, e não só `-translate-x-full`: um painel
+          fora da tela continua recebendo Tab, e quem navega por teclado cairia
+          dentro de um menu invisível. `visibility` tira do foco e ainda anima. */}
+      <aside
+        id="navegacao-principal"
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-56 bg-zinc-900 flex flex-col border-r border-zinc-800",
+          "transition-transform duration-200 ease-out",
+          "md:static md:h-screen md:translate-x-0 md:visible md:shrink-0",
+          aberta ? "translate-x-0 visible" : "-translate-x-full invisible"
+        )}
+      >
+        {/* Logo + WhatsApp Status */}
+        <div className="px-4 py-5 border-b border-zinc-800 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-md shrink-0" />
+            <span className="text-white font-semibold tracking-tight">NuFlow</span>
+            <button
+              type="button"
+              onClick={fechar}
+              aria-label="Fechar navegação"
+              className="md:hidden ml-auto flex items-center justify-center w-11 h-11 -mr-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <WhatsAppStatus />
+        </div>
 
-          // Seção da plataforma some para quem não administra a plataforma.
-          if (section.superAdmin && !me?.superAdmin) return null
-          const visibleItems = section.items.filter((item) => canSee(item.href))
-          if (visibleItems.length === 0) return null
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+          {/* Link Página Inicial */}
+          <Link
+            href="/sobre"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
+          >
+            <Home className="w-4 h-4 flex-shrink-0" />
+            Página Inicial
+          </Link>
 
-          return (
-            <div key={section.label}>
+          {/* Link exclusivo para videomakers externos */}
+          {me?.tipo === "videomaker" && (
+            <div>
               <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
-                {section.label}
+                Minha Área
               </p>
               <div className="space-y-0.5">
-                {visibleItems.map((item) => {
+                {[
+                  { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
+                  // O videomaker enxerga o quadro do audiovisual inteiro, não só o
+                  // que é dele — o rótulo antigo prometia menos do que a tela entrega.
+                  { href: "/demandas", label: "Demandas", icon: Film },
+                  { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
+                ].map((item) => {
                   const Icon = item.icon
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" && pathname.startsWith(item.href))
-
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
+                    <Link key={item.href} href={item.href}
                       className={cn(
                         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
-                        isActive
-                          ? "bg-white text-zinc-900 font-medium"
-                          : "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                      )}
-                    >
+                        isActive ? "bg-white text-zinc-900 font-medium" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      )}>
                       <Icon className="w-4 h-4 flex-shrink-0" />
                       {item.label}
                     </Link>
@@ -250,33 +249,76 @@ export function Sidebar() {
                 })}
               </div>
             </div>
-          )
-        })}
-      </nav>
+          )}
 
-      {/* User info + Logout */}
-      {me && (
-        <div className="px-3 py-3 border-t border-zinc-800">
-          <div className="flex items-center gap-2 px-2 mb-2">
-            <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-white">
-              {me.nome?.charAt(0)?.toUpperCase()}
+          {me?.tipo !== "videomaker" && sections.map((section) => {
+            // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
+            if (section.label === "Growth" && mods && !mods.growth) return null
+            if (section.label === "Eventos" && mods && !mods.eventos) return null
+
+            // Seção da plataforma some para quem não administra a plataforma.
+            if (section.superAdmin && !me?.superAdmin) return null
+            const visibleItems = section.items.filter((item) => canSee(item.href))
+            if (visibleItems.length === 0) return null
+
+            return (
+              <div key={section.label}>
+                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
+                  {section.label}
+                </p>
+                <div className="space-y-0.5">
+                  {visibleItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== "/dashboard" && pathname.startsWith(item.href))
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
+                          isActive
+                            ? "bg-white text-zinc-900 font-medium"
+                            : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                        )}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* User info + Logout */}
+        {me && (
+          <div className="px-3 py-3 border-t border-zinc-800">
+            <div className="flex items-center gap-2 px-2 mb-2">
+              <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-white">
+                {me.nome?.charAt(0)?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white font-medium truncate">{me.nome}</p>
+                <p className="text-[10px] text-zinc-500 capitalize">{me.tipo}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-white font-medium truncate">{me.nome}</p>
-              <p className="text-[10px] text-zinc-500 capitalize">{me.tipo}</p>
-            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors w-full"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sair
+            </button>
           </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors w-full"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Sair
-          </button>
-        </div>
-      )}
+        )}
 
-      <VersaoNoAr />
-    </aside>
+        <VersaoNoAr />
+      </aside>
+    </>
   )
 }

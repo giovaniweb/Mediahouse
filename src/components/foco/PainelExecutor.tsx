@@ -119,7 +119,10 @@ export function PainelExecutor() {
   const feitos = itens.filter((i) => i.concluido).length
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[19rem] max-w-[calc(100vw-2rem)]">
+    // z-30, abaixo do fundo escuro da gaveta (z-40) e da própria gaveta (z-50).
+    // Em z-40 ele empatava com o fundo e, por vir depois no DOM, aparecia por
+    // cima do menu aberto no celular.
+    <div className="fixed bottom-4 right-4 z-30 w-[19rem] max-w-[calc(100vw-2rem)]">
       <div className="rounded-xl border border-zinc-700 bg-zinc-900/95 backdrop-blur shadow-2xl shadow-black/50 overflow-hidden">
         {/* Cabeçalho — clicável inteiro para abrir/fechar */}
         <button

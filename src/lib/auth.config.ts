@@ -126,15 +126,15 @@ export const authConfig: NextAuthConfig = {
         return Response.redirect(new URL("/dashboard", request.nextUrl))
       }
 
-      // Redirecionar usuários mobile do /dashboard para /campo
-      if (pathname === "/dashboard") {
-        const ua = request.headers.get("user-agent") ?? ""
-        const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua)
-        if (isMobile) {
-          return Response.redirect(new URL("/campo", request.nextUrl))
-        }
-      }
-
+      // Não há mais desvio por User-Agent. Até 09/09/2026, quem abrisse
+      // /dashboard de um celular era mandado para /campo — um portal de
+      // Coberturas. O desvio escondia o problema em UMA porta: quem abria
+      // /demandas ou /jobs por link de WhatsApp caía no shell de desktop com a
+      // lateral fixa de 224px ocupando 57% de uma tela de 390px.
+      //
+      // Agora /campo saiu junto com o módulo de eventos e a lateral virou
+      // gaveta (ver Sidebar.tsx). O celular vê o mesmo produto que o desktop,
+      // com as mesmas permissões — que é o que o desvio nunca garantiu.
       return true
     },
     async jwt({ token, user }) {
