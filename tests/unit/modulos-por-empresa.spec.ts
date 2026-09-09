@@ -84,3 +84,47 @@ describe("rotas", () => {
     expect(await rotaBloqueadaParaOrg("/dashboard", "org-A")).toBe(false)
   })
 })
+
+// A regressão que motivou tudo isto: o módulo "eventos" estava desligado desde
+// agosto e a descrição dele já dizia "Coberturas" — mas /coberturas não estava
+// na lista de rotas. A página seguiu no ar, no menu, em produção, enquanto
+// /eventos sumia. Um módulo desligado pela metade é pior que um módulo ligado:
+// ninguém mantém o que acha que não existe.
+describe("coberturas pertence a eventos — a rota que tinha escapado", () => {
+  it("página e API de cobertura são do módulo eventos", () => {
+    expect(moduloDaRota("/coberturas")).toBe("eventos")
+    expect(moduloDaRota("/coberturas/abc123")).toBe("eventos")
+    expect(moduloDaRota("/api/coberturas")).toBe("eventos")
+    expect(moduloDaRota("/api/coberturas/abc123/checklist")).toBe("eventos")
+  })
+
+  it("o portal de campo cai junto: é uma casca de coberturas", () => {
+    expect(moduloDaRota("/campo")).toBe("eventos")
+    expect(moduloDaRota("/api/campo/agenda")).toBe("eventos")
+  })
+
+  it("com eventos indisponível, o middleware barra as duas", () => {
+    expect(rotaIndisponivelNaPlataforma("/coberturas")).toBe(true)
+    expect(rotaIndisponivelNaPlataforma("/campo")).toBe(true)
+  })
+
+  it("o link público de cobertura NÃO é bloqueado — já está na mão do cliente", () => {
+    // Desligar um módulo esconde a operação interna. O que já foi enviado para
+    // fora continua abrindo, senão a poda quebra entrega de terceiro.
+    expect(moduloDaRota("/api/publico/cobertura/evento-x")).toBeNull()
+    expect(rotaIndisponivelNaPlataforma("/api/publico/cobertura/evento-x")).toBe(false)
+    expect(rotaIndisponivelNaPlataforma("/api/publico/cobertura/evento-x/zip")).toBe(false)
+  })
+})
+
+describe("banco de ideias sai do piloto", () => {
+  it("está indisponível na plataforma, e nem uma linha ativa reabre", async () => {
+    expect(DISPONIVEL_NA_PLATAFORMA.ideias).toBe(false)
+    findMany.mockResolvedValue([{ modulo: "ideias", ativo: true }])
+    expect((await modulosDaOrganizacao("org-A")).ideias).toBe(false)
+  })
+
+  it("empresa nova não nasce com ele", () => {
+    expect(PADRAO_MODULOS.ideias).toBe(false)
+  })
+})
