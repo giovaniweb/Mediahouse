@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { TagEspelho } from "./TagEspelho"
 import { ArrowUpDown, ArrowUp, ArrowDown, Download, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -165,7 +166,12 @@ export function DemandasTabela({ demandas, onAbrir }: {
                   className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-800/50 cursor-pointer transition-colors"
                 >
                   <td className="px-3 py-2.5 font-mono text-[11px] text-zinc-500">{d.codigo}</td>
-                  <td className="px-3 py-2.5 text-zinc-200 max-w-0 truncate">{d.titulo}</td>
+                  <td className="px-3 py-2.5 text-zinc-200 max-w-0 truncate">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{d.titulo}</span>
+                      <TagEspelho espelho={d.espelho} className="shrink-0" />
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-zinc-400 hidden lg:table-cell truncate">
                     {d.produtos?.[0]?.produto?.nome ?? "—"}
                   </td>

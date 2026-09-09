@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
+import { EspelhoSecao } from "./EspelhoSecao"
 import useSWR from "swr"
 import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
@@ -324,9 +326,17 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const opcoesEdicao = dataOpcoesEdicao?.opcoes ?? []
   const produtos = dataProdutos?.produtos ?? []
   const papelAtual = String(dataMe?.membership?.papel ?? dataMe?.tipo ?? "").toLowerCase()
-  const podeGerenciar = papelAtual === "admin" || papelAtual === "gestor"
-  const podeEditar = podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda)
-  const podeExcluir = podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda)
+  // Espelhamento cross-tenant: de que lado da mesa esta empresa está neste card.
+  // Vem resolvido do servidor — a tela não sabe o que é uma aresta.
+  const espelho = data?.espelho as EspelhoDoCard | null | undefined
+  // Quem EXECUTA o card de outra empresa não o gerencia: editar briefing,
+  // excluir e gerar link público de acompanhamento são da dona. O servidor já
+  // recusa com 404/403; isto evita oferecer o botão que vai falhar, que é a pior
+  // forma de alguém descobrir uma fronteira.
+  const souExecutorExterno = espelho?.papel === "destino"
+  const podeGerenciar = !souExecutorExterno && (papelAtual === "admin" || papelAtual === "gestor")
+  const podeEditar = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda))
+  const podeExcluir = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda))
 
   // ── Converter em Job (cobertura) ────────────────────────────────────────────
   // Não duplica registro: a rota faz UPDATE da classificação nesta mesma
@@ -1141,6 +1151,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   const corpo = (
     <>
+      <FaixaEspelho espelho={espelho} />
       {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
       {aprovacaoAberta && demanda.linkCliente && (
         <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
@@ -2093,6 +2104,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
         <div className="space-y-4">
+          {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
+          {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
+
           {/* Solicitante */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <h2 className="font-semibold text-zinc-300 mb-3">Solicitante</h2>

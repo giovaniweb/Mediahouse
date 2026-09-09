@@ -26,12 +26,17 @@ const JOB: JobTransicao = {
 function ator(
   id: string,
   papel: string,
-  extras: { videomakerId?: string | null; explicita?: Partial<MapaPermissoes> | null } = {}
+  extras: {
+    videomakerId?: string | null
+    explicita?: Partial<MapaPermissoes> | null
+    origem?: ActorTransicao["origem"]
+  } = {}
 ): ActorTransicao {
   return {
     id,
     papel,
     videomakerId: extras.videomakerId ?? null,
+    origem: extras.origem ?? "dona",
     permissoes: permissaoEfetiva({
       membro: { papel, organizacaoId: "org-1", statusUsuario: "ativo" },
       permissaoExplicita: extras.explicita ?? null,

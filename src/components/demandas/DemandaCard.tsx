@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { formatarDataCurta } from "@/lib/datas"
 import { naoEnviadoAoCliente } from "@/lib/growth-kanban"
+import { TagEspelho, type EspelhoDoCard } from "./TagEspelho"
 
 const prioridadeConfig = {
   urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -47,6 +48,8 @@ interface DemandaCardProps {
     solicitante?: { nome: string } | null
     eventoGestao?: { id: string; nome: string } | null
     produtos?: { produto?: { nome: string } | null }[]
+    /** Vem pronto do servidor — a tela não sabe o que é uma aresta. */
+    espelho?: EspelhoDoCard | null
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
@@ -150,6 +153,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
               {diasAtraso ? `ATRASADA — ${diasAtraso}d` : "ATRASADA"}
             </span>
           )}
+          <TagEspelho espelho={demanda.espelho} />
           <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", deptColor)}>
             {demanda.departamento}
           </span>

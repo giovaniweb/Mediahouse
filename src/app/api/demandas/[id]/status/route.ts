@@ -5,7 +5,9 @@ import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
-import { requireDemandaOrg } from "@/lib/org"
+import { requireDemandaAcesso } from "@/lib/compartilhamento"
+import { comOrg } from "@/lib/org-contexto"
+import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
@@ -21,9 +23,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
-  const guard = await requireDemandaOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const { organizacaoId } = guard
+  // Aceita a empresa DONA e a que executa por espelhamento. Quem só acompanha
+  // recebe 403; quem não tem aresta nenhuma recebe 404 — ver lib/compartilhamento.ts.
+  const acesso = await requireDemandaAcesso(session, id, "executar")
+  if (acesso instanceof NextResponse) return acesso
+  const { papel: papelNoCard, nomeContraparte } = acesso
+
+  // A empresa DONA do card. Igual à empresa ativa quando não há espelho, e é
+  // por isso que substituir `organizacaoId` por ela aqui não muda nada para
+  // quem não usa o recurso.
+  //
+  // Tudo o que esta rota dispara pertence ao CARD, não a quem apertou o botão:
+  // a nota fiscal, o custo, o alerta, o aviso de WhatsApp. Se esses efeitos
+  // saíssem na empresa da executora, a dona pararia de receber os próprios
+  // avisos e a NF de um videomaker nasceria na empresa errada.
+  const organizacaoId = acesso.donaId
   const body = await req.json()
   const { statusInterno, observacao } = body
   // Sanitiza origem para valores válidos do enum OrigemHistorico
@@ -64,7 +78,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // papel na empresa; sem como determinar, `null` — e `null` nega.
     // Devolve também o papel LIDO DO BANCO: a sessão não serve como autoridade
     // aqui, porque `auth.ts` faz `papel ?? usuario.tipo` ao emitir o token.
-    permissoesEfetivas(session.user.id, organizacaoId),
+    // O vínculo é na empresa ATIVA da pessoa — ela não é membro da empresa dona
+    // quando está executando por espelhamento, e perguntar pela dona devolveria
+    // null, que a guarda trata como "não determinável" e NEGA.
+    permissoesEfetivas(session.user.id, acesso.organizacaoId),
     prisma.videomaker.findFirst({ where: { usuarioId: session.user.id }, select: { id: true } }).catch(() => null),
   ])
 
@@ -76,6 +93,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       papel: vinculo?.papel ?? null,
       permissoes: vinculo?.permissoes ?? null,
       videomakerId: perfilVideomaker?.id ?? null,
+      origem: papelNoCard,
     },
     demanda: {
       videomakerId: demandaAtual.videomakerId,
@@ -254,7 +272,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
     if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {
-      emSegundoPlano(async () => {
+      // `brutos_enviados` é o único destes blocos que o espelho alcança — os
+      // outros dependem de `para_postar`/`finalizado`, que estão fora da lista
+      // do executor. Por isso ele roda declarando a empresa da dona: a NF e o
+      // WhatsApp que ela dispara são dela.
+      emSegundoPlano(() => comOrg(organizacaoId, async () => {
         try {
           const nfExistente = await prisma.notaFiscalUpload.findFirst({
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
@@ -277,7 +299,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)
         }
-      }, "nf-upload-brutos")
+      }), "nf-upload-brutos")
     }
 
     // ── Atualizar ultimoConteudo nos produtos ao finalizar ────────────────────
@@ -353,7 +375,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // A demanda mudou de estado — o que estava pendente por causa do estado
     // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
-    emSegundoPlano(() => resolverAlertas(organizacaoId, id), "resolver-alertas")
+    emSegundoPlano(() => comOrg(organizacaoId, () => resolverAlertas(organizacaoId, id)), "resolver-alertas")
+
+    // O movimento do espelho tem que chegar na dona — é o ponto do recurso.
+    // Sem isto, a executora avisa a si mesma e a Contourline não fica sabendo.
+    if (papelNoCard === "espelho") {
+      emSegundoPlano(
+        () => avisarOrigemDoEspelho({
+          demandaId: id,
+          codigo: demandaAtual.codigo,
+          titulo: demandaAtual.titulo,
+          donaId: organizacaoId,
+          nomeExecutora: nomeContraparte ?? "Empresa parceira",
+          statusNovo: statusInterno,
+        }),
+        "aviso-espelho-origem"
+      )
+    }
 
     emSegundoPlano(() => notificarMudancaKanban({
       statusNovo: statusInterno,

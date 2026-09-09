@@ -575,7 +575,7 @@ describe("ações do videomaker (§13)", () => {
         const r = podeTransicionar({
           statusAtual: s,
           novoStatus: acao.alvo,
-          usuario: { id: "u-vm", papel: "videomaker", videomakerId: "vm-1", permissoes },
+          usuario: { id: "u-vm", papel: "videomaker", videomakerId: "vm-1", permissoes, origem: "dona" },
           demanda: {
             videomakerId: "vm-1", editorId: null,
             linkBrutos: "https://drive/brutos", linkFolderBrutos: null,

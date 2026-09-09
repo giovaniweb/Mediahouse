@@ -37,6 +37,8 @@ export interface DemandaLista {
   /** Link de aprovação do cliente. Já vinha da API (a consulta usa `include`);
    *  o kanban usa a AUSÊNCIA dele para marcar o card que não saiu por aqui. */
   linkCliente?: string | null
+  /** Executado por outra empresa (ou terceirizado para uma). Vem pronto da API. */
+  espelho?: { papel: "origem" | "destino"; contraparte: string; escopo: "acompanhar" | "executar" } | null
   _count?: { comentarios: number; arquivos: number }
 }
 

@@ -214,7 +214,7 @@ describe("10. Transition Guard usando a permissão efetiva", () => {
       statusAtual: "editando",
       novoStatus: "revisao_pendente",
       usuario: {
-        id: "u-1", papel, videomakerId: extras.videomakerId ?? null,
+        id: "u-1", papel, videomakerId: extras.videomakerId ?? null, origem: "dona",
         permissoes: permissaoEfetiva({
           membro: { papel, organizacaoId: extras.org ?? ORG, statusUsuario: extras.statusUsuario ?? "ativo" },
           permissaoExplicita: explicita ?? null,
@@ -302,7 +302,7 @@ describe("bypass de gestão sai do vínculo, não do token", () => {
     const r = podeTransicionar({
       statusAtual: "editando",
       novoStatus: "aprovado",
-      usuario: { id: "u-1", papel: "admin", permissoes: null, videomakerId: null },
+      usuario: { id: "u-1", papel: "admin", permissoes: null, videomakerId: null, origem: "dona" },
       demanda: JOB,
     })
     expect(r.ok).toBe(false)
@@ -315,7 +315,7 @@ describe("bypass de gestão sai do vínculo, não do token", () => {
       statusAtual: "editando",
       novoStatus: "aprovado",
       usuario: {
-        id: "u-1", papel: "videomaker", videomakerId: "vm-1",
+        id: "u-1", papel: "videomaker", videomakerId: "vm-1", origem: "dona",
         permissoes: permissaoEfetiva({
           membro: { papel: "videomaker", organizacaoId: ORG, statusUsuario: "ativo" },
           organizacaoId: ORG,

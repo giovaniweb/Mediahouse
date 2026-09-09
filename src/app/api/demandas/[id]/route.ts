@@ -7,6 +7,7 @@ import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsap
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
 import { validarPrazo, mesmoDia, formatarData, formatarDataCurta } from "@/lib/datas"
@@ -38,8 +39,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
-  const guard = await assertDemandaOrg(session, id)
-  if (guard instanceof NextResponse) return guard
+  // LER aceita espelho; PUT e DELETE, logo abaixo, continuam em
+  // `assertDemandaOrg` — editar briefing e excluir o card são da dona.
+  const acesso = await requireDemandaAcesso(session, id, "acompanhar")
+  if (acesso instanceof NextResponse) return acesso
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
@@ -80,12 +83,24 @@ export async function GET(_req: NextRequest, { params }: Params) {
         // expiradas — e a tela mostrava o link em verde, com check.
         select: { token: true, urlVideo: true, status: true, createdAt: true, expiresAt: true },
       },
+      // Só os rótulos congelados. As relações `origem`/`destino` da aresta
+      // atravessam a fronteira entre empresas, e este payload vai para os DOIS
+      // lados — é exatamente o caminho que `nomeOrigem`/`nomeDestino` existem
+      // para não precisar percorrer.
+      compartilhamentos: { where: { revogadoEm: null }, select: SELECT_ESPELHO },
     },
   })
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  return NextResponse.json({ demanda })
+  return NextResponse.json({
+    demanda,
+    // O que a tela precisa para desenhar a faixa e esconder os blocos que a
+    // outra empresa não opera. `papel` vem do acesso, não do payload, porque é
+    // ele que a rota já usou para autorizar.
+    espelho: espelhoDoCard(demanda.compartilhamentos, acesso.organizacaoId),
+    papelNoCard: acesso.papel,
+  })
 }
 
 const STATUS_VISIVEL_TO_INTERNO: Record<string, string> = {

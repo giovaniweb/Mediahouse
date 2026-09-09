@@ -1,6 +1,7 @@
 "use client"
 
 import { MessageSquare, Paperclip, AlertTriangle, CalendarDays } from "lucide-react"
+import { TagEspelho } from "./TagEspelho"
 import { cn } from "@/lib/utils"
 import {
   type DemandaLista, GRUPOS_LISTA, grupoDaDemanda, responsavelResumo,
@@ -38,7 +39,10 @@ function Linha({ d, onAbrir }: { d: DemandaLista; onAbrir: (id: string) => void 
     >
       <span className="flex-1 min-w-0">
         <span className="block text-sm text-zinc-200 truncate">{d.titulo}</span>
-        <span className="block text-[11px] font-mono text-zinc-600">{d.codigo}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[11px] font-mono text-zinc-600">{d.codigo}</span>
+          <TagEspelho espelho={d.espelho} />
+        </span>
       </span>
 
       {produto && (

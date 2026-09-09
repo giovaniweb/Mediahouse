@@ -134,6 +134,11 @@ export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisiv
 // Prisma, que não pode ir para o bundle do navegador.
 export const EVENTO_EDICAO = "edicao_campos"
 export const EVENTO_RESPONSAVEL = "responsavel_alterado"
+// Espelhamento cross-tenant. Ficam no MESMO eixo dos outros eventos porque a
+// pergunta que a timeline responde é uma só — o que aconteceu com este card —, e
+// terceirizar a execução é das coisas mais relevantes que acontecem com ele.
+export const EVENTO_ESPELHO_CONCEDIDO = "espelho_concedido"
+export const EVENTO_ESPELHO_REVOGADO = "espelho_revogado"
 
 // Início real da captação (§14 do Job Workflow).
 //

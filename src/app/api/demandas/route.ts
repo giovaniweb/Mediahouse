@@ -16,6 +16,7 @@ import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
+import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
@@ -148,7 +149,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const where: Record<string, unknown> = { organizacaoId }
+  // O quadro mostra o que é da empresa E o que ela executa por espelhamento —
+  // um card terceirizado que não aparecesse na tela de quem executa seria um job
+  // invisível para quem tem que fazê-lo.
+  //
+  // Isto NÃO vale para métricas: `/api/dashboard/*` e os relatórios continuam
+  // com `{ organizacaoId }` puro, senão a plataforma contaria cada job
+  // terceirizado duas vezes. Ver PLANO-ESPELHAMENTO-CROSS-TENANT.md §2.4.
+  const where: Record<string, unknown> = {}
+  const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) where.area = area
   if (departamento) where.departamento = departamento
   if (prioridade) where.prioridade = prioridade
@@ -166,7 +175,8 @@ export async function GET(req: NextRequest) {
   // Condições que internamente usam OR entram todas em AND[], para não se
   // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`
   // e a busca por código/descrição era silenciosamente descartada no /historico.
-  const and: Prisma.DemandaWhereInput[] = []
+  // O escopo por empresa já entrou ali em cima, pelo mesmo motivo: ele também é
+  // um OR, e no topo do `where` seria sobrescrito pelo primeiro filtro que usasse OR.
 
   if (escopoMinhas) and.push(escopoMinhas)
   if (responsavelId) and.push(whereResponsavel(responsavelId))
@@ -238,6 +248,9 @@ export async function GET(req: NextRequest) {
         linhaProjetoRef: { select: { id: true, nome: true } },
         produtos: { select: { produto: { select: { nome: true } } } },
         eventoGestao: { select: { id: true, nome: true } },
+        // Só os rótulos congelados: as relações da aresta atravessam a fronteira
+        // entre empresas, e esta lista é servida para os dois lados.
+        compartilhamentos: { where: { revogadoEm: null }, select: SELECT_ESPELHO },
         _count: { select: { comentarios: true, arquivos: true } },
       },
       orderBy: [
@@ -250,7 +263,14 @@ export async function GET(req: NextRequest) {
     usePagination ? prisma.demanda.count({ where }) : Promise.resolve(undefined),
   ])
 
-  return NextResponse.json({ demandas, ...(usePagination ? { total } : {}) })
+  // `espelho` já resolvido do lado do servidor: a tela não precisa saber de
+  // aresta, só se desenha "🤝 Terceirizado" ou "🤝 Contourline".
+  const comEspelho = demandas.map(({ compartilhamentos, ...d }) => ({
+    ...d,
+    espelho: espelhoDoCard(compartilhamentos, organizacaoId),
+  }))
+
+  return NextResponse.json({ demandas: comEspelho, ...(usePagination ? { total } : {}) })
 }
 
 export async function POST(req: NextRequest) {
