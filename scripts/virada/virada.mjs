@@ -27,7 +27,7 @@ import { join } from "node:path"
 import {
   ARQ_ENV_ANTES, ARQ_URLS, COFRE, abortar, aviso, binPg, comCliente, consultar, destino,
   exigirFase, garantirCasa, gravarEstado, guardarUrls, lerEstado, lerUrlsGuardadas,
-  mascarar, nao, nota, ok, origem, rodar, senhaNova, titulo, vercel, versaoMaiorPg,
+  gh, mascarar, nao, nota, ok, origem, rodar, senhaNova, titulo, vercel, versaoMaiorPg,
 } from "./lib.mjs"
 
 const args = process.argv.slice(2)
@@ -126,6 +126,9 @@ async function preflight() {
     !/DATABASE_URL/.test(prev.split("\n").filter((l) => !/preview\/rls/.test(l)).join("\n")),
     "nenhum preview fora de preview/rls herda banco de produção"
   )
+
+  titulo("GitHub — os secrets do release")
+  conferirSecretsDoRelease(conferir)
 
   titulo("Deploy de produção em curso")
   const dep = deployProducaoAtual()
@@ -483,6 +486,85 @@ async function apontar() {
 
   gravarEstado("apontar", { ok: true, deployAnterior: dep, ref: d.ref })
   console.log("\n✅ Produção apontada para São Paulo. Próximo:  verificar\n")
+  // A Vercel foi trocada. O GitHub NÃO — e é ele que aplica migration. Este
+  // aviso é o par do que o preflight confere: em 08/09/2026 a ausência dele
+  // custou uma hora de Kanban vazio.
+  aviso("os secrets do release no GitHub NÃO foram trocados por este passo")
+  nota(
+    "`DIRECT_URL_PRODUCAO` e `DATABASE_URL_PRODUCAO` no environment `producao` ainda\n" +
+      "   apontam para o banco ANTIGO. Enquanto não forem regravados, toda migration\n" +
+      "   vai para lá — e o congelamento a recusa, sem dizer o porquê.\n" +
+      `   grep -E '^DIRECT_URL=' ${ARQ_URLS} | cut -d= -f2- | tr -d '"\\n' | gh secret set DIRECT_URL_PRODUCAO --env producao\n` +
+      `   grep -E '^DATABASE_URL_DONO=' ${ARQ_URLS} | cut -d= -f2- | tr -d '"\\n' | gh secret set DATABASE_URL_PRODUCAO --env producao`
+  )
+}
+
+/**
+ * Os secrets do release apontam para o banco de HOJE?
+ *
+ * Isto existe por causa de 08/09/2026. A virada de 07/09 trocou as variáveis na
+ * VERCEL e ninguém trocou os secrets no GITHUB — eles continuaram apontando
+ * para us-west-1, o banco que a virada deixou congelado. Vinte e quatro horas
+ * depois, o primeiro release depois da mudança de região aplicou a migration no
+ * banco abandonado, bateu no congelamento e devolveu
+ * `cannot execute INSERT in a read-only transaction`. O Kanban de produção ficou
+ * uma hora vazio enquanto se procurava um defeito na migration, que não tinha
+ * defeito nenhum.
+ *
+ * O congelamento salvou a operação: sem ele o release teria "funcionado", o
+ * Actions ficaria verde, e a produção continuaria sem as tabelas.
+ *
+ * O QUE ESTA CONFERÊNCIA CONSEGUE, E O QUE NÃO CONSEGUE. Secret do GitHub é
+ * write-only: não há como ler o valor e comparar com a URL do destino. O que dá
+ * para comparar é a DATA. Um secret gravado ANTES do último `apontar` é, por
+ * construção, anterior à última troca de banco — e portanto suspeito. Não prova
+ * que o valor está certo; prova que está velho, que é exatamente o caso que
+ * custou a noite de 08/09.
+ */
+function conferirSecretsDoRelease(conferir) {
+  const quandoApontou = lerEstado().apontar?.em
+  if (!quandoApontou) {
+    nota("nenhum `apontar` no estado — a comparação por data só vale depois da primeira virada.")
+  }
+
+  const r = gh(["api", "/repos/{owner}/{repo}/environments/producao/secrets"])
+  if (r.codigo !== 0) {
+    return conferir(
+      false,
+      "consigo ler os secrets do environment `producao`",
+      "Sem isto o preflight não sabe para qual banco o release aplica migration. " +
+        "Confira `gh auth status` e a permissão no repositório.\n" +
+        r.saida.trim().split("\n").slice(0, 2).join(" ")
+    )
+  }
+
+  let secrets
+  try {
+    secrets = JSON.parse(r.saida).secrets ?? []
+  } catch {
+    return conferir(false, "a resposta do GitHub é legível", r.saida.slice(0, 200))
+  }
+
+  for (const nome of ["DIRECT_URL_PRODUCAO", "DATABASE_URL_PRODUCAO"]) {
+    const s = secrets.find((x) => x.name === nome)
+    if (!s) {
+      conferir(false, `${nome} existe no environment \`producao\``,
+        "O job `aplicar` do release-migrations.yml não roda sem ele.")
+      continue
+    }
+    if (!quandoApontou) {
+      ok(`${nome} existe (gravado em ${s.updated_at.slice(0, 10)})`)
+      continue
+    }
+    const atual = new Date(s.updated_at) >= new Date(quandoApontou)
+    conferir(
+      atual,
+      `${nome} é POSTERIOR ao último apontar (${s.updated_at.slice(0, 10)})`,
+      "Este secret é anterior à última troca de banco: o release aplicaria migration no banco ANTIGO.\n" +
+        `Regrave-o com o valor de ${ARQ_URLS}, sem imprimir na tela:\n` +
+        `  grep -E '^DIRECT_URL=' ${ARQ_URLS} | cut -d= -f2- | tr -d '\"\\n' | gh secret set ${nome} --env producao`
+    )
+  }
 }
 
 function trocarEnv(nome, valor) {

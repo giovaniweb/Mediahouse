@@ -117,6 +117,11 @@ export function vercel(args, opcoes = {}) {
   return rodar("vercel", [...args, "--non-interactive"], { silencioso: true, ...opcoes })
 }
 
+/** CLI do GitHub. Usada só para LER metadados — nunca para escrever secret. */
+export function gh(args, opcoes = {}) {
+  return rodar("gh", args, { silencioso: true, ...opcoes })
+}
+
 // ── conexões ─────────────────────────────────────────────────────────────────
 export function mascarar(url) {
   try {
