@@ -1,6 +1,7 @@
 "use client"
 
 import { use } from "react"
+import { ConverterEmDemanda } from "./ConverterEmDemanda"
 import useSWR from "swr"
 import Link from "next/link"
 import { ArrowLeft, Clock, ExternalLink, FileText, MapPin, Phone, User } from "lucide-react"
@@ -277,6 +278,13 @@ export default function JobDetalhePage({ params }: { params: Promise<{ id: strin
         <Secao titulo="Histórico">
           <JobTimeline eventos={job.historicos ?? []} />
         </Secao>
+
+        {/* Reclassificar vem por último e discreto de propósito: é raro, é de
+            gestão, e não disputa espaço com o que o executor abre a tela para
+            ver. Some sozinho para quem não pode converter. */}
+        <div className="pt-1">
+          <ConverterEmDemanda jobId={job.id} codigo={job.codigo} />
+        </div>
       </main>
     </div>
   )
