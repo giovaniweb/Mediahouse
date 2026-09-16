@@ -29,6 +29,7 @@ import {
 } from "@/lib/job-fase"
 import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
+import { ConverterEmDemanda } from "@/components/jobs/ConverterEmDemanda"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -1233,6 +1234,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   onExecutado={() => mutate()}
                 />
               )}
+
+              {/* O caminho de volta: Job → Demanda. Veio da tela antiga de
+                  /jobs/[id] e mudou para cá quando ela passou a ser esta tela.
+                  Reclassificar é raro e de gestão, por isso fica discreto e no
+                  fim; o componente some sozinho para quem não pode converter. */}
+              <ConverterEmDemanda jobId={demanda.id} codigo={demanda.codigo} />
             </section>
           )}
 
