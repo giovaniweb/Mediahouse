@@ -23,7 +23,7 @@ const fmtRS = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDi
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 // Lista de meses de Maio/2026 até o mês atual (descendente)
-export function opcoesMes(): { value: string; label: string }[] {
+function opcoesMes(): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = []
   const startY = 2026, startM = 5
   const now = new Date()
