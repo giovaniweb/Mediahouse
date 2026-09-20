@@ -14,7 +14,7 @@ A casca compartilhada, navegação e formulários de demandas já tinham moderni
 |---|---|---|
 | Demandas audiovisual e Growth | Preview já implementado: filtros, cards, colunas, formulário e detalhe | Staging: permissões por perfil, anexos, aprovações, drag em quadros longos e touch; gravação de posições ainda é individual |
 | Jobs | Quadro modernizado nesta etapa | Validar abertura e ações do detalhe com dados de teste, inclusive cancelado, bloqueado e externo; preservar `job-fase` e `job-transicoes` |
-| Dashboard | Reorganizar métricas e gráficos existentes de `/api/dashboard/metrics`, B2C/B2B e ideias, sem inventar indicadores | Há painéis próprios para videomaker/designer; mobile redireciona a `/campo`. Testar cada perfil e ausência de módulo. Reconciliar alteração local de tratamento de erro no repositório original |
+| Dashboard | Preview interno implementado com indicadores, gráfico das etapas atuais, carga, B2C/B2B e ideias; API não retorna histórico semanal | Há painéis próprios para videomaker/designer; mobile redireciona a `/campo`. Testar cada perfil e ausência de módulo. Tratamento de erro do repositório original incorporado sem alterar aquele checkout |
 | Agenda | Redesenhar calendário e detalhe preservando `/api/agenda` | Datas/fuso, privado, edição/exclusão e lembretes. Reusar padrão visual de diálogo, não campos específicos de demanda |
 | Aprovações audiovisual/Growth | Hierarquia de pendências, filtros e cards | Preservar distinção entre entrada, urgência e entrega criativa; testar aprovar/recusar e falhas sem duplicar ações |
 | Galerias de vídeo e artes | Grid, filtros e visualização responsiva | Publicação, acesso, arquivos privados, downloads e mídia pesada; aprovação não equivale automaticamente a publicação pública |
@@ -44,6 +44,10 @@ Cada lote deve manter o opt-in e permitir retorno ao clássico. Publicação ger
 
 Jobs: TypeScript e ESLint sem erros; build de produção local concluído; 137 testes de fase/transições passaram. QA de navegador usa APIs simuladas e não prova integrações reais. O inventário completo de páginas e referências diretas a endpoints está em `inventario-layouts.md`.
 
-O repositório original possui uma alteração ainda não commitada no dashboard (tratamento de erro e retry). Ela foi identificada e deixada intacta; esta etapa não substituiu esse arquivo. A modernização de dashboard/configurações/usuários ainda não está concluída.
+O repositório original possui uma alteração ainda não commitada no dashboard (tratamento de erro e retry). Ela foi identificada e deixada intacta; esta etapa não substituiu esse arquivo. O dashboard interno agora tem preview próprio; painéis especializados, configurações e usuários ainda precisam da modernização específica.
 
 QA local de navegador concluído: Jobs desktop/mobile sem overflow, exclusão de solicitação pendente, erro HTTP e retry, além da regressão de Demandas/Growth. Capturas: `evidencias-kanban/jobs-desktop.png` e `jobs-mobile.png`. Nenhum banco ou serviço externo foi acionado.
+
+## Lote seguinte: dashboard interno
+
+Implementado no opt-in, com evidências e limites em `dashboard-preview.md`. O estado mensal é rotulado como vídeos entregues. Corrigido o escopo da carga do editor para a organização atual. O histórico semanal continua dependente de dados não retornados pela API.

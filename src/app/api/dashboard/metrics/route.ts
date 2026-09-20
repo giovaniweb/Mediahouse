@@ -82,7 +82,7 @@ export async function GET() {
       where: { vinculos: { some: { organizacaoId, status: "ativo" } } },
       include: {
         demandas: {
-          where: { statusVisivel: { notIn: ["finalizado"] } },
+          where: { organizacaoId, statusVisivel: { notIn: ["finalizado"] } },
           select: { pesoDemanda: true },
         },
       },
