@@ -90,6 +90,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   return (
     <div onClick={handleClick}>
       <div
+        data-card-surface
         className={cn(
           "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
           // Prioridade (só aplica se não houver status especial)
@@ -142,9 +143,11 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           </div>
         </div>
 
-        <p className="text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2">
+        <button type="button" onClick={(event) => { event.stopPropagation(); handleClick() }}
+          className="block w-full text-left text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2 focus-visible:outline-2 focus-visible:outline-violet-400 focus-visible:outline-offset-2 rounded"
+          aria-label={`Abrir demanda: ${demanda.titulo}`}>
           {demanda.titulo}
-        </p>
+        </button>
 
         <div className="flex flex-wrap gap-1 mb-2">
           {isOverdue && (

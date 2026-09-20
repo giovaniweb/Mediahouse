@@ -1,5 +1,7 @@
 "use client"
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import surface from "./DemandSurface.module.css"
 import { useState, useEffect, useRef } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
@@ -258,6 +260,7 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 }
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
+  const { modern } = useVisualPreview()
   const id = demandaId
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -2550,14 +2553,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     // barra de rolagem —, e quem estava editando um campo perdia o contexto no meio.
     return (
       <div
-        className="fixed inset-0 z-[60] bg-black/70 overflow-y-auto"
+        className={cn("fixed inset-0 z-[60] bg-black/70 overflow-y-auto", modern && surface.overlay)}
         onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
       >
         <div
-          className="min-h-full w-full flex items-start justify-center p-4"
+          className={cn("min-h-full w-full flex items-start justify-center p-4", modern && surface.detailWrap)}
           onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
         >
-          <div className="w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className={cn("w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden", modern && surface.surface)} onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-mono text-sm text-zinc-300">{demanda.codigo}</span>

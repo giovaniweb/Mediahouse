@@ -1,0 +1,22 @@
+.workspace { background: #101116; color: #f5f5fb; }
+.workspace > aside { background: #171922; border-color: #303341; width: 244px; }
+.workspace > aside nav { scrollbar-width: thin; scrollbar-color: #44485b transparent; }
+.workspace > aside nav a { border-radius: 10px; min-height: 40px; }
+.workspace > aside nav a[aria-current="page"] { background: #ac8aff1c; color: #d8c7ff; box-shadow: inset 3px 0 #ac8aff; }
+.workspace > aside button:focus-visible, .workspace a:focus-visible { outline: 2px solid #b39aff; outline-offset: 3px; }
+.workspace header { background: #191b23b3; border-color: #303341; min-height: 64px; backdrop-filter: blur(12px); }
+.workspace input, .workspace select { border-radius: 10px; }
+.workspace input:focus-visible, .workspace select:focus-visible { outline: 2px solid #b39aff; outline-offset: 2px; }
+@media (max-width: 767px) {
+  .workspace header { height: auto; flex-wrap: wrap; gap: 12px; padding: 12px; }
+  .workspace header > div { flex-wrap: wrap; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .workspace *, .workspace *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media (max-width: 767px) {
+  .workspace [data-board-summary] > div:first-child { display: flex; gap: 20px; overflow-x: auto; padding: 12px; }
+  .workspace [data-board-summary] > div:first-child > div { min-width: 130px; }
+  .workspace [data-board-summary] > div:last-child { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .workspace [data-board-summary] > div:last-child > div { flex-wrap: nowrap; flex-shrink: 0; }
+  .workspace [data-board-summary] button { white-space: nowrap; }
+  .workspace [data-kanban-container] { min-height: 420px; padding: 8px; flex-shrink: 0; }
+}

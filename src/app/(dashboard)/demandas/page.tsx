@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
@@ -312,6 +313,7 @@ function DemandasKanban() {
       )}
 
       {/* Filtros */}
+      <BoardFilters>
       <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -391,6 +393,7 @@ function DemandasKanban() {
         <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
+      </BoardFilters>
 
       {/* Números + recortes + seletor de visão */}
       <div className="px-4 pt-1 pb-3">
@@ -407,7 +410,7 @@ function DemandasKanban() {
       {/* A visão escolhida. Kanban precisa de altura ancorada na viewport para a
           barra de rolagem ficar no rodapé; lista e tabela rolam com a página. */}
       {visao === "kanban" ? (
-        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+        <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
         </div>
       ) : (

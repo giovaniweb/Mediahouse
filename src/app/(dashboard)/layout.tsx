@@ -1,3 +1,4 @@
+import { WorkspaceVisual } from "@/components/layout/WorkspaceVisual"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { SessionProvider } from "@/components/layout/SessionProvider"
 import { Toaster } from "sonner"
@@ -13,14 +14,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           horizontal acaba no fim do conteúdo, fora da tela. O scroll vertical
           vive na coluna de conteúdo, então as telas normais rolam como antes. */}
       <NavegacaoMovelProvider>
-        <div className="flex h-screen overflow-hidden bg-zinc-950">
+        <WorkspaceVisual>
           <Sidebar />
           <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto">
             {/* Só aparece abaixo de md — no desktop a lateral é permanente. */}
             <BarraMovel />
             {children}
           </div>
-        </div>
+        </WorkspaceVisual>
       </NavegacaoMovelProvider>
       <PainelExecutor />
       {/* Avisos passaram para o topo: o painel do executor é permanente no canto

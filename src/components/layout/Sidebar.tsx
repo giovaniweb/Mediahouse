@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+import { useVisualPreview } from "./useVisualPreview"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -37,6 +39,7 @@ import {
   VideoOff,
   ScrollText,
   X,
+  ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -135,6 +138,24 @@ const sections = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { modern, available, toggle } = useVisualPreview()
+  const [expanded, setExpanded] = useState<{ path: string; label: string | null } | null>(null)
+  const activeHref = sections.flatMap(section => section.items).filter(item => pathname === item.href || pathname.startsWith(item.href + "/")).sort((a, b) => b.href.length - a.href.length)[0]?.href
+  const isItemActive = (href: string) => activeHref === href
+  const navigation = modern ? sections.map(section => {
+    if (section.label === "Geral") return { ...section, items: section.items.filter(item => item.href !== "/produtos") }
+    if (section.label === "Audiovisual") return { ...section, items: section.items.filter(item => !["/videomakers", "/equipe", "/custos"].includes(item.href)) }
+    if (section.label === "Growth") return { ...section, items: section.items.filter(item => item.href !== "/configuracoes/linhas-projetos") }
+    return section
+  }).flatMap(section => section.label === "Geral" ? [section, {
+    label: "Produtos",
+    items: sections.flatMap(group => group.items).filter(item => ["/produtos", "/configuracoes/linhas-projetos"].includes(item.href)),
+  }] : section.label === "Audiovisual" ? [section, {
+    label: "Equipe audiovisual",
+    items: sections.flatMap(group => group.items).filter(item => ["/videomakers", "/equipe", "/custos"].includes(item.href)),
+  }] : [section]) : sections
+  const currentSection = navigation.find(section => section.items.some(item => isItemActive(item.href)))?.label ?? "Geral"
+  const expandedLabel = expanded?.path === pathname ? expanded.label : currentSection
   const { data: me } = useMe()
   const { aberta, fechar } = useNavegacaoMovel()
 
@@ -235,9 +256,10 @@ export function Sidebar() {
                   { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
                 ].map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                  const isActive = isItemActive(item.href)
                   return (
                     <Link key={item.href} href={item.href}
+                        aria-current={isItemActive(item.href) ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
                         isActive ? "bg-white text-zinc-900 font-medium" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -251,7 +273,7 @@ export function Sidebar() {
             </div>
           )}
 
-          {me?.tipo !== "videomaker" && sections.map((section) => {
+          {me?.tipo !== "videomaker" && navigation.map((section) => {
             // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
             if (section.label === "Growth" && mods && !mods.growth) return null
             if (section.label === "Eventos" && mods && !mods.eventos) return null
@@ -263,20 +285,24 @@ export function Sidebar() {
 
             return (
               <div key={section.label}>
-                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
-                  {section.label}
-                </p>
-                <div className="space-y-0.5">
+                {modern ? (
+                  <button type="button" aria-expanded={expandedLabel === section.label}
+                    aria-controls={`menu-${section.label.replaceAll(" ", "-")}`}
+                    onClick={() => setExpanded({ path: pathname, label: expandedLabel === section.label ? null : section.label })}
+                    className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-zinc-300 rounded-lg hover:bg-white/5">
+                    {section.label}<ChevronDown className={cn("w-4 h-4 transition-transform", expandedLabel === section.label && "rotate-180")} />
+                  </button>
+                ) : <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">{section.label}</p>}
+                <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={modern && expandedLabel !== section.label} className="space-y-0.5">
                   {visibleItems.map((item) => {
                     const Icon = item.icon
-                    const isActive =
-                      pathname === item.href ||
-                      (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                    const isActive = isItemActive(item.href)
 
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
+                        aria-current={isItemActive(item.href) ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
                           isActive
@@ -295,6 +321,10 @@ export function Sidebar() {
           })}
         </nav>
 
+        {available && <button type="button" onClick={toggle} aria-pressed={modern}
+          className="mx-3 mb-3 rounded-xl border border-violet-400/30 px-3 py-2 text-xs text-violet-200 hover:bg-violet-400/10">
+          {modern ? "Voltar ao visual clássico" : "Usar novo visual"}
+        </button>}
         {/* User info + Logout */}
         {me && (
           <div className="px-3 py-3 border-t border-zinc-800">

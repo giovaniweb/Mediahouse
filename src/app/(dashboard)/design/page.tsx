@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Sparkles, Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
+import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO } from "@/lib/growth-conteudo"
@@ -92,21 +93,28 @@ export default function GrowthKanbanPage() {
   const handleMove = useCallback(async (demandaId: string, novaColuna: string) => {
     const statusInterno = GROWTH_COLUNA_PARA_STATUS[novaColuna as GrowthColunaId]
     if (!statusInterno) return
-    mutate((prev: { demandas: Array<{ id: string; statusInterno: string }> }) => ({
+    const anterior = data?.demandas?.find((d: { id: string }) => d.id === demandaId)?.statusInterno
+    const atualizar = (status: string) => mutate((prev: { demandas: Array<{ id: string; statusInterno: string }> } | undefined) => prev ? ({
       ...prev,
-      demandas: prev.demandas.map((d) => d.id === demandaId ? { ...d, statusInterno } : d),
-    }), false)
-    const res = await fetch(`/api/demandas/${demandaId}/status`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ statusInterno, origem: "kanban" }),
-    })
-    if (!res.ok) {
-      // Desfaz o movimento otimista e mostra a mensagem que a API mandou —
-      // "Erro ao mover" escondia a instrução e fazia parecer falta de permissão.
-      mutate()
-      toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
-    } else mutate()
-  }, [mutate])
+      demandas: prev.demandas.map(d => d.id === demandaId ? { ...d, statusInterno: status } : d),
+    }) : prev, false)
+    await atualizar(statusInterno)
+    try {
+      const res = await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno, origem: "kanban" }),
+      })
+      if (!res.ok) {
+        if (anterior) await atualizar(anterior)
+        toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
+      }
+      void mutate()
+    } catch {
+      if (anterior) await atualizar(anterior)
+      void mutate()
+      toast.error("Erro de conexão. Não foi possível confirmar o movimento do card.")
+    }
+  }, [mutate, data])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm("Excluir esta demanda?")) return
@@ -126,6 +134,7 @@ export default function GrowthKanbanPage() {
       </div>
 
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
+      <BoardFilters>
       <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -175,6 +184,7 @@ export default function GrowthKanbanPage() {
         <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
+      </BoardFilters>
 
       <div className="px-4 pt-1 pb-3">
         <BarraVisao
@@ -188,7 +198,7 @@ export default function GrowthKanbanPage() {
       </div>
 
       {visao === "kanban" ? (
-        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+        <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard
             demandas={demandas}
             onMove={handleMove}

@@ -58,7 +58,7 @@ export function BarraVisao({
   const kpi = calcularKpis(demandas)
 
   return (
-    <div className="space-y-3">
+    <div data-board-summary className="space-y-3">
       {/* Números do quadro */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-5 py-3.5">
         <Kpi icone={Inbox} rotulo="Demandas abertas" valor={kpi.abertas} tom="azul" />
@@ -74,6 +74,7 @@ export function BarraVisao({
             <button
               key={a.id}
               onClick={() => onAba(a.id)}
+              aria-pressed={aba === a.id}
               className={cn(
                 "text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
                 aba === a.id
@@ -95,6 +96,8 @@ export function BarraVisao({
                 key={v.id}
                 onClick={() => onVisao(v.id)}
                 title={`Ver como ${v.label.toLowerCase()}`}
+                aria-label={`Ver como ${v.label.toLowerCase()}`}
+                aria-pressed={visao === v.id}
                 className={cn(
                   "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors",
                   visao === v.id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
