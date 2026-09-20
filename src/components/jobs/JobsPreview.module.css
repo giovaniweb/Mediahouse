@@ -1,0 +1,24 @@
+.page { height: 100%; min-height: 0; background: #101116; }
+.intro { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:24px 28px 12px; }
+.intro p { color:#b39aff; font-size:10px; letter-spacing:.14em; font-weight:600; }
+.intro h1 { color:#f5f5fb; font-size:clamp(20px,2vw,28px); font-weight:600; margin-top:6px; }
+.intro > span { color:#a0a4b8; font-size:12px; max-width:260px; line-height:1.6; }
+.board { padding-top:12px; }
+.column { width:clamp(280px,23vw,340px); background:#191b23; border-radius:16px; }
+.column > header { padding:16px; }
+.column > div { padding:12px; }
+.card { background:#22242f; border-radius:12px; padding:16px; min-height:150px; box-shadow:0 4px 16px #00000012; }
+.card:hover { background:#292c39; }
+.card:focus-visible { outline:2px solid #b39aff; outline-offset:3px; }
+.card :global(.text-zinc-500), .card :global(.text-zinc-600) { color:#a0a4b8; }
+.error { padding:12px 24px; color:#ff9baf; font-size:13px; }
+.error button { text-decoration:underline; margin-left:12px; }
+@media(max-width:767px) {
+ .page { height:auto; min-height:100%; }
+ .intro { padding:18px 16px 8px; }
+ .intro > span { display:none; }
+ .boardSpace { min-height:460px; height:65dvh; flex:none; }
+ .column { width:min(300px,78vw); }
+ .board > div { padding-inline:16px; }
+ .board > button { width:24px; height:44px; }
+}

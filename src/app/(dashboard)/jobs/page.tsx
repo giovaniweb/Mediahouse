@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils"
 import { ehHoje } from "@/lib/datas"
 import { estaAtrasada } from "@/lib/status"
 import { TIPO_COBERTURA, ehJob } from "@/lib/job-fase"
+import { BoardFilters } from "@/components/kanban/BoardFilters"
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import styles from "@/components/jobs/JobsPreview.module.css"
 import { Search } from "lucide-react"
 
 // Quadro operacional de Jobs.
@@ -54,6 +57,7 @@ type Opcao = { id: string; nome: string }
 
 function Quadro() {
   const router = useRouter()
+  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
   const [videomakerId, setVideomakerId] = useState("")
@@ -73,7 +77,7 @@ function Quadro() {
   // sem antes limpar o filtro. Videomaker e editor podem ir, porque as opções
   // deles vêm de endpoints próprios e não dependem desta lista.
 
-  const { data, isLoading } = useSWR<{ demandas: JobDoQuadro[] }>(
+  const { data, isLoading, error, mutate } = useSWR<{ demandas: JobDoQuadro[] }>(
     `/api/demandas?${params}`,
     fetcher,
     { refreshInterval: 30000, keepPreviousData: true }
@@ -116,8 +120,9 @@ function Quadro() {
     "bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600"
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className={cn("flex flex-col h-screen", modern && styles.page)}>
       <Header title="Jobs" />
+      {modern && <div className={styles.intro}><div><p>OPERAÇÃO AUDIOVISUAL</p><h1>Seu próximo job. À vista.</h1></div><span>Captação, responsável e próximo passo em um só lugar.</span></div>}
 
       <div className="px-4 pt-3 pb-2 space-y-2.5">
         {/* Recortes principais (§35) */}
@@ -125,6 +130,7 @@ function Quadro() {
           {ABAS.map((a) => (
             <button
               key={a.id}
+              aria-pressed={aba === a.id}
               onClick={() => setAba(a.id)}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
@@ -146,38 +152,42 @@ function Quadro() {
         </div>
 
         {/* Busca e recortes secundários */}
+        <BoardFilters>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
+              aria-label="Buscar jobs por código ou título"
               placeholder="Buscar por código, título…"
               className="bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 w-56 focus:outline-none focus:border-zinc-600"
             />
           </div>
 
-          <select value={videomakerId} onChange={(e) => setVideomakerId(e.target.value)} className={selectClass}>
+          <select aria-label="Videomaker" value={videomakerId} onChange={(e) => setVideomakerId(e.target.value)} className={selectClass}>
             <option value="">Videomaker</option>
             {vms.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
           </select>
 
-          <select value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
+          <select aria-label="Editor" value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
             <option value="">Editor</option>
             {editores.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
           </select>
 
-          <select value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>
+          <select aria-label="Região" value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>
             <option value="">Região</option>
             {regioes.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
+        </BoardFilters>
       </div>
 
-      <div className="flex-1 min-h-0 pb-4">
+      {error && <div role="alert" className={styles.error}>Não foi possível atualizar os jobs. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
+      <div className={cn("flex-1 min-h-0 pb-4", modern && styles.boardSpace)}>
         {isLoading && todos.length === 0 ? (
           <p className="text-sm text-zinc-500 px-10 py-8">Carregando…</p>
-        ) : (
+        ) : error && !data ? null : (
           <JobsQuadro jobs={jobs} onAbrir={abrir} />
         )}
       </div>

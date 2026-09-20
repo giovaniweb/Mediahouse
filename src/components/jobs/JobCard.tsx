@@ -1,6 +1,7 @@
 "use client"
 
 import { AlertTriangle, Ban, Clock, MapPin, User } from "lucide-react"
+import styles from "./JobsPreview.module.css"
 import { cn } from "@/lib/utils"
 import { formatarDataCurta } from "@/lib/datas"
 import { diasDeAtraso } from "@/lib/status"
@@ -53,7 +54,7 @@ const riscoEstilo = {
   on_time:   "border-l-transparent",
 } as const
 
-export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: string) => void }) {
+export function JobCard({ job, onAbrir, modern = false }: { job: JobDoQuadro; onAbrir: (id: string) => void; modern?: boolean }) {
   const risco = nivelDeRisco(job)
   const responsavel = responsavelAtual(job)
   const acao = proximaAcao(job)
@@ -71,7 +72,7 @@ export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: stri
         "w-full text-left bg-zinc-900 border border-zinc-800 border-l-2 rounded-lg p-3",
         "hover:border-zinc-700 hover:bg-zinc-800/60 transition-colors",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500",
-        riscoEstilo[risco]
+        riscoEstilo[risco], modern && styles.card
       )}
     >
       {/* Identificação */}
