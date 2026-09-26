@@ -1203,11 +1203,12 @@ function TabEmpresa() {
   const salvar = async () => {
     setSaving(true)
     try {
-      await fetch("/api/config/empresa", {
+      const resposta = await fetch("/api/config/empresa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
+      if (!resposta.ok) throw new Error("Falha ao salvar")
       toast.success("Dados da empresa salvos!")
       mutate()
     } catch {
@@ -1347,11 +1348,12 @@ function TabGoogleDrive() {
     const folderId = extrairFolderId(folderInput)
     setSaving(true)
     try {
-      await fetch("/api/config/empresa", {
+      const resposta = await fetch("/api/config/empresa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ googleDriveFolderId: folderId || null }),
       })
+      if (!resposta.ok) throw new Error("Falha ao salvar")
       toast.success("Pasta do Drive salva!")
       mutate()
     } catch {

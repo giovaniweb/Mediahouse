@@ -1,8 +1,7 @@
+import { podeAdministrarIdentidade, numeroDeEmpresasDaIdentidade } from "@/lib/identidade-admin"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { contarVinculos } from "@/lib/usuario-vinculos"
 import { PRESETS } from "@/lib/permissoes"
 import { setPermissoes } from "@/lib/permissoes-server"
@@ -11,19 +10,19 @@ import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
 // PATCH /api/usuarios/[id] — atualiza dados + Pessoas & Acessos (categoria/função/áreas/papel)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
 
   const { id } = await params
 
-  const isOwn = session.user.id === id
-  const isPrivileged = ehGestor(session)
+  const isOwn = acesso.usuarioId === id
+  const isPrivileged = acesso.permissoes.gerenciarUsuarios
 
   if (!isOwn && !isPrivileged) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
-  const organizacaoId = await getOrgId(session)
+  const { organizacaoId } = acesso
 
   // Isolamento: privilegiado só edita pessoas da própria organização
   if (isPrivileged && !isOwn && organizacaoId) {
@@ -36,17 +35,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const body = await req.json()
   const { status, tipo, nome, email, telefone, novaSenha } = body
+  if (isOwn && ["papel", "tipo", "liderAudiovisual"].some(campo => campo in body)) {
+    return NextResponse.json({ error: "Outra pessoa autorizada deve alterar seu papel" }, { status: 403 })
+  }
 
   const data: Record<string, unknown> = {}
   if (nome) data.nome = nome
   if (telefone !== undefined) data.telefone = telefone
   if (email && isPrivileged) data.email = email
   if (isPrivileged && status) data.status = status
-  if (isPrivileged && tipo) data.tipo = tipo
 
   // Admin/gestor pode forçar reset de senha
   if (isPrivileged && novaSenha && typeof novaSenha === "string" && novaSenha.length >= 6) {
     data.senhaHash = await bcrypt.hash(novaSenha, 12)
+  }
+
+  if (Object.keys(data).length && !await podeAdministrarIdentidade(acesso.usuarioId, organizacaoId, id)) {
+    return NextResponse.json({ error: "Alterar a identidade compartilhada requer administração da plataforma" }, { status: 403 })
   }
 
   const usuario = await prisma.usuario.update({
@@ -89,19 +94,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // Se a pessoa pertence só a esta org: inativa a conta global. Se pertence a mais de
 // uma org: remove apenas o vínculo desta org (não afeta outras empresas).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
   const { id } = await params
 
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão para desativar usuários" }, { status: 403 })
-  }
-  if (session.user.id === id) {
+  if (acesso.usuarioId === id) {
     return NextResponse.json({ error: "Não é possível desativar sua própria conta aqui" }, { status: 400 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   // Só desativa/remove quem pertence à organização ativa
   const membership = await prisma.usuarioOrganizacao.findUnique({
@@ -110,8 +111,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   })
   if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
-  const totalOrgs = await prisma.usuarioOrganizacao.count({ where: { usuarioId: id } })
+  const totalOrgs = await numeroDeEmpresasDaIdentidade(id)
   const modo = req.nextUrl.searchParams.get("modo")
+
+  if ((modo === "hard" || totalOrgs <= 1) && !await podeAdministrarIdentidade(acesso.usuarioId, organizacaoId, id)) {
+    return NextResponse.json({ error: "Operação sobre identidade protegida requer administração da plataforma" }, { status: 403 })
+  }
 
   // ── HARD DELETE controlado: só para cadastro VAZIO (sem vínculos) ──────────
   if (modo === "hard") {
@@ -124,7 +129,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
     // Regra SaaS: pertence a mais de uma org → só super-admin pode apagar globalmente
     if (totalOrgs > 1) {
-      const eu = await prisma.usuario.findUnique({ where: { id: session.user.id }, select: { superAdmin: true } })
+      const eu = await prisma.usuario.findUnique({ where: { id: acesso.usuarioId }, select: { superAdmin: true } })
       if (!eu?.superAdmin) {
         return NextResponse.json(
           { error: "Usuário pertence a outras organizações. Exclusão global requer super-admin; aqui você pode apenas remover o vínculo desta empresa.", multiOrg: true },

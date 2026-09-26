@@ -1,23 +1,20 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { PRESETS } from "@/lib/permissoes"
 import { getPermissoes, setPermissoes } from "@/lib/permissoes-server"
-import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/permissoes?usuarioId=xxx — buscar permissões de um usuário
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
-  const usuarioId = req.nextUrl.searchParams.get("usuarioId") || session.user.id
+  const usuarioId = req.nextUrl.searchParams.get("usuarioId") || acesso.usuarioId
 
   // Qualquer um pode buscar as próprias permissões; gestor/admin pode buscar de qualquer um
-  if (usuarioId !== session.user.id && !ehGestor(session)) {
+  if (usuarioId !== acesso.usuarioId && !acesso.permissoes.gerenciarUsuarios) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -29,25 +26,17 @@ export async function GET(req: NextRequest) {
   })
   if (!membro) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
-  let permissoes = await getPermissoes(usuarioId, organizacaoId)
+  const permissoes = await getPermissoes(usuarioId, organizacaoId)
 
-  // Se não existir, criar com preset do papel da pessoa nesta empresa
-  if (!permissoes) {
-    const preset = PRESETS[membro.papel] || PRESETS.solicitante
-    permissoes = await setPermissoes(usuarioId, organizacaoId, preset)
-  }
-
-  return NextResponse.json(permissoes)
+  // Ausência legítima herda o papel, sem criar uma exceção persistente num GET.
+  return NextResponse.json(permissoes ?? PRESETS[membro.papel] ?? PRESETS.solicitante)
 }
 
 // PUT /api/permissoes — atualizar permissões (admin/gestor)
 export async function PUT(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Somente admin/gestor" }, { status: 403 })
-  }
 
   const body = await req.json()
   const { usuarioId, ...perms } = body
@@ -55,6 +44,8 @@ export async function PUT(req: NextRequest) {
   if (!usuarioId) {
     return NextResponse.json({ error: "usuarioId obrigatório" }, { status: 400 })
   }
+
+  if (usuarioId === acesso.usuarioId) return NextResponse.json({ error: "Outra pessoa autorizada deve alterar suas permissões" }, { status: 403 })
 
   // Whitelist de campos permitidos
   const allowed = [
@@ -72,8 +63,7 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
   const erro = await exigirMembro(usuarioId, organizacaoId)
   if (erro) return erro
 
@@ -93,20 +83,18 @@ async function exigirMembro(usuarioId: string, organizacaoId: string): Promise<N
 
 // POST /api/permissoes/reset — resetar para preset do tipo
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Somente admin/gestor" }, { status: 403 })
-  }
 
   const { usuarioId } = await req.json()
   if (!usuarioId) {
     return NextResponse.json({ error: "usuarioId obrigatório" }, { status: 400 })
   }
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
+
+  if (usuarioId === acesso.usuarioId) return NextResponse.json({ error: "Outra pessoa autorizada deve alterar suas permissões" }, { status: 403 })
 
   // O preset vem do papel NESTA empresa, não do tipo global do usuário.
   const membro = await prisma.usuarioOrganizacao.findUnique({

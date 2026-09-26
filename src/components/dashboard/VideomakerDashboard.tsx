@@ -120,7 +120,7 @@ export function VideomakerDashboard() {
   const [nfModalToken, setNfModalToken] = useState<string | null>(null)
   const [nfToast, setNfToast] = useState<{ token: string; codigo: string } | null>(null)
   const { data: vmData, mutate: mutateVm } = useSWR("/api/me/videomaker", fetcher)
-  const { data: empresaData } = useSWR("/api/config/empresa", fetcher)
+  const { data: empresaData } = useSWR("/api/me/empresa-faturamento", fetcher)
 
   // Checar localStorage após hydration
   useEffect(() => {

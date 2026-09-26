@@ -1,7 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { format } from "date-fns"
@@ -14,10 +13,9 @@ const VALOR_POR_DEMANDA = 200
 // GET /api/producao?de=2026-01-01&ate=2026-12-31  — intervalo customizado
 // Default: últimos 12 meses
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verCustos")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const sp = req.nextUrl.searchParams
   const mesParam = sp.get("mes")

@@ -1,15 +1,14 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { diariasDaEmpresa, fiscaisDaEmpresaEmLote } from "@/lib/videomaker-vinculo"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
 // GET /api/custos-videomaker — listar custos com filtros opcionais
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("verCustos")
+  if (acesso instanceof NextResponse) return acesso
 
   const { searchParams } = new URL(req.url)
   const videomakerId = searchParams.get("videomakerId")
@@ -18,8 +17,7 @@ export async function GET(req: NextRequest) {
   const de = searchParams.get("de")
   const ate = searchParams.get("ate")
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const custos = await prisma.custoVideomaker.findMany({
     where: {
@@ -85,11 +83,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/custos-videomaker — registrar novo custo
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("verCustos")
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({ error: "Sem permissão para alterar custos" }, { status: 403 })
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
@@ -102,6 +100,15 @@ export async function POST(req: NextRequest) {
   const valorLido = lerValorMonetario(valor)
   if (!valorLido.ok || valorLido.valor === null) {
     return erroDeCampo("valor", "Informe um valor numérico maior ou igual a zero.")
+  }
+
+  const vinculo = await prisma.videomakerOrganizacao.findUnique({
+    where: { organizacaoId_videomakerId: { videomakerId, organizacaoId } }, select: { id: true },
+  })
+  if (!vinculo) return NextResponse.json({ error: "Videomaker não encontrado nesta empresa" }, { status: 404 })
+  if (demandaId) {
+    const demanda = await prisma.demanda.findFirst({ where: { id: demandaId, organizacaoId }, select: { id: true } })
+    if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
   }
 
   const custo = await prisma.custoVideomaker.create({

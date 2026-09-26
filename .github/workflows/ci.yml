@@ -17,8 +17,8 @@ jobs:
     env:
       # Postgres efêmero do runner. Nenhum passo aqui toca o banco de produção:
       # os checks de schema comparam migrations com o datamodel, não com prod.
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/nuflow_ci
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/nuflow_test
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/nuflow_test
 
     services:
       postgres:
@@ -26,7 +26,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: nuflow_ci
+          POSTGRES_DB: nuflow_test
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
@@ -81,6 +81,11 @@ jobs:
       # migration — o mesmo descuido que deixou o banco sem histórico até agora.
       # (Compara banco × schema em vez de migrations × schema: assim não precisa
       # de shadow database, que o CLI do Prisma 7 só aceita via config.)
+      - name: Integração de autorização com banco sintético
+        run: npm run test:integration
+        env:
+          DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/nuflow_test
+
       - name: Banco migrado é idêntico ao schema
         run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 

@@ -1,8 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { contarVinculos } from "@/lib/usuario-vinculos"
 
 type Params = { params: Promise<{ id: string }> }
@@ -10,13 +8,9 @@ type Params = { params: Promise<{ id: string }> }
 // GET /api/usuarios/[id]/vinculos — vínculos do usuário (admin/gestor), p/ a UI decidir
 // entre "Excluir cadastro vazio" e "Mesclar duplicado". Org-scoped (só pessoa da org).
 export async function GET(_req: NextRequest, { params }: Params) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { id } = await params
   const membership = await prisma.usuarioOrganizacao.findUnique({

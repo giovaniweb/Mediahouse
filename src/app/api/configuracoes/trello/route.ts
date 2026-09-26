@@ -1,6 +1,5 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { getBoardLists } from "@/lib/trello"
 
 // Armazenamos config em memória/env (pode ser migrado para DB depois)
@@ -8,10 +7,8 @@ import { getBoardLists } from "@/lib/trello"
 let trelloConfigCache: { apiKey: string; token: string; boardId: string; ativo: boolean } | null = null
 
 export async function GET() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
   // Lê de env ou cache
   const cfg = trelloConfigCache ?? {
@@ -25,10 +22,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
   const body = await req.json()
   const { apiKey, token, boardId } = body

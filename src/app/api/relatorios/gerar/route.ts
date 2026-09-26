@@ -1,16 +1,15 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO, extrairJSON } from "@/lib/claude"
-import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/relatorios/gerar — gera relatório IA para um tipo e período
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  if (!acesso.permissoes.verCustos) return NextResponse.json({ error: "Este relatório contém dados financeiros" }, { status: 403 })
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { tipo, periodo } = body as { tipo: string; periodo: string }

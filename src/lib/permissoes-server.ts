@@ -79,14 +79,22 @@ export async function permissoesEfetivas(
         papel: true,
         organizacaoId: true,
         usuario: { select: { status: true } },
+        organizacao: { select: { ativo: true } },
       },
     })
     .catch(() => null)
 
   // Sem vínculo não há o que herdar: a pessoa não é desta empresa.
-  if (!vinculo) return null
+  if (!vinculo?.organizacao.ativo) return null
 
-  const explicita = await getPermissoes(usuarioId, organizacaoId).catch(() => null)
+  // Erro de consulta não é ausência de configuração: nunca herdar um preset
+  // quando a leitura da restrição explícita falhou.
+  let explicita: PermissaoUsuario | null
+  try {
+    explicita = await getPermissoes(usuarioId, organizacaoId)
+  } catch {
+    return null
+  }
 
   const permissoes = permissaoEfetiva({
     membro: {

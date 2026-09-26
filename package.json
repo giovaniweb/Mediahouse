@@ -26,7 +26,9 @@
     "db:studio": "prisma studio",
     "sanear:perfil-global": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/sanear-perfil-global.ts",
     "faxina:alertas": "node scripts/guarda-banco.mjs && dotenv -e .env.local -- ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register prisma/faxina-alertas.ts",
-    "_comment_guarda_banco": "Comandos que escrevem no banco passam por scripts/guarda-banco.mjs. Produção exige PERMITIR_BANCO_PRODUCAO=sim — ver o cabeçalho do script."
+    "_comment_guarda_banco": "Comandos que escrevem no banco passam por scripts/guarda-banco.mjs. Produção exige PERMITIR_BANCO_PRODUCAO=sim — ver o cabeçalho do script.",
+    "test:integration": "node scripts/teste-integracao.mjs",
+    "test:integration:prepare": "node scripts/teste-integracao.mjs migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

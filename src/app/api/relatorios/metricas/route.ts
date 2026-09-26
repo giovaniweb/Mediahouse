@@ -1,8 +1,7 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
-import { getOrgId, semOrg } from "@/lib/org"
 import { inicioDoDia } from "@/lib/datas"
 
 const VALOR_POR_DEMANDA = 200
@@ -18,10 +17,10 @@ const VALOR_POR_DEMANDA = 200
  *   ?periodo=custom&de=YYYY-MM-DD&ate=YYYY-MM-DD
  */
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  if (!acesso.permissoes.verCustos) return NextResponse.json({ error: "Este relatório contém dados financeiros" }, { status: 403 })
+  const { organizacaoId } = acesso
 
   const sp = req.nextUrl.searchParams
   const periodoParam = sp.get("periodo") ?? "mes"

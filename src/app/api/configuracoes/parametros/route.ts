@@ -1,7 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { TIPOS_VIDEO_SEED, TIPOS_CRIATIVO_SEED } from "@/lib/tipos-demanda"
 
 // Seed inicial com valores hardcoded
@@ -49,10 +48,9 @@ const SEED_PARAMETROS = [
 
 // GET /api/configuracoes/parametros?grupo=departamentos
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { searchParams } = new URL(req.url)
   const grupo = searchParams.get("grupo")
@@ -86,15 +84,14 @@ export async function GET(req: NextRequest) {
 
 // POST /api/configuracoes/parametros — criar novo
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const papel = (session.user as { tipo?: string }).tipo
+  const papel = acesso.papel
   if (!["admin", "gestor"].includes(papel ?? "")) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { grupo, valor, label, ordem } = body

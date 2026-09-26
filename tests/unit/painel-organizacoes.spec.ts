@@ -40,7 +40,7 @@ const chamar = (id: string, body: unknown) =>
 beforeEach(() => {
   findUniqueMembership.mockReset(); countMembership.mockReset()
   updateOrg.mockReset(); findUniqueUsuario.mockReset()
-  findUniqueUsuario.mockResolvedValue({ superAdmin: true })  // requireSuperAdmin
+  findUniqueUsuario.mockResolvedValue({ superAdmin: true, status: "ativo" })  // requireSuperAdmin
 })
 
 describe("quem não é super-admin não passa", () => {
@@ -100,4 +100,10 @@ describe("corpo inválido", () => {
     expect(res.status).toBe(400)
     expect(updateOrg).not.toHaveBeenCalled()
   })
+})
+
+it("superadmin inativo não administra organizações com sessão antiga", async () => {
+  findUniqueUsuario.mockResolvedValue({ superAdmin: true, status: "inativo" })
+  expect((await chamar("org-B", { ativo: false })).status).toBe(403)
+  expect(updateOrg).not.toHaveBeenCalled()
 })

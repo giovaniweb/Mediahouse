@@ -1,17 +1,12 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/configuracoes/whatsapp/desconectar — desconecta instância WhatsApp
 export async function POST() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
   if (!config) {

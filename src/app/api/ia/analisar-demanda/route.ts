@@ -1,19 +1,19 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
 import { analisarComClaude, extrairJSON } from "@/lib/claude"
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("verIA")
+  if (acesso instanceof NextResponse) return acesso
 
   const { demandaId } = await req.json()
 
   // Mesmo IDOR que a triagem tinha: buscava a demanda por id sem conferir dono,
   // então bastava trocar o id para analisar — e pagar a chamada de IA de —
   // demanda de outra empresa.
-  const guard = await requireDemandaOrg(session, demandaId)
+  const guard = await requireDemandaOrg({ user: { id: acesso.usuarioId, organizacaoId: acesso.organizacaoId } }, demandaId)
   if (guard instanceof NextResponse) return guard
 
   const demanda = await prisma.demanda.findUnique({
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   // Busca demandas similares para contexto
   const similares = await prisma.demanda.count({
-    where: { departamento: demanda.departamento, tipoVideo: demanda.tipoVideo },
+    where: { organizacaoId: acesso.organizacaoId, departamento: demanda.departamento, tipoVideo: demanda.tipoVideo },
   })
 
   const contexto = `

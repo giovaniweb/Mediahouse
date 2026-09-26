@@ -1,22 +1,20 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
-import { getOrgId, semOrg } from "@/lib/org"
 
 export const maxDuration = 120
 
 // POST /api/ia/agentes/monitor
 // Agente Monitor de Fluxo: analisa toda a pipeline de produção e detecta gargalos
 export async function POST() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verIA")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "monitor", organizacaoId, status: "executando", criadoPor: session.user?.id },
+    data: { agente: "monitor", organizacaoId, status: "executando", criadoPor: acesso.usuarioId },
   })
 
   try {

@@ -1,8 +1,7 @@
+import { podeAdministrarIdentidade } from "@/lib/identidade-admin"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
 
@@ -19,12 +18,10 @@ function senhaProvisoria(): string {
 // nova senha UMA vez, para repassar. Não guardamos o texto: o que fica no banco
 // é só o hash, igual a qualquer outra senha.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!ehGestor(session)) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const { id } = await params
 
@@ -36,6 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta empresa." }, { status: 404 })
 
+  if (!await podeAdministrarIdentidade(acesso.usuarioId, organizacaoId, id)) {
+    return NextResponse.json({ error: "Redefinir esta identidade compartilhada requer administração da plataforma" }, { status: 403 })
+  }
   const nova = senhaProvisoria()
   await prisma.usuario.update({
     where: { id },

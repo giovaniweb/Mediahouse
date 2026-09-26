@@ -1,8 +1,7 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailTeste, statusEmailGlobal } from "@/lib/email"
-import { getOrgId, semOrg } from "@/lib/org"
 
 const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -15,10 +14,9 @@ function emailsValidos(valores: unknown): string[] | null {
 
 // GET /api/configuracoes/email
 export async function GET() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const config = await prisma.configEmail.findFirst({
     where: { organizacaoId },
@@ -41,15 +39,14 @@ export async function GET() {
 
 // POST /api/configuracoes/email
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const papel = (session.user as { tipo?: string }).tipo
+  const papel = acesso.papel
   if (!["admin", "gestor"].includes(papel ?? "")) {
     return NextResponse.json({ error: "Apenas admin ou gestor pode alterar configurações" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body: unknown = await req.json()
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
