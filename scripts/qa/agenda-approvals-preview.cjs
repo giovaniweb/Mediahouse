@@ -1,0 +1,102 @@
+// All API traffic is mocked. No production credentials, database or messages.
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const {SignJWT}=require('jose');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'chrome'});
+ const context=await browser.newContext({viewport:{width:1440,height:960},reducedMotion:'reduce'});
+ const token=await new SignJWT({id:'preview-user',sub:'preview-user',tipo:'admin',papel:'admin',organizacaoId:'preview-org',name:'Pessoa de teste'}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode('nuflow-local-preview-only-secret-2026'.slice(0,32)));
+ await context.addCookies([{name:'authjs.session-token',value:token,url:'http://127.0.0.1:3107'}]);
+ const page=await context.newPage(); const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const output=process.env.QA_OUTPUT || '/tmp/nuflow-agenda-qa';fs.mkdirSync(output,{recursive:true});
+ const day=new Date();day.setHours(9,0,0,0);const end=new Date(day.getTime()+3600000);
+ let events=[{id:'e1',titulo:'Captação de lançamento',inicio:day.toISOString(),fim:end.toISOString(),tipo:'captacao',contexto:'contourline',status:'agendado',privado:false,local:'Estúdio',descricao:'Preparar luz e áudio. Conferir o roteiro antes da captação.',videomaker:{nome:'Rafael'},demanda:{id:'d1',codigo:'DEMO-101',titulo:'Filme de lançamento'}}];
+ const sample={id:'d1',codigo:'DEMO-101',titulo:'Filme de lançamento',descricao:'Briefing completo para captação e edição do lançamento.',departamento:'audiovisual',tipoVideo:'cobertura_evento',prioridade:'normal',statusInterno:'aguardando_aprovacao_interna',createdAt:day.toISOString(),solicitante:{id:'u1',nome:'Cliente de teste',email:'teste@example.test'}};
+ let demands=[sample,{...sample,id:'d2',codigo:'DEMO-102',titulo:'Campanha de primavera'}];
+ let failCreate=false,failDelete=false,failList=false,failConversion=false,role='admin';const requests=[];
+ await context.route('**/*', async route=>{
+  const request=route.request(),url=new URL(request.url());
+  if(url.hostname!=='127.0.0.1') return route.abort();
+  if(!url.pathname.startsWith('/api/')) return route.continue();
+  requests.push({path:url.pathname,query:url.search,method:request.method(),body:request.postDataJSON()});
+  const reply=(data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+  if(url.pathname==='/api/auth/session')return reply({user:{id:'preview-user',name:'Pessoa de teste',tipo:role},expires:'2099-01-01'});
+  if(url.pathname==='/api/me')return reply({id:'preview-user',nome:'Pessoa de teste',tipo:role,modulos:{growth:true,ideias:true},membership:{areas:['growth'],organizacaoId:'preview-org'},permissoes:{}});
+  if(url.pathname==='/api/agenda') {
+   if(request.method()==='POST') {if(failCreate)return reply({error:'Falha simulada'},500);events.push({...request.postDataJSON(),id:'created'});return reply({evento:events.at(-1)},201);}
+   return reply({eventos:events});
+  }
+  if(url.pathname==='/api/agenda/e1' && request.method()==='DELETE') {if(failDelete)return reply({error:'Falha'},403);events=events.filter(e=>e.id!=='e1');return reply({ok:true});}
+  if(url.pathname.endsWith('/converter'))return reply(failConversion?{error:'Conversão indisponível'}:{ok:true},failConversion?409:200);
+  if(url.pathname.endsWith('/aprovar')) {demands=demands.filter(d=>!url.pathname.includes(d.id));return reply({ok:true});}
+  if(url.pathname==='/api/demandas') {if(failList)return reply({error:'Falha'},500);return reply({demandas:url.searchParams.get('statusInterno')==='aguardando_aprovacao_interna'?demands:[]});}
+  if(url.pathname==='/api/aprovacao-video')return reply({aprovacoes:[]});
+  if(url.pathname==='/api/custos-videomaker')return reply({custos:[]});
+  if(url.pathname.includes('notificacoes'))return reply({notificacoes:[],naoLidas:0});
+  if(url.pathname.includes('foco'))return reply({emFoco:null,sugeridas:[],totalAbertas:0,atrasadas:0});
+  if(url.pathname.includes('organizacoes'))return reply({organizacoes:[]});
+  return reply({});
+ });
+ await page.goto('http://127.0.0.1:3107/agenda?visual=novo');
+ await page.getByRole('heading',{name:'Espaço para cada compromisso.'}).waitFor();
+ const eventButton=page.getByRole('button',{name:'Abrir evento: Captação de lançamento'}).first();await eventButton.waitFor();
+ await page.screenshot({path:`output/agenda.png`.replace('output',output)});
+ await eventButton.focus();await page.keyboard.press('Enter');
+ await page.getByRole('dialog').waitFor();
+ assert.equal(await page.getByRole('link',{name:'Abrir demanda vinculada →'}).getAttribute('href'),'/demandas/d1');
+ await page.screenshot({path:`${output}/agenda-detail.png`});
+ await page.getByRole('button',{name:'Fechar',exact:true}).focus();await page.keyboard.press('Shift+Tab');
+ assert.ok(await page.getByRole('dialog').evaluate(el=>el.contains(document.activeElement)));
+ failDelete=true;await page.getByRole('button',{name:'Excluir evento',exact:true}).click();
+ await page.getByRole('alert').filter({hasText:'Não foi possível excluir'}).waitFor();
+ assert.equal(await page.getByRole('dialog').count(),1);
+ await page.getByRole('button',{name:'Fechar',exact:true}).click();
+ await page.getByRole('button',{name:'Novo Evento',exact:true}).click();
+ await page.getByRole('textbox',{name:'Título',exact:true}).fill('Reunião de roteiro');
+ await page.getByRole('combobox',{name:'Lembrete WhatsApp'}).selectOption('30');
+ await page.getByRole('checkbox').check();
+ failCreate=true;await page.getByRole('button',{name:'Criar Evento',exact:true}).click();
+ await page.getByRole('alert').filter({hasText:'Não foi possível criar'}).waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'Título',exact:true}).inputValue(),'Reunião de roteiro');
+ failCreate=false;await page.getByRole('button',{name:'Criar Evento',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+ const create=requests.filter(r=>r.path==='/api/agenda' && r.method==='POST').at(-1);assert.equal(create.body.lembreteMinutos,30);assert.equal(create.body.privado,true);
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.screenshot({path:`${output}/agenda-mobile.png`});
+ await page.getByRole('button',{name:'Novo Evento',exact:true}).click();await page.getByRole('dialog').waitFor();
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.getByRole('button',{name:'Fechar',exact:true}).focus();await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
+ await page.setViewportSize({width:1440,height:960});
+ await page.goto('http://127.0.0.1:3107/aprovacoes?visual=novo');
+ await page.getByRole('heading',{name:'Uma decisão. O próximo passo.'}).waitFor();
+ await page.getByRole('heading',{name:'Filme de lançamento',exact:true}).waitFor();
+ await page.getByRole('button',{name:/Pagamentos/}).waitFor();
+ await page.screenshot({path:`${output}/approvals.png`});
+ failConversion=true;await page.getByRole('button',{name:'Aprovar como Job',exact:true}).first().click();
+ await page.getByText('Conversão indisponível',{exact:false}).waitFor();
+ assert.equal(requests.filter(r=>r.path.endsWith('/aprovar')).length,0);
+ failConversion=false;await page.getByRole('button',{name:'Aprovar como Job',exact:true}).first().click();
+ await page.getByRole('heading',{name:'Filme de lançamento',exact:true}).waitFor({state:'hidden'});
+ const conversionIndex=requests.findLastIndex(r=>r.path==='/api/jobs/d1/converter');const approvalIndex=requests.findLastIndex(r=>r.path==='/api/demandas/d1/aprovar');assert.ok(conversionIndex<approvalIndex);assert.equal(requests[conversionIndex].body.para,'job');
+ await page.getByRole('button',{name:'Recusar',exact:true}).click();await page.getByRole('dialog').waitFor();
+ await page.getByRole('textbox',{name:'Motivo da recusa'}).fill('Falta detalhar o roteiro');
+ await page.getByRole('button',{name:'Confirmar Recusa',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+ assert.equal(requests.filter(r=>r.path==='/api/demandas/d2/aprovar').at(-1).body.motivo,'Falta detalhar o roteiro');
+ const previousPayments=requests.filter(r=>r.path==='/api/custos-videomaker').length;
+ demands=[sample];await page.goto('http://127.0.0.1:3107/aprovacoes/growth?visual=novo');
+ await page.getByRole('heading',{name:'Filme de lançamento',exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:/Pagamentos/}).count(),0);
+ assert.equal(requests.filter(r=>r.path==='/api/custos-videomaker').length,previousPayments);
+ assert.ok(requests.filter(r=>r.path==='/api/demandas').at(-1).query.includes('area=design'));
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.screenshot({path:`${output}/approvals-mobile.png`});
+ failList=true;await page.goto('http://127.0.0.1:3107/aprovacoes/growth?visual=novo');
+ await page.getByRole('alert').filter({hasText:'Não foi possível carregar esta fila'}).waitFor();
+ assert.equal(await page.getByText('Tudo em dia! 🎉',{exact:true}).count(),0);
+ failList=false;await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();await page.getByRole('heading',{name:'Filme de lançamento',exact:true}).waitFor();
+ role='gestor';await page.goto('http://127.0.0.1:3107/agenda?visual=classico');await page.getByRole('button',{name:'Abrir evento: Captação de lançamento'}).first().click();await page.getByRole('dialog').waitFor();assert.equal(await page.getByRole('button',{name:'Excluir evento',exact:true}).count(),0);
+ assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({ok:true,checks:['agenda desktop/mobile','detail keyboard and focus','create payload','create/delete failures','classic manager view','approval conversion ordering','refusal payload','Growth no payments','load failure retry'],output}));
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

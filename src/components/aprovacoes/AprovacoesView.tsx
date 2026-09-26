@@ -1,5 +1,9 @@
 "use client"
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import { useDialogFocus } from "@/components/layout/useDialogFocus"
+import styles from "./ApprovalsPreview.module.css"
+import surface from "@/components/demandas/DemandSurface.module.css"
 import { useState } from "react"
 import { Header } from "@/components/layout/Header"
 import {
@@ -63,6 +67,7 @@ export type AreaAprovacao = "audiovisual" | "design"
 // no audiovisual.
 
 export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
+  const { modern } = useVisualPreview()
   const ehAudiovisual = area === "audiovisual"
   const rotuloArea = ehAudiovisual ? "Audiovisual" : "Growth"
   const q = `&area=${area}`
@@ -74,16 +79,18 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
   const [sugestaoIA, setSugestaoIA] = useState<Record<string, string>>({})
   const [analisandoIA, setAnalisandoIA] = useState<string | null>(null)
 
-  const { data: dataUrgentes, mutate: mutateU } = useSWR<{ demandas: Demanda[] }>(
+  const dialogRef = useDialogFocus(!!modal, () => { if (!loading) { setModal(null); setMotivo("") } })
+
+  const { data: dataUrgentes, mutate: mutateU, error: errorU, isLoading: loadingU } = useSWR<{ demandas: Demanda[] }>(
     `/api/demandas?statusInterno=urgencia_pendente_aprovacao${q}`, fetcher, { refreshInterval: 15000 })
-  const { data: dataNormais, mutate: mutateN } = useSWR<{ demandas: Demanda[] }>(
+  const { data: dataNormais, mutate: mutateN, error: errorN, isLoading: loadingN } = useSWR<{ demandas: Demanda[] }>(
     `/api/demandas?statusInterno=aguardando_aprovacao_interna${q}`, fetcher, { refreshInterval: 15000 })
   // Pagamentos de videomaker (PIX/CPF) são exclusivos do audiovisual.
-  const { data: dataCustos, mutate: mutateCustos } = useSWR<{ custos: CustoNF[] }>(
+  const { data: dataCustos, mutate: mutateCustos, error: errorC, isLoading: loadingC } = useSWR<{ custos: CustoNF[] }>(
     ehAudiovisual ? "/api/custos-videomaker?statusPagamento=nf_enviada" : null, fetcher, { refreshInterval: 15000 })
-  const { data: dataVideos, mutate: mutateVideos } = useSWR<{ aprovacoes: AprovacaoVideo[] }>(
+  const { data: dataVideos, mutate: mutateVideos, error: errorV, isLoading: loadingV } = useSWR<{ aprovacoes: AprovacaoVideo[] }>(
     `/api/aprovacao-video?status=pendente${q}`, fetcher, { refreshInterval: 15000 })
-  const { data: dataRecusadas, mutate: mutateRecusadas } = useSWR<{ demandas: Demanda[] }>(
+  const { data: dataRecusadas, mutate: mutateRecusadas, error: errorR, isLoading: loadingR } = useSWR<{ demandas: Demanda[] }>(
     `/api/demandas?statusInterno=encerrado${q}`, fetcher, { refreshInterval: 30000 })
 
   const urgentes = dataUrgentes?.demandas ?? []
@@ -91,6 +98,10 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
   const custos = dataCustos?.custos ?? []
   const videos = dataVideos?.aprovacoes ?? []
   const recusadas = dataRecusadas?.demandas ?? []
+
+  const currentError = {demandas:errorN, urgencias:errorU, pagamentos:errorC, videos:errorV, recusadas:errorR}[aba]
+  const currentLoading = {demandas:loadingN, urgencias:loadingU, pagamentos:loadingC, videos:loadingV, recusadas:loadingR}[aba]
+  const retryCurrent = {demandas:mutateN, urgencias:mutateU, pagamentos:mutateCustos, videos:mutateVideos, recusadas:mutateRecusadas}[aba]
 
   function mutateAll() { mutateU(); mutateN(); mutateCustos(); mutateVideos(); mutateRecusadas() }
 
@@ -222,12 +233,14 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <RefreshCw className="w-3.5 h-3.5" /> Auto-atualiza
         </div>
       } />
-      <main className="flex-1 p-6">
+      <main className={cn("flex-1 p-6", modern && styles.page)}>
+        {modern && <div className={styles.heading}><p>APROVAÇÕES · {rotuloArea.toUpperCase()}</p><h1>Uma decisão. O próximo passo.</h1><span>Revise o pedido, confira os detalhes e encaminhe o trabalho.</span></div>}
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-zinc-800 pb-0">
+        <div aria-label="Filtrar aprovações" className={cn("flex gap-2 mb-6 border-b border-zinc-800 pb-0", modern && styles.tabs)}>
           {abas.map((t) => (
             <button
               key={t.id}
+              aria-pressed={aba === t.id}
               onClick={() => setAba(t.id)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px",
@@ -253,6 +266,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           ))}
         </div>
 
+        {currentError ? <div role="alert" className={styles.error}>Não foi possível carregar esta fila. <button onClick={() => void retryCurrent()}>Tentar novamente</button></div>
+          : currentLoading ? <p role="status" className={styles.loading}>Carregando aprovações…</p> : <>
         {/* ─── ABA: DEMANDAS ─────────────────────────────────────────────── */}
         {aba === "demandas" && (
           <DemandaList
@@ -299,7 +314,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
         {/* ─── ABA: RECUSADAS ─────────────────────────────────────────────── */}
         {aba === "recusadas" && (
-          <div className="space-y-3 max-w-3xl">
+          <div data-approval-list className="space-y-3 max-w-3xl">
             {recusadas.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <CheckCircle2 className="w-12 h-12 text-green-400 mb-3" />
@@ -342,15 +357,16 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             ))}
           </div>
         )}
+        </>}
       </main>
 
       {/* Modal recusa */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4">
-            <h3 className="font-semibold text-white mb-1">Recusar Demanda</h3>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm", modern && surface.overlay)}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="approval-refuse-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4", modern && surface.surface)}>
+            <h3 id="approval-refuse-title" className="font-semibold text-white mb-1">Recusar Demanda</h3>
             <p className="text-sm text-zinc-400 mb-4">Motivo da recusa (comunicado ao solicitante via WhatsApp).</p>
-            <textarea
+            <textarea aria-label="Motivo da recusa"
               className="w-full border border-zinc-700 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-zinc-500 bg-zinc-800 text-zinc-200"
               rows={3} placeholder="Ex: Fora do escopo, informações insuficientes..."
               value={motivo} onChange={(e) => setMotivo(e.target.value)}
@@ -362,7 +378,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
                 {loading === modal.id ? "Recusando..." : "Confirmar Recusa"}
               </button>
-              <button onClick={() => { setModal(null); setMotivo("") }}
+              <button disabled={!!loading} onClick={() => { setModal(null); setMotivo("") }}
                 className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800">
                 Cancelar
               </button>
@@ -393,7 +409,7 @@ function DemandaList({
   )
 
   return (
-    <div className="space-y-3 max-w-3xl">
+    <div data-approval-list className="space-y-3 max-w-3xl">
       {lista.map((d) => (
         <div key={d.id} className={cn(
           "bg-zinc-900 border rounded-2xl p-5 space-y-3",
@@ -501,7 +517,7 @@ function PagamentoList({ custos, loading, onAprovar, onContestar }: {
   )
 
   return (
-    <div className="space-y-3 max-w-3xl">
+    <div data-approval-list className="space-y-3 max-w-3xl">
       {custos.map((c) => (
         <div key={c.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
           <div className="flex items-start justify-between gap-3">
@@ -607,7 +623,7 @@ function VideoList({ aprovacoes }: { aprovacoes: AprovacaoVideo[] }) {
   )
 
   return (
-    <div className="space-y-3 max-w-3xl">
+    <div data-approval-list className="space-y-3 max-w-3xl">
       {aprovacoes.map((ap) => (
         <div key={ap.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
