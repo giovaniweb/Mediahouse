@@ -1,5 +1,7 @@
 "use client"
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
 import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play, Inbox } from "lucide-react"
@@ -1239,7 +1241,7 @@ function TabEmpresa() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div data-settings-fields className="grid grid-cols-2 gap-4">
         {F("Razão Social", "razaoSocial", "Ex: CONTOURLINE EQUIPAMENTOS LTDA")}
         {F("Nome Fantasia", "nomeFantasia", "Ex: Contourline")}
         {F("CNPJ", "cnpj", "XX.XXX.XXX/0001-XX", true)}
@@ -1256,7 +1258,7 @@ function TabEmpresa() {
         <h4 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
           💰 Chave PIX
         </h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div data-settings-fields className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-zinc-500 mb-1">Tipo da Chave</label>
             <select
@@ -1920,6 +1922,7 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
 }
 
 export default function ConfiguracoesPage() {
+  const { modern } = useVisualPreview()
   const { data: session } = useSession()
   const [tab, setTab] = useState<Tab>("meu_perfil")
 
@@ -1955,16 +1958,18 @@ export default function ConfiguracoesPage() {
       <Suspense fallback={null}>
         <DriveCallbackHandler onSetTab={setTab} />
       </Suspense>
-      <main className="flex-1 p-6">
-        <div className="max-w-5xl mx-auto flex gap-6">
+      <main className={cn("flex-1 p-6", modern && preview.settings)}>
+        {modern && <div className={preview.intro}><div><p className={preview.eyebrow}>SEU ESPAÇO DE TRABALHO</p><h1>Configurações</h1><p>Identidade da empresa, integrações e preferências em um só lugar.</p></div></div>}
+        <div className={cn("max-w-5xl mx-auto flex gap-6", modern && preview.settingsLayout)}>
           {/* Sidebar Nav */}
-          <nav className="w-48 shrink-0">
+          <nav aria-label="Seções de configurações" className={cn("w-48 shrink-0", modern && preview.settingsNav)}>
             <div className="sticky top-6 space-y-0.5">
               {tabs.map((t) => {
                 const Icon = t.icon
                 return (
                   <button
                     key={t.id}
+                    aria-pressed={tab === t.id}
                     onClick={() => setTab(t.id)}
                     className={cn(
                       "w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors text-left",
@@ -1983,7 +1988,7 @@ export default function ConfiguracoesPage() {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <div className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl p-6", modern && preview.settingsPanel)}>
               {tab === "meu_perfil" && <TabMeuPerfil />}
               {tab === "whatsapp" && (
                 <div className="space-y-8">

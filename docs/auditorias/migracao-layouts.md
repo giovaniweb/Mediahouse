@@ -51,3 +51,9 @@ QA local de navegador concluído: Jobs desktop/mobile sem overflow, exclusão de
 ## Lote seguinte: dashboard interno
 
 Implementado no opt-in, com evidências e limites em `dashboard-preview.md`. O estado mensal é rotulado como vídeos entregues. Corrigido o escopo da carga do editor para a organização atual. O histórico semanal continua dependente de dados não retornados pela API.
+
+## Lotes adicionais — 26/09/2026
+
+Agenda e Aprovações receberam preview próprio; ver `agenda-aprovacoes-preview.md`.
+Pessoas & Acessos e Configurações receberam modernização de apresentação; ver `pessoas-configuracoes-preview.md`.
+A migração total ainda não está concluída. Galerias, cadastros de produtos/linhas, páginas especializadas da equipe, histórico, relatórios, organizações e experiência de campo precisam de seus próprios lotes e validações. Perfil pessoal completo e indicadores SaaS novos também exigem trabalho funcional separado.

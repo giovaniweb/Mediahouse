@@ -6,6 +6,8 @@
 // 12 campos para responder "qual é o WhatsApp dele?". O painel separa as duas
 // coisas: ler é o estado padrão, editar é um clique explícito.
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import preview from "@/components/layout/AdminPreview.module.css"
 import { useState } from "react"
 import {
   X, Mail, Phone, Copy, Check, CalendarDays, Link2, Briefcase, Users2, Award, BellRing,
@@ -89,6 +91,7 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   acoes: AcoesPessoa
   onClose: () => void
 }) {
+  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("geral")
   const [menu, setMenu] = useState(false)
 
@@ -112,7 +115,7 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   return (
     // z-50 para ficar acima do painel flutuante de foco (z-40), que mora no
     // canto inferior direito e cobriria justamente os botões de ação daqui.
-    <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl">
+    <aside aria-label="Detalhes da pessoa" className={cn("fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl", modern && preview.personPanel)}>
       {/* Cabeçalho */}
       <div className="flex items-center justify-between px-5 h-14 border-b border-zinc-800 shrink-0">
         <p className="text-sm font-semibold text-zinc-100">Detalhes da pessoa</p>

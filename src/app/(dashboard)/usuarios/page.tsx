@@ -1,5 +1,7 @@
 "use client"
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import preview from "@/components/layout/AdminPreview.module.css"
 import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
@@ -486,6 +488,7 @@ function Filtro({ valor, onChange, children }: {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function PessoasAcessosPage() {
+  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("pessoas")
 
   // Filtros da aba Pessoas
@@ -806,10 +809,10 @@ export default function PessoasAcessosPage() {
     <>
       <Header />
 
-      <main className={cn("flex-1 p-6 space-y-5 transition-[padding]", pessoaAberta && "lg:pr-[25rem]")}>
+      <main data-person-open={!!pessoaAberta} className={cn("flex-1 p-6 space-y-5 transition-[padding]", modern && preview.people, pessoaAberta && "lg:pr-[25rem]")}>
 
         {/* Título + ação principal */}
-        <div className="flex items-start justify-between gap-4">
+        <div className={cn("flex items-start justify-between gap-4", modern && preview.intro)}>
           <div>
             <h1 className="text-2xl font-semibold text-zinc-100">Pessoas &amp; Acessos</h1>
             <p className="text-sm text-zinc-500 mt-1">
@@ -827,6 +830,7 @@ export default function PessoasAcessosPage() {
         {/* Números — cada card é também um filtro */}
         <div className={cn(
           "grid gap-3 grid-cols-2 md:grid-cols-3",
+          modern && preview.metrics,
           // Com o painel aberto sobra menos largura: cinco colunas só a partir
           // do 2xl, senão os rótulos viram "Tot…" e o número perde o nome.
           pessoaAberta ? "2xl:grid-cols-5" : "lg:grid-cols-5",
@@ -836,6 +840,7 @@ export default function PessoasAcessosPage() {
             return (
               <button
                 key={c.label}
+                aria-pressed={selecionado}
                 onClick={() => { setAba("pessoas"); c.aplicar() }}
                 className={cn(
                   "flex items-center gap-3 rounded-xl border bg-zinc-900/60 px-4 py-3.5 text-left transition-colors",
@@ -855,10 +860,11 @@ export default function PessoasAcessosPage() {
         </div>
 
         {/* Abas */}
-        <div className="flex items-center gap-0 border-b border-zinc-800">
+        <div className={cn("flex items-center gap-0 border-b border-zinc-800", modern && preview.tabs)}>
           {abas.map(t => (
             <button
               key={t.id}
+              aria-pressed={aba === t.id}
               onClick={() => { setAba(t.id); setShowForm(false); setConflito(null) }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px",
@@ -1042,7 +1048,7 @@ export default function PessoasAcessosPage() {
             </div>
 
             {/* Tabela */}
-            <div className="border border-zinc-800 rounded-xl overflow-x-auto">
+            <div className={cn("border border-zinc-800 rounded-xl overflow-x-auto", modern && preview.table)}>
               <table className="w-full text-sm min-w-[900px]">
                 <thead className="bg-zinc-800/50 border-b border-zinc-800">
                   <tr>
@@ -1085,7 +1091,7 @@ export default function PessoasAcessosPage() {
                                 : iniciais(p.nome)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-zinc-100 truncate">{p.nome}</p>
+                              <button type="button" onClick={event => { event.stopPropagation(); setPessoaAbertaId(p.id) }} className="block max-w-full text-left font-medium text-zinc-100 truncate focus-visible:outline-2 focus-visible:outline-purple-400 focus-visible:outline-offset-4" aria-label={`Abrir pessoa: ${p.nome}`}>{p.nome}</button>
                               <p className="text-xs text-zinc-500 truncate">
                                 {p.email || <span className="italic text-zinc-600">sem e-mail</span>}
                               </p>
