@@ -47,12 +47,12 @@ export async function GET(req: NextRequest) {
     const [historicos, comentarios] = await Promise.all([
       prisma.historicoStatus.groupBy({
         by: ["usuarioId"],
-        where: { usuarioId: { in: ids } },
+        where: { usuarioId: { in: ids }, demanda: { organizacaoId } },
         _max: { createdAt: true },
       }),
       prisma.comentario.groupBy({
         by: ["usuarioId"],
-        where: { usuarioId: { in: ids } },
+        where: { usuarioId: { in: ids }, demanda: { organizacaoId } },
         _max: { createdAt: true },
       }),
     ])

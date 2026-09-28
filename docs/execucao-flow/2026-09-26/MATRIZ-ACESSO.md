@@ -59,3 +59,9 @@ Gerada dos handlers modificados, 26/09/2026. Isto não certifica outras rotas ne
 | `/api/usuarios` | POST | gerenciarUsuarios |
 
 As provas integradas chamam handlers com sessão simulada e banco real, sem middleware. A matriz de negação percorre métodos críticos e confere ausência de execução de agentes. Login real por navegador, todos os fluxos positivos, concorrência de revogação e integrações permanecem pendentes.
+
+## Ampliação de 28/09
+
+A integração passou a conferir GET de configuração empresarial, Trello e custos sob todos os 12 papéis persistidos no vínculo: admin/gestor permitidos por preset; operação, solicitante, editor, videomaker, social, gestor de eventos, designer, analista CRM, gestor de tráfego e auxiliar administrativo negados. O tipo global da identidade não altera o resultado. Exceção explícita de verCustos continua coberta no teste anterior.
+
+Trello: gravação/leitura permitidas, preservação de mapeamento, negação de reutilização de credenciais entre empresas, payload forjado, revogação durante chamada, falha externa e configuração desativada. Usuários: histórico e comentários de outra empresa não influenciam última atividade. Não há homologação real de Trello nem alegação de cobertura positiva de todas as rotas.

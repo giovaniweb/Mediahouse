@@ -6,6 +6,9 @@ vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => estado.cookie ? { value: estado.cookie } : undefined }) }))
 // Importar handlers não deve abrir clientes externos reais.
 vi.mock("@/lib/claude", () => ({ claude: {}, analisarComClaude: vi.fn(), extrairJSON: vi.fn(), executarAgenteComTools: vi.fn(), MODELO_POTENTE: "teste", MODELO_RAPIDO: "teste", SYSTEM_VIDEOOPS: "", TOOLS_VIDEOOPS: [] }))
+vi.mock("@/lib/trello", () => ({ getBoardLists: vi.fn(), syncDemandaTrello: vi.fn() }))
+import { getBoardLists } from "@/lib/trello"
+import { GET as trelloGET, POST as trelloPOST } from "@/app/api/configuracoes/trello/route"
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as custosGET, POST as custosPOST } from "@/app/api/custos-videomaker/route"
@@ -181,5 +184,93 @@ describe("handler real com banco descartável", () => {
     await db.usuarioOrganizacao.delete({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } } })
     expect((await post({ cnpj: "invadido" })).status).toBe(403)
     expect((await db.configEmpresa.findFirst({ where: { organizacaoId: orgA } }))?.cnpj).toBe("cnpj-sintetico-a")
+  })
+})
+
+
+describe("Trello por empresa", () => {
+  const enviar = (data: unknown) => trelloPOST(new NextRequest("http://localhost/api/configuracoes/trello", { method: "POST", body: JSON.stringify(data) }))
+  beforeEach(async () => {
+    await db.usuarioOrganizacao.upsert({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, create: { usuarioId: usuario, organizacaoId: orgA, papel: "admin", areas: [] }, update: { papel: "admin" } })
+    vi.mocked(getBoardLists).mockReset().mockResolvedValue([])
+    await db.configTrello.deleteMany({ where: { organizacaoId: { in: [orgA, orgB] } } })
+  })
+  it.each(["admin", "gestor", "operacao", "solicitante", "editor", "videomaker", "social", "gestor_eventos", "designer", "analista_crm", "gestor_trafego", "auxiliar_admin"] as const)("matriz de leitura administrativa e financeira: %s", async papel => {
+    await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel } })
+    const esperado = papel === "admin" || papel === "gestor" ? 200 : 403
+    expect((await GET()).status).toBe(esperado)
+    expect((await trelloGET()).status).toBe(esperado)
+    expect((await custosGET(new NextRequest("http://localhost/api/custos-videomaker"))).status).toBe(esperado)
+  })
+  it("última atividade considera apenas demandas da empresa selecionada", async () => {
+    const { GET: pessoasGET } = await import("@/app/api/usuarios/route")
+    const criar = (organizacaoId: string, sufixo: string) => db.demanda.create({ data: { organizacaoId, solicitanteId: alvo, codigo: `${prefix}-${sufixo}`, titulo: "Teste", descricao: "Teste", departamento: "growth", tipoVideo: "reels", cidade: "Teste" } })
+    const a = await criar(orgA, "atividade-a"), b = await criar(orgB, "atividade-b")
+    const antiga = new Date("2026-01-01T12:00:00Z"), recente = new Date("2026-09-01T12:00:00Z")
+    await db.historicoStatus.createMany({ data: [
+      { demandaId: a.id, usuarioId: alvo, statusNovo: "pedido_criado", createdAt: antiga },
+      { demandaId: b.id, usuarioId: alvo, statusNovo: "pedido_criado", createdAt: recente },
+    ] })
+    await db.comentario.create({ data: { demandaId: b.id, usuarioId: alvo, comentario: "Privado B", createdAt: recente } })
+    const res = await pessoasGET(new NextRequest("http://localhost/api/usuarios?busca=multiempresa"))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.usuarios.find((u: { id: string }) => u.id === alvo).ultimaAtividade).toBe(antiga.toISOString())
+    expect(JSON.stringify(body)).not.toContain("senhaHash")
+  })
+  it("configuração desativada não é apresentada como conectada", async () => {
+    await db.configTrello.create({ data: { organizacaoId: orgA, boardId: "boardAAAA", apiKey: "chave", token: "token", ativo: false } })
+    expect(await (await trelloGET()).json()).toEqual({ config: { boardId: "", ativo: false, apiKey: "", token: "" } })
+    expect(getBoardLists).not.toHaveBeenCalled()
+  })
+  it("persiste e lê sem devolver credenciais, preservando mapeamento", async () => {
+    const res = await enviar({ boardId: "boardAAAA", apiKey: "chave-secreta-a", token: "token-secreto-a" })
+    expect(res.status).toBe(200)
+    expect(JSON.stringify(await res.json())).not.toContain("secre")
+    const row = await db.configTrello.findFirstOrThrow({ where: { organizacaoId: orgA } })
+    await db.configTrello.update({ where: { id: row.id }, data: { listMapping: { lista: "entrada" } } })
+    expect((await enviar({ boardId: "boardAAAA", apiKey: "••••", token: "••••" })).status).toBe(200)
+    expect(getBoardLists).toHaveBeenLastCalledWith({ boardId: "boardAAAA", apiKey: "chave-secreta-a", token: "token-secreto-a" })
+    const atualizado = await db.configTrello.findUniqueOrThrow({ where: { id: row.id } })
+    expect(atualizado.listMapping).toEqual({ lista: "entrada" })
+    expect(await (await trelloGET()).json()).toEqual({ config: { boardId: "boardAAAA", ativo: true, apiKey: "••••", token: "••••" } })
+    expect((await enviar({ boardId: "boardNOVO" })).status).toBe(200)
+    expect((await db.configTrello.findUniqueOrThrow({ where: { id: row.id } })).listMapping).toBeNull()
+  })
+  it("admin de B não lê nem reutiliza segredo de A", async () => {
+    await db.configTrello.create({ data: { organizacaoId: orgA, boardId: "boardAAAA", apiKey: "segredo-a", token: "segredo-a" } })
+    await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgB } }, data: { papel: "admin" } })
+    estado.cookie = orgB
+    try {
+      expect(await (await trelloGET()).json()).toEqual({ config: { boardId: "", ativo: false, apiKey: "", token: "" } })
+      expect((await enviar({ boardId: "boardBBBB", apiKey: "••••", token: "••••" })).status).toBe(400)
+      expect(getBoardLists).not.toHaveBeenCalled()
+      expect((await enviar({ boardId: "boardBBBB", apiKey: "chave-b", token: "token-b" })).status).toBe(200)
+      expect((await db.configTrello.findFirstOrThrow({ where: { organizacaoId: orgA } })).boardId).toBe("boardAAAA")
+    } finally {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgB } }, data: { papel: "solicitante" } })
+    }
+  })
+  it("recusa payload forjado e falha do provedor sem expor mensagem", async () => {
+    expect((await enviar({ boardId: "boardAAAA", organizacaoId: orgB })).status).toBe(400)
+    expect((await enviar({ boardId: "../boards" })).status).toBe(400)
+    expect(getBoardLists).not.toHaveBeenCalled()
+    vi.mocked(getBoardLists).mockRejectedValue(new Error("credencial-na-mensagem-do-provedor"))
+    const res = await enviar({ boardId: "boardAAAA", apiKey: "chave", token: "token" })
+    expect(res.status).toBe(400)
+    expect(JSON.stringify(await res.json())).not.toContain("credencial-na-mensagem")
+    expect(await db.configTrello.count({ where: { organizacaoId: orgA } })).toBe(0)
+  })
+  it("revogação durante teste impede persistência", async () => {
+    vi.mocked(getBoardLists).mockImplementationOnce(async () => {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel: "solicitante" } })
+      return []
+    })
+    try {
+      expect((await enviar({ boardId: "boardAAAA", apiKey: "chave", token: "token" })).status).toBe(403)
+      expect(await db.configTrello.count({ where: { organizacaoId: orgA } })).toBe(0)
+    } finally {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel: "admin" } })
+    }
   })
 })

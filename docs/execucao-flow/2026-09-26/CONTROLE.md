@@ -4,13 +4,13 @@
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S04 concluído localmente; S01/S02/S03 permanecem abertos nos recortes indicados abaixo.
-- Próxima tarefa: completar matriz positiva/payloads e Trello legado em S03; preparar contexto obrigatório das ferramentas S05.
+- Tarefa em andamento: S03 avançado com Trello persistente isolado, atividade de usuários escopada e matriz de 12 papéis; S04 concluído localmente.
+- Próxima tarefa: S05, contexto obrigatório das ferramentas; completar os demais payloads de S03 sem presumir cobertura de todas as rotas.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
 - Última alteração: nonce OAuth persistente de uso único, vínculo ao navegador/ator/empresa, cifra versionada e migração gradual de credenciais Drive.
-- Verificações: 615 unitários, 34 cenários integrados, RLS sintético e auditores; build e tipos passaram. Migração aditiva aplicada somente no banco descartável.
+- Verificações: 618 unitários e 52 cenários integrados; build, tipos e auditores passaram. Sem nova migração no lote S03/Trello.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -141,3 +141,15 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Revisão própria: sem segredo em diff, sem alterações em preview/videoops, nenhum envio ou consumo de IA. Endpoint de teste Drive agora POST; mantém criação explícita de arquivo, ainda não executada contra Google.
 - Validação externa pendente: conta/pasta Google, migração do legado real, configuração de chaves e role do runtime em L02. Sync Drive permanece M03.
 - Próxima ação concreta: completar matriz positiva/payloads e isolamento Trello em S03, depois migrar todos os chamadores de ferramentas para contexto verificado S05. A fila restante não está concluída.
+
+## Checkpoint S03/Trello e usuários — 28/09
+
+- Sobre 0de0249, removido cache global do endpoint Trello. GET usa resolução por empresa, retorna somente board/estado e máscaras fixas; POST valida contrato estrito, testa a conexão, revalida autorização e persiste somente na empresa selecionada. Mapeamento de listas preservado ao atualizar credenciais do mesmo board e removido ao trocar de board, evitando destinos antigos. Escritas concorrentes da rota são serializadas por empresa; configurações duplicadas são recusadas.
+- Máscaras/credenciais omitidas só reutilizam a configuração da própria empresa. O fallback legado por ambiente continua restrito ao dono declarado. Erro de banco não ativa fallback; configuração explicitamente desativada também não. Credenciais Trello continuam no formato legado da tabela (não confundir com a cifra Drive entregue em S04); ampliar cifra e preparar rotação antes de homologar a integração comercial.
+- Erros HTTP, rede e JSON do helper Trello não propagam resposta externa nem URL com token. Nenhuma chamada real foi feita: adaptador Trello simulado na integração e fetch simulado nos testes do helper.
+- GET de usuários calcula última atividade somente a partir de demandas da empresa selecionada, mesmo para pessoa com vínculos em A/B. Não depende de RLS habilitado para essa restrição.
+- Matriz real de leitura de configuração, Trello e custos para todos os 12 papéis; cenários positivos de admin/gestor e negativos dos demais, além das exceções configuráveis cobertas no lote anterior. Isso não certifica todos os payloads das 53 fronteiras nem conclui S03 integralmente.
+- 618 testes unitários/42 arquivos e 52 integrações/2 arquivos: exit 0. Banco descartável PostgreSQL local, sem credenciais reais. ESLint dos arquivos alterados sem avisos; tipos/build e auditores passaram. Logs /private/tmp/nuflow-s03-*.log.
+- Tentativas corrigidas: fixture de revogação removia vínculo necessário ao grupo seguinte; restaurado no setup do grupo. Fixture de demanda exigia solicitanteId; preenchido antes da repetição bem-sucedida. Não eram falhas do provedor real.
+- Sem migration, publicação ou alteração em outros checkouts. Trello não possui tela consumidora ativa encontrada na busca atual; o contrato HTTP foi preservado com máscaras fixas. Homologação de board real permanece pendente em L02.
+- Próxima ação: S05 tem 18 ferramentas e chamadores em chat, agentes manuais, cron e webhook WhatsApp. Migrar em conjunto para contexto verificado, políticas por ferramenta, escopo de demandas e destinatário autorizado; não liberar ferramentas apenas pela permissão verIA. Permanecem payloads adicionais de S03 e criptografia de integrações legadas em S02.
