@@ -182,6 +182,7 @@ model Usuario {
   updatedAt  DateTime      @updatedAt
   superAdmin Boolean       @default(false) // gestão global de organizações (SaaS)
 
+  oauthDriveEstados   OAuthDriveEstado[]
   organizacoes        UsuarioOrganizacao[]
   demandasCriadas     Demanda[]               @relation("Solicitante")
   demandasGeridas     Demanda[]               @relation("Gestor")
@@ -2126,6 +2127,7 @@ model Organizacao {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  oauthDriveEstados  OAuthDriveEstado[]
   membros            UsuarioOrganizacao[]
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
@@ -2374,4 +2376,20 @@ model UsuarioOrganizacao {
   @@unique([usuarioId, organizacaoId])
   @@index([organizacaoId])
   @@map("usuario_organizacao")
+}
+
+// Desafio OAuth de curta duração. O nonce original não é persistido.
+model OAuthDriveEstado {
+  hash          String    @id
+  organizacaoId String
+  usuarioId     String
+  expiraEm      DateTime
+  consumidoEm   DateTime?
+  createdAt     DateTime  @default(now())
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId, expiraEm])
+  @@map("oauth_drive_estados")
 }

@@ -10,6 +10,7 @@
  */
 
 import crypto from "crypto"
+import { lerTokenDrive } from "@/lib/integration-secret"
 import { prisma } from "@/lib/prisma"
 
 // ── Cache do access_token (válido por ~1 hora) ──────────────────────────────
@@ -44,13 +45,13 @@ async function getAccessTokenFromOAuth(organizacaoId?: string | null): Promise<s
     body: new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: config.googleRefreshToken,
+      refresh_token: lerTokenDrive(config.googleRefreshToken, organizacaoId),
       grant_type: "refresh_token",
     }),
   })
 
   if (!res.ok) {
-    console.error("[google-drive] Falha ao renovar OAuth2 token:", await res.text())
+    console.error("[google-drive] Falha ao renovar OAuth2 token, HTTP", res.status)
     return null
   }
 

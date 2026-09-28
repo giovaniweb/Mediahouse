@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 26/09/2026 — execução técnica iniciada em checkout isolado; nenhuma publicação.
+Última atualização: 28/09/2026 — OAuth e cifra Drive implementados e testados localmente; nenhuma publicação.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S01/S02/S03, fatia de autorização; próximo bloco S04.
-- Próxima tarefa: concluir revisão e evidências do primeiro lote; OAuth S04.
+- Tarefa em andamento: S04 concluído localmente; S01/S02/S03 permanecem abertos nos recortes indicados abaixo.
+- Próxima tarefa: completar matriz positiva/payloads e Trello legado em S03; preparar contexto obrigatório das ferramentas S05.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: vínculo revalidado, configuração com allowlist/patch, guard de APIs, proteção da identidade multiempresa e testes reais locais.
-- Verificações: baseline 591 testes; atual 607 unitários, 17 cenários integrados, RLS sintético e auditores. Build passou após transportar correções pontuais existentes no preview; tipos e testes revalidados após ajuste de identidade.
+- Última alteração: nonce OAuth persistente de uso único, vínculo ao navegador/ator/empresa, cifra versionada e migração gradual de credenciais Drive.
+- Verificações: 615 unitários, 34 cenários integrados, RLS sintético e auditores; build e tipos passaram. Migração aditiva aplicada somente no banco descartável.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -27,7 +27,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S01 | Contexto e revogação | 01 | F01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | S02 | Configuração sem segredos | 01 | S01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | S03 | APIs críticas autorizadas | 01 | S01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
-| S04 | OAuth e cifra versionada | 01 | S02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| S04 | OAuth e cifra versionada | 01 | S02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S05 | Ferramentas autorizadas | 01 | S01, S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | S06 | Publicação explícita | 01 | S01, S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | S07 | RLS e pool | 01 | S01, S04, S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -126,3 +126,18 @@ Autoelevação por alteração do próprio papel/preset foi bloqueada; superadmi
 - Revisão própria do diff: nenhuma migration nova, segredo ou alteração do preview absorvida; tratamento de seleção inválida é intencionalmente 403. Exceção financeira temporária documentada na consolidação.
 - CI remoto, navegador com login real e release não executados. Os cartões amplos permanecem EM_EXECUCAO até completar seus critérios; este é um checkpoint de implementação, não conclusão de F00–L01.
 - Próxima ação: S04 — nonce OAuth persistente de uso único + cifra versionada de Drive, migrations e ensaio de concorrência local; concluir S02 e ampliar validação de S03. Trello global permanece risco conhecido a tratar, não integração homologada.
+
+## Checkpoint S04 — 28/09
+
+S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de configuração exigida por S04 já possui autorização, allowlist e preservação fiscal; isso não encerra todos os recortes de S02/S03. Cifra Drive pendente no checkpoint anterior agora está entregue. Operação, rotação e recuperação estão em S04-OPERACAO-DRIVE.md.
+
+- OAuth exige ator/empresa/capacidade atuais, cookie e nonce persistido por hash, expiração e consumo atômico. Estado previsível legado é recusado. Dois callbacks com o mesmo estado produzem uma única troca de token; autorizações distintas da mesma empresa são serializadas.
+- AES-256-GCM vinculado à empresa, chave/versionamento próprios, leitura transitória de legado e CLI por empresa com simulação padrão, paginação, bloqueio de linha, idempotência e rotação. Nenhuma credencial real migrada.
+- Migração 20260928000000_oauth_drive_estado aplicada somente em 127.0.0.1:55439/nuflow_test; 25 migrations no ambiente descartável. Diff schema/banco: nenhuma diferença.
+- 615 testes unitários/41 arquivos e 34 integrações/2 arquivos: exit 0. Integrações incluem expiração, troca de ator/empresa, revogação durante retorno, falha de provedor, preservação fiscal/token, concorrência e SET LOCAL ROLE app_user com negação entre empresas. Google simulado, banco real descartável.
+- Build Next/webpack, tipos, auditores tenancy/perfil, RLS e diff check: exit 0. ESLint final dos arquivos alterados: zero erros e nove avisos preexistentes na tela de configurações. Aviso de dependência dinâmica de face-api permanece no build.
+- CLI em simulação, chave sintética e empresa inexistente: exit 0. Logs locais em /private/tmp/nuflow-s04-*.log; não são evidências de produção.
+- Tentativa inicial de integração revelou campos extras do objeto de acesso passados ao filtro Prisma; corrigido com seleção explícita de usuarioId/organizacaoId e suíte repetida com sucesso.
+- Revisão própria: sem segredo em diff, sem alterações em preview/videoops, nenhum envio ou consumo de IA. Endpoint de teste Drive agora POST; mantém criação explícita de arquivo, ainda não executada contra Google.
+- Validação externa pendente: conta/pasta Google, migração do legado real, configuração de chaves e role do runtime em L02. Sync Drive permanece M03.
+- Próxima ação concreta: completar matriz positiva/payloads e isolamento Trello em S03, depois migrar todos os chamadores de ferramentas para contexto verificado S05. A fila restante não está concluída.

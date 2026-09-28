@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { requireAcesso } from "@/lib/acesso"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
-import { getOrgId, semOrg } from "@/lib/org"
 
 /**
- * GET /api/auth/setup-drive/test
+ * POST /api/auth/setup-drive/test
  * Testa a conexão com o Google Drive criando um arquivo vazio de teste.
  * Só para admin/gestor.
  */
-export async function GET() {
-  const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user?.tipo ?? "")) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+export async function POST() {
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   try {
     const fileName = `nuflow_teste_conexao_${Date.now()}.txt`
