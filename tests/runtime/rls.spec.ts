@@ -1,3 +1,5 @@
+import { receberEntrada, processarInbox } from "@/lib/whatsapp-inbox"
+import { encryptSecret } from "@/lib/secret-crypto"
 import { criarFila, enfileirar } from "@/lib/fila-duravel"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { randomUUID } from "node:crypto"
@@ -199,5 +201,25 @@ describe("fila sob login runtime sem bypass", () => {
     expect(await comOrg(b,()=>db.eventoJob.count({where:{jobId:ja.id}}))).toBe(0)
     await expect(comOrg(a,()=>db.eventoJob.deleteMany({where:{jobId:ja.id}}))).rejects.toThrow()
     await expect(comOrg(a,()=>db.jobAutomacao.delete({where:{id:ja.id}}))).rejects.toThrow()
+  })
+})
+
+describe("bootstrap e inbox WhatsApp sob RLS",()=>{
+  it("resolve só a instância, autentica e persiste com isolamento sem credencial de dono",async()=>{
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    const instance = `${p}-whatsapp`
+    try {
+      await admin.configWhatsapp.create({data:{organizacaoId:a,instanceId:instance,instanceUrl:"https://example.invalid",apiKey:"nao-usar",webhookSecret:encryptSecret("segredo-runtime")}})
+      const payload={instance,event:"messages.upsert",data:{key:{id:"ID-SINTETICO",fromMe:false,remoteJid:"5511999990001@s.whatsapp.net"},message:{conversation:"Olá"}}}
+      await expect(receberEntrada(payload,"errado")).rejects.toThrow("nao_autorizado")
+      expect((await receberEntrada(payload,"segredo-runtime")).resultado).toBe("persistido")
+      expect(await comOrg(null,()=>db.inboxWhatsapp.count())).toBe(0)
+      expect(await comOrg(b,()=>db.inboxWhatsapp.count())).toBe(0)
+      expect(await comOrg(a,()=>db.inboxWhatsapp.count())).toBe(1)
+      expect((await processarInbox(a)).concluidos).toBe(1)
+      await expect(prismaAuth.$queryRaw`SELECT * FROM public.whatsapp_instancia_org(${instance})`).rejects.toThrow()
+      await expect(prismaAuth.inboxWhatsapp.count()).rejects.toThrow()
+      await expect(comOrg(a,()=>db.inboxWhatsapp.deleteMany())).rejects.toThrow()
+    } finally {vi.unstubAllEnvs()}
   })
 })

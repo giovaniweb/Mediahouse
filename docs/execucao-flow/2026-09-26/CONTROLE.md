@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O01: fila durável e primeiro consumidor local; sem deploy.
+Última atualização: 29/09/2026 — O02: inbox WhatsApp durável; saída/conversa dependem de O03/O06/U03; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O01 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: O02 — inbox WhatsApp autenticada e persistida; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: O02 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: O03 — outbox e recibos; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: fila Postgres com idempotência, leases, retomada e recuperação de execuções por empresa.
-- Verificações O01: 674 unitários, 141 integrações e 19 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: webhook persiste inbox+job antes de confirmar; consumidor local e retomada sem IA/envio.
+- Verificações O02: 677 unitários, 155 integrações e 20 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -37,7 +37,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | R03 | Filtro de custos | 02 | S03, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R04 | Ordem e paginação de galeria | 02 | S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O01 | Fila durável | 03 | F01, S07, S08 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O02 | Inbox WhatsApp | 03 | O01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O02 | Inbox WhatsApp | 03 | O01, S05 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O03 | Outbox e recibos | 03 | O01, O02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -253,3 +253,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Migração 20260929040000_fila_duravel aplicada só no PostgreSQL descartável. Sem deploy, cron novo, IA paga ou mensagem real.
 - Limite: rotinas de envio/IA ainda não migradas; estados de entrega/timeout ambíguo pertencem a O03. Não prometer exactly-once externo nem worker contínuo.
 - Próxima ação: O02 — inbox WhatsApp persistida e autenticada, com contrato do provedor conferido.
+
+### O02 — inbox WhatsApp (29/09/2026)
+
+- Base 9bfe28e; contrato/limites em O02-INBOX-WHATSAPP.md. Instalação Evolution não confirmada; emissor oficial 2.3.7 é referência, não homologação.
+- Inbox cifrada e job atômicos; chave própria por empresa/instância/ID, retorno 503 antes de persistir, descartes explícitos e bootstrap RLS restrito.
+- Processamento local retomável de SIM/NÃO, revalidando convite/identidade/validade. Demais mensagens aguardam automação; respostas/download/transcrição/IA inline removidos deste caminho para não duplicar efeitos externos.
+- Consumidor técnico sem IA, protegido por CRON_SECRET, paginado por empresa; after como otimização e cron existente como retomada. Sem agendamento novo; cadência/cursor em L02.
+- Retenção de conteúdo de sete dias com limpeza em lotes; mantém chave. Job válido por 24h. Rejeição/expiração da fila não equivale a mensagem respondida.
+- 677 unitários, 155 integrações, 20 testes runtime, build/tipos/lint e auditores locais. Migração 20260929050000_inbox_whatsapp só no banco descartável.
+- NÃO publicar isoladamente: O03 precisa ligar confirmações/saída; conversa completa depende de O06/U03. Confirmar versão/payload real e ensaio L02. Sem mensagens ou chamadas pagas.
+- Próxima ação: O03 — outbox, recibos e tratamento de resultado desconhecido.

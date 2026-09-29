@@ -1,0 +1,25 @@
+import { timingSafeEqual } from "node:crypto"
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { processarInbox, limparConteudoInbox } from "@/lib/whatsapp-inbox"
+
+export const maxDuration = 60
+// Consumidor técnico sem IA/envio. Agendador deve seguir nextCursor até null.
+export async function GET(req: NextRequest) {
+  const segredo=process.env.CRON_SECRET
+  if(!segredo) return NextResponse.json({error:"cron_nao_configurado"},{status:500})
+  const a=Buffer.from(req.headers.get("authorization") ?? ""),b=Buffer.from(`Bearer ${segredo}`)
+  if(a.length!==b.length || !timingSafeEqual(a,b)) return NextResponse.json({error:"nao_autorizado"},{status:401})
+  const cursor=req.nextUrl.searchParams.get("cursor")?.slice(0,128)
+  const orgs=await prisma.organizacao.findMany({where:cursor ? {id:{gt:cursor}} : {},select:{id:true,ativo:true},orderBy:{id:"asc"},take:21})
+  const pagina=orgs.slice(0,20), resultados=[]
+  for(const org of pagina) {
+    try {
+      // Retenção vale inclusive para empresas pausadas; efeito de negócio não.
+      const removidos=await limparConteudoInbox(org.id)
+      const fila=org.ativo ? await processarInbox(org.id) : null
+      resultados.push({organizacaoId:org.id,fila,conteudosRemovidos:removidos})
+    } catch {resultados.push({organizacaoId:org.id,erro:"falha_local"})}
+  }
+  return NextResponse.json({resultados,nextCursor:orgs.length>20 ? pagina.at(-1)!.id : null})
+}

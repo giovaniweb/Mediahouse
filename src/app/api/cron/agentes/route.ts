@@ -1,3 +1,4 @@
+import { processarInbox, limparConteudoInbox } from "@/lib/whatsapp-inbox"
 import { recuperarExecucoesDuravel } from "@/lib/fila-manutencao"
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
@@ -54,6 +55,8 @@ export async function GET(req: NextRequest) {
       // mesma execução. Declarar sem delimitar deixaria a empresa da volta
       // anterior valendo na seguinte — o pior tipo de vazamento, porque o dado
       // sai carimbado com o dono errado.
+      const inbox = await processarInbox(org.id)
+      await limparConteudoInbox(org.id)
       const fila = await recuperarExecucoesDuravel(org.id)
       const r = await comOrg(org.id, async (): Promise<Record<string, unknown>> => {
         if (agente === "prazos") return await rodarAgentePrazos(org.id)
@@ -64,7 +67,7 @@ export async function GET(req: NextRequest) {
         else if (agente === "limpeza") return await registrarExecucao("limpeza-cron", org.id, () => rodarAgenteLimpeza(org.id))
         return await rodarAgenteAlertas(org.id)
       })
-      resultados.push({ organizacaoId: org.id, fila, ...r })
+      resultados.push({ organizacaoId: org.id, fila, inbox, ...r })
     } catch (e) {
       console.error(`[Cron] Erro org ${org.id}:`, e)
       resultados.push({ organizacaoId: org.id, erro: String(e) })

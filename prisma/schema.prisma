@@ -818,6 +818,7 @@ model ConfigWhatsapp {
   telefoneConectado String?
   pushName          String?
   connectedAt       DateTime?
+  connectionEventoEm DateTime?
   lastStatus        String?
   ativo             Boolean   @default(false)
   createdAt         DateTime  @default(now())
@@ -829,6 +830,7 @@ model ConfigWhatsapp {
 }
 
 model MensagemWhatsapp {
+  inboxId String? @unique
   organizacaoId String
   id            String          @id @default(cuid())
   demandaId     String?
@@ -2125,6 +2127,7 @@ model ProducaoManual {
 model Organizacao {
   eventosAuditoria EventoAuditoria[]
   jobsAutomacao JobAutomacao[]
+  inboxWhatsapp InboxWhatsapp[]
   eventosJob EventoJob[]
   id             String   @id @default(cuid())
   nome           String
@@ -2468,4 +2471,24 @@ model EventoJob {
   job JobAutomacao @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@index([organizacaoId, jobId, createdAt])
   @@map("eventos_job")
+}
+
+// Conteúdo reduzido/cifrado: limpar após 7 dias, conservar chave de deduplicação.
+model InboxWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  instanceId String @db.VarChar(128)
+  providerMessageId String @db.VarChar(128)
+  contrato String @default("evolution-envelope-v1") @db.VarChar(40)
+  conteudoCifrado String?
+  estado String @default("pendente") @db.VarChar(32)
+  resultado String? @db.VarChar(40)
+  demandaId String?
+  createdAt DateTime @default(now())
+  processadoEm DateTime?
+  conteudoExpiraEm DateTime
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId, instanceId, providerMessageId])
+  @@index([organizacaoId, conteudoExpiraEm])
+  @@map("inbox_whatsapp")
 }
