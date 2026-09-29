@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — R03: filtro de custos com intervalo completo; sem deploy.
+Última atualização: 29/09/2026 — R04: galeria paginada por entregável; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: R03 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: R04 — ordenação e paginação da galeria por entregável; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: R04 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: O01 — fila durável; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: filtros De/Até dos custos, erro por campo, calendário brasileiro e novo lançamento compatível com o filtro.
-- Verificações R03: 672 unitários e 124 integrações locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
+- Última alteração: contagem/ordem por entregável, data estimada e tratamento de falha na galeria.
+- Verificações R04: 674 unitários e 127 integrações locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -35,7 +35,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | R01 | Relatório legado | 02 | S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R02 | Métricas e recortes | 02 | R01, S01 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R03 | Filtro de custos | 02 | S03, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| R04 | Ordem e paginação de galeria | 02 | S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| R04 | Ordem e paginação de galeria | 02 | S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O01 | Fila durável | 03 | F01, S07, S08 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O02 | Inbox WhatsApp | 03 | O01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O03 | Outbox e recibos | 03 | O01, O02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -234,3 +234,12 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 672 unitários/49 arquivos e 124 integrações/8 arquivos aprovados. Build webpack, TypeScript, lint dos arquivos alterados sem avisos, auditores tenancy/perfil e diff check aprovados. Aviso preexistente face-api permanece. Logs /private/tmp/nuflow-r03-*.log.
 - Revisão própria. Sem migration, push/deploy, acesso ao banco real, IA ou mensagens externas. Dívida de datas antigas gravadas em UTC precisa inventário antes de correção histórica; custeio geral continua C01–C03.
 - Próxima ação: R04 — ordenar e paginar galeria pela unidade entregável, mantendo publicação explícita S06 e isolamento.
+
+### R04 — ordem e paginação da galeria (29/09/2026)
+
+- Base 350f184; contrato, evidências e limites em R04-GALERIA.md.
+- Bibliotecas e portfólio contam entregáveis; conclusão/anexação/atualização estimada e ID definem ordem estável. URLs canônicas duplicadas na mesma demanda não repetem o card.
+- Preservados isolamento e publicação explícita. Falha de assinatura retorna 503 sem fallback privado; interface permite repetir a página.
+- 674 unitários, 127 integrações, build/tipos, lint sem erros e auditores locais. Sem migração/deploy.
+- Limite: índice completo do escopo em memória; sem benchmark de escala ou validação visual autenticada. Detalhes/assinaturas restritos à página.
+- Próxima ação: O01 — fila durável; manter pendências S01/S02/S03.

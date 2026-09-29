@@ -3,12 +3,12 @@ import { useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 
-type Entrega = { id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; thumbnailUrl: string | null; publicado: boolean; legado: boolean }
+type Entrega = { id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; thumbnailUrl: string | null; publicado: boolean; legado: boolean; dataReferencia: string; origemData: string; dataEstimada: boolean }
 const fetcher = async (url: string) => {
   const res = await fetch(url)
   const body = await res.json()
   if (!res.ok) throw new Error(body.error ?? "Não foi possível carregar a biblioteca")
-  return body as { videos: Entrega[]; totalPages: number; podePublicar: boolean }
+  return body as { videos: Entrega[]; total: number; totalPages: number; podePublicar: boolean }
 }
 export default function Biblioteca({ areaInicial = "audiovisual" }: { areaInicial?: "audiovisual" | "design" }) {
   const [area, setArea] = useState(areaInicial), [search, setSearch] = useState(""), [page, setPage] = useState(1)
@@ -30,6 +30,7 @@ export default function Biblioteca({ areaInicial = "audiovisual" }: { areaInicia
       <input className="rounded border p-2" aria-label="Buscar entregas" placeholder="Buscar título ou código" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
     </div>
     {(erro || error) && <p role="alert" className="text-red-600">{erro || error.message}</p>}
+    {data && <p className="text-sm text-muted-foreground">{data.total} entregáveis encontrados</p>}
     {isLoading && <p>Carregando entregas…</p>}
     {data?.videos.length === 0 && <p>Nenhuma entrega encontrada nesta seleção.</p>}
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data?.videos.map(v => <article key={v.id} className="space-y-3 rounded-xl border p-4">
@@ -38,6 +39,7 @@ export default function Biblioteca({ areaInicial = "audiovisual" }: { areaInicia
       {v.thumbnailUrl && <img src={v.thumbnailUrl} alt="" loading="lazy" className="aspect-video w-full rounded object-cover" />}
       <span className="text-xs text-muted-foreground">{v.codigo} · {v.publicado ? "Publicado no portfólio" : "Uso interno"}</span>
       <h2 className="font-medium">{v.titulo}</h2>
+      <p className="text-xs text-muted-foreground">{new Date(v.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} · {v.dataEstimada ? "Data estimada" : v.origemData === "anexacao" ? "Anexado" : "Concluído"}</p>
       <div className="flex flex-wrap gap-3 text-sm"><a href={v.linkFinal} target="_blank" rel="noopener noreferrer" className="underline">Abrir arquivo</a><Link href={`/demandas/${v.demandaId}`} className="underline">Ver demanda</Link></div>
       {data.podePublicar && !v.legado && <button disabled={ocupado !== null} onClick={() => publicar(v)} className="rounded border px-3 py-2 text-sm disabled:opacity-50">{ocupado === v.id ? "Salvando…" : v.publicado ? "Retirar do portfólio público" : "Publicar para qualquer pessoa ver"}</button>}
       {v.legado && data.podePublicar && <p className="text-xs text-muted-foreground">Link antigo: registre a entrega como arquivo final na demanda para publicar.</p>}

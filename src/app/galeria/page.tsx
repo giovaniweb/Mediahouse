@@ -13,6 +13,9 @@ interface Video {
   departamento: string | null
   linkFinal: string
   thumbnailUrl: string | null
+  dataReferencia: string
+  origemData: string
+  dataEstimada: boolean
   finalizadaEm: string | null
   updatedAt: string
   produto: string | null
@@ -133,7 +136,7 @@ function getPlaceholderGradient(id: string): string {
 
 function fmtDate(iso: string | null) {
   if (!iso) return ""
-  return new Date(iso).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
+  return new Date(iso).toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "America/Sao_Paulo" })
 }
 
 // Contador animado de 0 → value
@@ -165,7 +168,7 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
   const [thumbFailed, setThumbFailed] = useState(false)
   const { tipo, embedUrl, youtubeId, isYoutubeShorts } = parseVideoUrl(video.linkFinal)
   const badgeClass = TIPO_COLOR[video.tipoVideo] ?? "bg-zinc-700/50 text-zinc-300 border-zinc-600"
-  const finDate = fmtDate(video.finalizadaEm ?? video.updatedAt)
+  const finDate = `${fmtDate(video.dataReferencia)}${video.dataEstimada ? " · estimada" : video.origemData === "anexacao" ? " · anexo" : ""}`
   const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo) || isYoutubeShorts
   const gradient = getPlaceholderGradient(video.id)
 
@@ -335,8 +338,10 @@ export default function GaleriaPage() {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
   const [initialLoad, setInitialLoad] = useState(true)
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const ultimaBusca = useRef({ p: 1, append: false })
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Buscar produtos para o filtro (público)
@@ -354,7 +359,9 @@ export default function GaleriaPage() {
     t = tipo,
     pid = produtoId
   ) => {
+    ultimaBusca.current = { p, append }
     setLoading(true)
+    setErro(null)
     try {
       const params = new URLSearchParams({ page: String(p), limit: "24" })
       if (q) params.set("search", q)
@@ -362,13 +369,15 @@ export default function GaleriaPage() {
       if (pid) params.set("produtoId", pid)
       const res = await fetch(`/api/publico/galeria?${params}${sufixoOrg("&")}`)
       if (!res.ok) {
-        console.error("[galeria] API error:", res.status)
-        return
+        throw new Error("Não foi possível carregar a galeria. Tente novamente.")
       }
       const data: GaleriaData = await res.json()
+      setPage(p)
       setTotal(data.total)
       setTotalPages(data.totalPages)
       setAllVideos((prev) => (append ? [...prev, ...data.videos] : data.videos))
+    } catch {
+      setErro("Não foi possível carregar a galeria. Tente novamente.")
     } finally {
       setLoading(false)
       setInitialLoad(false)
@@ -414,7 +423,6 @@ export default function GaleriaPage() {
 
   function loadMore() {
     const next = page + 1
-    setPage(next)
     fetchVideos(next, true)
   }
 
@@ -553,6 +561,7 @@ export default function GaleriaPage() {
 
       {/* ── Grid ──────────────────────────────────────────────────── */}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 py-8">
+        {erro && <div role="alert" className="mb-4 rounded-xl border border-red-300 p-4 text-sm">{erro} <button className="underline" disabled={loading} onClick={() => fetchVideos(ultimaBusca.current.p, ultimaBusca.current.append)}>Tentar novamente</button></div>}
         {initialLoad ? (
           <div className="flex flex-col items-center justify-center py-40 gap-4">
             <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />

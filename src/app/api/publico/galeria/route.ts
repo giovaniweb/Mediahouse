@@ -1,9 +1,10 @@
+import { paginarGaleria } from "@/lib/galeria-indice"
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
 import { comOrg } from "@/lib/org-contexto"
-import { PUBLICADO, SEM_CACHE_MIDIA, numeroPagina, resolverPublicacao } from "@/lib/publicacao-midia"
+import { PUBLICADO, SEM_CACHE_MIDIA, numeroPagina, resolverPublicacao, urlPublicavel } from "@/lib/publicacao-midia"
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
@@ -21,23 +22,32 @@ export async function GET(req: NextRequest) {
         ...(search ? { OR: [{ titulo: { contains: search, mode: "insensitive" } }, { codigo: { contains: search, mode: "insensitive" } }] } : {}),
       },
     }
-    const [total, arquivos] = await Promise.all([
-      prisma.arquivo.count({ where }),
-      prisma.arquivo.findMany({ where, skip: (page - 1) * limit, take: limit,
-        orderBy: [{ publicadoEm: "desc" }, { id: "asc" }],
+    const { pagina, arquivos } = await prisma.$transaction(async tx => {
+      const indice = await tx.arquivo.findMany({ where,
+        select: { id: true, demandaId: true, publicacaoUrl: true, createdAt: true, demanda: { select: { finalizadaEm: true, updatedAt: true } } } })
+      const pagina = paginarGaleria(indice.filter(a => urlPublicavel(a.publicacaoUrl,organizacaoId,a.demandaId)).map(a => ({
+        id: a.id, demandaId: a.demandaId, url: a.publicacaoUrl!, finalizadaEm: a.demanda.finalizadaEm, anexadoEm: a.createdAt, updatedAt: a.demanda.updatedAt, legado: false,
+      })),page,limit)
+      const arquivos = await tx.arquivo.findMany({ where: { AND: [where, { id: { in: pagina.itens.map(i => i.id) } }] },
         select: { id: true, sequencia: true, publicacaoUrl: true, publicacaoThumbnailUrl: true,
           demanda: { select: { id: true, codigo: true, titulo: true, tipoVideo: true, departamento: true, finalizadaEm: true, updatedAt: true,
-            produtos: { take: 1, select: { produto: { select: { id: true, nome: true } } } } } } },
-      }),
-    ])
+            produtos: { take: 1, orderBy: { produtoId: "asc" }, select: { produto: { select: { id: true, nome: true } } } } } } } })
+      return { pagina, arquivos }
+    }, { isolationLevel: "RepeatableRead" })
+    const ordem = new Map(pagina.itens.map((v,i) => [v.id,i]))
+    arquivos.sort((a,b) => ordem.get(a.id)!-ordem.get(b.id)!)
     const videos = await Promise.all(arquivos.map(async a => {
       const d = a.demanda
+      const item = pagina.itens[ordem.get(a.id)!]
       return { id: a.id, demandaId: d.id, codigo: d.codigo, titulo: d.titulo, tipoVideo: d.tipoVideo,
+        dataReferencia: item.dataReferencia, origemData: item.origemData, dataEstimada: item.dataEstimada,
         departamento: d.departamento, finalizadaEm: d.finalizadaEm, updatedAt: d.updatedAt, sequencia: a.sequencia,
         produto: d.produtos[0]?.produto.nome ?? null, produtoId: d.produtos[0]?.produto.id ?? null,
         linkFinal: await resolverPublicacao(a.publicacaoUrl, organizacaoId, d.id),
         thumbnailUrl: await resolverPublicacao(a.publicacaoThumbnailUrl, organizacaoId, d.id, true) }
     }))
-    return NextResponse.json({ total, page, limit, totalPages: Math.ceil(total / limit), videos: videos.filter(v => v.linkFinal) }, { headers: SEM_CACHE_MIDIA })
+    if (videos.some(v => !v.linkFinal)) return NextResponse.json({ error: "Mídia temporariamente indisponível. Tente novamente.", videos: [] }, { status: 503, headers: SEM_CACHE_MIDIA })
+    const { itens: _itens, ...paginacao } = pagina
+    return NextResponse.json({ ...paginacao, videos }, { headers: SEM_CACHE_MIDIA })
   })
 }

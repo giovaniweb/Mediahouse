@@ -121,7 +121,9 @@ describe("publicação explícita e autorização por objeto", () => {
     assinar.mockResolvedValueOnce(null as unknown as string)
     expect((await ler(path(a,d1))).status).toBe(502)
     assinar.mockResolvedValueOnce(null as unknown as string)
-    expect((await (await listar()).json()).videos).toEqual([])
+    const resposta = await listar()
+    expect(resposta.status).toBe(503)
+    expect((await resposta.json()).videos).toEqual([])
   })
   it("paginação pública conta arquivos, incluindo dois finais da mesma demanda", async () => {
     sessao(); await publicarArq()
