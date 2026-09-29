@@ -2,6 +2,7 @@ import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
+import { contextoUsuario } from "@/lib/ia-tool-contexto"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 
 export const maxDuration = 180
@@ -15,6 +16,7 @@ export async function POST() {
   const acesso = await requireAcesso("verIA")
   if (acesso instanceof NextResponse) return acesso
   const { organizacaoId } = acesso
+  const contexto = contextoUsuario(organizacaoId, acesso.usuarioId)
 
   const execucao = await prisma.agenteExecucao.create({
     data: { agente: "vistoria", organizacaoId, status: "executando", criadoPor: acesso.usuarioId },
@@ -100,7 +102,7 @@ Inclua um "Score de Saúde Geral" de 0-100 com justificativa.`
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      (n, i) => executarFerramenta(n, i, organizacaoId),
+      (n, i) => executarFerramenta(n, i, contexto),
       MODELO_POTENTE,
       20
     )

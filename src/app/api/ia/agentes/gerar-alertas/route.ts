@@ -2,6 +2,7 @@ import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
+import { contextoUsuario } from "@/lib/ia-tool-contexto"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 
 export const maxDuration = 120
@@ -12,6 +13,7 @@ export async function POST() {
   const acesso = await requireAcesso("verIA")
   if (acesso instanceof NextResponse) return acesso
   const { organizacaoId } = acesso
+  const contexto = contextoUsuario(organizacaoId, acesso.usuarioId)
 
   // Registra execução
   const execucao = await prisma.agenteExecucao.create({
@@ -45,7 +47,7 @@ Seja sistemático e crie alertas para TODOS os problemas encontrados. No final, 
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      (n, i) => executarFerramenta(n, i, organizacaoId),
+      (n, i) => executarFerramenta(n, i, contexto),
       MODELO_POTENTE,
       12
     )

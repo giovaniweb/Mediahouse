@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — OAuth e cifra Drive implementados e testados localmente; nenhuma publicação.
+Última atualização: 28/09/2026 — S05: ferramentas da IA autorizadas e WhatsApp com identidade verificada; nenhuma publicação.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S03 avançado com Trello persistente isolado, atividade de usuários escopada e matriz de 12 papéis; S04 concluído localmente.
-- Próxima tarefa: S05, contexto obrigatório das ferramentas; completar os demais payloads de S03 sem presumir cobertura de todas as rotas.
+- Tarefa em andamento: S05 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: S06 — publicação explícita e acesso à mídia; manter os recortes pendentes de S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: nonce OAuth persistente de uso único, vínculo ao navegador/ator/empresa, cifra versionada e migração gradual de credenciais Drive.
-- Verificações: 618 unitários e 52 cenários integrados; build, tipos e auditores passaram. Sem nova migração no lote S03/Trello.
+- Última alteração: contexto verificado por ferramenta, escopo de demandas, destinatário autorizado, webhook autenticado, número completo e transição condicional de convite.
+- Verificações: 620 unitários e 76 cenários integrados; build, tipos, lint e auditores passaram. Sem migration neste lote S05.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -28,7 +28,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S02 | Configuração sem segredos | 01 | S01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | S03 | APIs críticas autorizadas | 01 | S01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | S04 | OAuth e cifra versionada | 01 | S02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| S05 | Ferramentas autorizadas | 01 | S01, S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| S05 | Ferramentas autorizadas | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S06 | Publicação explícita | 01 | S01, S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | S07 | RLS e pool | 01 | S01, S04, S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -153,3 +153,18 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Tentativas corrigidas: fixture de revogação removia vínculo necessário ao grupo seguinte; restaurado no setup do grupo. Fixture de demanda exigia solicitanteId; preenchido antes da repetição bem-sucedida. Não eram falhas do provedor real.
 - Sem migration, publicação ou alteração em outros checkouts. Trello não possui tela consumidora ativa encontrada na busca atual; o contrato HTTP foi preservado com máscaras fixas. Homologação de board real permanece pendente em L02.
 - Próxima ação: S05 tem 18 ferramentas e chamadores em chat, agentes manuais, cron e webhook WhatsApp. Migrar em conjunto para contexto verificado, políticas por ferramenta, escopo de demandas e destinatário autorizado; não liberar ferramentas apenas pela permissão verIA. Permanecem payloads adicionais de S03 e criptografia de integrações legadas em S02.
+
+## Checkpoint S05 — 28/09
+
+- Base 095c97d; checkout e branch preservados. Implementadas políticas das 18 ferramentas; contrato e requisitos operacionais em S05-FERRAMENTAS.md. A dependência S01/S03 deste recorte tem revalidação e guard verIA comprovados; não encerra a revisão ampla dos demais handlers.
+- Todos os chamadores migrados: chat, quatro agentes manuais, três execuções técnicas de cron e secretária WhatsApp. Executor não aceita mais string de empresa nem objeto serializado forjado. Contexto emitido pelo adaptador e capacidades relidas por execução; comOrg envolve autorização e operação.
+- Consultas de demanda usam escopo próprio/verTodasDemandas. Custo exige verCustos; métricas/equipe omitem financeiro sem capacidade. Cron não recebe ferramenta de custos e não herda admin humano. Schemas estritos recusam campos extras, tipos inválidos e limites excessivos.
+- WhatsApp identificado por telefone completo dentro da empresa; ambiguidades falham fechadas. Resposta da secretária só retorna ao remetente. Outros envios exigem gestor/participante da demanda verificada. Contato externo fornece somente pedido pendente e recebe resposta; não enumera pessoas, jobs, ideias ou finanças. Anexos exigem URL da mídia recebida e demanda acessível.
+- Eliminado fallback inseguro de webhook sem segredo e associação LID por cache/sufixo/nome. Campo alternativo só é aceito no evento autenticado. SIM/NÃO exige um convite único atribuído e estado videomaker_notificado; atualização condicional e histórico na mesma transação.
+- 620 unitários/43 arquivos e 76 integrações/3 arquivos: exit 0. Novos 24 cenários integrados cobrem autoridade, escopo, efeitos negados, permissões positivas, mídia, destinatários, revogação, webhook e concorrência. Banco PostgreSQL descartável; WhatsApp, storage e IA simulados. Nenhum envio real.
+- Build webpack, TypeScript final, ESLint dos arquivos alterados, auditores tenancy/perfil e diff check: exit 0. Permanece aviso preexistente de dependência dinâmica face-api no build. Logs /private/tmp/nuflow-s05-*.log.
+- O ensaio concorrente expôs unique constraint no cadastro auxiliar de contato via upsert; substituído por createMany com skipDuplicates, mantendo a transição de convite atômica. Suíte repetida sem a colisão. Fixtures são sintéticas e removidas ao final.
+- Revisão própria: assinaturas antigas não existem entre chamadores; não há query de identidade por sufixo no webhook. Segredos/contextos não são incluídos no retorno das ferramentas. Sem schema novo ou alteração em outros checkouts.
+- Pendências externas: segredo na configuração Evolution, evento direto/LID da versão implantada, número completo/vínculo ativo, teste autorizado com destinatários sintéticos e role do runtime. Não publicar este lote sem esse ensaio L02: ausência de segredo ou associação LID confiável passa a recusar entrada, intencionalmente.
+- Limites: nenhuma transação única para uma conversa inteira; fila/inbox/outbox/recibos, índice de telefone canônico, limites de consumo IA e interface são O01–O06/U03. Não transformar este checkpoint em certificação geral do SaaS.
+- Próximo cartão: S06, publicação explícita e proteção de mídia; em seguida S07, runtime RLS/pool. Seguem pendentes os recortes já registrados de S02/S03.

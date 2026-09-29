@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { executarAgenteComTools, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
+import { contextoSistema } from "@/lib/ia-tool-contexto"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { hojeEmSaoPaulo, inicioDoDia, janelaDoDiaSeguinte, somarDias } from "@/lib/datas"
@@ -167,6 +168,7 @@ async function registrarExecucao<T extends Record<string, unknown>>(
 }
 
 async function rodarAgenteAlertas(organizacaoId: string) {
+  const contexto = contextoSistema(organizacaoId, "alertas")
   // Limpar snoozes expirados antes de rodar
   await prisma.alertaIA.updateMany({
     where: { organizacaoId, status: "ativo", snoozeAte: { lt: new Date(), not: null } },
@@ -192,7 +194,7 @@ async function rodarAgenteAlertas(organizacaoId: string) {
 Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das ações.`
 
   const { tokens } = await rodarComRegistro("gerar-alertas-cron", organizacaoId, () =>
-    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_RAPIDO, 8)
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, contexto), MODELO_RAPIDO, 8)
   )
 
   // NOTA: cobrança, briefing e lembretes têm crons dedicados próprios no vercel.json
@@ -203,6 +205,7 @@ Seja eficiente. Crie apenas alertas que ainda não existam. Retorne resumo das a
 }
 
 async function rodarAgentePrazos(organizacaoId: string) {
+  const contexto = contextoSistema(organizacaoId, "prazos")
   const prompt = `Agente de Prazos automático — execute as verificações de prazos e notifique via WhatsApp:
 
 1. buscar_demandas com em_atraso=true — envie mensagem de cobrança para cada videomaker atrasado
@@ -213,26 +216,27 @@ async function rodarAgentePrazos(organizacaoId: string) {
 Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissional.`
 
   const { tokens } = await rodarComRegistro("prazos-cron", organizacaoId, () =>
-    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, contexto), MODELO_POTENTE, 15)
   )
 
   return { agente: "prazos", tokens }
 }
 
 async function rodarAgenteVistoria(organizacaoId: string) {
+  const contexto = contextoSistema(organizacaoId, "vistoria")
   const prompt = `Vistoria semanal automática do NuFlow:
 
 1. buscar_metricas — saúde geral
 2. buscar_demandas — visão geral do pipeline
 3. buscar_videomakers — performance da equipe
-4. buscar_custos com dias=7 — financeiro da semana
+4. Não consulte custos: este principal automático é operacional e não tem acesso financeiro
 5. listar_gestores — enviar relatório semanal via WhatsApp
 
 Envie um resumo executivo completo para cada gestor usando enviar_whatsapp.
-Inclua: demandas concluídas, em andamento, atrasadas, custo total, top videomakers.`
+Inclua: demandas concluídas, em andamento, atrasadas, carga de trabalho, top videomakers.`
 
   const { resposta, tokens } = await rodarComRegistro("vistoria-cron", organizacaoId, () =>
-    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, organizacaoId), MODELO_POTENTE, 15)
+    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, contexto), MODELO_POTENTE, 15)
   )
 
   // Salva como RelatorioIA

@@ -3,6 +3,10 @@
  * Acessa o Prisma diretamente para buscar e criar dados
  */
 
+import { randomUUID } from "node:crypto"
+import type { Prisma } from "@prisma/client"
+import { autorizarFerramenta, type ContextoFerramenta } from "@/lib/ia-tool-contexto"
+import { comOrg } from "@/lib/org-contexto"
 import { prisma } from "@/lib/prisma"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
@@ -14,25 +18,27 @@ import { inicioDoDia, prazoVencido } from "@/lib/datas"
 
 export async function executarFerramenta(
   nome: string,
-  input: Record<string, unknown>,
-  organizacaoId: string
+  bruto: unknown,
+  contexto: ContextoFerramenta
 ): Promise<string> {
   try {
-    switch (nome) {
+    const { input, organizacaoId, filtro, usuarioId, financeiro, publico } = await autorizarFerramenta(nome, bruto, contexto)
+    return await comOrg(organizacaoId, async () => {
+      switch (nome) {
       case "buscar_demandas":
-        return await buscarDemandas(input, organizacaoId)
+        return await buscarDemandas(input, organizacaoId, filtro)
       case "buscar_videomakers":
-        return await buscarVideomakers(input, organizacaoId)
+        return await buscarVideomakers(input, organizacaoId, financeiro)
       case "buscar_custos":
         return await buscarCustos(input, organizacaoId)
       case "buscar_metricas":
-        return await buscarMetricas(organizacaoId)
+        return await buscarMetricas(organizacaoId, financeiro)
       case "buscar_alertas":
-        return await buscarAlertas(input, organizacaoId)
+        return await buscarAlertas(input, organizacaoId, filtro)
       case "criar_alerta":
         return await criarAlerta(input, organizacaoId)
       case "buscar_historico_demanda":
-        return await buscarHistoricoDemanda(input, organizacaoId)
+        return await buscarHistoricoDemanda(input, organizacaoId, filtro)
       // ── Novas ferramentas ─────────────────────────────────────────────────
       case "buscar_agenda_videomaker":
         return await buscarAgendaVideomaker(input, organizacaoId)
@@ -41,13 +47,13 @@ export async function executarFerramenta(
       case "enviar_whatsapp":
         return await enviarWhatsapp(input, organizacaoId)
       case "criar_demanda_rascunho":
-        return await criarDemandaRascunho(input, organizacaoId)
+        return await criarDemandaRascunho(input, organizacaoId, usuarioId)
       case "buscar_demanda_por_codigo":
-        return await buscarDemandaPorCodigo(input, organizacaoId)
+        return await buscarDemandaPorCodigo(input, organizacaoId, filtro)
       case "listar_gestores":
         return await listarGestores(organizacaoId)
       case "estruturar_demanda":
-        return await estruturarDemanda(input, organizacaoId)
+        return await estruturarDemanda(input, organizacaoId, publico)
       case "solicitar_dados_demanda":
         return await solicitarDadosDemanda(input, organizacaoId)
       case "vincular_arquivo_demanda":
@@ -59,19 +65,20 @@ export async function executarFerramenta(
       default:
         return JSON.stringify({ erro: `Ferramenta '${nome}' não encontrada` })
     }
-  } catch (e) {
-    return JSON.stringify({ erro: String(e) })
+    })
+  } catch {
+    return JSON.stringify({ erro: "Ação não autorizada ou dados inválidos. Nenhum sucesso confirmado." })
   }
 }
 
 // ─── Implementações ───────────────────────────────────────────────────────────
 
-async function buscarDemandas(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function buscarDemandas(input: Record<string, unknown>, organizacaoId: string, filtro: Prisma.DemandaWhereInput): Promise<string> {
   const limite = (input.limite as number) ?? 25
   const hoje = new Date()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { organizacaoId }
+  const where: any = { organizacaoId, AND: [filtro] }
 
   if (input.status) {
     where.statusInterno = input.status
@@ -134,7 +141,7 @@ async function buscarDemandas(input: Record<string, unknown>, organizacaoId: str
   })
 }
 
-async function buscarVideomakers(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function buscarVideomakers(input: Record<string, unknown>, organizacaoId: string, financeiro: boolean): Promise<string> {
   const apenasAtivos = input.apenas_ativos !== false
 
   // A REDE de videomakers é compartilhada entre as empresas — isso é decisão de
@@ -185,7 +192,7 @@ async function buscarVideomakers(input: Record<string, unknown>, organizacaoId: 
 
   const ha30dias = new Date(Date.now() - 30 * 86400000)
 
-  const custosPorVm = await prisma.custoVideomaker.groupBy({
+  const custosPorVm = financeiro ? await prisma.custoVideomaker.groupBy({
     by: ["videomakerId"],
     where: {
       organizacaoId,
@@ -193,19 +200,18 @@ async function buscarVideomakers(input: Record<string, unknown>, organizacaoId: 
     },
     _sum: { valor: true },
     _count: { id: true },
-  })
+  }) : []
 
   const vmComDados = videomakers.map(vm => {
     const custoVm = custosPorVm.find(c => c.videomakerId === vm.id)
     const vinculo = porId.get(vm.id)
     return {
       ...vm,
-      valorDiaria: vinculo?.valorDiaria ?? null,
+      ...(financeiro ? { valorDiaria: vinculo?.valorDiaria ?? null, custoUltimos30d: custoVm?._sum.valor ?? 0 } : {}),
       status: vinculo?.status ?? null,
       tipoContrato: vinculo?.tipoContrato ?? null,
       demandasAtivas: vm.demandas.length,
-      custoUltimos30d: custoVm?._sum.valor ?? 0,
-      servicosMes: custoVm?._count.id ?? 0,
+      ...(financeiro ? { servicosMes: custoVm?._count.id ?? 0 } : {}),
     }
   })
 
@@ -261,7 +267,7 @@ async function buscarCustos(input: Record<string, unknown>, organizacaoId: strin
   })
 }
 
-async function buscarMetricas(organizacaoId: string): Promise<string> {
+async function buscarMetricas(organizacaoId: string, financeiro: boolean): Promise<string> {
   const hoje = new Date()
   const ha7d = new Date(hoje.getTime() - 7 * 86400000)
   const ha30d = new Date(hoje.getTime() - 30 * 86400000)
@@ -303,7 +309,7 @@ async function buscarMetricas(organizacaoId: string): Promise<string> {
     }),
     prisma.alertaIA.count({ where: { ...og, status: "ativo", severidade: "critico" } }),
     prisma.alertaIA.count({ where: { ...og, status: "ativo" } }),
-    prisma.custoVideomaker.aggregate({ where: { ...og, dataReferencia: { gte: ha30d } }, _sum: { valor: true } }),
+    financeiro ? prisma.custoVideomaker.aggregate({ where: { ...og, dataReferencia: { gte: ha30d } }, _sum: { valor: true } }) : Promise.resolve(null),
     prisma.demanda.count({ where: { ...og, createdAt: { gte: ha30d } } }),
   ])
 
@@ -318,10 +324,7 @@ async function buscarMetricas(organizacaoId: string): Promise<string> {
       totalMes: demandasMes,
     },
     alertas: { total: alertasTotal, criticos: alertasCriticos },
-    financeiro: {
-      custoMes: custoMes._sum.valor ?? 0,
-      custoMedioPorVideo: demandasMes > 0 ? (custoMes._sum.valor ?? 0) / demandasMes : 0,
-    },
+    ...(custoMes ? { financeiro: { custoMes: custoMes._sum.valor ?? 0, custoMedioPorVideo: demandasMes > 0 ? (custoMes._sum.valor ?? 0) / demandasMes : 0 } } : {}),
     saudeGeral: calcularSaude({ totalAtivas, urgentes, emAtraso, alertasCriticos, concluidasSemana }),
   })
 }
@@ -340,9 +343,9 @@ function calcularSaude(dados: {
   return Math.max(0, score)
 }
 
-async function buscarAlertas(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function buscarAlertas(input: Record<string, unknown>, organizacaoId: string, filtro: Prisma.DemandaWhereInput): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { status: "ativo", organizacaoId }
+  const where: any = { status: "ativo", organizacaoId, ...(filtro.AND ? { demanda: filtro } : {}) }
   if (input.severidade) where.severidade = input.severidade
 
   const alertas = await prisma.alertaIA.findMany({
@@ -371,9 +374,9 @@ async function criarAlerta(input: Record<string, unknown>, organizacaoId: string
   return JSON.stringify({ criado: true, id: alerta.id, mensagem: alerta.mensagem })
 }
 
-async function buscarHistoricoDemanda(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function buscarHistoricoDemanda(input: Record<string, unknown>, organizacaoId: string, filtro: Prisma.DemandaWhereInput): Promise<string> {
   const historico = await prisma.historicoStatus.findMany({
-    where: { demandaId: input.demanda_id as string, demanda: { organizacaoId } },
+    where: { demandaId: input.demanda_id as string, demanda: { organizacaoId, AND: [filtro] } },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {
@@ -432,53 +435,13 @@ async function buscarAgendaVideomaker(input: Record<string, unknown>, organizaca
     }
   }
 
-  // Busca videomaker externo
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const vmWhere: any = {}
-  if (input.videomaker_id) vmWhere.id = input.videomaker_id
-  else if (input.nome) vmWhere.nome = { contains: input.nome as string, mode: "insensitive" }
-  else if (input.telefone) vmWhere.telefone = { contains: (input.telefone as string).slice(-8) }
-
-  // Se não encontrou por videomaker, tenta editor por nome/telefone
-  if (!input.videomaker_id && (input.nome || input.telefone)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const edWhere: any = { vinculos: { some: { organizacaoId } } }
-    if (input.nome) edWhere.nome = { contains: input.nome as string, mode: "insensitive" }
-    else if (input.telefone) {
-      edWhere.OR = [
-        { telefone: { contains: (input.telefone as string).slice(-8) } },
-        { whatsapp: { contains: (input.telefone as string).slice(-8) } },
-      ]
-    }
-    const editor = await prisma.editor.findFirst({ where: edWhere, select: { id: true, nome: true, telefone: true } })
-    if (editor) {
-      const eventos = await prisma.evento.findMany({
-        where: { organizacaoId, editorId: editor.id, inicio: { gte: inicio, lte: fim }, status: { not: "cancelado" } },
-        orderBy: { inicio: "asc" },
-        select: {
-          id: true, titulo: true, descricao: true, inicio: true,
-          fim: true, diaTodo: true, tipo: true, status: true, local: true,
-          demanda: { select: { codigo: true, titulo: true } },
-        },
-      })
-      return JSON.stringify({
-        pessoa: editor.nome,
-        tipo_pessoa: "editor (videomaker interno)",
-        editor_id: editor.id,
-        telefone: editor.telefone,
-        periodo: `${inicio.toLocaleDateString("pt-BR")} — ${fim.toLocaleDateString("pt-BR")}`,
-        eventos,
-        totalOcupacoes: eventos.length,
-      })
-    }
-  }
-
+  if (!input.videomaker_id) return JSON.stringify({ erro: "Agenda indisponível" })
   const videomaker = await prisma.videomaker.findFirst({
-    where: vmWhere,
+    where: { id: input.videomaker_id as string, vinculos: { some: { organizacaoId } } },
     select: { id: true, nome: true, telefone: true },
   })
 
-  if (!videomaker) return JSON.stringify({ erro: "Nenhum videomaker ou editor encontrado", input })
+  if (!videomaker) return JSON.stringify({ erro: "Nenhum videomaker ou editor encontrado" })
 
   const [eventos, captacoes] = await Promise.all([
     prisma.evento.findMany({
@@ -709,40 +672,17 @@ async function enviarWhatsapp(input: Record<string, unknown>, organizacaoId: str
 /**
  * Cria rascunho de demanda recebida via WhatsApp
  */
-async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
-  const count = await prisma.demanda.count()
-  const codigo = `VID-${String(count + 1).padStart(4, "0")}`
-
-  // Normaliza telefone do solicitante
-  const telSolicitante = input.telefone_solicitante
-    ? (input.telefone_solicitante as string).replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/\D/g, "")
-    : undefined
-
-  // Tenta vincular a um usuário pelo telefone
-  let solicitanteId: string | undefined
-  let isExternalRequester = false
-  if (telSolicitante) {
-    const u = await prisma.usuario.findFirst({
-      where: { telefone: { contains: telSolicitante.slice(-8) }, organizacoes: { some: { organizacaoId } } },
-    })
-    solicitanteId = u?.id
-  }
+async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoId: string, usuarioId?: string): Promise<string> {
+  const codigo = `VID-${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`
+  const telSolicitante = input.telefone_solicitante as string | undefined
+  let solicitanteId = usuarioId
+  const isExternalRequester = !solicitanteId
   if (!solicitanteId) {
-    // Solicitante externo — vincula ao admin/gestor da organização como responsável
-    isExternalRequester = true
-    const admin = await prisma.usuario.findFirst({ where: { tipo: { in: ["admin", "gestor"] }, organizacoes: { some: { organizacaoId } } } })
-    solicitanteId = admin?.id
+    const gestor = await prisma.usuarioOrganizacao.findFirst({ where: { organizacaoId, papel: { in: ["admin", "gestor"] }, usuario: { status: "ativo" } }, select: { usuarioId: true } })
+    solicitanteId = gestor?.usuarioId
   }
-  if (!solicitanteId) return JSON.stringify({ erro: "Nenhum gestor encontrado para vincular" })
-
-  // Resolve nome do solicitante real (de ContatoWhatsApp ou input)
-  let nomeSolicitante = (input.nome_solicitante as string) || null
-  if (!nomeSolicitante && telSolicitante) {
-    const contato = await prisma.contatoWhatsApp.findFirst({
-      where: { telefone: { contains: telSolicitante.slice(-8) }, organizacaoId },
-    })
-    nomeSolicitante = contato?.nome ?? null
-  }
+  if (!solicitanteId) return JSON.stringify({ erro: "Nenhum gestor disponível para receber o pedido" })
+  const nomeSolicitante = (input.nome_solicitante as string) || null
 
   const demanda = await prisma.demanda.create({
     data: {
@@ -765,7 +705,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
   // SEMPRE notifica gestores sobre nova demanda (independente se é externo ou interno)
   {
     const gestores = await prisma.usuario.findMany({
-      where: { tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] }, status: "ativo", telefone: { not: null }, organizacoes: { some: { organizacaoId } } },
+      where: { status: "ativo", telefone: { not: null }, organizacoes: { some: { organizacaoId, papel: { in: ["admin", "gestor"] } } } },
       select: { telefone: true, nome: true },
     })
     const origemLabel = isExternalRequester ? "📌 Solicitante EXTERNO" : "📌 Solicitante do sistema"
@@ -800,14 +740,13 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
 /**
  * Busca demanda pelo código (ex: VID-0023)
  */
-async function buscarDemandaPorCodigo(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function buscarDemandaPorCodigo(input: Record<string, unknown>, organizacaoId: string, filtro: Prisma.DemandaWhereInput): Promise<string> {
   const demanda = await prisma.demanda.findFirst({
-    where: { codigo: { equals: input.codigo as string, mode: "insensitive" }, organizacaoId },
-    include: {
-      videomaker: { select: { nome: true, telefone: true } },
-      editor: { select: { nome: true } },
-      solicitante: { select: { nome: true, telefone: true } },
-      historicos: { orderBy: { createdAt: "desc" }, take: 5 },
+    where: { codigo: { equals: input.codigo as string, mode: "insensitive" }, organizacaoId, AND: [filtro] },
+    select: {
+      id: true, codigo: true, titulo: true, descricao: true, statusInterno: true,
+      statusVisivel: true, dataLimite: true, updatedAt: true,
+      videomaker: { select: { nome: true } }, editor: { select: { nome: true } },
     },
   })
 
@@ -826,8 +765,8 @@ async function buscarDemandaPorCodigo(input: Record<string, unknown>, organizaca
  */
 async function listarGestores(organizacaoId: string): Promise<string> {
   const gestores = await prisma.usuario.findMany({
-    where: { tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] }, status: "ativo", organizacoes: { some: { organizacaoId } } },
-    select: { id: true, nome: true, telefone: true, email: true, tipo: true },
+    where: { status: "ativo", organizacoes: { some: { organizacaoId, papel: { in: ["admin", "gestor"] } } } },
+    select: { id: true, nome: true, telefone: true },
   })
   return JSON.stringify({ total: gestores.length, gestores })
 }
@@ -838,7 +777,7 @@ async function listarGestores(organizacaoId: string): Promise<string> {
  * Estrutura uma descrição vaga/informal em campos organizados de demanda.
  * Usa IA para interpretar e retorna os dados estruturados (sem criar a demanda).
  */
-async function estruturarDemanda(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
+async function estruturarDemanda(input: Record<string, unknown>, organizacaoId: string, publico: boolean): Promise<string> {
   const texto = input.texto_original as string
   if (!texto) return JSON.stringify({ erro: "texto_original é obrigatório" })
 
@@ -858,7 +797,7 @@ async function estruturarDemanda(input: Record<string, unknown>, organizacaoId: 
   // para caber "CRM" e "Sistema". Enquanto esta função chutava de uma lista
   // fixa, "preciso de um vídeo pro CRM" caía em "outros" e alguém tinha que
   // reclassificar na mão depois.
-  const departamentos = await listarDepartamentos(organizacaoId)
+  const departamentos = publico ? [] : await listarDepartamentos(organizacaoId)
   const existe = (v: string) => departamentos.some((d) => d.valor === v)
 
   // Primeiro o nome do próprio departamento aparecendo no texto.
@@ -1037,7 +976,7 @@ async function salvarIdeiaVideo(input: Record<string, unknown>, organizacaoId: s
     },
   })
 
-  const totalIdeias = await prisma.ideiaVideo.count()
+  const totalIdeias = await prisma.ideiaVideo.count({ where: { organizacaoId } })
 
   return JSON.stringify({
     salvo: true,
