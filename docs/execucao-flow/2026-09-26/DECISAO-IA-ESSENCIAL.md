@@ -36,7 +36,13 @@ Revisão seguinte, base b6bf7f2: retiradas a recomendação automática de aprov
 
 As notas deixam de aparecer como critério principal dos cards e da ordenação da interface. Análises salvas ficam recolhidas no detalhe como referência histórica; sem apagar campos. Conversão em demanda não aplica mais sugestaoTipo/sugestaoPrioridade antigos: respeita o tipo explícito ou social_media e inicia com prioridade normal, ajustável no fluxo humano.
 
-Ainda existem três caminhos pagos de eventos/coberturas: importação de briefing, relatório de evento e relatório de cobertura. São candidatos a permanecer por reduzirem leitura/digitação e sintetizarem um trabalho concluído; não foram homologados nem migrados ao orçamento neste recorte. Próxima ação: verificar autorização/dados/finalidade, consolidar o que for duplicado, manter geração determinística por padrão e usar IA opcional apenas onde agregar. A importação de documento exige limites próprios; não enviar mídia pelo adaptador atual de texto.
+Relatórios de eventos e coberturas agora são resumos determinísticos, sem chamada paga: checklist, demandas e documentos no evento; arquivos por pessoa/dia na cobertura. Contagens não geram notas de desempenho, qualidade ou retorno. O helper legado analisarComClaude, sem consumidores, foi removido.
+
+O resumo de evento separa previsão, realizado informado e custos audiovisuais; não soma registros potencialmente sobrepostos nem interpreta ausência como zero. Só consulta/exibe financeiro com verCustos. Isso protege este endpoint: GET /api/eventos/[id] ainda tem dívida anterior de exposição financeira e mistura de previsão/realizado, a tratar em S03/R03.
+
+A cobertura mantém histórico em RelatorioIA com modelo regras-v1, tokens zero e categoria legada semanal/periodo cobertura-ID. O histórico genérico preserva o JSON, mas não apresenta todos os novos campos e mantém sua restrição anterior para usuários sem verCustos. O evento mantém resposta e log de geração, sem persistir o corpo do resumo.
+
+Resta a importação de briefing como chamada ativa legada fora do orçamento. Próxima ação: proteger autorização/empresa, validar extração e aplicar limites próprios de PDF, entrada/saída e concorrência. Revisar os consumidores em eventos, coberturas e campo. Não enviar mídia pelo adaptador atual de texto.
 
 Não reconstruir chat/agentes ou notas automáticas. Cache, preços datados e política auditada O06 continuam pendentes para os caminhos que permanecerem. Sem telemetria real, a avaliação é de responsabilidade no fluxo, não de popularidade medida.
 

@@ -92,7 +92,7 @@ export default function EventoDetalhePage() {
   )
 }
 
-// ─── Relatório Final (IA) ─────────────────────────────────────────────────────
+// ─── Resumo do Evento ─────────────────────────────────────────────────────
 function TabRelatorio({ eventoId }: { eventoId: string }) {
   const [relatorio, setRelatorio] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -112,7 +112,7 @@ function TabRelatorio({ eventoId }: { eventoId: string }) {
       <button onClick={gerar} disabled={loading}
         className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-        {loading ? "Gerando…" : relatorio ? "Gerar novamente" : "Gerar Relatório Final (IA)"}
+        {loading ? "Gerando…" : relatorio ? "Gerar novamente" : "Gerar resumo do evento"}
       </button>
       {relatorio && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">

@@ -341,3 +341,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Preservados cadastro/conversão de ideias, aprovação humana e histórico. Notas antigas ficam em detalhe recolhido; a conversão deixa de aplicar prioridade/tipo sugeridos pela IA anterior.
 - 687 unitários, 217 integrações, build/tipos, lint sem erros e auditores aprovados. Dez avisos preexistentes de lint. Sem migration, exclusão de dados, mensagem, IA paga ou deploy.
 - Próximo: briefing e relatórios de eventos/coberturas; ainda usam chamadas legadas fora do orçamento. Não declarar O06 completa. Conversão de ideias tem dívida anterior de atomicidade/alocação de código; não coberta pelo teste simples de preservação deste recorte.
+
+
+### O06/U01 — resumos factuais de eventos e coberturas (29/09/2026)
+
+- Base 2db2309. Relatórios convertidos em regras sem LLM; telas usam Resumo e removem avaliações de desempenho. Helper pago legado sem consumidores removido.
+- Capacidade, vínculo e empresa explícitos; leitura consistente e log na mesma transação. Cobertura conta arquivos por dia/pessoa, sem expor membro de outra cobertura. Evento separa previsto/realizado e só consulta financeiro com verCustos.
+- Histórico de cobertura preserva categoria legada semanal e período cobertura-ID; renderização histórica completa e sua política de acesso continuam pendentes. Evento mantém resposta/log, sem persistir corpo. GET principal de eventos ainda precisa corrigir exposição financeira e mistura de previstos/realizados (S03/R03); proteção deste recorte é do resumo.
+- 687 unitários e 224 integrações aprovados, incluindo isolamento, permissões, valores ausentes/zero, contagem de fotos/vídeos, falha de banco e ausência de IA. Build webpack/tipos aprovados; lint sem erros, seis avisos preexistentes; auditores de tenancy/perfil aprovados. Logs /private/tmp/nuflow-eventos-regras-*.log.
+- Sem migration, exclusão, mensagem, chamada paga ou deploy; ensaio visual autenticado e benchmark pendentes.
+- Próximo: importação de briefing PDF, com autorização e orçamento próprios, limites de documento e validação de saída. Revisar consumidores de eventos, coberturas e campo. O06/U01 permanecem parciais.

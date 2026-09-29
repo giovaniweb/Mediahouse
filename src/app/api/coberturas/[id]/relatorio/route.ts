@@ -1,134 +1,48 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { analisarComClaude, extrairJSON } from "@/lib/claude"
-import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
 
 type Params = { params: Promise<{ id: string }> }
 
-const TIPO_LABEL: Record<string, string> = {
-  congresso: "Congresso",
-  feira: "Feira",
-  evento_corporativo: "Evento Corporativo",
-  show: "Show",
-  lancamento: "Lançamento",
-  outro: "Outro",
-}
-
-// POST /api/coberturas/[id]/relatorio
+/** Contagens não são notas de desempenho. Mantém o relatório salvo sem chamar IA. */
 export async function POST(_req: NextRequest, { params }: Params) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
-
+  const acesso = await requireAcesso("verCoberturas")
+  if (acesso instanceof NextResponse) return acesso
   const { id } = await params
-
-  const cobertura = await prisma.eventoCobertura.findUnique({
-    where: { id },
-    include: {
-      equipe: {
-        include: {
-          _count: { select: { uploads: true } },
-        },
-      },
-      checklist: true,
-      uploads: { orderBy: [{ dia: "asc" }, { createdAt: "asc" }] },
-    },
-  })
-
-  if (!cobertura || !pertenceAOrg(cobertura, organizacaoId)) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
-
-  // Calcular stats
-  const totalUploads = cobertura.uploads.length
-  const checklistConcluidos = cobertura.checklist.filter((c) => c.concluido).length
-  const checklistTotal = cobertura.checklist.length
-  const checklistPct = checklistTotal > 0 ? Math.round((checklistConcluidos / checklistTotal) * 100) : 0
-
-  // Uploads por dia
-  const uploadsPorDia: Record<number, number> = {}
-  for (const u of cobertura.uploads) {
-    uploadsPorDia[u.dia] = (uploadsPorDia[u.dia] ?? 0) + 1
-  }
-
-  const contexto = `
-EVENTO: ${cobertura.titulo}
-TIPO: ${TIPO_LABEL[cobertura.tipo] ?? cobertura.tipo}
-LOCAL: ${cobertura.local ?? "N/A"}, ${cobertura.cidade ?? "N/A"}
-PERÍODO: ${cobertura.dataInicio.toLocaleDateString("pt-BR")} a ${cobertura.dataFim.toLocaleDateString("pt-BR")} (${cobertura.totalDias} dias)
-CLIENTE: ${cobertura.cliente ?? "Não informado"}
-STATUS: ${cobertura.status}
-
-EQUIPE (${cobertura.equipe.length} membros):
-${cobertura.equipe.map((m) => `- ${m.nome} (${m.funcao}): ${m._count.uploads} uploads`).join("\n")}
-
-UPLOADS TOTAIS: ${totalUploads}
-UPLOADS POR DIA: ${Object.entries(uploadsPorDia).map(([d, n]) => `Dia ${d}: ${n} vídeos`).join(", ") || "Nenhum"}
-
-CHECKLIST: ${checklistConcluidos}/${checklistTotal} (${checklistPct}% concluído)
-`.trim()
-
-  const prompt = `
-Você é um analista de produção audiovisual. Analise este evento de cobertura e gere um relatório executivo.
-
-Responda SOMENTE com JSON válido neste formato:
-{
-  "resumo_executivo": "parágrafo de 3-4 frases resumindo o evento, equipe e resultado geral",
-  "performance_equipe": [
-    {
-      "nome": "Nome do membro",
-      "funcao": "captacao/edicao/etc",
-      "uploads_realizados": 5,
-      "avaliacao": "texto curto (1 frase) sobre a performance",
-      "pontos_fortes": "ponto forte específico observado nos dados"
-    }
-  ],
-  "destaques_por_dia": [
-    {
-      "dia": 1,
-      "destaque": "o que foi mais significativo neste dia",
-      "volume": 3,
-      "melhoria": "sugestão de melhoria específica para este tipo de dia"
-    }
-  ],
-  "recomendacoes": [
-    "recomendação concreta para próximas coberturas"
-  ],
-  "score_producao": 85,
-  "pontos_atencao": ["ponto de atenção 1", "ponto de atenção 2"]
-}
-`
-
+  const organizacaoId = acesso.organizacaoId
   try {
-    const { texto, tokens } = await analisarComClaude(prompt, contexto)
-    const conteudo = extrairJSON(texto) as Record<string, unknown> | null
-
-    const relatorio = await prisma.relatorioIA.create({
-      data: {
-        organizacaoId,
-        tipo: "semanal", // closest available enum value for event coverage reports
-        periodo: `cobertura-${id}`,
-        conteudo: (conteudo ?? { texto_bruto: texto }) as object,
-        tokens,
-        modelo: "claude-haiku-4-5",
-      },
-    })
-
-    await prisma.eventoCoberturaLog
-      .create({
-        data: {
-          coberturaId: id,
-          usuarioId: session.user.id,
-          acao: "relatorio",
-          detalhe: `Relatório IA gerado (score: ${(conteudo?.score_producao as number) ?? "N/A"})`,
-        },
-      })
-      .catch(() => null)
-
-    return NextResponse.json({ relatorio, conteudo })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error("[Coberturas/Relatorio] Erro Claude:", msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      const cobertura = await tx.eventoCobertura.findFirst({ where: { id, organizacaoId }, select: {
+        titulo: true, status: true, equipe: { select: { id: true, nome: true, funcao: true }, orderBy: { id: "asc" } },
+        checklist: { select: { concluido: true } },
+      } })
+      if (!cobertura) return null
+      const grupos = await tx.eventoCoberturaUpload.groupBy({ by: ["dia", "membroId"], where: { coberturaId: id, cobertura: { organizacaoId } }, _count: true, orderBy: { dia: "asc" } })
+      const total = grupos.reduce((s, g) => s + g._count, 0)
+      const concluidos = cobertura.checklist.filter(c => c.concluido).length
+      const porDia: Record<number, number> = {}
+      for (const g of grupos) porDia[g.dia] = (porDia[g.dia] ?? 0) + g._count
+      const equipeIds = new Set(cobertura.equipe.map(m => m.id))
+      const semMembro = grupos.filter(g => !g.membroId || !equipeIds.has(g.membroId)).reduce((s, g) => s + g._count, 0)
+      const conteudo = {
+        resumo_executivo: `${cobertura.titulo}. Status registrado: ${cobertura.status}. ${total} arquivos enviados; checklist com ${concluidos} de ${cobertura.checklist.length} itens concluídos. Contagem de arquivos não mede qualidade nem confirma entrega ou publicação.`,
+        equipe: cobertura.equipe.map(m => ({ nome: m.nome, funcao: m.funcao, arquivos: grupos.filter(g => g.membroId === m.id).reduce((s, g) => s + g._count, 0) })),
+        arquivos_por_dia: Object.entries(porDia).map(([dia, arquivos]) => ({ dia: Number(dia), arquivos })),
+        pontos_atencao: [
+          ...(cobertura.checklist.length ? [`${cobertura.checklist.length - concluidos} itens de checklist pendentes.`] : ["Checklist não cadastrado; conclusão não pode ser medida."]),
+          ...(total ? [] : ["Nenhum arquivo registrado."]),
+          ...(semMembro ? [`Arquivos sem integrante correspondente nesta cobertura: ${semMembro}.`] : []),
+        ],
+      }
+      // Conserva a categoria legada do histórico; o período identifica a cobertura.
+      const relatorio = await tx.relatorioIA.create({ data: { organizacaoId, tipo: "semanal", periodo: `cobertura-${id}`, conteudo, tokens: 0, modelo: "regras-v1" } })
+      await tx.eventoCoberturaLog.create({ data: { coberturaId: id, usuarioId: acesso.usuarioId, acao: "relatorio", detalhe: "Resumo de arquivos e checklist por regras, sem IA e sem nota de desempenho." } })
+      return { relatorio, conteudo, origem: "regras-v1" }
+    }, { isolationLevel: "RepeatableRead" }))
+    if (!resultado) return NextResponse.json({ error: "Cobertura não encontrada" }, { status: 404 })
+    return NextResponse.json(resultado, { headers: { "Cache-Control": "private, no-store" } })
+  } catch {
+    return NextResponse.json({ error: "Não foi possível gerar o resumo da cobertura. Tente novamente." }, { status: 503 })
   }
 }
