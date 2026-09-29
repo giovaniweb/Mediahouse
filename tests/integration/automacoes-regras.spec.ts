@@ -24,6 +24,7 @@ beforeAll(async()=>{
   await db.configWhatsapp.create({data:{organizacaoId:a,instanceId:p,instanceUrl:"https://example.invalid",apiKey:"sintetico",ativo:true}})
 })
 beforeEach(async()=>{
+  await db.permissaoUsuario.deleteMany({where:{organizacaoId:a}})
   vi.mocked(fetch).mockReset();vi.mocked(fetch).mockImplementation(async()=>Response.json({key:{id:randomUUID()}}));ia.mockClear()
   sessao.user={id:u,organizacaoId:a,tipo:"admin"}
   await db.jobAutomacao.deleteMany({where:{organizacaoId:a}})
@@ -124,6 +125,17 @@ describe("O04 sem LLM",()=>{
       expect(await db.saidaWhatsapp.count({where:{organizacaoId:a}})).toBe(0)
     } finally {vi.stubEnv("EMAIL_ENCRYPTION_KEY","sintetico-regras")}
     expect((await executarRotina(a,"prazos")).intencoesCriadas).toBe(1)
+  })
+  it("monitor manual opera com permissão de alertas sem exigir Central de IA nem enviar mensagens",async()=>{
+    await db.permissaoUsuario.create({data:{organizacaoId:a,usuarioId:u,verIA:false,verAlertas:true,gerenciarConfig:true}})
+    await db.demanda.create({data:demanda(`${p}-manual-simples`)})
+    const r=await manual()
+    expect(r.status).toBe(200)
+    expect((await r.json()).alertasCriados).toBeGreaterThan(0)
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a}})).toBe(0)
+    expect(ia).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()
+    await db.permissaoUsuario.update({where:{usuarioId_organizacaoId:{usuarioId:u,organizacaoId:a}},data:{verAlertas:false}})
+    expect((await manual()).status).toBe(403)
   })
   it("rotas negam sessão/segredo ausente e rotina inválida antes de executar",async()=>{
     await db.permissaoUsuario.create({data:{organizacaoId:a,usuarioId:u,verIA:true,gerenciarConfig:false}})

@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server"
 import { requireAcesso } from "@/lib/acesso"
 import { executarRotina, type Rotina } from "@/lib/automacoes-regras"
-/** Rotina de toda a empresa com efeitos: verIA isoladamente não autoriza disparos globais. */
+/** Rotinas operacionais por regras: capacidade do destino e gestão da empresa. */
 export async function executarRotinaManual(rotina:Rotina) {
-  const acesso=await requireAcesso("verIA")
+  const acesso=await requireAcesso(rotina === "vistoria" ? "verRelatorios" : "verAlertas")
   if(acesso instanceof NextResponse) return acesso
   const gestao=await requireAcesso("gerenciarConfig")
   if(gestao instanceof NextResponse) return gestao
-  if(rotina==="vistoria") {
-    const relatorios=await requireAcesso("verRelatorios")
-    if(relatorios instanceof NextResponse) return relatorios
-  }
   try {
     const resultado=await executarRotina(acesso.organizacaoId,rotina,acesso.usuarioId)
     const resumo=`Verificação por regras: ${resultado.analisados} registros, ${resultado.alertasCriados} alertas novos e ${resultado.intencoesCriadas} mensagens agendadas. ${resultado.relatoriosCriados} relatórios criados. Entrega depende do provedor.`

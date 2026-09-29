@@ -11,7 +11,7 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import { GET } from "@/app/api/relatorios/route"
 import { POST } from "@/app/api/relatorios/gerar/route"
 const p = `rel-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, u = `${p}-u`
-const gerar = (body: unknown) => POST(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify(body) }))
+const gerar = (body: unknown) => POST(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ analiseIA: true, ...(body as Record<string, unknown>) }) }))
 beforeAll(async () => {
   await db.organizacao.createMany({ data: [a,b].map(id => ({ id, nome: id, slug: id })) })
   await db.usuario.create({ data: { id: u, nome: u, tipo: "admin", senhaHash: "sem-login" } })

@@ -5,12 +5,27 @@ import Link from "next/link"
 import {Header} from "@/components/layout/Header"
 import {fetcher} from "@/lib/fetcher"
 import {toast} from "sonner"
+import {useMe} from "@/hooks/usePermissoes"
 type Alerta={id:string;mensagem:string;tipoAlerta:string;severidade:string;origem:string;acaoSugerida:string|null;createdAt:string;podeAgir:boolean;demanda:{id:string;codigo:string;titulo:string;responsavel:{nome:string}|null;editor:{nome:string}|null;videomaker:{nome:string}|null}|null}
 type Lista={alertas:Alerta[];total:number;tipos:string[];responsaveis:Array<{id:string;nome:string}>;nextCursor:string|null}
 export default function AlertasPage() {
   const [tipo,setTipo]=useState(""),[responsavel,setResponsavel]=useState(""),[idade,setIdade]=useState(""),[cursor,setCursor]=useState(""),[ocupado,setOcupado]=useState<string|null>(null)
+  const {data:me}=useMe()
+  const [verificando,setVerificando]=useState(false)
   const q=new URLSearchParams({tipo,responsavel,idade,cursor})
   const {data,error,isLoading,mutate}=useSWR<Lista>(`/api/alertas?${q}`,fetcher,{refreshInterval:30000})
+  async function verificar() {
+    setVerificando(true)
+    try {
+      const r=await fetch("/api/ia/agentes/monitor",{method:"POST"})
+      const resultado=await r.json()
+      if(!r.ok) throw new Error(resultado.error || "Não foi possível verificar as pendências.")
+      if(resultado.ignorada) toast.info("Nenhuma verificação executada: empresa sem atividade elegível ou automação indisponível.")
+      else toast.success(`Verificação concluída: ${resultado.alertasCriados} novos alertas.`)
+      setCursor("");await mutate()
+    } catch(e){toast.error(e instanceof Error?e.message:"Não foi possível verificar as pendências.")}
+    finally{setVerificando(false)}
+  }
   async function agir(id:string,acao:string) {
     setOcupado(id)
     try {
@@ -21,7 +36,11 @@ export default function AlertasPage() {
     finally{setOcupado(null)}
   }
   return <><Header title="Alertas"/><main className="flex-1 p-6 max-w-4xl space-y-4">
-    <h1 className="text-xl font-semibold">O que precisa de atenção</h1>
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <h1 className="text-xl font-semibold">O que precisa de atenção</h1>
+      {me?.permissoes.gerenciarConfig && me?.permissoes.verAlertas && <button disabled={verificando} className="border rounded-lg px-3 py-2 text-sm disabled:opacity-50" onClick={verificar}>{verificando?"Verificando…":"Verificar pendências"}</button>}
+    </div>
+    <p className="text-sm text-muted-foreground">Prazos e pendências são verificados por regras, sem consumo de IA.</p>
     <div className="flex gap-3 flex-wrap">
       <label>Tipo <select className="border rounded p-2 bg-background" value={tipo} onChange={e=>{setTipo(e.target.value);setCursor("")}}><option value="">Todos</option>{data?.tipos.map(t=><option key={t} value={t}>{t.replace(/^regra_/,"").replaceAll("_"," ")}</option>)}</select></label>
       <label>Responsável <select className="border rounded p-2 bg-background" value={responsavel} onChange={e=>{setResponsavel(e.target.value);setCursor("")}}><option value="">Todos</option>{data?.responsaveis.map(r=><option key={r.id} value={r.id}>{r.nome}</option>)}</select></label>

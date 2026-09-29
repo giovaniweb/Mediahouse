@@ -1,5 +1,7 @@
 # O06 — limites e consumo de IA
 
+**Diretriz vigente após a revisão do usuário:** [IA essencial](DECISAO-IA-ESSENCIAL.md). Central/chat/triagem/loops retirados; opt-in de relatórios implementado. Não executar a sequência histórica de migrar esses recursos removidos. O painel agora está em Relatórios.
+
 Estado: EM_EXECUCAO. Primeiro recorte em 29/09/2026, base 29d8088. Segundo recorte na mesma data, base 03a5282: orçamento durável e geração de relatórios protegida. Não declarar o aceite global do card cumprido.
 
 ## Recorte concluído: sugestões de produtos
@@ -70,10 +72,10 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 - Rotas testadas com adaptador real e SDK falso: relatório com consumo registrado, fallback com snapshot, timeout sem reenvio e painel autorizado/isolado. Sem ensaio visual autenticado, benchmark de escala ou chamada paga.
 - Logs: /private/tmp/nuflow-o06b-{migration,unit,integration,runtime,types,lint,build}.log.
 
-### Próximo recorte obrigatório
+### Próximo recorte obrigatório — revisado pelo usuário
 
-1. Migrar analisarComClaude e seus demais consumidores para contexto explícito e reserva central: eventos, coberturas, ideias individual/batch, triagem e análise de demanda. Tratar cada resposta de limite de modo legível.
-2. Migrar SDK direto de coberturas/briefing, chat streaming e executarAgenteComTools. Aplicar teto ao ciclo completo, ferramenta por rodada e tamanho do histórico; não reservar somente na primeira chamada. Desativar retries invisíveis nos caminhos migrados.
-3. Manter transcrição sem consumidor até ter escopo/limite próprio em bytes/duração e medição compatível; não fingir segundos como tokens.
-4. Adicionar opt-out textual explícito e cache autorizado dos relatórios com TTL/invalidação, edição auditada da política e tabela de preço datada. Expandir o painel somente conforme a cobertura real.
-5. Provar cobertura de todas as chamadas pagas, regras recorrentes sem IA e limites globais antes de concluir O06. Não iniciar M01 como se O06 estivesse concluída.
+1. Avaliar a necessidade das análises pontuais de demanda, ideias e eventos/coberturas antes de investir em sua migração. Substituir por regras ou retirar o que não justifica IA; proteger os caminhos mantidos com o orçamento existente.
+2. Chat, triagem autônoma e loops foram retirados. A prova aplicável é ausência de chamada/efeito em endpoint aposentado, não implementar limites para reativá-los.
+3. Opt-in textual dos relatórios concluído. Cache autorizado/TTL, preço datado e edição auditada da política seguem pendentes, sem exigir nova Central.
+4. Manter transcrição sem consumidor ativo. Conversa/secretária de WhatsApp é futura e depende de necessidade validada.
+5. Conferir cobertura dos caminhos pagos realmente mantidos antes de concluir O06; demais pendências de U01 continuam no controle.

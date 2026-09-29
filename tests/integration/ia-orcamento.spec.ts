@@ -6,6 +6,8 @@ vi.mock("@/lib/auth", () => ({ auth: async () => sessao.user ? { user: sessao.us
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@anthropic-ai/sdk", () => ({ default: class { constructor(opcoes: unknown) { opcoesSDK(opcoes) } messages = { create: chamada } } }))
 import { POST as gerar } from "@/app/api/relatorios/gerar/route"
+import { POST as chatRetirado } from "@/app/api/ia/chat/route"
+import { POST as triagemRetirada } from "@/app/api/ia/agentes/triagem/route"
 import { GET as resumoHTTP } from "@/app/api/ia/consumo/route"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { prismaBase as db } from "@/lib/prisma"
@@ -154,9 +156,33 @@ describe("adaptador de análise com provedor sintético", () => {
 
 
 describe("relatórios e painel com controle real e provedor falso", () => {
-  const relatorio = () => gerar(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ tipo: "semanal" }) }))
+  const relatorio = (analiseIA?: boolean) => gerar(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ tipo: "semanal", analiseIA }) }))
+  it("sem opt-in e com opt-out explícito gera indicadores sem reservar nem chamar IA", async () => {
+    for (const escolha of [undefined, false]) {
+      const r = await relatorio(escolha), body = await r.json()
+      expect(r.status).toBe(200)
+      expect(body.relatorio.modelo).toBe("regras-v1")
+      expect(body.relatorio.apresentacao.snapshot).toBeTruthy()
+      expect(body.tokens).toBe(0)
+    }
+    expect(chamada).not.toHaveBeenCalled()
+    expect(await db.consumoIA.count({ where: { organizacaoId: a } })).toBe(0)
+  })
+  it("chat e triagem retirados respondem 410 sem IA nem execução; sessão continua obrigatória", async () => {
+    for (const handler of [chatRetirado, triagemRetirada]) {
+      const r = await handler()
+      expect(r.status).toBe(410)
+      expect(await r.json()).toHaveProperty("codigo", "RECURSO_RETIRADO")
+    }
+    expect(chamada).not.toHaveBeenCalled()
+    expect(await db.consumoIA.count({ where: { organizacaoId: a } })).toBe(0)
+    expect(await db.agenteExecucao.count({ where: { organizacaoId: a } })).toBe(0)
+    sessao.user = null
+    expect((await chatRetirado()).status).toBe(401)
+    expect((await triagemRetirada()).status).toBe(401)
+  })
   it("rota autorizada registra finalidade, ator e tokens; painel não expõe prompts ou tokens de reserva", async () => {
-    const resposta = await relatorio()
+    const resposta = await relatorio(true)
     expect(resposta.status).toBe(200)
     expect((await resposta.json()).tokens).toBe(300)
     expect(chamada).toHaveBeenCalledTimes(1)
@@ -172,7 +198,7 @@ describe("relatórios e painel com controle real e provedor falso", () => {
   })
   it("limite mantém relatório determinístico e não chama provedor", async () => {
     await db.politicaIA.create({ data: { organizacaoId: a, tokensDia: 0 } })
-    const r = await relatorio(), body = await r.json()
+    const r = await relatorio(true), body = await r.json()
     expect(r.status).toBe(200)
     expect(body.relatorio.modelo).toBe("regras-v1")
     expect(body.relatorio.apresentacao.texto).toContain("limite diário")
@@ -181,7 +207,7 @@ describe("relatórios e painel com controle real e provedor falso", () => {
   })
   it("timeout conserva reserva desconhecida e devolve snapshot sem repetir chamada", async () => {
     chamada.mockRejectedValueOnce(new Error("segredo-provedor"))
-    const r = await relatorio(), body = await r.json()
+    const r = await relatorio(true), body = await r.json()
     expect(r.status).toBe(200)
     expect(body.relatorio.apresentacao.texto).toContain("confirmação pode estar pendente")
     expect(JSON.stringify(body)).not.toContain("segredo-provedor")

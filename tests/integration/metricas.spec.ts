@@ -69,13 +69,13 @@ describe("mesmos indicadores em todos os consumidores", () => {
     await db.permissaoUsuario.create({ data: { usuarioId: u, organizacaoId: a, ...PRESETS.admin, verCustos: false } })
     const r = await (await metricas(request(`/api/relatorios/metricas?${setembro}`))).json()
     expect(r.custos).toBeUndefined(); expect(JSON.stringify(r)).not.toContain("9876.54")
-    const resp = await gerar(post({ tipo: "mensal", mes: "2026-09" })); expect(resp.status).toBe(200)
+    const resp = await gerar(post({ tipo: "mensal", mes: "2026-09", analiseIA: true })); expect(resp.status).toBe(200)
     const g = await resp.json(); expect(g.relatorio.apresentacao.snapshot.custoTotal).toBeNull(); expect(analisar.mock.calls[0][0]).not.toContain("9876.54")
     const l = await (await historico(request("/api/relatorios"))).json(); expect(l.relatorios.some((v: {id: string}) => v.id === g.relatorio.id)).toBe(true)
     expect((await gerar(post({ tipo: "analise_custos" }))).status).toBe(403)
   })
   it("snapshot emitido permanece congelado após reabrir e concluir novamente", async () => {
-    const g = await (await gerar(post({ tipo: "mensal", mes: "2026-09" }))).json()
+    const g = await (await gerar(post({ tipo: "mensal", mes: "2026-09", analiseIA: true }))).json()
     const id = `${p}-fora`, params = { params: Promise.resolve({ id }) }
     expect((await mover(post({ statusInterno: "editando" }),params)).status).toBe(200)
     expect((await db.demanda.findUniqueOrThrow({ where: { id } })).finalizadaEm).toBeNull()

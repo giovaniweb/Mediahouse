@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O06: reserva durável de IA, relatórios protegidos e painel de consumo parcial; sem deploy.
+Última atualização: 29/09/2026 — simplificação aprovada: Central/chat retirados, IA opcional nos relatórios; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O06 EM_EXECUCAO. Sugestões por regras, orçamento durável e geração de relatórios protegida; demais caminhos de IA ainda pendentes. S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: migrar demais consumidores de analisarComClaude, coberturas/briefing e chat/tools ao orçamento; depois cache/opt-out, política auditada e preço datado. Ver O06-LIMITES-IA.md; não avançar M01 como se O06 estivesse completa.
+- Tarefa em andamento: O06 e U01 parciais. Diretriz vigente: DECISAO-IA-ESSENCIAL.md. Remover excesso antes de migrar mais chamadas. S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: avaliar análises contextuais restantes (demanda, ideias, eventos/coberturas); retirar/substituir o dispensável e aplicar orçamento apenas ao necessário. Chat/triagem/loops foram retirados: não recriar. Opt-in dos relatórios concluído; cache, preço e política auditada seguem pendentes.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: reserva atômica e conciliação em Postgres; relatório conserva indicadores sem IA ao atingir limite; painel parcial com custo desconhecido.
-- Verificações O06 parcial: 687 unitários, 212 integrações, 24 runtime, build webpack, tipos, lint sem erros e auditores/grants. Migration 20260929090000_orcamento_ia apenas no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: Central sai do menu; endpoints de chat/triagem encerrados; monitor no contexto de Alertas e relatórios sem IA por padrão.
+- Verificações atuais: 687 unitários, 215 integrações, build webpack/tipos, lint sem erros e auditores. Sem nova migration. As 24 provas runtime/grants da etapa anterior permanecem registradas; produção/provedor pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -49,7 +49,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C03 | Painel e conciliação | 05 | C02, R02, R03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | U02 | Próxima ação e quatro jobs | 06 | U01, C01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | U03 | Secretária delimitada | 06 | U02, O02, O03, O06, M01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | U04 | Equipe e parcerias | 06 | C01, S06, S07, U01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -322,3 +322,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Central de IA mostra detalhe restrito a gerenciarConfig, com cobertura explicitamente parcial. Medido/reserva/desconhecido separados; erro não vira zero.
 - 687 unitários, 212 integrações e 24 runtime; build webpack, grants/RLS, tipos, lint sem erros e auditores aprovados. Provedores falsos e banco descartável; sem IA paga, mensagem ou deploy.
 - Migration 20260929090000_orcamento_ia somente no banco descartável. Persistência deve preceder futura publicação. Restante de chamadas, cache/opt-out, preços e edição auditada da política continuam pendentes; O06 permanece EM_EXECUCAO.
+
+
+### O06/U01 — menos ferramentas, IA no contexto (29/09/2026)
+
+- Base 98b2f37. Diretriz do usuário e contrato em DECISAO-IA-ESSENCIAL.md; substitui a próxima etapa anterior de migrar chat/triagem/loops.
+- Central/chat/falso teste de secretária retirados; /ia redireciona a Alertas. Chat/triagem autenticados retornam 410 sem efeito; loop LLM e catálogo/prompt sem consumidor removidos.
+- Monitor permanece como Verificar pendências em Alertas, com verAlertas + gerenciarConfig. Sem LLM nem envio nesta ação. Cron O04 preservado.
+- Relatórios têm dois atalhos principais (semana/mês) e opt-in analiseIA=false por padrão. Sem opt-in não reserva nem chama provedor. Painel técnico recolhido foi para Relatórios. Histórico permanece legível.
+- 687 unitários, 215 integrações, build/tipos/lint sem erros e auditores aprovados. Sem nova migration, exclusão de dados, mensagem, IA paga ou deploy; ensaio visual autenticado pendente.
+- Não há telemetria de uso de produção nesta decisão. Demais análises contextuais possuem caminhos próprios e precisam de avaliação de utilidade antes de migrar. O06/U01 não concluídos; U03 é evolução futura, sem reintrodução automática de secretária.
