@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — S05: ferramentas da IA autorizadas e WhatsApp com identidade verificada; nenhuma publicação.
+Última atualização: 28/09/2026 — S06: biblioteca interna, publicação explícita e mídia por objeto; nenhuma publicação em produção.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S05 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: S06 — publicação explícita e acesso à mídia; manter os recortes pendentes de S03 visíveis.
+- Tarefa em andamento: S06 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: S07 — runtime RLS e pool; manter os recortes pendentes de S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: contexto verificado por ferramenta, escopo de demandas, destinatário autorizado, webhook autenticado, número completo e transição condicional de convite.
-- Verificações: 620 unitários e 76 cenários integrados; build, tipos, lint e auditores passaram. Sem migration neste lote S05.
+- Última alteração: portfólio opt-in por arquivo com snapshot e revogação; biblioteca privada; sessão/token vinculados ao objeto; proteção de miniaturas Drive.
+- Verificações S06: 630 unitários e 90 cenários integrados; build, tipos, lint, auditores e RLS locais. Migração aplicada somente no banco descartável; inventário de produção e storage real pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -29,7 +29,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S03 | APIs críticas autorizadas | 01 | S01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | S04 | OAuth e cifra versionada | 01 | S02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S05 | Ferramentas autorizadas | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| S06 | Publicação explícita | 01 | S01, S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| S06 | Publicação explícita | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S07 | RLS e pool | 01 | S01, S04, S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R01 | Relatório legado | 02 | S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -168,3 +168,15 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Pendências externas: segredo na configuração Evolution, evento direto/LID da versão implantada, número completo/vínculo ativo, teste autorizado com destinatários sintéticos e role do runtime. Não publicar este lote sem esse ensaio L02: ausência de segredo ou associação LID confiável passa a recusar entrada, intencionalmente.
 - Limites: nenhuma transação única para uma conversa inteira; fila/inbox/outbox/recibos, índice de telefone canônico, limites de consumo IA e interface são O01–O06/U03. Não transformar este checkpoint em certificação geral do SaaS.
 - Próximo cartão: S06, publicação explícita e proteção de mídia; em seguida S07, runtime RLS/pool. Seguem pendentes os recortes já registrados de S02/S03.
+
+
+### S06 — biblioteca, portfólio e acesso ao objeto (28/09/2026)
+
+- Contrato e roteiro de entrada: `S06-PUBLICACAO-MIDIA.md`. Sem deploy, envio externo ou consumo de IA. Publicação de portfólio foi testada somente com dados sintéticos locais.
+- `Arquivo` recebe data/ator de publicação/revogação e snapshot das URLs. Migração `20260929000000_publicacao_arquivo` aplicada somente em 127.0.0.1:55439/nuflow_test (26 migrações); nenhuma publicação retroativa.
+- Biblioteca audiovisual/Growth autenticada, com filtros de área/escopo, publicação explícita pela gestão e identificação de links legados. Growth passa a incluir finais sem linkFinal. Portfólio público conta arquivos, com ordem determinística; R04 ainda inclui revisão de outros consumidores.
+- Mídia autoriza registro específico; token de uma demanda não abre outra, documento ou NF. Parceiros exigem parceria/aresta ativas. Miniatura Drive exige snapshot publicado e ID exato. Cobertura verifica vínculo do caminho antes de assinar.
+- 630 testes unitários/44 arquivos e 90 integrações/4 arquivos. Assinador e Google simulados; PostgreSQL real descartável. Build webpack, TypeScript, lint dos arquivos alterados (zero erros; seis avisos preexistentes em galeria/Sidebar), auditores tenancy/perfil, RLS e diff check aprovados. Aviso preexistente de face-api permanece no build. Logs: /private/tmp/nuflow-s06-*.log.
+- Script de inventário somente leitura executado em banco local, empresa inexistente (contagens zero), para validar SQL. Não houve inventário dos dados reais, ensaio visual autenticado ou verificação do bucket real.
+- Limites: URLs assinadas antigas até 600s; links de buckets públicos/Drive exigem tratamento no provedor; arquivos sem registro e referências antigas precisam inventário. Não certificar acervo legado, M01–M04 ou prontidão comercial como resolvidos.
+- Próximo cartão: S07 (runtime RLS/pool). Manter pendências S01/S02/S03, validações externas e L02 abertas.

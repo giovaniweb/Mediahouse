@@ -106,7 +106,7 @@ function parseVideoUrl(url: string): {
 function getDriveThumbnail(url: string): string | null {
   const match = url.match(/\/file\/d\/([^/]+)/)
   // Usa proxy server-side com service account — evita problema de autenticação do Drive
-  if (match) return `/api/publico/drive-thumbnail?fileId=${match[1]}`
+  if (match) return `/api/publico/drive-thumbnail?fileId=${match[1]}${sufixoOrg("&")}`
   return null
 }
 
@@ -481,7 +481,7 @@ export default function GaleriaPage() {
             O café e o energético não foram à toa.
           </p>
           <p className="text-zinc-400 text-base sm:text-lg leading-relaxed mb-10">
-            Já finalizamos{" "}
+            Neste portfólio temos{" "}
             <strong className="text-2xl sm:text-3xl font-bold text-white">
               {initialLoad ? "…" : <AnimatedCounter value={total} />}
             </strong>{" "}
@@ -567,7 +567,7 @@ export default function GaleriaPage() {
               {hasFilters ? "Nenhum resultado" : "Sem vídeos ainda"}
             </p>
             <p className="text-zinc-600 text-sm mb-6">
-              {hasFilters ? "Tente outros termos ou remova os filtros" : "Os vídeos aparecerão aqui quando finalizados"}
+              {hasFilters ? "Tente outros termos ou remova os filtros" : "Os vídeos aparecerão aqui quando publicados pela equipe"}
             </p>
             {hasFilters && (
               <button
@@ -617,7 +617,7 @@ export default function GaleriaPage() {
           <span className="text-xs font-semibold text-zinc-400">NuFlow</span>
         </a>
         <p className="text-xs text-zinc-700">
-          {total.toLocaleString("pt-BR")} vídeos produzidos
+          {total.toLocaleString("pt-BR")} vídeos publicados
         </p>
       </footer>
     </div>

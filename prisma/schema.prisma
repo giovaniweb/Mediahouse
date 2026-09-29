@@ -718,6 +718,13 @@ model Arquivo {
   thumbnailUrl    String? // JPEG thumbnail no Supabase (gerado no cliente)
   transcodeStatus String? // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
   originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
+  // Divulgação opt-in. Snapshot preserva a versão que a gestão autorizou.
+  publicadoEm           DateTime?
+  publicadoPor          String?
+  revogadoEm            DateTime?
+  revogadoPor           String?
+  publicacaoUrl         String?
+  publicacaoThumbnailUrl String?
   createdAt       DateTime    @default(now())
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)

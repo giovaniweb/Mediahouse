@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { caminhoMidia, subirArquivo } from "@/lib/midia"
+import { caminhoMidia, subirArquivo, comToken } from "@/lib/midia"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     },
   })
   if (!fornecedor) return NextResponse.json({ error: "Portal não encontrado" }, { status: 404 })
-  return NextResponse.json({ fornecedor })
+  return NextResponse.json({ fornecedor: { ...fornecedor, custos: fornecedor.custos.map(c => ({ ...c, notaFiscalUrl: comToken(c.notaFiscalUrl, token) })) } }, { headers: { "Cache-Control": "private, no-store" } })
 }
 
 // POST /api/publico/fornecedor/[token] — fornecedor envia NF/documento para um custo
@@ -108,5 +108,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (g.telefone) await sendWhatsappMessage(g.telefone, msg, undefined, orgId).catch(() => null)
   }
 
-  return NextResponse.json({ ok: true, url })
+  return NextResponse.json({ ok: true, url: comToken(url, token) }, { headers: { "Cache-Control": "private, no-store" } })
 }
