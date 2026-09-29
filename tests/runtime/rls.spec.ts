@@ -1,3 +1,4 @@
+import { criarFila, enfileirar } from "@/lib/fila-duravel"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { PrismaClient } from "@prisma/client"
@@ -174,4 +175,29 @@ describe("Prisma conectado como runtime sem bypass", () => {
     expect((await admin.demanda.findUniqueOrThrow({ where: { id: da } })).titulo).toBe(da)
   })
 
+})
+
+describe("fila sob login runtime sem bypass", () => {
+  it("isola jobs/eventos, recusa contexto ausente e completa efeito local", async () => {
+    const fila = criarFila(db)
+    const criar = (org: string) => comOrg(org,()=>db.$transaction(tx=>enfileirar(tx,{
+      organizacaoId:org,tipo:"teste.runtime",referencia:org,chave:"runtime",expiraEm:new Date(Date.now()+60_000),
+    })))
+    const [ja,jb] = await Promise.all([criar(a),criar(b)])
+    expect(await comOrg(null,()=>db.jobAutomacao.count())).toBe(0)
+    expect((await comOrg(a,()=>db.jobAutomacao.findMany())).map(j=>j.id)).toEqual([ja.id])
+    await expect(comOrg(a,()=>db.$transaction(tx=>enfileirar(tx,{
+      organizacaoId:b,tipo:"teste.runtime",referencia:b,chave:"forjada",expiraEm:new Date(Date.now()+60_000),
+    })))).rejects.toThrow()
+    const [j] = await fila.reivindicar(a)
+    expect(j.id).toBe(ja.id)
+    expect(await fila.concluirLocal({id:j.id,organizacaoId:b,leaseToken:j.leaseToken!},async()=>{})).toBe(false)
+    expect(await fila.concluirLocal({id:j.id,organizacaoId:a,leaseToken:j.leaseToken!},async tx=>{
+      await tx.organizacao.update({where:{id:a},data:{nome:"efeito runtime"}})
+    })).toBe(true)
+    expect((await comOrg(b,()=>db.jobAutomacao.findUniqueOrThrow({where:{id:jb.id}}))).estado).toBe("pendente")
+    expect(await comOrg(b,()=>db.eventoJob.count({where:{jobId:ja.id}}))).toBe(0)
+    await expect(comOrg(a,()=>db.eventoJob.deleteMany({where:{jobId:ja.id}}))).rejects.toThrow()
+    await expect(comOrg(a,()=>db.jobAutomacao.delete({where:{id:ja.id}}))).rejects.toThrow()
+  })
 })

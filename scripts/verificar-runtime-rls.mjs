@@ -16,13 +16,25 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_any_column_privilege(current_user,'public.usuarios','UPDATE') AS edita_usuarios,
       has_function_privilege(current_user,'public.redefinir_senha_por_token(text,text)','EXECUTE') AS troca_por_token,
       has_table_privilege(current_user,'public.demandas','SELECT') AS le_demandas,
+      has_table_privilege(current_user,'public.jobs_automacao','SELECT') AS le_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','INSERT') AS insere_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','UPDATE') AS atualiza_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','DELETE') AS apaga_fila,
+      has_table_privilege(current_user,'public.eventos_job','SELECT') AS le_eventos_job,
+      has_table_privilege(current_user,'public.eventos_job','INSERT') AS insere_eventos_job,
+      has_table_privilege(current_user,'public.eventos_job','UPDATE,DELETE') AS altera_eventos_job,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.jobs_automacao'::regclass) AS rls_fila,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.eventos_job'::regclass) AS rls_eventos_job,
       has_table_privilege(current_user,'public.eventos_auditoria','SELECT') AS le_auditoria,
       has_table_privilege(current_user,'public.eventos_auditoria','INSERT') AS insere_auditoria,
       has_table_privilege(current_user,'public.eventos_auditoria','UPDATE,DELETE') AS altera_auditoria,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.eventos_auditoria'::regclass) AS rls_auditoria,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.demandas'::regclass) AS rls_demandas,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.oauth_drive_estados'::regclass) AS rls_oauth`)
-    const ok = r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const filaOk = tipo === "app"
+      ? r.le_fila && r.insere_fila && r.atualiza_fila && !r.apaga_fila && r.le_eventos_job && r.insere_eventos_job && !r.altera_eventos_job && r.rls_fila && r.rls_eventos_job
+      : !r.le_fila && !r.insere_fila && !r.atualiza_fila && !r.apaga_fila && !r.le_eventos_job && !r.insere_eventos_job && !r.altera_eventos_job
+    const ok = filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

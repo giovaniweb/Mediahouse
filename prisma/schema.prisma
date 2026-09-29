@@ -2124,6 +2124,8 @@ model ProducaoManual {
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
   eventosAuditoria EventoAuditoria[]
+  jobsAutomacao JobAutomacao[]
+  eventosJob EventoJob[]
   id             String   @id @default(cuid())
   nome           String
   slug           String   @unique // ex: "contourline" (preparado p/ subdomínio futuro)
@@ -2424,4 +2426,46 @@ model EventoAuditoria {
   @@index([organizacaoId, createdAt, id])
   @@index([payloadExpiraEm])
   @@map("eventos_auditoria")
+}
+
+// Intenção durável; conclusão de execução não significa entrega de mensagem.
+model JobAutomacao {
+  id String @id @default(cuid())
+  organizacaoId String
+  tipo String @db.VarChar(80)
+  versao Int @default(1)
+  referencia String @db.VarChar(128)
+  chave String @db.VarChar(128)
+  payload Json @default("{}")
+  estado String @default("pendente") @db.VarChar(16)
+  agendadoPara DateTime @default(now())
+  expiraEm DateTime
+  tentativas Int @default(0)
+  maxTentativas Int @default(5)
+  leaseAte DateTime?
+  leaseToken String?
+  erro String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  finishedAt DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  eventos EventoJob[]
+  @@unique([organizacaoId, tipo, chave])
+  @@index([organizacaoId, estado, agendadoPara, id])
+  @@map("jobs_automacao")
+}
+
+// Histórico reduzido de transições, sem payload, corpo de mensagem ou erro bruto.
+model EventoJob {
+  id String @id @default(cuid())
+  organizacaoId String
+  jobId String
+  tentativa Int
+  evento String @db.VarChar(24)
+  motivo String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  job JobAutomacao @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, jobId, createdAt])
+  @@map("eventos_job")
 }

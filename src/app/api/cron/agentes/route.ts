@@ -1,3 +1,4 @@
+import { recuperarExecucoesDuravel } from "@/lib/fila-manutencao"
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
 import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
@@ -43,14 +44,6 @@ export async function GET(req: NextRequest) {
 
   const agente = req.nextUrl.searchParams.get("agente") ?? "alertas"
 
-  // Fecha execuções que ficaram presas em "executando" — a função serverless morre
-  // no meio (timeout, deploy) e ninguém fecha a linha. Sem esta varredura elas se
-  // acumulam para sempre e falseiam qualquer leitura de saúde dos agentes.
-  await prisma.agenteExecucao.updateMany({
-    where: { status: "executando", createdAt: { lt: new Date(Date.now() - 30 * 60 * 1000) } },
-    data: { status: "erro", erro: "Execução interrompida (função encerrada antes de concluir)", finishedAt: new Date() },
-  }).catch((e) => console.error("[Cron] Falha ao limpar execuções presas:", e))
-
   // Roda o agente solicitado para CADA organização ativa (isolamento multiempresa).
   const orgs = await prisma.organizacao.findMany({ where: { ativo: true }, select: { id: true } })
   const resultados: Array<Record<string, unknown>> = []
@@ -61,6 +54,7 @@ export async function GET(req: NextRequest) {
       // mesma execução. Declarar sem delimitar deixaria a empresa da volta
       // anterior valendo na seguinte — o pior tipo de vazamento, porque o dado
       // sai carimbado com o dono errado.
+      const fila = await recuperarExecucoesDuravel(org.id)
       const r = await comOrg(org.id, async (): Promise<Record<string, unknown>> => {
         if (agente === "prazos") return await rodarAgentePrazos(org.id)
         else if (agente === "vistoria") return await rodarAgenteVistoria(org.id)
@@ -70,7 +64,7 @@ export async function GET(req: NextRequest) {
         else if (agente === "limpeza") return await registrarExecucao("limpeza-cron", org.id, () => rodarAgenteLimpeza(org.id))
         return await rodarAgenteAlertas(org.id)
       })
-      resultados.push({ organizacaoId: org.id, ...r })
+      resultados.push({ organizacaoId: org.id, fila, ...r })
     } catch (e) {
       console.error(`[Cron] Erro org ${org.id}:`, e)
       resultados.push({ organizacaoId: org.id, erro: String(e) })
