@@ -46,3 +46,8 @@ Erro de carregamento não vira Tudo certo. Vazio significa apenas ausência de a
 - Build inicial passou com cache webpack temporariamente desabilitado. Repetições finais atingiram ENOSPC ao gravar .tsbuildinfo e criar .next/static, mesmo após remover os artefatos locais. **Build final pendente até liberar espaço.** Nova repetição de runtime também não iniciou a suíte; a prova anterior de 23 testes permanece registrada nesta tarefa. next.config.ts foi restaurado, sem alteração no commit. Só caches/artefatos gerados desta tarefa foram removidos. Logs /private/tmp/nuflow-o05-*.log.
 
 Próximo: O06 — limites concorrentes e medição de IA por empresa/operação. Pendências: Evolution real, agendador/cadência, benchmark e retenção das batidas, ensaio visual e recortes S01/S02/S03.
+
+
+## Revalidação após ENOSPC — 29/09/2026
+
+Build webpack com configuração original aprovado. PostgreSQL descartável retomado na porta 55439; 23 testes runtime e verificador de grants/RLS aprovados. Logs em /private/tmp/nuflow-o05-build-recovery.log e /private/tmp/nuflow-o05-runtime-recovery.log. A pendência de validação local por disco está encerrada; isso não homologa produção nem provedor.

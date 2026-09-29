@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O05: saúde por evidências e ações individuais auditadas; sem deploy.
+Última atualização: 29/09/2026 — O05 revalidado; O06 iniciada com sugestões de produtos sem chamadas pagas; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O05 implementado, com testes locais aprovados; build final impedido por falta de disco; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: liberar espaço, repetir build/runtime finais e seguir O06 — limites e consumo de IA; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: O06 EM_EXECUCAO. Primeiro recorte concluído: sugestões de produtos por regras. S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: continuar O06 com adaptador central, reserva atômica por empresa, reconciliação e painel de consumo. Ver O06-LIMITES-IA.md; não avançar M01 como se O06 estivesse completa.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: painel de saúde, heartbeat, falha parcial e pausa/retomada/cancelamento de saídas.
-- Verificações O05: 684 unitários, 190 integrações e 23 testes runtime locais; tipos/lint e auditores. Build final e nova repetição de runtime impedidos por ENOSPC. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: consulta de sugestões sem provedor, seleção direta por produto, capacidade verProdutos e resposta explícita de falha.
+- Verificações O05: 684 unitários, 190 integrações e 23 testes runtime locais; tipos/lint e auditores. Build e runtime repetidos com sucesso após recuperação do espaço/servidor de teste em 29/09. Migração aplicada somente no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -41,7 +41,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O03 | Outbox e recibos | 03 | O01, O02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -297,3 +297,18 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 684 unitários, 190 integrações, 23 runtime, tipos, lint sem erros e auditores/grants aprovados. Nove avisos preexistentes de lint; face-api no build. Build inicial aprovado; build final e nova repetição de runtime impedidos por falta de disco (ENOSPC), mesmo após remover artefatos desta tarefa. Repetir após liberar espaço; configuração original de build restaurada. Logs /private/tmp/nuflow-o05-*.log.
 - Migração 20260929080000_pausa_saida_whatsapp somente no banco descartável. Sem mensagens, IA paga, deploy ou cron novo. Cadência, Evolution, benchmark/retenção das batidas e ensaio visual pendentes.
 - Próxima ação: liberar espaço e repetir validação final; depois O06 — limites concorrentes e medição de consumo de IA.
+
+
+### O05 — recuperação da validação (29/09/2026)
+
+- Build webpack com configuração original aprovado após recuperação de espaço.
+- PostgreSQL descartável retomado na porta 55439; 23 runtime e verificação de grants/RLS aprovados novamente. Nenhum acesso ao banco de produção.
+- Evidências: /private/tmp/nuflow-o05-build-recovery.log e /private/tmp/nuflow-o05-runtime-recovery.log. Encerrada a pendência local de ENOSPC; permanecem validações externas.
+
+### O06 — primeiro recorte: sugestões sem chamada paga (29/09/2026)
+
+- Base 29d8088; detalhes, limites e sequência em O06-LIMITES-IA.md.
+- GET de sugestões não instancia provedor nem usa chave de API; orientação editorial por regras em todos os produtos retornados. Consulta direta corrige produto fora do top 10.
+- Capacidade verProdutos, empresa revalidada, contexto explícito de banco, filtro de ativos, 404 uniforme e erro 503 legível. Tela informa origem por regras.
+- 687 unitários e 195 integrações aprovados; build webpack final, tipos e auditores aprovados. Lint sem erros, um aviso preexistente na tela de produto.
+- Sem migração, mensagem, IA paga ou deploy. O06 continua EM_EXECUCAO: ainda não existe teto agregado de IA nem medição central; demais caminhos pagos permanecem para o próximo recorte.
