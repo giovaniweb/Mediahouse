@@ -51,7 +51,7 @@ export function WhatsAppStatus() {
       // Havendo avisos perdidos, o destino útil é a fila de reenvio, não a
       // tela de configuração da conexão.
       href={naoEnviadas > 0 ? "/mensagens-falhadas" : "/configuracoes"}
-      title={naoEnviadas > 0 ? `${naoEnviadas} aviso(s) não entregue(s) — clique para reenviar` : cfg.label}
+      title={naoEnviadas > 0 ? `${naoEnviadas} saída(s) precisam de atenção — clique para conferir` : cfg.label}
       className="flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
     >
       <div className="relative">
@@ -74,7 +74,7 @@ export function WhatsAppStatus() {
       </span>
       {naoEnviadas > 0 && (
         <span
-          title={`${naoEnviadas} aviso(s) não entregue(s) nas últimas 24h`}
+          title={`${naoEnviadas} saída(s) precisam de atenção nas últimas 24h`}
           className="ml-auto shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40"
         >
           {naoEnviadas}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Header } from "@/components/layout/Header"
 import { Send, Phone, User, Search, MessageSquare, ChevronDown, ChevronUp } from "lucide-react"
 import useSWR from "swr"
@@ -45,6 +45,7 @@ interface Contato {
 }
 
 export default function MensagensPage() {
+  const chaveEnvio = useRef<{chave:string;assinatura:string} | null>(null)
   const [telefone, setTelefone] = useState("")
   const [mensagem, setMensagem] = useState("")
   const [enviando, setEnviando] = useState(false)
@@ -90,13 +91,16 @@ export default function MensagensPage() {
     }
     setEnviando(true)
     try {
+      const assinatura=JSON.stringify([telefone,mensagem])
+      if(chaveEnvio.current?.assinatura!==assinatura) chaveEnvio.current={chave:crypto.randomUUID(),assinatura}
       const res = await fetch("/api/whatsapp/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: telefone.replace(/\D/g, ""), mensagem }),
+        body: JSON.stringify({ telefone: telefone.replace(/\D/g, ""), mensagem, chave:chaveEnvio.current.chave }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success("Mensagem enviada!")
+      toast.success("Mensagem agendada. A entrega será confirmada por recibo.")
+      chaveEnvio.current = null
       setMensagem("")
     } catch (e) {
       toast.error(mensagemDeErro(e))

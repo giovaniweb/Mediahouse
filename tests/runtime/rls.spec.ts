@@ -223,3 +223,27 @@ describe("bootstrap e inbox WhatsApp sob RLS",()=>{
     } finally {vi.unstubAllEnvs()}
   })
 })
+
+describe("outbox sob RLS",()=>{
+  it("envia pelo runtime, isola recibos e bloqueia exclusão da trilha",async()=>{
+    const {criarSaida,processarSaidas}=await import("@/lib/whatsapp-outbox")
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    vi.stubEnv("WHATSAPP_EVOLUTION_CONTRATO","2.3.7")
+    const http=vi.mocked(fetch)
+    http.mockResolvedValueOnce(Response.json({key:{id:"PROV-RUNTIME"}}))
+    try {
+      await admin.usuario.update({where:{id:u},data:{telefone:"5511999990001"}})
+      await admin.configWhatsapp.update({where:{organizacaoId:a},data:{ativo:true}})
+      const s=await comOrg(a,()=>db.$transaction(tx=>criarSaida(tx,{organizacaoId:a,origem:"manual",referencia:u,chave:"runtime-saida",telefone:"5511999990001",texto:"Sintético",expiraEm:new Date(Date.now()+60000)})))
+      expect((await processarSaidas(a)).aceitos).toBe(1)
+      expect(await comOrg(b,()=>db.saidaWhatsapp.count())).toBe(0)
+      expect(await comOrg(null,()=>db.tentativaWhatsapp.count())).toBe(0)
+      const instance=`${p}-whatsapp`
+      await receberEntrada({instance,event:"messages.update",data:{keyId:"PROV-RUNTIME",remoteJid:"5511999990001@s.whatsapp.net",fromMe:true,status:"READ"}},"segredo-runtime")
+      expect((await comOrg(a,()=>db.saidaWhatsapp.findUniqueOrThrow({where:{id:s.id}}))).estado).toBe("lido")
+      await expect(comOrg(a,()=>db.reciboWhatsapp.deleteMany())).rejects.toThrow()
+      await expect(comOrg(a,()=>db.saidaWhatsapp.delete({where:{id:s.id}}))).rejects.toThrow()
+      await expect(prismaAuth.saidaWhatsapp.count()).rejects.toThrow()
+    } finally {vi.unstubAllEnvs()}
+  })
+})

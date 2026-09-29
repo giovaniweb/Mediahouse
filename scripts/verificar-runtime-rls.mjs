@@ -16,6 +16,13 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_any_column_privilege(current_user,'public.usuarios','UPDATE') AS edita_usuarios,
       has_function_privilege(current_user,'public.redefinir_senha_por_token(text,text)','EXECUTE') AS troca_por_token,
       has_table_privilege(current_user,'public.demandas','SELECT') AS le_demandas,
+      has_table_privilege(current_user,'public.saidas_whatsapp','SELECT') AS le_saidas,
+      has_table_privilege(current_user,'public.tentativas_whatsapp','SELECT') AS le_tentativas,
+      has_table_privilege(current_user,'public.recibos_whatsapp','SELECT') AS le_recibos,
+      has_table_privilege(current_user,'public.saidas_whatsapp','DELETE') AS apaga_saidas,
+      has_table_privilege(current_user,'public.tentativas_whatsapp','DELETE') AS apaga_tentativas,
+      has_table_privilege(current_user,'public.recibos_whatsapp','UPDATE,DELETE') AS altera_recibos,
+      (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.saidas_whatsapp'::regclass,'public.tentativas_whatsapp'::regclass,'public.recibos_whatsapp'::regclass)) AS rls_saidas,
       has_table_privilege(current_user,'public.inbox_whatsapp','SELECT') AS le_inbox,
       has_table_privilege(current_user,'public.inbox_whatsapp','INSERT') AS insere_inbox,
       has_table_privilege(current_user,'public.inbox_whatsapp','DELETE') AS apaga_inbox,
@@ -41,7 +48,9 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       : !r.le_fila && !r.insere_fila && !r.atualiza_fila && !r.apaga_fila && !r.le_eventos_job && !r.insere_eventos_job && !r.altera_eventos_job
     const inboxOk = tipo === "app" ? r.le_inbox && r.insere_inbox && !r.apaga_inbox && r.rls_inbox && r.resolve_instancia
       : !r.le_inbox && !r.insere_inbox && !r.apaga_inbox && !r.resolve_instancia
-    const ok = inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const saidasOk = tipo === "app" ? r.le_saidas && r.le_tentativas && r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos && r.rls_saidas
+      : !r.le_saidas && !r.le_tentativas && !r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos
+    const ok = saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

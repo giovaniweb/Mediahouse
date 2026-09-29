@@ -1,3 +1,4 @@
+import { processarSaidas } from "@/lib/whatsapp-outbox"
 import { NextRequest, NextResponse, after } from "next/server"
 import { receberEntrada, EntradaRecusada, processarInbox } from "@/lib/whatsapp-inbox"
 
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     const resultado=await receberEntrada(body,req.headers.get("x-webhook-secret") ?? req.nextUrl.searchParams.get("s"))
     // Otimização de latência, nunca a garantia de execução. Cron retoma a mesma fila.
     if(resultado.organizacaoId) {
-      try { after(async()=>{ await processarInbox(resultado.organizacaoId!).catch(()=>undefined) }) } catch { /* cron retoma a intenção já persistida */ }
+      try { after(async()=>{ await processarInbox(resultado.organizacaoId!).catch(()=>undefined); await processarSaidas(resultado.organizacaoId!).catch(()=>undefined) }) } catch { /* cron retoma a intenção já persistida */ }
     }
     return NextResponse.json({ok:true,resultado:resultado.resultado})
   } catch(e) {

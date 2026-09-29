@@ -495,6 +495,7 @@ export default function IAPage() {
 
 function MensagemBolha({ msg }: { msg: Mensagem }) {
   const isUser = msg.role === "user"
+  const chaveEnvio=useRef<{chave:string;assinatura:string}|null>(null)
   const [wppAberto, setWppAberto] = useState(false)
   const [wppTelefone, setWppTelefone] = useState("")
   const [wppEnviando, setWppEnviando] = useState(false)
@@ -505,12 +506,15 @@ function MensagemBolha({ msg }: { msg: Mensagem }) {
     setWppEnviando(true)
     setWppStatus("")
     try {
+      const assinatura=JSON.stringify([wppTelefone,msg.conteudo])
+      if(chaveEnvio.current?.assinatura!==assinatura) chaveEnvio.current={chave:crypto.randomUUID(),assinatura}
       const res = await fetch("/api/whatsapp/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: wppTelefone.trim(), mensagem: msg.conteudo }),
+        body: JSON.stringify({ telefone: wppTelefone.trim(), mensagem: msg.conteudo, chave:chaveEnvio.current.chave }),
       })
       setWppStatus(res.ok ? "ok" : "erro")
+      if(res.ok) chaveEnvio.current=null
       if (res.ok) setTimeout(() => { setWppAberto(false); setWppStatus(""); setWppTelefone("") }, 1500)
     } catch {
       setWppStatus("erro")
@@ -583,7 +587,7 @@ function MensagemBolha({ msg }: { msg: Mensagem }) {
                   className="flex-1 bg-transparent text-xs text-white placeholder-zinc-500 outline-none min-w-0"
                   autoFocus
                 />
-                {wppStatus === "ok" && <span className="text-xs text-green-400 shrink-0">Enviado!</span>}
+                {wppStatus === "ok" && <span className="text-xs text-green-400 shrink-0">Agendada!</span>}
                 {wppStatus === "erro" && <span className="text-xs text-red-400 shrink-0">Erro</span>}
                 <button
                   onClick={enviarWhatsApp}

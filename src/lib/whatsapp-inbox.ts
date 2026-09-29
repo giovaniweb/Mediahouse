@@ -1,3 +1,4 @@
+import { criarSaida, registrarRecibos } from "@/lib/whatsapp-outbox"
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto"
 import type { Prisma } from "@prisma/client"
 import { prisma, prismaBase } from "@/lib/prisma"
@@ -57,7 +58,17 @@ export async function receberEntrada(body: unknown, segredo: string | null): Pro
       })
       return { resultado:"conexao_registrada" }
     }
-    // Recibos só serão interpretados em O03, mas passam pela mesma autenticação.
+    if(evento==="messages.update") {
+      const registrados=await prisma.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM organizacoes WHERE id=${cfg.organizacaoId} FOR UPDATE`
+        const atual=await tx.configWhatsapp.findFirst({where:{id:cfg.id,organizacaoId:cfg.organizacaoId,instanceId:cfg.instanceId,
+          webhookSecret:cfg.webhookSecret,organizacao:{ativo:true}},select:{id:true}})
+        if(!atual) throw new EntradaRecusada(401,"nao_autorizado")
+        try { return await registrarRecibos(tx,cfg.organizacaoId,cfg.instanceId,b.data,b.date_time) }
+        catch(e) { if(e instanceof Error && ["Lote de recibos inválido","Data inválida"].includes(e.message)) throw new EntradaRecusada(400,"recibo_invalido");throw e }
+      })
+      return {resultado:registrados ? "recibos_persistidos" : "recibo_ignorado_ou_duplicado"}
+    }
     if (evento !== "messages.upsert") return { resultado:"evento_nao_suportado" }
     let entrada: ReturnType<typeof normalizarEntrada>
     try { entrada = normalizarEntrada(b.data) } catch { throw new EntradaRecusada(400,"mensagem_invalida") }
@@ -123,8 +134,15 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
   }
   await tx.inboxWhatsapp.update({where:{id,organizacaoId},data:{estado:resultado==="remetente_nao_verificado" ? "revisao" :
     resultado==="aguardando_automacao" ? "aguardando_automacao" : "processado",resultado,demandaId,processadoEm:new Date()}})
-  // O03 irá materializar resposta/outbox. Não há envio/IA sem idempotência aqui.
-  // A referência permanece na inbox; não criar job com handler inexistente.
+  const respostas:Record<string,string>={
+    videomaker_aceitou:"Captação confirmada. A equipe dará continuidade aos detalhes.",
+    videomaker_recusou:"Recusa registrada. A equipe poderá escalar outro profissional.",
+    convite_ausente_ou_ambiguo:"Não encontrei um convite único para confirmar. Consulte a equipe.",
+    convite_alterado:"O convite mudou. Consulte a equipe antes de confirmar.",
+    remetente_sem_convite:"Não encontrei um convite autorizado para este número. Consulte a equipe.",
+  }
+  if(remetente && respostas[resultado]) await criarSaida(tx,{organizacaoId,chave:`inbox:${id}:resposta`,origem:"inbox",referencia:id,
+    telefone:remetente.telefone,texto:respostas[resultado],expiraEm:new Date(inbox.createdAt.getTime()+86400_000)})
 }
 
 export async function processarInbox(organizacaoId: string) {

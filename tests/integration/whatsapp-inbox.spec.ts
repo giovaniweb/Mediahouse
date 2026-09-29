@@ -24,6 +24,7 @@ beforeAll(async()=>{
   await db.configWhatsapp.create({data:{organizacaoId:a,instanceId:instance,instanceName:`${instance}-nome`,instanceUrl:"https://example.invalid",apiKey:"nao-usar",webhookSecret:encryptSecret(secret)}})
 })
 beforeEach(async()=>{
+  await db.saidaWhatsapp.deleteMany({where:{organizacaoId:{in:[a,b]}}})
   await db.jobAutomacao.deleteMany({where:{organizacaoId:{in:[a,b]}}})
   await db.mensagemWhatsapp.deleteMany({where:{organizacaoId:a}})
   await db.inboxWhatsapp.deleteMany({where:{organizacaoId:{in:[a,b]}}})
@@ -91,7 +92,7 @@ describe("inbox WhatsApp persistente",()=>{
     const e=evento()
     expect((await (await enviar({...e,data:{...e.data,key:{...e.data.key,fromMe:true}}})).json()).resultado).toBe("mensagem_propria")
     expect((await (await enviar({...e,data:{...e.data,key:{...e.data.key,remoteJid:"123@g.us"}}})).json()).resultado).toBe("grupo_ou_status")
-    expect((await (await enviar({...e,event:"messages.update"})).json()).resultado).toBe("evento_nao_suportado")
+    expect((await (await enviar({...e,event:"messages.update"})).json()).resultado).toBe("recibo_ignorado_ou_duplicado")
     expect(await db.jobAutomacao.count({where:{organizacaoId:a}})).toBe(0)
   })
   it("áudio/anexo conservam só metadados; LID solto vai para revisão sem identidade",async()=>{
@@ -126,7 +127,7 @@ describe("inbox WhatsApp persistente",()=>{
     expect((await db.inboxWhatsapp.findFirstOrThrow({where:{organizacaoId:a}})).conteudoCifrado).toBeNull()
     expect((await db.mensagemWhatsapp.findFirstOrThrow({where:{organizacaoId:a}})).conteudo).toBe("[conteúdo expirado]")
     expect((await (await enviar(e)).json()).resultado).toBe("duplicado")
-    expect(await db.jobAutomacao.count({where:{organizacaoId:a}})).toBe(1)
+    expect(await db.jobAutomacao.count({where:{organizacaoId:a,tipo:"whatsapp.entrada"}})).toBe(1)
   })
   it("mensagem antiga não entra na automação nem aceita convite atual",async()=>{
     const e=evento()

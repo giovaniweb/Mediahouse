@@ -16,11 +16,10 @@ export async function GET() {
   // config de propósito: empresa sem configuração é justamente a que acumula
   // falhas "sem_config", e sair aqui esconderia todas elas.
   const naoEnviadas = organizacaoId
-    ? await prisma.mensagemWhatsapp.count({
+    ? await prisma.saidaWhatsapp.count({
         where: {
           organizacaoId,
-          direcao: "saida",
-          status: { in: ["falhou", "sem_config"] },
+          estado: { in: ["falhou", "desconhecido", "expirado"] },
           createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         },
       }).catch(() => 0)

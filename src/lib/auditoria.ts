@@ -2,13 +2,13 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BASE_FALSE, PRESETS } from "@/lib/permissoes"
 
-export const ACOES_AUDITORIA = ["manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
+export const ACOES_AUDITORIA = ["whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
 export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }
 
 const booleanos = new Set([...Object.keys(BASE_FALSE), "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
-const motivos = new Set(["autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
+const motivos = new Set(["config_corrigida","provedor_normalizado","destinatario_revalidado","autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
 const contadores = new Set(["processados", "pulados", "erros", "alterados"])
 // Somente nomes de campos, jamais valores fiscais/contato/credenciais.
 const campos = new Set(["cnpj", "razaoSocial", "nomeFantasia", "endereco", "bairro", "cidade", "estado", "cep", "email", "telefone", "pixKey", "pixTipo", "observacoesNF", "googleDriveFolderId", "nome", "status", "senhaHash", "categoria", "funcaoProfissional", "areas", "papel", "liderAudiovisual", "recebeTodosAvisos", "boardId", "credenciais", "emailsFinanceiro", "label", "ordem", "ativo", "grupo", "valor"])

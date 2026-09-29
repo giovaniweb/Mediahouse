@@ -106,6 +106,16 @@ export function criarFila(db: PrismaClient) {
         return jobs
       })
     },
+    async comLease<T>(lease: LeaseJob, efeito: (tx: Tx, job: JobAutomacao) => Promise<T>) {
+      return transacao(lease.organizacaoId, async tx => {
+        const v = await vigente(tx,lease)
+        if (!v) return null
+        const resultado = await efeito(tx,v.j)
+        const fim = await agora(tx)
+        if(v.j.leaseAte! <= fim || v.j.expiraEm <= fim) throw new LeasePerdido()
+        return resultado
+      })
+    },
     async renovar(lease: LeaseJob) {
       return transacao(lease.organizacaoId, async tx => {
         const v = await vigente(tx,lease)

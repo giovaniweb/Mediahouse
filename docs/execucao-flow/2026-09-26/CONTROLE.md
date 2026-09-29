@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O02: inbox WhatsApp durável; saída/conversa dependem de O03/O06/U03; sem deploy.
+Última atualização: 29/09/2026 — O03: outbox e recibos locais; contrato real e conversa completa pendentes; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O02 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: O03 — outbox e recibos; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: O03 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: O04 — regras e lembretes determinísticos; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: webhook persiste inbox+job antes de confirmar; consumidor local e retomada sem IA/envio.
-- Verificações O02: 677 unitários, 155 integrações e 20 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: intenções/tentativas/recibos de saída, bloqueio de reenvio desconhecido e confirmações locais da inbox.
+- Verificações O03: 677 unitários, 169 integrações e 21 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -38,7 +38,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | R04 | Ordem e paginação de galeria | 02 | S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O01 | Fila durável | 03 | F01, S07, S08 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O02 | Inbox WhatsApp | 03 | O01, S05 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O03 | Outbox e recibos | 03 | O01, O02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O03 | Outbox e recibos | 03 | O01, O02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -264,3 +264,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 677 unitários, 155 integrações, 20 testes runtime, build/tipos/lint e auditores locais. Migração 20260929050000_inbox_whatsapp só no banco descartável.
 - NÃO publicar isoladamente: O03 precisa ligar confirmações/saída; conversa completa depende de O06/U03. Confirmar versão/payload real e ensaio L02. Sem mensagens ou chamadas pagas.
 - Próxima ação: O03 — outbox, recibos e tratamento de resultado desconhecido.
+
+### O03 — outbox e recibos (29/09/2026)
+
+- Base 26422dc; contrato, operação e limites em O03-OUTBOX-WHATSAPP.md. Revisão própria, sem homologação externa.
+- Intenção/job atômicos, tentativas filhas, checkpoint de incerteza antes da rede, backoff limitado e reenvio manual auditado. Confirmações locais da inbox participam da transação de negócio.
+- Recibos autenticados e monotônicos; tela diferencia agendamento, aceitação, entrega e leitura. Histórico antigo preservado sem reenvio/reinterpretação. Retenção cifrada de sete dias.
+- 677 unitários, 169 integrações, 21 runtime, verificador de grants/RLS, build/tipos, lint sem erros e auditores aprovados. Dez avisos preexistentes de lint nas telas e aviso face-api no build. Logs /private/tmp/nuflow-o03-*.log.
+- Migração 20260929060000_outbox_whatsapp só no banco descartável. Sem publicação, registro remoto de webhook, mensagens ou chamadas pagas.
+- Contrato Evolution real não confirmado; worker exige WHATSAPP_EVOLUTION_CONTRATO após homologação. Não configurar arbitrariamente. Resultado desconhecido sem ID continua bloqueado para reenvio e requer investigação no provedor.
+- Adaptador legado ainda usa chave diária por conteúdo e não participa da transação original. O04 migra regras/chaves/contadores e remove LLM dessas rotinas. O05 completa a saúde; O06/U03 completam a conversa. Não declarar WhatsApp comercial homologado.
+- Próxima ação: O04 — regras, lembretes e snapshots recorrentes determinísticos com produtor atômico.

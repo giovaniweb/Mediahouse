@@ -105,9 +105,9 @@ function TabWhatsapp() {
         body: JSON.stringify({ telefone: testPhone }),
       })
       const json = await res.json()
-      if (json.ok && json.mensagemEnviada) {
-        setMsg({ type: "ok", text: `Mensagem de teste enviada para ${json.para}! Verifique o WhatsApp.` })
-        toast.success("Mensagem de teste enviada!")
+      if (json.ok && json.mensagemAgendada) {
+        setMsg({ type: "ok", text: `Mensagem de teste agendada para ${json.para}! Verifique o WhatsApp.` })
+        toast.success("Mensagem de teste agendada!")
       } else {
         setMsg({ type: "err", text: json.error ?? "Falha ao enviar mensagem de teste" })
       }

@@ -2128,6 +2128,9 @@ model Organizacao {
   eventosAuditoria EventoAuditoria[]
   jobsAutomacao JobAutomacao[]
   inboxWhatsapp InboxWhatsapp[]
+  saidasWhatsapp SaidaWhatsapp[]
+  tentativasWhatsapp TentativaWhatsapp[]
+  recibosWhatsapp ReciboWhatsapp[]
   eventosJob EventoJob[]
   id             String   @id @default(cuid())
   nome           String
@@ -2491,4 +2494,67 @@ model InboxWhatsapp {
   @@unique([organizacaoId, instanceId, providerMessageId])
   @@index([organizacaoId, conteudoExpiraEm])
   @@map("inbox_whatsapp")
+}
+
+model SaidaWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  chave String @db.VarChar(128)
+  revisao Int @default(0)
+  origem String @db.VarChar(16)
+  referencia String @db.VarChar(128)
+  destinatarioTipo String @db.VarChar(24)
+  destinatarioId String @db.VarChar(128)
+  telefoneHash String @db.VarChar(64)
+  telefoneCifrado String?
+  conteudoCifrado String?
+  instanceId String? @db.VarChar(128)
+  providerMessageId String? @db.VarChar(128)
+  estado String @default("aguardando") @db.VarChar(24)
+  motivo String? @db.VarChar(40)
+  tentativas Int @default(0)
+  proximaTentativa DateTime?
+  expiraEm DateTime
+  conteudoExpiraEm DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  registros TentativaWhatsapp[]
+  @@unique([organizacaoId,chave])
+  @@unique([organizacaoId,instanceId,providerMessageId])
+  @@index([organizacaoId,estado,createdAt])
+  @@map("saidas_whatsapp")
+}
+model TentativaWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  saidaId String
+  numero Int
+  leaseToken String
+  resultado String @db.VarChar(24)
+  httpStatus Int?
+  providerMessageId String? @db.VarChar(128)
+  motivo String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  saida SaidaWhatsapp @relation(fields: [saidaId], references: [id], onDelete: Cascade)
+  @@unique([saidaId,numero])
+  @@index([organizacaoId,saidaId])
+  @@map("tentativas_whatsapp")
+}
+model ReciboWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  instanceId String @db.VarChar(128)
+  providerMessageId String @db.VarChar(128)
+  telefoneHash String @db.VarChar(64)
+  chave String @db.VarChar(64)
+  estado String @db.VarChar(24)
+  ocorridoEm DateTime
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId,chave])
+  @@index([organizacaoId,instanceId,providerMessageId])
+  @@map("recibos_whatsapp")
 }

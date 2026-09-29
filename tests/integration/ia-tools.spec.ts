@@ -93,7 +93,7 @@ describe("executor autorizado", () => {
     for (const nome of ["buscar_demandas", "buscar_metricas", "listar_gestores", "buscar_ideias", "buscar_videomakers"]) expect(await chamar(nome, {}, ctx)).toHaveProperty("erro")
     expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "Vazamento" }, ctx)).toHaveProperty("erro")
     expect(sendWhatsappMessage).not.toHaveBeenCalled()
-    expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Resposta" }, ctx)).toHaveProperty("enviado", true)
+    expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Resposta" }, ctx)).toHaveProperty("agendado", true)
     expect(sendWhatsappMessage).toHaveBeenCalledWith(externo, "Resposta", undefined, a)
   })
   it("rascunho externo não forja solicitante ou publica", async () => {
@@ -107,7 +107,7 @@ describe("executor autorizado", () => {
     expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Invasão" }, ctx)).toHaveProperty("erro")
     expect(await chamar("enviar_whatsapp", { telefone: telOutro, mensagem: "Outro", demanda_id: own }, ctx)).toHaveProperty("erro")
     expect(sendWhatsappMessage).not.toHaveBeenCalled()
-    expect(await chamar("enviar_whatsapp", { telefone: tel, mensagem: "Prazo", demanda_id: own }, ctx)).toHaveProperty("enviado", true)
+    expect(await chamar("enviar_whatsapp", { telefone: tel, mensagem: "Prazo", demanda_id: own }, ctx)).toHaveProperty("agendado", true)
   })
   it("mesmo sufixo em outro DDD/empresa não confunde identidade", async () => {
     const r = await comOrg(a, () => identidadeWhatsApp(a, telOutro)); expect(r.usuario).toBeNull(); expect(r.videomaker?.id).toBe(outro)
@@ -163,7 +163,7 @@ describe("executor autorizado", () => {
     const e = await db.eventoAuditoria.findFirstOrThrow({ where: { organizacaoId: a, recursoId: r.id, acao: "ia.mutacao" } })
     expect(e.atorTipo).toBe("tecnico"); expect(e.atorId).toBe("agente.vistoria"); expect(JSON.stringify(e)).not.toContain("conteudo-privado")
     const antes = await db.eventoAuditoria.count({ where: { organizacaoId: a, acao: "ia.envio" } })
-    expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "conteudo-privado-auditoria" }, gestor())).toHaveProperty("enviado",true)
+    expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "conteudo-privado-auditoria" }, gestor())).toHaveProperty("agendado",true)
     const envios = await db.eventoAuditoria.findMany({ where: { organizacaoId: a, acao: "ia.envio" }, orderBy: { createdAt: "desc" }, take: 2 })
     expect(await db.eventoAuditoria.count({ where: { organizacaoId: a, acao: "ia.envio" } })).toBe(antes+2)
     expect(new Set(envios.map(e => e.correlationId)).size).toBe(1)
