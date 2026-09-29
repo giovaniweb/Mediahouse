@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — simplificação aprovada: Central/chat retirados, IA opcional nos relatórios; sem deploy.
+Última atualização: 29/09/2026 — retiradas recomendações de aprovação e pontuação automática de ideias; sem deploy.
 
 ## Checkpoint de retomada
 
 - Tarefa em andamento: O06 e U01 parciais. Diretriz vigente: DECISAO-IA-ESSENCIAL.md. Remover excesso antes de migrar mais chamadas. S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: avaliar análises contextuais restantes (demanda, ideias, eventos/coberturas); retirar/substituir o dispensável e aplicar orçamento apenas ao necessário. Chat/triagem/loops foram retirados: não recriar. Opt-in dos relatórios concluído; cache, preço e política auditada seguem pendentes.
+- Próxima tarefa: revisar briefing e relatórios de eventos/coberturas, consolidar duplicações e limitar somente IA útil/opcional. Demanda e pontuação de ideias retiradas; não migrar/recriar. Cache/preços/política auditada O06 pendentes.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: Central sai do menu; endpoints de chat/triagem encerrados; monitor no contexto de Alertas e relatórios sem IA por padrão.
-- Verificações atuais: 687 unitários, 215 integrações, build webpack/tipos, lint sem erros e auditores. Sem nova migration. As 24 provas runtime/grants da etapa anterior permanecem registradas; produção/provedor pendentes.
+- Última alteração: endpoints de análise de demanda/ideias respondem 410; telas preservam operação humana e análises antigas recolhidas. Conversão não herda prioridade/tipo inferidos por IA.
+- Verificações atuais: 687 unitários, 217 integrações, build webpack/tipos, lint sem erros e auditores. Sem nova migration. 24 provas runtime/grants da etapa anterior registradas; produção/provedor pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -332,3 +332,12 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Relatórios têm dois atalhos principais (semana/mês) e opt-in analiseIA=false por padrão. Sem opt-in não reserva nem chama provedor. Painel técnico recolhido foi para Relatórios. Histórico permanece legível.
 - 687 unitários, 215 integrações, build/tipos/lint sem erros e auditores aprovados. Sem nova migration, exclusão de dados, mensagem, IA paga ou deploy; ensaio visual autenticado pendente.
 - Não há telemetria de uso de produção nesta decisão. Demais análises contextuais possuem caminhos próprios e precisam de avaliação de utilidade antes de migrar. O06/U01 não concluídos; U03 é evolução futura, sem reintrodução automática de secretária.
+
+
+### O06/U01 — retirar opiniões automáticas de demandas e ideias (29/09/2026)
+
+- Base b6bf7f2; decisão e critérios em DECISAO-IA-ESSENCIAL.md.
+- Retirada a recomendação de aprovar/recusar demanda e pontuação de ideias individual/lote, incluindo endpoints pagos. Sessão e capacidade continuam exigidas; clientes antigos recebem 410.
+- Preservados cadastro/conversão de ideias, aprovação humana e histórico. Notas antigas ficam em detalhe recolhido; a conversão deixa de aplicar prioridade/tipo sugeridos pela IA anterior.
+- 687 unitários, 217 integrações, build/tipos, lint sem erros e auditores aprovados. Dez avisos preexistentes de lint. Sem migration, exclusão de dados, mensagem, IA paga ou deploy.
+- Próximo: briefing e relatórios de eventos/coberturas; ainda usam chamadas legadas fora do orçamento. Não declarar O06 completa. Conversão de ideias tem dívida anterior de atomicidade/alocação de código; não coberta pelo teste simples de preservação deste recorte.

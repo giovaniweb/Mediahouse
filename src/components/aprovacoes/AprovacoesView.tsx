@@ -71,8 +71,6 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
   const [loading, setLoading] = useState<string | null>(null)
   const [modal, setModal] = useState<{ id: string } | null>(null)
   const [motivo, setMotivo] = useState("")
-  const [sugestaoIA, setSugestaoIA] = useState<Record<string, string>>({})
-  const [analisandoIA, setAnalisandoIA] = useState<string | null>(null)
 
   const { data: dataUrgentes, mutate: mutateU } = useSWR<{ demandas: Demanda[] }>(
     `/api/demandas?statusInterno=urgencia_pendente_aprovacao${q}`, fetcher, { refreshInterval: 15000 })
@@ -173,29 +171,6 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
     } finally { setLoading(null) }
   }
 
-  // ─── Análise IA ───────────────────────────────────────────────────────────
-
-  async function analisarIA(d: Demanda) {
-    setAnalisandoIA(d.id)
-    try {
-      const res = await fetch("/api/ia/analisar-demanda", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId: d.id }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Erro na análise IA")
-      if (json.sugestao) {
-        setSugestaoIA(s => ({ ...s, [d.id]: json.sugestao }))
-        toast.success("Análise IA concluída!")
-      }
-    } catch (err) {
-      toast.error(`IA: ${String(err)}`)
-    } finally {
-      setAnalisandoIA(null)
-    }
-  }
-
   // ─── Tabs config ─────────────────────────────────────────────────────────
 
   const abas: { id: Aba; label: string; count: number; icon: React.ReactNode; cor: string }[] = [
@@ -258,11 +233,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <DemandaList
             lista={normais}
             loading={loading}
-            sugestaoIA={sugestaoIA}
-            analisandoIA={analisandoIA}
             onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
             onRecusar={(d) => setModal({ id: d.id })}
-            onIA={analisarIA}
             emptyMsg="Nenhuma demanda aguardando aprovação"
           />
         )}
@@ -272,11 +244,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <DemandaList
             lista={urgentes.map(d => ({ ...d, prioridade: "urgente" as const }))}
             loading={loading}
-            sugestaoIA={sugestaoIA}
-            analisandoIA={analisandoIA}
             onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
             onRecusar={(d) => setModal({ id: d.id })}
-            onIA={analisarIA}
             emptyMsg="Nenhuma urgência pendente"
             emptyIcon={<Zap className="w-12 h-12 text-zinc-600 mb-3" />}
           />
@@ -377,12 +346,11 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 // ─── Sub-componentes ─────────────────────────────────────────────────────────
 
 function DemandaList({
-  lista, loading, sugestaoIA, analisandoIA, onAprovar, onRecusar, onIA, emptyMsg, emptyIcon,
+  lista, loading, onAprovar, onRecusar, emptyMsg, emptyIcon,
 }: {
   lista: Demanda[]; loading: string | null
-  sugestaoIA: Record<string, string>; analisandoIA: string | null
   onAprovar: (d: Demanda, fluxo: FluxoDoRegistro) => void; onRecusar: (d: Demanda) => void
-  onIA: (d: Demanda) => void; emptyMsg: string; emptyIcon?: React.ReactNode
+  emptyMsg: string; emptyIcon?: React.ReactNode
 }) {
   if (lista.length === 0) return (
     <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -434,12 +402,7 @@ function DemandaList({
             </div>
           )}
 
-          {sugestaoIA[d.id] && (
-            <div className="flex items-start gap-2 bg-purple-900/20 border border-purple-800 rounded-xl px-3 py-2.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-purple-300 leading-relaxed">{sugestaoIA[d.id]}</p>
-            </div>
-          )}
+
 
           <div className="flex items-center gap-4 text-xs text-zinc-500">
             <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{d.solicitante.nome}</span>
@@ -472,13 +435,7 @@ function DemandaList({
               className="flex-1 flex items-center justify-center gap-1.5 border border-red-800 text-red-400 hover:bg-red-900/20 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
               <XCircle className="w-4 h-4" /> Recusar
             </button>
-            <button
-              onClick={() => onIA(d)}
-              disabled={analisandoIA === d.id || !!sugestaoIA[d.id]}
-              title="Análise da IA"
-              className="flex items-center gap-1 border border-purple-800 text-purple-400 hover:bg-purple-900/20 text-xs font-medium px-3 py-2.5 rounded-xl disabled:opacity-40">
-              <Sparkles className={cn("w-3.5 h-3.5", analisandoIA === d.id && "animate-pulse")} /> IA
-            </button>
+
           </div>
         </div>
       ))}

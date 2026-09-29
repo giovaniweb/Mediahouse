@@ -74,7 +74,7 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 
 ### Próximo recorte obrigatório — revisado pelo usuário
 
-1. Avaliar a necessidade das análises pontuais de demanda, ideias e eventos/coberturas antes de investir em sua migração. Substituir por regras ou retirar o que não justifica IA; proteger os caminhos mantidos com o orçamento existente.
+1. Análises de demanda e pontuação de ideias foram retiradas no servidor e nas telas; referências antigas preservadas. Restam briefing e relatórios de eventos/coberturas: avaliar/consolidar, conservar dados determinísticos e proteger somente IA opcional útil. Ver DECISAO-IA-ESSENCIAL.md.
 2. Chat, triagem autônoma e loops foram retirados. A prova aplicável é ausência de chamada/efeito em endpoint aposentado, não implementar limites para reativá-los.
 3. Opt-in textual dos relatórios concluído. Cache autorizado/TTL, preço datado e edição auditada da política seguem pendentes, sem exigir nova Central.
 4. Manter transcrição sem consumidor ativo. Conversa/secretária de WhatsApp é futura e depende de necessidade validada.

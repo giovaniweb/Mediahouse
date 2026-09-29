@@ -8,6 +8,11 @@ vi.mock("@anthropic-ai/sdk", () => ({ default: class { constructor(opcoes: unkno
 import { POST as gerar } from "@/app/api/relatorios/gerar/route"
 import { POST as chatRetirado } from "@/app/api/ia/chat/route"
 import { POST as triagemRetirada } from "@/app/api/ia/agentes/triagem/route"
+import { POST as demandaRetirada } from "@/app/api/ia/analisar-demanda/route"
+import { POST as ideiaRetirada } from "@/app/api/ideias/[id]/analisar/route"
+import { POST as loteRetirado } from "@/app/api/ideias/analisar-batch/route"
+import { POST as converterIdeia } from "@/app/api/ideias/[id]/converter/route"
+import { GET as listarIdeias } from "@/app/api/ideias/route"
 import { GET as resumoHTTP } from "@/app/api/ia/consumo/route"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { prismaBase as db } from "@/lib/prisma"
@@ -180,6 +185,33 @@ describe("relatórios e painel com controle real e provedor falso", () => {
     sessao.user = null
     expect((await chatRetirado()).status).toBe(401)
     expect((await triagemRetirada()).status).toBe(401)
+  })
+  it("análises retiradas de demandas e ideias não geram consumo nem alteram histórico", async () => {
+    const ideia = await db.ideiaVideo.create({ data: { organizacaoId: a, titulo: "Ideia histórica", scoreIA: 87, analiseIA: "Análise anterior", sugestaoTipo: "institucional", sugestaoPrioridade: "alta" } })
+    for (const handler of [demandaRetirada, ideiaRetirada, loteRetirado]) {
+      const r = await handler()
+      expect(r.status).toBe(410)
+      expect(await r.json()).toHaveProperty("codigo", "RECURSO_RETIRADO")
+    }
+    expect(await db.ideiaVideo.findUniqueOrThrow({ where: { id: ideia.id } })).toEqual(ideia)
+    expect(chamada).not.toHaveBeenCalled()
+    expect(await db.consumoIA.count({ where: { organizacaoId: a } })).toBe(0)
+    expect(await db.agenteExecucao.count({ where: { organizacaoId: a } })).toBe(0)
+    const lista = await listarIdeias(new NextRequest("http://localhost/api/ideias"))
+    expect((await lista.json()).ideias).toEqual(expect.arrayContaining([expect.objectContaining({ id: ideia.id, scoreIA: 87, analiseIA: "Análise anterior" })]))
+    const conversao = await converterIdeia(new NextRequest("http://localhost/api/ideias/x/converter", { method: "POST", body: "{}" }), { params: Promise.resolve({ id: ideia.id }) })
+    expect(conversao.status).toBe(200)
+    const demandaId = (await conversao.json()).demandaId
+    expect(await db.demanda.findUniqueOrThrow({ where: { id: demandaId } })).toMatchObject({ organizacaoId: a, titulo: ideia.titulo, prioridade: "normal", tipoVideo: "social_media" })
+    expect(await db.ideiaVideo.findUniqueOrThrow({ where: { id: ideia.id } })).toMatchObject({ demandaId, status: "em_producao", scoreIA: 87 })
+    expect(chamada).not.toHaveBeenCalled()
+  })
+  it("recursos retirados continuam exigindo sessão e capacidade adequada", async () => {
+    await db.permissaoUsuario.create({ data: { organizacaoId: a, usuarioId: u, verIA: false, verIdeias: false } })
+    for (const handler of [demandaRetirada, ideiaRetirada, loteRetirado]) expect((await handler()).status).toBe(403)
+    sessao.user = null
+    for (const handler of [demandaRetirada, ideiaRetirada, loteRetirado]) expect((await handler()).status).toBe(401)
+    expect(chamada).not.toHaveBeenCalled()
   })
   it("rota autorizada registra finalidade, ator e tokens; painel não expõe prompts ou tokens de reserva", async () => {
     const resposta = await relatorio(true)

@@ -32,9 +32,13 @@ O painel de consumo sai da Central e fica recolhido em Relatórios, com gerencia
 
 ## Ainda avaliar antes de manter ou ampliar
 
-Análise pontual de demanda possui botões no detalhe/aprovações; ideias individual/lote, briefing e relatórios de eventos/coberturas também têm caminhos próprios. Permanecem nesta revisão para preservar esses fluxos enquanto se decide seu valor. Ter consumidor no código não comprova frequência real de uso.
+Revisão seguinte, base b6bf7f2: retiradas a recomendação automática de aprovação de demanda e a pontuação de ideias, individual e em lote. Cadastro, revisão humana, status e conversão de ideias continuam. Os três endpoints antigos exigem sessão/capacidade e retornam 410 sem chamar modelo ou alterar registros.
 
-Próximo recorte: inventariar esses pontos no contexto de trabalho e decidir retirar, substituir por regra ou manter como ação opcional. Só os mantidos devem migrar ao orçamento. Não construir um novo chat nem um painel de agentes para substituir o removido. Cache, preços datados e política auditada O06 continuam pendentes para os caminhos que permanecerem.
+As notas deixam de aparecer como critério principal dos cards e da ordenação da interface. Análises salvas ficam recolhidas no detalhe como referência histórica; sem apagar campos. Conversão em demanda não aplica mais sugestaoTipo/sugestaoPrioridade antigos: respeita o tipo explícito ou social_media e inicia com prioridade normal, ajustável no fluxo humano.
+
+Ainda existem três caminhos pagos de eventos/coberturas: importação de briefing, relatório de evento e relatório de cobertura. São candidatos a permanecer por reduzirem leitura/digitação e sintetizarem um trabalho concluído; não foram homologados nem migrados ao orçamento neste recorte. Próxima ação: verificar autorização/dados/finalidade, consolidar o que for duplicado, manter geração determinística por padrão e usar IA opcional apenas onde agregar. A importação de documento exige limites próprios; não enviar mídia pelo adaptador atual de texto.
+
+Não reconstruir chat/agentes ou notas automáticas. Cache, preços datados e política auditada O06 continuam pendentes para os caminhos que permanecerem. Sem telemetria real, a avaliação é de responsabilidade no fluxo, não de popularidade medida.
 
 Secretária conversacional, planejamento por WhatsApp e agentes que escolhem ações ficam como evolução futura sujeita a necessidade validada. Entrada durável, aceite SIM/NÃO e saída WhatsApp já implementados não foram removidos.
 
@@ -46,3 +50,11 @@ Secretária conversacional, planejamento por WhatsApp e agentes que escolhem aç
 - Logs /private/tmp/nuflow-simplificar-ia-*.log. Lint conserva avisos preexistentes nas telas; face-api conserva aviso no build. Sem ensaio visual autenticado, tráfego de produção, mensagem, chamada paga ou deploy.
 
 O06 e U01 continuam parciais; esta decisão não encerra a auditoria inteira.
+
+
+## Validação da retirada contextual — 29/09/2026
+
+- Base b6bf7f2; 687 unitários e 217 integrações aprovados, incluindo retirada sem consumo, histórico preservado/legível, conversão sem herdar sugestão antiga e gates 401/403.
+- Build webpack/tipos, lint sem erros e auditores de escopo aprovados. Dez avisos preexistentes nas telas e aviso face-api no build. Sem ensaio visual autenticado.
+- Logs /private/tmp/nuflow-ia-contexto-*.log. Sem migration, exclusão de registros, mensagem, IA paga ou deploy.
+- O06/U01 permanecem parciais. A conversão de ideias mantém questões anteriores (alocação de código e atomicidade), fora deste recorte; este teste prova o caminho simples, não concorrência da conversão.
