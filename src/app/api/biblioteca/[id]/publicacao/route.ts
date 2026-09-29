@@ -1,3 +1,4 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
 import { NextRequest, NextResponse } from "next/server"
 import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
@@ -11,6 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json().catch(() => null)
   if (!body || Object.keys(body).length !== 1 || typeof body.publicar !== "boolean") return NextResponse.json({ error: "Informe publicar: true ou false" }, { status: 400 })
   const { id } = await params
+  const correlationId = correlacaoAuditoria()
   return comOrg(acesso.organizacaoId, async () => {
     // Serializa publicação/revogação com a leitura do conteúdo: o snapshot é a versão consentida.
     return prisma.$transaction(async tx => {
@@ -21,10 +23,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       // Uma segunda publicação não substitui silenciosamente o snapshot já público.
       if (body.publicar && a.publicadoEm && !a.revogadoEm) return NextResponse.json({ ok: true }, { headers: SEM_CACHE_MIDIA })
+      if (!body.publicar && (!a.publicadoEm || a.revogadoEm)) return NextResponse.json({ ok: true }, { headers: SEM_CACHE_MIDIA })
       await tx.arquivo.update({ where: { id }, data: body.publicar
         ? { publicadoEm: new Date(), publicadoPor: acesso.usuarioId, revogadoEm: null, revogadoPor: null, publicacaoUrl: a.url, publicacaoThumbnailUrl: a.thumbnailUrl }
         : { revogadoEm: new Date(), revogadoPor: acesso.usuarioId } })
-      await tx.historicoStatus.create({ data: { demandaId: a.demandaId, usuarioId: acesso.usuarioId, statusNovo: "publicacao", observacao: `${body.publicar ? "Publicado no" : "Retirado do"} portfólio: arquivo ${id}` } })
+      await registrarAuditoria(tx, acesso, { acao: "arquivo.publicacao", recurso: "arquivo", recursoId: id, correlationId,
+        antes: { publicado: !!a.publicadoEm && !a.revogadoEm }, depois: { publicado: body.publicar } })
       return NextResponse.json({ ok: true }, { headers: SEM_CACHE_MIDIA })
     }, { isolationLevel: "Serializable" })
   })

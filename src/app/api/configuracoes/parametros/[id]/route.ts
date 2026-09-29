@@ -1,3 +1,5 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -20,14 +22,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (guard) return guard
   const body = await req.json()
 
-  const p = await prisma.configParametro.update({
-    where: { id },
-    data: {
-      ...(body.label !== undefined && { label: body.label }),
-      ...(body.ordem !== undefined && { ordem: body.ordem }),
-      ...(body.ativo !== undefined && { ativo: body.ativo }),
-    },
-  })
+  const p = await comOrg(acesso.organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`parametro:${id}`}, 0))`
+    const antes = await tx.configParametro.findFirstOrThrow({ where: { id, organizacaoId: acesso.organizacaoId } })
+    const data = { ...(body.label !== undefined && { label: body.label }), ...(body.ordem !== undefined && { ordem: body.ordem }), ...(body.ativo !== undefined && { ativo: body.ativo }) }
+    const campos = Object.keys(data).filter(k => antes[k as keyof typeof antes] !== data[k as keyof typeof data])
+    if (!campos.length) return antes
+    const atual = await tx.configParametro.update({ where: { id }, data })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_parametro", recursoId: id, correlationId: correlacaoAuditoria(), antes: { ativo: antes.ativo }, depois: { ativo: atual.ativo, campos } })
+    return atual
+  }))
   return NextResponse.json({ parametro: p })
 }
 
@@ -42,6 +46,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params
   const guard = await assertParamOrg(acesso.organizacaoId, id)
   if (guard) return guard
-  await prisma.configParametro.delete({ where: { id } })
+  await comOrg(acesso.organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.configParametro.delete({ where: { id } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_parametro", recursoId: id, correlationId: correlacaoAuditoria(), depois: { ativo: false } })
+  }))
   return NextResponse.json({ ok: true })
 }

@@ -1,3 +1,4 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
   const body = schema.safeParse(await req.json().catch(() => null))
   if (!body.success) return NextResponse.json({ error: "Configuração inválida" }, { status: 400 })
   const { organizacaoId } = acesso
+  const correlationId = correlacaoAuditoria()
   try {
     const anterior = await comOrg(organizacaoId, () => configTrelloDaOrg(organizacaoId))
     const preservar = (valor: string | undefined, salvo: string | undefined) =>
@@ -37,10 +39,16 @@ export async function POST(req: NextRequest) {
     const token = preservar(body.data.token, anterior.ok ? anterior.cfg.token : undefined)
     if (!apiKey || !token) return NextResponse.json({ error: "Informe as credenciais desta empresa" }, { status: 400 })
     const cfg = { apiKey, token, boardId: body.data.boardId }
+    if (anterior.ok && anterior.cfg.boardId === cfg.boardId && anterior.cfg.apiKey === apiKey && anterior.cfg.token === token) return resposta(cfg.boardId, true)
+    await comOrg(organizacaoId, () => registrarAuditoria(prisma, acesso, { acao: "trello.conexao", recurso: "integracao", recursoId: "trello", resultado: "intencao", correlationId }))
     await getBoardLists(cfg)
     const atual = await requireAcesso("gerenciarConfig")
-    if (atual instanceof NextResponse) return atual
+    if (atual instanceof NextResponse) {
+      await comOrg(organizacaoId, () => registrarAuditoria(prisma, acesso, { acao: "trello.conexao", recurso: "integracao", recursoId: "trello", resultado: "negado", correlationId }))
+      return atual
+    }
     if (atual.organizacaoId !== organizacaoId || atual.usuarioId !== acesso.usuarioId) {
+      await comOrg(organizacaoId, () => registrarAuditoria(prisma, acesso, { acao: "trello.conexao", recurso: "integracao", recursoId: "trello", resultado: "negado", correlationId }))
       return NextResponse.json({ error: "Contexto alterado; tente novamente" }, { status: 403 })
     }
     await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
@@ -50,9 +58,12 @@ export async function POST(req: NextRequest) {
       const existente = existentes[0]
       if (existente) await tx.configTrello.update({ where: { id: existente.id }, data: { ...cfg, ativo: true, ...(existente.boardId !== cfg.boardId ? { listMapping: Prisma.DbNull } : {}) } })
       else await tx.configTrello.create({ data: { organizacaoId, ...cfg, ativo: true } })
+      await registrarAuditoria(tx, acesso, { acao: "trello.conexao", recurso: "integracao", recursoId: "trello", correlationId,
+        antes: { conectado: !!existente?.ativo }, depois: { conectado: true, campos: ["boardId", "credenciais"] } })
     }))
     return resposta(cfg.boardId, true)
   } catch {
+    await comOrg(organizacaoId, () => registrarAuditoria(prisma, acesso, { acao: "trello.conexao", recurso: "integracao", recursoId: "trello", resultado: "falha", correlationId }))
     return NextResponse.json({ error: "Não foi possível salvar a conexão Trello" }, { status: 400 })
   }
 }

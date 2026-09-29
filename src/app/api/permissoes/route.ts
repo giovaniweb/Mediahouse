@@ -1,3 +1,6 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
+import type { MapaPermissoes } from "@/lib/permissoes"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -67,7 +70,7 @@ export async function PUT(req: NextRequest) {
   const erro = await exigirMembro(usuarioId, organizacaoId)
   if (erro) return erro
 
-  const permissoes = await setPermissoes(usuarioId, organizacaoId, data)
+  const permissoes = await alterarPermissoes(acesso, usuarioId, data)
 
   return NextResponse.json(permissoes)
 }
@@ -104,7 +107,21 @@ export async function POST(req: NextRequest) {
   if (!membro) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
   const preset = PRESETS[membro.papel] || PRESETS.solicitante
-  const permissoes = await setPermissoes(usuarioId, organizacaoId, preset)
+  const permissoes = await alterarPermissoes(acesso, usuarioId, preset)
 
   return NextResponse.json(permissoes)
+}
+
+async function alterarPermissoes(acesso: { organizacaoId: string; usuarioId: string }, usuarioId: string, valores: Partial<MapaPermissoes>) {
+  const correlationId = correlacaoAuditoria()
+  return comOrg(acesso.organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`permissoes:${acesso.organizacaoId}:${usuarioId}`}, 0))`
+    const membro = await tx.usuarioOrganizacao.findUniqueOrThrow({ where: { usuarioId_organizacaoId: { usuarioId, organizacaoId: acesso.organizacaoId } }, select: { papel: true } })
+    const anterior = await tx.permissaoUsuario.findUnique({ where: { usuarioId_organizacaoId: { usuarioId, organizacaoId: acesso.organizacaoId } } })
+    if (anterior && Object.entries(valores).every(([k,v]) => anterior[k as keyof typeof anterior] === v)) return anterior
+    const atualizado = await setPermissoes(usuarioId, acesso.organizacaoId, valores, tx)
+    await registrarAuditoria(tx, acesso, { acao: "permissoes.alteradas", recurso: "usuario", recursoId: usuarioId, correlationId,
+      antes: anterior ?? PRESETS[membro.papel], depois: atualizado })
+    return atualizado
+  }))
 }

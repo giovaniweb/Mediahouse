@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+import { registrarAuditoria, correlacaoAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 /**
  * Executor de ferramentas IA — implementa cada tool disponível para os agentes
  * Acessa o Prisma diretamente para buscar e criar dados
@@ -14,6 +16,29 @@ import { listarDepartamentos } from "@/lib/departamentos"
 import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
 import { inicioDoDia, prazoVencido } from "@/lib/datas"
 
+const auditoriaFerramenta = new AsyncLocalStorage<{ ator: AtorAuditoria; correlationId: string }>()
+async function gravarFerramenta<T extends { id: string }>(recurso: string, gravar: (tx: Prisma.TransactionClient) => Promise<T>) {
+  const contexto = auditoriaFerramenta.getStore()
+  if (!contexto) throw new Error("Auditoria de ferramenta sem contexto")
+  return prisma.$transaction(async tx => {
+    const registro = await gravar(tx)
+    await registrarAuditoria(tx, contexto.ator, { acao: "ia.mutacao", recurso, recursoId: registro.id, correlationId: contexto.correlationId, depois: { alterados: 1 } })
+    return registro
+  })
+}
+async function enviarAuditado(...args: Parameters<typeof sendWhatsappMessage>) {
+  const contexto = auditoriaFerramenta.getStore()
+  if (!contexto) throw new Error("Auditoria de envio sem contexto")
+  const evento = { acao: "ia.envio" as const, recurso: "mensagem", recursoId: randomUUID(), correlationId: contexto.correlationId }
+  await registrarAuditoria(prisma, contexto.ator, { ...evento, resultado: "intencao" })
+  let resultado: Awaited<ReturnType<typeof sendWhatsappMessage>>
+  try { resultado = await sendWhatsappMessage(...args) }
+  catch (e) { await registrarAuditoria(prisma, contexto.ator, { ...evento, resultado: "falha" }); throw e }
+  // Falha de registro após o provedor mantém intenção pendente; não inventar falha de envio.
+  await registrarAuditoria(prisma, contexto.ator, { ...evento, resultado: resultado ? "sucesso" : "falha" })
+  return resultado
+}
+
 // ─── Executor principal ───────────────────────────────────────────────────────
 
 export async function executarFerramenta(
@@ -23,7 +48,8 @@ export async function executarFerramenta(
 ): Promise<string> {
   try {
     const { input, organizacaoId, filtro, usuarioId, financeiro, publico } = await autorizarFerramenta(nome, bruto, contexto)
-    return await comOrg(organizacaoId, async () => {
+    const ator: AtorAuditoria = usuarioId ? { organizacaoId, usuarioId } : { organizacaoId, tecnico: contexto.principal.tipo === "sistema" ? `agente.${contexto.principal.agente}` : "canal.whatsapp" }
+    return await comOrg(organizacaoId, () => auditoriaFerramenta.run({ ator, correlationId: correlacaoAuditoria() }, async () => {
       switch (nome) {
       case "buscar_demandas":
         return await buscarDemandas(input, organizacaoId, filtro)
@@ -65,7 +91,7 @@ export async function executarFerramenta(
       default:
         return JSON.stringify({ erro: `Ferramenta '${nome}' não encontrada` })
     }
-    })
+    }))
   } catch {
     return JSON.stringify({ erro: "Ação não autorizada ou dados inválidos. Nenhum sucesso confirmado." })
   }
@@ -359,7 +385,7 @@ async function buscarAlertas(input: Record<string, unknown>, organizacaoId: stri
 }
 
 async function criarAlerta(input: Record<string, unknown>, organizacaoId: string): Promise<string> {
-  const alerta = await prisma.alertaIA.create({
+  const alerta = await gravarFerramenta("alerta", tx => tx.alertaIA.create({
     data: {
       organizacaoId,
       tipoAlerta: input.tipo as string,
@@ -369,7 +395,7 @@ async function criarAlerta(input: Record<string, unknown>, organizacaoId: string
       demandaId: input.demanda_id as string | undefined,
       status: "ativo",
     },
-  })
+  }))
 
   return JSON.stringify({ criado: true, id: alerta.id, mensagem: alerta.mensagem })
 }
@@ -609,7 +635,7 @@ async function criarEventoAgenda(input: Record<string, unknown>, organizacaoId: 
   }
 
   // ── Cria o evento ─────────────────────────────────────────────────────
-  const evento = await prisma.evento.create({
+  const evento = await gravarFerramenta("evento", tx => tx.evento.create({
     data: {
       organizacaoId,
       titulo: input.titulo as string,
@@ -626,7 +652,7 @@ async function criarEventoAgenda(input: Record<string, unknown>, organizacaoId: 
       usuarioId,
       demandaId: (input.demanda_id as string) ?? undefined,
     },
-  })
+  }))
 
   // Nome do dono
   let nomeResponsavel = "Usuário"
@@ -661,7 +687,7 @@ async function enviarWhatsapp(input: Record<string, unknown>, organizacaoId: str
   const mensagem = input.mensagem as string
   if (!telefone || !mensagem) return JSON.stringify({ erro: "telefone e mensagem são obrigatórios" })
 
-  const resultado = await sendWhatsappMessage(telefone, mensagem, (input.demanda_id as string) ?? undefined, organizacaoId)
+  const resultado = await enviarAuditado(telefone, mensagem, (input.demanda_id as string) ?? undefined, organizacaoId)
   return JSON.stringify({
     enviado: !!resultado,
     telefone,
@@ -684,7 +710,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
   if (!solicitanteId) return JSON.stringify({ erro: "Nenhum gestor disponível para receber o pedido" })
   const nomeSolicitante = (input.nome_solicitante as string) || null
 
-  const demanda = await prisma.demanda.create({
+  const demanda = await gravarFerramenta("demanda", tx => tx.demanda.create({
     data: {
       organizacaoId,
       codigo,
@@ -700,7 +726,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
       telefoneSolicitante: telSolicitante || undefined,
       nomeSolicitante: nomeSolicitante || undefined,
     },
-  })
+  }))
 
   // SEMPRE notifica gestores sobre nova demanda (independente se é externo ou interno)
   {
@@ -711,7 +737,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
     const origemLabel = isExternalRequester ? "📌 Solicitante EXTERNO" : "📌 Solicitante do sistema"
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(
+        await enviarAuditado(
           g.telefone,
           `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${demanda.titulo}\n👤 ${nomeSolicitante || "Desconhecido"} (${telSolicitante || "sem tel"})\n${origemLabel}\n\nAcesse o sistema para aprovar.`,
           demanda.id, organizacaoId
@@ -876,7 +902,7 @@ async function solicitarDadosDemanda(input: Record<string, unknown>, organizacao
   const mensagem = input.mensagem as string
   const msgCompleta = `📋 *NuFlow — ${demanda.codigo}*\n\n${mensagem}\n\n_Responda esta mensagem com as informações solicitadas._`
 
-  const resultado = await sendWhatsappMessage(telefone, msgCompleta, demanda.id, organizacaoId)
+  const resultado = await enviarAuditado(telefone, msgCompleta, demanda.id, organizacaoId)
   const enviado = !!resultado
 
   // O texto de `mensagem` afirmava o envio mesmo com `resultado === null`. O
@@ -909,7 +935,7 @@ async function vincularArquivoDemanda(input: Record<string, unknown>, organizaca
 
   if (!demandaId) return JSON.stringify({ erro: "Demanda não encontrada" })
 
-  const arquivo = await prisma.arquivo.create({
+  const arquivo = await gravarFerramenta("arquivo", tx => tx.arquivo.create({
     data: {
       demandaId,
       tipoArquivo: ((input.tipo as string) || "referencia") as import("@prisma/client").TipoArquivo,
@@ -917,7 +943,7 @@ async function vincularArquivoDemanda(input: Record<string, unknown>, organizaca
       url: input.url_arquivo as string,
       origem: "whatsapp",
     },
-  })
+  }))
 
   return JSON.stringify({
     vinculado: true,
@@ -959,7 +985,7 @@ async function salvarIdeiaVideo(input: Record<string, unknown>, organizacaoId: s
     produtoId = produto?.id || null
   }
 
-  const ideia = await prisma.ideiaVideo.create({
+  const ideia = await gravarFerramenta("ideia", tx => tx.ideiaVideo.create({
     data: {
       organizacaoId,
       titulo,
@@ -974,7 +1000,7 @@ async function salvarIdeiaVideo(input: Record<string, unknown>, organizacaoId: s
       produtoId,
       tags: [],
     },
-  })
+  }))
 
   const totalIdeias = await prisma.ideiaVideo.count({ where: { organizacaoId } })
 

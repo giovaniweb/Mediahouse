@@ -1,3 +1,4 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { cifrarTokenDrive, lerTokenDrive, tokenDriveCifrado, validarChaveIntegracao } from "@/lib/integration-secret"
@@ -32,6 +33,7 @@ export async function migrarCredenciaisDrive(organizacaoId: string, aplicar = fa
         const atual = await tx.configEmpresa.findFirst({ where: { id: row.id, organizacaoId }, select: { googleRefreshToken: true } })
         if (atual?.googleRefreshToken !== token) return false
         await tx.configEmpresa.update({ where: { id: row.id }, data: { googleRefreshToken: novo } })
+        await registrarAuditoria(tx, { organizacaoId, tecnico: "drive.rotacao" }, { acao: "manutencao.credenciais", recurso: "config_empresa", recursoId: row.id, correlationId: correlacaoAuditoria(), depois: { campos: ["credenciais"] } })
         return true
       })
       itens.push({ id: row.id, estado: atualizado ? "cifrado" : "alterado_concorrentemente" })

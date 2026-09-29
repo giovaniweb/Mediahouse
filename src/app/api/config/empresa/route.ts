@@ -1,3 +1,5 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAcesso } from "@/lib/acesso"
@@ -18,9 +20,17 @@ export async function POST(req: NextRequest) {
   const parsed = configEmpresaPatch.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: "Configuração inválida" }, { status: 400 })
   const { organizacaoId } = acesso
-  const existing = await prisma.configEmpresa.findFirst({ where: { organizacaoId }, select: { id: true } })
-  const empresa = existing
-    ? await prisma.configEmpresa.update({ where: { id: existing.id }, data: parsed.data, select: empresaAdministrativaSelect })
-    : await prisma.configEmpresa.create({ data: { ...parsed.data, organizacaoId }, select: empresaAdministrativaSelect })
+  const correlationId = correlacaoAuditoria()
+  const empresa = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`config:${organizacaoId}`}, 0))`
+    const existing = await tx.configEmpresa.findFirst({ where: { organizacaoId }, select: empresaAdministrativaSelect })
+    const campos = Object.keys(parsed.data).filter(k => !existing || existing[k as keyof typeof existing] !== parsed.data[k as keyof typeof parsed.data])
+    if (existing && !campos.length) return existing
+    const atual = existing
+      ? await tx.configEmpresa.update({ where: { id: existing.id }, data: parsed.data, select: empresaAdministrativaSelect })
+      : await tx.configEmpresa.create({ data: { ...parsed.data, organizacaoId }, select: empresaAdministrativaSelect })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_empresa", recursoId: atual.id, correlationId, depois: { campos } })
+    return atual
+  }))
   return NextResponse.json({ empresa })
 }

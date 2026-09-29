@@ -1,3 +1,5 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -68,18 +70,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Informe até 20 e-mails válidos, separados por vírgula" }, { status: 400 })
   }
 
-  const existing = await prisma.configEmail.findFirst({ where: { organizacaoId } })
-
-  if (existing) {
-    await prisma.configEmail.update({ where: { id: existing.id }, data: { emailsFinanceiro: emails } })
-  } else {
-    await prisma.configEmail.create({
-      data: {
-        organizacaoId,
-        emailsFinanceiro: emails,
-      },
-    })
-  }
+  await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`email:${organizacaoId}`}, 0))`
+    const existing = await tx.configEmail.findFirst({ where: { organizacaoId } })
+    if (existing && JSON.stringify([...existing.emailsFinanceiro].sort()) === JSON.stringify([...emails].sort())) return
+    const atual = existing
+      ? await tx.configEmail.update({ where: { id: existing.id }, data: { emailsFinanceiro: emails } })
+      : await tx.configEmail.create({ data: { organizacaoId, emailsFinanceiro: emails } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_email", recursoId: atual.id, correlationId: correlacaoAuditoria(), depois: { campos: ["emailsFinanceiro"] } })
+  }))
 
   return NextResponse.json({ ok: true, ...statusEmailGlobal() })
 }

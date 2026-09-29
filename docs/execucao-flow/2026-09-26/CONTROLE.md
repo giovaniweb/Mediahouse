@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — S07: runtime RLS/pool ensaiado com logins restritos; sem deploy.
+Última atualização: 28/09/2026 — S08: trilha de ações sensíveis implementada e validada localmente; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S07 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: S08 — auditoria de ações sensíveis; manter os recortes pendentes de S03 visíveis.
+- Tarefa em andamento: S08 implementado no recorte documentado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: R01 — leitura dos relatórios legados e contrato validado; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: contexto transacional para queries/SQL/lotes/callback; conexões explícitas sob RLS; recuperação de senha atômica por token.
-- Verificações S07: 635 unitários, 90 integrações e 16 cenários runtime; verificador somente leitura de roles local. Migração aplicada só no banco descartável; configuração real do provedor permanece pendente.
+- Última alteração: eventos organizacionais de auditoria, escrita atômica, RLS append-only para app, retenção e leitura administrativa.
+- Verificações S08: 637 unitários, 101 integrações e 18 cenários runtime; verificador somente leitura de roles local. Migração aplicada só no banco descartável; configuração real do provedor permanece pendente.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -31,7 +31,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S05 | Ferramentas autorizadas | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S06 | Publicação explícita | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S07 | RLS e pool | 01 | S01, S04, S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R01 | Relatório legado | 02 | S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R02 | Métricas e recortes | 02 | R01, S01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R03 | Filtro de custos | 02 | S03, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -192,3 +192,15 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Build webpack, TypeScript, lint (zero erros/avisos nos arquivos alterados), auditores tenancy/perfil, verificador RLS e diff check: aprovados. Schema migrado sem diferença frente ao Prisma; aviso preexistente de dependência face-api no build.
 - Limites: provas de estado OAuth e identidade/login no banco, não login do navegador/Google real. Ainda faltam pool/conexões do provedor, ensaio HTTP de homologação e administração real. S08 deve trazer RLS próprio para a tabela central de auditoria. Não declarar L02 liberado.
 - Próximo cartão: S08. Pendências anteriores de S01/S02/S03 e validações externas continuam abertas.
+
+### S08 — ações sensíveis e retenção (28/09/2026)
+
+- Base efc8495; contrato, cobertura por fluxo e operação em S08-AUDITORIA.md. Revisão própria; não representa auditoria externa independente. Cartões amplos S01/S02/S03 permanecem abertos.
+- Evento separado de HistoricoStatus, organização/ator/correlação e payload allowlisted. Sucesso atômico com escrita; intenção/resultado para provedor. Configurações, permissões, pessoas, OAuth/Trello, publicação, backfills e ferramentas IA instrumentados no recorte descrito. Nenhum histórico inventado.
+- Leitura administrativa por empresa, paginação estável e seletor de fonte na tela atual. Detalhes ocultos após 90 dias; CLI técnica remove payload vencido em lotes e registra a manutenção. Agendamento real e política de retenção do envelope/backups pendentes. U06 continua aberto.
+- Duas migrações aplicadas somente no banco descartável: 20260929020000_eventos_auditoria e 20260929030000_auditoria_preservar_empresa; 29 ao todo. Role comum só insere/lê eventos próprios; não altera/apaga nem exclui a organização por cascata. Administração técnica continua privilegiada.
+- 637 testes unitários/46 arquivos, 101 integrações/5 arquivos, 18 runtime/1 arquivo: aprovados. Provas de rollback, retry, dados sensíveis omitidos, concorrência, isolamento A/B, grants reais e retenção. OAuth, WhatsApp e IA simulados.
+- Build webpack, TypeScript, ESLint dos arquivos alterados, auditores tenancy/perfil, RLS, diagnóstico de roles e diff check aprovados. Prisma sem diferença para banco migrado. Aviso preexistente de dependência dinâmica face-api permanece. Logs /private/tmp/nuflow-s08-final-*.log.
+- Ensaio final encontrou conflito de inferência TEXT/VARCHAR nos parâmetros repetidos do INSERT da retenção; casts explícitos corrigidos e suíte integrada repetida com sucesso.
+- Limites: resultado de envio é aceitação pelo provedor, não recibo de entrega. Correlação não substitui outbox/idempotência de envio. Negação identificável é best-effort; guard secundário e rotinas legadas não têm cobertura universal. Nenhum push, deploy, migração real ou mensagem enviada.
+- Próxima ação: R01, adaptar relatórios antigos e validar novos escritores sem regenerar texto pago; conferir autorização/isolamento dos handlers envolvidos antes de alterar leitura.

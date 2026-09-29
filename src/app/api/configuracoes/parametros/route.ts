@@ -1,3 +1,5 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -58,10 +60,10 @@ export async function GET(req: NextRequest) {
   // Seed se estiver vazio (por organização)
   const count = await prisma.configParametro.count({ where: { organizacaoId } })
   if (count === 0) {
-    await prisma.configParametro.createMany({
-      data: SEED_PARAMETROS.map((p) => ({ ...p, organizacaoId })),
-      skipDuplicates: true,
-    })
+    await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      const criados = await tx.configParametro.createMany({ data: SEED_PARAMETROS.map((p) => ({ ...p, organizacaoId })), skipDuplicates: true })
+      if (criados.count) await registrarAuditoria(tx, { organizacaoId, tecnico: "parametros.seed" }, { acao: "configuracao.alterada", recurso: "config_parametros", recursoId: organizacaoId, correlationId: correlacaoAuditoria(), depois: { alterados: criados.count } })
+    }))
   }
 
   const parametros = await prisma.configParametro.findMany({
@@ -100,8 +102,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "grupo, valor e label são obrigatórios" }, { status: 400 })
   }
 
-  const p = await prisma.configParametro.create({
-    data: { grupo, valor, label, ordem: ordem ?? 0, organizacaoId },
-  })
+  const p = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+    const atual = await tx.configParametro.create({ data: { grupo, valor, label, ordem: ordem ?? 0, organizacaoId } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_parametro", recursoId: atual.id, correlationId: correlacaoAuditoria(), depois: { ativo: true, campos: ["grupo", "valor", "label", "ordem"] } })
+    return atual
+  }))
   return NextResponse.json({ parametro: p }, { status: 201 })
 }

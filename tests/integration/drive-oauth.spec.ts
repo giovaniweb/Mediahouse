@@ -41,6 +41,7 @@ beforeEach(async () => {
     throw new Error("Chamada externa não suportada no teste")
   })
   vi.stubGlobal("fetch", fetchFake)
+  await db.eventoAuditoria.deleteMany({ where: { organizacaoId: { in: [orgA, orgB] } } })
   await db.configEmpresa.deleteMany({ where: { organizacaoId: { in: [orgA, orgB] } } })
 })
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
@@ -166,4 +167,17 @@ describe("OAuth Drive com Postgres real e Google sintético", () => {
       await expect(c.query('INSERT INTO oauth_drive_estados (hash,"organizacaoId","usuarioId","expiraEm") VALUES ($1,$2,$3,now())', [randomUUID(), orgA, userA])).rejects.toThrow()
     } finally { await c.query("ROLLBACK"); await c.end() }
   })
+  it("audita intenção/resultado correlacionados sem token, nonce ou conta", async () => {
+    const state = await estadoNovo()
+    expect(resultado(await callback(req(state)))).toBe("conectado")
+    const eventos = await db.eventoAuditoria.findMany({ where: { organizacaoId: orgA, acao: "drive.conexao" } })
+    expect(eventos.map(e => e.resultado).sort()).toEqual(["intencao", "sucesso"])
+    expect(new Set(eventos.map(e => e.correlationId)).size).toBe(1)
+    for (const segredo of [state, "access-sintetico", "refresh-sintetico", "teste@example.invalid", "code-sintetico"]) expect(JSON.stringify(eventos)).not.toContain(segredo)
+    fetchFake.mockReset().mockResolvedValue(new Response("segredo-do-provedor", { status: 500 }))
+    expect(resultado(await callback(req(await estadoNovo())))).toBe("erro_token")
+    expect(await db.eventoAuditoria.count({ where: { organizacaoId: orgA, resultado: "falha" } })).toBe(1)
+    expect(await db.eventoAuditoria.count({ where: { organizacaoId: orgA, resultado: "sucesso" } })).toBe(1)
+  })
+
 })

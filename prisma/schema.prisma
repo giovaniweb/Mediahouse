@@ -2123,6 +2123,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  eventosAuditoria EventoAuditoria[]
   id             String   @id @default(cuid())
   nome           String
   slug           String   @unique // ex: "contourline" (preparado p/ subdomínio futuro)
@@ -2399,4 +2400,28 @@ model OAuthDriveEstado {
 
   @@index([organizacaoId, expiraEm])
   @@map("oauth_drive_estados")
+}
+
+// Envelope append-only para o runtime; payload reduzido expira após 90 dias.
+model EventoAuditoria {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  atorTipo      String   @db.VarChar(16)
+  atorId        String   @db.VarChar(128)
+  acao          String   @db.VarChar(80)
+  recurso       String   @db.VarChar(40)
+  recursoId     String   @db.VarChar(128)
+  resultado     String   @db.VarChar(16)
+  correlationId String   @db.VarChar(64)
+  chave         String   @db.VarChar(64)
+  antes         Json?
+  depois        Json?
+  createdAt     DateTime @default(now())
+  payloadExpiraEm DateTime
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId, chave])
+  @@index([organizacaoId, createdAt, id])
+  @@index([payloadExpiraEm])
+  @@map("eventos_auditoria")
 }

@@ -6,7 +6,7 @@
 // exatamente o tipo de coisa que alguém esquece. Aqui é impossível esquecer.
 import { prisma } from "@/lib/prisma"
 import { BASE_FALSE, permissaoEfetiva, type MapaPermissoes, type PermissaoKey } from "@/lib/permissoes"
-import type { PermissaoUsuario } from "@prisma/client"
+import type { Prisma, PermissaoUsuario } from "@prisma/client"
 
 export type { MapaPermissoes }
 
@@ -38,9 +38,10 @@ export async function temPermissao(
 export async function setPermissoes(
   usuarioId: string,
   organizacaoId: string,
-  valores: Partial<MapaPermissoes>
+  valores: Partial<MapaPermissoes>,
+  cliente: Pick<Prisma.TransactionClient, "permissaoUsuario"> = prisma
 ): Promise<PermissaoUsuario> {
-  return prisma.permissaoUsuario.upsert({
+  return cliente.permissaoUsuario.upsert({
     where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
     create: { usuarioId, organizacaoId, ...BASE_FALSE, ...valores },
     update: valores,

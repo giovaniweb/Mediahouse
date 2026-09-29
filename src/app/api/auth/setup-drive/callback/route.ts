@@ -1,3 +1,4 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -13,7 +14,12 @@ export async function GET(req: NextRequest) {
   let origem: string
   try { origem = origemDrive(); validarChaveIntegracao() }
   catch { return NextResponse.json({ error: "Proteção da conexão Google não configurada" }, { status: 503 }) }
-  const finalizar = (estado: string) => {
+  const correlationId = correlacaoAuditoria()
+  const finalizar = async (estado: string) => {
+    if (estado !== "conectado") await comOrg(acesso.organizacaoId, () => registrarAuditoria(prisma, acesso, {
+      acao: "drive.conexao", recurso: "integracao", recursoId: "drive", correlationId,
+      resultado: ["autorizacao_invalida", "recusado"].includes(estado) ? "negado" : "falha", depois: { motivo: estado },
+    }))
     const resposta = NextResponse.redirect(`${origem}/configuracoes?tab=drive&drive=${estado}`)
     resposta.headers.set("Cache-Control", "no-store")
     resposta.cookies.set(DRIVE_STATE_COOKIE, "", { httpOnly: true, secure: origem.startsWith("https:"), sameSite: "lax", path: "/api/auth/setup-drive", maxAge: 0 })
@@ -26,6 +32,9 @@ export async function GET(req: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID, clientSecret = process.env.GOOGLE_CLIENT_SECRET
   if (!code || !clientId || !clientSecret) return finalizar("sem_credenciais")
 
+  await comOrg(acesso.organizacaoId, () => registrarAuditoria(prisma, acesso, {
+    acao: "drive.conexao", recurso: "integracao", recursoId: "drive", resultado: "intencao", correlationId,
+  }))
   try {
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -58,6 +67,8 @@ export async function GET(req: NextRequest) {
       const data = { googleRefreshToken: cifrarTokenDrive(token, organizacaoId), googleDriveEmail: email, googleDriveConnectedAt: new Date() }
       if (existing) await tx.configEmpresa.update({ where: { id: existing.id }, data })
       else await tx.configEmpresa.create({ data: { organizacaoId, ...data } })
+      await registrarAuditoria(tx, acesso, { acao: "drive.conexao", recurso: "integracao", recursoId: "drive", correlationId,
+        antes: { conectado: !!existing?.googleRefreshToken }, depois: { conectado: true } })
     }))
     return finalizar("conectado")
   } catch {

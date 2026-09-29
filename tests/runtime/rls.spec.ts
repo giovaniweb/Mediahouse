@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 vi.mock("@/lib/auth", () => ({ auth: async () => null }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
 import { comRls } from "@/lib/prisma-rls"
 import { comOrg } from "@/lib/org-contexto"
 import { prismaAuth } from "@/lib/prisma-auth"
@@ -147,6 +148,30 @@ describe("Prisma conectado como runtime sem bypass", () => {
       expect(await comOrg(b, () => db.demanda.findUnique({ where: { id: da } }))).toBeNull()
       await admin.demandaCompartilhamento.delete({ where: { id: edge.id } })
     } finally { await admin.parceriaOrganizacao.delete({ where: { id: parceria.id } }) }
+  })
+
+  it("auditoria é append-only e isolada no role do runtime", async () => {
+    await comOrg(a, () => registrarAuditoria(db, { organizacaoId: a, usuarioId: u }, {
+      acao: "configuracao.alterada", recurso: "config_empresa", recursoId: a, correlationId: correlacaoAuditoria(), depois: { conectado: true },
+    }))
+    const evento = await comOrg(a, () => db.eventoAuditoria.findFirstOrThrow())
+    expect(await comOrg(b, () => db.eventoAuditoria.count())).toBe(0)
+    expect(await comOrg(null, () => db.eventoAuditoria.count())).toBe(0)
+    await expect(comOrg(a, () => db.eventoAuditoria.update({ where: { id: evento.id }, data: { resultado: "falha" } }))).rejects.toThrow()
+    await expect(comOrg(a, () => db.eventoAuditoria.delete({ where: { id: evento.id } }))).rejects.toThrow()
+    await expect(prismaAuth.eventoAuditoria.count()).rejects.toThrow()
+    await expect(comOrg(a, () => db.organizacao.delete({ where: { id: a } }))).rejects.toThrow()
+    expect(await comOrg(a, () => db.eventoAuditoria.count())).toBe(1)
+    await expect(comOrg(b, () => registrarAuditoria(db, { organizacaoId: a, tecnico: "rotina" }, {
+      acao: "configuracao.alterada", recurso: "config_empresa", recursoId: a, correlationId: correlacaoAuditoria(),
+    }))).rejects.toThrow()
+  })
+  it("falha na auditoria reverte a escrita sensível no runtime", async () => {
+    await expect(comOrg(a, () => db.$transaction(async tx => {
+      await tx.demanda.update({ where: { id: da }, data: { titulo: "nao-commitar" } })
+      await registrarAuditoria(tx, { organizacaoId: b, usuarioId: u }, { acao: "configuracao.alterada", recurso: "config_empresa", recursoId: a, correlationId: correlacaoAuditoria() })
+    }))).rejects.toThrow()
+    expect((await admin.demanda.findUniqueOrThrow({ where: { id: da } })).titulo).toBe(da)
   })
 
 })
