@@ -93,16 +93,13 @@ describe("mesmos indicadores em todos os consumidores", () => {
   })
   it("cron semanal persiste o mesmo contrato sem consultar métricas por ferramentas ou expor custos", async () => {
     vi.stubEnv("CRON_SECRET", "cron-local-sintetico")
-    agente.mockImplementation(async (prompt: string, executar: (nome: string, input: unknown) => Promise<string>) => {
-      expect(prompt).toContain("SNAPSHOT:"); expect(prompt).not.toContain("9876.54")
-      expect(await executar("buscar_metricas",{})).toContain("Use o snapshot")
-      return { resposta: "Vistoria sintética", tokens: 1 }
-    })
+    agente.mockImplementation(() => { throw new Error("LLM não permitido em rotina") })
     try {
       const response = await cron(new NextRequest("http://localhost/api/cron/agentes?agente=vistoria", { headers: { authorization: "Bearer cron-local-sintetico" } }))
       expect(response.status).toBe(200)
-      const saved = await db.relatorioIA.findFirstOrThrow({ where: { organizacaoId: a, tipo: "semanal" }, orderBy: { createdAt: "desc" } })
-      expect(saved.conteudo).toMatchObject({ metadados: { area: "audiovisual", origem: "agente" }, snapshot: { custoTotal: null, metricas: { versao: 1, recorte: { tipo: "semana" } } } })
+      const saved = await db.relatorioIA.findFirstOrThrow({ where: { organizacaoId: a, tipo: "semanal", chaveRegra: { startsWith: "semanal:v1:audiovisual:" } }, orderBy: { createdAt: "desc" } })
+      expect(saved.conteudo).toMatchObject({ metadados: { area: "audiovisual", origem: "agente" }, snapshot: { custoTotal: null, metricas: { versao: 1, recorte: { tipo: "custom" } } } })
+      expect(agente).not.toHaveBeenCalled()
     } finally { vi.unstubAllEnvs() }
   })
   it("datas inválidas não consomem IA", async () => {

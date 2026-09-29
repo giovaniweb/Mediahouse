@@ -247,3 +247,23 @@ describe("outbox sob RLS",()=>{
     } finally {vi.unstubAllEnvs()}
   })
 })
+
+
+describe("regras O04 no runtime",()=>{
+  it("deriva notificarEm sob role restrito e cria intenção com isolamento",async()=>{
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    try {
+      const {executarRotina}=await import("@/lib/automacoes-regras")
+      const e=await comOrg(a,()=>db.evento.create({data:{organizacaoId:a,titulo:"Runtime sintético",usuarioId:u,inicio:new Date(Date.now()+30*60000),fim:new Date(Date.now()+90*60000),lembreteMinutos:120}}))
+      expect(e.notificarEm?.getTime()).toBe(e.inicio.getTime()-120*60000)
+      const adulterado=await comOrg(a,()=>db.evento.update({where:{id:e.id},data:{notificarEm:new Date(0)}}))
+      expect(adulterado.notificarEm).toEqual(e.notificarEm)
+      const r=await executarRotina(a,"lembretes")
+      expect(r.intencoesCriadas).toBe(1)
+      expect(await comOrg(b,()=>db.saidaWhatsapp.count({where:{origem:"regra"}}))).toBe(0)
+      expect(await comOrg(null,()=>db.evento.count())).toBe(0)
+      await comOrg(a,()=>db.organizacao.update({where:{id:a},data:{ambienteTeste:true}}))
+      expect(await executarRotina(a,"alertas")).toHaveProperty("ignorada")
+    } finally {vi.unstubAllEnvs()}
+  })
+})

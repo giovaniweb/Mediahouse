@@ -7,6 +7,8 @@ import { criarFila, enfileirar } from "@/lib/fila-duravel"
 import { identidadeWhatsApp, telefoneCompleto, jidRecebidoVerificado } from "@/lib/whatsapp-identidade"
 import { objeto, type ConteudoEntrada } from "@/lib/whatsapp-inbox-contrato"
 
+import { contextoRegraValido, type ContextoRegra } from "@/lib/regras-operacionais"
+
 type Tx=Prisma.TransactionClient
 const TIPO="whatsapp.saida"
 export const hashTelefone=(telefone:string)=>createHash("sha256").update(telefone).digest("hex")
@@ -21,10 +23,11 @@ async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
     chave:`${s.id}:${s.revisao}:${s.tentativas}`,payload:{revisao:s.revisao},agendadoPara,expiraEm:s.expiraEm})
 }
 /** Intenção + negócio no mesmo tx. Autoridade do produtor é validada na fronteira. */
-export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado";referencia:string;telefone:string;texto:string;expiraEm:Date}) {
+export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado"|"regra";regraContexto?:ContextoRegra;referencia:string;telefone:string;texto:string;expiraEm:Date}) {
   const telefone=telefoneCompleto(e.telefone)
   if(!telefone || !e.texto.trim() || e.texto.length>4096 || !e.chave || e.chave.length>128 || !e.referencia || e.referencia.length>128 ||
     !Number.isFinite(e.expiraEm.getTime()) || e.expiraEm<=new Date()) throw new Error("Intenção de saída inválida")
+  if(e.origem==="regra" && (!e.regraContexto || !await contextoRegraValido(tx,e.organizacaoId,e.regraContexto,new Date()))) throw new Error("Regra não vigente")
   let destino:{tipo:string;id:string}|null=null
   if(e.origem==="inbox") {
     const inbox=await tx.inboxWhatsapp.findFirst({where:{id:e.referencia,organizacaoId:e.organizacaoId,conteudoExpiraEm:{gt:new Date()}},select:{conteudoCifrado:true}})
@@ -35,7 +38,7 @@ export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;orig
   } else destino=await destinoAutorizado(tx,e.organizacaoId,telefone)
   if(!destino) throw new Error("Destinatário não autorizado")
   const id=randomUUID(),criado=await tx.saidaWhatsapp.createMany({data:{
-    id,organizacaoId:e.organizacaoId,chave:e.chave,origem:e.origem,referencia:e.referencia,
+    id,organizacaoId:e.organizacaoId,chave:e.chave,origem:e.origem,referencia:e.referencia,regraContexto:e.regraContexto,
     destinatarioTipo:destino.tipo,destinatarioId:destino.id,telefoneHash:hashTelefone(telefone),
     telefoneCifrado:encryptSecret(telefone),conteudoCifrado:encryptSecret(e.texto),
     expiraEm:e.expiraEm,conteudoExpiraEm:new Date(Date.now()+7*86400_000),
@@ -137,6 +140,7 @@ export async function processarSaidas(organizacaoId:string) {
           const d=await tx.demanda.findFirst({where:{id:s.referencia,organizacaoId},select:{updatedAt:true}})
           if(!d || d.updatedAt>s.createdAt) return falhar("cancelado","objeto_alterado")
         }
+        if(s.origem==="regra" && (!s.regraContexto || !await contextoRegraValido(tx,organizacaoId,s.regraContexto as ContextoRegra,new Date()))) return falhar("cancelado","regra_resolvida")
         const telefone=decryptSecret(s.telefoneCifrado),texto=decryptSecret(s.conteudoCifrado)
         if(!await destinoContinuaValido(tx,s,telefone,cfg.instanceId)) return falhar("cancelado","destinatario_alterado")
         const tentativa=await tx.tentativaWhatsapp.create({data:{organizacaoId,saidaId:s.id,numero:s.tentativas+1,leaseToken:lease.leaseToken,resultado:"iniciada"}})

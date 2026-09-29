@@ -1,0 +1,137 @@
+import {randomUUID} from "node:crypto"
+import {beforeAll,beforeEach,afterAll,describe,it,expect,vi} from "vitest"
+import {NextRequest} from "next/server"
+const {ia,sessao}=vi.hoisted(()=>({ia:vi.fn(()=>{throw new Error("IA proibida nas regras")}),sessao:{user:null as null|{id:string;organizacaoId:string;tipo:string}}}))
+vi.mock("@/lib/claude",()=>({executarAgenteComTools:ia,analisarComClaude:ia,MODELO_POTENTE:"proibido",MODELO_RAPIDO:"proibido"}))
+vi.mock("@/lib/auth",()=>({auth:async()=>sessao.user?{user:sessao.user}:null}))
+vi.mock("next/headers",()=>({cookies:async()=>({get:()=>undefined})}))
+import {prismaBase as db} from "@/lib/prisma"
+import {prismaAuth} from "@/lib/prisma-auth"
+import {executarRotina} from "@/lib/automacoes-regras"
+import {processarSaidas} from "@/lib/whatsapp-outbox"
+import {GET as cron} from "@/app/api/cron/agentes/route"
+import {POST as manual} from "@/app/api/ia/agentes/monitor/route"
+const p=`reg-${randomUUID()}`,a=`${p}-a`,b=`${p}-b`,u=`${p}-u`,vm=`${p}-vm`,tel="5511987650123"
+const demanda=(id:string)=>({id,organizacaoId:a,codigo:id,titulo:id,descricao:"sintético",departamento:"teste",cidade:"Teste",tipoVideo:"reels",solicitanteId:u,statusInterno:"editando" as const,statusVisivel:"edicao" as const,updatedAt:new Date(Date.now()-5*86400_000),dataLimite:new Date(Date.now()-2*86400_000),videomakerId:vm})
+beforeAll(async()=>{
+  vi.stubEnv("EMAIL_ENCRYPTION_KEY","sintetico-regras")
+  vi.stubEnv("WHATSAPP_EVOLUTION_CONTRATO","2.3.7")
+  await db.organizacao.createMany({data:[a,b].map(id=>({id,nome:id,slug:id}))})
+  await db.usuario.create({data:{id:u,nome:u,tipo:"admin",telefone:"5511977770001",senhaHash:"nao-usar"}})
+  await db.usuarioOrganizacao.create({data:{organizacaoId:a,usuarioId:u,papel:"admin",areas:[]}})
+  await db.videomaker.create({data:{id:vm,nome:vm,telefone:tel}})
+  await db.videomakerOrganizacao.create({data:{organizacaoId:a,videomakerId:vm,status:"ativo"}})
+  await db.configWhatsapp.create({data:{organizacaoId:a,instanceId:p,instanceUrl:"https://example.invalid",apiKey:"sintetico",ativo:true}})
+})
+beforeEach(async()=>{
+  vi.mocked(fetch).mockReset();vi.mocked(fetch).mockImplementation(async()=>Response.json({key:{id:randomUUID()}}));ia.mockClear()
+  sessao.user={id:u,organizacaoId:a,tipo:"admin"}
+  await db.jobAutomacao.deleteMany({where:{organizacaoId:a}})
+  await db.saidaWhatsapp.deleteMany({where:{organizacaoId:a}})
+  await db.evento.deleteMany({where:{organizacaoId:a}})
+  await db.custoVideomaker.deleteMany({where:{organizacaoId:a}})
+  await db.demanda.deleteMany({where:{organizacaoId:a}})
+  await db.relatorioIA.deleteMany({where:{organizacaoId:a}})
+  await db.agenteExecucao.deleteMany({where:{organizacaoId:a}})
+  await db.permissaoUsuario.deleteMany({where:{organizacaoId:a}})
+  await db.organizacao.update({where:{id:a},data:{ativo:true,ambienteTeste:false}})
+})
+afterAll(async()=>{
+  await db.organizacao.deleteMany({where:{id:{in:[a,b]}}});await db.videomaker.delete({where:{id:vm}});await db.usuario.delete({where:{id:u}})
+  await Promise.all([db.$disconnect(),prismaAuth.$disconnect()]);vi.unstubAllEnvs()
+})
+describe("O04 sem LLM",()=>{
+  it("varre mais de uma página, deduplica concorrência e resolve/reabre o mesmo alerta",async()=>{
+    await db.demanda.createMany({data:Array.from({length:103},(_,i)=>demanda(`${p}-d${i}`))})
+    await Promise.all([executarRotina(a,"alertas"),executarRotina(a,"monitor")])
+    expect(await db.alertaIA.count({where:{organizacaoId:a,status:"ativo"}})).toBe(206)
+    const id=`${p}-d0`,alerta=await db.alertaIA.findFirstOrThrow({where:{organizacaoId:a,demandaId:id,tipoAlerta:"regra_prazo_vencido"}})
+    await db.demanda.update({where:{id},data:{statusVisivel:"finalizado",linkFinal:"https://example.invalid/f.mp4"}})
+    await executarRotina(a,"alertas")
+    expect((await db.alertaIA.findUniqueOrThrow({where:{id:alerta.id}})).status).toBe("resolvido")
+    await db.demanda.update({where:{id},data:{statusVisivel:"edicao"}})
+    await executarRotina(a,"monitor")
+    expect((await db.alertaIA.findUniqueOrThrow({where:{id:alerta.id}})).status).toBe("ativo")
+    expect(ia).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()
+  })
+  it("evento interno calcula notificarEm; mudança de horário cancela aviso anterior antes da rede",async()=>{
+    const e=await db.evento.create({data:{organizacaoId:a,titulo:"Teste",inicio:new Date(Date.now()+30*60000),fim:new Date(Date.now()+90*60000),usuarioId:u,lembreteMinutos:180}})
+    expect(e.notificarEm?.getTime()).toBe(e.inicio.getTime()-180*60000)
+    await Promise.all([executarRotina(a,"lembretes"),executarRotina(a,"lembretes")])
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a}})).toBe(1)
+    expect((await db.evento.findUniqueOrThrow({where:{id:e.id}})).lembreteEnviado).toBe(false)
+    await db.evento.update({where:{id:e.id},data:{inicio:new Date(Date.now()+5*3600000)}})
+    await processarSaidas(a)
+    expect((await db.saidaWhatsapp.findFirstOrThrow({where:{organizacaoId:a}})).estado).toBe("cancelado")
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it("externo sem telefone não vira enviado; cancelamento e troca de responsável invalidam",async()=>{
+    const e=await db.evento.create({data:{organizacaoId:a,titulo:"Teste",inicio:new Date(Date.now()+30*60000),fim:new Date(Date.now()+90*60000),videomakerId:vm}})
+    await executarRotina(a,"lembretes")
+    await db.evento.update({where:{id:e.id},data:{videomakerId:null,usuarioId:u}})
+    await executarRotina(a,"lembretes")
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a,estado:"cancelado"}})).toBe(1)
+    await db.evento.update({where:{id:e.id},data:{status:"cancelado"}})
+    await executarRotina(a,"lembretes")
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a,estado:"aguardando"}})).toBe(0)
+    await db.evento.create({data:{organizacaoId:a,titulo:"Sem responsável",inicio:new Date(Date.now()+600000),fim:new Date(Date.now()+3600000)}})
+    expect((await executarRotina(a,"lembretes")).semDestinatario).toBe(1)
+  })
+  it("pagar custo após enfileirar impede cobrança e não incrementa contadores de envio",async()=>{
+    const c=await db.custoVideomaker.create({data:{organizacaoId:a,videomakerId:vm,valor:100,dataReferencia:new Date(),dataVencimento:new Date(Date.now()-86400_000)}})
+    await executarRotina(a,"cobranca");await executarRotina(a,"cobranca")
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a}})).toBe(1)
+    expect((await db.custoVideomaker.findUniqueOrThrow({where:{id:c.id}})).qtdCobranças).toBe(0)
+    await db.custoVideomaker.update({where:{id:c.id},data:{pago:true,statusPagamento:"pago"}})
+    await processarSaidas(a)
+    expect(fetch).not.toHaveBeenCalled()
+    expect((await db.saidaWhatsapp.findFirstOrThrow({where:{organizacaoId:a}})).estado).toBe("cancelado")
+  })
+  it("demanda concluída antes do envio cancela prazo; só fila não significa aceitação",async()=>{
+    const d=await db.demanda.create({data:demanda(`${p}-prazo`)})
+    const r=await executarRotina(a,"prazos")
+    expect(r.intencoesCriadas).toBe(1)
+    expect(await db.tentativaWhatsapp.count({where:{organizacaoId:a}})).toBe(0)
+    await db.demanda.update({where:{id:d.id},data:{statusVisivel:"finalizado"}})
+    await processarSaidas(a);expect(fetch).not.toHaveBeenCalled()
+  })
+  it("empresa vazia, pausada ou de teste não gera execução comercial",async()=>{
+    expect(await executarRotina(a,"vistoria")).toHaveProperty("ignorada","sem_atividade")
+    await db.demanda.create({data:demanda(`${p}-teste`)})
+    await db.organizacao.update({where:{id:a},data:{ambienteTeste:true}})
+    expect(await executarRotina(a,"alertas")).toHaveProperty("ignorada")
+    await db.organizacao.update({where:{id:a},data:{ambienteTeste:false,ativo:false}})
+    expect(await executarRotina(a,"alertas")).toHaveProperty("ignorada")
+    expect(await db.agenteExecucao.count({where:{organizacaoId:a}})).toBe(0)
+  })
+  it("semanal concorrente guarda dois snapshots por área e não regenera após nova tentativa",async()=>{
+    await db.demanda.create({data:demanda(`${p}-rel`)})
+    await Promise.all([executarRotina(a,"vistoria"),executarRotina(a,"vistoria")])
+    expect(await db.relatorioIA.count({where:{organizacaoId:a}})).toBe(2)
+    const salvo=await db.relatorioIA.findMany({where:{organizacaoId:a},orderBy:{id:"asc"}})
+    await executarRotina(a,"vistoria")
+    expect(await db.relatorioIA.findMany({where:{organizacaoId:a},orderBy:{id:"asc"}})).toEqual(salvo)
+    expect(salvo.every(s=>s.tokens===0 && s.modelo==="regras-v1")).toBe(true)
+    expect(await db.relatorioIA.count({where:{organizacaoId:b}})).toBe(0)
+    expect(ia).not.toHaveBeenCalled()
+  })
+  it("falha ao cifrar reverte alerta e intenção do objeto, sem perder possibilidade de retomada",async()=>{
+    await db.demanda.create({data:demanda(`${p}-rollback`)})
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","");vi.stubEnv("NEXTAUTH_SECRET","")
+    try {
+      await expect(executarRotina(a,"prazos")).rejects.toThrow("falha_local_regras")
+      expect(await db.alertaIA.count({where:{organizacaoId:a}})).toBe(0)
+      expect(await db.saidaWhatsapp.count({where:{organizacaoId:a}})).toBe(0)
+    } finally {vi.stubEnv("EMAIL_ENCRYPTION_KEY","sintetico-regras")}
+    expect((await executarRotina(a,"prazos")).intencoesCriadas).toBe(1)
+  })
+  it("rotas negam sessão/segredo ausente e rotina inválida antes de executar",async()=>{
+    await db.permissaoUsuario.create({data:{organizacaoId:a,usuarioId:u,verIA:true,gerenciarConfig:false}})
+    expect((await manual()).status).toBe(403)
+    sessao.user=null;expect((await manual()).status).toBe(401)
+    vi.stubEnv("CRON_SECRET","teste-cron-regras")
+    expect((await cron(new NextRequest("http://localhost/api/cron/agentes"))).status).toBe(401)
+    expect((await cron(new NextRequest("http://localhost/api/cron/agentes?agente=desconhecido",{headers:{authorization:"Bearer teste-cron-regras"}}))).status).toBe(400)
+    expect(ia).not.toHaveBeenCalled()
+  })
+})

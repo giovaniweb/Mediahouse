@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O03: outbox e recibos locais; contrato real e conversa completa pendentes; sem deploy.
+Última atualização: 29/09/2026 — O04: regras e lembretes sem LLM, resumos semanais por área; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O03 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: O04 — regras e lembretes determinísticos; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: O04 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: O05 — saúde e alertas; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: intenções/tentativas/recibos de saída, bloqueio de reenvio desconhecido e confirmações locais da inbox.
-- Verificações O03: 677 unitários, 169 integrações e 21 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: cron e ações de monitoramento por regras; lembretes derivados do evento, revalidação de avisos e snapshots semanais sem IA.
+- Verificações O04: 682 unitários, 179 integrações e 22 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -39,7 +39,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O01 | Fila durável | 03 | F01, S07, S08 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O02 | Inbox WhatsApp | 03 | O01, S05 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O03 | Outbox e recibos | 03 | O01, O02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O04 | Regras e lembretes | 03 | O03, R01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -275,3 +275,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Contrato Evolution real não confirmado; worker exige WHATSAPP_EVOLUTION_CONTRATO após homologação. Não configurar arbitrariamente. Resultado desconhecido sem ID continua bloqueado para reenvio e requer investigação no provedor.
 - Adaptador legado ainda usa chave diária por conteúdo e não participa da transação original. O04 migra regras/chaves/contadores e remove LLM dessas rotinas. O05 completa a saúde; O06/U03 completam a conversa. Não declarar WhatsApp comercial homologado.
 - Próxima ação: O04 — regras, lembretes e snapshots recorrentes determinísticos com produtor atômico.
+
+### O04 — regras, lembretes e resumos (29/09/2026)
+
+- Base 3b804ea; contrato, critérios e limites em O04-REGRAS-E-LEMBRETES.md. Revisão própria, sem homologação externa.
+- Cron e quatro ações manuais de monitoramento substituídos por regras versionadas, sem LLM. Alertas únicos com resolução/reabertura, páginas de 100 e filtros combinados sem sobrescrever status. Cobrança restrita à NF pendente, não ao pagamento pelo prestador.
+- notificarEm derivado pelo banco; cron atrasado ainda atende evento futuro. Intenção/job por regra na transação; alteração de horário/responsável, conclusão e pagamento invalidam antes da rede. Contadores antigos não são marcados como envio.
+- Snapshot da semana anterior fechada por área, deduplicado e com zero tokens. Empresas inativas/de teste/sem atividade elegível não geram execução comercial. Ambiente de teste exige marcação explícita antes da publicação.
+- Limpeza automática de links suspensa até M04; não apoiar exclusão em agendamento de aviso. Briefing simplificado para central de alertas; análises de capacidade/custo por IA removidas desses quatro comandos, sem prometer diagnósticos não implementados.
+- 682 unitários, 179 integrações, 22 runtime, build/tipos, lint sem erros, grants/RLS e auditores aprovados. Um aviso preexistente de lint na tela IA e face-api no build. Logs /private/tmp/nuflow-o04-*.log.
+- Migração 20260929070000_regras_deterministicas apenas no banco descartável. Sem deploy, mensagens ou chamadas pagas. Homologação Evolution, agendador seguindo cursor, benchmark de volume e interface de saúde pendentes. Demais produtores legados fora destas rotinas conservam limitações O03.
+- Próxima ação: O05 — apresentar saúde por evidências e permitir ações individuais auditadas sobre saídas.

@@ -43,6 +43,13 @@ afterAll(async () => {
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 describe("executor autorizado", () => {
+  it("combina status, atraso e parada sem sobrescrever status solicitado",async()=>{
+    await db.demanda.update({where:{id:own},data:{statusInterno:"editando",statusVisivel:"edicao",dataLimite:new Date(Date.now()-5*86400_000),updatedAt:new Date(Date.now()-5*86400_000)}})
+    await db.demanda.update({where:{id:hidden},data:{statusInterno:"fila_edicao",statusVisivel:"edicao",dataLimite:new Date(Date.now()-5*86400_000),updatedAt:new Date(Date.now()-5*86400_000)}})
+    const r=await chamar("buscar_demandas",{status:"editando",em_atraso:true,paradas_ha_dias:3},gestor())
+    expect(r.demandas.map((d:{id:string})=>d.id)).toEqual([own])
+  })
+
   it("nega contexto ausente, string antiga e objeto forjado", async () => {
     for (const ctx of [undefined, a, { organizacaoId: a, principal: { tipo: "sistema", agente: "vistoria" } }]) expect(JSON.parse(await executarFerramenta("buscar_metricas", {}, ctx as ContextoFerramenta))).toHaveProperty("erro")
   })

@@ -58,7 +58,7 @@ const AGENTES: AgenteCard[] = [
   {
     id: "gerar_alertas",
     nome: "Gerar Alertas",
-    descricao: "Varre todo o sistema identificando problemas: demandas paradas, atrasos, sobrecarga de equipe e anomalias de custo",
+    descricao: "Verifica atrasos, falta de atualização, aprovação pendente e entrega sem arquivo final. Sem consumo de IA.",
     icon: Bell,
     cor: "text-red-400",
     endpoint: "/api/ia/agentes/gerar-alertas",
@@ -66,7 +66,7 @@ const AGENTES: AgenteCard[] = [
   {
     id: "monitor",
     nome: "Monitor de Fluxo",
-    descricao: "Analisa o pipeline completo, detecta gargalos, vê distribuição de carga e recomenda ações para as próximas 24h",
+    descricao: "Atualiza as pendências do fluxo por regras e resolve alertas que deixaram de valer. Sem consumo de IA.",
     icon: Activity,
     cor: "text-blue-400",
     endpoint: "/api/ia/agentes/monitor",
@@ -74,7 +74,7 @@ const AGENTES: AgenteCard[] = [
   {
     id: "prazos",
     nome: "Agente de Prazos",
-    descricao: "Notifica videomakers sobre prazos em 24h, cobra atrasados via WhatsApp e motiva projetos parados há 3+ dias",
+    descricao: "Agenda avisos de prazo e falta de atualização para os responsáveis. A entrega é acompanhada nas saídas do WhatsApp.",
     icon: CalendarCheck,
     cor: "text-orange-400",
     endpoint: "/api/ia/agentes/prazos",
@@ -82,7 +82,7 @@ const AGENTES: AgenteCard[] = [
   {
     id: "vistoria",
     nome: "Vistoria do Sistema",
-    descricao: "Auditoria completa: pipeline, custos, produtividade, oportunidades de melhoria — envia relatório ao gestor via WhatsApp",
+    descricao: "Gera o resumo da semana anterior por área e agenda um aviso aos gestores. Sem análise paga de IA.",
     icon: ShieldCheck,
     cor: "text-purple-400",
     endpoint: "/api/ia/agentes/vistoria",

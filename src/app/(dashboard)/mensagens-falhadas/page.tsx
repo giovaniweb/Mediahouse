@@ -8,6 +8,7 @@ import {toast} from "sonner"
 type Saida={id:string;estado:string;motivo:string|null;tentativas:number;createdAt:string;proximaTentativa:string|null;podeTentar:boolean;registros:Array<{createdAt:string;httpStatus:number|null;resultado:string}>}
 const estados:Record<string,string>={aguardando:"Aguardando tentativa",aceito:"Aceita pelo provedor",entregue:"Entrega confirmada",lido:"Leitura confirmada",falhou:"Falhou",desconhecido:"Resultado desconhecido",expirado:"Prazo encerrado",cancelado:"Cancelada"}
 const motivos:Record<string,string>={sem_config:"Verifique a conexão do WhatsApp.",contrato_nao_validado:"A integração precisa ser validada antes do envio.",
+  regra_resolvida:"A condição do aviso mudou ou já foi resolvida.",
   destinatario_alterado:"O vínculo ou número do destinatário mudou.",objeto_alterado:"O trabalho mudou desde a criação do aviso.",
   timeout_ou_rede:"O provedor pode ter aceitado. Confira os recibos no provedor; não reenvie.",envio_iniciado:"Tentativa iniciada sem confirmação. Não reenvie.",
   resposta_inconclusiva:"Resposta incompleta do provedor. Confira os recibos no provedor.",rejeitado_provedor:"O provedor recusou a tentativa.",

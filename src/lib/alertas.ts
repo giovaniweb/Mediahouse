@@ -127,7 +127,7 @@ async function carregarContexto(organizacaoId: string, demandaId?: string) {
   // Todos os ativos, de qualquer tipo. Filtrar por `TIPOS_PENDENTES` aqui era o
   // que deixava os tipos inventados pela IA fora do alcance do resolvedor.
   const ativos: AlertaAtivo[] = await prisma.alertaIA.findMany({
-    where: { organizacaoId, status: "ativo", ...(demandaId ? { demandaId } : {}) },
+    where: { organizacaoId, chaveRegra: null, status: "ativo", ...(demandaId ? { demandaId } : {}) },
     select: { id: true, tipoAlerta: true, demandaId: true, createdAt: true },
   })
 
