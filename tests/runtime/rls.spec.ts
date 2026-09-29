@@ -1,6 +1,7 @@
 import { receberEntrada, processarInbox } from "@/lib/whatsapp-inbox"
 import { encryptSecret } from "@/lib/secret-crypto"
 import { criarFila, enfileirar } from "@/lib/fila-duravel"
+import { criarOrcamentoIA } from "@/lib/ia-orcamento"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { PrismaClient } from "@prisma/client"
@@ -281,5 +282,27 @@ describe("saúde O05 sob RLS",()=>{
     expect((await saudeConsumidores(a))[0].estado).toBe("parcial")
     expect((await saudeConsumidores(b))[0].estado).toBe("sem_registro")
     expect(await comOrg(a,()=>db.eventoAuditoria.count({where:{acao:"whatsapp.pausar"}}))).toBe(1)
+  })
+})
+
+
+describe("orçamento O06 sob RLS", () => {
+  it("reserva e reconcilia com role restrito; impede leitura/escrita cruzada e exclusão", async () => {
+    await admin.organizacao.update({ where: { id: a }, data: { ambienteTeste: false } })
+    const controle = criarOrcamentoIA(db)
+    const r = await controle.reservar({ organizacaoId: a, usuarioId: u, finalidade: "relatorio.semanal" }, "claude-haiku-4-5", 100, 100)
+    await controle.iniciar(r)
+    await controle.reconciliar(r, { entrada: 10, saida: 20, cacheLeitura: null, cacheEscrita: null, provedorId: "msg-runtime" })
+    expect((await controle.resumo(a)).tokensMedidos).toBe(30)
+    expect(await comOrg(b, () => db.consumoIA.findMany())).toEqual([])
+    expect(await comOrg(null, () => db.consumoIA.count())).toBe(0)
+    await expect(comOrg(b, () => db.consumoIA.update({ where: { id: r.id }, data: { debitoTokens: 0 } }))).rejects.toThrow()
+    await expect(comOrg(a, () => db.consumoIA.deleteMany())).rejects.toThrow()
+    await expect(prismaAuth.consumoIA.count()).rejects.toThrow()
+    await comOrg(a, () => db.politicaIA.create({ data: { organizacaoId: a, tokensDia: 1000 } }))
+    expect(await comOrg(b, () => db.politicaIA.findMany())).toEqual([])
+    await expect(comOrg(b, () => db.politicaIA.update({ where: { organizacaoId: a }, data: { habilitada: false } }))).rejects.toThrow()
+    await expect(prismaAuth.politicaIA.count()).rejects.toThrow()
+    await expect(comOrg(a, () => db.politicaIA.deleteMany())).rejects.toThrow()
   })
 })

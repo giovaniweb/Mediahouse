@@ -16,6 +16,11 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_any_column_privilege(current_user,'public.usuarios','UPDATE') AS edita_usuarios,
       has_function_privilege(current_user,'public.redefinir_senha_por_token(text,text)','EXECUTE') AS troca_por_token,
       has_table_privilege(current_user,'public.demandas','SELECT') AS le_demandas,
+      has_table_privilege(current_user,'public.consumos_ia','SELECT,INSERT,UPDATE') AS usa_consumo_ia,
+      has_table_privilege(current_user,'public.politicas_ia','SELECT,INSERT,UPDATE') AS usa_politica_ia,
+      has_table_privilege(current_user,'public.consumos_ia','DELETE') AS apaga_consumo_ia,
+      has_table_privilege(current_user,'public.politicas_ia','DELETE') AS apaga_politica_ia,
+      (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.consumos_ia'::regclass,'public.politicas_ia'::regclass)) AS rls_ia,
       has_table_privilege(current_user,'public.saidas_whatsapp','SELECT') AS le_saidas,
       has_table_privilege(current_user,'public.tentativas_whatsapp','SELECT') AS le_tentativas,
       has_table_privilege(current_user,'public.recibos_whatsapp','SELECT') AS le_recibos,
@@ -50,7 +55,8 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       : !r.le_inbox && !r.insere_inbox && !r.apaga_inbox && !r.resolve_instancia
     const saidasOk = tipo === "app" ? r.le_saidas && r.le_tentativas && r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos && r.rls_saidas
       : !r.le_saidas && !r.le_tentativas && !r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos
-    const ok = saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const iaOk = r.rls_ia && !r.apaga_consumo_ia && !r.apaga_politica_ia && (tipo === "app" ? r.usa_consumo_ia && r.usa_politica_ia : !r.usa_consumo_ia && !r.usa_politica_ia)
+    const ok = iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

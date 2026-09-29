@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O05 revalidado; O06 iniciada com sugestões de produtos sem chamadas pagas; sem deploy.
+Última atualização: 29/09/2026 — O06: reserva durável de IA, relatórios protegidos e painel de consumo parcial; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O06 EM_EXECUCAO. Primeiro recorte concluído: sugestões de produtos por regras. S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: continuar O06 com adaptador central, reserva atômica por empresa, reconciliação e painel de consumo. Ver O06-LIMITES-IA.md; não avançar M01 como se O06 estivesse completa.
+- Tarefa em andamento: O06 EM_EXECUCAO. Sugestões por regras, orçamento durável e geração de relatórios protegida; demais caminhos de IA ainda pendentes. S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: migrar demais consumidores de analisarComClaude, coberturas/briefing e chat/tools ao orçamento; depois cache/opt-out, política auditada e preço datado. Ver O06-LIMITES-IA.md; não avançar M01 como se O06 estivesse completa.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: consulta de sugestões sem provedor, seleção direta por produto, capacidade verProdutos e resposta explícita de falha.
-- Verificações O05: 684 unitários, 190 integrações e 23 testes runtime locais; tipos/lint e auditores. Build e runtime repetidos com sucesso após recuperação do espaço/servidor de teste em 29/09. Migração aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: reserva atômica e conciliação em Postgres; relatório conserva indicadores sem IA ao atingir limite; painel parcial com custo desconhecido.
+- Verificações O06 parcial: 687 unitários, 212 integrações, 24 runtime, build webpack, tipos, lint sem erros e auditores/grants. Migration 20260929090000_orcamento_ia apenas no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -312,3 +312,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Capacidade verProdutos, empresa revalidada, contexto explícito de banco, filtro de ativos, 404 uniforme e erro 503 legível. Tela informa origem por regras.
 - 687 unitários e 195 integrações aprovados; build webpack final, tipos e auditores aprovados. Lint sem erros, um aviso preexistente na tela de produto.
 - Sem migração, mensagem, IA paga ou deploy. O06 continua EM_EXECUCAO: ainda não existe teto agregado de IA nem medição central; demais caminhos pagos permanecem para o próximo recorte.
+
+
+### O06 — segundo recorte: orçamento e relatórios protegidos (29/09/2026)
+
+- Base 03a5282; contrato/limitações em O06-LIMITES-IA.md.
+- Política por empresa com defaults finitos; reserva transacional, simultaneidade, checkpoint único, expiração apenas pré-envio e débito desconhecido mantido até conciliação. Uso de entrada/saída/cache separado; sem preço inventado.
+- Adaptador de texto com contexto explícito, tamanho/saída limitados, timeout e sem retry automático. Primeiro consumidor: geração manual de relatórios; fallback conserva snapshot e informa indisponibilidade/consumo pendente.
+- Central de IA mostra detalhe restrito a gerenciarConfig, com cobertura explicitamente parcial. Medido/reserva/desconhecido separados; erro não vira zero.
+- 687 unitários, 212 integrações e 24 runtime; build webpack, grants/RLS, tipos, lint sem erros e auditores aprovados. Provedores falsos e banco descartável; sem IA paga, mensagem ou deploy.
+- Migration 20260929090000_orcamento_ia somente no banco descartável. Persistência deve preceder futura publicação. Restante de chamadas, cache/opt-out, preços e edição auditada da política continuam pendentes; O06 permanece EM_EXECUCAO.

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { ConsumoIA } from "@/components/automacoes/ConsumoIA"
 import { Header } from "@/components/layout/Header"
 import {
   Bot,
@@ -307,6 +308,7 @@ export default function IAPage() {
   return (
     <div className="flex flex-col h-screen bg-zinc-950 overflow-hidden">
       <Header title="Central de IA" />
+      <ConsumoIA />
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── Painel esquerdo: Chat ───────────────────────────────────────── */}

@@ -6,6 +6,7 @@ vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@/lib/claude", () => ({ analisarComClaude: analisar, executarAgenteComTools: agente, MODELO_POTENTE: "simulado", MODELO_RAPIDO: "simulado" }))
 vi.mock("@/lib/notificar", () => ({ emSegundoPlano: vi.fn() }))
+vi.mock("@/lib/ia-analise", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/ia-analise")>(), analisarComOrcamento: analisar }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as metricas } from "@/app/api/relatorios/metricas/route"

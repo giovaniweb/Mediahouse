@@ -2131,6 +2131,8 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  politicaIA PoliticaIA?
+  consumosIA ConsumoIA[]
   ambienteTeste Boolean @default(false)
   eventosAuditoria EventoAuditoria[]
   jobsAutomacao JobAutomacao[]
@@ -2566,4 +2568,48 @@ model ReciboWhatsapp {
   @@unique([organizacaoId,chave])
   @@index([organizacaoId,instanceId,providerMessageId])
   @@map("recibos_whatsapp")
+}
+
+
+// O06: orçamento em tokens. Preço ausente não equivale a custo zero.
+model PoliticaIA {
+  organizacaoId String @id
+  habilitada Boolean @default(true)
+  tokensDia Int @default(100000)
+  simultaneas Int @default(2)
+  entradaBytes Int @default(32768)
+  saidaTokens Int @default(4096)
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@map("politicas_ia")
+}
+
+model ConsumoIA {
+  id String @id @default(cuid())
+  organizacaoId String
+  usuarioId String
+  finalidade String @db.VarChar(80)
+  modelo String @db.VarChar(80)
+  tentativa Int @default(1)
+  estado String @default("reservado") @db.VarChar(20)
+  token String
+  periodo DateTime @db.Date
+  reservaTokens Int
+  entradaBytes Int
+  limiteSaida Int
+  debitoTokens Int
+  entradaTokens Int?
+  saidaTokens Int?
+  cacheLeituraTokens Int?
+  cacheEscritaTokens Int?
+  duracaoMs Int?
+  provedorId String? @db.VarChar(128)
+  expiraEm DateTime
+  iniciadoEm DateTime?
+  concluidoEm DateTime?
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, periodo])
+  @@index([organizacaoId, estado, expiraEm])
+  @@map("consumos_ia")
 }
