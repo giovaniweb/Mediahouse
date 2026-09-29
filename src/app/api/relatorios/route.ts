@@ -1,3 +1,4 @@
+import { apresentarRelatorio, tiposRelatorio } from "@/lib/relatorio-contrato"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -10,13 +11,14 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const tipo = searchParams.get("tipo")
-  const limite = parseInt(searchParams.get("limite") ?? "20")
+  const limite = Number(searchParams.get("limite") ?? "20")
+  if (!Number.isInteger(limite) || limite < 1 || limite > 100 || (tipo && !tiposRelatorio.safeParse(tipo).success)) return NextResponse.json({ error: "Filtro inválido" }, { status: 400 })
 
   const { organizacaoId } = acesso
 
   const relatorios = await prisma.relatorioIA.findMany({
     where: { organizacaoId, ...(tipo && { tipo: tipo as never }) },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limite,
     select: {
       id: true,
@@ -29,5 +31,5 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ relatorios })
+  return NextResponse.json({ relatorios: relatorios.map(({ conteudo, ...r }) => ({ ...r, apresentacao: apresentarRelatorio(conteudo) })) }, { headers: { "Cache-Control": "private, no-store" } })
 }

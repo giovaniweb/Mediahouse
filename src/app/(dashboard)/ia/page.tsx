@@ -280,8 +280,10 @@ export default function IAPage() {
           i === 0
             ? {
                 ...e,
-                status: resp.ok ? "concluido" : "erro",
-                resultado: data.analise ?? data.resumo ?? data.conteudo ?? JSON.stringify(data).slice(0, 200),
+                status: resp.ok && data.relatorio?.apresentacao?.estado !== "invalido" ? "concluido" : "erro",
+                resultado: data.relatorio?.apresentacao
+                  ? (data.relatorio.apresentacao.aviso ?? data.relatorio.apresentacao.texto ?? data.relatorio.apresentacao.dados?.resumo_executivo ?? "Relatório salvo. Consulte a página Relatórios.")
+                  : data.analise ?? data.resumo ?? data.conteudo ?? JSON.stringify(data).slice(0, 200),
                 alertasGerados: data.alertasGerados ?? 0,
                 tokens: data.tokens ?? 0,
               }

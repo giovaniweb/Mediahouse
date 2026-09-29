@@ -1,8 +1,10 @@
+import { z } from "zod"
+import { criarRelatorioV1, apresentarRelatorio, tiposRelatorio, lerRespostaRelatorio } from "@/lib/relatorio-contrato"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
-import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO, extrairJSON } from "@/lib/claude"
+import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
 
 // POST /api/relatorios/gerar — gera relatório IA para um tipo e período
 export async function POST(req: NextRequest) {
@@ -11,15 +13,13 @@ export async function POST(req: NextRequest) {
   if (!acesso.permissoes.verCustos) return NextResponse.json({ error: "Este relatório contém dados financeiros" }, { status: 403 })
   const { organizacaoId } = acesso
 
-  const body = await req.json()
-  const { tipo, periodo } = body as { tipo: string; periodo: string }
-
-  if (!tipo) return NextResponse.json({ error: "tipo é obrigatório" }, { status: 400 })
+  const body = z.object({ tipo: tiposRelatorio, periodo: z.enum(["semanal", "mensal", "realtime"]).optional() }).strict().safeParse(await req.json().catch(() => null))
+  if (!body.success) return NextResponse.json({ error: "Tipo ou período inválido" }, { status: 400 })
+  const { tipo, periodo } = body.data
 
   const agora = new Date()
   const ha30dias = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000)
   const ha7dias = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1)
 
   try {
     let conteudo: unknown
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const modelo = tipo === "realtime" ? MODELO_RAPIDO : MODELO_POTENTE
 
     // ─── Coletar dados base ────────────────────────────────────────────────
-    const dataInicio = periodo === "semanal" ? ha7dias : tipo === "realtime" ? ha7dias : ha30dias
+    const dataInicio = (periodo ?? tipo) === "semanal" ? ha7dias : tipo === "realtime" ? ha7dias : ha30dias
 
     const [demandas, custos, videomakers, alertas, ideiasStats] = await Promise.all([
       prisma.demanda.findMany({
@@ -160,7 +160,7 @@ RETORNE JSON com esta estrutura exata:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto, tokens: t }
+      conteudo = lerRespostaRelatorio(texto)
 
     } else if (tipo === "analise_custos") {
       const custosPorVm = vmAtividade.filter(v => v.custoTotal > 0)
@@ -189,7 +189,7 @@ RETORNE JSON com esta estrutura exata:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto }
+      conteudo = lerRespostaRelatorio(texto)
 
     } else if (tipo === "performance_videomaker") {
       const vmDetalhes = videomakers.map(vm => {
@@ -234,7 +234,7 @@ RETORNE JSON com esta estrutura:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto }
+      conteudo = lerRespostaRelatorio(texto)
 
     } else if (tipo === "otimizacao_contratacao") {
       const prompt = `Com base nos dados de demandas e custos, sugira como otimizar o modelo de contratação de videomakers.
@@ -261,11 +261,11 @@ RETORNE JSON com esta estrutura:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto }
+      conteudo = lerRespostaRelatorio(texto)
 
     } else if (tipo === "banco_ideias") {
       const ideiasRecentes = await prisma.ideiaVideo.findMany({
-        where: { createdAt: { gte: dataInicio } },
+        where: { organizacaoId, createdAt: { gte: dataInicio } },
         include: { produto: { select: { nome: true } } },
         orderBy: { scoreIA: "desc" },
         take: 20,
@@ -298,7 +298,7 @@ RETORNE JSON com esta estrutura:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", MODELO_POTENTE)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto }
+      conteudo = lerRespostaRelatorio(texto)
 
     } else {
       // semanal, mensal, realtime — relatório geral
@@ -334,7 +334,7 @@ RETORNE JSON com esta estrutura:
 
       const { texto, tokens: t } = await analisarComClaude(prompt, "", modelo)
       tokens = t
-      conteudo = extrairJSON(texto) ?? { resumo: texto }
+      conteudo = lerRespostaRelatorio(texto)
     }
 
     // Salvar relatório no banco
@@ -344,20 +344,22 @@ RETORNE JSON com esta estrutura:
         ? `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`
         : "realtime")
 
+    const documento = criarRelatorioV1(conteudo, { tipo, periodo: periodoStr, area: "nao_separada", origem: "manual", geradoEm: agora.toISOString(), inicio: dataInicio.toISOString(), fim: null }, { demandasCriadas: demandas.length, concluidas, emAndamento, custoTotal: totalCusto, custoPorVideo, tempoMedioDias: tempoMedio, alertasAtivos: alertas.length })
     const relatorio = await prisma.relatorioIA.create({
       data: {
         organizacaoId,
         tipo: tipo as never,
         periodo: periodoStr,
-        conteudo: conteudo as never,
+        conteudo: documento,
         tokens,
         modelo,
       },
     })
 
-    return NextResponse.json({ relatorio, conteudo, tokens })
-  } catch (err) {
-    console.error("Erro ao gerar relatório:", err)
+    const { conteudo: _conteudo, ...metadados } = relatorio
+    return NextResponse.json({ relatorio: { ...metadados, apresentacao: apresentarRelatorio(documento) }, tokens }, { headers: { "Cache-Control": "private, no-store" } })
+  } catch {
+    console.error("Erro ao gerar relatório")
     return NextResponse.json({ error: "Erro ao gerar relatório com IA" }, { status: 500 })
   }
 }

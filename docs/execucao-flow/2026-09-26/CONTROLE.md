@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — S08: trilha de ações sensíveis implementada e validada localmente; sem deploy.
+Última atualização: 28/09/2026 — R01: leitura legada e contrato de relatórios; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S08 implementado no recorte documentado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: R01 — leitura dos relatórios legados e contrato validado; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: R01 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: R02 — unificar métricas, períodos e recortes; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: eventos organizacionais de auditoria, escrita atômica, RLS append-only para app, retenção e leitura administrativa.
-- Verificações S08: 637 unitários, 101 integrações e 18 cenários runtime; verificador somente leitura de roles local. Migração aplicada só no banco descartável; configuração real do provedor permanece pendente.
+- Última alteração: leitor compatível de relatórios, envelope v1 validado, snapshot preservado e isolamento de ideias no gerador.
+- Verificações R01: 653 unitários e 107 integrações locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -32,7 +32,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S06 | Publicação explícita | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S07 | RLS e pool | 01 | S01, S04, S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| R01 | Relatório legado | 02 | S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| R01 | Relatório legado | 02 | S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R02 | Métricas e recortes | 02 | R01, S01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R03 | Filtro de custos | 02 | S03, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R04 | Ordem e paginação de galeria | 02 | S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -204,3 +204,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Ensaio final encontrou conflito de inferência TEXT/VARCHAR nos parâmetros repetidos do INSERT da retenção; casts explícitos corrigidos e suíte integrada repetida com sucesso.
 - Limites: resultado de envio é aceitação pelo provedor, não recibo de entrega. Correlação não substitui outbox/idempotência de envio. Negação identificável é best-effort; guard secundário e rotinas legadas não têm cobertura universal. Nenhum push, deploy, migração real ou mensagem enviada.
 - Próxima ação: R01, adaptar relatórios antigos e validar novos escritores sem regenerar texto pago; conferir autorização/isolamento dos handlers envolvidos antes de alterar leitura.
+
+### R01 — relatórios legados e contrato validado (28/09/2026)
+
+- Base ca2c133; contrato e limites em R01-RELATORIOS.md. Corrigida divergência analise/resumo_executivo que deixava o semanal sem texto. Histórico não regravado nem regenerado.
+- DTO validado, conteúdo textual/estruturado seguro e erro visível com referência. Campos ausentes não viram zero. Geração manual e cron usam envelope v1; snapshot manual preservado quando IA responde em formato inválido, sem repetição automática por formato.
+- Consumidores Relatórios e Central de IA migrados juntos. Entrada da geração/listagem validada. Consulta de ideias recentes passa a exigir filtro da empresa. Mantido gate financeiro até R02.
+- 653 unitários/47 arquivos e 107 integrações/6 arquivos aprovados; PostgreSQL local com IA simulada. Cobertura de HTML escapado, formato semanal sintético, campos ausentes/inválidos, snapshot, isolamento A/B e ausência de IA na leitura. Logs /private/tmp/nuflow-r01-*.log.
+- Build webpack, TypeScript, ESLint (zero erros; seis avisos preexistentes nas telas), auditores tenancy/perfil e diff check aprovados. Aviso preexistente face-api no build. Revisão própria, sem avaliação independente ou ensaio visual autenticado.
+- Sem migration, push/deploy, chamadas pagas ou mensagens externas. Não declarar indicadores reconciliados: semântica das métricas, períodos e Growth continua R02; cron/envios/consumo continuam nos cartões O.
+- Próxima ação: R02 — serviço comum de métricas e recortes com testes de reabertura, fronteiras de datas e separação de áreas, sem recalcular snapshots antigos.

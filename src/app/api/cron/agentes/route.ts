@@ -1,3 +1,4 @@
+import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
@@ -246,12 +247,12 @@ Inclua: demandas concluídas, em andamento, atrasadas, carga de trabalho, top vi
         organizacaoId,
         tipo: "semanal",
         periodo: new Date().toLocaleDateString("pt-BR"),
-        conteudo: { analise: resposta, auto: true },
+        conteudo: criarRelatorioV1({ analise: resposta }, { tipo: "semanal", periodo: new Date().toLocaleDateString("pt-BR"), area: "nao_separada", origem: "agente", geradoEm: new Date().toISOString(), inicio: null, fim: null }),
         tokens,
         modelo: MODELO_POTENTE,
       },
     })
-  } catch { /* ignora duplicata */ }
+  } catch { throw new Error("Não foi possível salvar o relatório semanal") }
 
   return { agente: "vistoria", tokens }
 }

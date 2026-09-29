@@ -1,5 +1,7 @@
 "use client"
 
+import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
+import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
 import useSWR from "swr"
@@ -18,8 +20,6 @@ import {
   Zap,
   RefreshCw,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   Calendar,
   Target,
   Activity,
@@ -83,13 +83,11 @@ interface Metricas {
   tendencia: { semana: string; criadas: number; concluidas: number }[]
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface RelatorioGerado {
   id: string
   tipo: string
   periodo: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  conteudo: Record<string, any>
+  apresentacao: ApresentacaoRelatorio
   tokens: number
   modelo: string
   createdAt: string
@@ -101,15 +99,6 @@ const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 })
 
 const fmtNum = (v: number) => v.toLocaleString("pt-BR")
-
-const STATUS_LABELS: Record<string, string> = {
-  entrada: "Entrada",
-  producao: "Produção",
-  edicao: "Edição",
-  aprovacao: "Aprovação",
-  para_postar: "Para Postar",
-  finalizado: "Finalizado",
-}
 
 const TIPO_RELATORIO_LABELS: Record<string, string> = {
   produtividade_time: "Produtividade da Equipe",
@@ -328,356 +317,6 @@ function RelatorioBadge({ tipo }: { tipo: string }) {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RelatorioConteudo({ conteudo, tipo }: { conteudo: Record<string, any>; tipo: string }) {
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const toggle = (key: string) => setExpanded(expanded === key ? null : key)
-
-  // ── Produtividade ─────────────────────────────────────────────────────────
-  if (tipo === "produtividade_time") {
-    const score = conteudo.score_produtividade as number
-    const scoreCor = score >= 70 ? "text-green-400" : score >= 40 ? "text-amber-400" : "text-red-400"
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className={`text-5xl font-bold ${scoreCor}`}>{score}</div>
-          <div>
-            <div className="text-sm text-zinc-300 font-medium">Score de Produtividade</div>
-            <div className="text-xs text-zinc-500">Baseado em conclusões, SLA e eficiência</div>
-          </div>
-        </div>
-
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_executivo as string}</p>
-
-        {/* Pontos fortes */}
-        {Array.isArray(conteudo.pontos_fortes) && conteudo.pontos_fortes.length > 0 && (
-          <div>
-            <button onClick={() => toggle("fortes")} className="flex items-center gap-2 text-sm font-medium text-green-400 mb-2">
-              <CheckCircle2 className="w-4 h-4" />
-              Pontos Fortes ({(conteudo.pontos_fortes as string[]).length})
-              {expanded === "fortes" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "fortes" && (
-              <ul className="space-y-1">
-                {(conteudo.pontos_fortes as string[]).map((p, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                    <span className="text-green-500 mt-0.5">✓</span> {p}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Gargalos */}
-        {Array.isArray(conteudo.gargalos) && conteudo.gargalos.length > 0 && (
-          <div>
-            <button onClick={() => toggle("gargalos")} className="flex items-center gap-2 text-sm font-medium text-amber-400 mb-2">
-              <AlertTriangle className="w-4 h-4" />
-              Gargalos Identificados ({(conteudo.gargalos as unknown[]).length})
-              {expanded === "gargalos" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "gargalos" && (
-              <div className="space-y-2">
-                {(conteudo.gargalos as { problema: string; impacto: string; solucao: string }[]).map((g, i) => (
-                  <div key={i} className="bg-amber-950/30 border border-amber-800/30 rounded-lg p-3">
-                    <div className="text-sm font-medium text-amber-300">{g.problema}</div>
-                    <div className="text-xs text-zinc-400 mt-1">Impacto: {g.impacto}</div>
-                    <div className="text-xs text-emerald-400 mt-1">→ {g.solucao}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Oportunidades */}
-        {Array.isArray(conteudo.oportunidades_melhoria) && (
-          <div>
-            <button onClick={() => toggle("ops")} className="flex items-center gap-2 text-sm font-medium text-blue-400 mb-2">
-              <Target className="w-4 h-4" />
-              Oportunidades ({(conteudo.oportunidades_melhoria as unknown[]).length})
-              {expanded === "ops" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "ops" && (
-              <div className="space-y-2">
-                {(conteudo.oportunidades_melhoria as { area: string; acao: string; ganho_estimado: string }[]).map((o, i) => (
-                  <div key={i} className="bg-blue-950/20 border border-blue-800/30 rounded-lg p-3">
-                    <div className="text-xs font-medium text-blue-300 uppercase tracking-wide">{o.area}</div>
-                    <div className="text-sm text-zinc-300 mt-0.5">{o.acao}</div>
-                    <div className="text-xs text-green-400 mt-1">Ganho: {o.ganho_estimado}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Feedback do processo */}
-        {conteudo.feedback_processo && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              Feedback IA do Processo
-            </div>
-            <p className="text-sm text-zinc-300">{conteudo.feedback_processo as string}</p>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Análise de Custos ─────────────────────────────────────────────────────
-  if (tipo === "analise_custos") {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_financeiro as string}</p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-zinc-800 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-green-400">{fmt(conteudo.total_periodo as number)}</div>
-            <div className="text-xs text-zinc-500">Total do período</div>
-          </div>
-          <div className="bg-zinc-800 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-blue-400">{fmt(conteudo.custo_medio_video as number)}</div>
-            <div className="text-xs text-zinc-500">Custo médio/vídeo</div>
-          </div>
-        </div>
-
-        {conteudo.avaliacao_roi && (
-          <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-lg p-3">
-            <div className="text-xs font-medium text-emerald-400 mb-1">Avaliação ROI</div>
-            <p className="text-sm text-zinc-300">{conteudo.avaliacao_roi as string}</p>
-          </div>
-        )}
-
-        {Array.isArray(conteudo.videomakers_eficientes) && (
-          <div>
-            <button onClick={() => toggle("vms")} className="flex items-center gap-2 text-sm font-medium text-purple-400 mb-2">
-              <Users className="w-4 h-4" />
-              Eficiência por Videomaker
-              {expanded === "vms" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "vms" && (
-              <div className="space-y-2">
-                {(conteudo.videomakers_eficientes as { nome: string; custo_beneficio: string; recomendacao: string }[]).map((v, i) => (
-                  <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3">
-                    <div>
-                      <div className="text-sm font-medium text-white">{v.nome}</div>
-                      <div className="text-xs text-zinc-400 mt-0.5">{v.custo_beneficio}</div>
-                    </div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      v.recomendacao === "manter" ? "bg-green-500/20 text-green-300" :
-                      v.recomendacao === "aumentar" ? "bg-blue-500/20 text-blue-300" :
-                      "bg-red-500/20 text-red-300"
-                    }`}>
-                      {v.recomendacao}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {Array.isArray(conteudo.otimizacoes_contratacao) && (
-          <div>
-            <button onClick={() => toggle("otim")} className="flex items-center gap-2 text-sm font-medium text-amber-400 mb-2">
-              <TrendingUp className="w-4 h-4" />
-              Otimizações Sugeridas
-              {expanded === "otim" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "otim" && (
-              <div className="space-y-2">
-                {(conteudo.otimizacoes_contratacao as { tipo: string; descricao: string; economia_potencial: string }[]).map((o, i) => (
-                  <div key={i} className="bg-amber-950/20 border border-amber-800/30 rounded-lg p-3">
-                    <div className="text-xs font-semibold text-amber-300">{o.tipo}</div>
-                    <div className="text-sm text-zinc-300 mt-0.5">{o.descricao}</div>
-                    <div className="text-xs text-green-400 mt-1">Economia: {o.economia_potencial}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {conteudo.projecao_mes_seguinte && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 mb-1">
-              <Calendar className="w-3.5 h-3.5" /> Projeção Próximo Mês
-            </div>
-            <div className="text-lg font-bold text-white">
-              {fmt((conteudo.projecao_mes_seguinte as { valor_estimado: number }).valor_estimado)}
-            </div>
-            <div className="text-xs text-zinc-400 mt-0.5">
-              {(conteudo.projecao_mes_seguinte as { base_calculo: string }).base_calculo}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Relatório Geral (semanal/mensal/realtime) ──────────────────────────────
-  if (["semanal", "mensal", "realtime"].includes(tipo)) {
-    const saude = conteudo.saude_geral_sistema as number
-    const saudeCor = saude >= 70 ? "text-green-400" : saude >= 40 ? "text-amber-400" : "text-red-400"
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className={`text-4xl font-bold ${saudeCor}`}>{saude}</div>
-          <div>
-            <div className="text-sm font-medium text-zinc-300">Saúde Geral do Sistema</div>
-            <div className="text-xs text-zinc-500">{conteudo.titulo as string}</div>
-          </div>
-        </div>
-
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_executivo as string}</p>
-
-        {/* KPIs */}
-        {Array.isArray(conteudo.kpis) && (
-          <div className="grid grid-cols-2 gap-2">
-            {(conteudo.kpis as { nome: string; valor: string; tendencia: string; avaliacao: string }[]).map((kpi, i) => (
-              <div key={i} className="bg-zinc-800/60 border border-zinc-700/50 rounded-lg p-2.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wide">{kpi.nome}</span>
-                  {kpi.tendencia === "up" ? (
-                    <TrendingUp className={`w-3 h-3 ${kpi.avaliacao === "bom" ? "text-green-400" : "text-red-400"}`} />
-                  ) : kpi.tendencia === "down" ? (
-                    <TrendingDown className={`w-3 h-3 ${kpi.avaliacao === "bom" ? "text-green-400" : "text-red-400"}`} />
-                  ) : (
-                    <Minus className="w-3 h-3 text-zinc-500" />
-                  )}
-                </div>
-                <div className="text-sm font-bold text-white">{kpi.valor}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Destaques */}
-        {Array.isArray(conteudo.destaques_positivos) && conteudo.destaques_positivos.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-green-400 flex items-center gap-1.5 mb-2">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Destaques Positivos
-            </div>
-            {(conteudo.destaques_positivos as string[]).map((d, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span> {d}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Atenção */}
-        {Array.isArray(conteudo.pontos_atencao) && conteudo.pontos_atencao.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-amber-400 flex items-center gap-1.5 mb-2">
-              <AlertTriangle className="w-3.5 h-3.5" /> Pontos de Atenção
-            </div>
-            {(conteudo.pontos_atencao as string[]).map((p, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="text-amber-500 mt-0.5 flex-shrink-0">⚠</span> {p}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Ações */}
-        {Array.isArray(conteudo.acoes_recomendadas) && (
-          <div>
-            <button onClick={() => toggle("acoes")} className="flex items-center gap-2 text-sm font-medium text-blue-400 mb-2">
-              <Target className="w-4 h-4" />
-              Ações Recomendadas ({(conteudo.acoes_recomendadas as unknown[]).length})
-              {expanded === "acoes" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "acoes" && (
-              <div className="space-y-2">
-                {(conteudo.acoes_recomendadas as { prioridade: string; acao: string; responsavel: string }[]).map((a, i) => (
-                  <div key={i} className="flex gap-3 bg-zinc-800/50 rounded-lg p-3">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded self-start mt-0.5 ${
-                      a.prioridade === "alta" ? "bg-red-500/20 text-red-300" :
-                      a.prioridade === "media" ? "bg-amber-500/20 text-amber-300" :
-                      "bg-zinc-600/30 text-zinc-400"
-                    }`}>{a.prioridade.toUpperCase()}</span>
-                    <div>
-                      <div className="text-sm text-zinc-200">{a.acao}</div>
-                      <div className="text-xs text-zinc-500 mt-0.5">→ {a.responsavel}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {conteudo.previsao_proximo_periodo && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-300">
-            <div className="text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" /> Previsão
-            </div>
-            {conteudo.previsao_proximo_periodo as string}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Performance Videomaker ────────────────────────────────────────────────
-  if (tipo === "performance_videomaker") {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.insights_equipe as string}</p>
-        {Array.isArray(conteudo.ranking_performance) && (
-          <div className="space-y-3">
-            {(conteudo.ranking_performance as {
-              posicao: number; nome: string; score_performance: number
-              pontos_fortes: string[]; areas_melhoria: string[]; recomendacao: string
-            }[]).map((vm, i) => (
-              <div key={i} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-zinc-500">#{vm.posicao}</span>
-                    <span className="text-sm font-medium text-white">{vm.nome}</span>
-                  </div>
-                  <div className={`text-lg font-bold ${vm.score_performance >= 70 ? "text-green-400" : vm.score_performance >= 40 ? "text-amber-400" : "text-red-400"}`}>
-                    {vm.score_performance}
-                  </div>
-                </div>
-                <p className="text-xs text-zinc-300 mb-2">{vm.recomendacao}</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-green-400 font-medium mb-1">Pontos Fortes</div>
-                    {vm.pontos_fortes.map((p, j) => <div key={j} className="text-zinc-400">• {p}</div>)}
-                  </div>
-                  <div>
-                    <div className="text-amber-400 font-medium mb-1">A Melhorar</div>
-                    {vm.areas_melhoria.map((p, j) => <div key={j} className="text-zinc-400">• {p}</div>)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {conteudo.proximo_passo && (
-          <div className="bg-blue-950/30 border border-blue-800/30 rounded-lg p-3 text-sm text-zinc-300">
-            <div className="text-xs font-medium text-blue-400 mb-1">Próximo Passo</div>
-            {conteudo.proximo_passo as string}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // Fallback
-  return (
-    <pre className="text-xs text-zinc-400 bg-zinc-900 rounded-lg p-3 overflow-auto max-h-64">
-      {JSON.stringify(conteudo, null, 2)}
-    </pre>
-  )
-}
-
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 type Periodo = "semana" | "mes" | "3meses" | "ano" | "custom"
@@ -790,11 +429,14 @@ export default function RelatoriosPage() {
         body: JSON.stringify({ tipo }),
       })
       const data = await res.json()
-      if (data.conteudo) {
-        setRelatorioAtual({ ...data.relatorio, conteudo: data.conteudo })
+      if (!res.ok) throw new Error(data.error ?? "Não foi possível gerar o relatório")
+      if (data.relatorio) {
+        setRelatorioAtual(data.relatorio)
         setAbaAtiva("ia")
         await recarregarHistorico()
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível gerar o relatório")
     } finally {
       setGerando(null)
     }
@@ -1238,7 +880,7 @@ export default function RelatoriosPage() {
                     </div>
                   </div>
                   <div className="p-4 max-h-[60vh] overflow-y-auto">
-                    <RelatorioConteudo conteudo={relatorioAtual.conteudo} tipo={relatorioAtual.tipo} />
+                    <ConteudoRelatorio apresentacao={relatorioAtual.apresentacao} referencia={relatorioAtual.id} />
                   </div>
                 </div>
               ) : (
