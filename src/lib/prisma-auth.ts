@@ -1,3 +1,4 @@
+import { conexaoBanco } from "@/lib/banco-conexao"
 // Cliente do caminho de AUTENTICAÇÃO.
 //
 // Existe por um problema de ordem, não por conveniência: o login precisa ler
@@ -15,7 +16,7 @@
 // Ele não lê demanda, custo, nem nada de cliente. Se este cliente vazar para
 // outro uso por engano, o dano é limitado pelo GRANT, não pela boa intenção.
 //
-// AUTH_DATABASE_URL ausente = usa a conexão normal. É o estado de hoje, antes da
+// Com RLS ativo, AUTH_DATABASE_URL é obrigatória. Sem RLS, usa fallback legado. É o estado de hoje, antes da
 // virada: sem RLS ligada para o role atual, um cliente só resolve tudo.
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
@@ -23,7 +24,7 @@ import { PrismaPg } from "@prisma/adapter-pg"
 const globalParaAuth = globalThis as unknown as { prismaAuth: PrismaClient | undefined }
 
 function criar() {
-  const url = process.env.AUTH_DATABASE_URL || process.env.DATABASE_URL
+  const url = conexaoBanco("auth")
   return new PrismaClient({
     adapter: new PrismaPg({ connectionString: url }),
     log: ["error"],

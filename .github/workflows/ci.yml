@@ -86,13 +86,18 @@ jobs:
         env:
           DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/nuflow_test
 
+      - name: Runtime Prisma com logins restritos e pool reutilizado
+        run: npm run test:runtime
+        env:
+          DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/nuflow_test
+
       - name: Banco migrado é idêntico ao schema
         run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 
       # Prova o isolamento de verdade: cria duas empresas de mentira, vira o role
       # da aplicação com SET LOCAL ROLE (que perde o BYPASSRLS) e confere que uma
       # não enxerga a outra. Tudo dentro de uma transação desfeita.
-      # É o único teste que responde "o RLS realmente isola?" sem produção.
+      # Complementa o ensaio Prisma com verificações de políticas e parcerias.
       - name: RLS isola de verdade
         run: node scripts/verificar-rls.mjs
 

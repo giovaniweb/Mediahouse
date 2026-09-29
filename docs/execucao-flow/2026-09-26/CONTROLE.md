@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — S06: biblioteca interna, publicação explícita e mídia por objeto; nenhuma publicação em produção.
+Última atualização: 28/09/2026 — S07: runtime RLS/pool ensaiado com logins restritos; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: S06 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: S07 — runtime RLS e pool; manter os recortes pendentes de S03 visíveis.
+- Tarefa em andamento: S07 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: S08 — auditoria de ações sensíveis; manter os recortes pendentes de S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: portfólio opt-in por arquivo com snapshot e revogação; biblioteca privada; sessão/token vinculados ao objeto; proteção de miniaturas Drive.
-- Verificações S06: 630 unitários e 90 cenários integrados; build, tipos, lint, auditores e RLS locais. Migração aplicada somente no banco descartável; inventário de produção e storage real pendentes.
+- Última alteração: contexto transacional para queries/SQL/lotes/callback; conexões explícitas sob RLS; recuperação de senha atômica por token.
+- Verificações S07: 635 unitários, 90 integrações e 16 cenários runtime; verificador somente leitura de roles local. Migração aplicada só no banco descartável; configuração real do provedor permanece pendente.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -30,7 +30,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S04 | OAuth e cifra versionada | 01 | S02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S05 | Ferramentas autorizadas | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S06 | Publicação explícita | 01 | S01, S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| S07 | RLS e pool | 01 | S01, S04, S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| S07 | RLS e pool | 01 | S01, S04, S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R01 | Relatório legado | 02 | S03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R02 | Métricas e recortes | 02 | R01, S01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -180,3 +180,15 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Script de inventário somente leitura executado em banco local, empresa inexistente (contagens zero), para validar SQL. Não houve inventário dos dados reais, ensaio visual autenticado ou verificação do bucket real.
 - Limites: URLs assinadas antigas até 600s; links de buckets públicos/Drive exigem tratamento no provedor; arquivos sem registro e referências antigas precisam inventário. Não certificar acervo legado, M01–M04 ou prontidão comercial como resolvidos.
 - Próximo cartão: S07 (runtime RLS/pool). Manter pendências S01/S02/S03, validações externas e L02 abertas.
+
+
+### S07 — runtime e pool com logins restritos (28/09/2026)
+
+- Roteiro: `S07-RUNTIME-RLS.md`. Runner e CI usam conexão direta de logins temporários sem superuser/bypass/ownership; administrador somente no preparo/limpeza local. Não houve troca de credenciais ou flag em produção.
+- Extensão extraída e corrigida: SQL também recebe contexto; ausência de empresa declara vazio; callback não desativa a extensão do cliente global; lote mantém ordem/rollback. Prova com pool de duas conexões e resíduo numa conexão única.
+- Conexões explícitas obrigatórias sob RLS, sem fallback de auth/admin para dono. Verificador somente leitura testado localmente com os roles restritos; administração técnica permanece atrás dos gates existentes de super-admin.
+- Recuperação de senha falhou no primeiro ensaio restrito. Proposta de UPDATE direto foi rejeitada pela revisão automática e não aplicada. Alternativa implementada: função restrita a token válido de uso único, sem conceder UPDATE em usuários. Regressões de expiração, privilégio e concorrência passaram.
+- Migração `20260929010000_auth_reset_por_token` aplicada somente em 127.0.0.1:55439/nuflow_test; 27 migrações. 635 unitários/45 arquivos, 90 integrações/4 arquivos, 16 runtime/1 arquivo; RLS SQL e diagnóstico de roles aprovados. Logs `/private/tmp/nuflow-s07-*.log`.
+- Build webpack, TypeScript, lint (zero erros/avisos nos arquivos alterados), auditores tenancy/perfil, verificador RLS e diff check: aprovados. Schema migrado sem diferença frente ao Prisma; aviso preexistente de dependência face-api no build.
+- Limites: provas de estado OAuth e identidade/login no banco, não login do navegador/Google real. Ainda faltam pool/conexões do provedor, ensaio HTTP de homologação e administração real. S08 deve trazer RLS próprio para a tabela central de auditoria. Não declarar L02 liberado.
+- Próximo cartão: S08. Pendências anteriores de S01/S02/S03 e validações externas continuam abertas.

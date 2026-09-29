@@ -29,7 +29,9 @@
     "_comment_guarda_banco": "Comandos que escrevem no banco passam por scripts/guarda-banco.mjs. Produção exige PERMITIR_BANCO_PRODUCAO=sim — ver o cabeçalho do script.",
     "test:integration": "node scripts/teste-integracao.mjs",
     "test:integration:prepare": "node scripts/teste-integracao.mjs migrate",
-    "db:cifrar-drive": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register scripts/cifrar-drive.ts"
+    "db:cifrar-drive": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register scripts/cifrar-drive.ts",
+    "test:runtime": "node scripts/teste-runtime-rls.mjs",
+    "verificar:runtime": "node scripts/verificar-runtime-rls.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
