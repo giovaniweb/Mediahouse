@@ -480,7 +480,6 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   const [loadingBriefing, setLoadingBriefing] = useState(false)
   const [extrato, setExtrato] = useState<ExtratoEvento | null>(null)
   const [erroMsg, setErroMsg] = useState("")
-  const [tipoErro, setTipoErro] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   // manual form fields
   const [titulo, setTitulo] = useState("")
@@ -512,10 +511,9 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
     const file = e.target.files?.[0]
     if (!file) return
     if (file.type !== "application/pdf") { toast.error("Selecione um arquivo PDF"); return }
-    if (file.size > 20 * 1024 * 1024) { toast.error("PDF muito grande (máximo 20 MB)"); return }
+    if (file.size > 3 * 1024 * 1024) { toast.error("PDF muito grande (máximo 3 MB)"); return }
     setPdfFile(file)
     setErroMsg("")
-    setTipoErro(null)
     setLoadingBriefing(true)
     try {
       const form = new FormData()
@@ -524,7 +522,6 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
       const json = await res.json()
       if (!res.ok || json.error) {
         setErroMsg(json.error ?? "Erro ao processar o briefing")
-        setTipoErro(json.tipo ?? null)
         setLoadingBriefing(false)
         return
       }
@@ -532,7 +529,6 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
       setEditExtrato(json.dados)
     } catch {
       setErroMsg("Erro ao conectar com o servidor")
-      setTipoErro(null)
     } finally {
       setLoadingBriefing(false)
     }
@@ -630,7 +626,7 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
                 }}
               >
                 <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 6 }}>📄 Via Briefing PDF</div>
-                <div style={{ fontSize: 13, color: MUTED }}>IA extrai título, datas, programação e checklist automaticamente</div>
+                <div style={{ fontSize: 13, color: MUTED }}>Usa o saldo de IA para extrair dados. Revise antes de criar.</div>
               </button>
               <button
                 onClick={() => setMode("manual")}
@@ -657,7 +653,7 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
                 }}>
                   <FileText style={{ width: 48, height: 48, color: ACCENT }} />
                   <span style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>Selecionar PDF do briefing</span>
-                  <span style={{ fontSize: 11, color: MUTED }}>máximo 20 MB</span>
+                  <span style={{ fontSize: 11, color: MUTED }}>máximo 3 MB</span>
                   {pdfFile && <span style={{ fontSize: 12, color: ACCENT }}>{pdfFile.name}</span>}
                   <input type="file" accept=".pdf" style={{ display: "none" }} onChange={handlePdfSelect} />
                 </label>
@@ -666,7 +662,7 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
               {loadingBriefing && (
                 <div style={{ textAlign: "center", padding: "40px 0" }}>
                   <Loader2 style={{ width: 40, height: 40, color: ACCENT, margin: "0 auto 12px" }} className="animate-spin" />
-                  <p style={{ color: MUTED, fontSize: 14 }}>Claude está lendo o briefing...</p>
+                  <p style={{ color: MUTED, fontSize: 14 }}>Lendo o briefing. Revise os dados antes de salvar.</p>
                 </div>
               )}
 
@@ -675,18 +671,16 @@ function CriarEventoSheet({ onClose, onCreated }: { onClose: () => void; onCreat
                   padding: "16px", borderRadius: 14, background: "rgba(248,113,113,.1)",
                   border: "1px solid rgba(248,113,113,.3)", marginBottom: 16,
                 }}>
-                  <p style={{ fontSize: 13.5, color: "#fca5a5", marginBottom: tipoErro === "api_credits" ? 12 : 0 }}>{erroMsg}</p>
-                  {tipoErro === "api_credits" && (
-                    <button
-                      onClick={() => { setMode("manual"); setErroMsg("") }}
-                      style={{
-                        padding: "10px 16px", borderRadius: 12, border: `1px solid ${ACCENT}`,
-                        background: SOFT, color: TEXT, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      ✍️ Criar manualmente
-                    </button>
-                  )}
+                  <p style={{ fontSize: 13.5, color: "#fca5a5", marginBottom: 12 }}>{erroMsg}</p>
+                  <button
+                    onClick={() => { setMode("manual"); setErroMsg("") }}
+                    style={{
+                      padding: "10px 16px", borderRadius: 12, border: `1px solid ${ACCENT}`,
+                      background: SOFT, color: TEXT, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    ✍️ Criar manualmente
+                  </button>
                 </div>
               )}
 

@@ -42,7 +42,13 @@ O resumo de evento separa previsão, realizado informado e custos audiovisuais; 
 
 A cobertura mantém histórico em RelatorioIA com modelo regras-v1, tokens zero e categoria legada semanal/periodo cobertura-ID. O histórico genérico preserva o JSON, mas não apresenta todos os novos campos e mantém sua restrição anterior para usuários sem verCustos. O evento mantém resposta e log de geração, sem persistir o corpo do resumo.
 
-Resta a importação de briefing como chamada ativa legada fora do orçamento. Próxima ação: proteger autorização/empresa, validar extração e aplicar limites próprios de PDF, entrada/saída e concorrência. Revisar os consumidores em eventos, coberturas e campo. Não enviar mídia pelo adaptador atual de texto.
+A importação de briefing permanece opcional, agora pelo adaptador ia-briefing.ts e pelo orçamento central. Exige vínculo ativo e verEventos ou verCoberturas conforme o destino; o destino não escolhe empresa. Arquivo até 3 MiB e corpo multipart até 3 MiB + 64 KiB, verificados na leitura real. Antes da rede reserva 29.120 tokens (24.000 entrada + 4.096 saída + 1.024 margem); conta o pedido completo e só gera com estimativa até 20.000 tokens de entrada. Não confundir bytes binários com tokens. EntradaBytes da política/consumo mede o prompt textual; limite binário é separado e fixo no adaptador.
+
+A contagem não é uma geração paga e sua estimativa pode diferir do uso real. A reserva antecede a contagem para proteger simultaneidade e opt-out. Falha/excesso antes do checkpoint libera reserva; falha após checkpoint conserva débito desconhecido. Sem retry automático nem fallback de modelo. O uso real, inclusive acima da reserva, é contabilizado integralmente. Schema valida datas reais/período, enums, tamanhos e listas; saída truncada ou inválida não preenche formulário nem dispara segunda chamada. Dados continuam sujeitos a revisão humana, sem criar evento automaticamente.
+
+Consumidores de eventos, coberturas e campo informam 3 MB e revisão; campo permite preenchimento manual em qualquer erro. PDF e resposta bruta não são gravados nos logs de consumo. O PDF é transmitido ao provedor na contagem e na geração. Não há parser local nem limite próprio de páginas: estrutura/criptografia são avaliadas pelo provedor, e o teto de conteúdo é por tokens estimados. Homologação com PDF real, qualidade de extração/OCR e ensaio visual autenticado pendentes; os testes usam provedor falso.
+
+Referência técnica consultada: [contagem de tokens da Anthropic](https://platform.claude.com/docs/en/build-with-claude/token-counting), suporte a PDF e estimativa anterior à geração. Os limites acima são decisões do produto, não limites oficiais do provedor.
 
 Não reconstruir chat/agentes ou notas automáticas. Cache, preços datados e política auditada O06 continuam pendentes para os caminhos que permanecerem. Sem telemetria real, a avaliação é de responsabilidade no fluxo, não de popularidade medida.
 

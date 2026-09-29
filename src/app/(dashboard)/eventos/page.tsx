@@ -236,11 +236,12 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   // Importa dados de um briefing PDF via IA (reusa /api/coberturas/briefing)
   async function importarBriefing(file: File) {
+    if (file.type !== "application/pdf" || file.size > 3 * 1024 * 1024) { toast.error("Selecione um PDF de até 3 MB."); return }
     setImportando(true)
     try {
       const fd = new FormData()
       fd.append("file", file)
-      const res = await fetch("/api/coberturas/briefing", { method: "POST", body: fd })
+      const res = await fetch("/api/coberturas/briefing?destino=eventos", { method: "POST", body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Erro ao ler o briefing")
       const d = json.dados as {
@@ -298,7 +299,7 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
         <button onClick={() => briefingRef.current?.click()} disabled={importando}
           className="w-full mb-4 flex items-center justify-center gap-2 text-xs border border-dashed border-zinc-700 hover:border-purple-600 text-zinc-400 hover:text-purple-300 py-2.5 rounded-lg transition-colors disabled:opacity-50">
           {importando ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-          {importando ? "Lendo briefing com IA…" : "📄 Importar de briefing PDF (IA preenche os campos)"}
+          {importando ? "Lendo briefing com IA…" : "📄 Importar PDF com IA (até 3 MB · revise os campos)"}
         </button>
 
         <div className="space-y-3">

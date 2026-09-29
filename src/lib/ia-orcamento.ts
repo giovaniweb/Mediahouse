@@ -45,17 +45,19 @@ export function criarOrcamentoIA(db: PrismaClient) {
     return r._sum.debitoTokens ?? 0
   }
   return {
-    async reservar(c: ContextoConsumoIA, modelo: string, entradaBytes: number, limiteSaida: number) {
+    async reservar(c: ContextoConsumoIA, modelo: string, entradaBytes: number, limiteSaida: number, documento?: { limiteEntradaTokens: number }) {
       if (!c.organizacaoId || !c.usuarioId || !/^[a-z][a-z0-9_.-]{1,79}$/.test(c.finalidade) || !/^[a-zA-Z0-9_.-]{1,80}$/.test(modelo)) throw new LimiteIA("indisponivel")
       if (!Number.isInteger(entradaBytes) || entradaBytes < 1 || entradaBytes > 65536 || !Number.isInteger(limiteSaida) || limiteSaida < 1 || limiteSaida > 8192) throw new LimiteIA("entrada")
+      if (documento && (!Number.isInteger(documento.limiteEntradaTokens) || documento.limiteEntradaTokens < 1 || documento.limiteEntradaTokens > 32768)) throw new LimiteIA("entrada")
       return transacao(c.organizacaoId, async (tx, data, empresa) => {
         const p = await politica(tx, c.organizacaoId)
         if (!empresa.ativo || empresa.ambienteTeste || !p.habilitada || !await membro(tx, c.organizacaoId, c.usuarioId)) throw new LimiteIA("indisponivel")
         if (entradaBytes > p.entradaBytes || limiteSaida > p.saidaTokens) throw new LimiteIA("entrada")
         await limpar(tx, c.organizacaoId, data)
-        // Estimativa conservadora para texto UTF-8; o adaptador não aceita mídia/tools.
+        // Texto usa bytes UTF-8. Documento usa teto próprio reservado antes da contagem remota.
+        // entradaBytes registra apenas o prompt textual; tamanho binário é limitado pelo adaptador PDF.
         // Uso acima da reserva é contabilizado integralmente, nunca truncado ao teto.
-        const reservaTokens = entradaBytes + limiteSaida + 1024
+        const reservaTokens = (documento?.limiteEntradaTokens ?? entradaBytes) + limiteSaida + 1024
         if ((await saldo(tx, c.organizacaoId, data)) + reservaTokens > p.tokensDia) throw new LimiteIA("orcamento")
         const ativos = await tx.consumoIA.count({ where: { organizacaoId: c.organizacaoId, OR: [{ estado: { in: ["reservado", "enviando"] } }, { estado: "desconhecido", expiraEm: { gt: data } }] } })
         if (ativos >= p.simultaneas) throw new LimiteIA("simultaneas")

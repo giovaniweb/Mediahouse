@@ -96,6 +96,7 @@ function BriefingModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       setErro("O arquivo deve ser um PDF.")
       return
     }
+    if (file.size > 3 * 1024 * 1024) { setErro("PDF muito grande (máximo 3 MB)."); return }
     setErro(null)
     setEtapa("carregando")
     try {
@@ -204,7 +205,7 @@ function BriefingModal({ onClose, onCreated }: { onClose: () => void; onCreated:
                     <Loader2 className="w-6 h-6 text-teal-400 animate-spin" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-zinc-200">Claude está lendo o briefing...</p>
+                    <p className="text-sm font-medium text-zinc-200">Lendo o briefing. Revise os dados antes de salvar.</p>
                     <p className="text-xs text-zinc-500 mt-1">Isso pode levar alguns segundos</p>
                   </div>
                 </div>
@@ -227,7 +228,7 @@ function BriefingModal({ onClose, onCreated }: { onClose: () => void; onCreated:
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium text-zinc-200">Arraste o PDF do briefing aqui</p>
-                      <p className="text-xs text-zinc-500 mt-1">ou clique para selecionar · máximo 20 MB</p>
+                      <p className="text-xs text-zinc-500 mt-1">ou clique para selecionar · máximo 3 MB</p>
                     </div>
                     <input
                       id="briefing-file-input"
@@ -243,7 +244,7 @@ function BriefingModal({ onClose, onCreated }: { onClose: () => void; onCreated:
                     </div>
                   )}
                   <p className="text-xs text-zinc-500 text-center">
-                    O Claude irá extrair: título, datas, local, cliente, programação por dia e checklist específico.
+                    A leitura usa o saldo de IA da empresa. Revise os dados extraídos antes de criar o evento.
                   </p>
                 </>
               )}

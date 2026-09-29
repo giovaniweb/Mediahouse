@@ -351,3 +351,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 687 unitários e 224 integrações aprovados, incluindo isolamento, permissões, valores ausentes/zero, contagem de fotos/vídeos, falha de banco e ausência de IA. Build webpack/tipos aprovados; lint sem erros, seis avisos preexistentes; auditores de tenancy/perfil aprovados. Logs /private/tmp/nuflow-eventos-regras-*.log.
 - Sem migration, exclusão, mensagem, chamada paga ou deploy; ensaio visual autenticado e benchmark pendentes.
 - Próximo: importação de briefing PDF, com autorização e orçamento próprios, limites de documento e validação de saída. Revisar consumidores de eventos, coberturas e campo. O06/U01 permanecem parciais.
+
+
+### O06/U01 — briefing PDF com limites e revisão (29/09/2026)
+
+- Base b00bc17. Importação opcional preservada; vínculo/capacidade por destino, empresa derivada da sessão. PDF limitado na leitura real e no arquivo (3 MiB), contagem prévia, orçamento diário/concorrência compartilhados e sem retry.
+- Validação estrutural, datas/período e listas; respostas truncadas/inválidas não preenchem formulário. Consumo confirmado persiste mesmo se saída inválida; timeout de geração mantém débito desconhecido. Sem logs com PDF/texto bruto.
+- Eventos, coberturas e campo informam limite/revisão; campo oferece criação manual após qualquer erro. Painel de consumo inclui briefing. Não cria eventos automaticamente.
+- 687 unitários e 245 integrações distintas aprovados (243 na suíte + 21 no recorte final, duas novas); build webpack/tipos, lint sem erros e auditores aprovados. Onze avisos preexistentes em campo, face-api no build. Logs /private/tmp/nuflow-briefing-*.log.
+- Sem migration nova, chamada paga, mensagem ou deploy. Contagem é estimativa, sem garantia de teto monetário; PDF real/OCR, páginas e comportamento visual não homologados. Detalhes em DECISAO-IA-ESSENCIAL.md.
+- Próximo em O06: política de consumo editável com auditoria; cache/TTL e preços datados continuam pendentes. Manter também dívida S03/R03 do GET principal de eventos (permissão financeira e previsto/realizado). O06/U01 continuam parciais.

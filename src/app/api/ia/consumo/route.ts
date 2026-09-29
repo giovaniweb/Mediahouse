@@ -8,7 +8,7 @@ export async function GET() {
   if (acesso instanceof NextResponse) return acesso
   try {
     const resumo = await criarOrcamentoIA(prisma).resumo(acesso.organizacaoId)
-    return NextResponse.json({ ...resumo, cobertura: "relatorios.gerar" }, { headers: { "Cache-Control": "private, no-store" } })
+    return NextResponse.json({ ...resumo, cobertura: "relatorios.gerar,briefing" }, { headers: { "Cache-Control": "private, no-store" } })
   } catch {
     return NextResponse.json({ error: "Não foi possível consultar o consumo de IA." }, { status: 503 })
   }

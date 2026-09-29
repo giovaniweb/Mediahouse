@@ -224,7 +224,7 @@ describe("relatórios e painel com controle real e provedor falso", () => {
     expect(painel.status).toBe(200)
     expect(painel.headers.get("cache-control")).toContain("no-store")
     const resumo = await painel.json()
-    expect(resumo).toMatchObject({ cobertura: "relatorios.gerar", tokensMedidos: 300, custoMonetario: null })
+    expect(resumo).toMatchObject({ cobertura: "relatorios.gerar,briefing", tokensMedidos: 300, custoMonetario: null })
     expect(resumo).not.toHaveProperty("token")
     expect(resumo).not.toHaveProperty("usuarioId")
   })

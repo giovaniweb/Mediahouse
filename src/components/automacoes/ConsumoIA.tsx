@@ -19,9 +19,9 @@ export function ConsumoIA() {
   const { data, error, isLoading, mutate } = useSWR<Resumo>(podeVer && me?.membership ? ["/api/ia/consumo", me.membership.organizacaoId] : null, () => fetcher("/api/ia/consumo"), { revalidateOnFocus: false, shouldRetryOnError: false })
   if (!podeVer) return null
   return <details className="mx-4 my-2 max-h-72 shrink-0 overflow-y-auto rounded-xl border border-zinc-800 p-4 text-sm">
-    <summary className="cursor-pointer font-medium">Uso de IA em relatórios</summary>
+    <summary className="cursor-pointer font-medium">Consumo de IA</summary>
     <div className="mt-3 space-y-3">
-      <p className="text-zinc-400">Este controle cobre a análise opcional dos relatórios. Outras análises pontuais ainda não entram neste saldo.</p>
+      <p className="text-zinc-400">Este controle cobre a análise opcional dos relatórios e a importação de briefing PDF.</p>
       {error ? <p role="alert">Não foi possível consultar o consumo. <button className="underline" onClick={() => mutate()}>Tentar novamente</button></p>
         : isLoading || !data ? <p>Consultando consumo…</p> : <>
           <p>{data.habilitadaEfetiva ? "Análise de IA disponível, sujeita ao saldo." : "Análise de IA desativada para esta empresa."} Os relatórios de dados continuam disponíveis.</p>

@@ -74,8 +74,18 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 
 ### Próximo recorte obrigatório — revisado pelo usuário
 
-1. Análises de demanda e pontuação de ideias foram retiradas no servidor e nas telas; referências antigas preservadas. Relatórios de eventos/coberturas agora usam regras sem IA. Resta proteger importação de briefing PDF, incluindo os consumidores de eventos, coberturas e campo; exige limites próprios de documento e validação de saída. Ver DECISAO-IA-ESSENCIAL.md.
+1. Análises de demanda e pontuação de ideias foram retiradas no servidor e nas telas; referências antigas preservadas. Relatórios de eventos/coberturas agora usam regras sem IA. Briefing PDF agora passa por orçamento, limites próprios de documento e validação de saída, incluindo consumidores de eventos, coberturas e campo. Homologação real permanece pendente. Ver DECISAO-IA-ESSENCIAL.md.
 2. Chat, triagem autônoma e loops foram retirados. A prova aplicável é ausência de chamada/efeito em endpoint aposentado, não implementar limites para reativá-los.
 3. Opt-in textual dos relatórios concluído. Cache autorizado/TTL, preço datado e edição auditada da política seguem pendentes, sem exigir nova Central.
 4. Manter transcrição sem consumidor ativo. Conversa/secretária de WhatsApp é futura e depende de necessidade validada.
 5. Conferir cobertura dos caminhos pagos realmente mantidos antes de concluir O06; demais pendências de U01 continuam no controle.
+
+
+### Briefing protegido — 29/09/2026
+
+- Base b00bc17. Detalhes/limitações em DECISAO-IA-ESSENCIAL.md. Sonnet existente preservado, sem novo modelo nem dependência.
+- Reserva documental interna acrescenta limiteEntradaTokens, validado entre 1 e 32.768; não é entrada controlada pelo navegador. No briefing é fixo 24.000. entradaBytes representa apenas prompt textual (mesma política); binário tem limite próprio 3 MiB. Sem alteração de schema.
+- SDK sem retries, contagem até 15 s e geração até 35 s; maxDuration de 60 s. Contagem excessiva/recusada não gera mensagem. Estimativa não garante teto absoluto de cobrança; reconciliação registra o uso real.
+- Consumo central agora declara relatórios e briefing; orçamento diário/concorrência são compartilhados. Chamadas LLM ativas encontradas em src: ia-analise e ia-briefing. Transcrição segue sem consumidor ativo.
+- 687 unitários; suíte completa com 243 integrações e recorte final com 21 provas de briefing (duas adicionais, 245 integrações distintas). Build webpack/tipos, lint sem erros e auditores aprovados; 11 avisos preexistentes em campo e aviso face-api no build. Logs /private/tmp/nuflow-briefing-*.log.
+- Sem migration nova, produção, mensagem, chamada paga ou deploy. Não conclui O06: cache/TTL, preço datado, política auditada e homologação dos caminhos mantidos seguem pendentes.
