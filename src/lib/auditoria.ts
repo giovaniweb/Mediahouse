@@ -7,7 +7,7 @@ export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }
 
-const booleanos = new Set([...Object.keys(BASE_FALSE), "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
+const booleanos = new Set([...Object.keys(BASE_FALSE), "habilitada", "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
 const motivos = new Set(["config_corrigida","provedor_normalizado","destinatario_revalidado","autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
 const contadores = new Set(["processados", "pulados", "erros", "alterados"])
 // Somente nomes de campos, jamais valores fiscais/contato/credenciais.
@@ -17,6 +17,8 @@ export function payloadAuditoria(entrada?: Record<string, unknown>): Prisma.Inpu
   for (const [k,v] of Object.entries(entrada ?? {})) {
     if (booleanos.has(k) && typeof v === "boolean") saida[k] = v
     else if (contadores.has(k) && Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 1000000) saida[k] = v as number
+    else if (k === "tokensDia" && Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 1000000) saida[k] = v as number
+    else if (k === "simultaneas" && Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= 5) saida[k] = v as number
     else if (k === "motivo" && typeof v === "string" && motivos.has(v)) saida[k] = v
     else if (k === "papel" && typeof v === "string" && Object.hasOwn(PRESETS,v)) saida[k] = v
     else if (k === "campos" && Array.isArray(v)) saida[k] = [...new Set(v.filter(x => typeof x === "string" && campos.has(x)))].sort()

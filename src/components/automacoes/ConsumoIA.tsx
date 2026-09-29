@@ -1,10 +1,12 @@
 "use client"
+import { useState } from "react"
+import type { PoliticaEditavel } from "@/lib/ia-politica"
 import useSWR from "swr"
 import { useMe } from "@/hooks/usePermissoes"
 import { fetcher } from "@/lib/fetcher"
 
 type Resumo = {
-  politica: { tokensDia: number; simultaneas: number }
+  politica: PoliticaEditavel
   habilitadaEfetiva: boolean
   periodoUTC: string
   tokensMedidos: number
@@ -34,7 +36,48 @@ export function ConsumoIA() {
           <p className="text-zinc-400">Valores em dinheiro: desconhecidos, sem tabela de preços cadastrada. Reservas são estimativas; não são cobrança confirmada.</p>
           <p className="text-zinc-400">Período por data da reserva: {data.periodoUTC} (UTC). Até {data.politica.simultaneas} chamadas simultâneas. Reservas sem confirmação de dias anteriores continuam comprometendo o saldo.</p>
           <button className="underline" onClick={() => mutate()}>Atualizar consumo</button>
+          <EditorPolitica key={me?.membership?.organizacaoId} politica={data.politica} atualizar={() => mutate()} />
         </>}
     </div>
   </details>
+}
+
+
+function EditorPolitica({ politica, atualizar }: { politica: PoliticaEditavel; atualizar: () => Promise<unknown> }) {
+  const [edicao, setEdicao] = useState<{ anterior: PoliticaEditavel; nova: PoliticaEditavel } | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [mensagem, setMensagem] = useState("")
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!edicao || salvando) return
+    setSalvando(true); setMensagem("")
+    try {
+      const r = await fetch("/api/ia/politica", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edicao) })
+      const body = await r.json()
+      if (r.status === 409) { setEdicao(null); await atualizar(); throw new Error("Os limites mudaram. Abra Ajustar limites novamente para revisar os valores atuais.") }
+      if (!r.ok) throw new Error(body.error ?? "Não foi possível confirmar a alteração.")
+      setEdicao(null)
+      setMensagem("Limites salvos. Alterações ficam no registro de auditoria.")
+      await atualizar()
+    } catch (e) { setMensagem(e instanceof Error ? e.message : "Não foi possível confirmar a alteração. Atualize o consumo.") }
+    finally { setSalvando(false) }
+  }
+  return <div className="border-t border-zinc-700 pt-3">
+    {!edicao ? <button className="underline" onClick={() => { const p = { habilitada: politica.habilitada, tokensDia: politica.tokensDia, simultaneas: politica.simultaneas }; setEdicao({ anterior: p, nova: { ...p } }); setMensagem("") }}>Ajustar limites</button> :
+      <form onSubmit={salvar} className="space-y-3">
+        <fieldset disabled={salvando} className="space-y-3">
+          <legend className="font-medium">Limites de IA da empresa</legend>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={edicao.nova.habilitada} onChange={e => setEdicao({ ...edicao, nova: { ...edicao.nova, habilitada: e.target.checked } })} />Permitir análises de IA</label>
+          <label className="block">Tokens por dia (UTC)
+            <input className="block w-full rounded border border-zinc-600 bg-zinc-900 p-2" type="number" required min={0} max={1000000} step={1} value={Number.isNaN(edicao.nova.tokensDia) ? "" : edicao.nova.tokensDia} onChange={e => setEdicao({ ...edicao, nova: { ...edicao.nova, tokensDia: e.target.valueAsNumber } })} />
+          </label>
+          <label className="block">Chamadas simultâneas
+            <input className="block w-full rounded border border-zinc-600 bg-zinc-900 p-2" type="number" required min={1} max={5} step={1} value={Number.isNaN(edicao.nova.simultaneas) ? "" : edicao.nova.simultaneas} onChange={e => setEdicao({ ...edicao, nova: { ...edicao.nova, simultaneas: e.target.valueAsNumber } })} />
+          </label>
+          <p className="text-zinc-400">Desativar impede novas chamadas; não cancela as já enviadas. Reduzir o limite não apaga consumo ou reservas. Estes limites são de tokens, não de reais.</p>
+          <div className="flex gap-4"><button type="submit" className="rounded bg-teal-700 px-3 py-2">{salvando ? "Salvando…" : "Salvar limites"}</button><button type="button" onClick={() => { setEdicao(null); setMensagem("") }}>Cancelar</button></div>
+        </fieldset>
+      </form>}
+    {mensagem && <p role="status" className="mt-2">{mensagem}</p>}
+  </div>
 }

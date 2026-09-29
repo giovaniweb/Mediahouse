@@ -76,7 +76,7 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 
 1. Análises de demanda e pontuação de ideias foram retiradas no servidor e nas telas; referências antigas preservadas. Relatórios de eventos/coberturas agora usam regras sem IA. Briefing PDF agora passa por orçamento, limites próprios de documento e validação de saída, incluindo consumidores de eventos, coberturas e campo. Homologação real permanece pendente. Ver DECISAO-IA-ESSENCIAL.md.
 2. Chat, triagem autônoma e loops foram retirados. A prova aplicável é ausência de chamada/efeito em endpoint aposentado, não implementar limites para reativá-los.
-3. Opt-in textual dos relatórios concluído. Cache autorizado/TTL, preço datado e edição auditada da política seguem pendentes, sem exigir nova Central.
+3. Opt-in textual dos relatórios concluído. Edição auditada da política concluída no painel recolhido de consumo. Cache autorizado/TTL e preço datado seguem pendentes, sem exigir nova Central.
 4. Manter transcrição sem consumidor ativo. Conversa/secretária de WhatsApp é futura e depende de necessidade validada.
 5. Conferir cobertura dos caminhos pagos realmente mantidos antes de concluir O06; demais pendências de U01 continuam no controle.
 
@@ -89,3 +89,11 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 - Consumo central agora declara relatórios e briefing; orçamento diário/concorrência são compartilhados. Chamadas LLM ativas encontradas em src: ia-analise e ia-briefing. Transcrição segue sem consumidor ativo.
 - 687 unitários; suíte completa com 243 integrações e recorte final com 21 provas de briefing (duas adicionais, 245 integrações distintas). Build webpack/tipos, lint sem erros e auditores aprovados; 11 avisos preexistentes em campo e aviso face-api no build. Logs /private/tmp/nuflow-briefing-*.log.
 - Sem migration nova, produção, mensagem, chamada paga ou deploy. Não conclui O06: cache/TTL, preço datado, política auditada e homologação dos caminhos mantidos seguem pendentes.
+
+
+### Política editável e auditada — 29/09/2026
+
+- Base 1ce2f47; controles e semântica em DECISAO-IA-ESSENCIAL.md. Só três opções editáveis no painel existente; limites técnicos preservados.
+- Autorização por gerenciarConfig/empresa, validação estrita, lock compartilhado com orçamento e auditoria atômica. Edições concorrentes divergentes não sobrescrevem silenciosamente; repetição sem mudança é idempotente.
+- 687 unitários e 261 integrações aprovados, incluindo 16 novas provas de política/isolamento/rollback/concorrência/efeito no orçamento. Build webpack/tipos e auditores aprovados; lint dos arquivos alterados sem erros/avisos. Face-api mantém aviso anterior no build. Logs /private/tmp/nuflow-politica-*.log.
+- Sem schema/migração nova, IA paga, produção ou deploy. O06 segue parcial por cache/TTL, preços datados e homologação. Próxima correção prioritária: dívida S03/R03 do acesso financeiro no GET de eventos, antes de ampliar ferramentas.

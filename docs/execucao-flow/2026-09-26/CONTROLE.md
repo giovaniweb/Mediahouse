@@ -361,3 +361,12 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 687 unitários e 245 integrações distintas aprovados (243 na suíte + 21 no recorte final, duas novas); build webpack/tipos, lint sem erros e auditores aprovados. Onze avisos preexistentes em campo, face-api no build. Logs /private/tmp/nuflow-briefing-*.log.
 - Sem migration nova, chamada paga, mensagem ou deploy. Contagem é estimativa, sem garantia de teto monetário; PDF real/OCR, páginas e comportamento visual não homologados. Detalhes em DECISAO-IA-ESSENCIAL.md.
 - Próximo em O06: política de consumo editável com auditoria; cache/TTL e preços datados continuam pendentes. Manter também dívida S03/R03 do GET principal de eventos (permissão financeira e previsto/realizado). O06/U01 continuam parciais.
+
+
+### O06 — ajustar limites com auditoria (29/09/2026)
+
+- Base 1ce2f47. Painel existente recebe habilitação, tokens/dia e simultaneidade, sem nova Central. Valores técnicos preservados.
+- Permissão gerenciarConfig e empresa revalidada; alteração/auditoria atômicas sob o lock do orçamento. Comparação dos valores anteriores evita sobrescrita concorrente divergente; no-op não duplica evento.
+- Desativação bloqueia futuros checkpoints; consumo, reservas e chamadas já enviadas são preservados. Redução não libera dívida nem cria saldo fictício.
+- 687 unitários, 261 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-politica-*.log; aviso face-api anterior. Sem migração nova, chamada paga, produção ou deploy; interface autenticada ainda não homologada.
+- Próximo: S03/R03 — revisar permissão financeira e separação previsto/realizado no GET principal de eventos. Cache/TTL, preços datados e homologação de O06 permanecem pendentes.

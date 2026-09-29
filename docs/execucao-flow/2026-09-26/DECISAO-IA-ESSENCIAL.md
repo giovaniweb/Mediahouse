@@ -50,7 +50,7 @@ Consumidores de eventos, coberturas e campo informam 3 MB e revisão; campo perm
 
 Referência técnica consultada: [contagem de tokens da Anthropic](https://platform.claude.com/docs/en/build-with-claude/token-counting), suporte a PDF e estimativa anterior à geração. Os limites acima são decisões do produto, não limites oficiais do provedor.
 
-Não reconstruir chat/agentes ou notas automáticas. Cache, preços datados e política auditada O06 continuam pendentes para os caminhos que permanecerem. Sem telemetria real, a avaliação é de responsabilidade no fluxo, não de popularidade medida.
+Não reconstruir chat/agentes ou notas automáticas. Cache e preços datados O06 continuam pendentes para os caminhos que permanecerem. A política já pode ser ajustada com auditoria no painel de consumo existente. Sem telemetria real, a avaliação é de responsabilidade no fluxo, não de popularidade medida.
 
 Secretária conversacional, planejamento por WhatsApp e agentes que escolhem ações ficam como evolução futura sujeita a necessidade validada. Entrada durável, aceite SIM/NÃO e saída WhatsApp já implementados não foram removidos.
 
@@ -70,3 +70,13 @@ O06 e U01 continuam parciais; esta decisão não encerra a auditoria inteira.
 - Build webpack/tipos, lint sem erros e auditores de escopo aprovados. Dez avisos preexistentes nas telas e aviso face-api no build. Sem ensaio visual autenticado.
 - Logs /private/tmp/nuflow-ia-contexto-*.log. Sem migration, exclusão de registros, mensagem, IA paga ou deploy.
 - O06/U01 permanecem parciais. A conversão de ideias mantém questões anteriores (alocação de código e atomicidade), fora deste recorte; este teste prova o caminho simples, não concorrência da conversão.
+
+
+## Ajuste simples dos limites — 29/09/2026
+
+- Base 1ce2f47. Em Relatórios > Consumo de IA > Ajustar limites: habilitada, tokens por dia UTC (0–1.000.000) e simultaneidade (1–5). Sem página ou agente novo; parâmetros técnicos de entrada/saída preservados.
+- PATCH /api/ia/politica exige gerenciarConfig e vínculo atual. Empresa/ator vêm da sessão; body estrito não aceita organização, usuário, saldos ou campos técnicos.
+- Lock da organização compartilhado com reserva/checkpoint; antes/depois e ator registrados em configuracao.alterada / politica_ia na mesma transação. Falha de auditoria reverte a edição. Payload numérico permitido explicitamente; retenção segue a auditoria existente, sem promessa de armazenamento imutável/perpétuo.
+- Cliente envia valores anteriores: se política efetiva divergir, retorna 409 e exige reabrir edição com dados atuais. Repetição que já coincide com os valores atuais não grava evento duplicado. É comparação de valores efetivos, não versionamento de cada edição intermediária.
+- Desativar impede reservas/checkpoints futuros; envio já iniciado pode concluir. Reduzir abaixo do gasto mantém consumo e reservas, bloqueando novas chamadas. Não zera débitos desconhecidos. Tokens não equivalem a teto monetário exato.
+- 687 unitários, 261 integrações, build webpack/tipos, lint sem avisos nos arquivos alterados e auditores aprovados. Sem migração nova, IA paga, produção ou deploy. Ensaio visual autenticado pendente.
