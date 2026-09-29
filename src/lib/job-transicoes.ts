@@ -324,3 +324,10 @@ export function podeTransicionar(entrada: {
 
   return { ok: true, avisos }
 }
+
+/** Só uma entrada em finalizado ganha data. Reabrir limpa o marcador atual,
+ * sem apagar histórico; trocar entre status finais preserva a conclusão. */
+export function marcadorConclusao(atual: { statusVisivel: string; finalizadaEm: Date | null }, novoStatusVisivel: string, agora = new Date()): { finalizadaEm: Date | null } {
+  if (novoStatusVisivel !== "finalizado") return { finalizadaEm: null }
+  return { finalizadaEm: atual.statusVisivel === "finalizado" ? atual.finalizadaEm : agora }
+}

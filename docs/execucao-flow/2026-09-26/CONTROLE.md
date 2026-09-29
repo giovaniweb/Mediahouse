@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 28/09/2026 — R01: leitura legada e contrato de relatórios; sem deploy.
+Última atualização: 29/09/2026 — R02: critérios compartilhados de métricas e snapshots; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: R01 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: R02 — unificar métricas, períodos e recortes; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: R02 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: R03 — intervalo de custos; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: leitor compatível de relatórios, envelope v1 validado, snapshot preservado e isolamento de ideias no gerador.
-- Verificações R01: 653 unitários e 107 integrações locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
+- Última alteração: recorte brasileiro validado, conclusão atual, fontes separadas, snapshots compartilhados e proteção financeira.
+- Verificações R02: 666 unitários, 114 integrações e 18 runtime locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -33,7 +33,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | S07 | RLS e pool | 01 | S01, S04, S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | S08 | Serviço de auditoria | 01 | S02, S03, S04, S05, S06, S07 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R01 | Relatório legado | 02 | S03 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| R02 | Métricas e recortes | 02 | R01, S01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| R02 | Métricas e recortes | 02 | R01, S01 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R03 | Filtro de custos | 02 | S03, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | R04 | Ordem e paginação de galeria | 02 | S06 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | O01 | Fila durável | 03 | F01, S07, S08 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -214,3 +214,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Build webpack, TypeScript, ESLint (zero erros; seis avisos preexistentes nas telas), auditores tenancy/perfil e diff check aprovados. Aviso preexistente face-api no build. Revisão própria, sem avaliação independente ou ensaio visual autenticado.
 - Sem migration, push/deploy, chamadas pagas ou mensagens externas. Não declarar indicadores reconciliados: semântica das métricas, períodos e Growth continua R02; cron/envios/consumo continuam nos cartões O.
 - Próxima ação: R02 — serviço comum de métricas e recortes com testes de reabertura, fronteiras de datas e separação de áreas, sem recalcular snapshots antigos.
+
+### R02 — métricas e recortes compartilhados (29/09/2026)
+
+- Base eb24333; contrato, critérios e limitações em R02-METRICAS.md. Período brasileiro com fim exclusivo, alias Growth/design, datas/áreas rejeitadas quando inválidas. Conclusão exige estado final atual e data confiável; removida inferência por updatedAt nos consumidores cobertos.
+- Contagem comum para dashboard, relatório, produção e resumo executivo/PDF. Arquivos finais deduplicados por identidade conhecida; link legado somente como fallback. Publicações usam data explícita ou Não medido. Manual permanece mensal/separado, sem total combinado potencialmente duplicado.
+- Reabertura limpa finalizadaEm nos dois handlers de coluna/status sem apagar histórico; nova conclusão recebe data nova. Snapshot emitido continua intacto. Não executada correção retroativa em massa.
+- Geração manual e cron semanal usam snapshot validado do mesmo serviço. verRelatorios não implica acesso financeiro; custos/diárias omitidos sem verCustos, tipos financeiros negados e histórico legado protegido. Testado valor sintético secreto fora do payload e do prompt.
+- 666 unitários/48 arquivos, 114 integrações/7 arquivos e 18 runtime/1 arquivo aprovados, banco PostgreSQL descartável. Cron e IA simulados, notificações de transição suprimidas nos testes. Nenhum envio externo.
+- Build webpack, TypeScript, lint (zero erros; dez avisos em trechos preexistentes), auditores tenancy/perfil e diff check aprovados. Aviso preexistente face-api permanece. Logs /private/tmp/nuflow-r02-*.log. Revisão própria; ensaio visual autenticado não realizado.
+- Sem migration ou publicação. Custos sem vínculo não rateados, identidade de versões antigas depende M01, fechamento financeiro C01–C03 e instrumentos dos demais agentes O ainda pendentes. Recortes amplos S01/S02/S03 continuam abertos.
+- Próxima ação: R03 — filtros combinados de custos com início inclusivo/fim exclusivo e compatibilidade de/ate.

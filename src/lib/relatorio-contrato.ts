@@ -1,3 +1,4 @@
+import { snapshotOperacionalSchema } from "@/lib/metricas-contrato"
 import { z } from "zod"
 
 export const tiposRelatorio = z.enum(["produtividade_time", "analise_custos", "otimizacao_contratacao", "performance_videomaker", "semanal", "mensal", "realtime", "banco_ideias"])
@@ -33,8 +34,8 @@ const campos = {
   recomendacoes: lista(z.object({ acao: texto, prioridade: z.enum(["alta", "media", "baixa"]), impacto: texto })),
 }
 const estruturado = z.object(campos).partial().refine(v => Object.entries(v).some(([k,v]) => !["titulo", "periodo"].includes(k) && (!Array.isArray(v) || v.length > 0)), "Sem conteúdo reconhecido")
-const snapshotSchema = z.object({ demandasCriadas: numero, concluidas: numero, emAndamento: numero, custoTotal: numero, custoPorVideo: numero, tempoMedioDias: numero, alertasAtivos: numero }).strict()
-const metadadosSchema = z.object({ tipo: tiposRelatorio, periodo: texto, area: z.literal("nao_separada"), origem: z.enum(["manual", "agente"]), geradoEm: z.iso.datetime(), inicio: z.iso.datetime().nullable(), fim: z.iso.datetime().nullable() }).strict()
+const snapshotSchema = z.object({ demandasCriadas: numero, concluidas: numero, emAndamento: numero, custoTotal: numero.nullable(), custoPorVideo: numero.nullable(), tempoMedioDias: numero.nullable(), alertasAtivos: numero, metricas: snapshotOperacionalSchema.optional(), bancoIdeias: z.object({ escopo: z.literal("empresa_sem_separacao_de_area"), total: numero, novas: numero, realizadas: numero, criadasPeriodo: numero }).optional(), equipe: z.array(z.object({ nome: texto, demandasAtivasOuConcluidasPeriodo: numero })).optional() }).strict()
+const metadadosSchema = z.object({ tipo: tiposRelatorio, periodo: texto, area: z.enum(["nao_separada", "audiovisual", "design"]), origem: z.enum(["manual", "agente"]), geradoEm: z.iso.datetime(), inicio: z.iso.datetime().nullable(), fim: z.iso.datetime().nullable() }).strict()
 const corpo = z.discriminatedUnion("formato", [
   z.object({ formato: z.literal("texto"), texto }),
   z.object({ formato: z.literal("estruturado"), dados: estruturado }),

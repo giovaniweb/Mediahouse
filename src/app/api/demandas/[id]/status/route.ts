@@ -12,7 +12,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
 import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
-import { podeTransicionar } from "@/lib/job-transicoes"
+import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { StatusInterno } from "@prisma/client"
 
@@ -154,12 +154,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const [demanda] = await prisma.$transaction([
       prisma.demanda.update({
-        where: { id },
+        where: { id, statusInterno: demandaAtual.statusInterno, updatedAt: demandaAtual.updatedAt },
         data: {
           statusInterno: statusInterno as StatusInterno,
           statusVisivel: novoStatusVisivel,
           // Marcar data de finalização ao chegar em "finalizado"
-          ...(novoStatusVisivel === "finalizado" ? { finalizadaEm: new Date() } : {}),
+          ...marcadorConclusao(demandaAtual, novoStatusVisivel),
           ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
           ...(body.linkFinal && { linkFinal: body.linkFinal }),
           ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),

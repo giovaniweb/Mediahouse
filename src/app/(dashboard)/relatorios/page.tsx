@@ -34,6 +34,7 @@ import { useMe } from "@/hooks/usePermissoes"
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Metricas {
+  operacional: { publicacoes: number | null; finalizadasSemData: number; manual: { aviso: string } }
   geradoEm: string
   periodo?: { de: string; ate: string; tipo: string }
   demandas: {
@@ -45,11 +46,11 @@ interface Metricas {
     emAtraso: number
     aguardandoAprovacao: number
     emEdicao: number
-    tempoMedioConclusao: number
+    tempoMedioConclusao: number | null
     porTipo: { tipo: string; count: number }[]
     porStatus: { status: string; count: number }[]
   }
-  custos: {
+  custos?: {
     totalMes: number
     totalSemana: number
     total30d: number
@@ -399,7 +400,7 @@ export default function RelatoriosPage() {
     if (!mRes?.periodo) return null
     const de = new Date(mRes.periodo.de).getTime()
     const ate = new Date(mRes.periodo.ate).getTime()
-    const len = ate - de
+    const len = ate - de + 86_400_000
     const prevDe = new Date(de - len).toISOString().slice(0, 10)
     const prevAte = new Date(de - 86_400_000).toISOString().slice(0, 10)
     return `/api/relatorios/metricas?periodo=custom&de=${prevDe}&ate=${prevAte}&area=${resAreaParam}`
@@ -414,19 +415,13 @@ export default function RelatoriosPage() {
     ? `/api/producao-manual?area=${resAreaParam}&de=${mRes.periodo.de.slice(0, 10)}&ate=${mRes.periodo.ate.slice(0, 10)}`
     : null
   const { data: prodManual, mutate: mutateProdManual } = useSWR<{ producaoPorCategoria: Record<string, number>; totalManual: number; presencialPorCategoria: Record<string, number>; totalPresencial: number }>(pmUrl, fetcher)
-  // Produção manual do período anterior (para o delta de produção total)
-  const pmPrevUrl = abaAtiva === "resultados" && areaRes !== "eventos" && prevUrl && mRes?.periodo
-    ? (() => { const u = new URL(prevUrl, "http://x"); return `/api/producao-manual?area=${resAreaParam}&de=${u.searchParams.get("de")}&ate=${u.searchParams.get("ate")}` })()
-    : null
-  const { data: prodManualPrev } = useSWR<{ totalManual: number }>(pmPrevUrl, fetcher)
-
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
     try {
       const res = await fetch("/api/relatorios/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo }),
+        body: JSON.stringify({ tipo, area: areaRel, periodo, ...(periodo === "custom" ? { de: periodoCustomDe, ate: periodoCustomAte } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Não foi possível gerar o relatório")
@@ -440,7 +435,7 @@ export default function RelatoriosPage() {
     } finally {
       setGerando(null)
     }
-  }, [recarregarHistorico])
+  }, [recarregarHistorico, areaRel, periodo, periodoCustomDe, periodoCustomAte])
 
   const m = metricas
 
@@ -489,7 +484,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
                 {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
-                  <button key={a} onClick={() => setAreaRes(a)}
+                  <button key={a} onClick={() => { setAreaRes(a); if (a !== "eventos") setAreaRel(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
               </div>
@@ -546,7 +541,7 @@ export default function RelatoriosPage() {
                   const cats = prodManual?.producaoPorCategoria ?? {}
                   const nuflow = mRes?.producao?.videosEntreguesMes ?? 0
                   const totalManual = prodManual?.totalManual ?? 0
-                  const totalGeral = totalManual + nuflow
+
                   const cores = ["text-blue-400", "text-cyan-400", "text-emerald-400", "text-amber-400", "text-pink-400"]
                   const catEntries = Object.entries(cats)
                   const presencial = Object.entries(prodManual?.presencialPorCategoria ?? {})
@@ -559,11 +554,11 @@ export default function RelatoriosPage() {
                           ✏️ Editar números
                         </button>
                       </div>
-                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Volume de conteúdo (lançados + NuFlow) + frentes presenciais.</p>
+                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Fontes separadas: lançamentos mensais podem repetir entregas do sistema. Não somamos sem conciliação.</p>
                       <div className="grid lg:grid-cols-3 gap-5">
                         {/* Vídeos (2/3) */}
                         <div className="lg:col-span-2">
-                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{unidade} postados/entregues</div>
+                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{unidade} entregues</div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {catEntries.map(([cat, qtd], i) => (
                               <div key={cat} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
@@ -573,11 +568,11 @@ export default function RelatoriosPage() {
                             ))}
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
                               <div className="text-3xl font-bold text-emerald-400">{fmtNum(nuflow)}</div>
-                              <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Demandas NuFlow</div>
+                              <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Entregáveis NuFlow</div>
                             </div>
                             <div className="rounded-xl border border-purple-700/50 bg-purple-950/30 p-4 print:border-zinc-400 print:bg-zinc-50">
-                              <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalGeral)}</div>
-                              <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Total geral</div>
+                              <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalManual)}</div>
+                              <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Lançamentos manuais</div>
                             </div>
                           </div>
                         </div>
@@ -602,20 +597,21 @@ export default function RelatoriosPage() {
                   )
                 })()}
 
+                <p className="text-xs text-zinc-500">Publicações registradas: {mRes?.operacional.publicacoes ?? "Não medido"}. Finalizadas sem data confiável (fora do cálculo): {mRes?.operacional.finalizadasSemData ?? "—"}.</p>
                 {/* KPIs com comparação */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <KpiCard label={areaRes === "design" ? "Artes entregues" : "Vídeos entregues"} value={fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)} atual={mRes?.producao?.videosEntreguesMes} anterior={mPrev?.producao?.videosEntreguesMes} />
                   <KpiCard label="Concluídas" value={fmtNum(mRes?.producao?.demandasFinalizadasMes ?? 0)} atual={mRes?.producao?.demandasFinalizadasMes} anterior={mPrev?.producao?.demandasFinalizadasMes} />
                   <KpiCard label="Criadas" value={fmtNum(mRes?.demandas?.totalMes ?? 0)} atual={mRes?.demandas?.totalMes} anterior={mPrev?.demandas?.totalMes} />
-                  <KpiCard label="Tempo médio" value={`${mRes?.demandas?.tempoMedioConclusao ?? 0}d`} atual={mRes?.demandas?.tempoMedioConclusao} anterior={mPrev?.demandas?.tempoMedioConclusao} inverter sub="menor é melhor" />
+                  <KpiCard label="Tempo médio" value={mRes?.demandas?.tempoMedioConclusao == null ? "Não medido" : `${mRes.demandas.tempoMedioConclusao}d`} atual={mRes?.demandas?.tempoMedioConclusao ?? undefined} anterior={mPrev?.demandas?.tempoMedioConclusao ?? undefined} inverter sub="menor é melhor" />
                   {(() => {
                     const valor = mRes?.producao?.valorPorDemanda ?? 200
-                    const totalAtual = (prodManual?.totalManual ?? 0) + (mRes?.producao?.videosEntreguesMes ?? 0)
-                    const totalAnt = (prodManualPrev?.totalManual ?? 0) + (mPrev?.producao?.videosEntreguesMes ?? 0)
+                    const totalAtual = mRes?.producao?.videosEntreguesMes ?? 0
+                    const totalAnt = mPrev?.producao?.videosEntreguesMes ?? 0
                     return (
                       <>
-                        <KpiCard label={`Custo médio/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
-                        <KpiCard label="Produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
+                        <KpiCard label={`Referência/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
+                        <KpiCard label="Índice de produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
                       </>
                     )
                   })()}
@@ -668,7 +664,7 @@ export default function RelatoriosPage() {
               <span className="text-xs text-zinc-500 font-medium">Área:</span>
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
                 {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
-                  <button key={a} onClick={() => setAreaRel(a)}
+                  <button key={a} onClick={() => { setAreaRel(a); setAreaRes(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
                     {label}
                   </button>
@@ -726,7 +722,7 @@ export default function RelatoriosPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`${m?.demandas.totalMes ?? 0} criadas no período`} cor="blue" />
               <MetricCard icon={CheckCircle2} label="Vídeos Entregues" value={fmtNum(m?.producao?.videosEntreguesMes ?? m?.producao?.videosEntregues30d ?? m?.demandas.concluidas30d ?? 0)} sub={`em ${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} demandas`} cor="green" />
-              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização (c/ VM)" cor="zinc" />
+              <MetricCard icon={Clock} label="Tempo Médio" value={m?.demandas.tempoMedioConclusao == null ? "Não medido" : `${m.demandas.tempoMedioConclusao}d`} sub="Criação → conclusão atual" cor="zinc" />
               <MetricCard icon={AlertTriangle} label="Em Atraso" value={fmtNum(m?.demandas.emAtraso ?? 0)} sub={`${m?.alertas.criticos ?? 0} alertas críticos`} cor={m && m.demandas.emAtraso > 0 ? "red" : "zinc"} alert={m && m.demandas.emAtraso > 0} />
             </div>
 
@@ -792,7 +788,7 @@ export default function RelatoriosPage() {
               <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
                 <h3 className="text-sm font-medium text-white mb-3">Top Custos (30d)</h3>
                 <div className="space-y-2.5">
-                  {m?.custos.topVideomakers.map((vm) => (
+                  {m?.custos?.topVideomakers.map((vm) => (
                     <div key={vm.id} className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-medium text-zinc-300">{vm.nome}</div>
@@ -801,7 +797,7 @@ export default function RelatoriosPage() {
                       <div className="text-sm font-semibold text-green-400">{fmt(vm.totalGasto)}</div>
                     </div>
                   ))}
-                  {!m?.custos.topVideomakers.length && (
+                  {!m?.custos?.topVideomakers.length && (
                     <p className="text-xs text-zinc-500">Nenhum custo registrado</p>
                   )}
                 </div>

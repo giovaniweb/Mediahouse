@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma"
 export async function GET(req: NextRequest) {
   const acesso = await requireAcesso("verRelatorios")
   if (acesso instanceof NextResponse) return acesso
-  if (!acesso.permissoes.verCustos) return NextResponse.json({ error: "Este relatório contém dados financeiros" }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const tipo = searchParams.get("tipo")
@@ -31,5 +30,5 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ relatorios: relatorios.map(({ conteudo, ...r }) => ({ ...r, apresentacao: apresentarRelatorio(conteudo) })) }, { headers: { "Cache-Control": "private, no-store" } })
+  return NextResponse.json({ relatorios: relatorios.map(({ conteudo, ...r }) => ({ ...r, apresentacao: apresentarRelatorio(conteudo) })).filter(r => acesso.permissoes.verCustos || (r.apresentacao.snapshot?.metricas && r.apresentacao.snapshot.custoTotal === null && r.apresentacao.snapshot.custoPorVideo === null)) }, { headers: { "Cache-Control": "private, no-store" } })
 }

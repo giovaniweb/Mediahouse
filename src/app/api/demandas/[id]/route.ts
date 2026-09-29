@@ -1,3 +1,4 @@
+import { marcadorConclusao } from "@/lib/job-transicoes"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -174,19 +175,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const novoStatusInterno = STATUS_VISIVEL_TO_INTERNO[body.statusVisivel]
     const demandaAtual = await prisma.demanda.findUnique({
       where: { id },
-      select: { statusInterno: true, videomakerId: true, codigo: true, titulo: true },
+      select: { statusInterno: true, statusVisivel: true, finalizadaEm: true, updatedAt: true, videomakerId: true, codigo: true, titulo: true },
     })
 
+    if (!demandaAtual || !novoStatusInterno) return NextResponse.json({ error: "Demanda ou status inválido" }, { status: 400 })
     const [demanda] = await prisma.$transaction([
       prisma.demanda.update({
-        where: { id },
+        where: { id, updatedAt: demandaAtual.updatedAt },
         data: {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           statusVisivel: body.statusVisivel as any,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           statusInterno: novoStatusInterno as any,
           // Marcar data de finalização automaticamente
-          ...(body.statusVisivel === "finalizado" ? { finalizadaEm: new Date() } : {}),
+          ...marcadorConclusao(demandaAtual, body.statusVisivel),
         },
       }),
       prisma.historicoStatus.create({

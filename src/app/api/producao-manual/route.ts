@@ -1,3 +1,4 @@
+import { recorteMetricas, RecorteInvalido } from "@/lib/metricas-recorte"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -20,9 +21,10 @@ export async function GET(req: NextRequest) {
   const { organizacaoId } = acesso
 
   const sp = req.nextUrl.searchParams
-  const area = sp.get("area") === "design" ? "design" : "audiovisual"
-  const de = sp.get("de") ? new Date(sp.get("de")!) : new Date(new Date().getFullYear(), 0, 1)
-  const ate = sp.get("ate") ? new Date(sp.get("ate")!) : new Date()
+  let recorte
+  try { recorte = recorteMetricas(new URLSearchParams({ periodo: "ano", ...Object.fromEntries(sp) })) }
+  catch (e) { if (e instanceof RecorteInvalido) return NextResponse.json({ error: e.message }, { status: 400 }); throw e }
+  const area = recorte.area, de = new Date(recorte.de), ate = new Date(recorte.ate)
 
   const lancamentos = await prisma.producaoManual.findMany({
     where: { organizacaoId, area, competencia: { gte: compDe(de), lte: compDe(ate) } },
@@ -40,6 +42,10 @@ export async function GET(req: NextRequest) {
   const totalPresencial = Object.values(presencialPorCategoria).reduce((a, b) => a + b, 0)
 
   return NextResponse.json({
+    fonte: "lancamento_mensal",
+    recorte,
+    totalCombinado: null,
+    aviso: "Valores mensais; podem repetir entregas automáticas e não devem ser somados sem conciliação.",
     lancamentos,
     // compat + novos campos
     porCategoria: producaoPorCategoria,

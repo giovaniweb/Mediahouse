@@ -49,7 +49,7 @@ describe("relatórios persistidos", () => {
     await db.ideiaVideo.createMany({ data: [{ organizacaoId: a, titulo: "IDEIA_PUBLICO_A" }, { organizacaoId: b, titulo: "IDEIA_PRIVADA_B" }] })
     await gerar({ tipo: "banco_ideias" })
     const prompt = analisar.mock.calls[0][0]
-    expect(prompt).toContain("IDEIA_PUBLICO_A"); expect(prompt).not.toContain("IDEIA_PRIVADA_B")
+    expect(prompt).toContain("SNAPSHOT:"); expect(prompt).not.toContain("IDEIA_PUBLICO_A"); expect(prompt).not.toContain("IDEIA_PRIVADA_B")
   })
   it("novo relatório retorna apresentação compartilhada pelo histórico", async () => {
     const data = await (await gerar({ tipo: "mensal" })).json()

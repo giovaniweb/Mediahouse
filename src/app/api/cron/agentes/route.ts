@@ -1,3 +1,5 @@
+import { recorteMetricas } from "@/lib/metricas-recorte"
+import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
 import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
@@ -225,19 +227,12 @@ Use a ferramenta enviar_whatsapp para cada notificação. Seja direto e profissi
 
 async function rodarAgenteVistoria(organizacaoId: string) {
   const contexto = contextoSistema(organizacaoId, "vistoria")
-  const prompt = `Vistoria semanal automática do NuFlow:
-
-1. buscar_metricas — saúde geral
-2. buscar_demandas — visão geral do pipeline
-3. buscar_videomakers — performance da equipe
-4. Não consulte custos: este principal automático é operacional e não tem acesso financeiro
-5. listar_gestores — enviar relatório semanal via WhatsApp
-
-Envie um resumo executivo completo para cada gestor usando enviar_whatsapp.
-Inclua: demandas concluídas, em andamento, atrasadas, carga de trabalho, top videomakers.`
+  const recorte = recorteMetricas(new URLSearchParams({ periodo: "semana", area: "audiovisual" }))
+  const snapshot = snapshotDoRelatorio(await metricasRelatorio(organizacaoId,recorte,false))
+  const prompt = `Vistoria semanal automática. Use SOMENTE os indicadores deste snapshot, sem recalcular por consultas. Null significa não medido. Manual é mensal e não pode ser somado ao automático. Não invente dados. Consulte listar_gestores e envie o resumo para cada gestor usando enviar_whatsapp. Retorne o conteúdo do resumo na resposta final. SNAPSHOT: ${JSON.stringify(snapshot)}`
 
   const { resposta, tokens } = await rodarComRegistro("vistoria-cron", organizacaoId, () =>
-    executarAgenteComTools(prompt, (n, i) => executarFerramenta(n, i, contexto), MODELO_POTENTE, 15)
+    executarAgenteComTools(prompt, (n, i) => ["listar_gestores", "enviar_whatsapp"].includes(n) ? executarFerramenta(n, i, contexto) : Promise.resolve(JSON.stringify({ erro: "Use o snapshot fornecido" })), MODELO_POTENTE, 15)
   )
 
   // Salva como RelatorioIA
@@ -246,8 +241,8 @@ Inclua: demandas concluídas, em andamento, atrasadas, carga de trabalho, top vi
       data: {
         organizacaoId,
         tipo: "semanal",
-        periodo: new Date().toLocaleDateString("pt-BR"),
-        conteudo: criarRelatorioV1({ analise: resposta }, { tipo: "semanal", periodo: new Date().toLocaleDateString("pt-BR"), area: "nao_separada", origem: "agente", geradoEm: new Date().toISOString(), inicio: null, fim: null }),
+        periodo: `${recorte.de} a ${recorte.ate}`,
+        conteudo: criarRelatorioV1({ analise: resposta }, { tipo: "semanal", periodo: `${recorte.de} a ${recorte.ate}`, area: recorte.area, origem: "agente", geradoEm: snapshot.metricas.geradoEm, inicio: recorte.inicio, fim: recorte.fim }, snapshot),
         tokens,
         modelo: MODELO_POTENTE,
       },
