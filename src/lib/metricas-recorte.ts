@@ -1,7 +1,9 @@
 import { dataEmSaoPaulo, somarDias, somarMeses } from "@/lib/datas"
 export const VERSAO_METRICAS = 1 as const
 export type RecorteMetricas = { versao: 1; area: "audiovisual" | "design"; fuso: "America/Sao_Paulo"; tipo: string; de: string; ate: string; inicio: string; fim: string }
-export class RecorteInvalido extends Error {}
+export class RecorteInvalido extends Error {
+  constructor(mensagem: string, public campo?: "de" | "ate") { super(mensagem) }
+}
 function diaValido(s: string) {
   return /^20\d{2}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(`${s}T00:00:00Z`).toISOString().slice(0,10) === s
 }
@@ -18,6 +20,13 @@ function meiaNoite(dia: string) {
     ms = proximo
   }
   return new Date(ms).toISOString()
+}
+/** Limites opcionais compartilhados; ate inclui todo o dia no Brasil. */
+export function intervaloCalendario(de: string | null, ate: string | null): { gte?: Date; lt?: Date } {
+  if (de !== null && !diaValido(de)) throw new RecorteInvalido("Informe uma data inicial válida (AAAA-MM-DD).", "de")
+  if (ate !== null && !diaValido(ate)) throw new RecorteInvalido("Informe uma data final válida (AAAA-MM-DD).", "ate")
+  if (de !== null && ate !== null && de > ate) throw new RecorteInvalido("A data final deve ser igual ou posterior à inicial.", "ate")
+  return { ...(de !== null ? { gte: new Date(meiaNoite(de)) } : {}), ...(ate !== null ? { lt: new Date(meiaNoite(somarDias(ate,1))) } : {}) }
 }
 export function recorteMetricas(sp: URLSearchParams, agora = new Date()): RecorteMetricas {
   const raw = sp.get("area") ?? "audiovisual"
@@ -38,9 +47,9 @@ export function recorteMetricas(sp: URLSearchParams, agora = new Date()): Recort
   else if (tipo === "12meses") de = somarMeses(`${hoje.slice(0,7)}-01`,-11)
   else if (tipo === "mes") de = `${hoje.slice(0,7)}-01`
   else throw new RecorteInvalido("Período inválido")
-  if (!diaValido(de) || !diaValido(ate) || de > ate) throw new RecorteInvalido("Datas inválidas ou intervalo invertido")
+  const faixa = intervaloCalendario(de,ate)
   if (Date.parse(ate)-Date.parse(de) > 5*366*86400000) throw new RecorteInvalido("Selecione um intervalo de até cinco anos")
-  return { versao: VERSAO_METRICAS, area, fuso: "America/Sao_Paulo", tipo, de, ate, inicio: meiaNoite(de), fim: meiaNoite(somarDias(ate,1)) }
+  return { versao: VERSAO_METRICAS, area, fuso: "America/Sao_Paulo", tipo, de, ate, inicio: faixa.gte!.toISOString(), fim: faixa.lt!.toISOString() }
 }
 export const faixaMetricas = (r: RecorteMetricas) => ({ gte: new Date(r.inicio), lt: new Date(r.fim) })
 export const filtroConcluidas = (organizacaoId: string, r: RecorteMetricas) => ({ organizacaoId, area: r.area, statusVisivel: "finalizado" as const, finalizadaEm: faixaMetricas(r) })

@@ -1,3 +1,5 @@
+import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
+import { z } from "zod"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -17,6 +19,12 @@ export async function GET(req: NextRequest) {
   const de = searchParams.get("de")
   const ate = searchParams.get("ate")
 
+  let dataReferencia
+  try { dataReferencia = intervaloCalendario(de, ate) }
+  catch (e) {
+    if (e instanceof RecorteInvalido) return erroDeCampo(e.campo ?? "de", e.message)
+    throw e
+  }
   const { organizacaoId } = acesso
 
   const custos = await prisma.custoVideomaker.findMany({
@@ -25,14 +33,13 @@ export async function GET(req: NextRequest) {
       ...(videomakerId && { videomakerId }),
       ...(demandaId && { demandaId }),
       ...(pago !== null && pago !== undefined && { pago: pago === "true" }),
-      ...(de && { dataReferencia: { gte: new Date(de) } }),
-      ...(ate && { dataReferencia: { lte: new Date(ate) } }),
+      ...(de !== null || ate !== null ? { dataReferencia } : {}),
     },
     include: {
       videomaker: { select: { id: true, nome: true, cidade: true } },
       demanda: { select: { id: true, codigo: true, titulo: true, tipoVideo: true } },
     },
-    orderBy: { dataReferencia: "desc" },
+    orderBy: [{ dataReferencia: "desc" }, { id: "desc" }],
   })
 
   // Calcular totais
@@ -78,7 +85,7 @@ export async function GET(req: NextRequest) {
     porVideomaker: Object.entries(porVideomaker)
       .map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => b.total - a.total),
-  })
+  }, { headers: { "Cache-Control": "private, no-store" } })
 }
 
 // POST /api/custos-videomaker — registrar novo custo
@@ -93,7 +100,12 @@ export async function POST(req: NextRequest) {
   const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
 
   if (!videomakerId) return erroDeCampo("videomakerId", "Selecione o videomaker.")
-  if (!dataReferencia) return erroDeCampo("dataReferencia", "Informe a data de referência.")
+  const referencia = z.union([z.iso.date(), z.iso.datetime({ offset: true })]).safeParse(dataReferencia)
+  if (!referencia.success) return erroDeCampo("dataReferencia", "Informe uma data de referência válida.")
+  let instanteReferencia: Date
+  try {
+    instanteReferencia = referencia.data.length === 10 ? intervaloCalendario(referencia.data, null).gte! : new Date(referencia.data)
+  } catch { return erroDeCampo("dataReferencia", "Informe uma data de referência válida.") }
 
   // `!valor` recusaria um custo de zero e deixaria passar texto não numérico
   // (que virava NaN no banco). A leitura separa "ausente" de "inválido".
@@ -119,7 +131,7 @@ export async function POST(req: NextRequest) {
       tipo: tipo ?? "diaria",
       valor: valorLido.valor,
       descricao,
-      dataReferencia: new Date(dataReferencia),
+      dataReferencia: instanteReferencia,
       dataVencimento: dataVencimento ? new Date(dataVencimento) : null,
       pago: pago ?? false,
       dataPagamento: dataPagamento ? new Date(dataPagamento) : null,
