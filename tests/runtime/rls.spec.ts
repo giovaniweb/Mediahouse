@@ -267,3 +267,19 @@ describe("regras O04 no runtime",()=>{
     } finally {vi.unstubAllEnvs()}
   })
 })
+
+
+describe("saúde O05 sob RLS",()=>{
+  it("consulta recibos correlacionados e pausa com auditoria no runtime",async()=>{
+    const {saudeWhatsapp,acompanharConsumidor,saudeConsumidores}=await import("@/lib/automacoes-saude")
+    const {controlarSaida}=await import("@/lib/whatsapp-outbox")
+    const s=await comOrg(a,()=>db.saidaWhatsapp.findFirstOrThrow({where:{origem:"regra",estado:"aguardando"}}))
+    await controlarSaida(a,s.id,u,"pausar")
+    expect((await saudeWhatsapp(a)).pausadas).toBe(1)
+    expect((await saudeWhatsapp(b)).pausadas).toBe(0)
+    await acompanharConsumidor(a,"whatsapp-inbox",async()=>({dados:true,contadores:{concluidos:0,falhos:1,pendentes:0}}))
+    expect((await saudeConsumidores(a))[0].estado).toBe("parcial")
+    expect((await saudeConsumidores(b))[0].estado).toBe("sem_registro")
+    expect(await comOrg(a,()=>db.eventoAuditoria.count({where:{acao:"whatsapp.pausar"}}))).toBe(1)
+  })
+})

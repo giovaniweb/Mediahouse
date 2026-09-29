@@ -127,7 +127,7 @@ export async function processarSaidas(organizacaoId:string) {
     try {
       const preparado=await fila.comLease(lease,async(tx,j)=>{
         const s=await tx.saidaWhatsapp.findFirst({where:{id:j.referencia,organizacaoId}})
-        if(!s || s.estado!=="aguardando" || objeto(j.payload).revisao!==s.revisao) return null
+        if(!s || s.pausada || s.estado!=="aguardando" || objeto(j.payload).revisao!==s.revisao) return null
         const falhar=async(estado:string,motivo:string)=>{await tx.saidaWhatsapp.update({where:{id:s.id,organizacaoId},data:{estado,motivo,proximaTentativa:null}});return null}
         if(j.versao!==1) return falhar("falhou","versao_nao_suportada")
         if(s.expiraEm.getTime()<=Date.now()+20_000) return falhar("expirado","validade_expirada")
@@ -149,7 +149,14 @@ export async function processarSaidas(organizacaoId:string) {
           instanceId:cfg.instanceId,tentativas:{increment:1},proximaTentativa:null}})
         return {s,cfg,telefone,texto,tentativa}
       })
-      if(!preparado) {await fila.concluirLocal(lease,async()=>{});resumo.semEnvio++;continue}
+      if(!preparado) {
+        await fila.concluirLocal(lease,async()=>{})
+        const atual=await comOrg(organizacaoId,()=>prisma.saidaWhatsapp.findFirst({where:{id:job.referencia,organizacaoId},select:{estado:true}}))
+        if(atual?.estado==="falhou") resumo.falhos++
+        else if(atual?.estado==="desconhecido") resumo.desconhecidos++
+        else resumo.semEnvio++
+        continue
+      }
       envioIniciado=true
       // Rede fora da transação. Nunca alternar número como reação a HTTP/timeout.
       const resposta=await enviarEvolution(preparado.cfg,preparado.telefone,preparado.texto)
@@ -193,6 +200,24 @@ export async function tentarNovamente(organizacaoId:string,id:string,usuarioId:s
     await agendar(tx,nova)
     const {registrarAuditoria,correlacaoAuditoria}=await import("@/lib/auditoria")
     await registrarAuditoria(tx,{organizacaoId,usuarioId},{acao:"whatsapp.retentativa",recurso:"saida_whatsapp",recursoId:id,correlationId:correlacaoAuditoria(),resultado:"intencao",depois:{motivo}})
+    return nova
+  }))
+}
+
+/** Serializado com a preparação do worker; nenhuma ação depois do início da rede. */
+export async function controlarSaida(organizacaoId:string,id:string,usuarioId:string,acao:"pausar"|"retomar"|"cancelar") {
+  return comOrg(organizacaoId,()=>prisma.$transaction(async tx=>{
+    const [org]=await tx.$queryRaw<{ativo:boolean}[]>`SELECT ativo FROM organizacoes WHERE id=${organizacaoId} FOR UPDATE`
+    const s=await tx.saidaWhatsapp.findFirst({where:{id,organizacaoId}})
+    if(!org?.ativo || !s || !["aguardando","falhou"].includes(s.estado)) throw new Error("Ação indisponível")
+    if(acao!=="cancelar" && (s.estado!=="aguardando" || s.expiraEm.getTime()<=Date.now()+20_000)) throw new Error("Ação indisponível")
+    if((acao==="pausar" && s.pausada) || (acao==="retomar" && !s.pausada)) return s
+    const nova=await tx.saidaWhatsapp.update({where:{id,organizacaoId},data:acao==="cancelar"?
+      {estado:"cancelado",pausada:false,motivo:"cancelado_operador",proximaTentativa:null}:
+      {pausada:acao==="pausar",revisao:{increment:1}}})
+    if(acao==="retomar") await agendar(tx,nova,nova.proximaTentativa && nova.proximaTentativa>new Date()?nova.proximaTentativa:new Date())
+    const {registrarAuditoria,correlacaoAuditoria}=await import("@/lib/auditoria")
+    await registrarAuditoria(tx,{organizacaoId,usuarioId},{acao:`whatsapp.${acao}`,recurso:"saida_whatsapp",recursoId:id,correlationId:correlacaoAuditoria()})
     return nova
   }))
 }

@@ -1,11 +1,14 @@
 "use client"
+import {SaudeAutomacoes} from "@/components/automacoes/SaudeAutomacoes"
 import {useState} from "react"
 import useSWR from "swr"
 import {Header} from "@/components/layout/Header"
 import {fetcher} from "@/lib/fetcher"
 import {toast} from "sonner"
 
-type Saida={id:string;estado:string;motivo:string|null;tentativas:number;createdAt:string;proximaTentativa:string|null;podeTentar:boolean;registros:Array<{createdAt:string;httpStatus:number|null;resultado:string}>}
+type Saida={id:string;origem:string;referencia:string;destinatarioTipo:string;pausada:boolean;podePausar:boolean;podeRetomar:boolean;podeCancelar:boolean;estado:string;motivo:string|null;tentativas:number;createdAt:string;proximaTentativa:string|null;podeTentar:boolean;registros:Array<{numero:number;motivo:string|null;createdAt:string;httpStatus:number|null;resultado:string}>}
+const origens:Record<string,string>={inbox:"Resposta à conversa",manual:"Envio manual",legado:"Notificação anterior",regra:"Regra automática"}
+const destinos:Record<string,string>={inbox:"Remetente da conversa",usuario:"Pessoa da equipe",editor:"Editor",videomaker:"Videomaker"}
 const estados:Record<string,string>={aguardando:"Aguardando tentativa",aceito:"Aceita pelo provedor",entregue:"Entrega confirmada",lido:"Leitura confirmada",falhou:"Falhou",desconhecido:"Resultado desconhecido",expirado:"Prazo encerrado",cancelado:"Cancelada"}
 const motivos:Record<string,string>={sem_config:"Verifique a conexão do WhatsApp.",contrato_nao_validado:"A integração precisa ser validada antes do envio.",
   regra_resolvida:"A condição do aviso mudou ou já foi resolvida.",
@@ -17,13 +20,13 @@ const quando=(data:string)=>new Date(data).toLocaleString("pt-BR",{timeZone:"Ame
 export default function MensagensFalhadasPage() {
   const [cursor,setCursor]=useState(""),[ocupada,setOcupada]=useState<string|null>(null),[motivo,setMotivo]=useState("config_corrigida")
   const {data,error,isLoading,mutate}=useSWR<{mensagens:Saida[];total:number;tentativas:number;legado:number;nextCursor:string|null}>(`/api/mensagens-falhadas?cursor=${encodeURIComponent(cursor)}`,fetcher)
-  async function tentar(id:string) {
+  async function tentar(id:string,acao="tentar") {
     setOcupada(id)
     try {
-      const r=await fetch("/api/mensagens-falhadas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,motivo})})
+      const r=await fetch("/api/mensagens-falhadas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,motivo,acao})})
       const b=await r.json()
       if(!r.ok) throw new Error(b.error || "Não foi possível agendar")
-      toast.success("Nova tentativa agendada. Isso ainda não confirma entrega.")
+      toast.success(acao==="pausar"?"Saída pausada.":acao==="cancelar"?"Saída cancelada.":"Tentativa agendada. Isso não confirma entrega.")
       await mutate()
     } catch(e) {toast.error(e instanceof Error ? e.message : "Falha ao agendar")}
     finally {setOcupada(null)}
@@ -31,6 +34,7 @@ export default function MensagensFalhadasPage() {
   return <>
     <Header title="Saídas do WhatsApp"/>
     <main className="flex-1 overflow-y-auto p-6 space-y-4">
+      <SaudeAutomacoes/>
       <h1 className="text-xl font-semibold">Saídas do WhatsApp</h1>
       <p className="text-sm text-muted-foreground">Aceitação pelo provedor, entrega e leitura são etapas diferentes.</p>
       {error ? <div role="alert">Não foi possível carregar. <button onClick={()=>mutate()} className="underline">Tentar novamente</button></div>
@@ -46,11 +50,21 @@ export default function MensagensFalhadasPage() {
             </select>
           </label>
           {data?.mensagens.map(s=><article key={s.id} className="rounded-xl border p-4 space-y-2">
-            <div className="font-medium">{estados[s.estado] ?? s.estado}</div>
+            <div className="font-medium">{s.pausada?"Pausada":estados[s.estado] ?? s.estado}</div>
             <p className="text-sm text-muted-foreground">{quando(s.createdAt)} · {s.tentativas} tentativa(s)</p>
             {s.motivo && <p>{motivos[s.motivo] ?? "Confira o estado antes de uma nova ação."}</p>}
             {!!s.registros[0] && <p className="text-sm">Última tentativa: {quando(s.registros[0].createdAt)}{s.registros[0].httpStatus ? ` · HTTP ${s.registros[0].httpStatus}` : ""}</p>}
             {s.proximaTentativa && <p className="text-sm">Próxima tentativa: {quando(s.proximaTentativa)}</p>}
+            <details className="text-sm"><summary className="cursor-pointer">Origem e tentativas</summary>
+              <p>Origem: {origens[s.origem]??s.origem} · destinatário: {destinos[s.destinatarioTipo]??s.destinatarioTipo}</p>
+              <p className="break-all">Referência de suporte: {s.referencia}</p>
+              {s.registros.map(t=><p key={t.numero}>Tentativa {t.numero}: {estados[t.resultado]??t.resultado} · {quando(t.createdAt)}{t.httpStatus?` · HTTP ${t.httpStatus}`:""}</p>)}
+            </details>
+            <div className="flex gap-3 flex-wrap">
+              {s.podePausar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"pausar")} className="underline">Pausar</button>}
+              {s.podeRetomar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"retomar")} className="underline">Retomar</button>}
+              {s.podeCancelar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"cancelar")} className="underline">Cancelar esta saída</button>}
+            </div>
             {s.podeTentar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id)} className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50">{ocupada===s.id ? "Agendando…" : "Tentar novamente"}</button>}
           </article>)}
           <div className="flex gap-4">

@@ -9,7 +9,7 @@ type Status = "loading" | "connected" | "disconnected" | "error"
 
 export function WhatsAppStatus() {
   const [status, setStatus] = useState<Status>("loading")
-  // Avisos que não chegaram nas últimas 24h. Saber que a conexão caiu importa
+  // Avisos que não chegaram . Saber que a conexão caiu importa
   // menos do que saber quantas mensagens se perderam enquanto ela estava fora.
   const [naoEnviadas, setNaoEnviadas] = useState(0)
 
@@ -19,9 +19,10 @@ export function WhatsAppStatus() {
     async function check() {
       try {
         const res = await fetch("/api/whatsapp/status")
+        if (!res.ok) throw new Error("Status indisponível")
         const json = await res.json()
         if (!mounted) return
-        setStatus(json.connected ? "connected" : "disconnected")
+        setStatus(json.state === "desconhecida" ? "error" : json.connected ? "connected" : "disconnected")
         setNaoEnviadas(Number(json.naoEnviadas) || 0)
       } catch {
         if (mounted) setStatus("error")
@@ -39,9 +40,9 @@ export function WhatsAppStatus() {
 
   const statusConfig = {
     loading: { color: "bg-zinc-500", pulse: true, label: "Verificando..." },
-    connected: { color: "bg-green-500", pulse: false, label: "WhatsApp conectado" },
+    connected: { color: "bg-green-500", pulse: false, label: "Conexão reportada pelo WhatsApp" },
     disconnected: { color: "bg-red-500", pulse: true, label: "WhatsApp desconectado" },
-    error: { color: "bg-amber-500", pulse: false, label: "Erro na verificacao" },
+    error: { color: "bg-amber-500", pulse: false, label: "Status sem confirmação" },
   }
 
   const cfg = statusConfig[status]
@@ -74,7 +75,7 @@ export function WhatsAppStatus() {
       </span>
       {naoEnviadas > 0 && (
         <span
-          title={`${naoEnviadas} saída(s) precisam de atenção nas últimas 24h`}
+          title={`${naoEnviadas} saída(s) precisam de atenção `}
           className="ml-auto shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40"
         >
           {naoEnviadas}

@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — O04: regras e lembretes sem LLM, resumos semanais por área; sem deploy.
+Última atualização: 29/09/2026 — O05: saúde por evidências e ações individuais auditadas; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O04 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: O05 — saúde e alertas; manter os recortes pendentes de S02/S03 visíveis.
+- Tarefa em andamento: O05 implementado, com testes locais aprovados; build final impedido por falta de disco; S01/S02/S03 conservam recortes pendentes.
+- Próxima tarefa: liberar espaço, repetir build/runtime finais e seguir O06 — limites e consumo de IA; manter os recortes pendentes de S02/S03 visíveis.
 - Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
 - Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
 - Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: cron e ações de monitoramento por regras; lembretes derivados do evento, revalidação de avisos e snapshots semanais sem IA.
-- Verificações O04: 682 unitários, 179 integrações e 22 testes runtime locais; build/tipos/lint e auditores. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
+- Última alteração: painel de saúde, heartbeat, falha parcial e pausa/retomada/cancelamento de saídas.
+- Verificações O05: 684 unitários, 190 integrações e 23 testes runtime locais; tipos/lint e auditores. Build final e nova repetição de runtime impedidos por ENOSPC. Migração nova aplicada somente no banco descartável; produção/provedor permanecem pendentes.
 - Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
 - Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
 
@@ -40,7 +40,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O02 | Inbox WhatsApp | 03 | O01, S05 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O03 | Outbox e recibos | 03 | O01, O02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O05 | Alertas e saúde | 03 | O02, O03, O04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -286,3 +286,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 682 unitários, 179 integrações, 22 runtime, build/tipos, lint sem erros, grants/RLS e auditores aprovados. Um aviso preexistente de lint na tela IA e face-api no build. Logs /private/tmp/nuflow-o04-*.log.
 - Migração 20260929070000_regras_deterministicas apenas no banco descartável. Sem deploy, mensagens ou chamadas pagas. Homologação Evolution, agendador seguindo cursor, benchmark de volume e interface de saúde pendentes. Demais produtores legados fora destas rotinas conservam limitações O03.
 - Próxima ação: O05 — apresentar saúde por evidências e permitir ações individuais auditadas sobre saídas.
+
+### O05 — saúde e ações auditadas (29/09/2026)
+
+- Base e00b416; contrato e operação em O05-SAUDE-E-ALERTAS.md. Revisão própria, sem homologação externa.
+- Conexão reportada, inbox, aceite, recibo correlacionado e fila separados. Polling local; erro não vira zero e silêncio não implica falha.
+- Heartbeat técnico dos dois consumidores; resumo parcial inclui falha antes da rede. Atraso exige cadência real; sem registro/cadência são explícitos. Continuidade do cursor permanece L02.
+- Pausa, retomada e cancelamento por intenção com lock compartilhado e auditoria atômica. Revisão evita worker antigo; nenhuma ação opera depois do checkpoint de envio. Reenvio conserva O03.
+- Alertas com filtros, paginação e detalhes; inclui responsável externo. Leitura por capacidade/empresa/escopo e alterações auditadas. Erro de interface visível.
+- 684 unitários, 190 integrações, 23 runtime, tipos, lint sem erros e auditores/grants aprovados. Nove avisos preexistentes de lint; face-api no build. Build inicial aprovado; build final e nova repetição de runtime impedidos por falta de disco (ENOSPC), mesmo após remover artefatos desta tarefa. Repetir após liberar espaço; configuração original de build restaurada. Logs /private/tmp/nuflow-o05-*.log.
+- Migração 20260929080000_pausa_saida_whatsapp somente no banco descartável. Sem mensagens, IA paga, deploy ou cron novo. Cadência, Evolution, benchmark/retenção das batidas e ensaio visual pendentes.
+- Próxima ação: liberar espaço e repetir validação final; depois O06 — limites concorrentes e medição de consumo de IA.

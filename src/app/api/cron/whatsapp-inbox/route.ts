@@ -1,3 +1,4 @@
+import { acompanharConsumidor } from "@/lib/automacoes-saude"
 import { processarSaidas } from "@/lib/whatsapp-outbox"
 import { timingSafeEqual } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
@@ -21,11 +22,15 @@ export async function GET(req: NextRequest) {
     ultima=org.id
     try {
       // Retenção vale inclusive para empresas pausadas; efeito de negócio não.
+      const dados=await acompanharConsumidor(org.id,"whatsapp-inbox",async()=>{
       const removidos=await limparConteudoInbox(org.id)
       const fila=org.ativo ? await processarInbox(org.id) : null
       const saidas=await processarSaidas(org.id)
-      resultados.push({organizacaoId:org.id,fila,saidas,conteudosRemovidos:removidos})
+      return {dados:{organizacaoId:org.id,fila,saidas,conteudosRemovidos:removidos},contadores:{concluidos:(fila?.concluidos??0)+saidas.aceitos,falhos:(fila?.falhos??0)+saidas.falhos+saidas.desconhecidos,pendentes:0}}
+      })
+      resultados.push(dados)
     } catch {resultados.push({organizacaoId:org.id,erro:"falha_local"})}
   }
-  return NextResponse.json({resultados,nextCursor:ultima && (resultados.length<orgs.length) ? ultima : null})
+  const parcial=resultados.some(r=>"erro" in r || ("saidas" in r && (r.saidas.falhos+r.saidas.desconhecidos+(r.fila?.falhos??0))>0))
+  return NextResponse.json({ok:!parcial,parcial,resultados,nextCursor:ultima && (resultados.length<orgs.length) ? ultima : null})
 }
