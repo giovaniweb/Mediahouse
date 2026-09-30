@@ -717,6 +717,15 @@ model Arquivo {
   sequencia       Int? // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
   thumbnailUrl    String? // JPEG thumbnail no Supabase (gerado no cliente)
   transcodeStatus String? // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
+  // Identidade da FONTE original; não muda quando url recebe uma prévia.
+  // Organização e uso continuam em demanda.organizacaoId e tipoArquivo.
+  fonteProvedor   String?
+  fonteBucket     String?
+  fonteObjectKey  String?
+  fonteReferencia String? // Drive fileId ou referência externa; nunca token Supabase
+  fonteVersao     Int?    // versão interna; null no legado não inventariado
+  fonteMimeDeclarado String? // informado no upload, não equivale a codec verificado
+  fonteSha256     String? // calculado somente quando o servidor recebeu os bytes
   originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
   // Divulgação opt-in. Snapshot preserva a versão que a gestão autorizou.
   publicadoEm           DateTime?

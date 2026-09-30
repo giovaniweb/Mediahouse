@@ -66,3 +66,10 @@ Não executar backfill no acervo real durante implementação. Ensaiar com arqui
 Implementado localmente `midia-identidade.ts` e integrado ao transcode: classificação sem download, host de storage exato, vínculo de objeto com demanda/empresa antes da rede, renovação de assinatura e nenhuma alternativa para URL arbitrária. Reconversão/manutenção deixam de declarar aceite inexistente. Foram aprovados 712 unitários e 19 integrações focadas, tipos/lint/auditores e build webpack. Serviços externos simulados.
 
 M01 permanece EM_EXECUCAO. Não há migração ou identidade persistida ainda. Próximo recorte: campos aditivos e metadados dos uploads, evento transacional e compatibilidade dos canais legados. Drive, galeria e worker completo continuam pendentes; nenhum backfill no acervo ou publicação foi feito. Detalhes e limitações no CONTROLE.md.
+
+
+## Evidência de execução — 30/09/2026, segundo recorte M01
+
+Metadados da fonte original persistidos por migração aditiva, sem preencher o legado. Canais existentes de criação recebem identidade reconhecível; uploads que passam pelo servidor recebem tamanho/hash reais e MIME explicitamente declarado. Registro de upload da demanda e link operacional agora são transacionais e reenvios da mesma confirmação não duplicam o arquivo. Documentos não alteram links de vídeos e brutos passam a ter Arquivo. Interface trata falha HTTP na confirmação.
+
+Provas locais: 717 unitários, 305 integrações, 25 runtime/RLS, verificador de roles, tipos/build, lint sem erros e auditores. Migração aplicada só no banco sintético. M01 continua parcial: evento durável, consumidores por identidade persistida, preview/cópia/revisão Drive e inventário permanecem pendentes; detalhes no CONTROLE.md. Próximo: evento de processamento na transação e consumidor com lease em M02. Nenhuma homologação de worker/Drive real nesta etapa.

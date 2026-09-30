@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — primeiro recorte M01: identidade de leitura e origem autorizada no transcode; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — segundo recorte M01: metadados da fonte e registro transacional dos uploads; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: continuar M01 — persistir metadados de identidade/versão e padronizar uploads com evento transacional; o adaptador de leitura e a proteção da fonte do transcode já estão implementados localmente. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
+- Próxima etapa: continuar M01/M02 — evento durável de processamento na transação do arquivo e consumo por identidade persistida. Metadados aditivos da fonte e registro transacional dos uploads de demanda já estão implementados localmente. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: classificação de identidade (privado/legado/Drive/externo) e autorização do objeto antes do download/encaminhamento ao transcode (primeiro recorte M01 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
-- Últimas provas locais: 712 unitários, 19 integrações focadas em mídia (5 novas), tipos/lint e auditores aprovados. Build webpack aprovado. Integração ampla anterior: 293 casos; não repetida neste recorte. Sem worker/storage reais ou ensaio visual nesta etapa.
+- Última implementação: metadados de fonte original nos canais de criação de Arquivo; confirmação de upload transacional e idempotente por demanda/tipo/URL (segundo recorte M01 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
+- Últimas provas locais: 717 unitários, 305 integrações, 25 testes runtime/RLS e verificador de roles aprovados; tipos/build webpack, lint sem erros e auditores aprovados. O componente DemandaDetalhe conserva avisos preexistentes de lint; build conserva aviso face-api. Storage e worker simulados, sem ensaio visual nesta etapa.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -422,3 +422,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Sem migração, backfill, alteração de originais, publicação ou chamadas pagas. Eventos continuam em standby.
 - M01 segue parcial: faltam colunas aditivas de identidade/versão/checksum/preview/cópia Drive, gravação consistente em todos os canais, evento transacional e adaptação dos demais consumidores. A comparação exata com URL registrada é uma proteção transitória; a identidade ainda não está persistida no banco. Deduplicação/idempotência, callback e corrida de estado após aceite continuam em M02. O status legado sem_worker ainda agrega ausência de configuração, recusa e falha de envio.
 - Próxima unidade: mapear os canais de criação de Arquivo e adicionar persistência compatível de metadados, sem backfill real; só então avançar worker/Drive/biblioteca.
+
+
+### 30/09/2026 — M01 parcial: metadados de fonte e registro de upload
+
+- Migração aditiva `20260930000000_identidade_fonte_arquivo`: provedor, bucket, chave, referência, versão interna, MIME declarado e SHA-256 da fonte. Legado permanece nulo; organização e uso continuam na demanda e no tipoArquivo. Sem duplicar organização nem inventar MIME/codec/hash. Campos da fonte não mudam quando a URL de reprodução recebe preview.
+- Criadores de Arquivo (upload de demanda, anexo público, ferramenta WhatsApp, recuperação auditada e confirmação Drive) passam a extrair metadados quando a referência é reconhecível. Caminhos privados incompatíveis não recebem identidade inferida. Os dois canais que recebem bytes no servidor calculam hash/tamanho; confirmação de upload do navegador ignora metadados fornecidos pelo cliente.
+- `registrarArquivoDemanda` revalida organização no banco, serializa confirmações por demanda e grava Arquivo/link operacional na mesma transação. Reenvio da mesma URL/tipo não duplica nem recoloca arquivo antigo como link principal. Sequência usa máximo + 1. POST agora cria Arquivo, brutos também; documento não altera linkBrutos. Uploads novos recusam referência privada de outra empresa/demanda/tipo.
+- DemandaDetalhe confere a resposta da gravação e não anuncia sucesso diante de falha HTTP. Conversão inicia depois do commit, apenas em nova confirmação; atualização de estado não sobrescreve callback que já concluiu.
+- Provas: migração no PostgreSQL descartável, 717 unitários, 305 integrações (7 novas), 25 runtime/RLS (1 novo), verificador de roles, tipos, build webpack, lint sem erros e auditores aprovados. Serviços externos simulados. Sem publicação/migração de produção, backfill ou alteração do acervo.
+- Limites: M01 segue parcial. Faltam evento transacional de processamento, consumo da identidade persistida pelos demais serviços, identidade de preview/cópia e revisão Drive, codec verificado e inventário. FonteVersao=1 é versão interna inicial, não comprova imutabilidade de objeto externo. Identidade nula mantém leitura legada. Caminhos de edição direta de linkFinal/linkBrutos e registros administrativos ainda não usam o serviço idempotente; exclusão permanece no fluxo legado. Metadados extraídos de URL não comprovam que o objeto existe no storage. Upload que termina no storage mas falha no banco pode deixar órfão; não há remoção automática.
+- Próximo recorte: evento durável junto do registro e início do consumidor M02; fila/lease e callback versionado antes de homologar worker real. Eventos de negócio continuam em standby.

@@ -594,11 +594,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     }
 
     // 4. Salva a URL na demanda (+ thumbnailUrl se disponível)
-    await fetch(`/api/demandas/${id}/upload-video`, {
+    const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: publicUrl, tipo, ...(thumbnailUrl ? { thumbnailUrl } : {}) }),
     })
+    if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
 
     return publicUrl
   }
@@ -699,11 +700,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     }
 
     // 3. Salva URL do Drive na demanda
-    await fetch(`/api/demandas/${id}/upload-video`, {
+    const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: publicUrl, tipo }),
     })
+    if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
 
     return publicUrl
   }
@@ -774,11 +776,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         }
       } else {
         // URL externa: salva diretamente no DB
-        await fetch(`/api/demandas/${id}/upload-video`, {
+        const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: videoUrl, tipo: linkModalTipo }),
         })
+        if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
         if (linkModalTipo === "final") setLinkFinal(videoUrl)
         else setLinkBrutos(videoUrl)
       }
@@ -964,11 +967,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   async function deleteVideoLink(tipo: "brutos" | "final", arquivoId?: string) {
     if (!confirm(`Remover ${tipo === "brutos" ? copy.rawRemoveConfirm : copy.finalRemoveConfirm}?`)) return
     try {
-      await fetch(`/api/demandas/${id}/upload-video`, {
+      const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: null, tipo, ...(arquivoId ? { arquivoId } : {}) }),
       })
+      if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
       if (tipo === "brutos") setLinkBrutos("")
       else setLinkFinal("")
       toast.success(copy.finalRemoved)

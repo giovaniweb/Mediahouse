@@ -1,3 +1,4 @@
+import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
@@ -30,7 +31,7 @@ export async function backfillAuditado(tipo: "custos" | "arquivos", acesso: { or
           } else {
             if (!["finalizado", "para_postar"].includes(atual.statusVisivel) || !atual.linkFinal) return false
             if (await tx.arquivo.findFirst({ where: { demandaId: d.id, tipoArquivo: "final" } })) return false
-            const arquivo = await tx.arquivo.create({ data: { demandaId: d.id, tipoArquivo: "final", nomeArquivo: `${atual.codigo}_001.${atual.linkFinal.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "mp4"}`, url: atual.linkFinal, thumbnailUrl: atual.thumbnailUrl, sequencia: 1 } })
+            const arquivo = await tx.arquivo.create({ data: { ...metadadosFonte(atual.linkFinal, organizacaoId, d.id), demandaId: d.id, tipoArquivo: "final", nomeArquivo: `${atual.codigo}_001.${atual.linkFinal.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "mp4"}`, url: atual.linkFinal, thumbnailUrl: atual.thumbnailUrl, sequencia: 1 } })
             await registrarAuditoria(tx, acesso, { acao, recurso: "arquivo", recursoId: arquivo.id, correlationId, depois: { publicado: false, alterados: 1 } })
           }
           return true
