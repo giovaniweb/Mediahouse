@@ -30,4 +30,4 @@ A categoria contratos é o marcador existente. Conteúdo financeiro cadastrado c
 
 Não foi adicionada segregação obrigatória entre solicitante e aprovador; um gestor autorizado pode decidir sua solicitação. Documentos não têm edição otimista: alterações autorizadas são serializadas e auditadas, mas a última edição pode substituir a anterior. Pedidos de criação repetidos ainda podem gerar registros distintos. Auditoria e fluxo não versionam o conteúdo de arquivos externos.
 
-Próximo: tornar criação do evento/checklist/demandas atômica e auditada, evitando eventos parcialmente criados. Permanecem revisão de relações (fornecedores/produtos/responsáveis), exclusão/checklist legados e consistência do percentual persistido.
+Etapa anteriormente proposta, agora adiada pelo usuário: tornar criação do evento/checklist/demandas atômica e auditada. Não executar até a retomada definida em DECISAO-EVENTOS-ADIADOS.md. Permanecem revisão de relações (fornecedores/produtos/responsáveis), exclusão/checklist legados e consistência do percentual persistido.

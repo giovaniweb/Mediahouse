@@ -1,18 +1,17 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — retiradas recomendações de aprovação e pontuação automática de ideias; sem deploy.
+Última atualização: 29/09/2026 — módulo de eventos adiado por decisão do usuário; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: O06 e U01 parciais. Diretriz vigente: DECISAO-IA-ESSENCIAL.md. Remover excesso antes de migrar mais chamadas. S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: revisar briefing e relatórios de eventos/coberturas, consolidar duplicações e limitar somente IA útil/opcional. Demanda e pontuação de ideias retiradas; não migrar/recriar. Cache/preços/política auditada O06 pendentes.
-- Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
-- Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: endpoints de análise de demanda/ideias respondem 410; telas preservam operação humana e análises antigas recolhidas. Conversão não herda prioridade/tipo inferidos por IA.
-- Verificações atuais: 687 unitários, 217 integrações, build webpack/tipos, lint sem erros e auditores. Sem nova migration. 24 provas runtime/grants da etapa anterior registradas; produção/provedor pendentes.
-- Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
-- Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
+- Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
+- Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
+- Próxima frente fora de eventos: retomar pendências gerais de O06 (cache/TTL, preços datados e homologação); política auditada já implementada. Demais tarefas de mídia/Drive, custos e SaaS mantêm a fila e suas dependências.
+- O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
+- Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
+- Última implementação: 8049a4b — proteção de documentos/aprovações de eventos. Preservar trabalho e dados; nenhuma publicação foi realizada nesta sequência.
+- Últimas provas locais: 687 unitários, 281 integrações, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Esta atualização de planejamento não altera código.
+- Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
 
@@ -388,3 +387,10 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 687 unitários, 281 integrações e build webpack/tipos aprovados; lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-documentos-*.log. Sem migration, rede externa, IA paga, mensagem ou deploy. Ensaio visual/runtime específico pendentes.
 - Classificação depende da categoria contratos; texto livre/documento mal classificado e compartilhamento externo continuam limitações. Não declarar sigilo completo.
 - Próximo: criação atômica/auditada de evento, checklist e demandas. Demais dívidas de exclusão/checklist/relações e O06 continuam no controle.
+
+
+### Decisão do usuário — eventos em standby (29/09/2026)
+
+- Base 8049a4b. Registradas as duas ideias em DECISAO-EVENTOS-ADIADOS.md: briefing→cards e gestão do departamento de eventos. Não definir a arquitetura agora.
+- Retirada da sequência imediata a criação atômica/auditada de eventos. Indicações anteriores de “próximo” nessa frente ficam substituídas por esta decisão.
+- Sem alteração de código, dados, disponibilidade, navegação ou produção. Correções existentes preservadas; retomada exige conversa e plano futuro.
