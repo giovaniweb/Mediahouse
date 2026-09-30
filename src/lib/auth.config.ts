@@ -76,6 +76,9 @@ export const authConfig: NextAuthConfig = {
         "/fornecedor",        // portal público do fornecedor (token)
         "/relatorio-executivo", // relatório executivo público (visualização externa)
         "/api/mcp",           // servidor MCP remoto (autenticado por Bearer token da org)
+        // Plugin do Premiere: sessão própria (Bearer), conferida em lib/cutflow.ts.
+        // /api/cutflow/autorizar confere a sessão do navegador na própria rota.
+        "/api/cutflow",
         "/d",                 // acompanhamento público de demanda (token opt-in, read-only)
         "/api/health",        // liveness p/ monitoramento — não devolve dado de negócio
         // Mídia privada. Passa pelo middleware porque a página pública de

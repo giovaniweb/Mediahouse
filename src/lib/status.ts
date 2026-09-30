@@ -157,3 +157,8 @@ export const EVENTO_ESPELHO_REVOGADO = "espelho_revogado"
 // verdade, com o significado certo, e o `createdAt` do histórico dele é o
 // `capture_finished_at`.
 export const EVENTO_CAPTACAO_INICIADA = "captacao_iniciada"
+
+// Cutflow (30/09/2026): o plugin do Premiere puxou o card da fila para editar.
+// É fato, não etapa — a mudança de status para `editando` segue o caminho
+// normal de transição. O `createdAt` desta linha é quando a edição começou.
+export const EVENTO_CUTFLOW_PUXADO = "cutflow_puxado"

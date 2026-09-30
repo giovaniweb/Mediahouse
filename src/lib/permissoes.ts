@@ -27,6 +27,7 @@ export type PermissaoKey =
   | "gerenciarFornecedores"
   | "verDesign"
   | "gerenciarDesigners"
+  | "usarCutflow"
   | "criarDemanda"
   | "editarDemanda"
   | "excluirDemanda"
@@ -58,6 +59,7 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   gerenciarFornecedores: "Gerenciar Fornecedores",
   verDesign: "Ver Growth / Conteúdos",
   gerenciarDesigners: "Gerenciar equipe criativa",
+  usarCutflow: "Usar o Cutflow (plugin do Premiere)",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
   excluirDemanda: "Excluir Demanda",
@@ -95,6 +97,12 @@ export const PERMISSAO_GRUPOS = [
       "verDesign",
       "gerenciarDesigners",
     ] as PermissaoKey[],
+  },
+  {
+    // Cutflow (30/09/2026): o plugin do Premiere entra com o login do NuFlow.
+    // Só vale com o módulo `cutflow` ligado na empresa.
+    label: "Cutflow",
+    keys: ["usarCutflow"] as PermissaoKey[],
   },
   {
     label: "Eventos",
@@ -147,6 +155,7 @@ export const BASE_FALSE: PresetPerms = {
   gerenciarFornecedores: false,
   verDesign: false,
   gerenciarDesigners: false,
+  usarCutflow: false,
   criarDemanda: false,
   editarDemanda: false,
   excluirDemanda: false,

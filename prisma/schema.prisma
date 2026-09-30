@@ -1485,6 +1485,9 @@ model PermissaoUsuario {
   gerenciarFornecedores Boolean @default(false)
   verDesign             Boolean @default(false)
   gerenciarDesigners    Boolean @default(false)
+  // Cutflow (plugin do Premiere, 30/09/2026): quem pode entrar no plugin com o
+  // login do NuFlow. Além disto a empresa precisa do módulo `cutflow`.
+  usarCutflow           Boolean @default(false)
 
   // Ações em demandas
   criarDemanda   Boolean @default(false)
@@ -2706,4 +2709,40 @@ model LancamentoSetor {
   @@unique([organizacaoId, chaveOrigem])
   @@index([organizacaoId, competencia])
   @@map("lancamentos_setor")
+}
+
+// ── Cutflow (plugin do Premiere) ─────────────────────────────────────────────
+// Login do plugin sem senha no Premiere (fluxo de dispositivo, 30/09/2026): o
+// computador guarda um segredo e manda ao NuFlow só o hash dele; a pessoa, já
+// logada no navegador, autoriza; o plugin recebe UMA vez a sessão, da qual o
+// banco também só guarda o hash. Sem relações Prisma de propósito: as chaves
+// estrangeiras ficam no SQL e os modelos grandes (Demanda, Usuario) não mudam.
+model CutflowSessao {
+  id              String    @id @default(cuid())
+  organizacaoId   String
+  usuarioId       String
+  dispositivoHash String    @unique
+  tokenHash       String?   @unique
+  nomeComputador  String?
+  entregueEm      DateTime?
+  ultimoUsoEm     DateTime?
+  expiraEm        DateTime
+  revogadaEm      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([organizacaoId])
+  @@map("cutflow_sessoes")
+}
+
+// Trava contra edição dupla: um card da fila só é puxado por um computador.
+model CutflowPuxada {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  demandaId     String   @unique
+  usuarioId     String
+  sessaoId      String
+  puxadaEm      DateTime @default(now())
+
+  @@index([organizacaoId])
+  @@map("cutflow_puxadas")
 }

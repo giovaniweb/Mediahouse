@@ -58,6 +58,10 @@ describe("rota sem sessão declara a empresa", () => {
     const src = readFileSync(arquivo, "utf8")
     if (/\bawait auth\(\)/.test(src)) continue
     if (/import \{ requireAcesso \} from "@\/lib\/acesso"/.test(src) && /\bawait requireAcesso\(/.test(src)) continue
+    // Rotas do plugin Cutflow (30/09/2026): a sessão é Bearer, e quem declara a
+    // empresa é `autenticarCutflow`, antes de qualquer consulta — a garantia de
+    // que ela declara mesmo está no teste de lib/cutflow logo abaixo.
+    if (/import \{[^}]*\bautenticarCutflow\b[^}]*\} from "@\/lib\/cutflow"/.test(src) && /\bawait autenticarCutflow\(/.test(src)) continue
     if (/declararOrg\(|comOrg\(/.test(src)) continue
     const modelos = [...new Set([...src.matchAll(/\bprisma\.(\w+)\./g)].map((m) => m[1]))]
     if (!modelos.some((m) => escopado[m])) continue
@@ -78,6 +82,19 @@ describe("rota sem sessão declara a empresa", () => {
     for (const [rota, motivo] of Object.entries(DISPENSADAS)) {
       expect(motivo.trim(), rota).not.toBe("")
     }
+  })
+})
+
+describe("a autenticação do Cutflow declara a empresa antes de consultar", () => {
+  it("declararOrg vem depois da credencial e antes da primeira consulta por empresa", () => {
+    const src = readFileSync("src/lib/cutflow.ts", "utf8")
+    const corpo = src.slice(src.indexOf("export async function autenticarCutflow"))
+    const credencial = corpo.indexOf('orgPorCredencial("cutflow_sessao"')
+    const declara = corpo.indexOf("declararOrg(organizacaoId)")
+    const consulta = corpo.indexOf("prisma.")
+    expect(credencial).toBeGreaterThan(-1)
+    expect(declara).toBeGreaterThan(credencial)
+    expect(consulta).toBeGreaterThan(declara)
   })
 })
 

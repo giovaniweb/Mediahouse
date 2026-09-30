@@ -20,7 +20,7 @@
 // Este módulo é importado por telas. Como `lib/status.ts`, usa import de TIPO —
 // o runtime do Prisma não pode ir para o bundle do navegador.
 import type { StatusInterno } from "@prisma/client"
-import { EVENTO_CAPTACAO_INICIADA, EVENTO_EDICAO, EVENTO_RESPONSAVEL, estaAtrasada, venceHoje } from "./status"
+import { EVENTO_CAPTACAO_INICIADA, EVENTO_CUTFLOW_PUXADO, EVENTO_EDICAO, EVENTO_RESPONSAVEL, estaAtrasada, venceHoje } from "./status"
 
 /** As seis fases do documento. */
 export type JobFase =
@@ -589,6 +589,7 @@ export const EVENTO_LABEL: Record<StatusInterno, string> = {
  */
 export function rotuloDeEvento(statusNovo: string, observacao?: string | null): string {
   if (statusNovo === EVENTO_CAPTACAO_INICIADA) return "Captação iniciada"
+  if (statusNovo === EVENTO_CUTFLOW_PUXADO) return observacao ?? "Edição iniciada no Cutflow"
   if (statusNovo === EVENTO_EDICAO) return observacao ?? "Job editado"
   if (statusNovo === EVENTO_RESPONSAVEL) return observacao ?? "Responsável alterado"
   return EVENTO_LABEL[statusNovo as StatusInterno] ?? statusNovo
