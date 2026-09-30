@@ -31,13 +31,23 @@ export async function POST(req: NextRequest, { params }: Params) {
   })
   if (!demanda) return NextResponse.json({ error: "Este card não está na fila do Cutflow." }, { status: 404 })
 
+  // O card passa a "editando" pela mesma guarda de transição do quadro. Se a
+  // guarda recusar (ex.: a pessoa sem permissão de mover), a trava fica e o
+  // plugin mostra o motivo — o status não é forçado. Puxar de novo tenta de novo
+  // (a permissão pode ter sido dada depois).
+  const irParaEditando = async (): Promise<{ mudou: boolean; aviso?: string }> => {
+    if (demanda.statusInterno === "editando") return { mudou: false }
+    const r = await mudarStatus(sessaoDoPlugin(ctx), id, { statusInterno: "editando", origem: "automacao", observacao: "Edição iniciada no Cutflow" })
+    return r.ok ? { mudou: true } : { mudou: false, aviso: (await r.json().catch(() => ({}))).error }
+  }
+
   const ocupada = async () => {
     const p = await prisma.cutflowPuxada.findUnique({
       where: { demandaId: id, organizacaoId },
       select: { usuarioId: true, sessaoId: true, puxadaEm: true },
     })
     if (!p) return null
-    if (p.sessaoId === ctx.sessaoId) return NextResponse.json({ puxada: true, jaEra: true, desde: p.puxadaEm })
+    if (p.sessaoId === ctx.sessaoId) return NextResponse.json({ puxada: true, jaEra: true, desde: p.puxadaEm, status: await irParaEditando() })
     const quem = await prisma.usuario.findUnique({ where: { id: p.usuarioId }, select: { nome: true } })
     const por = p.usuarioId === ctx.usuarioId ? "você, em outro computador" : quem?.nome ?? "outra pessoa"
     return NextResponse.json({ error: `Em edição por ${por}.`, emEdicaoPor: por, desde: p.puxadaEm }, { status: 409 })
@@ -65,13 +75,5 @@ export async function POST(req: NextRequest, { params }: Params) {
       observacao: `Edição iniciada no Cutflow por ${quem?.nome ?? "alguém"}${ctx.nomeComputador ? ` (${ctx.nomeComputador})` : ""}`,
     },
   })
-  // O card passa a "editando" pela mesma guarda de transição do quadro. Se a
-  // guarda recusar (ex.: a pessoa sem permissão de mover), a trava fica e o
-  // plugin mostra o motivo — o status não é forçado.
-  let status: { mudou: boolean; aviso?: string } = { mudou: false }
-  if (demanda.statusInterno !== "editando") {
-    const r = await mudarStatus(sessaoDoPlugin(ctx), id, { statusInterno: "editando", origem: "automacao", observacao: "Edição iniciada no Cutflow" })
-    status = r.ok ? { mudou: true } : { mudou: false, aviso: (await r.json().catch(() => ({}))).error }
-  }
-  return NextResponse.json({ puxada: true, jaEra: false, codigo: demanda.codigo, status })
+  return NextResponse.json({ puxada: true, jaEra: false, codigo: demanda.codigo, status: await irParaEditando() })
 }

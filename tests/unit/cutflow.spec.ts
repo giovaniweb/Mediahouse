@@ -280,8 +280,10 @@ describe("puxar: trava contra edição dupla", () => {
   it("puxar de novo do mesmo computador devolve o que já existe, sem outro histórico", async () => {
     db.cutflowPuxada.findUnique.mockResolvedValue({ usuarioId: "u-1", sessaoId: "s-1", puxadaEm: new Date() })
     const r = await puxar(req(), params("d-1"))
-    expect(await r.json()).toMatchObject({ puxada: true, jaEra: true })
+    expect(await r.json()).toMatchObject({ puxada: true, jaEra: true, status: { mudou: true } })
     expect(db.historicoStatus.create).not.toHaveBeenCalled()
+    // Tenta o status de novo: a permissão de mover pode ter sido dada depois da primeira puxada.
+    expect(mudarStatus).toHaveBeenCalledOnce()
   })
 
   it("corrida perdida no banco (P2002) vira 409 com quem ganhou", async () => {
