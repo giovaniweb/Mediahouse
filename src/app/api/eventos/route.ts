@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       percentualConclusao: true,
       coberturaId: true,
       responsavel: { select: { id: true, nome: true } },
-      _count: { select: { demandas: { where: { organizacaoId } }, checklist: true, documentos: true, custos: acesso.permissoes.verFinanceiroEvento } },
+      _count: { select: { demandas: { where: { organizacaoId } }, checklist: true, documentos: { where: acesso.permissoes.verFinanceiroEvento ? {} : { categoria: { not: "contratos" } } }, custos: acesso.permissoes.verFinanceiroEvento } },
     },
     orderBy: [{ dataInicio: "desc" }],
   }))

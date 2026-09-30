@@ -34,6 +34,6 @@ Logs /private/tmp/nuflow-eventos-fin-*.log. Banco descartável, sem rede externa
 
 ## Limites e próximo passo
 
-Não declarar todo o financeiro confidencial: textos livres, documentos e links podem conter informações financeiras sem classificação confiável. As APIs próprias de documentos/aprovações ainda precisam da revisão de capacidade, classificação e mutações. Ocultar aprovações de orçamento/contrato no detalhe não protege sozinho seus endpoints. Essa é a próxima etapa.
+Não declarar todo o financeiro confidencial: textos livres, documentos e links podem conter informações financeiras sem classificação confiável. As APIs próprias de documentos/aprovações ainda precisam da revisão de capacidade, classificação e mutações. Ocultar aprovações de orçamento/contrato no detalhe não protege sozinho seus endpoints. Esse recorte foi implementado em S03-DOCUMENTOS-APROVACOES.md; continuam as limitações de classificação de texto livre e compartilhamento externo ali descritas.
 
 Também permanecem dívidas anteriores: criação do evento/checklist/demandas não atômica, registro de log de edição best-effort, validação completa de relações de fornecedores/produtos/responsáveis, exclusão do evento com guard legado, paginação e consistência do percentual persistido. Não foram silenciosamente declaradas resolvidas por remover quatro exceções do verificador estático: esse verificador reconhece requireAcesso por arquivo, não prova cada handler legado.

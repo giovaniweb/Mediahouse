@@ -378,3 +378,13 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Previsto/realizado/ausente/zero separados; soma evento+AV retirada por possível dupla contagem. GET do detalhe não altera o registro. Telas ajustadas ao contrato.
 - 687 unitários, 269 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados; face-api mantém aviso anterior. Sem nova migration, rede externa, mensagem, IA paga ou deploy. Ensaio visual autenticado/runtime específico pendentes. Logs /private/tmp/nuflow-eventos-fin-*.log.
 - Próximo: documentos/aprovações de eventos, especialmente classificação de conteúdo financeiro e autorização de suas APIs. Não concluir segurança de todo o módulo: criação não atômica, logs best-effort, relações e exclusão legada continuam pendentes. O06 mantém cache/TTL, preços datados e homologação pendentes.
+
+
+### S03 — documentos e aprovações protegidos (29/09/2026)
+
+- Base 16a85b0. Contrato e limites em S03-DOCUMENTOS-APROVACOES.md. Contratos e aprovações financeiras exigem verFinanceiroEvento, inclusive contagens. Autorizações de API revalidam vínculo/empresa; tela segue os gates.
+- Decisão exige admin/gestor/gestor_eventos da empresa. Transição pendente→decidida serializada; divergência concorrente é 409 e retry idêntico não duplica. Documento decidido não é reaberto/substituído/excluído por leitor.
+- Schemas validam links, status, datas e campos. Auditoria de operações atômica sem copiar URLs/textos; falha reverte escrita. Interface mostra falhas, sem limpar formulário como se tivesse sucesso.
+- 687 unitários, 281 integrações e build webpack/tipos aprovados; lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-documentos-*.log. Sem migration, rede externa, IA paga, mensagem ou deploy. Ensaio visual/runtime específico pendentes.
+- Classificação depende da categoria contratos; texto livre/documento mal classificado e compartilhamento externo continuam limitações. Não declarar sigilo completo.
+- Próximo: criação atômica/auditada de evento, checklist e demandas. Demais dívidas de exclusão/checklist/relações e O06 continuam no controle.

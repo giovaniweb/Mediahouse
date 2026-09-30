@@ -37,7 +37,7 @@ export default function EventoDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("geral")
-  const { data, mutate, isLoading, error } = useSWR<{ evento: Evento; financeiro: Financeiro | null }>(`/api/eventos/${id}`, fetcher)
+  const { data, mutate, isLoading, error } = useSWR<{ evento: Evento; financeiro: Financeiro | null; podeDecidir: boolean }>(`/api/eventos/${id}`, fetcher)
 
   if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
   if (error) return <div role="alert" className="p-6 text-zinc-400">Não foi possível consultar o evento. <button className="underline" onClick={() => mutate()}>Tentar novamente</button></div>
@@ -85,9 +85,9 @@ export default function EventoDetalhePage() {
       {tab === "geral" && <TabGeral ev={ev} financeiro={data.financeiro} onMutate={mutate} />}
       {tab === "audiovisual" && <TabAudiovisual ev={ev} eventoId={id} onMutate={mutate} />}
       {tab === "checklist" && <TabChecklist eventoId={id} checklist={ev.checklist} onMutate={mutate} />}
-      {tab === "documentos" && <TabDocumentos eventoId={id} documentos={ev.documentos} onMutate={mutate} />}
+      {tab === "documentos" && <TabDocumentos podeFinanceiro={!!data.financeiro} podeDecidir={data.podeDecidir} eventoId={id} documentos={ev.documentos} onMutate={mutate} />}
       {tab === "orcamento" && data.financeiro && <TabOrcamento eventoId={id} custos={ev.custos ?? []} financeiro={data.financeiro} onMutate={mutate} />}
-      {tab === "aprovacoes" && <TabAprovacoes eventoId={id} aprovacoes={ev.aprovacoes} onMutate={mutate} />}
+      {tab === "aprovacoes" && <TabAprovacoes key={`${!!data.financeiro}-${data.podeDecidir}`} podeFinanceiro={!!data.financeiro} podeDecidir={data.podeDecidir} eventoId={id} aprovacoes={ev.aprovacoes} onMutate={mutate} />}
       {tab === "relatorio" && <TabRelatorio eventoId={id} />}
     </div>
   )
@@ -336,29 +336,38 @@ function TabChecklist({ eventoId, checklist, onMutate }: { eventoId: string; che
   )
 }
 
+async function alterarDocumentoOuAprovacao(url: string, options: RequestInit) {
+  try {
+    const r = await fetch(url, options)
+    const body = await r.json()
+    if (!r.ok) throw new Error(body.error ?? "Não foi possível confirmar a alteração.")
+    return true
+  } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível confirmar a alteração."); return false }
+}
+
 // ─── Documentos ───────────────────────────────────────────────────────────────
 const CAT_DOC: Record<string, string> = {
   manual_expositor: "Manual do Expositor", programacao: "Programação", briefing: "Briefing",
-  contratos: "Contratos", planta: "Planta", projeto_stand: "Projeto do Stand",
+  contratos: "Contratos (restrito)", planta: "Planta", projeto_stand: "Projeto do Stand",
   layout_identidade: "Layout/Identidade", material_impresso: "Material Impresso",
   artes_digitais: "Artes Digitais", audiovisual: "Audiovisual", outros: "Outros",
 }
-function TabDocumentos({ eventoId, documentos, onMutate }: { eventoId: string; documentos: DocItem[]; onMutate: () => void }) {
+function TabDocumentos({ eventoId, documentos, onMutate, podeFinanceiro, podeDecidir }: { eventoId: string; documentos: DocItem[]; onMutate: () => void; podeFinanceiro: boolean; podeDecidir: boolean }) {
   const [form, setForm] = useState({ nome: "", categoria: "briefing", linkExterno: "" })
   async function add() {
     if (!form.nome.trim()) { toast.error("Nome do documento obrigatório"); return }
-    await fetch(`/api/eventos/${eventoId}/documentos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+    if (!await alterarDocumentoOuAprovacao(`/api/eventos/${eventoId}/documentos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })) return
     setForm({ nome: "", categoria: "briefing", linkExterno: "" }); onMutate()
   }
   async function remover(did: string) {
-    await fetch(`/api/eventos/${eventoId}/documentos?docId=${did}`, { method: "DELETE" }); onMutate()
+    if (await alterarDocumentoOuAprovacao(`/api/eventos/${eventoId}/documentos?docId=${did}`, { method: "DELETE" })) onMutate()
   }
   return (
     <div className="space-y-3">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto] gap-2 items-end">
         <input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} placeholder="Nome do documento" className={inputCls} />
         <select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))} className={inputCls + " md:w-44"}>
-          {Object.entries(CAT_DOC).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(CAT_DOC).filter(([k]) => k !== "contratos" || podeFinanceiro).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <input value={form.linkExterno} onChange={(e) => setForm((f) => ({ ...f, linkExterno: e.target.value }))} placeholder="Link (Drive, etc.)" className={inputCls} />
         <button onClick={add} className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm whitespace-nowrap">Adicionar</button>
@@ -375,7 +384,7 @@ function TabDocumentos({ eventoId, documentos, onMutate }: { eventoId: string; d
                 <p className="text-[10px] text-zinc-500">{CAT_DOC[d.categoria] ?? d.categoria} · {d.status}</p>
               </div>
               {(d.linkExterno || d.url) && <a href={d.linkExterno || d.url || "#"} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-blue-400"><ExternalLink className="w-4 h-4" /></a>}
-              <button onClick={() => remover(d.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+              {(podeDecidir || !["aprovado", "reprovado", "finalizado"].includes(d.status)) && <button onClick={() => remover(d.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
             </div>
           ))}
         </div>
@@ -439,21 +448,21 @@ function TabOrcamento({ eventoId, custos, financeiro, onMutate }: { eventoId: st
 
 // ─── Aprovações ───────────────────────────────────────────────────────────────
 const TIPO_APROV: Record<string, string> = { orcamento: "Orçamento", layout: "Layout", material: "Material", contrato: "Contrato", entrega: "Entrega" }
-function TabAprovacoes({ eventoId, aprovacoes, onMutate }: { eventoId: string; aprovacoes: AprovacaoItem[]; onMutate: () => void }) {
-  const [tipo, setTipo] = useState("orcamento")
+function TabAprovacoes({ eventoId, aprovacoes, onMutate, podeFinanceiro, podeDecidir }: { eventoId: string; aprovacoes: AprovacaoItem[]; onMutate: () => void; podeFinanceiro: boolean; podeDecidir: boolean }) {
+  const [tipo, setTipo] = useState(podeFinanceiro ? "orcamento" : "layout")
   async function add() {
-    await fetch(`/api/eventos/${eventoId}/aprovacoes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo }) })
+    if (!await alterarDocumentoOuAprovacao(`/api/eventos/${eventoId}/aprovacoes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo }) })) return
     onMutate()
   }
   async function decidir(aid: string, status: string) {
-    await fetch(`/api/eventos/${eventoId}/aprovacoes`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: aid, status }) })
+    await alterarDocumentoOuAprovacao(`/api/eventos/${eventoId}/aprovacoes`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: aid, status }) })
     onMutate()
   }
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
         <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={inputCls}>
-          {Object.entries(TIPO_APROV).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(TIPO_APROV).filter(([k]) => podeFinanceiro || !["orcamento", "contrato"].includes(k)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <button onClick={add} className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm whitespace-nowrap"><Plus className="w-4 h-4" /></button>
       </div>
@@ -464,7 +473,7 @@ function TabAprovacoes({ eventoId, aprovacoes, onMutate }: { eventoId: string; a
           {aprovacoes.map((a) => (
             <div key={a.id} className="flex items-center gap-3 p-3">
               <span className="flex-1 text-sm text-zinc-200">{TIPO_APROV[a.tipo] ?? a.tipo}</span>
-              {a.status === "pendente" ? (
+              {a.status === "pendente" && podeDecidir ? (
                 <div className="flex gap-1.5">
                   <button onClick={() => decidir(a.id, "aprovado")} className="text-xs px-2 py-1 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-600/40 hover:bg-emerald-600/30">Aprovar</button>
                   <button onClick={() => decidir(a.id, "reprovado")} className="text-xs px-2 py-1 rounded bg-red-600/20 text-red-300 border border-red-600/40 hover:bg-red-600/30">Reprovar</button>

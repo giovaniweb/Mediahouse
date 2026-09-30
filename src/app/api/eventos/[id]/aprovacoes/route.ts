@@ -1,42 +1,45 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireEventoAccess } from "@/lib/eventos-access"
-import { requireEventoGestaoOrg } from "@/lib/org"
-import type { TipoAprovacao } from "@prisma/client"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { aprovacaoCriar, aprovacaoDecidir, podeDecidirEvento, tipoFinanceiro } from "@/lib/eventos-documentos"
 
 type Params = { params: Promise<{ id: string }> }
-
-// POST — solicita aprovação
-export async function POST(req: NextRequest, { params }: Params) {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
+async function executar(req: NextRequest, { params }: Params, decidir: boolean) {
+  const acesso = await requireAcesso("verEventos")
+  if (acesso instanceof NextResponse) return acesso
+  if (decidir && !podeDecidirEvento(acesso.papel)) return resposta({ error: "A decisão exige gestão de eventos." }, 403)
+  let body: unknown
+  try { body = await req.json() } catch { return resposta({ error: "Dados inválidos" }, 400) }
+  const criacao = decidir ? null : aprovacaoCriar.safeParse(body)
+  const decisao = decidir ? aprovacaoDecidir.safeParse(body) : null
+  if (criacao?.success === false || decisao?.success === false) return resposta({ error: "Tipo ou decisão inválidos" }, 400)
+  if (criacao?.success && tipoFinanceiro(criacao.data.tipo) && !acesso.permissoes.verFinanceiroEvento) return resposta({ error: "Sem permissão financeira" }, 403)
   const { id } = await params
-  const guard = await requireEventoGestaoOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const body = await req.json()
-  const aprovacao = await prisma.eventoGestaoAprovacao.create({
-    data: { eventoId: id, tipo: (body.tipo ?? "orcamento") as TipoAprovacao, status: "pendente", observacao: body.observacao ?? null },
-  })
-  return NextResponse.json({ aprovacao }, { status: 201 })
+  try {
+    return await comOrg(acesso.organizacaoId, () => prisma.$transaction(async tx => {
+      const eventos = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM eventos_gestao WHERE id=${id} AND "organizacaoId"=${acesso.organizacaoId} FOR UPDATE`
+      if (!eventos.length) return resposta({ error: "Evento não encontrado" }, 404)
+      const ator = { organizacaoId: acesso.organizacaoId, usuarioId: acesso.usuarioId }
+      if (criacao?.success) {
+        const aprovacao = await tx.eventoGestaoAprovacao.create({ data: { ...criacao.data, eventoId: id, status: "pendente" } })
+        await registrarAuditoria(tx, ator, { acao: "evento.aprovacao", recurso: "aprovacao_evento", recursoId: aprovacao.id, correlationId: correlacaoAuditoria(), depois: { operacao: "criar", decisao: "pendente" } })
+        return resposta({ aprovacao }, 201)
+      }
+      if (!decisao?.success) return resposta({ error: "Decisão inválida" }, 400)
+      const atual = await tx.eventoGestaoAprovacao.findFirst({ where: { id: decisao.data.id, eventoId: id, ...(acesso.permissoes.verFinanceiroEvento ? {} : { tipo: { notIn: ["orcamento", "contrato"] } }) } })
+      if (!atual) return resposta({ error: "Aprovação não encontrada" }, 404)
+      if (atual.status !== "pendente") {
+        if (atual.status === decisao.data.status && atual.aprovadoPor === acesso.usuarioId && (decisao.data.observacao === undefined || decisao.data.observacao === atual.observacao)) return resposta({ ok: true })
+        return resposta({ error: "Esta solicitação já foi decidida. Atualize a lista." }, 409)
+      }
+      await tx.eventoGestaoAprovacao.update({ where: { id: atual.id }, data: { status: decisao.data.status, aprovadoPor: acesso.usuarioId, ...(decisao.data.observacao !== undefined ? { observacao: decisao.data.observacao } : {}) } })
+      await registrarAuditoria(tx, ator, { acao: "evento.aprovacao", recurso: "aprovacao_evento", recursoId: atual.id, correlationId: correlacaoAuditoria(), antes: { decisao: atual.status }, depois: { decisao: decisao.data.status } })
+      return resposta({ ok: true })
+    }))
+  } catch { return resposta({ error: "Não foi possível confirmar a aprovação." }, 503) }
 }
-
-// PATCH — aprovar/reprovar
-export async function PATCH(req: NextRequest, { params }: Params) {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const { id } = await params
-  const guard = await requireEventoGestaoOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const body = await req.json()
-  if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
-  const r = await prisma.eventoGestaoAprovacao.updateMany({
-    where: { id: body.id, eventoId: id },
-    data: {
-      status: body.status,
-      aprovadoPor: session.user.id,
-      ...(body.observacao !== undefined ? { observacao: body.observacao } : {}),
-    },
-  })
-  if (r.count === 0) return NextResponse.json({ error: "Aprovação não encontrada" }, { status: 404 })
-  return NextResponse.json({ ok: true })
-}
+export const POST = (req: NextRequest, params: Params) => executar(req, params, false)
+export const PATCH = (req: NextRequest, params: Params) => executar(req, params, true)

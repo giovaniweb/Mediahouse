@@ -15,7 +15,7 @@ export async function GET() {
       const emProducao = await tx.eventoGestao.count({ where: { organizacaoId, status: { in: ["producao", "execucao"] } } })
       const atrasados = await tx.eventoGestao.count({ where: { organizacaoId, status: ativos, dataFim: { lt: agora } } })
       const finalizados = await tx.eventoGestao.count({ where: { organizacaoId, status: "finalizado" } })
-      const docsPendentes = await tx.eventoGestaoDocumento.count({ where: { evento: { organizacaoId }, status: "pendente" } })
+      const docsPendentes = await tx.eventoGestaoDocumento.count({ where: { evento: { organizacaoId }, status: "pendente", ...(acesso.permissoes.verFinanceiroEvento ? {} : { categoria: { not: "contratos" as const } }) } })
       let financeiro = null
       if (acesso.permissoes.verFinanceiroEvento) {
         const orcamentos = await tx.eventoGestao.aggregate({ where: { organizacaoId }, _sum: { orcamentoPrevisto: true } })

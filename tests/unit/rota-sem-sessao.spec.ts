@@ -44,9 +44,7 @@ const DISPENSADAS: Record<string, string> = {
     "idem: o cliente final falando do profissional pertence à rede, não a uma empresa",
   // Módulo `eventos` está desligado na plataforma (DISPONIVEL_NA_PLATAFORMA).
   // Ligá-lo exige passar por aqui antes.
-  "src/app/api/eventos/[id]/aprovacoes/route.ts": "módulo eventos desligado",
   "src/app/api/eventos/[id]/checklist/route.ts": "módulo eventos desligado",
-  "src/app/api/eventos/[id]/documentos/route.ts": "módulo eventos desligado",
   "src/app/api/fornecedores/[id]/route.ts": "módulo eventos desligado",
   "src/app/api/fornecedores/route.ts": "módulo eventos desligado",
   "src/app/api/produtos-servico/[id]/route.ts": "módulo eventos desligado",

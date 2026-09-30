@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
 import { requireAcesso } from "@/lib/acesso"
+import { linkDocumentoSeguro, podeDecidirEvento } from "@/lib/eventos-documentos"
 import { comOrg } from "@/lib/org-contexto"
 import { requireEventoGestaoOrg } from "@/lib/org"
 
@@ -23,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
           responsavel: { select: { id: true, nome: true } },
           cobertura: { select: { id: true, slug: true, titulo: true, status: true } },
           checklist: { orderBy: { createdAt: "asc" } },
-          documentos: { orderBy: { createdAt: "desc" } },
+          documentos: { where: podeFinanceiro ? {} : { categoria: { not: "contratos" } }, orderBy: { createdAt: "desc" } },
           custos: podeFinanceiro ? { orderBy: { createdAt: "desc" }, include: { fornecedor: { select: { id: true, nome: true } }, produtoServico: { select: { id: true, nome: true } } } } : false,
           aprovacoes: { where: podeFinanceiro ? {} : { tipo: { notIn: ["orcamento", "contrato"] } }, orderBy: { createdAt: "desc" } },
           demandas: { where: { organizacaoId }, select: {
@@ -50,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
           ...(av ? { custoAudiovisual: av._sum.valor } : {}),
         }
       }
-      return { evento: { ...evento, percentualConclusao }, financeiro }
+      return { evento: { ...evento, documentos: evento.documentos.map(d => ({ ...d, url: linkDocumentoSeguro(d.url), linkExterno: linkDocumentoSeguro(d.linkExterno) })), percentualConclusao }, financeiro, podeDecidir: podeDecidirEvento(acesso.papel) }
     }, { isolationLevel: "RepeatableRead" }))
     if (!resultado) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
     return NextResponse.json(resultado, { headers: { "Cache-Control": "private, no-store" } })

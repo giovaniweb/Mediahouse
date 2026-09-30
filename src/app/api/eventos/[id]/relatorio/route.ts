@@ -20,7 +20,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
         select: { nome: true, status: true, dataInicio: true, dataFim: true, local: true, cidade: true,
           responsavel: { select: { nome: true } },
           checklist: { select: { concluido: true } },
-          _count: { select: { documentos: true } },
+          _count: { select: { documentos: { where: acesso.permissoes.verFinanceiroEvento ? {} : { categoria: { not: "contratos" } } } } },
           demandas: { where: { organizacaoId }, select: { statusVisivel: true } },
         },
       })
