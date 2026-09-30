@@ -31,8 +31,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!dem?.linkFinal || !precisaTranscode(dem.linkFinal)) {
       return NextResponse.json({ error: "Nenhum vídeo .mov para converter" }, { status: 400 })
     }
-    await enqueueTranscode({ demandaId: id, sourceUrl: dem.linkFinal })
-    return NextResponse.json({ ok: true, enfileirado: true, legado: true })
+    const aceito = await enqueueTranscode({ organizacaoId: guard.organizacaoId, demandaId: id, sourceUrl: dem.linkFinal })
+    return NextResponse.json({ ok: true, enfileirado: aceito, legado: true })
   }
 
   const fonte = arq.originalUrl ?? arq.url
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Vídeo já está em MP4 (nada a converter)" }, { status: 400 })
   }
 
-  await prisma.arquivo.update({ where: { id: arq.id }, data: { transcodeStatus: "processing" } })
-  await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: fonte })
+  const aceito = await enqueueTranscode({ organizacaoId: guard.organizacaoId, arquivoId: arq.id, demandaId: id, sourceUrl: fonte })
 
-  return NextResponse.json({ ok: true, enfileirado: true })
+  await prisma.arquivo.update({ where: { id: arq.id }, data: { transcodeStatus: aceito ? "processing" : "sem_worker" } })
+  return NextResponse.json({ ok: true, enfileirado: aceito })
 }

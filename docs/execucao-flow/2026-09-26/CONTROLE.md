@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — estimativa monetária de IA com preços datados; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — primeiro recorte M01: identidade de leitura e origem autorizada no transcode; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima frente fora de eventos: M01 — identidade da mídia, base para Drive/biblioteca. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
+- Próxima etapa: continuar M01 — persistir metadados de identidade/versão e padronizar uploads com evento transacional; o adaptador de leitura e a proteção da fonte do transcode já estão implementados localmente. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: estimativa em USD do consumo confirmado de IA (recorte O06 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
-- Últimas provas locais: 692 unitários, 293 integrações distintas, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Este recorte altera estimativa de consumo, painel existente e testes; eventos não foram retomados.
+- Última implementação: classificação de identidade (privado/legado/Drive/externo) e autorização do objeto antes do download/encaminhamento ao transcode (primeiro recorte M01 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
+- Últimas provas locais: 712 unitários, 19 integrações focadas em mídia (5 novas), tipos/lint e auditores aprovados. Build webpack aprovado. Integração ampla anterior: 293 casos; não repetida neste recorte. Sem worker/storage reais ou ensaio visual nesta etapa.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -41,7 +41,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
-| M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -411,3 +411,14 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Painel mostra total estimado ou subtotal parcial, sem conversão/fatura. Valores antigos não são reescritos; documentação em O06-LIMITES-IA.md.
 - 692 unitários e 293 integrações distintas aprovados (suite + recorte de 33 após atualizar expectativa do adaptador); build/tipos, lint sem erros/avisos e auditores aprovados. Sem migration, chamada paga, mensagem ou deploy. Homologação externa/visual e comparação de fatura pendentes.
 - Próximo: M01 — identidade única de mídia para preparar Drive/biblioteca. Eventos seguem em standby; não reiniciar seu desenvolvimento.
+
+
+### 30/09/2026 — M01 parcial: identidade de leitura e fonte do transcode
+
+- Adaptador distingue objeto Supabase privado/legado, referência Drive e link externo. URL assinada identifica o objeto sem incorporar token. Host Supabase precisa coincidir exatamente com a configuração; recusa caminhos ambíguos, escapes, credenciais e protocolos inseguros.
+- Antes de assinar ou baixar, transcode exige caminho de vídeo da demanda e vínculo exato no banco com arquivo/original ou linkFinal, sempre na organização autorizada. HEAD e envio ao worker não seguem redirects e possuem timeout. Falha de assinatura não encaminha a URL original como alternativa. Links externos permanecem cadastrados, mas não são baixados por esse serviço.
+- Upload registra Arquivo antes de consultar metadados remotos. Reconversão e manutenção contam somente serviços aceitos; legado da manutenção recebeu filtro explícito de organização.
+- Provas: 712 unitários (20 novos), 19 integrações de mídia com PostgreSQL sintético (5 novas), tipos, lint, auditores e build webpack. Build mantém aviso preexistente de face-api. Integrações usam assinatura e worker simulados; não comprovam execução real de conversão.
+- Sem migração, backfill, alteração de originais, publicação ou chamadas pagas. Eventos continuam em standby.
+- M01 segue parcial: faltam colunas aditivas de identidade/versão/checksum/preview/cópia Drive, gravação consistente em todos os canais, evento transacional e adaptação dos demais consumidores. A comparação exata com URL registrada é uma proteção transitória; a identidade ainda não está persistida no banco. Deduplicação/idempotência, callback e corrida de estado após aceite continuam em M02. O status legado sem_worker ainda agrega ausência de configuração, recusa e falha de envio.
+- Próxima unidade: mapear os canais de criação de Arquivo e adicionar persistência compatível de metadados, sem backfill real; só então avançar worker/Drive/biblioteca.

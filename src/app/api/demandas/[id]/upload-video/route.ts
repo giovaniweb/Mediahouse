@@ -94,7 +94,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
     // Confere o tipo real: arquivo sem extensão passava batido e chegava ao
     // cliente como quicktime, que o Chrome não toca.
-    const ehTranscode = await precisaTranscodeConferindo(url)
     const arq = await prisma.arquivo.create({
       data: {
         demandaId: id,
@@ -114,8 +113,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // worker aceitou, "sem_worker" quando não há para onde mandar. A diferença
     // importa — a segunda é um problema de configuração que precisa aparecer,
     // não um vídeo que está convertendo.
-    if (ehTranscode) {
-      const aceito = await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
+    if (await precisaTranscodeConferindo(url, { organizacaoId: guard.organizacaoId, demandaId: id, arquivoId: arq.id })) {
+      const aceito = await enqueueTranscode({ organizacaoId: guard.organizacaoId, arquivoId: arq.id, demandaId: id, sourceUrl: url })
       await prisma.arquivo.update({
         where: { id: arq.id },
         data: { transcodeStatus: aceito ? "processing" : "sem_worker" },

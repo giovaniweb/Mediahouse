@@ -59,3 +59,10 @@ Não executar backfill no acervo real durante implementação. Ensaiar com arqui
 **Testes:** final com 29/30/31 dias, reaberto, data nula, Growth sem vídeo por natureza, permissão restrita, ação repetida e storage ausente.
 
 **Aceite:** sumir do quadro não apaga serviço/custo; pendência de acervo é visível sem acusar perda comprovada; nenhuma promessa de redução de GB sem inventário de armazenamento.
+
+
+## Evidência de execução — 30/09/2026, primeiro recorte M01
+
+Implementado localmente `midia-identidade.ts` e integrado ao transcode: classificação sem download, host de storage exato, vínculo de objeto com demanda/empresa antes da rede, renovação de assinatura e nenhuma alternativa para URL arbitrária. Reconversão/manutenção deixam de declarar aceite inexistente. Foram aprovados 712 unitários e 19 integrações focadas, tipos/lint/auditores e build webpack. Serviços externos simulados.
+
+M01 permanece EM_EXECUCAO. Não há migração ou identidade persistida ainda. Próximo recorte: campos aditivos e metadados dos uploads, evento transacional e compatibilidade dos canais legados. Drive, galeria e worker completo continuam pendentes; nenhum backfill no acervo ou publicação foi feito. Detalhes e limitações no CONTROLE.md.
