@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -18,8 +19,25 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export default function LoginPage() {
+  // useSearchParams exige Suspense para a página poder ser pré-renderizada.
+  return (
+    <Suspense>
+      <FormularioLogin />
+    </Suspense>
+  )
+}
+
+function FormularioLogin() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  // O middleware manda o link completo; ao servidor vai só o caminho, e só se for
+  // deste mesmo endereço (a validação final é de destinoDoLogin, no servidor).
+  const bruto = useSearchParams().get("callbackUrl")
+  let destino: string | undefined
+  try {
+    const u = bruto ? new URL(bruto, window.location.origin) : null
+    if (u && u.origin === window.location.origin) destino = u.pathname + u.search + u.hash
+  } catch {}
 
   const {
     register,
@@ -32,13 +50,13 @@ export default function LoginPage() {
     setError("")
 
     // Server Action: login e redirect acontecem no servidor — sem problema de cookie no browser
-    const result = await loginAction(data.login, data.password)
+    const result = await loginAction(data.login, data.password, destino)
 
     if (result?.error) {
       setError(result.error)
       setLoading(false)
     }
-    // Se não há erro, o server action redireciona para /dashboard automaticamente
+    // Se não há erro, o server action redireciona (para o callbackUrl validado ou /dashboard)
   }
 
   return (
