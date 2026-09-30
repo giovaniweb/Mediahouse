@@ -1,60 +1,48 @@
-# NuFlow — Worker de Transcodificação de Vídeo
+# Worker de mídia do Flow
 
-Converte vídeos `.mov`/HEVC (iPhone) para **MP4 H.264**, que toca em **qualquer navegador e dispositivo**.
-Roda separado do NuFlow (que está na Vercel e não tem ffmpeg). O NuFlow aciona este worker por HTTP;
-ele baixa o vídeo do Supabase, converte com `ffmpeg` e devolve a URL do MP4 por callback.
+## Estado da implementação
 
-**Regra automática:**
-- vídeo **HEVC** → re-encoda para H.264 + AAC
-- vídeo **H.264 dentro de .mov** → só reembala para .mp4 (rápido, sem perda)
-- já **MP4/H.264** → ignora (não reprocessa)
+`index.mjs` é o servidor legado e ainda é o entrypoint do Docker. Ele assume o bucket público `uploads` e não tem lease persistido. **Não homologado para a nova fila privada.** O código é preservado até a substituição coordenada do consumidor/callback; copiar o motor novo para a imagem não ativa o fluxo v2.
 
----
+`converter.mjs` é o motor v2 testado localmente, sem dependências npm. Usa Node 20.3+ (ou 22), ffmpeg e ffprobe. Não abre servidor, não cria fila em memória e não responde HTTP 202. A função `criarConversor(config)` devolve um executor com uma conversão simultânea; chamadas concorrentes recebem `worker_ocupado`.
 
-## Deploy no Railway (recomendado, ~US$5/mês)
+## Contrato do motor v2
 
-1. Acesse [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → escolha este repositório (`Mediahouse`).
-2. Em **Settings → Root Directory**, defina: `worker-transcode`
-   (assim o Railway usa o `Dockerfile` desta pasta e ignora o app Next.js).
-3. Em **Variables**, adicione as 4 variáveis:
+O servidor deve emitir este contrato **após reivindicar um job persistido e validar organização, arquivo e versão**:
 
-   | Variável | Valor |
-   |---|---|
-   | `TRANSCODE_SECRET` | `7e9627d4f1aa43f650d9e5aa5b269ac72ea5d26b30586e78` |
-   | `SUPABASE_URL` | o mesmo valor de `NEXT_PUBLIC_SUPABASE_URL` da Vercel (ex: `https://sddsqdzcfueajsvgocaa.supabase.co`) |
-   | `SUPABASE_SERVICE_ROLE_KEY` | o mesmo valor da Vercel |
-   | `NUFLOW_CALLBACK_URL` | `https://nuflow.space/api/transcode/callback` |
+- `jobId`, `leaseToken`, `organizacaoId`, `demandaId`, `arquivoId`, `fonteVersao`, `perfil: "h264-720p-v1"`;
+- `bucket` e `objectKey` do original, extraídos da identidade persistida;
+- `sourceUrl` de leitura assinada e `uploadUrl` de envio assinado, ambas temporárias e no host de storage configurado;
+- `sha256` do original quando conhecido.
 
-4. Deploy. Quando subir, o Railway dá uma URL pública (ex: `https://nuflow-transcode-production.up.railway.app`).
-   Confira em `SUA_URL/health` → deve responder `{"ok":true}`.
+A configuração aceita `storageOrigin` (origem HTTPS sem caminho) e `tempRoot` opcional. Somente o teste local usa `permitirHttpLocal: true` com IP `127.0.0.1`. Esse parâmetro nunca deve vir do usuário. O motor não recebe service role nem escolhe destino externo.
 
-> **Render** funciona igual: New → Web Service → repo → Root Directory `worker-transcode` → Docker → mesmas variáveis.
+Destino derivado, sempre no bucket privado `midia`:
 
----
+`org/{org}/videos/{demanda}/previews/{arquivo}/{versao}/h264-720p-v1/{job}-{lease}.mp4`
 
-## Depois: configurar a Vercel (NuFlow)
+O emissor deve criar uma assinatura de upload para esse caminho, sem sobrescrita. Tentativas diferentes produzem objetos diferentes; um worker antigo não sobrescreve o resultado novo. O callback deve conferir o lease e a versão antes de tornar a prévia visível. Uma saída órfã não pode ser apagada automaticamente.
 
-No projeto da Vercel, adicione 2 variáveis de ambiente e faça **redeploy**:
+## Processamento e limites do ensaio
 
-| Variável | Valor |
-|---|---|
-| `TRANSCODE_WORKER_URL` | a URL pública do worker (ex: `https://nuflow-transcode-production.up.railway.app`) |
-| `TRANSCODE_SECRET` | `7e9627d4f1aa43f650d9e5aa5b269ac72ea5d26b30586e78` (mesmo valor do worker) |
+- Entrada de até 100 MiB (também medidos durante streaming), duração de até 10 minutos; dimensão máxima de entrada 8192 px e 33.554.432 pixels.
+- Download com timeout de 2 minutos e sem redirects; ffprobe limitado a 30 segundos; ffmpeg a 15 minutos. Listas de reprodução e protocolos de rede no ffmpeg são recusados.
+- Perfil fixo v1: MP4/H.264, AAC 128 kbps se houver áudio, CRF 23, preset veryfast, yuv420p e faststart; no máximo 1280 px no maior lado, dimensões pares, sem ampliar. Entrada sem áudio gera saída sem áudio.
+- Amostras com proporção de pixel não quadrada ou rotação não múltipla de 90° são recusadas explicitamente neste recorte.
+- Saída limitada a 100 MiB, inspecionada novamente por ffprobe, enviada por stream. Checksum SHA-256 e tamanho do original e da prévia fazem parte do resultado; nenhuma modificação no original.
+- Temporários ficam em diretório exclusivo e são limpos em sucesso, erro e aborto cooperativo. O controlador externo deve abortar o motor quando perder o lease. SIGKILL/reinício abrupto ainda exige reconciliação de diretórios e saída persistida pelo futuro consumidor.
+- Não existe garantia de redução de tamanho. Este perfil prioriza reprodução; qualidade/HDR e desempenho em acervo real ainda precisam de homologação.
 
-Pronto. A partir daí, todo vídeo `.mov` enviado é convertido automaticamente, e há um botão
-**"Reconverter p/ MP4"** para os vídeos antigos.
+## Testar sem produção
 
----
-
-## Rodar local (teste)
-
-```bash
-cd worker-transcode
-TRANSCODE_SECRET=teste \
-SUPABASE_URL=https://sddsqdzcfueajsvgocaa.supabase.co \
-SUPABASE_SERVICE_ROLE_KEY=xxx \
-NUFLOW_CALLBACK_URL=http://localhost:3000/api/transcode/callback \
-PORT=8080 node index.mjs
+```sh
+npm test --prefix worker-transcode
 ```
 
-Precisa de `ffmpeg` e `ffprobe` instalados (`brew install ffmpeg` no Mac).
+A suíte gera clipes sintéticos, abre um storage simulado apenas em loopback, executa ffmpeg/ffprobe reais e limpa os arquivos. Cobre MOV/H.264, MOV/HEVC, MP4/HEVC, vertical, ausência de áudio, checksum, conteúdo inválido/playlist, tamanho/duração, storage indisponível, redirects, concorrência e aborto. Imprime medidas de tempo e tamanho; não mede o pico de memória dos subprocessos nem comprova reprodução em navegador. O CI inclui um job dedicado; execução remota ainda pendente.
+
+## Pendências antes de ativar
+
+Consumidor de `midia.converter`, renovação/aborto por lease, credenciais de curta duração, callback autenticado/idempotente, reconciliação após upload/crash, preservação e leitura autorizada de prévia no app, conciliação com transcode legado, limpeza pós-reinício e ensaio de navegador. Não publicar o Docker legado como se já fosse a versão durável privada.
+
+Segredos devem ser gerados exclusivamente para o ambiente e guardados no provedor, nunca copiados de exemplos do repositório. O exemplo fixo anterior foi removido; se tiver sido usado em um ambiente real, sua substituição faz parte da preparação de publicação.

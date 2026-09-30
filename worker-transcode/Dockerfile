@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Sem dependências externas — só Node nativo
 COPY package.json ./
-COPY index.mjs ./
+COPY index.mjs converter.mjs ./
 
 ENV PORT=8080
 EXPOSE 8080

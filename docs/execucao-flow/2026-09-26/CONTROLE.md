@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — terceiro recorte M01: intenção durável e preparação recuperável da mídia; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — primeiro recorte M02: motor privado com ensaio ffmpeg sintético; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: consumidor M02 para midia.converter, com identidade persistida, saída privada, lease e callback versionado. Preparação local já grava a intenção de conversão; NÃO existe consumidor externo novo ativo. Antes de ativá-lo, conciliar transcodeStatus/caminho legado para impedir conversões duplicadas. M01 segue parcial nos demais canais/consumidores. O06 conserva pendências de homologação.
+- Próxima etapa: ligar motor converter.mjs ao consumidor de midia.converter com assinatura por identidade persistida, renovação/aborto de lease e callback versionado/idempotente. Motor local já foi ensaiado; index.mjs/Docker ainda executam o legado. Não ativar a nova conversão antes de conciliar estados legados e callback. M01 conserva pendências de outros canais/consumidores; eventos seguem adiados.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: intenção midia.preparar na transação de upload da demanda e consumidor local recuperável que gera midia.converter. Eventos seguem em standby; sem publicação.
-- Últimas provas locais: 717 unitários, 310 integrações, 25 runtime/RLS e verificador de roles aprovados; tipos, lint dos arquivos alterados, auditores e build webpack aprovados. Aviso preexistente face-api no build. Nenhuma conversão externa real ou validação visual nesta etapa.
+- Última implementação: motor v2 de conversão limitado, com destino privado por tentativa e testes ffmpeg reais. Não conectado ao servidor/worker de produção; sem publicação.
+- Últimas provas locais deste recorte: 13 testes do motor com ffmpeg/ffprobe reais e storage loopback, 717 unitários do app e checagem sintática aprovados. ESLint padrão ignora worker-transcode; não contar como lint aprovado. Etapa anterior: 310 integrações, 25 runtime/RLS, tipos/auditores/build aprovados; não repetidos porque este recorte não muda app/schema. Docker, CI remoto, navegador e provedores reais pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -42,7 +42,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
-| M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| M02 | Worker privado | 04 | M01, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -456,3 +456,18 @@ Contagem dos cartões, sem pesos por complexidade ou estimativa de horas:
 | Prontidão para vender | Não homologada | Não mensurável com as provas atuais | L01/L02/L03, integrações reais e piloto continuam pendentes |
 
 Não somar percentuais das linhas. Os cartões têm tamanhos diferentes; estes números medem cobertura do plano e não esforço, qualidade integral ou percentual de funcionalidades de produção. O módulo de eventos permanece em standby e não é contado como entregue por ter sido adiado.
+
+
+### 30/09/2026 — M02 parcial: motor privado ensaiado com ffmpeg
+
+- `worker-transcode/converter.mjs`: executa conversão, não é servidor/consumidor e não confirma aceite em memória. Contrato restrito a organização/demanda/arquivo/versão/job/lease/perfil, origem no host de storage configurado e saída derivada no bucket midia por tentativa. Nenhuma service role entra no motor. Perfis e paths não são comandos livres.
+- Streaming de entrada/saída, teto 100 MiB inclusive sem Content-Length, duração até 10 min, dimensões de entrada limitadas, subprocessos com timeout, duas threads e sem protocolos de rede. Diretório isolado; limpa em término/erro/aborto cooperativo. SHA-256 original/prévia, MIME/codec/dimensões/duração, tempo e tamanho retornados; original preservado. Uma conversão por instância; saturação recusa trabalho.
+- MP4/H.264/AAC (quando houver áudio), yuv420p/faststart, CRF 23/veryfast, maior dimensão até 1280 px, sem ampliar. Valida saída por ffprobe antes do envio. Rejeita pixel não quadrado e rotações não múltiplas de 90° neste recorte.
+- 13 testes reais locais: MOV/H.264 com áudio, MOV/HEVC e MP4/HEVC sem áudio, vertical, inválido/playlist, duração >10 min, tamanho declarado e streaming >100 MiB, hash divergente, falha de download/upload, redirect, concorrência/aborto, caminhos/versões. Checagem independente do MP4 enviado, faststart, proporção e integridade do original. Mais 717 unitários do app aprovados. Node --check passou; ESLint do projeto ignora a pasta do worker, portanto não certificou estes arquivos.
+- Clipes sintéticos de 1 segundo (esta máquina; não extrapolar para produção): H.264 MOV 20.970→26.273 bytes/75 ms; HEVC MOV 11.270→10.706/61 ms; HEVC MP4 11.319→10.706/58 ms; vertical 720×1440→640×1280, 230.265→145.421 bytes/104 ms. Compressão não garantida. Pico de memória do subprocesso, qualidade/HDR, custos reais e reprodução em navegador não medidos.
+- CI dedicado adicionado para instalar ffmpeg e executar a suíte; execução remota pendente. Docker copia o módulo novo, mas entrypoint index.mjs permanece legado e não chama o motor. README reescrito com contrato/limites/pendências, removendo exemplo fixo de segredo. Não usar o exemplo anterior em novos ambientes; eventual rotação real pertence à preparação de publicação.
+- **Não ativo:** consumidor midia.converter, emissão de URLs assinadas por lease, renovação, callback idempotente, persistência/validação final da prévia, reconciliação com transcode legado, crash/restart abrupto e limpeza de órfãos. Aborto cooperativo testado não equivale a recuperação após SIGKILL. Nenhum deploy, arquivo real ou serviço pago usado. M02 EM_EXECUCAO; M01 continua parcial. Eventos continuam em standby.
+
+### Atualização do percentual após o motor local
+
+Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do plano completo**. Agora são 8 etapas parciais e 13 técnicas ainda não iniciadas. M02 ganhou provas locais, sem ser contado como concluído: 23/36 cartões têm alguma prova local (63,9%), o que não equivale a homologação. Venda continua não homologada; publicação/piloto pendentes.

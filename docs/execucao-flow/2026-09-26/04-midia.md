@@ -80,3 +80,10 @@ Provas locais: 717 unitários, 305 integrações, 25 runtime/RLS, verificador de
 Upload da demanda registra intenção `midia.preparar` na transação, com identidade por arquivo/versão/perfil. Preparador local integrado ao cron usa lease e cria `midia.converter` atomicamente, sem rede. A preparação retoma após lease vencido e rejeita versão/empresa inválida. Prazo de 7 dias; sem backfill de uploads anteriores. 717 unitários, 310 integrações, 25 runtime/RLS, verificador de roles, tipos/lint/auditores/build aprovados.
 
 **Limite de ativação:** ainda não há consumidor de conversão para esses jobs. Caminho legado permanece. Próximo recorte é M02: worker privado e callback versionado/idempotente, conciliando jobs com conversões legadas para não duplicar efeitos. Não confundir conclusão da preparação com conclusão do vídeo. M01 segue parcial nos demais itens.
+
+
+## Evidência de execução — 30/09/2026, primeiro recorte M02
+
+Motor `worker-transcode/converter.mjs` adicionado e ensaiado: 13 testes com ffmpeg/ffprobe reais e storage local simulado. Suporta MOV/H.264, MOV/HEVC, MP4/HEVC e vertical, com/sem áudio; saída MP4/H.264/AAC privada por tentativa, faststart, até 1280 px sem ampliar, limites de 100 MiB/10 min, validação pós-conversão, hash/tamanho e cancelamento cooperativo. 717 unitários do app continuam aprovados. Medidas e limites no CONTROLE.md e README do worker.
+
+M02 EM_EXECUCAO. Motor não está ligado ao entrypoint legado nem à fila; próximo recorte é o consumidor com assinatura por lease e callback versionado. Sem CI remoto/Docker/navegador/Railway real ou teste de reinício abrupto. O teto de concorrência e o aborto do motor são locais; garantia durável de retomada ainda depende dessa integração. Nenhum original real foi usado.
