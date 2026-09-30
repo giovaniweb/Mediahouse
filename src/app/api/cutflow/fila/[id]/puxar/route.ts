@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { autenticarCutflow, editorCutflow, FORA_DA_FILA } from "@/lib/cutflow"
+import { autenticarCutflow, editorCutflow, FORA_DA_FILA, sessaoDoPlugin } from "@/lib/cutflow"
+import { mudarStatus } from "@/lib/mudar-status"
 import { EVENTO_CUTFLOW_PUXADO } from "@/lib/status"
 
 type Params = { params: Promise<{ id: string }> }
@@ -12,9 +13,9 @@ type Params = { params: Promise<{ id: string }> }
 // de quem está editando. Puxar de novo do mesmo computador devolve o que já
 // existe (o plugin pode repetir depois de cair a rede).
 //
-// O status do card NÃO muda aqui: a passagem para `editando` segue a guarda de
-// transição normal (próxima etapa do Cutflow). O que fica é o fato, no
-// histórico, com a hora em que a edição começou.
+// O card passa a `editando` pela mesma função de status do quadro (guarda de
+// transição, histórico e avisos). O evento cutflow_puxado fica além disso, com
+// o computador, que o status não registra.
 export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await autenticarCutflow(req)
   if (ctx instanceof NextResponse) return ctx
@@ -64,5 +65,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       observacao: `Edição iniciada no Cutflow por ${quem?.nome ?? "alguém"}${ctx.nomeComputador ? ` (${ctx.nomeComputador})` : ""}`,
     },
   })
-  return NextResponse.json({ puxada: true, jaEra: false, codigo: demanda.codigo })
+  // O card passa a "editando" pela mesma guarda de transição do quadro. Se a
+  // guarda recusar (ex.: a pessoa sem permissão de mover), a trava fica e o
+  // plugin mostra o motivo — o status não é forçado.
+  let status: { mudou: boolean; aviso?: string } = { mudou: false }
+  if (demanda.statusInterno !== "editando") {
+    const r = await mudarStatus(sessaoDoPlugin(ctx), id, { statusInterno: "editando", origem: "automacao", observacao: "Edição iniciada no Cutflow" })
+    status = r.ok ? { mudou: true } : { mudou: false, aviso: (await r.json().catch(() => ({}))).error }
+  }
+  return NextResponse.json({ puxada: true, jaEra: false, codigo: demanda.codigo, status })
 }

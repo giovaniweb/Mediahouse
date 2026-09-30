@@ -165,6 +165,44 @@ export async function autenticarCutflow(req: { headers: Headers }): Promise<Cont
   return { organizacaoId, usuarioId: sessao.usuarioId, sessaoId: sessao.id, nomeComputador: sessao.nomeComputador }
 }
 
+/** A sessão do plugin no formato que a mudança de status aceita (só id e empresa). */
+export function sessaoDoPlugin(ctx: ContextoCutflow) {
+  return { user: { id: ctx.usuarioId, organizacaoId: ctx.organizacaoId } }
+}
+
+// ── Envio para aprovação ────────────────────────────────────────────────────
+// O plugin sobe o vídeo direto para o Drive (sessão resumável); ao concluir,
+// apresenta este recibo assinado, que amarra o arquivo ao card, à pasta e ao
+// tamanho declarados. Sem ele, qualquer fileId poderia virar "vídeo final".
+export const VALIDADE_ENVIO_MS = 24 * 60 * 60 * 1000
+
+function assinarComDominio(dominio: string, corpo: string): string {
+  return createHmac("sha256", segredo()).update(dominio + corpo).digest("base64url")
+}
+
+export type EnvioCutflow = { demandaId: string; fileId: string; pastaId: string | null; tamanho: number; nome: string; sessaoId: string }
+
+export function assinarEnvio(e: EnvioCutflow, agora = Date.now()): string {
+  const b64 = Buffer.from(JSON.stringify({ ...e, exp: agora + VALIDADE_ENVIO_MS })).toString("base64url")
+  return `${b64}.${assinarComDominio("cutflow-envio:", b64)}`
+}
+
+export function lerEnvio(bruto: unknown, agora = Date.now()): EnvioCutflow | null {
+  if (typeof bruto !== "string" || bruto.length > 4000) return null
+  const [b64, assinatura] = bruto.split(".")
+  if (!b64 || !assinatura) return null
+  const esperada = Buffer.from(assinarComDominio("cutflow-envio:", b64))
+  const recebida = Buffer.from(assinatura)
+  if (esperada.length !== recebida.length || !timingSafeEqual(esperada, recebida)) return null
+  try {
+    const d = JSON.parse(Buffer.from(b64, "base64url").toString("utf8"))
+    if (typeof d.exp !== "number" || d.exp <= agora || typeof d.fileId !== "string" || typeof d.demandaId !== "string") return null
+    return { demandaId: d.demandaId, fileId: d.fileId, pastaId: d.pastaId ?? null, tamanho: Number(d.tamanho), nome: String(d.nome), sessaoId: String(d.sessaoId) }
+  } catch {
+    return null
+  }
+}
+
 // ── Fila ────────────────────────────────────────────────────────────────────
 
 /**

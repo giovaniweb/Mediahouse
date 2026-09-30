@@ -157,6 +157,8 @@ export async function criarSessaoUploadDrive(opts: {
   fileName: string
   fileSize: number
   contentType: string
+  /** Pasta de destino (ex.: "Material pronto" do card). Sem ela, a pasta raiz da empresa. */
+  pastaId?: string | null
 }, organizacaoId?: string | null): Promise<DriveUploadSession> {
   if (!organizacaoId) throw new Error("Drive: sem organização — não é possível decidir em qual conta subir o arquivo.")
   if (driveCopiaAtiva(organizacaoId)) throw new Error("Upload direto desativado no piloto; use a cópia durável nas configurações do Drive.")
@@ -165,7 +167,7 @@ export async function criarSessaoUploadDrive(opts: {
     where: { organizacaoId },
     select: { googleDriveFolderId: true },
   })
-  const folderId = config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
+  const folderId = opts.pastaId || config?.googleDriveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
   if (!folderId) {
     throw new Error("Pasta do Google Drive não configurada. Acesse Configurações → Google Drive.")
   }

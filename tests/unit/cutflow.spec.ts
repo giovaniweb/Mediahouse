@@ -15,7 +15,7 @@ process.env.NEXTAUTH_SECRET = "segredo-de-teste-com-mais-de-32-caracteres"
 
 const db = {
   cutflowSessao: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
-  cutflowPuxada: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+  cutflowPuxada: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   editorOrganizacao: { findMany: vi.fn() },
   demanda: { findMany: vi.fn(), findFirst: vi.fn() },
   historicoStatus: { create: vi.fn() },
@@ -35,7 +35,15 @@ const sessaoNavegador = vi.fn()
 vi.mock("@/lib/auth", () => ({ auth: () => sessaoNavegador() }))
 vi.mock("@/lib/org", () => ({ getOrgId: async () => "org-A", semOrg: () => new Response(null, { status: 403 }) }))
 const getAccessToken = vi.fn()
-vi.mock("@/lib/google-drive", () => ({ getAccessToken: (...a: unknown[]) => getAccessToken(...a) }))
+const criarSessaoUploadDrive = vi.fn()
+vi.mock("@/lib/google-drive", () => ({
+  getAccessToken: (...a: unknown[]) => getAccessToken(...a),
+  criarSessaoUploadDrive: (...a: unknown[]) => criarSessaoUploadDrive(...a),
+}))
+const mudarStatus = vi.fn()
+vi.mock("@/lib/mudar-status", () => ({ mudarStatus: (...a: unknown[]) => mudarStatus(...a) }))
+const criarArquivoFinal = vi.fn()
+vi.mock("@/lib/video-final", () => ({ criarArquivoFinal: (...a: unknown[]) => criarArquivoFinal(...a) }))
 
 const L = await import("@/lib/cutflow")
 const { POST: conectar } = await import("@/app/api/cutflow/conectar/route")
@@ -44,6 +52,9 @@ const { POST: buscarSessao } = await import("@/app/api/cutflow/sessao/route")
 const { GET: fila } = await import("@/app/api/cutflow/fila/route")
 const { POST: puxar } = await import("@/app/api/cutflow/fila/[id]/puxar/route")
 const { GET: arquivos } = await import("@/app/api/cutflow/demandas/[id]/arquivos/route")
+const { POST: abrirEnvio } = await import("@/app/api/cutflow/demandas/[id]/envio/route")
+const { POST: concluirEnvio } = await import("@/app/api/cutflow/demandas/[id]/envio/concluir/route")
+const respostaStatus = (ok: boolean, error?: string) => ({ ok, json: async () => (error ? { error } : {}) })
 
 const TOKEN = "t".repeat(43)
 const HASH = L.hashCutflow("segredo-do-computador-com-bastante-tamanho")
@@ -70,6 +81,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   db.usuario.findUnique.mockResolvedValue({ nome: "Giovani", email: "g@x" })
   db.organizacao.findUnique.mockResolvedValue({ nome: "Media House" })
+  mudarStatus.mockResolvedValue(respostaStatus(true))
 })
 
 describe("peças da biblioteca", () => {
@@ -288,6 +300,25 @@ describe("puxar: trava contra edição dupla", () => {
     const h = db.historicoStatus.create.mock.calls[0][0].data
     expect(h).toMatchObject({ demandaId: "d-1", statusAnterior: "fila_edicao", statusNovo: "cutflow_puxado", origem: "automacao" })
     expect(h.observacao).toBe("Edição iniciada no Cutflow por Giovani (Mac do Giovani)")
+    // O card anda para "editando" pela MESMA função de status do quadro, como a pessoa do plugin.
+    expect(mudarStatus).toHaveBeenCalledWith({ user: { id: "u-1", organizacaoId: "org-A" } }, "d-1",
+      { statusInterno: "editando", origem: "automacao", observacao: "Edição iniciada no Cutflow" })
+  })
+
+  it("guarda de status recusou: a trava fica e o plugin recebe o motivo, sem status forçado", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue(null)
+    db.cutflowPuxada.create.mockResolvedValue({})
+    mudarStatus.mockResolvedValue(respostaStatus(false, "Você não tem permissão para mover demandas."))
+    const d = await (await puxar(req(), params("d-1"))).json()
+    expect(d).toMatchObject({ puxada: true, status: { mudou: false, aviso: "Você não tem permissão para mover demandas." } })
+  })
+
+  it("card já em edição não passa pela mudança de status de novo", async () => {
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1", codigo: "D1", statusInterno: "editando" })
+    db.cutflowPuxada.findUnique.mockResolvedValue(null)
+    db.cutflowPuxada.create.mockResolvedValue({})
+    await puxar(req(), params("d-1"))
+    expect(mudarStatus).not.toHaveBeenCalled()
   })
 })
 
@@ -348,5 +379,88 @@ describe("arquivos do material bruto", () => {
     expect(d.token).toBe("drive-token")
     expect(new Date(d.tokenExpiraEm).getTime() - Date.now()).toBeLessThanOrEqual(45 * 60_000)
     expect(getAccessToken).toHaveBeenCalledWith("org-A")
+  })
+})
+
+describe("enviar para aprovação", () => {
+  const PASTA = "https://drive.google.com/drive/folders/PRONTO1234567"
+  const envioValido = (extra: Partial<Parameters<typeof L.assinarEnvio>[0]> = {}) =>
+    L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: "PRONTO1234567", tamanho: 5000, nome: "DEM-1.mp4", sessaoId: "s-1", ...extra })
+  const drive = (meta: Record<string, unknown>, status = 200) =>
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: status === 200, status, json: async () => meta })))
+
+  beforeEach(() => {
+    sessaoValida()
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1", linkFolderFinal: PASTA })
+    getAccessToken.mockResolvedValue("drive-token")
+    criarSessaoUploadDrive.mockResolvedValue({ sessionUri: "https://upload.google/x", fileId: "f-1", publicUrl: "u" })
+  })
+
+  it("só o computador que puxou abre o envio, e só MP4/MOV com tamanho", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-9" })
+    expect((await abrirEnvio(req({ nome: "a.mp4", tamanho: 10, tipo: "video/mp4" }), params("d-1"))).status).toBe(409)
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
+    for (const ruim of [{ nome: "a.mp4", tamanho: 0, tipo: "video/mp4" }, { nome: "a.mp4", tamanho: 10, tipo: "text/html" }, { nome: "", tamanho: 10, tipo: "video/mp4" }]) {
+      expect((await abrirEnvio(req(ruim), params("d-1"))).status).toBe(400)
+    }
+    expect(criarSessaoUploadDrive).not.toHaveBeenCalled()
+  })
+
+  it("abre a sessão na pasta Material pronto do card e devolve recibo que amarra tudo", async () => {
+    const d = await (await abrirEnvio(req({ nome: "DEM-1.mp4", tamanho: 5000, tipo: "video/mp4" }), params("d-1"))).json()
+    expect(criarSessaoUploadDrive).toHaveBeenCalledWith({ fileName: "DEM-1.mp4", fileSize: 5000, contentType: "video/mp4", pastaId: "PRONTO1234567" }, "org-A")
+    expect(d.sessionUri).toBe("https://upload.google/x")
+    expect(L.lerEnvio(d.envio)).toMatchObject({ demandaId: "d-1", fileId: "f-1", pastaId: "PRONTO1234567", tamanho: 5000, sessaoId: "s-1" })
+  })
+
+  it("recibo adulterado, de outro card ou de outro computador: 400 sem tocar no Drive", async () => {
+    const [b64, ass] = envioValido().split(".")
+    for (const ruim of [`${b64}.x${ass.slice(1)}`, envioValido({ demandaId: "d-2" }), envioValido({ sessaoId: "s-9" }),
+      L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 1, nome: "a", sessaoId: "s-1" }, Date.now() - L.VALIDADE_ENVIO_MS - 1)]) {
+      expect((await concluirEnvio(req({ envio: ruim }), params("d-1"))).status).toBe(400)
+    }
+    expect(getAccessToken).not.toHaveBeenCalled()
+  })
+
+  it("nunca 'enviado' sem conferir: tamanho diferente, lixeira ou fora da pasta = 409 e nada registrado", async () => {
+    for (const meta of [{ size: "4999", parents: ["PRONTO1234567"] }, { size: "5000", parents: ["PRONTO1234567"], trashed: true }, { size: "5000", parents: ["OUTRA"] }]) {
+      drive(meta)
+      expect((await concluirEnvio(req({ envio: envioValido() }), params("d-1"))).status).toBe(409)
+    }
+    drive({}, 404)
+    expect((await concluirEnvio(req({ envio: envioValido() }), params("d-1"))).status).toBe(409)
+    expect(criarArquivoFinal).not.toHaveBeenCalled()
+    expect(mudarStatus).not.toHaveBeenCalled()
+  })
+
+  it("conferido: registra a versão, muda para edição finalizada pela função do quadro e solta a trava", async () => {
+    drive({ size: "5000", parents: ["PRONTO1234567"] })
+    const r = await concluirEnvio(req({ envio: envioValido() }), params("d-1"))
+    expect(await r.json()).toMatchObject({ enviado: true, statusMudou: true, linkFinal: "https://drive.google.com/file/d/f-1/view?usp=sharing" })
+    expect(criarArquivoFinal).toHaveBeenCalledWith("org-A", "d-1", "https://drive.google.com/file/d/f-1/view?usp=sharing", undefined, "DEM-1.mp4")
+    expect(mudarStatus).toHaveBeenCalledWith({ user: { id: "u-1", organizacaoId: "org-A" } }, "d-1", {
+      statusInterno: "edicao_finalizada", linkFinal: "https://drive.google.com/file/d/f-1/view?usp=sharing",
+      origem: "automacao", observacao: "Enviado para aprovação pelo Cutflow",
+    })
+    expect(db.cutflowPuxada.deleteMany).toHaveBeenCalledWith({ where: { demandaId: "d-1", organizacaoId: "org-A" } })
+  })
+
+  it("vídeo registrado mas status recusado: diz isso (207), não finge, e a trava fica", async () => {
+    drive({ size: "5000", parents: ["PRONTO1234567"] })
+    mudarStatus.mockResolvedValue(respostaStatus(false, "Link do vídeo final obrigatório."))
+    const r = await concluirEnvio(req({ envio: envioValido() }), params("d-1"))
+    expect(r.status).toBe(207)
+    expect(await r.json()).toMatchObject({ enviado: true, statusMudou: false, aviso: "Link do vídeo final obrigatório." })
+    expect(db.cutflowPuxada.deleteMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("a rota de status do quadro e o Cutflow usam a mesma função", () => {
+  it("PATCH /api/demandas/[id]/status só autentica e delega", async () => {
+    const { readFileSync } = await import("node:fs")
+    const rota = readFileSync("src/app/api/demandas/[id]/status/route.ts", "utf8")
+    expect(rota).toContain("return mudarStatus(session, id, await req.json())")
+    expect(rota).not.toContain("podeTransicionar")
   })
 })
