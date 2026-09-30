@@ -37,6 +37,7 @@ beforeEach(async () => {
   sessao.user = { id: u, organizacaoId: a, tipo: "admin" }
   chamada.mockResolvedValue({ id: "msg-rota", content: [{ type: "text", text: "Análise sintética" }], usage: { input_tokens: 200, output_tokens: 100 } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: a } })
+  await db.relatorioIA.deleteMany({ where: { organizacaoId: { in: [a, b] } } })
   await db.consumoIA.deleteMany({ where: { organizacaoId: { in: [a, b] } } })
   await db.politicaIA.deleteMany({ where: { organizacaoId: { in: [a, b] } } })
   await db.organizacao.updateMany({ where: { id: { in: [a, b] } }, data: { ativo: true, ambienteTeste: false } })
@@ -162,6 +163,68 @@ describe("adaptador de análise com provedor sintético", () => {
 
 describe("relatórios e painel com controle real e provedor falso", () => {
   const relatorio = (analiseIA?: boolean) => gerar(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ tipo: "semanal", analiseIA }) }))
+  it("reaproveita análise idêntica recente sem nova cobrança nem duplicar histórico", async () => {
+    const primeiro = await (await relatorio(true)).json()
+    const segundo = await (await relatorio(true)).json()
+    expect(segundo).toMatchObject({ reutilizado: true, tokens: 0, relatorio: { id: primeiro.relatorio.id } })
+    expect(chamada).toHaveBeenCalledTimes(1)
+    expect(await db.consumoIA.count({ where: { organizacaoId: a } })).toBe(1)
+    expect(await db.relatorioIA.count({ where: { organizacaoId: a } })).toBe(1)
+  })
+  it("cache vencido não renova o prazo em leituras e exige nova geração", async () => {
+    const primeiro = await (await relatorio(true)).json()
+    await db.relatorioIA.update({ where: { id: primeiro.relatorio.id }, data: { createdAt: new Date(Date.now() - 16 * 60 * 1000) } })
+    const segundo = await (await relatorio(true)).json()
+    expect(segundo.reutilizado).toBe(false); expect(chamada).toHaveBeenCalledTimes(2)
+  })
+  it("alterar dados invalida reaproveitamento", async () => {
+    await relatorio(true)
+    const ideia = await db.ideiaVideo.create({ data: { organizacaoId: a, titulo: "Nova ideia de teste" } })
+    try {
+      const segundo = await (await relatorio(true)).json()
+      expect(segundo.reutilizado).toBe(false); expect(chamada).toHaveBeenCalledTimes(2)
+    } finally { await db.ideiaVideo.delete({ where: { id: ideia.id } }) }
+  })
+  it("política desativada e opt-out não servem análise do cache", async () => {
+    await relatorio(true)
+    await db.politicaIA.create({ data: { organizacaoId: a, habilitada: false } })
+    for (const escolha of [true, false]) {
+      const r = await (await relatorio(escolha)).json()
+      expect(r.reutilizado).toBe(false); expect(r.relatorio.modelo).toBe("regras-v1")
+    }
+    expect(chamada).toHaveBeenCalledTimes(1)
+  })
+  it("revogação financeira não reaproveita análise anterior", async () => {
+    await relatorio(true)
+    await db.permissaoUsuario.create({ data: { organizacaoId: a, usuarioId: u, verRelatorios: true, verCustos: false } })
+    const segundo = await (await relatorio(true)).json()
+    expect(segundo.reutilizado).toBe(false); expect(chamada).toHaveBeenCalledTimes(2)
+  })
+  it("não compartilha cache entre empresas nem entre pessoas", async () => {
+    await relatorio(true)
+    sessao.user!.organizacaoId = b
+    expect((await (await relatorio(true)).json()).reutilizado).toBe(false)
+    const outro = `${p}-cache-user`
+    await db.usuario.create({ data: { id: outro, nome: "Outro", tipo: "admin", senhaHash: "teste" } })
+    await db.usuarioOrganizacao.create({ data: { organizacaoId: a, usuarioId: outro, papel: "admin", areas: [] } })
+    try {
+      sessao.user = { id: outro, organizacaoId: a, tipo: "admin" }
+      expect((await (await relatorio(true)).json()).reutilizado).toBe(false)
+      expect(chamada).toHaveBeenCalledTimes(3)
+    } finally { await db.usuario.delete({ where: { id: outro } }) }
+  })
+  it("mudar tipo do relatório não reaproveita análise de outro objetivo", async () => {
+    await relatorio(true)
+    const r = await gerar(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ tipo: "mensal", periodo: "semana", analiseIA: true }) }))
+    expect((await r.json()).reutilizado).toBe(false); expect(chamada).toHaveBeenCalledTimes(2)
+  })
+  it("saída inválida do provedor não se torna cache válido", async () => {
+    chamada.mockResolvedValueOnce({ id: "msg-invalida", content: [{ type: "text", text: "{invalido" }], usage: { input_tokens: 10, output_tokens: 5 } })
+    const primeiro = await (await relatorio(true)).json()
+    expect(primeiro.relatorio.apresentacao.estado).toBe("invalido")
+    const segundo = await (await relatorio(true)).json()
+    expect(segundo.reutilizado).toBe(false); expect(chamada).toHaveBeenCalledTimes(2)
+  })
   it("sem opt-in e com opt-out explícito gera indicadores sem reservar nem chamar IA", async () => {
     for (const escolha of [undefined, false]) {
       const r = await relatorio(escolha), body = await r.json()

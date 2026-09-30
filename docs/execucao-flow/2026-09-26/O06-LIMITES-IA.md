@@ -76,7 +76,7 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 
 1. Análises de demanda e pontuação de ideias foram retiradas no servidor e nas telas; referências antigas preservadas. Relatórios de eventos/coberturas agora usam regras sem IA. Briefing PDF agora passa por orçamento, limites próprios de documento e validação de saída, incluindo consumidores de eventos, coberturas e campo. Homologação real permanece pendente. Ver DECISAO-IA-ESSENCIAL.md.
 2. Chat, triagem autônoma e loops foram retirados. A prova aplicável é ausência de chamada/efeito em endpoint aposentado, não implementar limites para reativá-los.
-3. Opt-in textual dos relatórios concluído. Edição auditada da política concluída no painel recolhido de consumo. Cache autorizado/TTL e preço datado seguem pendentes, sem exigir nova Central.
+3. Opt-in textual dos relatórios concluído. Edição auditada da política concluída no painel recolhido de consumo. Cache autorizado de relatórios com TTL de 15 minutos implementado no recorte abaixo. Preço datado e homologação seguem pendentes, sem exigir nova Central.
 4. Manter transcrição sem consumidor ativo. Conversa/secretária de WhatsApp é futura e depende de necessidade validada.
 5. Conferir cobertura dos caminhos pagos realmente mantidos antes de concluir O06; demais pendências de U01 continuam no controle.
 
@@ -97,3 +97,15 @@ GET /api/ia/consumo requer gerenciarConfig, retorna apenas agregados da empresa 
 - Autorização por gerenciarConfig/empresa, validação estrita, lock compartilhado com orçamento e auditoria atômica. Edições concorrentes divergentes não sobrescrevem silenciosamente; repetição sem mudança é idempotente.
 - 687 unitários e 261 integrações aprovados, incluindo 16 novas provas de política/isolamento/rollback/concorrência/efeito no orçamento. Build webpack/tipos e auditores aprovados; lint dos arquivos alterados sem erros/avisos. Face-api mantém aviso anterior no build. Logs /private/tmp/nuflow-politica-*.log.
 - Sem schema/migração nova, IA paga, produção ou deploy. O06 segue parcial por cache/TTL, preços datados e homologação. Próxima correção prioritária: dívida S03/R03 do acesso financeiro no GET de eventos, antes de ampliar ferramentas.
+
+
+### Reaproveitamento de análise de relatórios — 30/09/2026
+
+- Base 3769e51. Eventos continuam em standby. Escopo exclusivo de POST /api/relatorios/gerar; não altera briefing/coberturas/eventos.
+- Mesmo relatório salvo pode ser retornado por até 15 minutos desde createdAt original. Toda chamada recalcula o snapshot autorizado e revalida verRelatorios/acesso financeiro antes de procurar cache. Opt-in obrigatório; política/empresa desativada bloqueia reuso e segue fallback por regras.
+- Chave SHA-256 inclui empresa, usuário, permissão financeira, tipo, modelo, versão do prompt e snapshot completo. Exclui apenas metricas.geradoEm (instante da coleta); conserva recorte/datas e métricas. Ordem de propriedades normalizada; ordem de arrays conservada, preferindo miss seguro a confundir dados. Alteração do prompt/regras exige incrementar PROMPT_RELATORIO_VERSAO.
+- Usa RelatorioIA já existente e metadata cacheIA opcional validada no contrato v1; sem tabela, serviço, migration ou dependência nova. Só saídas válidas com modelo pago recebem chave; histórico antigo e fallback não são candidatos. Dados de outra pessoa/empresa/tipo não são reaproveitados.
+- Hit retorna o ID, data e tokens históricos originais, com reutilizado=true e tokens=0 no topo da resposta (nenhum consumo novo). Não cria relatório, reserva nem cobrança; consulta de resumo mantém a manutenção normal das reservas. UI avisa o reaproveitamento. Prazo não desliza com novas leituras e expiração não apaga histórico.
+- Limite deliberado: cache não deduplica duas primeiras gerações simultâneas que ainda não têm resposta salva; orçamento/simultaneidade existentes continuam protegendo essas chamadas. Não se promete eliminação de toda chamada duplicada ou valor monetário economizado. Falha no banco não vira hit; sem homologação paga/visual.
+- 687 unitários e 289 integrações distintas (286 na suíte completa e 29 no recorte final, três adicionais) aprovados; build webpack/tipos e auditores aprovados. Lint sem erros, três avisos preexistentes na tela de relatórios; face-api no build. Logs /private/tmp/nuflow-cache-*.log.
+- Sem IA paga, mensagem, produção ou deploy. O06 parcial: preço datado, homologação e avaliação de concorrência/escala continuam pendentes. Contrato v1 com campo opcional é aceito pelo leitor atual; rollback para leitor antigo estrito exige avaliar registros com cacheIA.

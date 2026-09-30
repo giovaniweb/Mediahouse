@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — módulo de eventos adiado por decisão do usuário; sem deploy.
+Última atualização: 30/09/2026 — reaproveitamento de análises de relatórios; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima frente fora de eventos: retomar pendências gerais de O06 (cache/TTL, preços datados e homologação); política auditada já implementada. Demais tarefas de mídia/Drive, custos e SaaS mantêm a fila e suas dependências.
+- Próxima frente fora de eventos: retomar preços datados e homologação de O06; cache/TTL de relatórios e política auditada já implementados. Demais tarefas de mídia/Drive, custos e SaaS mantêm a fila e suas dependências.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: 8049a4b — proteção de documentos/aprovações de eventos. Preservar trabalho e dados; nenhuma publicação foi realizada nesta sequência.
-- Últimas provas locais: 687 unitários, 281 integrações, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Esta atualização de planejamento não altera código.
+- Última implementação: cache autorizado de relatórios (recorte O06 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
+- Últimas provas locais: 687 unitários, 289 integrações distintas, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Este recorte altera somente relatórios gerais e seu contrato/testes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -394,3 +394,12 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Base 8049a4b. Registradas as duas ideias em DECISAO-EVENTOS-ADIADOS.md: briefing→cards e gestão do departamento de eventos. Não definir a arquitetura agora.
 - Retirada da sequência imediata a criação atômica/auditada de eventos. Indicações anteriores de “próximo” nessa frente ficam substituídas por esta decisão.
 - Sem alteração de código, dados, disponibilidade, navegação ou produção. Correções existentes preservadas; retomada exige conversa e plano futuro.
+
+
+### O06 — cache autorizado de relatórios (30/09/2026)
+
+- Base 3769e51. Empresa/pessoa/tipo/modelo/permissão/snapshot iguais permitem reutilizar relatório válido salvo há até 15 minutos. Nova consulta dos indicadores antecede o reuso. Opt-out/desativação respeitados.
+- Sem novo registro de relatório/consumo no hit; prazo e geração originais preservados e aviso na interface. Contrato e limites em O06-LIMITES-IA.md. Sem schema/migration ou nova infraestrutura.
+- 687 unitários, 289 integrações distintas, build webpack/tipos e auditores aprovados; lint sem erros, três avisos anteriores de relatórios e aviso face-api no build. Logs /private/tmp/nuflow-cache-*.log.
+- Sem chamada paga, mensagem ou deploy. Não elimina corridas entre primeiras gerações simultâneas; teto de orçamento continua vigente. Ensaio visual/pago e escala pendentes.
+- Próximo: preços datados e apresentação de estimativa monetária, sem prometer equivalência à fatura. Eventos permanecem em standby.

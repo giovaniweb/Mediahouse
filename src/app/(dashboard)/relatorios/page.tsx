@@ -426,6 +426,7 @@ export default function RelatoriosPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Não foi possível gerar o relatório")
+      if (data.reutilizado) toast.success("Análise recente reaproveitada: dados iguais, sem nova chamada de IA.")
       if (data.relatorio) {
         setRelatorioAtual(data.relatorio)
         setAbaAtiva("ia")
@@ -456,7 +457,7 @@ export default function RelatoriosPage() {
       <main className="flex-1 p-6 space-y-6">
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" disabled={gerando !== null} checked={analiseIA} onChange={e => setAnaliseIA(e.target.checked)} className="mt-1" />
-          <span>Incluir análise de IA no próximo relatório <span className="block text-zinc-400">Opcional, usa o saldo da empresa. Os indicadores funcionam sem IA.</span></span>
+          <span>Incluir análise de IA no próximo relatório <span className="block text-zinc-400">Opcional, usa o saldo da empresa. Análises idênticas de até 15 minutos são reaproveitadas. Os indicadores funcionam sem IA.</span></span>
         </label>
         <ConsumoIA />
 
