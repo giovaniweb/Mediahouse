@@ -1,3 +1,4 @@
+import { TABELA_IA, estimarGrupoIA } from "@/lib/ia-precos"
 import { randomUUID } from "node:crypto"
 import type { ConsumoIA, Prisma, PrismaClient } from "@prisma/client"
 import { comOrg } from "@/lib/org-contexto"
@@ -113,7 +114,27 @@ export function criarOrcamentoIA(db: PrismaClient) {
         const medido = await tx.consumoIA.aggregate({ where: { organizacaoId, periodo: periodo(data), estado: "concluido" }, _sum: { debitoTokens: true } })
         const pendente = await tx.consumoIA.aggregate({ where: { organizacaoId, estado: { in: ["reservado", "enviando", "desconhecido"] } }, _sum: { debitoTokens: true }, _count: true })
         const desconhecido = await tx.consumoIA.aggregate({ where: { organizacaoId, estado: "desconhecido" }, _sum: { debitoTokens: true } })
-        return { politica: { habilitada: p.habilitada, tokensDia: p.tokensDia, simultaneas: p.simultaneas, entradaBytes: p.entradaBytes, saidaTokens: p.saidaTokens }, habilitadaEfetiva: empresa.ativo && !empresa.ambienteTeste && p.habilitada, periodoUTC: periodo(data).toISOString().slice(0, 10), tokensMedidos: medido._sum.debitoTokens ?? 0, tokensComprometidos: comprometidos, tokensPendentes: pendente._sum.debitoTokens ?? 0, tokensResultadoDesconhecido: desconhecido._sum.debitoTokens ?? 0, chamadasPendentes: pendente._count, tokensDisponiveis: Math.max(0, p.tokensDia - comprometidos), custoMonetario: null, precificacao: "desconhecida" as const }
+        const concluidas = await tx.consumoIA.count({ where: { organizacaoId, periodo: periodo(data), estado: "concluido" } })
+        // Campos ausentes e escrita de cache (TTL não registrado) não recebem preço inventado.
+        // Limites por entrada/leitura garantem contexto <=200k sem inferir a partir da soma diária.
+        const grupos = await tx.consumoIA.groupBy({ by: ["modelo"], where: {
+          organizacaoId, periodo: periodo(data), estado: "concluido",
+          iniciadoEm: { gte: new Date(TABELA_IA.inicio), lt: new Date(TABELA_IA.fim) },
+          entradaTokens: { gte: 0, lte: 100000 }, saidaTokens: { gte: 0 },
+          cacheLeituraTokens: { gte: 0, lte: 100000 }, cacheEscritaTokens: 0,
+        }, _sum: { entradaTokens: true, saidaTokens: true, cacheLeituraTokens: true }, _count: true })
+        let subtotalUSD = 0, chamadasEstimadas = 0
+        for (const g of grupos) {
+          const valor = estimarGrupoIA(g.modelo, { entrada: g._sum.entradaTokens ?? 0, saida: g._sum.saidaTokens ?? 0, leitura: g._sum.cacheLeituraTokens ?? 0 })
+          if (valor !== null) { subtotalUSD += valor; chamadasEstimadas += g._count }
+        }
+        const chamadasSemPreco = concluidas - chamadasEstimadas
+        const estimativaCusto = { tabela: TABELA_IA, subtotalUSD, chamadasEstimadas, chamadasSemPreco,
+          usd: chamadasSemPreco === 0 && pendente._count === 0 ? subtotalUSD : null,
+          chamadasPendentes: pendente._count,
+          tabelaVigente: data >= new Date(TABELA_IA.inicio) && data < new Date(TABELA_IA.fim),
+        }
+        return { politica: { habilitada: p.habilitada, tokensDia: p.tokensDia, simultaneas: p.simultaneas, entradaBytes: p.entradaBytes, saidaTokens: p.saidaTokens }, habilitadaEfetiva: empresa.ativo && !empresa.ambienteTeste && p.habilitada, periodoUTC: periodo(data).toISOString().slice(0, 10), tokensMedidos: medido._sum.debitoTokens ?? 0, tokensComprometidos: comprometidos, tokensPendentes: pendente._sum.debitoTokens ?? 0, tokensResultadoDesconhecido: desconhecido._sum.debitoTokens ?? 0, chamadasPendentes: pendente._count, tokensDisponiveis: Math.max(0, p.tokensDia - comprometidos), estimativaCusto, custoMonetario: null, precificacao: "desconhecida" as const }
       })
     },
   }

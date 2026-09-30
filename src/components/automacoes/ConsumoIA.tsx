@@ -12,8 +12,10 @@ type Resumo = {
   tokensMedidos: number
   tokensPendentes: number
   tokensResultadoDesconhecido: number
+  estimativaCusto: { usd: number | null; subtotalUSD: number; chamadasEstimadas: number; chamadasSemPreco: number; chamadasPendentes: number; tabelaVigente: boolean; tabela: { consultadoEm: string; fonte: string } }
   tokensDisponiveis: number
 }
+const usd = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 6 })
 const numero = (v: number) => v.toLocaleString("pt-BR")
 export function ConsumoIA() {
   const { data: me } = useMe()
@@ -33,7 +35,12 @@ export function ConsumoIA() {
             <div><dt>Reservados para chamadas em andamento</dt><dd>{numero(data.tokensPendentes - data.tokensResultadoDesconhecido)}</dd></div>
             <div><dt>Reserva com resultado ainda desconhecido</dt><dd>{numero(data.tokensResultadoDesconhecido)}</dd></div>
           </dl>
-          <p className="text-zinc-400">Valores em dinheiro: desconhecidos, sem tabela de preços cadastrada. Reservas são estimativas; não são cobrança confirmada.</p>
+          <div className="space-y-1">
+            <p>Estimativa em USD: {data.estimativaCusto.usd === null ? "total indisponível" : usd(data.estimativaCusto.usd)}</p>
+            {data.estimativaCusto.usd === null && <p>Subtotal das chamadas com preço conhecido: {usd(data.estimativaCusto.subtotalUSD)}.</p>}
+            <p className="text-zinc-400">{data.estimativaCusto.chamadasEstimadas} chamadas estimadas; {data.estimativaCusto.chamadasSemPreco} sem preço aplicável; {data.estimativaCusto.chamadasPendentes} pendentes, incluindo reservas anteriores. Não representa a fatura; não inclui impostos, descontos ou câmbio.</p>
+            <p className="text-zinc-400"><a className="underline" href={data.estimativaCusto.tabela.fonte} target="_blank" rel="noreferrer">Preços consultados em {data.estimativaCusto.tabela.consultadoEm}</a>. {!data.estimativaCusto.tabelaVigente && "Tabela fora da validade para novas chamadas; requer atualização."}</p>
+          </div>
           <p className="text-zinc-400">Período por data da reserva: {data.periodoUTC} (UTC). Até {data.politica.simultaneas} chamadas simultâneas. Reservas sem confirmação de dias anteriores continuam comprometendo o saldo.</p>
           <button className="underline" onClick={() => mutate()}>Atualizar consumo</button>
           <EditorPolitica key={me?.membership?.organizacaoId} politica={data.politica} atualizar={() => mutate()} />

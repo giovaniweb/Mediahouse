@@ -94,6 +94,39 @@ describe("reservas de IA no PostgreSQL", () => {
     expect(await orcamento.resumo(a)).toMatchObject({ tokensMedidos: 5100, tokensComprometidos: 5100, custoMonetario: null, precificacao: "desconhecida" })
     expect(await db.consumoIA.findUniqueOrThrow({ where: { id: r.id } })).toMatchObject({ entradaTokens: 5000, saidaTokens: 50, cacheLeituraTokens: 20, cacheEscritaTokens: 30 })
   })
+  it("estima somente categorias conhecidas e isola custo por empresa", async () => {
+    const r = await reservar(); await orcamento.iniciar(r)
+    await orcamento.reconciliar(r, { entrada: 1000, saida: 100, cacheLeitura: 100, cacheEscrita: 0, provedorId: "msg-preco" })
+    await db.consumoIA.update({ where: { id: r.id }, data: { iniciadoEm: new Date("2026-09-30T01:00:00Z") } })
+    const outro = await reservar(b); await orcamento.iniciar(outro)
+    await orcamento.reconciliar(outro, { entrada: 10000, saida: 10000, cacheLeitura: 0, cacheEscrita: 0, provedorId: "msg-outro" })
+    const resumo = await orcamento.resumo(a)
+    expect(resumo.estimativaCusto).toMatchObject({ chamadasEstimadas: 1, chamadasSemPreco: 0, chamadasPendentes: 0 })
+    expect(resumo.estimativaCusto.usd).toBeCloseTo(0.00151)
+  })
+  it("cache escrito sem duração conhecida e consumo pendente impedem total monetário", async () => {
+    const r = await reservar(); await orcamento.iniciar(r)
+    await orcamento.reconciliar(r, uso)
+    await db.consumoIA.update({ where: { id: r.id }, data: { iniciadoEm: new Date("2026-09-30T01:00:00Z") } })
+    await reservar()
+    expect((await orcamento.resumo(a)).estimativaCusto).toMatchObject({ usd: null, subtotalUSD: 0, chamadasSemPreco: 1, chamadasPendentes: 1 })
+  })
+  it("preço não retroage nem cobre chamadas fora da validade", async () => {
+    const r = await reservar(); await orcamento.iniciar(r)
+    await orcamento.reconciliar(r, { entrada: 100, saida: 50, cacheLeitura: 0, cacheEscrita: 0, provedorId: "msg-data" })
+    for (const inicio of ["2026-09-29T23:59:59Z", "2026-10-30T00:00:00Z"]) {
+      await db.consumoIA.update({ where: { id: r.id }, data: { iniciadoEm: new Date(inicio) } })
+      expect((await orcamento.resumo(a)).estimativaCusto).toMatchObject({ usd: null, chamadasSemPreco: 1 })
+    }
+  })
+  it("ausência de medição e modelo desconhecido não viram custo zero", async () => {
+    const r = await reservar(); await orcamento.iniciar(r)
+    await orcamento.reconciliar(r, { entrada: 100, saida: 50, cacheLeitura: null, cacheEscrita: null, provedorId: "msg-ausente" })
+    await db.consumoIA.update({ where: { id: r.id }, data: { iniciadoEm: new Date("2026-09-30T01:00:00Z") } })
+    expect((await orcamento.resumo(a)).estimativaCusto.usd).toBeNull()
+    await db.consumoIA.update({ where: { id: r.id }, data: { modelo: "modelo-desconhecido", cacheLeituraTokens: 0, cacheEscritaTokens: 0 } })
+    expect((await orcamento.resumo(a)).estimativaCusto).toMatchObject({ usd: null, chamadasSemPreco: 1 })
+  })
   it("empresa inativa, de teste, opt-out e ator sem vínculo são recusados", async () => {
     await db.organizacao.update({ where: { id: a }, data: { ativo: false } })
     await expect(reservar()).rejects.toMatchObject({ codigo: "indisponivel" })
@@ -130,7 +163,7 @@ describe("adaptador de análise com provedor sintético", () => {
     })
     expect(await criarAnaliseIA(db, enviar)("PROMPT-PRIVADO", "", modelo, contexto)).toEqual({ texto: "Resposta sintética", tokens: 30 })
     const salvo = await db.consumoIA.findFirstOrThrow({ where: { organizacaoId: a } })
-    expect(salvo).toMatchObject({ estado: "concluido", debitoTokens: 30, cacheLeituraTokens: null, cacheEscritaTokens: null })
+    expect(salvo).toMatchObject({ estado: "concluido", debitoTokens: 30, cacheLeituraTokens: 0, cacheEscritaTokens: 0 })
     expect(JSON.stringify(salvo)).not.toContain("PROMPT-PRIVADO")
     expect(enviar).toHaveBeenCalledTimes(1)
   })

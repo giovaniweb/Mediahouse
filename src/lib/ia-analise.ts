@@ -26,7 +26,9 @@ export function criarAnaliseIA(db: PrismaClient, enviar: (pedido: Pedido) => Pro
     }
     try {
       const response = await enviar(pedido)
-      await orcamento.reconciliar(reserva, { entrada: response.usage.input_tokens, saida: response.usage.output_tokens, cacheLeitura: response.usage.cache_read_input_tokens ?? null, cacheEscrita: response.usage.cache_creation_input_tokens ?? null, provedorId: response.id })
+      // Este pedido não habilita prompt caching: campos omitidos representam zero.
+      // Valores retornados explicitamente pelo provedor continuam preservados.
+      await orcamento.reconciliar(reserva, { entrada: response.usage.input_tokens, saida: response.usage.output_tokens, cacheLeitura: response.usage.cache_read_input_tokens ?? 0, cacheEscrita: response.usage.cache_creation_input_tokens ?? 0, provedorId: response.id })
       const tokens = response.usage.input_tokens + response.usage.output_tokens + (response.usage.cache_read_input_tokens ?? 0) + (response.usage.cache_creation_input_tokens ?? 0)
       return { texto: response.content.filter(b => b.type === "text").map(b => b.text ?? "").join("\n"), tokens }
     } catch {
