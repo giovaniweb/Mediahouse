@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdtemp, rm, stat } from "node:fs/promises"
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Readable, Transform } from "node:stream"
@@ -120,9 +120,12 @@ export function criarConversor(config) {
     const inicio = Date.now()
     try {
       dir = await mkdtemp(join(config.tempRoot ?? tmpdir(), "nuflow-preview-"))
+      const marcar = fase => writeFile(join(dir, ".nuflow-owner.json"), JSON.stringify({ tipo: "nuflow-preview-v2", pid: process.pid, fase }), { mode: 0o600 })
+      await marcar("seguro")
       const input = join(dir, "original.bin"), output = join(dir, "preview.mp4")
       const fonte = await baixar(contrato.sourceUrl, input, signal)
       if (job.sha256 && job.sha256 !== fonte.sha256) erro("checksum_divergente")
+      await marcar("subprocesso")
       const original = await inspecionar(input, signal)
       await executar("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "2", ...INPUT_SEGURO, "-i", input,
         "-map", `0:${original.video.index}`, ...(original.audio ? ["-map", `0:${original.audio.index}`] : []),
@@ -138,6 +141,7 @@ export function criarConversor(config) {
         previa.largura > original.largura || previa.altura > original.altura ||
         Math.abs(previa.duracao - original.duracao) > Math.max(0.5, original.duracao * 0.03) ||
         Math.abs(previa.largura / previa.altura - original.largura / original.altura) > 0.02) erro("preview_invalida")
+      await marcar("seguro")
       const sha256 = await hashArquivo(output)
       signal.throwIfAborted()
       const corpo = createReadStream(output)

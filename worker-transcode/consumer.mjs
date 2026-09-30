@@ -1,3 +1,4 @@
+import { limparTemporariosAbandonados } from "./temporarios.mjs"
 import { mkdir, readdir, readFile, rename, unlink, open } from "node:fs/promises"
 import { join, isAbsolute } from "node:path"
 import { criarConversor } from "./converter.mjs"
@@ -98,6 +99,16 @@ export function consumidorConfigurado(env = process.env) {
     const storage = new URL(env.SUPABASE_URL)
     if (storage.protocol !== "https:" || storage.username || storage.password || storage.pathname !== "/" || storage.search || storage.hash) throw new Error()
   } catch { throw new Error("storage_invalido") }
-  return criarConsumidor({ api: criarApi({ apiUrl: env.MIDIA_WORKER_API_URL, secret: env.MIDIA_WORKER_SECRET }),
-    converter: criarConversor({ storageOrigin: env.SUPABASE_URL }), stateDir: env.MIDIA_WORKER_STATE_DIR })
+  const tempRoot = join(env.MIDIA_WORKER_STATE_DIR, "temporarios")
+  let preparado = false
+  const executar = criarConsumidor({ api: criarApi({ apiUrl: env.MIDIA_WORKER_API_URL, secret: env.MIDIA_WORKER_SECRET }),
+    converter: criarConversor({ storageOrigin: env.SUPABASE_URL, tempRoot }), stateDir: env.MIDIA_WORKER_STATE_DIR })
+  return async options => {
+    if (!preparado) {
+      await mkdir(tempRoot, { recursive: true, mode: 0o700 })
+      await limparTemporariosAbandonados(tempRoot)
+      preparado = true
+    }
+    return executar(options)
+  }
 }

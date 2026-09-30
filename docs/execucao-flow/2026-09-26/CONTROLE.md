@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — segundo recorte M02: protocolo de lease, callback e consumidor com recibo; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — terceiro recorte M02: ensaio de queda em processo e limpeza conservadora; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: ensaio ponta a ponta isolado de Next + worker + storage sintético, incluindo crash após upload/SIGKILL, temporários e reprodução autorizada. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próxima etapa: processo Next completo com login restrito + navegador, Docker/memória e queda durante ffmpeg. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: API autenticada de claim/renovação/conclusão/falha, recibo da prévia no banco e consumidor v2 com recibo local persistido. Convivência legada protegida; produção não alterada, eventos em standby.
-- Últimas provas locais: 717 unitários do app, 321 integrações distintas, 26 runtime/RLS + verificador, 18 testes worker, tipos/lint do app/auditores/build aprovados. ESLint padrão ignora worker; Node --check realizado. Assinatura/HEAD simulados no protocolo; Docker, navegador, provedores e CI remoto pendentes.
+- Última implementação: marcação por fase e limpeza conservadora de temporários no startup, acompanhadas de ensaio SIGKILL real após upload e após commit. Convivência legada protegida; produção não alterada, eventos em standby.
+- Últimas provas locais desta etapa: 323 integrações (25 arquivos), 19 testes worker, tipos e lint dos arquivos de teste aprovados. Rodada anterior: 717 unitários do app, 26 runtime/RLS + verificador, auditores/build. Ensaio novo faz HEAD HTTP real em storage simulado; Docker, Next completo/navegador, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -483,3 +483,15 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - Provas: 717 unitários, 321 integrações distintas (11 novas; 23 focadas repetidas após ajuste de replay), 26 runtime/RLS (1 nova conclusão de preview sob role restrita), verificador, 18 testes worker (5 novos do consumidor), tipos/lint do app/auditores/build. Storage/assinatura/HEAD simulados no protocolo; motor validado separadamente com ffmpeg real. Sem acervo/custo externo.
 - Pendências: processo ponta a ponta, SIGKILL/reinício abrupto, limpeza pós-crash, inventário/reconciliação de objetos órfãos, memória/navegador, UX de estados, homologação Railway/Storage e credenciais multiempresa. Crash após upload antes de salvar recibo, volume perdido ou lease expirado pode repetir computação; conclusão é idempotente, conversão não é exactly-once. Recibo não autoriza publicar fora do lease. M02 permanece EM_EXECUCAO.
 - Percentual: 15/36 etapas técnicas completas (41,7%), 8 parciais; plano completo 15/38 (39,5%). Progresso dentro do worker não equivale a cartão concluído; venda não homologada.
+
+
+### M02 — 30/09/2026, terceiro recorte: queda de processo e temporários
+
+- Worker real em processo filho, com FFmpeg/FFprobe e clipe HEVC sintético; rotas reais do protocolo e de mídia servidas por adaptador HTTP de teste, PostgreSQL local e storage simulado. Não executa o servidor Next completo.
+- SIGKILL depois de gravar o upload, antes de responder: mantém original, expira lease da fixture, reinicia com outra autorização/chave, limpa temporário marcado seguro e recusa callback antigo. O objeto remoto órfão é preservado, não apagado automaticamente.
+- SIGKILL depois do commit, antes da resposta: recupera recibo persistido, confirma idempotentemente e não repete upload. Apenas um evento de conclusão. Token válido entrega bytes com hash esperado; sem token/token inválido/revogado recusa acesso. Storage sem assinatura recusa acesso.
+- Temporários no volume de estado, com marcador de PID/fase. Só remove marcadores seguros de processo inexistente; preserva symlinks, dados desconhecidos e fase de subprocesso. Volume exclusivo por instância/namespace; não usar este mecanismo para coordenar hosts diferentes.
+- Pendências explícitas: Next completo com credenciais restritas neste mesmo ensaio, navegador, Docker/Railway, memória, subprocessos após SIGKILL durante conversão, expiração real de URLs assinadas e coleta de órfãos remotos. Login administrativo na suíte de integração; RLS continua coberto separadamente pelo ensaio runtime anterior.
+- M01/M02 continuam parciais; 15 de 36 cartões técnicos implementados (41,7%). Sem publicação, configuração externa ou mídia real.
+
+- Validação deste recorte: 323 integrações, 19 testes do worker, TypeScript sem erros, lint dos arquivos novos sem erros e diff sem problemas. CI preparado para instalar FFmpeg antes da integração; execução remota não realizada.

@@ -94,3 +94,10 @@ M02 EM_EXECUCAO. Motor não está ligado ao entrypoint legado nem à fila; próx
 Consumidor v2 ligado ao protocolo claim/renew/complete/fail, com recibo local persistido e callback idempotente no banco. API confere empresa/versão/lease e objeto no storage; conclusão e aplicação da prévia são atômicas, preservando original/publicação. Ativação desligada e restrita à empresa-piloto; legado protegido. Migração de recibo só no banco sintético.
 
 Provas: 717 unitários, 321 integrações distintas, 26 runtime/RLS e verificador, 18 testes worker, tipos/lint do app/auditores/build. Motor e protocolo foram testados separadamente; falta ensaio em processos ponta a ponta, reinício abrupto, limpeza/reconciliação e navegador. M02 parcial. Contrato/configuração e limites no README do worker; nenhum deploy ou configuração externa.
+
+
+## Evidência de execução — 30/09/2026, terceiro recorte M02
+
+Ensaio em processos com worker/ffmpeg real, rotas reais via adaptador HTTP, PostgreSQL e storage sintético. SIGKILL após upload recupera com novo lease e limpa temporário seguro; após commit recupera recibo sem repetir upload. Prévia entrega bytes com hash esperado mediante token válido, com recusa sem autorização ou após revogação. Startup limpa somente temporários marcados seguros de PID inexistente, preservando subprocessos/arquivos desconhecidos.
+
+Não equivale ao Next completo, navegador, RLS no mesmo fluxo ou storage real. Queda durante ffmpeg, pico de memória, Docker e coleta de órfãos remotos permanecem pendentes. M02 parcial; nenhuma publicação. Detalhes no CONTROLE.md e README do worker.

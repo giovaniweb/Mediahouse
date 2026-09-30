@@ -94,6 +94,9 @@ jobs:
       # migration — o mesmo descuido que deixou o banco sem histórico até agora.
       # (Compara banco × schema em vez de migrations × schema: assim não precisa
       # de shadow database, que o CLI do Prisma 7 só aceita via config.)
+      - name: Instalar ffmpeg para ensaio de queda do worker
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Integração de autorização com banco sintético
         run: npm run test:integration
         env:
