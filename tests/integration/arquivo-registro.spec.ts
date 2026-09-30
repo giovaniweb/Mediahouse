@@ -1,3 +1,5 @@
+import { prepararMidias, registrarIntencaoMidia, PREPARAR_MIDIA, CONVERTER_MIDIA } from "@/lib/midia-fila"
+import { criarFila } from "@/lib/fila-duravel"
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { randomUUID, createHash } from "node:crypto"
 import { NextRequest } from "next/server"
@@ -21,6 +23,7 @@ beforeAll(async () => {
 })
 beforeEach(async () => {
   estado.org = a
+  await db.jobAutomacao.deleteMany({ where: { organizacaoId: a } })
   await db.arquivo.deleteMany({ where: { demandaId: d } })
   await db.demanda.update({ where: { id: d }, data: { linkFinal: null, linkBrutos: null } })
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://storage.test")
@@ -37,6 +40,7 @@ describe("registro de arquivos e demanda", () => {
     const r = await Promise.all([registrar(), registrar(), registrar()])
     expect(new Set(r.map(x => x.arquivo.id)).size).toBe(1)
     expect(r.filter(x => x.criado)).toHaveLength(1)
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: a, tipo: PREPARAR_MIDIA } })).toBe(1)
     expect(r[0].arquivo).toMatchObject({ fonteProvedor: "supabase", fonteBucket: "midia", fonteObjectKey: `org/${a}/videos/${d}/v.mp4`, fonteVersao: 1, fonteSha256: null, fonteMimeDeclarado: null })
     expect((await db.demanda.findUniqueOrThrow({ where: { id: d } })).linkFinal).toBe(url())
   })
@@ -78,4 +82,44 @@ describe("registro de arquivos e demanda", () => {
     const legado = await db.arquivo.create({ data: { demandaId: d, tipoArquivo: "final", nomeArquivo: "legado", url: "https://example.com/legado" } })
     expect(legado.fonteVersao).toBeNull(); expect(legado.fonteProvedor).toBeNull()
   })
+  it("prepara sem rede após interromper a requisição que registrou o upload", async () => {
+    const { arquivo } = await registrar()
+    expect(await prepararMidias(a)).toMatchObject({ concluidos: 1, falhos: 0 })
+    const jobs = await db.jobAutomacao.findMany({ where: { organizacaoId: a }, orderBy: { tipo: "asc" } })
+    expect(jobs.find(j => j.tipo === PREPARAR_MIDIA)?.estado).toBe("concluido")
+    expect(jobs.find(j => j.tipo === CONVERTER_MIDIA)).toMatchObject({ estado: "pendente", referencia: arquivo.id, payload: { fonteVersao: 1, perfil: "h264-720p-v1" } })
+    expect(JSON.stringify(jobs.map(j => j.payload))).not.toContain("/api/midia")
+    expect((await prepararMidias(a)).reivindicados).toBe(0)
+    expect((await db.arquivo.findUniqueOrThrow({ where: { id: arquivo.id } })).transcodeStatus).toBeNull()
+  })
+  it("retoma lease vencido sem duplicar a intenção de conversão", async () => {
+    await registrar()
+    const [j] = await criarFila(db).reivindicar(a, 1, [PREPARAR_MIDIA])
+    await db.jobAutomacao.update({ where: { id: j.id }, data: { leaseAte: new Date(0) } })
+    expect((await prepararMidias(a)).concluidos).toBe(1)
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: a, tipo: CONVERTER_MIDIA } })).toBe(1)
+    expect((await db.jobAutomacao.findUniqueOrThrow({ where: { id: j.id } })).tentativas).toBe(2)
+  })
+  it("versão antiga é rejeitada; outra empresa não prepara a mídia", async () => {
+    const { arquivo } = await registrar()
+    expect((await prepararMidias(b)).reivindicados).toBe(0)
+    await db.arquivo.update({ where: { id: arquivo.id }, data: { fonteVersao: 2 } })
+    expect((await prepararMidias(a)).falhos).toBe(1)
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: a, tipo: CONVERTER_MIDIA } })).toBe(0)
+  })
+  it("rollback elimina tanto o arquivo quanto a intenção", async () => {
+    await expect(db.$transaction(async tx => {
+      const arquivo = await tx.arquivo.create({ data: { demandaId: d, tipoArquivo: "final", url: url(), nomeArquivo: "v.mp4", fonteProvedor: "supabase", fonteBucket: "midia", fonteObjectKey: `org/${a}/videos/${d}/v.mp4`, fonteVersao: 1 } })
+      await registrarIntencaoMidia(tx, a, arquivo)
+      throw new Error("rollback sintético")
+    })).rejects.toThrow("rollback sintético")
+    expect(await db.arquivo.count({ where: { demandaId: d } })).toBe(0)
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: a } })).toBe(0)
+  })
+  it("referências Drive e documentos não geram conversões locais", async () => {
+    await patch({ tipo: "final", url: "https://drive.google.com/file/d/abc/view" })
+    await patch({ tipo: "documento", url: url("briefing.pdf", "docs") })
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: a } })).toBe(0)
+  })
+
 })

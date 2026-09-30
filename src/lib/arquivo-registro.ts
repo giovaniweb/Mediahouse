@@ -1,3 +1,4 @@
+import { registrarIntencaoMidia } from "@/lib/midia-fila"
 import { prisma } from "@/lib/prisma"
 import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { identificarMidia } from "@/lib/midia-identidade"
@@ -46,6 +47,7 @@ export async function registrarArquivoDemanda(p: RegistroArquivo) {
       [p.tipo === "final" ? "linkFinal" : "linkBrutos"]: p.url,
       ...(p.tipo === "final" && p.thumbnailUrl ? { thumbnailUrl: p.thumbnailUrl } : {}),
     } })
+    await registrarIntencaoMidia(tx, p.organizacaoId, arquivo)
     return { arquivo, criado: true }
   })
 }

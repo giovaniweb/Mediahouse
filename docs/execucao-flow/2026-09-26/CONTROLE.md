@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — segundo recorte M01: metadados da fonte e registro transacional dos uploads; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — terceiro recorte M01: intenção durável e preparação recuperável da mídia; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: continuar M01/M02 — evento durável de processamento na transação do arquivo e consumo por identidade persistida. Metadados aditivos da fonte e registro transacional dos uploads de demanda já estão implementados localmente. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
+- Próxima etapa: consumidor M02 para midia.converter, com identidade persistida, saída privada, lease e callback versionado. Preparação local já grava a intenção de conversão; NÃO existe consumidor externo novo ativo. Antes de ativá-lo, conciliar transcodeStatus/caminho legado para impedir conversões duplicadas. M01 segue parcial nos demais canais/consumidores. O06 conserva pendências de homologação.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: metadados de fonte original nos canais de criação de Arquivo; confirmação de upload transacional e idempotente por demanda/tipo/URL (segundo recorte M01 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
-- Últimas provas locais: 717 unitários, 305 integrações, 25 testes runtime/RLS e verificador de roles aprovados; tipos/build webpack, lint sem erros e auditores aprovados. O componente DemandaDetalhe conserva avisos preexistentes de lint; build conserva aviso face-api. Storage e worker simulados, sem ensaio visual nesta etapa.
+- Última implementação: intenção midia.preparar na transação de upload da demanda e consumidor local recuperável que gera midia.converter. Eventos seguem em standby; sem publicação.
+- Últimas provas locais: 717 unitários, 310 integrações, 25 runtime/RLS e verificador de roles aprovados; tipos, lint dos arquivos alterados, auditores e build webpack aprovados. Aviso preexistente face-api no build. Nenhuma conversão externa real ou validação visual nesta etapa.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -433,3 +433,26 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Provas: migração no PostgreSQL descartável, 717 unitários, 305 integrações (7 novas), 25 runtime/RLS (1 novo), verificador de roles, tipos, build webpack, lint sem erros e auditores aprovados. Serviços externos simulados. Sem publicação/migração de produção, backfill ou alteração do acervo.
 - Limites: M01 segue parcial. Faltam evento transacional de processamento, consumo da identidade persistida pelos demais serviços, identidade de preview/cópia e revisão Drive, codec verificado e inventário. FonteVersao=1 é versão interna inicial, não comprova imutabilidade de objeto externo. Identidade nula mantém leitura legada. Caminhos de edição direta de linkFinal/linkBrutos e registros administrativos ainda não usam o serviço idempotente; exclusão permanece no fluxo legado. Metadados extraídos de URL não comprovam que o objeto existe no storage. Upload que termina no storage mas falha no banco pode deixar órfão; não há remoção automática.
 - Próximo recorte: evento durável junto do registro e início do consumidor M02; fila/lease e callback versionado antes de homologar worker real. Eventos de negócio continuam em standby.
+
+
+### 30/09/2026 — M01 parcial: intenção atômica e preparação recuperável
+
+- Upload final elegível (identidade Supabase da própria demanda) grava `midia.preparar` na transação de Arquivo/link. Chave por arquivo, versão e perfil `h264-720p-v1`; payload contém só versão/perfil, nunca URL assinada. Documento, bruto e referência Drive/externa não geram conversão local. A confirmação repetida mantém a intenção original.
+- `prepararMidias` reivindica até 2 jobs com lease da fila existente, revalida empresa/arquivo/versão e cria `midia.converter` atomicamente com a conclusão da preparação. Arquivo removido/versão incompatível falha definitivamente; falha transitória usa retry limitado. Validade de 7 dias desde o registro, sem renovação silenciosa. Job vencido é terminal, não garantia de retenção indefinida.
+- Cron de agentes chama apenas essa preparação local, com autenticação/cursor e limite de tempo já existentes. Sem IA, download, rede ou execução ffmpeg nessa rotina. Cadência real segue o cron existente, não processamento imediato.
+- Conversão M02 ainda NÃO é consumida. O caminho legado de tentativa imediata continua; a fila registra a intenção para evolução, mas NÃO comprova retomada automática da conversão. Worker atual ainda assume uploads público e não possui idempotência/lease: não ativar retries remotos até adaptar saída privada/callback e conciliar conversões legadas já iniciadas/concluídas. A preparação concluída não significa vídeo convertido.
+- Provas: 717 unitários; 310 integrações (5 novas, cobrindo intenção única, retomada de lease vencido, rollback, versão/empresa e exclusão de referências externas); 25 runtime/RLS com intenção de mídia sob role restrita; verificador de roles, tipos, lint, auditores e build webpack. Sem migração nova, backfill, publicação ou processamento de mídia real.
+- M01 permanece EM_EXECUCAO; M02 não foi dado como concluído. Pendências de preview/revisão Drive/inventário e canais fora do upload de demanda permanecem.
+
+### Percentual solicitado — fotografia de 30/09/2026
+
+Contagem dos cartões, sem pesos por complexidade ou estimativa de horas:
+
+| Medida | Contagem | Percentual | Interpretação |
+| --- | --- | --- | --- |
+| Etapas técnicas concluídas (F00–L01) | 15 de 36 | 41,7% | IMPLEMENTADO; 7 parciais e 14 ainda A_FAZER |
+| Plano completo, incluindo publicação/piloto | 15 de 38 | 39,5% | L02 e L03 ainda não executados |
+| Etapas técnicas com alguma prova local | 22 de 36 | 61,1% | Inclui 7 parciais; não equivale a aceitação completa |
+| Prontidão para vender | Não homologada | Não mensurável com as provas atuais | L01/L02/L03, integrações reais e piloto continuam pendentes |
+
+Não somar percentuais das linhas. Os cartões têm tamanhos diferentes; estes números medem cobertura do plano e não esforço, qualidade integral ou percentual de funcionalidades de produção. O módulo de eventos permanece em standby e não é contado como entregue por ter sido adiado.

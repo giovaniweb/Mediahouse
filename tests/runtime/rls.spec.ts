@@ -85,10 +85,12 @@ describe("Prisma conectado como runtime sem bypass", () => {
     const url = `/api/midia/org/${a}/videos/${da}/runtime.mp4`
     const resultado = await comOrg(a, () => registrarArquivoDemanda({ organizacaoId: a, demandaId: da, tipo: "final", url, nomeArquivo: "runtime.mp4" }))
     try {
+      expect(await comOrg(a, () => db.jobAutomacao.count({ where: { referencia: resultado.arquivo.id, tipo: "midia.preparar" } }))).toBe(1)
       expect(resultado.arquivo.fonteObjectKey).toBe(`org/${a}/videos/${da}/runtime.mp4`)
       expect(await comOrg(b, () => db.arquivo.findFirst({ where: { id: resultado.arquivo.id } }))).toBeNull()
       await expect(comOrg(b, () => registrarArquivoDemanda({ organizacaoId: a, demandaId: da, tipo: "final", url, nomeArquivo: "runtime.mp4" }))).rejects.toThrow("Demanda não encontrada")
     } finally {
+      await admin.jobAutomacao.deleteMany({ where: { organizacaoId: a, referencia: resultado.arquivo.id } })
       await admin.arquivo.delete({ where: { id: resultado.arquivo.id } })
       await admin.demanda.update({ where: { id: da }, data: { linkFinal: null } })
     }

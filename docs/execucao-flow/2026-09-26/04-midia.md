@@ -73,3 +73,10 @@ M01 permanece EM_EXECUCAO. Não há migração ou identidade persistida ainda. P
 Metadados da fonte original persistidos por migração aditiva, sem preencher o legado. Canais existentes de criação recebem identidade reconhecível; uploads que passam pelo servidor recebem tamanho/hash reais e MIME explicitamente declarado. Registro de upload da demanda e link operacional agora são transacionais e reenvios da mesma confirmação não duplicam o arquivo. Documentos não alteram links de vídeos e brutos passam a ter Arquivo. Interface trata falha HTTP na confirmação.
 
 Provas locais: 717 unitários, 305 integrações, 25 runtime/RLS, verificador de roles, tipos/build, lint sem erros e auditores. Migração aplicada só no banco sintético. M01 continua parcial: evento durável, consumidores por identidade persistida, preview/cópia/revisão Drive e inventário permanecem pendentes; detalhes no CONTROLE.md. Próximo: evento de processamento na transação e consumidor com lease em M02. Nenhuma homologação de worker/Drive real nesta etapa.
+
+
+## Evidência de execução — 30/09/2026, terceiro recorte M01
+
+Upload da demanda registra intenção `midia.preparar` na transação, com identidade por arquivo/versão/perfil. Preparador local integrado ao cron usa lease e cria `midia.converter` atomicamente, sem rede. A preparação retoma após lease vencido e rejeita versão/empresa inválida. Prazo de 7 dias; sem backfill de uploads anteriores. 717 unitários, 310 integrações, 25 runtime/RLS, verificador de roles, tipos/lint/auditores/build aprovados.
+
+**Limite de ativação:** ainda não há consumidor de conversão para esses jobs. Caminho legado permanece. Próximo recorte é M02: worker privado e callback versionado/idempotente, conciliando jobs com conversões legadas para não duplicar efeitos. Não confundir conclusão da preparação com conclusão do vídeo. M01 segue parcial nos demais itens.
