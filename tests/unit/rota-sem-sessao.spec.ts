@@ -46,11 +46,7 @@ const DISPENSADAS: Record<string, string> = {
   // Ligá-lo exige passar por aqui antes.
   "src/app/api/eventos/[id]/aprovacoes/route.ts": "módulo eventos desligado",
   "src/app/api/eventos/[id]/checklist/route.ts": "módulo eventos desligado",
-  "src/app/api/eventos/[id]/custos/route.ts": "módulo eventos desligado",
   "src/app/api/eventos/[id]/documentos/route.ts": "módulo eventos desligado",
-  "src/app/api/eventos/[id]/route.ts": "módulo eventos desligado",
-  "src/app/api/eventos/dashboard/route.ts": "módulo eventos desligado",
-  "src/app/api/eventos/route.ts": "módulo eventos desligado",
   "src/app/api/fornecedores/[id]/route.ts": "módulo eventos desligado",
   "src/app/api/fornecedores/route.ts": "módulo eventos desligado",
   "src/app/api/produtos-servico/[id]/route.ts": "módulo eventos desligado",

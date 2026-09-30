@@ -14,7 +14,7 @@ import { fetcher } from "@/lib/fetcher"
 
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 const fmtData = (s: string) => new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
-const fmtMoney = (n: number) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+const fmtMoney = (n: number | null | undefined) => n == null ? "Não informado" : `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
 
 type Tab = "geral" | "audiovisual" | "checklist" | "documentos" | "orcamento" | "aprovacoes" | "relatorio"
 
@@ -37,9 +37,10 @@ export default function EventoDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("geral")
-  const { data, mutate, isLoading } = useSWR<{ evento: Evento; financeiro: Financeiro }>(`/api/eventos/${id}`, fetcher)
+  const { data, mutate, isLoading, error } = useSWR<{ evento: Evento; financeiro: Financeiro | null }>(`/api/eventos/${id}`, fetcher)
 
   if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
+  if (error) return <div role="alert" className="p-6 text-zinc-400">Não foi possível consultar o evento. <button className="underline" onClick={() => mutate()}>Tentar novamente</button></div>
   if (!data?.evento) return <div className="p-6 text-zinc-500">Evento não encontrado.</div>
 
   const ev = data.evento
@@ -73,7 +74,7 @@ export default function EventoDetalhePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-zinc-800 mb-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map((t) => (
+        {TABS.filter(t => t.id !== "orcamento" || data.financeiro !== null).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap border-b-2 transition-colors ${tab === t.id ? "border-purple-500 text-zinc-100" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>
             <t.icon className="w-4 h-4" /> {t.label}
@@ -85,7 +86,7 @@ export default function EventoDetalhePage() {
       {tab === "audiovisual" && <TabAudiovisual ev={ev} eventoId={id} onMutate={mutate} />}
       {tab === "checklist" && <TabChecklist eventoId={id} checklist={ev.checklist} onMutate={mutate} />}
       {tab === "documentos" && <TabDocumentos eventoId={id} documentos={ev.documentos} onMutate={mutate} />}
-      {tab === "orcamento" && <TabOrcamento eventoId={id} custos={ev.custos} financeiro={data.financeiro} onMutate={mutate} />}
+      {tab === "orcamento" && data.financeiro && <TabOrcamento eventoId={id} custos={ev.custos ?? []} financeiro={data.financeiro} onMutate={mutate} />}
       {tab === "aprovacoes" && <TabAprovacoes eventoId={id} aprovacoes={ev.aprovacoes} onMutate={mutate} />}
       {tab === "relatorio" && <TabRelatorio eventoId={id} />}
     </div>
@@ -124,7 +125,7 @@ function TabRelatorio({ eventoId }: { eventoId: string }) {
 }
 
 // ─── Visão Geral ──────────────────────────────────────────────────────────────
-function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financeiro; onMutate: () => void }) {
+function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financeiro | null; onMutate: () => void }) {
   const [status, setStatus] = useState(ev.status)
   async function mudarStatus(novo: string) {
     setStatus(novo)
@@ -137,8 +138,8 @@ function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financ
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card label="Demandas" value={String(ev.demandas.length)} icon={<Film className="w-4 h-4 text-blue-400" />} />
         <Card label="Documentos" value={String(ev.documentos.length)} icon={<FileText className="w-4 h-4 text-amber-400" />} />
-        <Card label="Custo total" value={fmtMoney(financeiro.custoTotal)} icon={<DollarSign className="w-4 h-4 text-emerald-400" />} />
-        <Card label="Orçamento" value={ev.orcamentoPrevisto ? fmtMoney(ev.orcamentoPrevisto) : "—"} icon={<DollarSign className="w-4 h-4 text-zinc-400" />} />
+        {financeiro && <Card label="Realizado informado" value={fmtMoney(financeiro.custoEventoReal)} icon={<DollarSign className="w-4 h-4 text-emerald-400" />} />}
+        {financeiro && <Card label="Orçamento previsto" value={fmtMoney(ev.orcamentoPrevisto)} icon={<DollarSign className="w-4 h-4 text-zinc-400" />} />}
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
@@ -403,10 +404,11 @@ function TabOrcamento({ eventoId, custos, financeiro, onMutate }: { eventoId: st
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3">
-        <Card label="Audiovisual (demandas)" value={fmtMoney(financeiro.custoAudiovisual)} icon={<Film className="w-4 h-4 text-blue-400" />} />
-        <Card label="Outros fornecedores" value={fmtMoney(financeiro.custoEventoReal)} icon={<DollarSign className="w-4 h-4 text-amber-400" />} />
-        <Card label="Custo total" value={fmtMoney(financeiro.custoTotal)} icon={<DollarSign className="w-4 h-4 text-emerald-400" />} />
+        <Card label="Previsão dos itens" value={fmtMoney(financeiro.custoEventoPrevisto)} icon={<DollarSign className="w-4 h-4 text-amber-400" />} />
+        <Card label="Realizado informado" value={fmtMoney(financeiro.custoEventoReal)} icon={<DollarSign className="w-4 h-4 text-emerald-400" />} />
+        {"custoAudiovisual" in financeiro && <Card label="Audiovisual vinculado" value={fmtMoney(financeiro.custoAudiovisual)} icon={<Film className="w-4 h-4 text-blue-400" />} />}
       </div>
+      <p className="text-xs text-zinc-400">{financeiro.itensSemRealizado} itens sem valor realizado informado. Valores não comprovam pagamento. Custos audiovisuais ficam separados para evitar dupla contagem.</p>
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
         <input value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} placeholder="Descrição do custo" className={inputCls} />
         <select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))} className={inputCls + " w-40"}>
@@ -425,7 +427,7 @@ function TabOrcamento({ eventoId, custos, financeiro, onMutate }: { eventoId: st
                 <p className="text-sm text-zinc-200 truncate">{c.descricao}</p>
                 <p className="text-[10px] text-zinc-500">{CAT_CUSTO[c.categoria] ?? c.categoria}{c.fornecedor ? ` · ${c.fornecedor.nome}` : ""}</p>
               </div>
-              <span className="text-sm text-zinc-300">{fmtMoney(c.valorReal ?? c.valorPrevisto)}</span>
+              <span className="text-sm text-zinc-300">Previsto: {fmtMoney(c.valorPrevisto)} · Realizado: {fmtMoney(c.valorReal)}</span>
               <button onClick={() => remover(c.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           ))}
@@ -498,7 +500,7 @@ type Evento = {
   checklist: TarefaItem[]; documentos: DocItem[]; custos: CustoItem[]; aprovacoes: AprovacaoItem[]
   demandas: { id: string; codigo: string; titulo: string; tipoVideo: string; area: string; statusVisivel: string; statusInterno: string; videomaker: { nome: string } | null; designer: { nome: string } | null }[]
 }
-type Financeiro = { custoEventoPrevisto: number; custoEventoReal: number; custoAudiovisual: number; custoTotal: number }
+type Financeiro = { custoEventoPrevisto: number | null; custoEventoReal: number | null; custoAudiovisual?: number | null; itensSemRealizado: number }
 type TarefaItem = { id: string; titulo: string; concluido: boolean; categoria: string | null; status: string }
 type DocItem = { id: string; nome: string; categoria: string; status: string; url: string | null; linkExterno: string | null }
 type CustoItem = { id: string; descricao: string; categoria: string; valorPrevisto: number; valorReal: number | null; fornecedor: { id: string; nome: string } | null }

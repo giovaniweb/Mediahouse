@@ -38,7 +38,7 @@ As notas deixam de aparecer como critério principal dos cards e da ordenação 
 
 Relatórios de eventos e coberturas agora são resumos determinísticos, sem chamada paga: checklist, demandas e documentos no evento; arquivos por pessoa/dia na cobertura. Contagens não geram notas de desempenho, qualidade ou retorno. O helper legado analisarComClaude, sem consumidores, foi removido.
 
-O resumo de evento separa previsão, realizado informado e custos audiovisuais; não soma registros potencialmente sobrepostos nem interpreta ausência como zero. Só consulta/exibe financeiro com verCustos. Isso protege este endpoint: GET /api/eventos/[id] ainda tem dívida anterior de exposição financeira e mistura de previsão/realizado, a tratar em S03/R03.
+O resumo de evento separa previsão, realizado informado e custos audiovisuais; não soma registros potencialmente sobrepostos nem interpreta ausência como zero. Só consulta/exibe financeiro com verFinanceiroEvento; o agregado audiovisual exige adicionalmente verCustos. O recorte S03-EVENTOS-FINANCEIRO.md agora aplica a mesma separação ao detalhe/lista/painel e protege orçamento/custos. Documentos, aprovações e outras dívidas do módulo continuam explicitamente pendentes.
 
 A cobertura mantém histórico em RelatorioIA com modelo regras-v1, tokens zero e categoria legada semanal/periodo cobertura-ID. O histórico genérico preserva o JSON, mas não apresenta todos os novos campos e mantém sua restrição anterior para usuários sem verCustos. O evento mantém resposta e log de geração, sem persistir o corpo do resumo.
 

@@ -40,16 +40,16 @@ export async function POST(_req: NextRequest, { params }: Params) {
         `Demandas vinculadas: ${evento.demandas.length}; com status finalizado: ${entregasConcluidas}.`,
         "Status finalizado não confirma publicação nem aprovação de todos os arquivos.",
       ]
-      if (acesso.permissoes.verCustos) {
+      if (acesso.permissoes.verFinanceiroEvento) {
         const financeiro = await tx.eventoGestao.findFirstOrThrow({ where: { id, organizacaoId }, select: { orcamentoPrevisto: true, custos: { select: { valorPrevisto: true, valorReal: true } } } })
         const realizados = financeiro.custos.filter(c => c.valorReal !== null)
-        const av = await tx.custoVideomaker.aggregate({ where: { organizacaoId, demanda: { organizacaoId, eventoGestaoId: id } }, _sum: { valor: true }, _count: true })
+        const av = acesso.permissoes.verCustos ? await tx.custoVideomaker.aggregate({ where: { organizacaoId, demanda: { organizacaoId, eventoGestaoId: id } }, _sum: { valor: true }, _count: true }) : null
         linhas.push("", "Financeiro — lançamentos registrados",
           `Orçamento previsto do evento: ${moeda(financeiro.orcamentoPrevisto)}.`,
           `Previsão dos itens de custo: ${financeiro.custos.length ? moeda(financeiro.custos.reduce((s, c) => s + c.valorPrevisto, 0)) : "Sem lançamentos"}.`,
           `Valor realizado informado: ${moeda(realizados.length ? realizados.reduce((s, c) => s + c.valorReal!, 0) : null)}.`,
           `Itens sem valor realizado informado: ${financeiro.custos.length - realizados.length}.`,
-          `Custos audiovisuais vinculados: ${av._count ? moeda(av._sum.valor) : "Sem lançamentos"}.`,
+          ...(av ? [`Custos audiovisuais vinculados: ${av._count ? moeda(av._sum.valor) : "Sem lançamentos"}.`] : []),
           "Custos do evento e audiovisuais são apresentados separadamente: os registros podem se sobrepor. Valores previstos não substituem realizados; estes lançamentos não comprovam pagamento.")
       }
       linhas.push("", "Resumo calculado a partir dos registros atuais, sem IA. Não mede qualidade, alcance ou retorno do evento.")

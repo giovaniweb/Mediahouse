@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireEventoAccess } from "@/lib/eventos-access"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
 import { criarPastaDrive } from "@/lib/google-drive"
-import { getOrgId, semOrg } from "@/lib/org"
 import { after } from "next/server"
 import type { Prioridade } from "@prisma/client"
 
@@ -34,10 +34,9 @@ function gerarSlug(titulo: string): string {
 
 // GET /api/eventos — lista eventos de gestão
 export async function GET(req: NextRequest) {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verEventos")
+  if (acesso instanceof NextResponse) return acesso
+  const organizacaoId = acesso.organizacaoId
 
   const sp = req.nextUrl.searchParams
   const status = sp.get("status")
@@ -60,7 +59,7 @@ export async function GET(req: NextRequest) {
       : {}),
   }
 
-  const eventos = await prisma.eventoGestao.findMany({
+  const eventos = await comOrg(organizacaoId, () => prisma.eventoGestao.findMany({
     where,
     select: {
       id: true,
@@ -73,28 +72,29 @@ export async function GET(req: NextRequest) {
       local: true,
       dataInicio: true,
       dataFim: true,
-      orcamentoPrevisto: true,
-      orcamentoAprovado: true,
+      orcamentoPrevisto: acesso.permissoes.verFinanceiroEvento,
+      orcamentoAprovado: acesso.permissoes.verFinanceiroEvento,
       percentualConclusao: true,
       coberturaId: true,
       responsavel: { select: { id: true, nome: true } },
-      _count: { select: { demandas: true, checklist: true, documentos: true, custos: true } },
+      _count: { select: { demandas: { where: { organizacaoId } }, checklist: true, documentos: true, custos: acesso.permissoes.verFinanceiroEvento } },
     },
     orderBy: [{ dataInicio: "desc" }],
-  })
+  }))
 
-  return NextResponse.json({ eventos })
+  return NextResponse.json({ eventos }, { headers: { "Cache-Control": "private, no-store" } })
 }
 
 // POST /api/eventos — cria evento + gera demandas audiovisuais selecionadas (+ cobertura)
 export async function POST(req: NextRequest) {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verEventos")
+  if (acesso instanceof NextResponse) return acesso
+  const organizacaoId = acesso.organizacaoId
 
+  return comOrg(organizacaoId, async () => {
   try {
     const body = await req.json()
+    if (!acesso.permissoes.verFinanceiroEvento && body.orcamentoPrevisto != null && body.orcamentoPrevisto !== "") return NextResponse.json({ error: "Sem permissão financeira" }, { status: 403 })
     const {
       nome,
       tipo,
@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nome e data inicial são obrigatórios" }, { status: 400 })
     }
 
+    if (orcamentoPrevisto != null && orcamentoPrevisto !== "" && (typeof orcamentoPrevisto !== "number" && typeof orcamentoPrevisto !== "string" || !Number.isFinite(Number(orcamentoPrevisto)) || Number(orcamentoPrevisto) < 0)) return NextResponse.json({ error: "Orçamento inválido" }, { status: 400 })
     const inicio = new Date(dataInicio)
     const fim = dataFim ? new Date(dataFim) : inicio
 
@@ -137,8 +138,8 @@ export async function POST(req: NextRequest) {
         dataInicio: inicio,
         dataFim: fim,
         responsavelId: responsavelId || null,
-        orcamentoPrevisto: orcamentoPrevisto ? parseFloat(orcamentoPrevisto) : null,
-        createdById: session.user.id,
+        orcamentoPrevisto: orcamentoPrevisto == null || orcamentoPrevisto === "" ? null : Number(orcamentoPrevisto),
+        createdById: acesso.usuarioId,
       },
     })
 
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest) {
               dataInicio: inicio,
               dataFim: fim,
               totalDias: 1,
-              createdById: session.user.id,
+              createdById: acesso.usuarioId,
             },
           })
           coberturaId = cobertura.id
@@ -204,7 +205,7 @@ export async function POST(req: NextRequest) {
             statusInterno: "aguardando_aprovacao_interna",
             statusVisivel: STATUS_PARA_COLUNA["aguardando_aprovacao_interna"],
             pesoDemanda: peso,
-            solicitanteId: session.user.id,
+            solicitanteId: acesso.usuarioId,
             dataEvento: inicio,
             localEvento: local ?? null,
             eventoGestaoId: evento.id,
@@ -237,7 +238,7 @@ export async function POST(req: NextRequest) {
             statusInterno: "aguardando_aprovacao_interna",
             statusVisivel: STATUS_PARA_COLUNA["aguardando_aprovacao_interna"],
             pesoDemanda: 1,
-            solicitanteId: session.user.id,
+            solicitanteId: acesso.usuarioId,
             dataEvento: inicio,
             localEvento: local ?? null,
             eventoGestaoId: evento.id,
@@ -260,7 +261,7 @@ export async function POST(req: NextRequest) {
     await prisma.eventoGestaoLog.create({
       data: {
         eventoId: evento.id,
-        usuarioId: session.user.id,
+        usuarioId: acesso.usuarioId,
         acao: "criado",
         detalhe: `Evento criado com ${demandasCriadas.length} demanda(s) audiovisual(is)${coberturaId ? " + cobertura" : ""}`,
       },
@@ -277,9 +278,10 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ evento, demandasCriadas: demandasCriadas.length, coberturaId, ok: true }, { status: 201 })
+    return NextResponse.json({ evento: { id: evento.id }, demandasCriadas: demandasCriadas.length, coberturaId, ok: true }, { status: 201 })
   } catch (e) {
     console.error("[Eventos] Erro ao criar evento:", e)
     return NextResponse.json({ error: "Erro ao criar evento" }, { status: 500 })
   }
+  })
 }

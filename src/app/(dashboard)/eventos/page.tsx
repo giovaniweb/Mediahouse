@@ -10,6 +10,7 @@ import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign, Cl
 import { PECAS_AUDIOVISUAIS, pecasDefaultPara } from "@/lib/eventos-pecas"
 import { PECAS_DESIGN, pecasDesignDefaultPara } from "@/lib/design-pecas"
 import { toast } from "sonner"
+import { useMe } from "@/hooks/usePermissoes"
 import { fetcher } from "@/lib/fetcher"
 
 type EventoLista = {
@@ -33,7 +34,7 @@ type EventoLista = {
 
 type DashboardEventos = {
   proximos: number; emProducao: number; atrasados: number; finalizados: number
-  totalPrevisto: number; totalGasto: number; docsPendentes: number; pagamentosPendentes: number
+  docsPendentes: number; financeiro: { totalPrevisto: number | null; realizadoInformado: number | null; pagamentosPendentes: number; itensSemRealizado: number } | null
 }
 
 // Kanban de eventos por status (drag nativo)
@@ -104,7 +105,7 @@ export default function EventosPage() {
   const eventos = data?.eventos ?? []
   const { data: dash } = useSWR<DashboardEventos>("/api/eventos/dashboard", fetcher)
 
-  const fmtMoneyShort = (n: number) => n >= 1000 ? `R$ ${(n / 1000).toFixed(1)}k` : `R$ ${n.toFixed(0)}`
+  const fmtMoneyShort = (n: number | null) => n === null ? "Não informado" : n >= 1000 ? `R$ ${(n / 1000).toFixed(1)}k` : `R$ ${n.toFixed(0)}`
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -128,10 +129,10 @@ export default function EventosPage() {
           <MiniCard icon={<Activity className="w-4 h-4 text-indigo-400" />} label="Em produção" value={String(dash.emProducao)} />
           <MiniCard icon={<AlertTriangle className="w-4 h-4 text-amber-400" />} label="Atrasados" value={String(dash.atrasados)} alert={dash.atrasados > 0} />
           <MiniCard icon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />} label="Finalizados" value={String(dash.finalizados)} />
-          <MiniCard icon={<DollarSign className="w-4 h-4 text-zinc-400" />} label="Previsto" value={fmtMoneyShort(dash.totalPrevisto)} />
-          <MiniCard icon={<DollarSign className="w-4 h-4 text-emerald-400" />} label="Gasto" value={fmtMoneyShort(dash.totalGasto)} />
+          {dash.financeiro && <MiniCard icon={<DollarSign className="w-4 h-4 text-zinc-400" />} label="Orçamento previsto" value={fmtMoneyShort(dash.financeiro.totalPrevisto)} />}
+          {dash.financeiro && <MiniCard icon={<DollarSign className="w-4 h-4 text-emerald-400" />} label="Realizado informado" value={fmtMoneyShort(dash.financeiro.realizadoInformado)} />}
           <MiniCard icon={<FileText className="w-4 h-4 text-amber-400" />} label="Docs pendentes" value={String(dash.docsPendentes)} alert={dash.docsPendentes > 0} />
-          <MiniCard icon={<DollarSign className="w-4 h-4 text-red-400" />} label="Pagtos pendentes" value={String(dash.pagamentosPendentes)} alert={dash.pagamentosPendentes > 0} />
+          {dash.financeiro && <MiniCard icon={<DollarSign className="w-4 h-4 text-red-400" />} label="Pagtos pendentes" value={String(dash.financeiro.pagamentosPendentes)} alert={dash.financeiro.pagamentosPendentes > 0} />}
         </div>
       )}
 
@@ -180,7 +181,7 @@ export default function EventosPage() {
                       <span>{fmtData(ev.dataInicio)} → {fmtData(ev.dataFim)}</span>
                       {ev.cidade && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {ev.cidade}</span>}
                       <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> {ev._count.demandas} demandas</span>
-                      {ev.orcamentoPrevisto ? <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {ev.orcamentoPrevisto.toLocaleString("pt-BR")}</span> : null}
+                      {ev.orcamentoPrevisto != null ? <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {ev.orcamentoPrevisto.toLocaleString("pt-BR")}</span> : null}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -213,6 +214,8 @@ const TIPO_BRIEFING_MAP: Record<string, string> = {
 }
 
 function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { data: me } = useMe()
+  const podeFinanceiro = me?.permissoes.verFinanceiroEvento === true
   const [form, setForm] = useState({
     nome: "", tipo: "congresso", descricao: "", cidade: "", estado: "", local: "",
     dataInicio: "", dataFim: "", orcamentoPrevisto: "",
@@ -274,7 +277,7 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
       const res = await fetch("/api/eventos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, pecas, pecasDesign }),
+        body: JSON.stringify({ ...form, orcamentoPrevisto: podeFinanceiro ? form.orcamentoPrevisto : undefined, pecas, pecasDesign }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Erro ao criar evento")
@@ -314,10 +317,10 @@ function CriarEventoModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 {Object.entries(TIPO_EVENTO_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
-            <div>
+            {podeFinanceiro && <div>
               <label className="block text-xs text-zinc-500 mb-1">Orçamento previsto (R$)</label>
-              <input type="number" value={form.orcamentoPrevisto} onChange={(e) => upd("orcamentoPrevisto", e.target.value)} placeholder="0" className={inputCls} />
-            </div>
+              <input type="number" min={0} value={form.orcamentoPrevisto} onChange={(e) => upd("orcamentoPrevisto", e.target.value)} placeholder="Não informado" className={inputCls} />
+            </div>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

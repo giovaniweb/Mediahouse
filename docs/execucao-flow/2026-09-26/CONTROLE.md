@@ -370,3 +370,11 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Desativação bloqueia futuros checkpoints; consumo, reservas e chamadas já enviadas são preservados. Redução não libera dívida nem cria saldo fictício.
 - 687 unitários, 261 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-politica-*.log; aviso face-api anterior. Sem migração nova, chamada paga, produção ou deploy; interface autenticada ainda não homologada.
 - Próximo: S03/R03 — revisar permissão financeira e separação previsto/realizado no GET principal de eventos. Cache/TTL, preços datados e homologação de O06 permanecem pendentes.
+
+
+### S03/R03 — financeiro estruturado de eventos (29/09/2026)
+
+- Base 794e690; contrato, escopo e dívidas em S03-EVENTOS-FINANCEIRO.md. Lista, detalhe, dashboard e resumo aplicam verFinanceiroEvento; agregado audiovisual exige também verCustos. Empresa explícita nas consultas. Escritas de custos/orçamento protegidas e respostas de criação/edição sem dados financeiros.
+- Previsto/realizado/ausente/zero separados; soma evento+AV retirada por possível dupla contagem. GET do detalhe não altera o registro. Telas ajustadas ao contrato.
+- 687 unitários, 269 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados; face-api mantém aviso anterior. Sem nova migration, rede externa, mensagem, IA paga ou deploy. Ensaio visual autenticado/runtime específico pendentes. Logs /private/tmp/nuflow-eventos-fin-*.log.
+- Próximo: documentos/aprovações de eventos, especialmente classificação de conteúdo financeiro e autorização de suas APIs. Não concluir segurança de todo o módulo: criação não atômica, logs best-effort, relações e exclusão legada continuam pendentes. O06 mantém cache/TTL, preços datados e homologação pendentes.
