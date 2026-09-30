@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -20,12 +21,14 @@ export async function POST(_req: NextRequest) {
   // marcava `processing` em arquivo alheio e mandava a URL para o worker.
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+  if (workerMidiaAtivo(organizacaoId)) return NextResponse.json({ error: "Conversão gerenciada pela fila de mídia; reconversão legada desativada nesta empresa." }, { status: 409 })
 
   // Arquivos finais .mov/.qt ainda não convertidos (transcodeStatus != done)
   const arquivos = await prisma.arquivo.findMany({
     where: {
       demanda: { organizacaoId },
       tipoArquivo: "final",
+      previewJobId: null,
       OR: [{ url: { endsWith: ".mov" } }, { url: { endsWith: ".MOV" } }, { url: { endsWith: ".qt" } }],
       NOT: { transcodeStatus: "done" },
     },

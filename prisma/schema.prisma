@@ -726,6 +726,12 @@ model Arquivo {
   fonteVersao     Int?    // versão interna; null no legado não inventariado
   fonteMimeDeclarado String? // informado no upload, não equivale a codec verificado
   fonteSha256     String? // calculado somente quando o servidor recebeu os bytes
+  // Recibo da prévia v2; identifica a tentativa que concluiu sem alterar a fonte.
+  previewObjectKey String?
+  previewSha256 String?
+  previewTamanho Int?
+  previewFonteVersao Int?
+  previewJobId String?
   originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
   // Divulgação opt-in. Snapshot preserva a versão que a gestão autorizou.
   publicadoEm           DateTime?

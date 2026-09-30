@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — primeiro recorte M02: motor privado com ensaio ffmpeg sintético; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — segundo recorte M02: protocolo de lease, callback e consumidor com recibo; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: ligar motor converter.mjs ao consumidor de midia.converter com assinatura por identidade persistida, renovação/aborto de lease e callback versionado/idempotente. Motor local já foi ensaiado; index.mjs/Docker ainda executam o legado. Não ativar a nova conversão antes de conciliar estados legados e callback. M01 conserva pendências de outros canais/consumidores; eventos seguem adiados.
+- Próxima etapa: ensaio ponta a ponta isolado de Next + worker + storage sintético, incluindo crash após upload/SIGKILL, temporários e reprodução autorizada. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: motor v2 de conversão limitado, com destino privado por tentativa e testes ffmpeg reais. Não conectado ao servidor/worker de produção; sem publicação.
-- Últimas provas locais deste recorte: 13 testes do motor com ffmpeg/ffprobe reais e storage loopback, 717 unitários do app e checagem sintática aprovados. ESLint padrão ignora worker-transcode; não contar como lint aprovado. Etapa anterior: 310 integrações, 25 runtime/RLS, tipos/auditores/build aprovados; não repetidos porque este recorte não muda app/schema. Docker, CI remoto, navegador e provedores reais pendentes.
+- Última implementação: API autenticada de claim/renovação/conclusão/falha, recibo da prévia no banco e consumidor v2 com recibo local persistido. Convivência legada protegida; produção não alterada, eventos em standby.
+- Últimas provas locais: 717 unitários do app, 321 integrações distintas, 26 runtime/RLS + verificador, 18 testes worker, tipos/lint do app/auditores/build aprovados. ESLint padrão ignora worker; Node --check realizado. Assinatura/HEAD simulados no protocolo; Docker, navegador, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -471,3 +471,15 @@ Não somar percentuais das linhas. Os cartões têm tamanhos diferentes; estes n
 ### Atualização do percentual após o motor local
 
 Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do plano completo**. Agora são 8 etapas parciais e 13 técnicas ainda não iniciadas. M02 ganhou provas locais, sem ser contado como concluído: 23/36 cartões têm alguma prova local (63,9%), o que não equivale a homologação. Venda continua não homologada; publicação/piloto pendentes.
+
+### 30/09/2026 — M02 parcial: protocolo e consumidor v2
+
+- Migração aditiva `20260930010000_recibo_preview`: chave, SHA-256, tamanho, versão-fonte e job da prévia. RLS e fonte original preservados; aplicada apenas no banco sintético.
+- `/api/transcode/worker`: segredo dedicado, corpo até 8 KiB, no-store, ações claim/renew/complete/fail. Desligado por padrão e restrito à empresa configurada no servidor; cliente não escolhe organização. Fila O01 ganhou teto opcional por empresa: v2 pede 1; consumidores anteriores mantêm seus limites.
+- Claim prepara intenções, revalida fonte/versão/empresa/estado e assina fora da transação; verifica lease novamente antes da resposta. Renew corta autorização após mudança de versão/pausa. Legacy processing não recebe outro processamento; done/skipped são tratados como concluídos.
+- Callback exige job/lease/versão/perfil/destino da tentativa e HEAD compatível em existência/MIME/tamanho. Atualização CAS do arquivo, linkFinal e aprovação pendente + conclusão são atômicas. Retry após commit perdido confere recibo persistido. SHA-256/codec/dimensões são atestados pelo worker autenticado, não recalculados no app. Snapshot público e fonte não mudam. Replay do upload original depois da prévia não duplica Arquivo.
+- Consumidor renova a cada 20 s, aborta na perda/incerteza e persiste recibo em diretório configurado (write/fsync/rename) antes da confirmação. Três tentativas de callback; resposta incerta mantém recibo para próximo ciclo/reinício. 503 preserva retry; 409 encerra recibo obsoleto. Poll 30 s ocioso/1 s após conclusão. Start/Docker selecionam v2 só pela flag; default legado.
+- Na empresa ativada, disparos/callbacks legados são bloqueados. Preview v2 continua protegida contra callback legado após desligar flag. Preflight precisa reconciliar conversões antigas em andamento e jobs expirados; não há backfill ou recuperação administrativa automática. Nenhuma flag externa foi ativada.
+- Provas: 717 unitários, 321 integrações distintas (11 novas; 23 focadas repetidas após ajuste de replay), 26 runtime/RLS (1 nova conclusão de preview sob role restrita), verificador, 18 testes worker (5 novos do consumidor), tipos/lint do app/auditores/build. Storage/assinatura/HEAD simulados no protocolo; motor validado separadamente com ffmpeg real. Sem acervo/custo externo.
+- Pendências: processo ponta a ponta, SIGKILL/reinício abrupto, limpeza pós-crash, inventário/reconciliação de objetos órfãos, memória/navegador, UX de estados, homologação Railway/Storage e credenciais multiempresa. Crash após upload antes de salvar recibo, volume perdido ou lease expirado pode repetir computação; conclusão é idempotente, conversão não é exactly-once. Recibo não autoriza publicar fora do lease. M02 permanece EM_EXECUCAO.
+- Percentual: 15/36 etapas técnicas completas (41,7%), 8 parciais; plano completo 15/38 (39,5%). Progresso dentro do worker não equivale a cartão concluído; venda não homologada.

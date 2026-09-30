@@ -34,7 +34,7 @@ export async function registrarArquivoDemanda(p: RegistroArquivo) {
     const demanda = await tx.demanda.findFirst({ where: { id: p.demandaId, organizacaoId: p.organizacaoId }, select: { id: true } })
     if (!demanda) throw new Error("Demanda não encontrada")
     // Reenvio da confirmação de upload não cria outra entrega nem altera sua versão.
-    const existente = await tx.arquivo.findFirst({ where: { demandaId: p.demandaId, tipoArquivo: p.tipo, url: p.url }, orderBy: { createdAt: "asc" } })
+    const existente = await tx.arquivo.findFirst({ where: { demandaId: p.demandaId, tipoArquivo: p.tipo, OR: [{ url: p.url }, { originalUrl: p.url }] }, orderBy: { createdAt: "asc" } })
     if (existente) return { arquivo: existente, criado: false }
     const ultima = await tx.arquivo.aggregate({ where: { demandaId: p.demandaId, tipoArquivo: p.tipo }, _max: { sequencia: true } })
     const arquivo = await tx.arquivo.create({ data: {

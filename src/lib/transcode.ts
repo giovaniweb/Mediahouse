@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 
 // Integração com o worker de transcodificação (HEVC/.mov → MP4 H.264).
 // O worker roda separado (Railway/Render) — ver pasta worker-transcode/.
@@ -74,6 +75,7 @@ export async function precisaTranscodeConferindo(url: string | null | undefined,
  * rodou em produção, e nada no sistema dizia isso.
  */
 export async function enqueueTranscode(opts: FonteTranscode): Promise<boolean> {
+  if (workerMidiaAtivo(opts.organizacaoId)) return false
   const worker = process.env.TRANSCODE_WORKER_URL?.replace(/\/$/, "")
   const secret = process.env.TRANSCODE_SECRET
   if (!worker || !secret) {

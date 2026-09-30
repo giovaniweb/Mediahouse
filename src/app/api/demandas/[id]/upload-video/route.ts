@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { createHash } from "node:crypto"
 import { fonteUploadValida, registrarArquivoDemanda } from "@/lib/arquivo-registro"
 import { NextRequest, NextResponse } from "next/server"
@@ -103,6 +104,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 async function iniciarConversao(url: string, organizacaoId: string, demandaId: string, arquivoId: string) {
+  if (workerMidiaAtivo(organizacaoId)) return
   if (await precisaTranscodeConferindo(url, { organizacaoId, demandaId, arquivoId })) {
     const aceito = await enqueueTranscode({ organizacaoId, arquivoId, demandaId, sourceUrl: url })
     await prisma.arquivo.updateMany({ where: { id: arquivoId, transcodeStatus: null }, data: { transcodeStatus: aceito ? "processing" : "sem_worker" } })

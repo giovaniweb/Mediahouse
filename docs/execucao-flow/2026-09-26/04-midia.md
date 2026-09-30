@@ -87,3 +87,10 @@ Upload da demanda registra intenção `midia.preparar` na transação, com ident
 Motor `worker-transcode/converter.mjs` adicionado e ensaiado: 13 testes com ffmpeg/ffprobe reais e storage local simulado. Suporta MOV/H.264, MOV/HEVC, MP4/HEVC e vertical, com/sem áudio; saída MP4/H.264/AAC privada por tentativa, faststart, até 1280 px sem ampliar, limites de 100 MiB/10 min, validação pós-conversão, hash/tamanho e cancelamento cooperativo. 717 unitários do app continuam aprovados. Medidas e limites no CONTROLE.md e README do worker.
 
 M02 EM_EXECUCAO. Motor não está ligado ao entrypoint legado nem à fila; próximo recorte é o consumidor com assinatura por lease e callback versionado. Sem CI remoto/Docker/navegador/Railway real ou teste de reinício abrupto. O teto de concorrência e o aborto do motor são locais; garantia durável de retomada ainda depende dessa integração. Nenhum original real foi usado.
+
+
+## Evidência de execução — 30/09/2026, segundo recorte M02
+
+Consumidor v2 ligado ao protocolo claim/renew/complete/fail, com recibo local persistido e callback idempotente no banco. API confere empresa/versão/lease e objeto no storage; conclusão e aplicação da prévia são atômicas, preservando original/publicação. Ativação desligada e restrita à empresa-piloto; legado protegido. Migração de recibo só no banco sintético.
+
+Provas: 717 unitários, 321 integrações distintas, 26 runtime/RLS e verificador, 18 testes worker, tipos/lint do app/auditores/build. Motor e protocolo foram testados separadamente; falta ensaio em processos ponta a ponta, reinício abrupto, limpeza/reconciliação e navegador. M02 parcial. Contrato/configuração e limites no README do worker; nenhum deploy ou configuração externa.

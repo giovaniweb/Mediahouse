@@ -6,7 +6,7 @@
   "description": "Worker de transcodifica\u00e7\u00e3o de v\u00eddeo (HEVC/.mov \u2192 MP4 H.264) do NuFlow",
   "main": "index.mjs",
   "scripts": {
-    "start": "node index.mjs",
+    "start": "node start.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {

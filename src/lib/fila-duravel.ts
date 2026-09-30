@@ -70,8 +70,9 @@ export function criarFila(db: PrismaClient) {
     return { j, data }
   }
   return {
-    async reivindicar(organizacaoId: string, limite = 1, tipos?: string[]) {
+    async reivindicar(organizacaoId: string, limite = 1, tipos?: string[], tetoEmpresa = LIMITE_POR_EMPRESA) {
       if (!Number.isInteger(limite) || limite < 1 || limite > LIMITE_POR_EMPRESA) throw new Error("Lote inválido")
+      if (!Number.isInteger(tetoEmpresa) || tetoEmpresa < 1 || tetoEmpresa > LIMITE_POR_EMPRESA) throw new Error("Teto inválido")
       return transacao(organizacaoId, async tx => {
         const ativo = await empresa(tx,organizacaoId), data = await agora(tx)
         // Manutenção limitada; retomadas seguintes drenam o restante sem perder jobs.
@@ -89,7 +90,7 @@ export function criarFila(db: PrismaClient) {
         }
         if (!ativo) return []
         const emCurso = await tx.jobAutomacao.count({ where: { organizacaoId, estado: "executando", leaseAte: { gt: data }, expiraEm: { gt: data } } })
-        const quantidade = Math.min(limite, LIMITE_POR_EMPRESA-emCurso)
+        const quantidade = Math.min(limite, tetoEmpresa-emCurso)
         if (quantidade <= 0) return []
         const candidatos = await tx.$queryRaw<JobAutomacao[]>`
           SELECT * FROM jobs_automacao WHERE "organizacaoId"=${organizacaoId} AND estado='pendente'
