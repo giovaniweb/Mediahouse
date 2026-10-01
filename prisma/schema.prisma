@@ -2147,6 +2147,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  lotesAcervo LoteAcervo[]
   copiasDrive CopiaDrive[]
   politicaIA PoliticaIA?
   consumosIA ConsumoIA[]
@@ -2658,4 +2659,20 @@ model CopiaDrive {
   @@unique([organizacaoId,arquivoId,fonteVersao,pastaId,conexao], map: "copias_drive_identidade_key")
   @@index([organizacaoId,estado,createdAt])
   @@map("copias_drive")
+}
+
+// Plano de manutenção explícito; contém somente referências e hashes, não bytes/segredos.
+model LoteAcervo {
+  id String @id @default(cuid())
+  organizacaoId String
+  operadorId String
+  snapshot Json
+  resultado Json?
+  estado String @default("simulado")
+  expiraEm DateTime
+  createdAt DateTime @default(now())
+  aplicadoEm DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, createdAt])
+  @@map("lotes_acervo")
 }

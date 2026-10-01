@@ -1,18 +1,18 @@
 # Controle da execução do Flow
 
-Última atualização: 01/10/2026 — bloco M03: cópia Drive durável implementada e ensaiada localmente; Google e agendamento externos pendentes. Sem deploy.
+Última atualização: 01/10/2026 — bloco M04 implementado e ensaiado localmente: biblioteca, recuperação por lote, histórico e retenção sem exclusão. Sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próximo bloco: M04 (biblioteca, recuperação assistida e retenção), com complementos M01 de inventário/identidade. Executar blocos completos com checkpoints internos. M02/M03 têm aceite local nos respectivos documentos; não presumir homologação de Docker/Supabase/Railway/Google. M03 é piloto manual de até 100 MiB, com flags desligadas por padrão.
+- Próximo bloco: C01–C03 (profissionais/contratos e custo do setor), em entrega coesa com checkpoints internos. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: fila paginada Drive, referência e recibo persistidos, ID remoto salvo antes do envio, reconciliação após queda, autorização/RLS, verificação de pasta sem escrita e estado de cópias na configuração. Sem alterar original/prévia nem criar permissões públicas. Detalhes e limites em M03-ACEITE-LOCAL.md.
-- Provas locais: 738 unitários, 341 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração ensaiada e schema sem divergência. Não houve teste com Google real nem ensaio visual desta tela.
-- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das 38 migrações.
-- Progresso: 17/36 cartões técnicos implementados (47,2%); 17/38 incluindo publicação/piloto (44,7%). Percentual de implementação, não de prontidão para venda.
+- Última implementação: biblioteca com filtros e estado de prévia; qualidade “sem referência final” integrada ao acervo; fila paginada com regra de 30 dias em Audiovisual/Growth; histórico sem data inventada; simulação/aplicação auditada por lote e retomada de relatórios. Originais, prévias, finais, custos e registros preservados.
+- Provas locais: 748 unitários, 353 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração aditiva ensaiada e schema sem divergência. Sem ensaio visual nem Storage real nesta etapa.
+- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das migrações; agora são 39.
+- Progresso: 18/36 cartões técnicos implementados (50%); 18/38 incluindo publicação/piloto (47,4%). Percentual de implementação, não de prontidão para venda.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -46,7 +46,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
-| M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C03 | Painel e conciliação | 05 | C02, R02, R03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -560,3 +560,12 @@ Base: `30c5592`, checkout/branch acima. Entrega e limites em [M03-ACEITE-LOCAL.m
 Validação local: 738 unitários, 341 integrações, 26 runtime + verificador. Testes do novo fluxo usam Google simulado e login PostgreSQL sem bypass. Tipos/lint/auditores/build e diff de schema conferidos. Corrigidos índice truncado e DELETE herdado durante ensaio da migração inédita no banco sintético.
 
 Externos pendentes: conta/pasta Google de homologação, agendamento, permissões herdadas, ensaio de perda de resposta no provedor, limites de execução e avaliação de Shared Drive. Limites locais: 100 MiB, cinco tentativas, um arquivo por chamada, enfileiramento manual; sem reabertura automática de jobs terminais e sem backfill do acervo. Nenhum deploy/push/configuração externa realizado. Próximo bloco: M04 com cobertura conservadora do inventário M01.
+
+
+### M04 / 01-10-2026 — bloco biblioteca, recuperação e retenção
+
+Base `5dcb7a4`. Entrega documentada em [M04-ACEITE-LOCAL.md](M04-ACEITE-LOCAL.md). Biblioteca unifica arquivos/artes/links aprovados, acrescenta filtros e estado de prévia; página de entregas sem vídeo vira filtro de qualidade e sai do menu. Audiovisual/Growth consultam fila paginada com corte de 30 dias, preservando legado sem data e todos os registros. Histórico não inventa conclusão por atualização.
+
+Recuperação antiga bloqueada: simular até 25 demandas, revisar, aplicar lote persistido com operador/hash/validade, transação serializável, auditoria e relatório antes/depois. Últimos lotes podem ser retomados. Não promove bruto, não publica e não apaga. Política explícita preserva original/prévia/final; sem promessa de economia de GB ou confirmação de arquivo remoto.
+
+Provas: 748 unitários, 353 integrações, 26 runtime + verificador, tipos/lint/auditores/build, diff de schema sem divergência. Migração somente em banco sintético. Permissões, versão de prévia, URLs inseguras, concorrência, expiração e dados alterados conferidos. Pendentes externos: revisão visual com equipe e homologação/publicação autorizada. Índice de entregáveis R04 continua em memória; inventário físico global/retenção destrutiva não foram declarados concluídos. Próximo bloco: C01–C03.

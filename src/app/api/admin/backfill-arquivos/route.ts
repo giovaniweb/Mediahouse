@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireAcesso } from "@/lib/acesso"
-import { backfillAuditado } from "@/lib/backfill-auditado"
+/** A recuperação exige simulação persistida e aplicação explícita de um lote. */
 export async function POST() {
   const acesso = await requireAcesso("gerenciarConfig")
   if (acesso instanceof NextResponse) return acesso
-  if (acesso.papel !== "admin" || !acesso.permissoes.editarDemanda) return NextResponse.json({ error: "Sem permissão para manutenção" }, { status: 403 })
-  return NextResponse.json(await backfillAuditado("arquivos", acesso), { headers: { "Cache-Control": "no-store" } })
+  return NextResponse.json({ error: "Abra Biblioteca > Revisar acervo para simular e revisar um lote antes de aplicar.", destino: "/biblioteca/acervo" },{ status: 409 })
 }

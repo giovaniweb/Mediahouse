@@ -1,9 +1,9 @@
-import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
 
 export async function backfillAuditado(tipo: "custos" | "arquivos", acesso: { organizacaoId: string; usuarioId: string }) {
+  if (tipo === "arquivos") throw new Error("Recuperação exige lote simulado e aplicação explícita")
   const { organizacaoId } = acesso, correlationId = correlacaoAuditoria()
   const acao = tipo === "custos" ? "manutencao.custos" : "manutencao.arquivos"
   return comOrg(organizacaoId, async () => {
@@ -28,11 +28,6 @@ export async function backfillAuditado(tipo: "custos" | "arquivos", acesso: { or
             const custo = await tx.custoVideomaker.create({ data: { organizacaoId, demandaId: d.id, videomakerId: atual.videomakerId, tipo: "projeto", valor: vinculo.valorDiaria,
               descricao: `Serviço (backfill): ${atual.codigo} — ${atual.titulo}`, dataReferencia: atual.finalizadaEm ?? atual.updatedAt, pago: false, statusPagamento: "pendente_nf" } })
             await registrarAuditoria(tx, acesso, { acao, recurso: "custo", recursoId: custo.id, correlationId, depois: { alterados: 1 } })
-          } else {
-            if (!["finalizado", "para_postar"].includes(atual.statusVisivel) || !atual.linkFinal) return false
-            if (await tx.arquivo.findFirst({ where: { demandaId: d.id, tipoArquivo: "final" } })) return false
-            const arquivo = await tx.arquivo.create({ data: { ...metadadosFonte(atual.linkFinal, organizacaoId, d.id), demandaId: d.id, tipoArquivo: "final", nomeArquivo: `${atual.codigo}_001.${atual.linkFinal.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "mp4"}`, url: atual.linkFinal, thumbnailUrl: atual.thumbnailUrl, sequencia: 1 } })
-            await registrarAuditoria(tx, acesso, { acao, recurso: "arquivo", recursoId: arquivo.id, correlationId, depois: { publicado: false, alterados: 1 } })
           }
           return true
         })

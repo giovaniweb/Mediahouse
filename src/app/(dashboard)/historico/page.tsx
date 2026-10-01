@@ -91,7 +91,7 @@ export default function HistoricoPage() {
               <Archive className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-zinc-100">Histórico Completo</h1>
+              <h1 className="text-xl font-bold text-zinc-100">Histórico Completo</h1><p className="text-xs text-zinc-400">Serviços e custos continuam acessíveis na demanda, mesmo sem arquivo. Filtros de data usam apenas conclusões registradas.</p>
               <p className="text-sm text-zinc-400">
                 {isLoading ? "Carregando…" : `${total.toLocaleString("pt-BR")} demandas concluídas`}
               </p>
@@ -240,7 +240,7 @@ export default function HistoricoPage() {
                     {d.editor?.nome ?? <span className="text-zinc-600">—</span>}
                   </td>
                   <td className="px-4 py-3 text-zinc-400 text-xs whitespace-nowrap">
-                    {fmtDate(d.finalizadaEm ?? d.updatedAt)}
+                    {d.finalizadaEm ? fmtDate(d.finalizadaEm) : "Legado: conclusão sem data"}
                   </td>
                 </tr>
               ))}

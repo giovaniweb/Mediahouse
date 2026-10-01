@@ -121,7 +121,10 @@ function DemandasKanban() {
     setSoMinhas(false)
   }
 
+  const [navegacaoFila, setNavegacaoFila] = useState({ filtro: "", pagina: 1 })
   const params = new URLSearchParams()
+  params.set("filaTrabalho", "1")
+
   params.set("area", "audiovisual")
   if (search) params.set("search", search)
   if (filtroDepto) params.set("departamento", filtroDepto)
@@ -138,21 +141,17 @@ function DemandasKanban() {
   if (soAtrasadas) params.set("atrasadas", "1")
   if (prioridadeUrl) params.set("prioridade", prioridadeUrl)
   if (statusUrl) params.set("statusVisivel", statusUrl)
+  const chaveFiltro = params.toString()
+  const paginaFila = navegacaoFila.filtro === chaveFiltro ? navegacaoFila.pagina : 1
+  const setPaginaFila = (mudar: (pagina: number) => number) => setNavegacaoFila({ filtro: chaveFiltro, pagina: mudar(paginaFila) })
+  params.set("limit", "100")
+  params.set("offset", String((paginaFila-1)*100))
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
   const demandasAll = data?.demandas ?? []
 
-  // Coluna Concluído mostra só os últimos 30 dias (histórico completo em /historico)
-  const TRINTA_DIAS_MS = 30 * 24 * 60 * 60 * 1000
-  const agora30 = Date.now()
-  const demandas = demandasAll.filter((d: { statusVisivel: string; finalizadaEm?: string | null; updatedAt?: string }) => {
-    if (d.statusVisivel !== "finalizado") return true
-    const ref = d.finalizadaEm
-      ? new Date(d.finalizadaEm).getTime()
-      : 0  // sem finalizadaEm = demanda antiga → vai para histórico (não para kanban)
-    return agora30 - ref <= TRINTA_DIAS_MS
-  })
+  const demandas = demandasAll
 
   // Mapeamento coluna → statusInterno representativo (dispara notificações WhatsApp)
   const COLUNA_PARA_STATUS: Record<string, string> = {
@@ -276,6 +275,13 @@ function DemandasKanban() {
 
   return (
     <>
+      <div className="flex items-center gap-3 px-6 py-2 text-sm">
+        <button disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p-1)}>Anterior</button>
+        <span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span>
+        <button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p+1)}>Próxima</button>
+        <a href="/historico" className="underline">Histórico completo</a>
+      </div>
+      {demandas.some((d: {statusVisivel:string;finalizadaEm?:string|null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) && <p className="px-6 text-xs text-amber-400">Há concluídos legados sem data nesta página. Eles continuam visíveis até revisão; nenhuma data foi inventada.</p>}
       <Header
         title="Demandas"
         actions={
