@@ -1,18 +1,17 @@
 "use client"
 
-import { LayoutGrid, List, Table2, Inbox, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
+import { LayoutGrid, List, Inbox, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Visao, AbaRapida, DemandaLista } from "./tipos-visao"
 import { calcularKpis } from "./tipos-visao"
 
 // Topo do quadro: os números que respondem "como estamos", o seletor de visão e
-// os recortes de uso diário. Fica igual nas três visões — muda o desenho embaixo,
+// os recortes de uso diário. Fica igual nas duas visões — muda o desenho embaixo,
 // não a navegação.
 
 const VISOES: { id: Visao; label: string; icone: typeof LayoutGrid }[] = [
   { id: "kanban", label: "Kanban", icone: LayoutGrid },
   { id: "lista", label: "Lista", icone: List },
-  { id: "tabela", label: "Tabela", icone: Table2 },
 ]
 
 const ABAS: { id: AbaRapida; label: string }[] = [
