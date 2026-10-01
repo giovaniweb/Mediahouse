@@ -88,3 +88,30 @@ O comando inicia Next **dev/webpack**, cria logins sem bypass e dados descartáv
 Comprovados localmente: conversão MOV/HEVC com áudio, prévia 640×360/6 s, checksum, token válido, recusa sem token/com token de outra demanda/revogado. Browser IAB abriu link do card real; player de medição fez seek em 3 s e terminou em 6 s sem erro. Simulador registrou três pedidos Range. A expiração foi acelerada no simulador; não é homologação do Supabase real.
 
 O ensaio revelou contexto de empresa diferente entre bundles Next com Prisma compartilhado: corrigido em `org-contexto.ts` compartilhando a instância de AsyncLocalStorage, sem compartilhar o valor de cada requisição. Teste unitário intercala contextos e recarrega módulos. Produção em container, memória sob carga, coleta de órfãos e rollout seguem pendentes.
+
+## Container com recursos limitados — preparado, execução pendente
+
+```sh
+node scripts/ensaio-midia/container.mjs
+```
+
+Requer Docker com daemon acessível e cgroup v2 que exponha `memory.max`, `memory.peak` e `memory.events`. Neste computador Docker/Podman não estão disponíveis: o comando encerrou com código 2, sem produzir medição. Não houve build de imagem, execução de container nem validação remota de CI nesta etapa.
+
+O script constrói a imagem atual do worker e uma imagem derivada de ensaio com `procps`/testes. A construção baixa imagem/pacotes públicos; a execução usa `--network=none`, usuário `node`, filesystem somente leitura, sem volumes do host, sem capabilities e sem novas permissões. Usa init para recolher processos encerrados. Limites iniciais **de teste**, não dimensionamento aprovado: 768 MiB de memória e swap total (sem swap adicional), 2 CPUs, 256 processos, `/tmp` em tmpfs de 192 MiB contabilizado na memória do container. Os testes rodam sequencialmente, pois o worker processa uma conversão por instância.
+
+`CGROUP_SINTETICO` registra o pico do cgroup e deltas de eventos OOM/oom_kill; qualquer OOM ou falha de teste reprova. `ESTADO_CONTAINER` registra também o estado final do Docker, inclusive quando o processo de medição é morto. Ausência de cgroup/limite reprova, nunca retorna aprovação baseada só em RSS. O script remove apenas seu container e tags aleatórias de ensaio; não executa prune. O contexto Docker tem allowlist, evitando enviar `.env`, recibos ou vídeos locais ao builder.
+
+Job `worker-container` adicionado ao CI, separado dos testes locais já existentes. Não prova crash do container inteiro, persistência de volume após recriação, entrada 4K/8K/10 minutos, carga de produção ou Railway. O entrypoint de produção e a ativação do piloto permanecem inalterados.
+
+## Critérios para futuro inventário de órfãos (somente leitura)
+
+Não há exclusão remota automática nem inventário real executado. A análise deverá ser restrita ao bucket privado e ao padrão de **prévias v2**, com organização conferida no banco; nunca tratar ausência de vínculo na amostra como prova de ausência no acervo.
+
+| Situação encontrada | Classificação conservadora |
+| --- | --- |
+| Referência de fonte/original, URL atual, snapshot publicado, thumbnail, link de demanda ou aprovação, inclusive anterior | Preservar: ainda referenciado |
+| Job ativo, tentativa/recibo ainda em reconciliação, inventário incompleto, acesso negado ou vínculo desconhecido | Preservar: inconclusivo |
+| Objeto fora do padrão de prévia v2 ou pertencente a outra organização | Fora do escopo |
+| Tentativa antiga sem referências em inventário completo e consistente | Candidato à revisão humana; não equivale a autorização para excluir |
+
+O relatório deverá registrar empresa, bucket/chave, versão, job/tentativa, bytes, datas observadas e motivos, sem guardar URLs assinadas. Requer paginação completa tanto no storage quanto no banco e evidência de que não houve mudanças relevantes durante a análise. Falha em qualquer página torna o inventário inconclusivo. Antes de uma futura exclusão, serão necessárias política de retenção/carência aprovada, consideração do maior TTL de assinatura, nova conferência dos vínculos e lote auditável. Limpar um recibo local obsoleto não autoriza apagar o objeto remoto.

@@ -74,7 +74,7 @@ test("morte do worker durante ffmpeg encerra filho e permite limpeza; mede RSS s
     }
     assert.equal((await encerrado).code, 0); assert.equal(uploads, 1)
     assert.deepEqual((await readdir(root)).filter(n => n.startsWith("nuflow-preview-")), [])
-    console.log("RSS_SINTETICO", JSON.stringify({ entrada: "1080p30, 8s, H264, sem áudio", picoAmostradoMiB: Math.round(picoKiB / 1024), amostras, intervaloMinimoMs: 25, limiteMemoriaImposto: false }))
+    console.log("RSS_SINTETICO", JSON.stringify({ entrada: "1080p30, 8s, H264, sem áudio", picoAmostradoMiB: Math.round(picoKiB / 1024), amostras, intervaloMinimoMs: 25, amostragemNaoMedeCgroup: true }))
   } finally {
     if (worker?.exitCode === null && worker?.signalCode === null) { worker.kill("SIGKILL"); await encerrado }
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve))

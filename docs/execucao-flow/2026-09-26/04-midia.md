@@ -115,3 +115,10 @@ Próximo: Next completo com credenciais sintéticas restritas e reprodução/see
 Next completo em dev/webpack, worker real, logins restritos com RLS e SDK Supabase contra storage local simulado. Corrigido contexto de empresa separado entre bundles Next que causava 404 com token válido. Navegador IAB reproduziu prévia sintética de 6 s, avançou para 3 s e terminou sem erro; página pública real exibiu card e abriu o vídeo. Recusa sem token, outra demanda, revogação e expiração simulada comprovadas por HTTP.
 
 Ensaio encerrado e limpo. Produção/container/provedor real ainda não homologados; M02 parcial. Detalhes e comando reproduzível no README do worker e CONTROLE.md.
+
+
+## Evidência de execução — 30/09/2026, sexto recorte M02
+
+Ensaio de Docker preparado com limite real de memória/CPU/processos, runner que reprova OOM e job de CI. Docker/Podman ausentes localmente: execução explicitamente não validada, nenhum pico de container disponível. Critérios de inventário de órfãos documentados, sem implementar ou executar exclusão.
+
+Próxima evidência depende de executar o harness em Docker/cgroup v2; crash completo/volume e inventário remoto permanecem pendentes. M02 parcial.

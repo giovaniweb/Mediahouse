@@ -1,15 +1,15 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — quinto recorte M02: Next completo, reprodução no navegador e contexto RLS entre bundles; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — sexto recorte M02: ensaio de container preparado, execução indisponível localmente; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: Docker/limites de memória sob carga e política de reconciliação de órfãos. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próxima etapa: executar `node scripts/ensaio-midia/container.mjs` em ambiente com Docker/cgroup v2 e revisar relatório OOM/pico. Docker e Podman não estão disponíveis neste computador; job CI preparado, não executado remotamente. Inventário real de órfãos ainda não implementado; critérios somente leitura registrados no README do worker. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: contexto AsyncLocalStorage compartilhado no processo entre bundles Next, alinhado ao Prisma compartilhado; corrige 404 indevido da prévia com token válido. Harness Next/SDK/worker com logins restritos e storage simulado. Convivência legada protegida; produção não alterada, eventos em standby.
+- Última implementação: harness Docker com recursos limitados e relatório de cgroup/OOM, imagem derivada de teste, allowlist do contexto Docker e job CI próprio. Sem alterar entrypoint de produção. Execução de container não validada por ausência do runtime local. Convivência legada protegida; produção não alterada, eventos em standby.
 - Últimas provas locais desta etapa: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos/lint focados, auditores e build webpack; Next dev completo e navegador IAB com storage simulado aprovados. Última rodada worker: 20 testes. Docker, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
@@ -516,3 +516,14 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - Processos do ensaio encerrados, fixtures/roles/diretório temporário removidos. Nenhum deploy ou uso de acervo real. M02 continua parcial; 15/36 cartões técnicos concluídos (41,7%).
 
 - Regressão aprovada: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos, lint focado, auditores e build webpack. Build mantém aviso preexistente de dependência dinâmica face-api.
+
+
+### M02/I01 — 30/09/2026, sexto recorte: preparo de container e critérios de órfãos
+
+- Verificação local: nenhum executável Docker/Podman disponível. Harness retorna código 2 e mensagem explícita de ensaio não executado. Não instalar runtime nem atribuir pico RSS anterior a um container.
+- Script `scripts/ensaio-midia/container.mjs` constrói imagem atual e imagem de testes; execução sem rede, sem volumes do host, usuário node, read-only, init, capacidades removidas, 768 MiB, 2 CPUs, 256 processos e tmpfs limitado. Tags e container únicos são removidos ao final, sem prune.
+- Runner exige cgroup v2 e limite real, registra memory.peak e deltas de OOM/oom_kill; falha ou OOM reprova. CI recebeu job dedicado. Contexto Docker em allowlist não envia credenciais/estado local.
+- Critérios de futuro inventário remoto registrados no README: preservar referências atuais/originais/publicadas/aprovações, jobs e recibos em reconciliação; inventário incompleto é inconclusivo; candidato antigo sem referência ainda exige revisão/política. Nenhum inventário nem exclusão remota realizados.
+- M02/I01 não concluídos. Container real, crash do container/volume, memória sob carga e inventário remoto seguem pendentes. Sem publicação.
+
+- Validação local do preparo: 20 testes worker sequenciais aprovados, lint do script/sintaxe Node/diff aprovados. Sem Docker, launcher recusou execução (código 2); sem cgroup, runner recusou validação (código 1). Nenhum resultado de container inferido desses checks.

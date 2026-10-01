@@ -1,0 +1,11 @@
+# Usa a mesma imagem do worker; não altera o entrypoint da imagem de produção.
+ARG WORKER_IMAGE=nuflow-transcode:ensaio-base
+FROM ${WORKER_IMAGE}
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends procps \
+  && rm -rf /var/lib/apt/lists/*
+COPY tests ./tests
+COPY ensaio-container.mjs ./
+USER node
+CMD ["node", "ensaio-container.mjs"]
