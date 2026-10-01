@@ -1,3 +1,6 @@
+import { Prisma } from "@prisma/client"
+import { randomUUID } from "node:crypto"
+import { registrarAuditoria } from "@/lib/auditoria"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -25,10 +28,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return erroDeCampo("valor", "Informe um valor numérico maior ou igual a zero.")
   }
 
-  const updated = await prisma.custoVideomaker.update({
-    where: { id },
+  if (body.pago !== undefined && typeof body.pago !== "boolean") return erroDeCampo("pago", "Informe um estado de pagamento válido.")
+  const updated = await prisma.$transaction(async tx => {
+  const alterado = await tx.custoVideomaker.update({
+    where: { id, organizacaoId, updatedAt: custo.updatedAt },
     data: {
       pago: body.pago ?? custo.pago,
+      ...(typeof body.pago === "boolean" ? { statusPagamento: body.pago ? "pago" : custo.notaFiscalUrl ? "nf_enviada" : "pendente_nf" } : {}),
+      ...(valorLido.presente && valorLido.valor !== null ? { valorConfirmadoEm: new Date() } : {}),
       dataPagamento: body.dataPagamento ? new Date(body.dataPagamento) : custo.dataPagamento,
       comprovante: body.comprovante ?? custo.comprovante,
       valor: valorLido.presente && valorLido.valor !== null ? valorLido.valor : custo.valor,
@@ -41,6 +48,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
   })
 
+    await registrarAuditoria(tx, acesso, { acao: "manutencao.custos", recurso: "custo", recursoId: id, correlationId: randomUUID(), depois: { operacao: "editar", alterados: 1 } })
+    return alterado
+  }).catch(e => { if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") return null; throw e })
+  if (!updated) return NextResponse.json({ error: "O custo mudou durante a edição. Atualize antes de tentar novamente." }, { status: 409 })
   return NextResponse.json({ custo: updated })
 }
 

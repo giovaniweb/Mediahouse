@@ -4,7 +4,6 @@ import { diariasDaEmpresa } from "@/lib/videomaker-vinculo"
 import { inicioDoDia } from "@/lib/datas"
 import { metricasOperacionais } from "@/lib/metricas-operacionais"
 import type { RecorteMetricas } from "@/lib/metricas-recorte"
-const VALOR_POR_DEMANDA = 200
 export async function metricasRelatorio(organizacaoId: string, recorte: RecorteMetricas, financeiro: boolean) {
   const agora = new Date(), area = recorte.area, deDate = new Date(recorte.inicio), ateDate = new Date(recorte.fim)
   const operacional = await metricasOperacionais(organizacaoId, recorte)
@@ -28,7 +27,6 @@ export async function metricasRelatorio(organizacaoId: string, recorte: RecorteM
 
   // ── Produção (índice de produtividade) ─────────────────────────────────────
   // Usa contagem de vídeos individuais entregues (Arquivo final), não de demandas
-  const producaoPeriodo = videosEntregues * VALOR_POR_DEMANDA
 
   // ── Volume por tipo de vídeo (criadas no período) ─────────────────────────
   const demandasPeriodo = await prisma.demanda.findMany({
@@ -188,9 +186,6 @@ export async function metricasRelatorio(organizacaoId: string, recorte: RecorteM
       escopo: "Custos vinculados a demandas desta área; lançamentos sem demanda não rateados",
     } } : {}),
     producao: {
-      valorPorDemanda: VALOR_POR_DEMANDA,
-      producaoMes: producaoPeriodo,
-      producao30d: producaoPeriodo,
       demandasFinalizadasMes: concluidas,
       demandasFinalizadas30d: concluidas,
       videosEntreguesMes: videosEntregues,

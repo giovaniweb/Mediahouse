@@ -411,8 +411,6 @@ function TabParametros() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState("")
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillResult, setBackfillResult] = useState<{ processados: number; pulados: number; erros: number } | null>(null)
   const [convertendoHevc, setConvertendoHevc] = useState(false)
   const [hevcResult, setHevcResult] = useState<number | null>(null)
 
@@ -554,45 +552,10 @@ function TabParametros() {
 
       {/* Backfill de custos retroativos */}
       <div className="border-t border-zinc-800 pt-6">
-        <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-              <Settings className="w-4 h-4 text-orange-400" /> Gerar Custos Retroativos
-            </h4>
-            <p className="text-xs text-zinc-500 mt-1">
-              Cria registros de custo para demandas finalizadas que ainda não têm custo vinculado.
-              Usa o <strong className="text-zinc-400">valor/diária</strong> de cada videomaker.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={async () => {
-                setBackfilling(true)
-                setBackfillResult(null)
-                try {
-                  const res = await fetch("/api/admin/backfill-custos", { method: "POST" })
-                  const json = await res.json()
-                  if (!res.ok) throw new Error(json.error ?? "Erro ao executar backfill")
-                  setBackfillResult({ processados: json.processados, pulados: json.pulados, erros: json.erros })
-                  toast.success(`✅ Backfill: ${json.processados} custo(s) criado(s)!`)
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Erro no backfill")
-                } finally {
-                  setBackfilling(false)
-                }
-              }}
-              disabled={backfilling}
-              className="inline-flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
-              {backfilling ? "Processando…" : "⚙️ Gerar custos retroativos"}
-            </button>
-            {backfillResult && (
-              <span className={`text-xs px-3 py-1.5 rounded-lg border ${backfillResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
-                {backfillResult.processados} criado(s) · {backfillResult.pulados} já existiam{backfillResult.erros > 0 ? ` · ${backfillResult.erros} erro(s)` : ""}
-              </span>
-            )}
-          </div>
+        <div className="border border-zinc-700 rounded-xl p-5 mb-4">
+          <h4 className="text-sm font-semibold">Conferência dos custos históricos</h4>
+          <p className="text-xs text-zinc-400 mt-2">Confira os serviços sem custo e registre somente valores comprovados. A diária atual não preenche o passado.</p>
+          <a href="/custos" className="text-sm underline">Abrir custos e pendências</a>
         </div>
 
         <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-3">
