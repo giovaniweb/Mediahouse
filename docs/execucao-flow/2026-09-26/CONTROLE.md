@@ -1,16 +1,18 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — bloco consolidado de mídia: M02 implementado localmente com homologação externa pendente; coleta de inventário operacional e remux validados. Sem deploy.
+Última atualização: 01/10/2026 — bloco M03: cópia Drive durável implementada e ensaiada localmente; Google e agendamento externos pendentes. Sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próximo bloco: M03 (cópia Drive durável) e complementos M01 de identidade dos consumidores. Executar blocos completos com checkpoints internos, conforme autorização do usuário. M02 tem aceite local em M02-ACEITE-LOCAL.md; Docker/Supabase/Railway continuam externos pendentes, não reabrir pequenas entregas isoladas de mídia sem necessidade. Coleta de inventário operacional entregue, cobertura global/recibos/retenção seguem em M01/M04.
+- Próximo bloco: M04 (biblioteca, recuperação assistida e retenção), com complementos M01 de inventário/identidade. Executar blocos completos com checkpoints internos. M02/M03 têm aceite local nos respectivos documentos; não presumir homologação de Docker/Supabase/Railway/Google. M03 é piloto manual de até 100 MiB, com flags desligadas por padrão.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: coletor de inventário pg/Supabase somente leitura, paginação e diagnósticos conservadores; remux para fontes compatíveis preservando pacotes; timeout independente do supervisor ensaiado. Nenhum backfill/exclusão/configuração externa.
-- Últimas provas locais do bloco: 718 unitários, 326 integrações, 26 runtime/RLS + verificador, 19 inventário e 21 worker; tipos/lint/auditores/build webpack aprovados. Next dev/IAB também aprovados no remux. Docker, provedores e CI remoto pendentes.
+- Última implementação: fila paginada Drive, referência e recibo persistidos, ID remoto salvo antes do envio, reconciliação após queda, autorização/RLS, verificação de pasta sem escrita e estado de cópias na configuração. Sem alterar original/prévia nem criar permissões públicas. Detalhes e limites em M03-ACEITE-LOCAL.md.
+- Provas locais: 738 unitários, 341 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração ensaiada e schema sem divergência. Não houve teste com Google real nem ensaio visual desta tela.
+- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das 38 migrações.
+- Progresso: 17/36 cartões técnicos implementados (47,2%); 17/38 incluindo publicação/piloto (44,7%). Percentual de implementação, não de prontidão para venda.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -43,7 +45,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
-| M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| M03 | Sync Drive | 04 | M01, S04, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -549,3 +551,12 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - Progresso de implementação técnica passa a 16/36 (44,4%); 16/38 (42,1%) incluindo publicação/piloto. Não corresponde a prontidão comercial.
 
 - Validação final do bloco: 718 unitários, 326 integrações, 26 runtime/RLS e verificador, 19 inventário, 21 worker, tipos/lint/auditores/build aprovados. Após revisão, integração focada e suíte de inventário repetidas para provar que lease real não é exportado: só o marcador `presente`. Build mantém aviso preexistente face-api.
+
+
+### M03 / 01-10-2026 — bloco completo de cópia Drive para piloto
+
+Base: `30c5592`, checkout/branch acima. Entrega e limites em [M03-ACEITE-LOCAL.md](M03-ACEITE-LOCAL.md). Migração aditiva de cópias com RLS, produtor paginado, fila O01, consumidor autenticado com lease renovável, ID remoto pré-alocado, checksum/versão, reconciliação após resposta perdida e UI de acompanhamento. Leitura de pasta separada da criação de arquivo de teste. Produtores/upload direto legados bloqueados no piloto. Original/prévia não mudam. Sem LLM.
+
+Validação local: 738 unitários, 341 integrações, 26 runtime + verificador. Testes do novo fluxo usam Google simulado e login PostgreSQL sem bypass. Tipos/lint/auditores/build e diff de schema conferidos. Corrigidos índice truncado e DELETE herdado durante ensaio da migração inédita no banco sintético.
+
+Externos pendentes: conta/pasta Google de homologação, agendamento, permissões herdadas, ensaio de perda de resposta no provedor, limites de execução e avaliação de Shared Drive. Limites locais: 100 MiB, cinco tentativas, um arquivo por chamada, enfileiramento manual; sem reabertura automática de jobs terminais e sem backfill do acervo. Nenhum deploy/push/configuração externa realizado. Próximo bloco: M04 com cobertura conservadora do inventário M01.

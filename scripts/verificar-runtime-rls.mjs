@@ -33,6 +33,9 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_table_privilege(current_user,'public.inbox_whatsapp','DELETE') AS apaga_inbox,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.inbox_whatsapp'::regclass) AS rls_inbox,
       has_function_privilege(current_user,'public.whatsapp_instancia_org(text)','EXECUTE') AS resolve_instancia,
+      has_table_privilege(current_user,'public.copias_drive','SELECT,INSERT,UPDATE') AS usa_copias_drive,
+      has_table_privilege(current_user,'public.copias_drive','DELETE') AS apaga_copias_drive,
+      (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.copias_drive'::regclass) AS rls_copias_drive,
       has_table_privilege(current_user,'public.jobs_automacao','SELECT') AS le_fila,
       has_table_privilege(current_user,'public.jobs_automacao','INSERT') AS insere_fila,
       has_table_privilege(current_user,'public.jobs_automacao','UPDATE') AS atualiza_fila,
@@ -56,7 +59,8 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
     const saidasOk = tipo === "app" ? r.le_saidas && r.le_tentativas && r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos && r.rls_saidas
       : !r.le_saidas && !r.le_tentativas && !r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos
     const iaOk = r.rls_ia && !r.apaga_consumo_ia && !r.apaga_politica_ia && (tipo === "app" ? r.usa_consumo_ia && r.usa_politica_ia : !r.usa_consumo_ia && !r.usa_politica_ia)
-    const ok = iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const driveOk = r.rls_copias_drive && !r.apaga_copias_drive && (tipo === "app" ? r.usa_copias_drive : !r.usa_copias_drive)
+    const ok = driveOk && iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

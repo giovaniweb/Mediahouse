@@ -1,3 +1,4 @@
+import { driveCopiaAtiva } from "@/lib/drive-copias"
 /**
  * Google Drive — upload de vídeos finais
  *
@@ -158,6 +159,7 @@ export async function criarSessaoUploadDrive(opts: {
   contentType: string
 }, organizacaoId?: string | null): Promise<DriveUploadSession> {
   if (!organizacaoId) throw new Error("Drive: sem organização — não é possível decidir em qual conta subir o arquivo.")
+  if (driveCopiaAtiva(organizacaoId)) throw new Error("Upload direto desativado no piloto; use a cópia durável nas configurações do Drive.")
   // Prioridade: banco (configurado pelo admin, por org) > variável de ambiente
   const config = await prisma.configEmpresa.findFirst({
     where: { organizacaoId },

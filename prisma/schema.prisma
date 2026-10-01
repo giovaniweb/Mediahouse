@@ -707,6 +707,7 @@ model ChecklistItem {
 }
 
 model Arquivo {
+  copiasDrive CopiaDrive[]
   id              String      @id @default(cuid())
   demandaId       String
   tipoArquivo     TipoArquivo
@@ -2146,6 +2147,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  copiasDrive CopiaDrive[]
   politicaIA PoliticaIA?
   consumosIA ConsumoIA[]
   ambienteTeste Boolean @default(false)
@@ -2627,4 +2629,33 @@ model ConsumoIA {
   @@index([organizacaoId, periodo])
   @@index([organizacaoId, estado, expiraEm])
   @@map("consumos_ia")
+}
+
+// Cópia privada do original; nunca substitui Arquivo.url ou linkFinal.
+model CopiaDrive {
+  id String @id @default(cuid())
+  organizacaoId String
+  arquivoId String
+  fonteVersao Int
+  fonteBucket String
+  fonteObjectKey String
+  fonteSha256 String?
+  pastaId String
+  conexao String
+  chave String @unique
+  driveFileId String?
+  driveVersion String?
+  sha256 String?
+  md5 String?
+  tamanho Int?
+  estado String @default("pendente")
+  erro String?
+  concluidoEm DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields:[organizacaoId],references:[id],onDelete:Cascade)
+  arquivo Arquivo @relation(fields:[arquivoId],references:[id],onDelete:Cascade)
+  @@unique([organizacaoId,arquivoId,fonteVersao,pastaId,conexao], map: "copias_drive_identidade_key")
+  @@index([organizacaoId,estado,createdAt])
+  @@map("copias_drive")
 }

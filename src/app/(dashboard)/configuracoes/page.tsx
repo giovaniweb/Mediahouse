@@ -1254,7 +1254,11 @@ function TabGoogleDrive() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ processados: number; erros: number } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ enfileirados: number; existentes: number; ignorados: number } | null>(null)
+  const [syncCursor, setSyncCursor] = useState<string | null>(null)
+  const { data: syncStatus, error: syncStatusError, mutate: atualizarSync } = useSWR<{
+    ativo: boolean; ultimaCopiaEm: string | null; estados: Record<string, number>; recentes: { id: string; estado: string; erro: string | null; concluidoEm: string | null }[]
+  }>("/api/admin/sync-drive", fetcher, { refreshInterval: dados => (dados?.estados?.pendente || dados?.estados?.executando) ? 15000 : 0 })
   if (empresa && !loaded) {
     // Mostrar URL completa da pasta se tiver ID salvo
     setFolderInput(
@@ -1285,6 +1289,9 @@ function TabGoogleDrive() {
         body: JSON.stringify({ googleDriveFolderId: folderId || null }),
       })
       if (!resposta.ok) throw new Error("Falha ao salvar")
+      setTestResult(null)
+      setSyncCursor(null)
+      setSyncResult(null)
       toast.success("Pasta do Drive salva!")
       mutate()
     } catch {
@@ -1339,10 +1346,10 @@ function TabGoogleDrive() {
                   setTesting(true)
                   setTestResult(null)
                   try {
-                    const res = await fetch("/api/auth/setup-drive/test", { method: "POST" })
+                    const res = await fetch("/api/auth/setup-drive/test")
                     const json = await res.json()
                     if (res.ok && json.ok) {
-                      setTestResult({ ok: true, msg: `✅ Conexão OK! Arquivo de teste criado: ${json.fileName}` })
+                      setTestResult({ ok: true, msg: `Pasta acessível em ${new Date(json.verificadoEm).toLocaleString("pt-BR")}. Nenhum arquivo criado.` })
                     } else {
                       setTestResult({ ok: false, msg: `❌ Erro: ${json.error ?? "Falha no teste"}` })
                     }
@@ -1356,7 +1363,7 @@ function TabGoogleDrive() {
                 className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50"
               >
                 {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Testar conexão
+                Verificar acesso à pasta
               </button>
             </div>
             {testResult && (
@@ -1410,7 +1417,7 @@ function TabGoogleDrive() {
           <input
             type="url"
             value={folderInput}
-            onChange={e => setFolderInput(e.target.value)}
+            onChange={e => { setFolderInput(e.target.value); setTestResult(null) }}
             placeholder="https://drive.google.com/drive/folders/1abc_ID_da_pasta"
             className="flex-1 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-800 text-zinc-200 placeholder-zinc-500"
           />
@@ -1434,10 +1441,9 @@ function TabGoogleDrive() {
         <div className="flex items-start gap-3 bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-4">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-emerald-400">Google Drive pronto para uso!</p>
+            <p className="text-sm font-semibold text-emerald-400">Conta e pasta configuradas</p>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Uploads de vídeos finais serão salvos automaticamente na pasta configurada.
-              Sem limite de 50 MB.
+              Verifique o acesso à pasta. Configuração salva não confirma que os vídeos já foram copiados.
             </p>
           </div>
         </div>
@@ -1463,8 +1469,8 @@ function TabGoogleDrive() {
             <Upload className="w-4 h-4 text-purple-400" /> Sincronizar Vídeos Existentes com Drive
           </h4>
           <p className="text-xs text-zinc-500 mt-1">
-            Envia todos os vídeos finalizados (no Supabase) para o Google Drive em lote.
-            O link da galeria permanece no Supabase — Drive é cópia de entrega.
+            Enfileira até 50 originais identificados por lote. A cópia segue as permissões da pasta de destino; o Flow não cria acesso público.
+            Original e prévia permanecem no Flow. Arquivos acima de 100 MiB precisam aguardar a ampliação do piloto.
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -1473,33 +1479,41 @@ function TabGoogleDrive() {
               setSyncing(true)
               setSyncResult(null)
               try {
-                const res = await fetch("/api/admin/sync-drive", { method: "POST" })
+                const res = await fetch("/api/admin/sync-drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(syncCursor ? { cursor: syncCursor } : {}) })
                 const json = await res.json()
                 if (!res.ok) throw new Error(json.error ?? "Erro ao sincronizar")
-                setSyncResult({ processados: json.processados, erros: json.erros })
-                toast.success(`✅ Sync concluído: ${json.processados} vídeo(s) enviado(s) ao Drive!`)
+                setSyncResult({ enfileirados: json.enfileirados, existentes: json.existentes, ignorados: json.ignorados })
+                setSyncCursor(json.proximoCursor)
+                await atualizarSync()
+                toast.success(`${json.enfileirados} cópia(s) enfileirada(s). Acompanhe a conclusão abaixo.`)
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : "Erro ao sincronizar")
               } finally {
                 setSyncing(false)
               }
             }}
-            disabled={syncing}
+            disabled={syncing || !syncStatus?.ativo}
             className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {syncing ? "Sincronizando…" : "📤 Sincronizar com Drive"}
+            {syncing ? "Enfileirando…" : syncCursor ? "Enfileirar próximo lote" : "Enfileirar cópias no Drive"}
           </button>
           {syncResult && (
-            <span className={`text-xs px-3 py-1.5 rounded-lg border ${syncResult.erros === 0 ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/30 border-amber-700/40 text-amber-400"}`}>
-              {syncResult.processados} enviado(s){syncResult.erros > 0 ? ` · ${syncResult.erros} erro(s)` : ""}
+            <span className="text-xs text-zinc-300" role="status">
+              {syncResult.enfileirados} na fila · {syncResult.existentes} já registrados · {syncResult.ignorados} sem identidade elegível
             </span>
           )}
         </div>
-        {syncing && (
-          <p className="text-xs text-zinc-500 animate-pulse">
-            Processando vídeos… pode demorar alguns minutos para arquivos grandes.
-          </p>
+        {syncStatusError && <p className="text-xs text-amber-400">Não foi possível consultar as cópias. Tente atualizar.</p>}
+        {syncStatus && (
+          <div className="text-xs text-zinc-400 space-y-2" aria-live="polite">
+            {!syncStatus.ativo && <p>Sincronização em homologação. A ativação desta empresa ainda está pendente.</p>}
+            <p>{syncStatus.estados?.concluido ?? 0} cópias verificadas · {syncStatus.estados?.pendente ?? 0} aguardando · {syncStatus.estados?.executando ?? 0} em andamento · {(syncStatus.estados?.falhou ?? 0) + (syncStatus.estados?.expirado ?? 0) + (syncStatus.estados?.cancelado ?? 0)} encerradas sem conclusão</p>
+            {syncStatus.ultimaCopiaEm && <p>Última cópia verificada: {new Date(syncStatus.ultimaCopiaEm).toLocaleString("pt-BR")}</p>}
+            {syncStatus.recentes?.some(c => c.erro) && <p className="text-amber-400">Há cópias que precisam de atenção. Detalhes abaixo.</p>}
+            {syncStatus.recentes?.filter(c => c.erro).map(c => <p key={c.id}>{c.erro === "reconectar_google" ? "Reconecte a conta Google." : c.erro === "permissao_google" || c.erro === "pasta_indisponivel" ? "Confira as permissões da pasta de destino." : c.erro === "original_acima_100_mib" ? "Original acima do limite de 100 MiB do piloto." : c.erro === "falha_temporaria" || c.erro === "google_http_429" ? "Falha temporária: nova tentativa conforme limite da fila." : "Cópia não concluída; revise a origem e a configuração do Drive."}</p>)}
+            <p>Enfileirar novamente não duplica cópias. Itens encerrados sem conclusão precisam de revisão antes de reprocessar.</p>
+          </div>
         )}
       </div>
 
