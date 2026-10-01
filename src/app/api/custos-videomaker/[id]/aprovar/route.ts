@@ -35,6 +35,8 @@ export async function POST(
 
   if (!custo || !pertenceAOrg(custo, organizacaoId)) return NextResponse.json({ error: "Custo não encontrado" }, { status: 404 })
 
+  if (custo.pago || custo.statusPagamento === "pago") return NextResponse.json({ error: "Pagamento já registrado ou em conflito. Confira o comprovante antes de alterar." }, { status: 409 })
+
   // ── Aprovar pagamento ──────────────────────────────────────────────────────
   if (acao === "aprovar_pagamento") {
     const fiscais = await fiscaisDaEmpresa(custo.videomakerId, organizacaoId)
@@ -47,10 +49,11 @@ export async function POST(
       )
     }
 
-    await prisma.custoVideomaker.update({
-      where: { id: custoId },
-      data: { statusPagamento: "aguardando_pagamento", emailFinanceiroAt: new Date() },
+    const mudou = await prisma.custoVideomaker.updateMany({
+      where: { id: custoId, organizacaoId, pago: false, statusPagamento: "nf_enviada" },
+      data: { statusPagamento: "aguardando_pagamento" },
     })
+    if (!mudou.count) return NextResponse.json({ error: "Aprovação exige nota fiscal recebida e pagamento ainda não aprovado." }, { status: 409 })
 
     const emailResult = await sendEmailFinanceiro({
       nomeVideomaker: custo.videomaker.nome,
@@ -63,6 +66,7 @@ export async function POST(
       custoId: custo.id,
     }, organizacaoId)
 
+    if (emailResult.ok) await prisma.custoVideomaker.updateMany({ where: { id: custoId, organizacaoId, statusPagamento: "aguardando_pagamento" }, data: { emailFinanceiroAt: new Date() } })
     return NextResponse.json({
       ok: true,
       emailEnviado: emailResult.ok,
@@ -74,10 +78,11 @@ export async function POST(
 
   // ── Contestar pagamento ────────────────────────────────────────────────────
   if (acao === "contestar") {
-    await prisma.custoVideomaker.update({
-      where: { id: custoId },
+    const mudou = await prisma.custoVideomaker.updateMany({
+      where: { id: custoId, organizacaoId, pago: false, statusPagamento: { not: "pago" } },
       data: { statusPagamento: "contestado" },
     })
+    if (!mudou.count) return NextResponse.json({ error: "Pagamento mudou. Atualize antes de contestar." }, { status: 409 })
     return NextResponse.json({ ok: true, mensagem: "Custo contestado com sucesso." })
   }
 

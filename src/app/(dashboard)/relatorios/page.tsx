@@ -12,7 +12,6 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  DollarSign,
   Film,
   Users,
   AlertTriangle,
@@ -66,9 +65,6 @@ interface Metricas {
     }[]
   }
   producao?: {
-    valorPorDemanda: number
-    producaoMes: number
-    producao30d: number
     demandasFinalizadasMes: number
     demandasFinalizadas30d: number
     videosEntreguesMes?: number
@@ -612,17 +608,7 @@ export default function RelatoriosPage() {
                   <KpiCard label="Concluídas" value={fmtNum(mRes?.producao?.demandasFinalizadasMes ?? 0)} atual={mRes?.producao?.demandasFinalizadasMes} anterior={mPrev?.producao?.demandasFinalizadasMes} />
                   <KpiCard label="Criadas" value={fmtNum(mRes?.demandas?.totalMes ?? 0)} atual={mRes?.demandas?.totalMes} anterior={mPrev?.demandas?.totalMes} />
                   <KpiCard label="Tempo médio" value={mRes?.demandas?.tempoMedioConclusao == null ? "Não medido" : `${mRes.demandas.tempoMedioConclusao}d`} atual={mRes?.demandas?.tempoMedioConclusao ?? undefined} anterior={mPrev?.demandas?.tempoMedioConclusao ?? undefined} inverter sub="menor é melhor" />
-                  {(() => {
-                    const valor = mRes?.producao?.valorPorDemanda ?? 200
-                    const totalAtual = mRes?.producao?.videosEntreguesMes ?? 0
-                    const totalAnt = mPrev?.producao?.videosEntreguesMes ?? 0
-                    return (
-                      <>
-                        <KpiCard label={`Referência/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
-                        <KpiCard label="Índice de produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
-                      </>
-                    )
-                  })()}
+
                 </div>
               </>
             )}
@@ -735,20 +721,7 @@ export default function RelatoriosPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MetricCard
-                icon={DollarSign}
-                label="Valor Produzido"
-                value={fmt(m?.producao?.producaoMes ?? 0)}
-                sub={`${m?.producao?.demandasFinalizadasMes ?? 0} demandas · R$${m?.producao?.valorPorDemanda ?? 200}/dem.`}
-                cor="green"
-              />
-              <MetricCard
-                icon={BarChart2}
-                label="Custo/Vídeo"
-                value={fmt(m?.producao?.valorPorDemanda ?? 200)}
-                sub="Índice de produtividade"
-                cor="blue"
-              />
+              <a href="/custos" className="p-4 border border-zinc-700 rounded-xl text-sm">Custos reais do setor →<p className="text-xs text-zinc-400 mt-2">Valores registrados por competência e pendências de conferência.</p></a>
               <MetricCard icon={Users} label="Videomakers" value={`${m?.videomakers.ativos ?? 0}/${m?.videomakers.total ?? 0}`} sub="Ativos / Total" cor="purple" />
               <MetricCard icon={Zap} label="Urgentes" value={fmtNum(m?.demandas.urgentes ?? 0)} sub={`${m?.demandas.aguardandoAprovacao ?? 0} aguardando aprovação`} cor={m && m.demandas.urgentes > 0 ? "amber" : "zinc"} />
             </div>

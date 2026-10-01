@@ -1017,6 +1017,9 @@ enum StatusPagamento {
 }
 
 model CustoVideomaker {
+  valorConfirmadoEm DateTime?
+  fatoOrigem String?
+  @@unique([organizacaoId, fatoOrigem])
   organizacaoId     String
   id                String          @id @default(cuid())
   videomakerId      String
@@ -2147,6 +2150,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  lancamentosSetor LancamentoSetor[]
   lotesAcervo LoteAcervo[]
   copiasDrive CopiaDrive[]
   politicaIA PoliticaIA?
@@ -2708,4 +2712,26 @@ model LimitePublico {
 
   @@index([janelaInicio])
   @@map("limites_publicos")
+}
+
+// Custos complementares. Externos permanecem exclusivamente em CustoVideomaker.
+model LancamentoSetor {
+  id String @id @default(cuid())
+  organizacaoId String
+  competencia String
+  categoria String
+  descricao String
+  valor Decimal? @db.Decimal(14, 2)
+  moeda String @default("BRL")
+  fonte String
+  chaveOrigem String
+  assinatura String
+  usuarioId String?
+  criadoPor String
+  canceladoEm DateTime?
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId, chaveOrigem])
+  @@index([organizacaoId, competencia])
+  @@map("lancamentos_setor")
 }

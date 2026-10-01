@@ -1,17 +1,17 @@
 # Controle da execução do Flow
 
-Última atualização: 01/10/2026 — bloco M04 implementado e ensaiado localmente: biblioteca, recuperação por lote, histórico e retenção sem exclusão. Sem deploy.
+Última atualização: 01/10/2026 — base financeira C02/C03 implementada e ensaiada localmente; aceite integral permanece pendente. Sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próximo bloco: C01–C03 (profissionais/contratos e custo do setor), em entrega coesa com checkpoints internos. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
+- Bloco atual: C01–C03. Base financeira C02/C03 entregue localmente; concluir contratos C01, alocação e revisão histórica antes do aceite integral. Ver C02-C03-BASE-LOCAL.md. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: biblioteca com filtros e estado de prévia; qualidade “sem referência final” integrada ao acervo; fila paginada com regra de 30 dias em Audiovisual/Growth; histórico sem data inventada; simulação/aplicação auditada por lote e retomada de relatórios. Originais, prévias, finais, custos e registros preservados.
-- Provas locais: 748 unitários, 353 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração aditiva ensaiada e schema sem divergência. Sem ensaio visual nem Storage real nesta etapa.
-- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das migrações; agora são 39.
+- Última implementação: livro complementar por competência, origem e auditoria; visão mensal do setor parcial e pendências; pagamentos coerentes e repetição protegida; bloqueio do retroativo inseguro e retirada de índices fictícios em reais. C01/contratos e rateio permanecem pendentes.
+- Provas locais: 761 unitários, 363 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração aditiva ensaiada e schema sem divergência. Sem ensaio visual nem operações externas nesta etapa.
+- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das migrações; agora são 40.
 - Progresso: 18/36 cartões técnicos implementados (50%); 18/38 incluindo publicação/piloto (47,4%). Percentual de implementação, não de prontidão para venda.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
@@ -48,8 +48,8 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | M03 | Sync Drive | 04 | M01, S04, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| C03 | Painel e conciliação | 05 | C02, R02, R03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| C02 | Competência e lançamento | 05 | C01, S03, S07 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
+| C03 | Painel e conciliação | 05 | C02, R02, R03 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | U02 | Próxima ação e quatro jobs | 06 | U01, C01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | U03 | Secretária delimitada | 06 | U02, O02, O03, O06, M01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -569,3 +569,14 @@ Base `5dcb7a4`. Entrega documentada em [M04-ACEITE-LOCAL.md](M04-ACEITE-LOCAL.md
 Recuperação antiga bloqueada: simular até 25 demandas, revisar, aplicar lote persistido com operador/hash/validade, transação serializável, auditoria e relatório antes/depois. Últimos lotes podem ser retomados. Não promove bruto, não publica e não apaga. Política explícita preserva original/prévia/final; sem promessa de economia de GB ou confirmação de arquivo remoto.
 
 Provas: 748 unitários, 353 integrações, 26 runtime + verificador, tipos/lint/auditores/build, diff de schema sem divergência. Migração somente em banco sintético. Permissões, versão de prévia, URLs inseguras, concorrência, expiração e dados alterados conferidos. Pendentes externos: revisão visual com equipe e homologação/publicação autorizada. Índice de entregáveis R04 continua em memória; inventário físico global/retenção destrutiva não foram declarados concluídos. Próximo bloco: C01–C03.
+
+
+### C02/C03 — 01/10/2026, base financeira e tela mensal
+
+Base aba3cfd. Escopo implementado e pendências em [C02-C03-BASE-LOCAL.md](C02-C03-BASE-LOCAL.md). Livro Decimal por competência, fonte, origem idempotente, imutabilidade e cancelamento auditado. RLS forçada/sem DELETE, valores desconhecidos explícitos e total parcial. Externos continuam em seu subregistro; novo lançamento com zero é confirmado, retry da tela não duplica, estados novos de pagamento são coerentes. Aprovação condicional impede reabrir pagamento já registrado. Retroativo baseado em diária atual é bloqueado. Custos/relatórios deixam de converter volume em R$ 200 ou sugerir “se pagou”.
+
+Tela inicial do setor simplificada, com detalhes recolhidos e carregamento das consultas de externos apenas quando essa aba é aberta. Não equivale ao novo visual integral: protótipo separado, U01 parcial e revisão visual ainda pendente. C01 não foi alterado. C02/C03 permanecem em execução até contrato/snapshot, alocação estruturada, lotes históricos e custo por unidade. Sem esses critérios, razão custo/entrega é null; não inventar média.
+
+Progresso permanece 18/36 cartões completos (50%), 18/38 com publicação/piloto (47,4%). Há avanço dentro de dois cartões, sem completar indevidamente seus aceites. Nenhuma publicação, migração em produção, comunicação externa ou análise paga por IA.
+
+Validação: 761 unitários, 363 integrações, 26 runtime + verificador de grants/RLS; tipos, build, auditores e schema diff aprovados. Lint sem erros, com avisos legados. Migração aplicada somente ao banco sintético local. Sem ensaio visual no navegador.
