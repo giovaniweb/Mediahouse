@@ -1,15 +1,15 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — sexto recorte M02: ensaio de container preparado, execução indisponível localmente; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — sétimo recorte M01/M02: classificador offline do inventário, sem exclusão; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: executar `node scripts/ensaio-midia/container.mjs` em ambiente com Docker/cgroup v2 e revisar relatório OOM/pico. Docker e Podman não estão disponíveis neste computador; job CI preparado, não executado remotamente. Inventário real de órfãos ainda não implementado; critérios somente leitura registrados no README do worker. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próxima etapa: executar `node scripts/ensaio-midia/container.mjs` em ambiente com Docker/cgroup v2 e revisar relatório OOM/pico. Docker e Podman não estão disponíveis neste computador; job CI preparado, não executado remotamente. Classificador offline de inventário implementado e testado; próximo avanço independente é o coletor paginado/consistente de referências e objetos. Coleta remota e inventário real ainda pendentes. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: harness Docker com recursos limitados e relatório de cgroup/OOM, imagem derivada de teste, allowlist do contexto Docker e job CI próprio. Sem alterar entrypoint de produção. Execução de container não validada por ausência do runtime local. Convivência legada protegida; produção não alterada, eventos em standby.
+- Última implementação: CLI offline de inventário com contrato validado, classificação conservadora e relatório sem permissão de exclusão; 12 testes específicos e exemplo sintético. Docker permanece indisponível localmente, sem validação de container. Convivência legada protegida; produção não alterada, eventos em standby.
 - Últimas provas locais desta etapa: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos/lint focados, auditores e build webpack; Next dev completo e navegador IAB com storage simulado aprovados. Última rodada worker: 20 testes. Docker, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
@@ -527,3 +527,12 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - M02/I01 não concluídos. Container real, crash do container/volume, memória sob carga e inventário remoto seguem pendentes. Sem publicação.
 
 - Validação local do preparo: 20 testes worker sequenciais aprovados, lint do script/sintaxe Node/diff aprovados. Sem Docker, launcher recusou execução (código 2); sem cgroup, runner recusou validação (código 1). Nenhum resultado de container inferido desses checks.
+
+
+### M01/M02 — 30/09/2026, sétimo recorte: classificador offline de inventário
+
+- Docker/Podman continuam indisponíveis no PATH; não atribuir aprovação de container. Avanço independente no cruzamento de objetos/referências/jobs via snapshot JSON local, sem rede nem .env.
+- CLI gera relatório novo 0600 com classes preservar/inconclusivo/fora_escopo/revisar e contagens/bytes. Não sobrescreve entrada/saída, não exclui nada, não estima economia. Rejeita URL assinada, campos desconhecidos, nomes ambíguos e referências inconsistentes de arquivo/job.
+- Preserva referência de original/publicação/aprovação/link e job ativo; coleta incompleta/recibos não conciliados impedem candidatura. Carência explícita e encerramento real exigidos. As evidências de completude são declaradas no snapshot, não verificadas pelo classificador. Coletor real ainda não implementado.
+- 12 testes passaram, incluindo execução do CLI e proteção contra sobrescrita; contrato/exemplo/comando documentados. CI executará essa suíte, sem execução remota nesta etapa.
+- Próximo: coleta paginada e consistente, inicialmente em fixtures, com falhas tornando resultado inconclusivo. M01/M02 parciais; inventário do acervo, política de retenção e qualquer exclusão permanecem fora deste recorte. Sem deploy.

@@ -103,9 +103,9 @@ O script constrói a imagem atual do worker e uma imagem derivada de ensaio com 
 
 Job `worker-container` adicionado ao CI, separado dos testes locais já existentes. Não prova crash do container inteiro, persistência de volume após recriação, entrada 4K/8K/10 minutos, carga de produção ou Railway. O entrypoint de produção e a ativação do piloto permanecem inalterados.
 
-## Critérios para futuro inventário de órfãos (somente leitura)
+## Critérios de inventário de órfãos (somente leitura)
 
-Não há exclusão remota automática nem inventário real executado. A análise deverá ser restrita ao bucket privado e ao padrão de **prévias v2**, com organização conferida no banco; nunca tratar ausência de vínculo na amostra como prova de ausência no acervo.
+Há classificador offline de snapshots (abaixo); não há coletor remoto, exclusão automática nem inventário real executado. A análise deverá ser restrita ao bucket privado e ao padrão de **prévias v2**, com organização conferida no banco; nunca tratar ausência de vínculo na amostra como prova de ausência no acervo.
 
 | Situação encontrada | Classificação conservadora |
 | --- | --- |
@@ -115,3 +115,18 @@ Não há exclusão remota automática nem inventário real executado. A análise
 | Tentativa antiga sem referências em inventário completo e consistente | Candidato à revisão humana; não equivale a autorização para excluir |
 
 O relatório deverá registrar empresa, bucket/chave, versão, job/tentativa, bytes, datas observadas e motivos, sem guardar URLs assinadas. Requer paginação completa tanto no storage quanto no banco e evidência de que não houve mudanças relevantes durante a análise. Falha em qualquer página torna o inventário inconclusivo. Antes de uma futura exclusão, serão necessárias política de retenção/carência aprovada, consideração do maior TTL de assinatura, nova conferência dos vínculos e lote auditável. Limpar um recibo local obsoleto não autoriza apagar o objeto remoto.
+
+## Relatório offline de inventário — primeiro recorte
+
+```sh
+npm run midia:inventario -- snapshot.json relatorio.json
+npm run test:inventario
+```
+
+Contrato v1 em `scripts/lib/inventario-midia.mjs` e exemplo inteiramente sintético em `docs/execucao-flow/2026-09-26/inventario-exemplo-sintetico.json`. A entrada contém organização, instante observado, carência explícita (mínimo técnico de 24 h, não política de retenção aprovada), objetos com bytes/datas, referências canônicas, vínculos de arquivos e jobs de conversão. `encerradoEm` deve vir do `finishedAt` do job, nunca da data de exportação. O CLI lê JSON local de até 32 MiB, recusa campos desconhecidos/URLs assinadas e gera arquivo novo com permissão 0600; não sobrescreve arquivos e não conecta a provedores/banco.
+
+As cinco evidências de coleta completa/consistente e recibos conciliados são **declarações da origem do snapshot**. O classificador não prova essas condições. O coletor futuro deverá produzi-las com paginação, consistência e reconciliação verificáveis; exportação parcial deve marcá-las como falsas. Não usar o exemplo como evidência sobre dados reais.
+
+Saída: `preservar`, `inconclusivo`, `fora_escopo` ou `revisar`, com motivo e contagem/bytes por classe. Bytes são strings decimais para evitar perda de precisão na soma; duplicatas de objetos não são somadas duas vezes e ficam inconclusivas. Totais não representam espaço recuperável. `autorizaExclusao` é sempre falso. Arquivo ausente, job desconhecido/ambíguo, lease ainda registrado, data futura ou ausência de encerramento impedem revisão como candidato. Nomes de jobs com hífens são conferidos contra o snapshot, não adivinhados.
+
+Doze testes incluem referências de publicação/aprovação, organização divergente, coleta incompleta, job ativo, carência, duplicatas, ambiguidade, rejeição de tokens e execução real do CLI sem sobrescrita. A coleta automática e a interface administrativa continuam pendentes.

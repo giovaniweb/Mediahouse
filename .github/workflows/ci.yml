@@ -83,6 +83,9 @@ jobs:
       - name: Testes unitários
         run: npm test
 
+      - name: Inventário offline de mídia sem exclusão
+        run: npm run test:inventario
+
       # Impede a 59ª rota sem escopo de organização. A allowlist em
       # scripts/tenancy-allowlist.json guarda a dívida conhecida e só encolhe.
       - name: Isolamento multiempresa (auditor estático)

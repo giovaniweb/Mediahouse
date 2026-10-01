@@ -122,3 +122,8 @@ Ensaio encerrado e limpo. Produção/container/provedor real ainda não homologa
 Ensaio de Docker preparado com limite real de memória/CPU/processos, runner que reprova OOM e job de CI. Docker/Podman ausentes localmente: execução explicitamente não validada, nenhum pico de container disponível. Critérios de inventário de órfãos documentados, sem implementar ou executar exclusão.
 
 Próxima evidência depende de executar o harness em Docker/cgroup v2; crash completo/volume e inventário remoto permanecem pendentes. M02 parcial.
+
+
+## Evidência de execução — 30/09/2026, sétimo recorte M01/M02
+
+Classificador offline de snapshot de inventário implementado, com relatório conservador por organização, referências, jobs e carência. 12 testes aprovados; CLI sem rede, sem sobrescrita e sem exclusão. Exemplo sintético e contrato no README do worker. Evidências de completude são declaradas pela origem; coletor automático ainda pendente. Docker continua indisponível, nenhuma validação de container presumida. M01/M02 parciais.
