@@ -4,7 +4,7 @@
 
 ## Checkpoint de retomada
 
-- Visual: por orientação de 01/10, as próximas melhorias devem usar o padrão aprovado do protótipo. Custos, Relatórios e Configurações já têm ManagementSurface integrada; não voltar ao visual antigo nesses fluxos. Navegação global e demais páginas ainda exigem migração seletiva. Ver U01-VISUAL-GESTAO.md.
+- Prioridade confirmada em 01/10: simplificar os fluxos e fechar sua funcionalidade antes de expandir o novo visual. Preservar ManagementSurface já integrada em Custos/Relatórios/Configurações; aplicar o padrão aprovado às demais telas quando sua estrutura estiver consolidada. Esta decisão substitui a obrigação anterior de migrar o visual junto de toda melhoria.
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
 - Bloco atual: C01–C03. Base financeira C02/C03 entregue localmente; concluir contratos C01, alocação e revisão histórica antes do aceite integral. Ver C02-C03-BASE-LOCAL.md. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
@@ -587,3 +587,23 @@ Validação: 761 unitários, 363 integrações, 26 runtime + verificador de gran
 Orientação explícita do usuário: fazer as melhorias com o visual novo. Custos, Relatórios e Configurações agora usam a linguagem do protótipo aprovado, com base compartilhada e fontes locais, sem importar regras antigas do protótipo. Detalhes em [U01-VISUAL-GESTAO.md](U01-VISUAL-GESTAO.md). Navegação global/demais módulos permanecem pendentes; U01 não concluída por esta entrega.
 
 Tipos, build, 761 unitários e lint sem erros aprovados. Ensaio no Next completo com usuário/dados fictícios: custos, formulário/teclado, parâmetros e relatórios; layout amplo e estreito conferidos. Prévia local preservada para revisão, sem publicação. Progresso de cartões completos permanece 18/36.
+
+
+### U01 — 01/10/2026, simplificação de Demandas/Growth e projeção restante
+
+Kanban e Lista são as duas visões disponíveis. Tabela e modal de importação retirados dos dois fluxos e seus componentes removidos. Preferência antiga `tabela` migra para Kanban; localStorage indisponível não impede navegação. Rota antiga de importação retorna 410 depois de autenticação/contexto, sem ler arquivo ou gravar demanda. Criação individual, paginação e histórico preservados. Tipos, 769 unitários, lint sem erros, auditor de tenancy e build aprovados. U01 permanece parcial, sem aumentar o percentual por remover apenas uma parte do seu escopo.
+
+Recontagem do plano: 38 cartões = 18 implementados +9 em execução +11 a fazer. Restam 20 aceites, dos quais 18 técnicos e 2 operacionais (L02/L03). Etapas têm tamanhos diferentes; 47,4% dos cartões do plano não é medição de horas nem prontidão comercial. Cartões implementados ainda têm homologações externas identificadas.
+
+Agrupamento do restante para entregas maiores (não substitui dependências individuais):
+
+| Bloco | Cartões restantes | Quantidade |
+| --- | --- | --- |
+| Fundação e segurança | F01, S01, S02, S03 | 4 |
+| Integrações e mídia | O06, M01; homologações externas dos já implementados | 2 |
+| Contratos e financeiro | C01, C02, C03 | 3 |
+| Simplificação dos fluxos e experiência | U01–U07 | 7 |
+| Infraestrutura e ensaio completo | I01, L01 | 2 |
+| Publicação e piloto | L02, L03 | 2 |
+
+Reserva inicial de planejamento: 2–4 semanas de trabalho e validação regulares, sujeita a revisão. Não deriva de velocidade medida e não é compromisso de conclusão. Acesso às contas de homologação, credenciais válidas, revisão de dados legados e disponibilidade da equipe para o piloto podem ampliar esse intervalo. Não prometer 100% com apenas testes locais ou computador ligado; publicação/uso real precisam dos respectivos aceites. Eventos continuam em standby. Próximo bloco funcional principal: C01 e complementos C02/C03.
