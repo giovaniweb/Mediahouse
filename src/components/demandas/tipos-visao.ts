@@ -1,10 +1,4 @@
-// Tipos e regras compartilhados pelas duas visões do quadro (Kanban, Lista e
-// Tabela).
-//
-// Por que três: o time trabalha de três jeitos e o sistema só oferecia um. Quem
-// se organiza em planilha por semana precisa de tabela; quem vem de Trello/ClickUp
-// prefere lista agrupada; quem já se acostumou com o quadro fica no kanban. É a
-// mesma consulta e o mesmo conjunto de dados — muda só o desenho.
+// Regras compartilhadas por Kanban e Lista.
 
 import { estaAtrasada, diasDeAtraso, venceHoje } from "@/lib/status"
 

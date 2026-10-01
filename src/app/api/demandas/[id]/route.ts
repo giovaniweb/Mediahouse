@@ -1,10 +1,13 @@
+import { emitirConvite, ConviteInvalido } from "@/lib/convites"
+import { requireAcesso } from "@/lib/acesso"
 import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { marcadorConclusao } from "@/lib/job-transicoes"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
-import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
+import { registrarServicoPendente } from "@/lib/custo-servico"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
@@ -12,7 +15,7 @@ import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
-import { validarPrazo, mesmoDia, formatarData, formatarDataCurta } from "@/lib/datas"
+import { validarPrazo, mesmoDia, formatarDataCurta } from "@/lib/datas"
 import { erroDeCampo } from "@/lib/erros-api"
 import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } from "@/lib/historico"
 import type { Session } from "next-auth"
@@ -144,6 +147,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
   const body = await req.json()
+  if (body.videomakerId !== undefined) {
+    const acesso = await requireAcesso("editarDemanda")
+    if (acesso instanceof NextResponse) return acesso
+    if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({error:"Apenas a gestão pode atribuir profissionais"},{status:403})
+  }
 
   // A edição inline é a porta por onde as datas absurdas entraram (há prazos
   // gravados no ano 0026 e no ano 0001). O prazo só é checado quando MUDA: senão
@@ -207,39 +215,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Quando finalizar → auto-criar custo se videomaker externo
     if (body.statusVisivel === "finalizado" && demandaAtual?.videomakerId) {
       try {
-        const jaExiste = await prisma.custoVideomaker.findFirst({
-          where: { demandaId: id, videomakerId: demandaAtual.videomakerId },
-        })
-        if (!jaExiste) {
-          const demandaFull = await prisma.demanda.findUnique({
-            where: { id },
-            select: { codigo: true, titulo: true },
-          })
-          // Terceiro lugar do sistema que cria custo, e o terceiro que lia a
-          // diária do perfil global. Ela é do vínculo desta empresa; sem valor
-          // combinado o custo entra zerado, mas avisando em vez de calado.
-          const valor = await diariaDaEmpresa(demandaAtual.videomakerId, guard.organizacaoId)
-          if (valor === null) {
-            console.warn(
-              `[Demanda] ${demandaFull?.codigo}: sem diária no vínculo do VM ${demandaAtual.videomakerId} ` +
-                `com a org ${guard.organizacaoId} — custo criado zerado, precisa de valor manual.`
-            )
-          }
-
-          await prisma.custoVideomaker.create({
-            data: {
-              organizacaoId: guard.organizacaoId,
-              videomakerId: demandaAtual.videomakerId,
-              demandaId: id,
-              tipo: "projeto",
-              valor: valor ?? 0,
-              descricao: `Serviço: ${demandaFull?.codigo} — ${demandaFull?.titulo}`,
-              dataReferencia: new Date(),
-              pago: false,
-              statusPagamento: "pendente_nf",
-            },
-          })
-        }
+        await registrarServicoPendente(prisma, guard.organizacaoId, id, demandaAtual.videomakerId)
       } catch (e) {
         console.error("Erro ao auto-criar custo:", e)
       }
@@ -453,74 +429,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   if (body.videomakerId !== undefined) {
     videomakeridAnterior = demandaAntes?.videomakerId
-
-    // Se mudou o videomaker, notificar o NOVO videomaker via WhatsApp
-    if (body.videomakerId && body.videomakerId !== videomakeridAnterior) {
-      const novoVm = await prisma.videomaker.findUnique({
-        where: { id: body.videomakerId },
-        select: { nome: true, telefone: true },
-      })
-      if (novoVm?.telefone && demandaAntes) {
-        const dataFmt = formatarData(body.dataCaptacao ?? demandaAntes.dataCaptacao) || "A confirmar"
-
-        const isCobertura = demandaAntes.tipoVideo?.toLowerCase().includes("cobertura")
-
-        // Criar ConviteVideomaker com token (validade 72h) para confirmação via link
-        let conviteLink: string | undefined
-        try {
-          const convite = await prisma.conviteVideomaker.create({
-            data: {
-              demandaId: id,
-              videomakerId: body.videomakerId,
-              expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
-            },
-          })
-          const baseUrl = process.env.NEXTAUTH_URL ?? "https://nuflow.space"
-          conviteLink = `${baseUrl}/convite/${convite.token}`
-        } catch (e) {
-          console.error("[Convite] Erro ao criar convite:", e)
-        }
-
-        // Fixa o telefone num const: dentro do closure o TypeScript não mantém
-        // o narrowing do `if (novoVm.telefone)` de fora.
-        const telVm = novoVm.telefone
-        if (isCobertura) {
-          // Template rico para cobertura — inclui local, cidade, descrição, pagamento e link
-          const local = body.localGravacao || demandaAntes.localGravacao || "A confirmar"
-          const cidade = body.cidade || demandaAntes.cidade || ""
-          const descricao = body.descricao || demandaAntes.descricao || null
-          emSegundoPlano(() => sendWhatsappMessage(
-            telVm,
-            templates.coberturaConfirmacao(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, dataFmt, local, cidade, descricao, conviteLink),
-            id
-          ), "wa-videomaker-atribuido")
-        } else {
-          // Demandas normais: template padrão com link
-          emSegundoPlano(() => sendWhatsappMessage(
-            telVm,
-            templates.videomakertNotificado(demandaAntes.codigo, demandaAntes.titulo, dataFmt, conviteLink),
-            id
-          ), "wa-videomaker-atribuido")
-        }
-        // Sempre mudar status para "videomaker_notificado" quando VM é atribuído e notificado
-        // (seja cobertura ou demanda normal) — permite que o SIM/NÃO via WhatsApp ainda funcione como fallback
-        autoStatusVideomakerNotificado = true
-
-        // Notificar solicitante que um profissional foi selecionado
-        const telSolicitante = demandaAntes.telefoneSolicitante || demandaAntes.solicitante?.telefone
-        if (telSolicitante) {
-          // Formata o telefone do VM para exibir ao solicitante (ex: (31) 99999-9999)
-          const telVmFmt = novoVm.telefone
-            ? novoVm.telefone.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")
-            : undefined
-          emSegundoPlano(() => sendWhatsappMessage(
-            telSolicitante,
-            templates.profissionalSelecionadoSolicitante(novoVm.nome, demandaAntes.codigo, demandaAntes.titulo, telVmFmt),
-            id
-          ), "wa-solicitante-profissional")
-        }
-      }
-    }
+    autoStatusVideomakerNotificado = Boolean(body.videomakerId && body.videomakerId !== videomakeridAnterior)
   }
 
   // Detectar mudança de editorId para notificação WhatsApp
@@ -621,6 +530,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // Cobertura com novo videomaker → mudar status para aguardando confirmação
   if (autoStatusVideomakerNotificado) {
     updateData.statusInterno = "videomaker_notificado"
+    updateData.statusVisivel = STATUS_PARA_COLUNA.videomaker_notificado
   }
 
   // Estado anterior, lido antes de gravar: é o que permite dizer O QUE mudou, e
@@ -631,7 +541,24 @@ export async function PUT(req: NextRequest, { params }: Params) {
     include: { responsaveis: { select: { usuario: { select: { id: true, nome: true } } } } },
   })
 
-  const demanda = await prisma.demanda.update({ where: { id }, data: updateData })
+  let demanda
+  try {
+    demanda = await prisma.$transaction(async tx => {
+      // Atribuição, invalidação dos links antigos e novo aviso durável são um commit.
+      if (body.videomakerId !== undefined) {
+        await tx.$queryRaw`SELECT id FROM demandas WHERE id=${id} AND "organizacaoId"=${guard.organizacaoId} FOR UPDATE`
+        const atual = await tx.demanda.findUniqueOrThrow({where:{id,organizacaoId:guard.organizacaoId}})
+        if(atual.updatedAt.getTime()!==antesDaEdicao?.updatedAt.getTime()) throw new ConviteInvalido("O job mudou. Atualize a página antes de atribuir.")
+        if(atual.videomakerId!==body.videomakerId) await tx.conviteVideomaker.updateMany({where:{demandaId:id,status:"pendente"},data:{status:"substituido"}})
+      }
+      const d = await tx.demanda.update({ where: { id }, data: updateData })
+      if(autoStatusVideomakerNotificado) await emitirConvite(tx,{organizacaoId:guard.organizacaoId,usuarioId:session.user.id},id,body.videomakerId)
+      return d
+    })
+  } catch(e) {
+    if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
+    throw e
+  }
 
   // Responsáveis: vale tanto para `responsavelId` (singular) quanto para
   // `responsavelIds[]` — antes só o array reconstruía a M2M, e a edição inline

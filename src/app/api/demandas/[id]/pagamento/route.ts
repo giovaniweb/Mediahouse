@@ -100,22 +100,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { notaFiscalUrl, statusPagamento: "nf_enviada" },
       })
     } else {
-      // Diária vem do vínculo desta empresa — mesma regra do custo criado ao
-      // finalizar a demanda. Sem valor combinado, entra zerado mas avisando.
-      const diaria = await diariaDaEmpresa(demanda.videomakerId!, organizacaoId)
-      if (diaria === null) {
-        console.warn(
-          `[Pagamento] ${demanda.codigo}: sem diária no vínculo do VM ${demanda.videomakerId} ` +
-            `com a org ${organizacaoId} — custo criado zerado, precisa de valor manual.`
-        )
-      }
+      // O envio de NF não comprova que houve exatamente uma diária.
+      // O financeiro confirma o total; não usar a tarifa atual do cadastro.
       custo = await prisma.custoVideomaker.create({
         data: {
           organizacaoId,
           videomakerId: demanda.videomakerId!,
           demandaId: id,
           tipo: "diaria",
-          valor: diaria ?? 0,
+          valor: 0,
+          valorConfirmadoEm: null,
           dataReferencia: new Date(),
           notaFiscalUrl,
           statusPagamento: "nf_enviada",

@@ -1,3 +1,4 @@
+import { ConviteInvalido, responderConvite } from "@/lib/convites"
 import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
@@ -12,7 +13,7 @@ import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
-import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
+import { registrarServicoPendente } from "@/lib/custo-servico"
 import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { StatusInterno } from "@prisma/client"
@@ -111,6 +112,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Precondição continua 400 (é dado que falta); autoridade é 403.
     const http = veredito.codigo === "precondicao" || veredito.codigo === "status_inexistente" ? 400 : 403
     return NextResponse.json({ error: veredito.motivo }, { status: http })
+  }
+
+  // Quando há convite formal, a ação do job usa o mesmo aceite do link e WhatsApp.
+  if (["videomaker_aceitou", "videomaker_recusou"].includes(statusInterno) && demandaAtual.videomakerId && !veredito.noop) {
+    try {
+      const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+        const convites = await tx.conviteVideomaker.findMany({where:{demandaId:id,videomakerId:demandaAtual.videomakerId!,status:"pendente",demanda:{organizacaoId}},take:2})
+        if (!convites.length) {
+          if(await tx.conviteVideomaker.count({where:{demandaId:id,videomakerId:demandaAtual.videomakerId!,demanda:{organizacaoId}}})) throw new ConviteInvalido("Nenhum convite pendente. Solicite um novo convite à equipe.")
+          return null // Legados sem convite: transição operacional abaixo.
+        }
+        if (convites.length!==1) throw new ConviteInvalido("Há mais de um convite. Responda pelo link do convite correto.")
+        await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:demandaAtual.videomakerId!,
+          usuarioId:session.user.id,acao:statusInterno==="videomaker_aceitou" ? "aceitar" : "recusar",origem:"manual"})
+        return tx.demanda.findUniqueOrThrow({where:{id,organizacaoId}})
+      }))
+      if(resultado) return NextResponse.json(resultado)
+    } catch(e) {
+      if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
+      throw e
+    }
   }
 
   // Telemetria da sequência: é assim que se descobre qual é a matriz verdadeira
@@ -327,43 +349,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // ── Auto-criar CustoVideomaker ao finalizar ───────────────────────────────
     if (novoStatusVisivel === "finalizado" && demandaAtual.videomakerId) {
-      emSegundoPlano(async () => {
-        try {
-          const jaExiste = await prisma.custoVideomaker.findFirst({
-            where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
-          })
-          if (!jaExiste) {
-            // A diária vem do vínculo DESTA empresa, nunca do perfil global — o
-            // global é da rede inteira e não vale para dinheiro. Sem vínculo ou
-            // sem valor combinado, o custo entra zerado para aparecer na tela de
-            // pagamento e alguém preencher; o aviso abaixo é o que impede isso
-            // de passar em silêncio, como passava antes.
-            const diaria = await diariaDaEmpresa(demandaAtual.videomakerId!, organizacaoId)
-            if (diaria === null) {
-              console.warn(
-                `[Status] ${demandaAtual.codigo}: sem diária no vínculo do VM ${demandaAtual.videomakerId} ` +
-                  `com a org ${organizacaoId} — custo lançado zerado, precisa de valor manual.`
-              )
-            }
-            await prisma.custoVideomaker.create({
-              data: {
-                organizacaoId,
-                videomakerId: demandaAtual.videomakerId!,
-                demandaId: id,
-                tipo: "projeto",
-                valor: diaria ?? 0,
-                descricao: `Serviço: ${demandaAtual.codigo} — ${demandaAtual.titulo}`,
-                dataReferencia: new Date(),
-                pago: false,
-                statusPagamento: "pendente_nf",
-              },
-            })
-            console.info(`[Status] Custo auto-criado para ${demandaAtual.codigo} — VM ${demandaAtual.videomakerId}`)
-          }
-        } catch (e) {
-          console.error("[Status] Erro ao auto-criar custo:", e)
-        }
-      }, "custo-videomaker")
+      await registrarServicoPendente(prisma, organizacaoId, id, demandaAtual.videomakerId)
     }
 
     // ── Notificações WhatsApp: rodam DEPOIS da resposta, mas com a função viva.

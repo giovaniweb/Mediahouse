@@ -1,86 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { z, ZodError } from "zod"
+import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
-import { getWhatsappConfig } from "@/lib/whatsapp"
-
-// POST /api/convites — criar convite para videomaker
+import { comOrg } from "@/lib/org-contexto"
+import { ConviteInvalido, emitirConvite } from "@/lib/convites"
+const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
+const entrada = z.object({ demandaId: z.string().min(1).max(128), videomakerId: z.string().min(1).max(128) }).strict()
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  const { demandaId, videomakerId } = await req.json()
-  if (!demandaId || !videomakerId) {
-    return NextResponse.json({ error: "demandaId e videomakerId obrigatórios" }, { status: 400 })
+  const acesso = await requireAcesso("editarDemanda")
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return resposta({ error: "Apenas a gestão pode administrar convites" }, 403)
+  try {
+    const e = entrada.parse(await req.json())
+    const convite = await comOrg(acesso.organizacaoId, () => prisma.$transaction(tx => emitirConvite(tx, acesso, e.demandaId, e.videomakerId)))
+    return resposta({ id: convite.id, token: convite.token, status: convite.status, expiresAt: convite.expiresAt }, 201)
+  } catch (e) {
+    if (e instanceof ConviteInvalido) return resposta({ error: e.message }, e.status)
+    if (e instanceof ZodError || e instanceof SyntaxError) return resposta({ error: "Informe demanda e profissional válidos" }, 400)
+    throw e
   }
-
-  // Verificar se já existe convite pendente
-  const existente = await prisma.conviteVideomaker.findFirst({
-    where: { demandaId, videomakerId, status: "pendente" },
-  })
-  if (existente) {
-    return NextResponse.json({ error: "Já existe convite pendente", convite: existente }, { status: 409 })
-  }
-
-  const convite = await prisma.conviteVideomaker.create({
-    data: {
-      demandaId,
-      videomakerId,
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h
-    },
-    include: {
-      videomaker: { select: { nome: true, telefone: true } },
-      demanda: { select: { codigo: true, titulo: true } },
-    },
-  })
-
-  // Enviar notificação WhatsApp ao videomaker
-  const vm = convite.videomaker
-  if (vm.telefone) {
-    const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
-    const link = `${baseUrl}/convite/${convite.token}`
-
-    try {
-      const demOrg = await prisma.demanda.findUnique({ where: { id: convite.demandaId }, select: { organizacaoId: true } })
-      const configWpp = await getWhatsappConfig(demOrg?.organizacaoId)
-      if (configWpp) {
-        const phone = vm.telefone.replace(/\D/g, "")
-        await fetch(`${configWpp.instanceUrl}/message/sendText/${configWpp.instanceId}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: configWpp.apiKey,
-          },
-          body: JSON.stringify({
-            number: phone,
-            text: `Oi ${vm.nome}! Voce foi convidado para a demanda *${convite.demanda.codigo} - ${convite.demanda.titulo}*.\n\nAcesse o link abaixo para aceitar ou recusar:\n${link}\n\nO convite expira em 48h.`,
-          }),
-        })
-      }
-    } catch (e) {
-      console.error("Erro ao enviar WhatsApp de convite:", e)
-    }
-  }
-
-  return NextResponse.json(convite, { status: 201 })
 }
-
-// GET /api/convites?demandaId=xxx — listar convites de uma demanda
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
+  const acesso = await requireAcesso("editarDemanda")
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return resposta({ error: "Apenas a gestão pode administrar convites" }, 403)
   const demandaId = req.nextUrl.searchParams.get("demandaId")
-  if (!demandaId) {
-    return NextResponse.json({ error: "demandaId obrigatório" }, { status: 400 })
-  }
-
-  const convites = await prisma.conviteVideomaker.findMany({
-    where: { demandaId },
-    include: {
-      videomaker: { select: { nome: true, telefone: true } },
-    },
-    orderBy: { createdAt: "desc" },
+  if (!demandaId || demandaId.length > 128) return resposta({ error: "Demanda inválida" }, 400)
+  return comOrg(acesso.organizacaoId, async () => {
+    if (!await prisma.demanda.findFirst({ where: { id: demandaId, organizacaoId: acesso.organizacaoId }, select: { id: true } })) return resposta({ error: "Demanda não encontrada" }, 404)
+    return resposta(await prisma.conviteVideomaker.findMany({
+      where: { demandaId, demanda: { organizacaoId: acesso.organizacaoId } },
+      select: { id: true, status: true, createdAt: true, expiresAt: true, respondidoEm: true, videomaker: { select: { id: true, nome: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 100,
+    }))
   })
-
-  return NextResponse.json(convites)
 }

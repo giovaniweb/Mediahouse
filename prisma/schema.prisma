@@ -1525,6 +1525,11 @@ model ConviteVideomaker {
   expiresAt    DateTime
   createdAt    DateTime  @default(now())
 
+  // Condição oferecida, congelada na emissão; legado permanece desconhecido.
+  versao       Int       @default(1)
+  tarifaDiaria Decimal?  @db.Decimal(14, 2)
+  condicoes    String?   @db.Text
+
   demanda    Demanda    @relation(fields: [demandaId], references: [id], onDelete: Cascade)
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
 
