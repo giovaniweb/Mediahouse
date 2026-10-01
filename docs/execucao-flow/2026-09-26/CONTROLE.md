@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — quarto recorte M02: supervisor de subprocessos e primeira amostragem de memória; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — quinto recorte M02: Next completo, reprodução no navegador e contexto RLS entre bundles; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: processo Next completo com login restrito + navegador; depois Docker/limites de memória sob carga. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próxima etapa: Docker/limites de memória sob carga e política de reconciliação de órfãos. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: supervisor separado para ffmpeg/ffprobe, que encerra o filho ao perder conexão IPC com o worker, inclusive em SIGKILL. Primeiro ensaio de RSS e retomada após queda durante conversão. Convivência legada protegida; produção não alterada, eventos em standby.
-- Últimas provas locais desta etapa: 20 testes worker e 13 integrações focadas de mídia aprovados; checagem de sintaxe Node e diff. Rodada anterior completa: 323 integrações (25 arquivos), tipos e lint dos arquivos de teste aprovados. Rodada anterior: 717 unitários do app, 26 runtime/RLS + verificador, auditores/build. Ensaio novo faz HEAD HTTP real em storage simulado; Docker, Next completo/navegador, provedores e CI remoto pendentes.
+- Última implementação: contexto AsyncLocalStorage compartilhado no processo entre bundles Next, alinhado ao Prisma compartilhado; corrige 404 indevido da prévia com token válido. Harness Next/SDK/worker com logins restritos e storage simulado. Convivência legada protegida; produção não alterada, eventos em standby.
+- Últimas provas locais desta etapa: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos/lint focados, auditores e build webpack; Next dev completo e navegador IAB com storage simulado aprovados. Última rodada worker: 20 testes. Docker, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -504,3 +504,15 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - RSS local amostrado: 294 MiB para worker+supervisor+conversor, 13 amostras com intervalo mínimo de 25 ms. Não é teto de memória, cgroup, teste de 4K/8K ou dimensionamento de Railway.
 - Next completo/navegador, runtime restrito no mesmo fluxo, container/Docker, queda simultânea do supervisor, memória sob carga, URLs assinadas expiradas e coleta remota seguem pendentes. Roteiro da próxima prova no README do worker.
 - M02 continua parcial. 15/36 cartões técnicos (41,7%); nenhum deploy ou ajuste externo.
+
+
+### M02/S07 — 30/09/2026, quinto recorte: Next completo e navegador
+
+- `scripts/ensaio-midia/next-local.mjs`: Next dev webpack real, dois logins descartáveis app_user/app_auth sem bypass, RLS ativo, SDK Supabase real contra servidor loopback que simula assinatura/storage privado e Range. Bootstrap administrativo apenas das fixtures; aplicação não recebe conexão administrativa. Recusa arquivos .env de desenvolvimento e limita fetch a loopback.
+- Vídeo sintético MOV/HEVC com áudio, 640×360, 24 fps, 6 segundos, convertido pelo worker real. Fonte preservada, um upload e checksum conferido. Testa ausência de token, token de outra demanda, revogação e expiração acelerada de assinatura no simulador.
+- Encontrado 404 indevido no token válido: bundles distintos tinham cópias de AsyncLocalStorage, enquanto Prisma era compartilhado no processo. Contexto agora é singleton global; dados continuam isolados por execução assíncrona. Teste de regressão recarrega módulos e intercala empresas/contexto nulo/aninhado.
+- Navegador IAB: metadados 640×360/6 s/sem erro; seek a 3 s e reprodução até ended em 6 s. Página real `/d/token` exibiu Material final; URL do card abriu vídeo nativo com mesmos metadados. Player de medição pertence ao harness, não é nova interface do produto. Três requisições Range observadas.
+- Revogação impede novas assinaturas; URL emitida antes continuou válida até sua expiração simulada. Não prometer revogação instantânea de URLs já emitidas. Assinatura real Supabase, produção/Railway e outros navegadores ainda pendentes.
+- Processos do ensaio encerrados, fixtures/roles/diretório temporário removidos. Nenhum deploy ou uso de acervo real. M02 continua parcial; 15/36 cartões técnicos concluídos (41,7%).
+
+- Regressão aprovada: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos, lint focado, auditores e build webpack. Build mantém aviso preexistente de dependência dinâmica face-api.

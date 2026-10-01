@@ -63,7 +63,7 @@ npm test --prefix worker-transcode
 
 Suíte do app: integração com PostgreSQL sintético testa protocolo/callback/concorrência/versão/legado; runtime prova conclusão e isolamento sob RLS sem bypass. O ensaio `tests/integration/midia-processo.spec.ts` usa as rotas reais em um adaptador HTTP de teste, PostgreSQL e worker/ffmpeg em processos filhos. Interrompe o worker com SIGKILL após upload e após commit antes da resposta: comprova nova tentativa, rejeição do lease anterior, recuperação do recibo sem novo upload, hash da prévia, acesso com token e revogação. Assinaturas/storage e sessão anônima são simulados; o banco dessa suíte usa login administrativo, portanto não substitui a suíte runtime/RLS. Requer ffmpeg/ffprobe instalados e roda em `npm run test:integration` com `DATABASE_URL_TEST` explicitamente local. A expiração do lease é acelerada apenas na fixture.
 
-São provas complementares: ainda não houve ensaio de ponta a ponta com processo Next, worker e storage real juntos, nem validação de navegador, Docker/Railway ou limites de memória sob carga. CI remoto permanece pendente.
+São provas complementares: Next dev completo e navegador foram ensaiados posteriormente (abaixo), com storage simulado. Storage real, Docker/Railway, limites de memória sob carga e CI remoto permanecem pendentes.
 
 Segredos devem ser exclusivos por ambiente e nunca copiados de exemplos antigos. Um exemplo fixo anterior foi removido; se tiver sido usado em ambiente real, sua substituição pertence à preparação de publicação.
 
@@ -73,4 +73,18 @@ Teste local em macOS: clipe sintético H.264, 1920×1080, 30 fps, 8 segundos, se
 
 Pico RSS **amostrado de 294 MiB**, somando worker Node, supervisor Node e FFmpeg/FFprobe; 13 amostras, intervalo mínimo de 25 ms acrescido do custo de `ps`. Uma repetição após o ajuste de inicialização registrou 283 MiB em 12 amostras. Não é pico exato, medição de cgroup nem limite imposto. Não extrapolar para 4K/8K, 10 minutos, outros codecs, simultaneidade ou memória do container. O supervisor acrescenta um processo Node por subprocesso, de forma sequencial. São 20 testes worker e 13 integrações focadas aprovados nesta etapa.
 
-Próxima prova de navegador: iniciar Next completo com logins sintéticos restritos e storage local, converter fixture, abrir o link autorizado e observar metadados/reprodução/seek; repetir sem token, com token de outra demanda e após revogação. Verificar o GET de autorização separadamente de uma URL já assinada, que continua válida até expirar. Nenhuma mídia real ou configuração de produção deve ser necessária.
+Roteiro de navegador executado no recorte seguinte: iniciar Next completo com logins sintéticos restritos e storage local, converter fixture, abrir o link autorizado e observar metadados/reprodução/seek; repetir sem token, com token de outra demanda e após revogação. Verificar o GET de autorização separadamente de uma URL já assinada, que continua válida até expirar. Nenhuma mídia real ou configuração de produção deve ser necessária.
+
+## Next completo e navegador — 30/09/2026
+
+Ensaio reproduzível (requer PostgreSQL sintético já migrado, ffmpeg/ffprobe, dependências do app instaladas e checkout sem .env):
+
+```sh
+DATABASE_URL_TEST=postgresql://postgres@127.0.0.1:55439/nuflow_test node scripts/ensaio-midia/next-local.mjs
+```
+
+O comando inicia Next **dev/webpack**, cria logins sem bypass e dados descartáveis, executa worker real e testa autorização HTTP. Imprime duas URLs locais: página pública real do Flow e player de medição do harness para seek/reprodução. Mantém o ambiente por até 15 minutos; SIGTERM/SIGINT após `ENSAIO_PRONTO` encerra e limpa fixtures/roles. `--verificar` executa apenas as verificações HTTP e encerra automaticamente. Usa `.next/dev` do checkout; não executar junto de outro Next dev neste checkout.
+
+Comprovados localmente: conversão MOV/HEVC com áudio, prévia 640×360/6 s, checksum, token válido, recusa sem token/com token de outra demanda/revogado. Browser IAB abriu link do card real; player de medição fez seek em 3 s e terminou em 6 s sem erro. Simulador registrou três pedidos Range. A expiração foi acelerada no simulador; não é homologação do Supabase real.
+
+O ensaio revelou contexto de empresa diferente entre bundles Next com Prisma compartilhado: corrigido em `org-contexto.ts` compartilhando a instância de AsyncLocalStorage, sem compartilhar o valor de cada requisição. Teste unitário intercala contextos e recarrega módulos. Produção em container, memória sob carga, coleta de órfãos e rollout seguem pendentes.

@@ -108,3 +108,10 @@ Não equivale ao Next completo, navegador, RLS no mesmo fluxo ou storage real. Q
 Supervisor separado encerra ffmpeg/ffprobe se o worker perder a conexão IPC, inclusive após SIGKILL. Teste real durante conversão comprova término do filho, limpeza segura e conversão seguinte; 20 testes worker e 13 integrações focadas aprovados. Pico RSS amostrado de 294 MiB num clipe sintético 1080p30/8s, sem impor limite ou extrapolar para produção.
 
 Próximo: Next completo com credenciais sintéticas restritas e reprodução/seek/autorização no navegador. Docker, queda simultânea do supervisor, memória sob carga e órfãos remotos seguem pendentes. M02 parcial, sem deploy.
+
+
+## Evidência de execução — 30/09/2026, quinto recorte M02
+
+Next completo em dev/webpack, worker real, logins restritos com RLS e SDK Supabase contra storage local simulado. Corrigido contexto de empresa separado entre bundles Next que causava 404 com token válido. Navegador IAB reproduziu prévia sintética de 6 s, avançou para 3 s e terminou sem erro; página pública real exibiu card e abriu o vídeo. Recusa sem token, outra demanda, revogação e expiração simulada comprovadas por HTTP.
+
+Ensaio encerrado e limpo. Produção/container/provedor real ainda não homologados; M02 parcial. Detalhes e comando reproduzível no README do worker e CONTROLE.md.
