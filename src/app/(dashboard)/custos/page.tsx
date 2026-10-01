@@ -1,5 +1,7 @@
 "use client"
 
+import { ManagementSurface, ManagementIntro } from "@/components/layout/ManagementSurface"
+
 import { ResumoSetor } from "@/components/custos/ResumoSetor"
 import { useRef, useState } from "react"
 import useSWR from "swr"
@@ -181,13 +183,15 @@ export default function CustosPage() {
   }
 
   return (
-    <>
+    <ManagementSurface>
       <Header title="Gestão de Custos" />
+      <ManagementIntro title="Custos do setor" description="Veja os valores conhecidos do mês e confira o que ainda precisa de atenção." />
 
       {/* ── Tab switcher ──────────────────────────────────────────────── */}
-      <div className="px-6 pt-4 pb-0 border-b border-zinc-800">
-        <div className="flex gap-1">
+      <div data-cost-tabs className="px-6 pt-4 pb-0 border-b border-zinc-800">
+        <div data-management-tabs aria-label="Visões de custos" className="flex gap-1">
           <button
+            aria-pressed={aba === "custos"}
             onClick={() => setAba("custos")}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
               aba === "custos"
@@ -199,6 +203,7 @@ export default function CustosPage() {
             Externos e pagamentos
           </button>
           <button
+            aria-pressed={aba === "setor"}
             onClick={() => setAba("setor")}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
               aba === "setor"
@@ -604,6 +609,6 @@ export default function CustosPage() {
           </div>
         </div>
       )}
-    </>
+    </ManagementSurface>
   )
 }

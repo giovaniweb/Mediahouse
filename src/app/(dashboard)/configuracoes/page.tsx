@@ -1,5 +1,7 @@
 "use client"
 
+import { ManagementSurface, ManagementIntro } from "@/components/layout/ManagementSurface"
+
 import { SaudeAutomacoes } from "@/components/automacoes/SaudeAutomacoes"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
@@ -555,7 +557,7 @@ function TabParametros() {
         <div className="border border-zinc-700 rounded-xl p-5 mb-4">
           <h4 className="text-sm font-semibold">Conferência dos custos históricos</h4>
           <p className="text-xs text-zinc-400 mt-2">Confira os serviços sem custo e registre somente valores comprovados. A diária atual não preenche o passado.</p>
-          <a href="/custos" className="text-sm underline">Abrir custos e pendências</a>
+          <a data-finance-link href="/custos" className="text-sm underline">Abrir custos e pendências</a>
         </div>
 
         <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-3">
@@ -920,6 +922,8 @@ function TabMeuPerfil() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                aria-label="Pode fazer captação também"
+                aria-pressed={formEditor.fazCaptacao}
                 onClick={() => setFormEditor({ ...formEditor, fazCaptacao: !formEditor.fazCaptacao })}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${formEditor.fazCaptacao ? "bg-purple-600" : "bg-zinc-600"}`}
               >
@@ -1000,6 +1004,8 @@ function TabMeuPerfil() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                aria-label="Pode fazer edição também"
+                aria-pressed={formVm.podeEditar}
                 onClick={() => setFormVm({ ...formVm, podeEditar: !formVm.podeEditar })}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${formVm.podeEditar ? "bg-purple-600" : "bg-zinc-600"}`}
               >
@@ -1812,8 +1818,9 @@ export default function ConfiguracoesPage() {
 
   if (!["admin", "gestor"].includes(session?.user?.tipo ?? "")) {
     return (
-      <>
+      <ManagementSurface>
         <Header title="Configurações" />
+      <ManagementIntro title="Configurações" description="Ajuste as conexões e as preferências da sua equipe." />
         <main className="flex-1 p-6 flex items-center justify-center">
           <div className="text-center text-zinc-400">
             <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -1821,27 +1828,29 @@ export default function ConfiguracoesPage() {
             <p className="text-sm mt-1">Somente administradores e gestores podem acessar as configurações.</p>
           </div>
         </main>
-      </>
+      </ManagementSurface>
     )
   }
 
   return (
-    <>
+    <ManagementSurface>
       <Header title="Configurações" />
+      <ManagementIntro title="Configurações" description="Ajuste as conexões e as preferências da sua equipe." />
       {/* Handler do callback OAuth2 do Google Drive (sem renderização visual) */}
       <Suspense fallback={null}>
         <DriveCallbackHandler onSetTab={setTab} />
       </Suspense>
       <main className="flex-1 p-6">
-        <div className="max-w-5xl mx-auto flex gap-6">
+        <div data-settings-layout className="max-w-5xl mx-auto flex gap-6">
           {/* Sidebar Nav */}
-          <nav className="w-48 shrink-0">
+          <nav data-settings-nav aria-label="Seções de configurações" className="w-48 shrink-0">
             <div className="sticky top-6 space-y-0.5">
               {tabs.map((t) => {
                 const Icon = t.icon
                 return (
                   <button
                     key={t.id}
+                    aria-pressed={tab === t.id}
                     onClick={() => setTab(t.id)}
                     className={cn(
                       "w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors text-left",
@@ -1860,7 +1869,7 @@ export default function ConfiguracoesPage() {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <div data-settings-panel className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
               {tab === "meu_perfil" && <TabMeuPerfil />}
               {tab === "whatsapp" && (
                 <div className="space-y-8">
@@ -1883,7 +1892,7 @@ export default function ConfiguracoesPage() {
           </div>
         </div>
       </main>
-    </>
+    </ManagementSurface>
   )
 }
 

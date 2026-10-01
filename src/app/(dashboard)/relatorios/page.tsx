@@ -1,5 +1,7 @@
 "use client"
 
+import { ManagementSurface, ManagementIntro } from "@/components/layout/ManagementSurface"
+
 import { ConsumoIA } from "@/components/automacoes/ConsumoIA"
 import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
 import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
@@ -439,7 +441,7 @@ export default function RelatoriosPage() {
   const m = metricas
 
   return (
-    <>
+    <ManagementSurface>
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -450,15 +452,19 @@ export default function RelatoriosPage() {
         }
       `}</style>
       <Header title="Relatórios" />
+      <ManagementIntro title="Relatórios" description="Acompanhe as entregas e os resultados, um recorte de cada vez." />
       <main className="flex-1 p-6 space-y-6">
-        <label className="flex items-start gap-2 text-sm">
+        <details className="rounded-xl border border-zinc-800 p-4">
+          <summary className="cursor-pointer text-sm text-zinc-400">Análise opcional com IA</summary>
+        <label className="flex items-start gap-2 text-sm mt-4">
           <input type="checkbox" disabled={gerando !== null} checked={analiseIA} onChange={e => setAnaliseIA(e.target.checked)} className="mt-1" />
           <span>Incluir análise de IA no próximo relatório <span className="block text-zinc-400">Opcional, usa o saldo da empresa. Análises idênticas de até 15 minutos são reaproveitadas. Os indicadores funcionam sem IA.</span></span>
         </label>
         <ConsumoIA />
+        </details>
 
         {/* ── Abas ───────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
+        <div data-management-tabs aria-label="Visões de relatórios" className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
           {[
             { key: "resultados", label: "Resultados", icon: BarChart2 },
             { key: "realtime", label: "Tempo Real", icon: Activity },
@@ -467,6 +473,7 @@ export default function RelatoriosPage() {
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              aria-pressed={abaAtiva === key}
               onClick={() => setAbaAtiva(key as typeof abaAtiva)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 abaAtiva === key
@@ -721,7 +728,7 @@ export default function RelatoriosPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <a href="/custos" className="p-4 border border-zinc-700 rounded-xl text-sm">Custos reais do setor →<p className="text-xs text-zinc-400 mt-2">Valores registrados por competência e pendências de conferência.</p></a>
+              <a data-finance-link href="/custos" className="p-4 border border-zinc-700 rounded-xl text-sm">Custos reais do setor →<p className="text-xs text-zinc-400 mt-2">Valores registrados por competência e pendências de conferência.</p></a>
               <MetricCard icon={Users} label="Videomakers" value={`${m?.videomakers.ativos ?? 0}/${m?.videomakers.total ?? 0}`} sub="Ativos / Total" cor="purple" />
               <MetricCard icon={Zap} label="Urgentes" value={fmtNum(m?.demandas.urgentes ?? 0)} sub={`${m?.demandas.aguardandoAprovacao ?? 0} aguardando aprovação`} cor={m && m.demandas.urgentes > 0 ? "amber" : "zinc"} />
             </div>
@@ -908,6 +915,6 @@ export default function RelatoriosPage() {
         )}
 
       </main>
-    </>
+    </ManagementSurface>
   )
 }

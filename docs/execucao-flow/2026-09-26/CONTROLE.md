@@ -4,6 +4,7 @@
 
 ## Checkpoint de retomada
 
+- Visual: por orientação de 01/10, as próximas melhorias devem usar o padrão aprovado do protótipo. Custos, Relatórios e Configurações já têm ManagementSurface integrada; não voltar ao visual antigo nesses fluxos. Navegação global e demais páginas ainda exigem migração seletiva. Ver U01-VISUAL-GESTAO.md.
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
 - Bloco atual: C01–C03. Base financeira C02/C03 entregue localmente; concluir contratos C01, alocação e revisão histórica antes do aceite integral. Ver C02-C03-BASE-LOCAL.md. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
@@ -580,3 +581,9 @@ Tela inicial do setor simplificada, com detalhes recolhidos e carregamento das c
 Progresso permanece 18/36 cartões completos (50%), 18/38 com publicação/piloto (47,4%). Há avanço dentro de dois cartões, sem completar indevidamente seus aceites. Nenhuma publicação, migração em produção, comunicação externa ou análise paga por IA.
 
 Validação: 761 unitários, 363 integrações, 26 runtime + verificador de grants/RLS; tipos, build, auditores e schema diff aprovados. Lint sem erros, com avisos legados. Migração aplicada somente ao banco sintético local. Sem ensaio visual no navegador.
+
+### U01 — 01/10/2026, visual de gestão integrado
+
+Orientação explícita do usuário: fazer as melhorias com o visual novo. Custos, Relatórios e Configurações agora usam a linguagem do protótipo aprovado, com base compartilhada e fontes locais, sem importar regras antigas do protótipo. Detalhes em [U01-VISUAL-GESTAO.md](U01-VISUAL-GESTAO.md). Navegação global/demais módulos permanecem pendentes; U01 não concluída por esta entrega.
+
+Tipos, build, 761 unitários e lint sem erros aprovados. Ensaio no Next completo com usuário/dados fictícios: custos, formulário/teclado, parâmetros e relatórios; layout amplo e estreito conferidos. Prévia local preservada para revisão, sem publicação. Progresso de cartões completos permanece 18/36.
