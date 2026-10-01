@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BASE_FALSE, PRESETS } from "@/lib/permissoes"
 
-export const ACOES_AUDITORIA = ["evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
+export const ACOES_AUDITORIA = ["convite.criar", "convite.responder", "evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
 export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }

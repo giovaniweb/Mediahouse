@@ -48,7 +48,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | M02 | Worker privado | 04 | M01, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| C01 | Convite e contrato | 05 | S01, S08, O03 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | C03 | Painel e conciliação | 05 | C02, R02, R03 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
@@ -607,3 +607,12 @@ Agrupamento do restante para entregas maiores (não substitui dependências indi
 | Publicação e piloto | L02, L03 | 2 |
 
 Reserva inicial de planejamento: 2–4 semanas de trabalho e validação regulares, sujeita a revisão. Não deriva de velocidade medida e não é compromisso de conclusão. Acesso às contas de homologação, credenciais válidas, revisão de dados legados e disponibilidade da equipe para o piloto podem ampliar esse intervalo. Não prometer 100% com apenas testes locais ou computador ligado; publicação/uso real precisam dos respectivos aceites. Eventos continuam em standby. Próximo bloco funcional principal: C01 e complementos C02/C03.
+
+
+### C01/C02 — 01/10/2026, convites formais e proteção do custo automático
+
+Bloco documentado em [C01-CONVITES-BASE-LOCAL.md](C01-CONVITES-BASE-LOCAL.md). Emissão administrativa autorizada, condição imutável, aceite compartilhado entre link/job/WhatsApp, trava da vaga, retry sem duplicação e avisos duráveis. Atribuição e emissão agora persistem juntas; recusa antiga não desatribui outro profissional. Importação teve também o parser residual removido. Conclusão/NF deixam de inferir total pela diária atual; fato automático cria pendência auditada sem duplicar.
+
+C01 iniciado, mas ainda parcial pelos caminhos legados e NF/pagamento. C02/C03 continuam parciais. Contagem atual: 18 implementados + 10 em execução + 10 a fazer = 38. Percentual de cartões completos permanece 18/36 técnicos (50%) ou 18/38 do plano (47,4%); não representa prontidão comercial.
+
+763 unitários; 371 integrações no conjunto completo mais o oitavo caso de convites validado no arquivo (372 casos distintos); 26 runtime e grants/RLS, tipos, build, auditores e schema diff aprovados. Lint sem erros, quatro avisos legados. Banco sintético agora contém 41 migrações. Próximo bloco financeiro: autorização e estados de NF/pagamento, total contratado e, em seguida, alocação/rateio/conciliação. Sem publicação nem contato externo.

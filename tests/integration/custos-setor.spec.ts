@@ -64,3 +64,14 @@ it("retroativo não usa diária atual nem reabertura altera gasto pago",async()=
   await adminDb.demanda.update({where:{id:d.id},data:{statusVisivel:"edicao",finalizadaEm:null}})
   expect(await resumoCustosSetor(db,org,"2026-10")).toMatchObject({totalConhecido:"500.00",pagamentosExternos:{pago:"500.00"},pendencias:[]})
 })
+
+it("conclusão concorrente cria uma pendência, sem supor uma diária ou usar tarifa atual",async()=>{
+  const { registrarServicoPendente }=await import("@/lib/custo-servico")
+  const d=await adminDb.demanda.create({data:{organizacaoId:org,codigo:prefix,titulo:"Serviço",descricao:"Teste",cidade:"Teste",departamento:"growth",tipoVideo:"reels",solicitanteId:user,videomakerId:vm,statusVisivel:"finalizado",finalizadaEm:new Date("2026-10-05T12:00Z")}})
+  const [a,b]=await Promise.all([registrarServicoPendente(db,org,d.id,vm),registrarServicoPendente(db,org,d.id,vm)])
+  expect(a?.id).toBe(b?.id);expect(a).toMatchObject({valor:0,valorConfirmadoEm:null})
+  expect(await registrarServicoPendente(db,outra,d.id,vm)).toBeNull()
+  expect(await adminDb.custoVideomaker.count({where:{demandaId:d.id}})).toBe(1)
+  expect(await adminDb.eventoAuditoria.count({where:{organizacaoId:org,recursoId:a!.id}})).toBe(1)
+  expect(await resumoCustosSetor(db,org,"2026-10")).toMatchObject({totalConhecido:"0.00",parcial:true})
+})

@@ -1,3 +1,4 @@
+import { ConviteInvalido, responderConvite } from "@/lib/convites"
 import { criarSaida, registrarRecibos } from "@/lib/whatsapp-outbox"
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto"
 import type { Prisma } from "@prisma/client"
@@ -119,10 +120,22 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
       else {
         // Não aceitar um convite criado/alterado DEPOIS do recebimento.
         const demandas = await tx.demanda.findMany({where:{organizacaoId,videomakerId:vm.id,statusInterno:"videomaker_notificado"},take:2})
-        if(demandas.length!==1 || demandas[0].updatedAt.getTime()>Math.min(inbox.createdAt.getTime(),enviadoEm.getTime()+(c.enviadoEm ? 999 : 0))) resultado="convite_ausente_ou_ambiguo"
+        const convites = await tx.conviteVideomaker.findMany({where:{videomakerId:vm.id,status:"pendente",demanda:{organizacaoId}},take:2})
+        const jobs = new Set([...demandas.map(d=>d.id), ...convites.map(c=>c.demandaId)])
+        const recebidoEm = new Date(Math.min(inbox.createdAt.getTime(),enviadoEm.getTime()+(c.enviadoEm ? 999 : 0)))
+        if(jobs.size!==1 || convites.length>1) resultado="convite_ausente_ou_ambiguo"
+        else if(convites.length===1) {
+          try {
+            const r=await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:vm.id,
+              acao:sim ? "aceitar" : "recusar",origem:"whatsapp",recebidoEm})
+            resultado=sim ? "videomaker_aceitou" : "videomaker_recusou"; demandaId=r.demandaId
+          } catch(e) { if(e instanceof ConviteInvalido) resultado="convite_alterado"; else throw e }
+        }
+        else if(demandas.length!==1 || demandas[0].updatedAt>recebidoEm) resultado="convite_ausente_ou_ambiguo"
         else {
           const d=demandas[0], status=sim ? "videomaker_aceitou" : "videomaker_recusou"
-          const mudou=await tx.demanda.updateMany({where:{id:d.id,organizacaoId,videomakerId:vm.id,statusInterno:"videomaker_notificado",updatedAt:d.updatedAt},
+          const formal = await tx.conviteVideomaker.count({where:{demandaId:d.id,videomakerId:vm.id,demanda:{organizacaoId}}})
+          const mudou=formal ? {count:0} : await tx.demanda.updateMany({where:{id:d.id,organizacaoId,videomakerId:vm.id,statusInterno:"videomaker_notificado",updatedAt:d.updatedAt},
             data:{statusInterno:status,statusVisivel:STATUS_PARA_COLUNA[status],...(!sim ? {videomakerId:null} : {})}})
           if(mudou.count) {
             await tx.historicoStatus.create({data:{demandaId:d.id,statusAnterior:"videomaker_notificado",statusNovo:status,origem:"whatsapp",observacao:"Resposta via inbox WhatsApp verificada"}})
@@ -137,7 +150,7 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
   const respostas:Record<string,string>={
     videomaker_aceitou:"Captação confirmada. A equipe dará continuidade aos detalhes.",
     videomaker_recusou:"Recusa registrada. A equipe poderá escalar outro profissional.",
-    convite_ausente_ou_ambiguo:"Não encontrei um convite único para confirmar. Consulte a equipe.",
+    convite_ausente_ou_ambiguo:"Não encontrei um convite único para confirmar. Abra o link do job desejado para responder com segurança.",
     convite_alterado:"O convite mudou. Consulte a equipe antes de confirmar.",
     remetente_sem_convite:"Não encontrei um convite autorizado para este número. Consulte a equipe.",
   }
