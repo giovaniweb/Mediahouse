@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — terceiro recorte M02: ensaio de queda em processo e limpeza conservadora; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — quarto recorte M02: supervisor de subprocessos e primeira amostragem de memória; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: processo Next completo com login restrito + navegador, Docker/memória e queda durante ffmpeg. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próxima etapa: processo Next completo com login restrito + navegador; depois Docker/limites de memória sob carga. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: marcação por fase e limpeza conservadora de temporários no startup, acompanhadas de ensaio SIGKILL real após upload e após commit. Convivência legada protegida; produção não alterada, eventos em standby.
-- Últimas provas locais desta etapa: 323 integrações (25 arquivos), 19 testes worker, tipos e lint dos arquivos de teste aprovados. Rodada anterior: 717 unitários do app, 26 runtime/RLS + verificador, auditores/build. Ensaio novo faz HEAD HTTP real em storage simulado; Docker, Next completo/navegador, provedores e CI remoto pendentes.
+- Última implementação: supervisor separado para ffmpeg/ffprobe, que encerra o filho ao perder conexão IPC com o worker, inclusive em SIGKILL. Primeiro ensaio de RSS e retomada após queda durante conversão. Convivência legada protegida; produção não alterada, eventos em standby.
+- Últimas provas locais desta etapa: 20 testes worker e 13 integrações focadas de mídia aprovados; checagem de sintaxe Node e diff. Rodada anterior completa: 323 integrações (25 arquivos), tipos e lint dos arquivos de teste aprovados. Rodada anterior: 717 unitários do app, 26 runtime/RLS + verificador, auditores/build. Ensaio novo faz HEAD HTTP real em storage simulado; Docker, Next completo/navegador, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -495,3 +495,12 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - M01/M02 continuam parciais; 15 de 36 cartões técnicos implementados (41,7%). Sem publicação, configuração externa ou mídia real.
 
 - Validação deste recorte: 323 integrações, 19 testes do worker, TypeScript sem erros, lint dos arquivos novos sem erros e diff sem problemas. CI preparado para instalar FFmpeg antes da integração; execução remota não realizada.
+
+
+### M02 — 30/09/2026, quarto recorte: supervisão durante conversão
+
+- Supervisor Node separado por execução de ffmpeg/ffprobe. Detecta desconexão IPC do worker, encerra somente o filho próprio e espera seu término antes de marcar o temporário seguro. Aborto/timeout são encaminhados ao supervisor; o worker aguarda sua saída antes de limpar. Argumentos Node de teste não são herdados pelo fork.
+- Ensaio com SIGKILL do worker enquanto FFmpeg real converte um clipe 1080p30 de 8 segundos: filho encerrado, nenhum upload, temporário seguro removido e conversão seguinte concluída. 20 testes do worker e 13 integrações focadas aprovados.
+- RSS local amostrado: 294 MiB para worker+supervisor+conversor, 13 amostras com intervalo mínimo de 25 ms. Não é teto de memória, cgroup, teste de 4K/8K ou dimensionamento de Railway.
+- Next completo/navegador, runtime restrito no mesmo fluxo, container/Docker, queda simultânea do supervisor, memória sob carga, URLs assinadas expiradas e coleta remota seguem pendentes. Roteiro da próxima prova no README do worker.
+- M02 continua parcial. 15/36 cartões técnicos (41,7%); nenhum deploy ou ajuste externo.

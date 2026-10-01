@@ -1,7 +1,7 @@
 // Motor v2: recebe referências assinadas emitidas pelo servidor após validar o lease.
 // Não é servidor HTTP nem fila em memória. O consumidor durável deve renovar o lease
 // e abortar este motor ao perdê-lo; ativação depende do contrato M02 de callback.
-import { spawn } from "node:child_process"
+import { fork } from "node:child_process"
 import { createHash } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
@@ -50,21 +50,24 @@ export function validarContrato(j, config) {
   return { sourceUrl, uploadUrl, destino }
 }
 
-async function executar(bin, args, signal, timeoutMs) {
+async function executar(bin, args, signal, timeoutMs, marker) {
   signal.throwIfAborted()
   return new Promise((resolve, reject) => {
     let stdout = "", tamanho = 0, limite = false, expirou = false
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "ignore"], signal, killSignal: "SIGKILL" })
-    const timer = setTimeout(() => { expirou = true; child.kill("SIGKILL") }, timeoutMs)
+    const child = fork(new URL("./subprocesso.mjs", import.meta.url), [bin, JSON.stringify(args), String(timeoutMs), marker, String(process.pid)], { execArgv: [], stdio: ["ignore", "pipe", "ignore", "ipc"] })
+    const cancelar = () => { if (child.connected) child.send("cancelar", () => {}) }
+    signal.addEventListener("abort", cancelar, { once: true })
+    if (signal.aborted) cancelar()
+    const timer = setTimeout(() => { expirou = true; cancelar() }, timeoutMs)
     // Em aborto, aguarda close (processo terminou) antes de limpar o diretório.
     child.on("error", () => {})
     child.stdout.on("data", chunk => {
       tamanho += chunk.length
-      if (tamanho > 1024 * 1024) { limite = true; child.kill("SIGKILL") }
+      if (tamanho > 1024 * 1024) { limite = true; cancelar() }
       else stdout += chunk.toString()
     })
     child.on("close", code => {
-      clearTimeout(timer)
+      clearTimeout(timer); signal.removeEventListener("abort", cancelar)
       if (signal.aborted) return reject(new ErroConversao("cancelado"))
       if (expirou || limite || code !== 0) return reject(new ErroConversao(expirou ? "processamento_timeout" : "midia_invalida"))
       resolve(stdout)
@@ -72,9 +75,9 @@ async function executar(bin, args, signal, timeoutMs) {
   })
 }
 const INPUT_SEGURO = ["-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,avi,ogg"]
-async function inspecionar(path, signal) {
+async function inspecionar(path, signal, marker) {
   let json
-  try { json = JSON.parse(await executar("ffprobe", ["-v", "error", ...INPUT_SEGURO, "-show_streams", "-show_format", "-of", "json", path], signal, 30_000)) }
+  try { json = JSON.parse(await executar("ffprobe", ["-v", "error", ...INPUT_SEGURO, "-show_streams", "-show_format", "-of", "json", path], signal, 30_000, marker)) }
   catch (e) { if (e instanceof ErroConversao) throw e; erro("midia_invalida") }
   const video = json.streams?.find(s => s.codec_type === "video" && !s.disposition?.attached_pic)
   const audio = json.streams?.find(s => s.codec_type === "audio")
@@ -120,22 +123,23 @@ export function criarConversor(config) {
     const inicio = Date.now()
     try {
       dir = await mkdtemp(join(config.tempRoot ?? tmpdir(), "nuflow-preview-"))
-      const marcar = fase => writeFile(join(dir, ".nuflow-owner.json"), JSON.stringify({ tipo: "nuflow-preview-v2", pid: process.pid, fase }), { mode: 0o600 })
+      const marker = join(dir, ".nuflow-owner.json")
+      const marcar = fase => writeFile(marker, JSON.stringify({ tipo: "nuflow-preview-v2", pid: process.pid, fase }), { mode: 0o600 })
       await marcar("seguro")
       const input = join(dir, "original.bin"), output = join(dir, "preview.mp4")
       const fonte = await baixar(contrato.sourceUrl, input, signal)
       if (job.sha256 && job.sha256 !== fonte.sha256) erro("checksum_divergente")
       await marcar("subprocesso")
-      const original = await inspecionar(input, signal)
+      const original = await inspecionar(input, signal, marker)
       await executar("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "2", ...INPUT_SEGURO, "-i", input,
         "-map", `0:${original.video.index}`, ...(original.audio ? ["-map", `0:${original.audio.index}`] : []),
         "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn",
         "-vf", "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
         "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-fs", String(LIMITES.bytes + 1), output], signal, 15 * 60_000)
+        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-fs", String(LIMITES.bytes + 1), output], signal, 15 * 60_000, marker)
       const tamanho = (await stat(output)).size
       if (tamanho > LIMITES.bytes) erro("saida_excedida")
-      const previa = await inspecionar(output, signal)
+      const previa = await inspecionar(output, signal, marker)
       if (previa.video.codec_name !== "h264" || (previa.audio && previa.audio.codec_name !== "aac") ||
         (!!previa.audio !== !!original.audio) || previa.largura > 1280 || previa.altura > 1280 ||
         previa.largura > original.largura || previa.altura > original.altura ||
