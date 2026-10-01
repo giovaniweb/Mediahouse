@@ -33,7 +33,8 @@
     "test:runtime": "node scripts/teste-runtime-rls.mjs",
     "verificar:runtime": "node scripts/verificar-runtime-rls.mjs",
     "test:inventario": "node --test tests/inventario/*.test.mjs",
-    "midia:inventario": "node scripts/inventario-midia.mjs"
+    "midia:inventario": "node scripts/inventario-midia.mjs",
+    "midia:coletar": "node scripts/coletar-inventario-midia.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

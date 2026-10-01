@@ -37,7 +37,7 @@ test("job ativo é preservado; desconhecido, duplicado ou incompatível é incon
 })
 test("hífens ambíguos em job/lease não inventam vínculo", () => {const s=fixture();s.jobs.push({...s.jobs[0],id:"job-id-lease"});assert.equal(item(s).motivo,"tentativa_desconhecida_ou_ambigua")})
 test("lease ainda registrado e data de encerramento ausente bloqueiam revisão", () => {
-  const s=fixture();s.jobs[0].leaseToken="lease-id";assert.equal(item(s).motivo,"lease_ainda_registrado");s.jobs[0].leaseToken=null;s.jobs[0].encerradoEm=null;assert.equal(item(s).motivo,"sem_data_de_encerramento")
+  const s=fixture();s.jobs[0].leaseToken="lease-id";assert.equal(item(s).motivo,"lease_ainda_registrado");s.jobs[0].leaseToken="outro-lease";assert.equal(item(s).motivo,"lease_ainda_registrado");s.jobs[0].leaseToken=null;s.jobs[0].encerradoEm=null;assert.equal(item(s).motivo,"sem_data_de_encerramento")
 })
 test("carência conta a data mais recente; datas futuras são inconclusivas", () => {
   const s=fixture();s.jobs[0].encerradoEm="2026-09-29T12:00:00Z";assert.equal(item(s).motivo,"dentro_da_carencia");s.jobs[0].encerradoEm="2026-10-01T12:00:00Z";assert.equal(item(s).motivo,"data_futura")

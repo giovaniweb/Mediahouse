@@ -88,7 +88,7 @@ try {
   await probeRole.end()
   await new Promise(resolve => storage.listen(0, '127.0.0.1', resolve)); storageOrigin = `http://127.0.0.1:${storage.address().port}`
   const porta = createServer(); await new Promise(resolve => porta.listen(0, '127.0.0.1', resolve)); const port = porta.address().port; await new Promise(resolve => porta.close(resolve)); appOrigin = `http://127.0.0.1:${port}`
-  const r = spawnSync('ffmpeg', ['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','6','-c:v','libx265','-threads','1','-x265-params','pools=1:frame-threads=1:log-level=error','-c:a','aac',join(root,'original.mov')], { timeout: 30000 }); assert.equal(r.status, 0)
+  const r = spawnSync('ffmpeg', ['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','6','-c:v',process.argv.includes('--h264')?'libx264':'libx265','-threads','1',...(process.argv.includes('--h264')?[]:['-x265-params','pools=1:frame-threads=1:log-level=error']),'-c:a','aac',join(root,'original.mov')], { timeout: 30000 }); assert.equal(r.status, 0)
   const source = await readFile(join(root,'original.mov')), key = `org/${org}/videos/${demanda}/original.mov`, originalUrl = `/api/midia/${key}`
   objetos.set(key, source)
   await db.organizacao.create({ data: { id: org, nome: 'Flow — ensaio sintético', slug: org } })
@@ -115,7 +115,7 @@ try {
   for(const t of tickets.values()) t.ate=0
   assert.equal((await fetch(assinada)).status,403)
   await db.demanda.update({where:{id:demanda},data:{publicTokenAtivo:true}})
-  const manifest = { app: `${appOrigin}/d/${token}`, navegador: `${storageOrigin}/ensaio`, root, pid: process.pid, verificacoes: ['conversão real','login sem bypass','original preservado','token válido','sem token','token de outra demanda','revogação','TTL assinatura simulado'], modo:'Next dev webpack; storage simulado' }
+  const manifest = { app: `${appOrigin}/d/${token}`, navegador: `${storageOrigin}/ensaio`, root, pid: process.pid, verificacoes: ['conversão real','login sem bypass','original preservado','token válido','sem token','token de outra demanda','revogação','TTL assinatura simulado'], modo:'Next dev webpack; storage simulado', codecFonte:process.argv.includes('--h264')?'h264':'hevc' }
   await writeFile(join(root,'resultado.json'),JSON.stringify(manifest,null,2))
   console.log('ENSAIO_PRONTO',JSON.stringify(manifest))
   if (!process.argv.includes('--verificar')) await new Promise(resolve => { const timer=setTimeout(resolve,15*60000); for(const s of ['SIGTERM','SIGINT'])process.once(s,()=>{clearTimeout(timer);resolve()}) })

@@ -43,11 +43,11 @@ export function analisarInventario(entrada) {
       if (job && /^[a-zA-Z0-9_-]{1,128}$/.test(lease)) candidatos.push({ job, lease })
     }
     if (candidatos.length !== 1) return resultado("inconclusivo", "tentativa_desconhecida_ou_ambigua")
-    const { job, lease } = candidatos[0]
+    const { job } = candidatos[0]
     const extra = { arquivoId: arquivo.id, demandaId: arquivo.demandaId, jobId: job.id, fonteVersao: Number(p[6]), perfil: p[7] }
     if (jobs.ambiguos.has(job.id) || job.organizacaoId !== s.organizacaoId || job.arquivoId !== arquivo.id || job.fonteVersao !== Number(p[6]) || job.perfil !== p[7]) return resultado("inconclusivo", "job_incompativel", extra)
     if (["pendente", "executando"].includes(job.estado)) return resultado("preservar", "job_ativo", extra)
-    if (job.leaseToken === lease) return resultado("inconclusivo", "lease_ainda_registrado", extra)
+    if (job.leaseToken !== null) return resultado("inconclusivo", "lease_ainda_registrado", extra)
     if (!job.encerradoEm) return resultado("inconclusivo", "sem_data_de_encerramento", extra)
     if (Date.parse(o.criadoEm) > agora || Date.parse(job.encerradoEm) > agora) return resultado("inconclusivo", "data_futura", extra)
     if (agora - Math.max(Date.parse(o.criadoEm), Date.parse(job.encerradoEm)) < carencia) return resultado("preservar", "dentro_da_carencia", extra)

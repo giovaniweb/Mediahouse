@@ -89,7 +89,7 @@ async function inspecionar(path, signal, marker) {
   if (!["h264", "hevc", "vp8", "vp9", "av1", "mpeg4", "mjpeg", "theora"].includes(video.codec_name)) erro("codec_nao_suportado")
   const rotacao = Number(video.side_data_list?.find(d => d.rotation !== undefined)?.rotation ?? video.tags?.rotate ?? 0)
   if (!Number.isFinite(rotacao) || rotacao % 90 !== 0) erro("rotacao_nao_suportada")
-  return { video, audio, duracao, largura: Math.abs(rotacao % 180) === 90 ? video.height : video.width, altura: Math.abs(rotacao % 180) === 90 ? video.width : video.height }
+  return { video, audio, duracao, rotacao, largura: Math.abs(rotacao % 180) === 90 ? video.height : video.width, altura: Math.abs(rotacao % 180) === 90 ? video.width : video.height }
 }
 async function baixar(url, path, signal) {
   const res = await fetch(url, { redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) })
@@ -131,12 +131,23 @@ export function criarConversor(config) {
       if (job.sha256 && job.sha256 !== fonte.sha256) erro("checksum_divergente")
       await marcar("subprocesso")
       const original = await inspecionar(input, signal, marker)
-      await executar("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "2", ...INPUT_SEGURO, "-i", input,
-        "-map", `0:${original.video.index}`, ...(original.audio ? ["-map", `0:${original.audio.index}`] : []),
-        "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn",
+      // Reempacota somente o subconjunto já compatível. MOV é container, não codec.
+      // Preserva os pacotes de vídeo/áudio e aplica faststart sem nova perda de qualidade.
+      const remux = original.video.codec_name === "h264" && original.video.pix_fmt === "yuv420p" &&
+        ["Constrained Baseline", "Baseline", "Main", "High"].includes(original.video.profile) &&
+        Number.isInteger(original.video.level) && original.video.level > 0 && original.video.level <= 41 &&
+        original.rotacao === 0 && original.largura <= 1280 && original.altura <= 1280 &&
+        (!original.audio || (original.audio.codec_name === "aac" && original.audio.profile === "LC" &&
+          [32000, 44100, 48000].includes(Number(original.audio.sample_rate)) && original.audio.channels <= 2))
+      const codecArgs = remux ? ["-c", "copy"] : [
         "-vf", "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
         "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-fs", String(LIMITES.bytes + 1), output], signal, 15 * 60_000, marker)
+        "-c:a", "aac", "-b:a", "128k",
+      ]
+      await executar("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-threads", "2", ...INPUT_SEGURO, "-i", input,
+        "-map", `0:${original.video.index}`, ...(original.audio ? ["-map", `0:${original.audio.index}`] : []),
+        "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn", ...codecArgs,
+        "-movflags", "+faststart", "-fs", String(LIMITES.bytes + 1), output], signal, 15 * 60_000, marker)
       const tamanho = (await stat(output)).size
       if (tamanho > LIMITES.bytes) erro("saida_excedida")
       const previa = await inspecionar(output, signal, marker)
@@ -159,7 +170,7 @@ export function criarConversor(config) {
       signal.throwIfAborted()
       return { jobId: job.jobId, leaseToken: job.leaseToken, fonteVersao: job.fonteVersao, perfil: PERFIL,
         bucket: "midia", objectKey: contrato.destino, tamanho, sha256, mime: "video/mp4", codec: "h264", codecAudio: previa.audio ? "aac" : null,
-        largura: previa.largura, altura: previa.altura, duracao: previa.duracao, fonte, tempoMs: Date.now() - inicio }
+        largura: previa.largura, altura: previa.altura, duracao: previa.duracao, modo: remux ? "remux" : "transcode", fonte, tempoMs: Date.now() - inicio }
     } catch (e) {
       if (signal.aborted) erro("cancelado")
       if (e instanceof ErroConversao) throw e

@@ -63,6 +63,7 @@ for (const nome of ["h264.mov", "hevc.mov", "hevc.mp4", "vertical.mp4"]) {
   test(`converte ${nome}, preserva original e envia MP4 privado`, async () => {
     reset(); fonte = await readFile(join(root, nome)); const originalHash = createHash("sha256").update(fonte).digest("hex")
     const r = await converter({ ...job(), sha256: originalHash })
+    assert.equal(r.modo, nome === "h264.mov" ? "remux" : "transcode")
     assert.equal(r.codec, "h264"); assert.equal(r.codecAudio, nome === "h264.mov" ? "aac" : null)
     assert.equal(r.bucket, "midia"); assert.equal(uploads.length, 1)
     assert.equal(uploads[0].bytes.length, r.tamanho)
@@ -79,7 +80,14 @@ for (const nome of ["h264.mov", "hevc.mov", "hevc.mp4", "vertical.mp4"]) {
     const saida = join(root, "verificar.mp4"); await writeFile(saida, b)
     const probe = spawnSync("ffprobe", ["-v", "error", "-show_streams", "-of", "json", saida], { encoding: "utf8" })
     assert.equal(probe.status, 0); assert.equal(JSON.parse(probe.stdout).streams[0].codec_name, "h264")
-    medidas.push({ arquivo: nome, entradaBytes: fonte.length, saidaBytes: r.tamanho, tempoMs: r.tempoMs, largura: r.largura, altura: r.altura })
+    if (nome === "h264.mov") {
+      const pacotes = path => {
+        const out = spawnSync("ffmpeg", ["-v", "error", "-i", path, "-map", "0:v:0", "-c", "copy", "-f", "hash", "-hash", "sha256", "pipe:1"], { encoding: "utf8", timeout: 10000 })
+        assert.equal(out.status, 0); return out.stdout.trim()
+      }
+      assert.equal(pacotes(saida), pacotes(join(root, nome)), "remux preserva os pacotes do vídeo")
+    }
+    medidas.push({ arquivo: nome, modo: r.modo, entradaBytes: fonte.length, saidaBytes: r.tamanho, tempoMs: r.tempoMs, largura: r.largura, altura: r.altura })
     await limpo()
   })
 }

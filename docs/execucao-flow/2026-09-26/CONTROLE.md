@@ -1,16 +1,16 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — sétimo recorte M01/M02: classificador offline do inventário, sem exclusão; eventos seguem adiados; sem deploy.
+Última atualização: 30/09/2026 — bloco consolidado de mídia: M02 implementado localmente com homologação externa pendente; coleta de inventário operacional e remux validados. Sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima etapa: executar `node scripts/ensaio-midia/container.mjs` em ambiente com Docker/cgroup v2 e revisar relatório OOM/pico. Docker e Podman não estão disponíveis neste computador; job CI preparado, não executado remotamente. Classificador offline de inventário implementado e testado; próximo avanço independente é o coletor paginado/consistente de referências e objetos. Coleta remota e inventário real ainda pendentes. Next dev completo com logins restritos e navegador foi ensaiado com storage simulado; build de produção e provedor real não se confundem com esse ensaio. Queda isolada do worker durante ffmpeg agora tem supervisor e prova local; queda do container inteiro permanece pendente. Quedas após upload e após commit foram ensaiadas com rotas reais em adaptador HTTP, PostgreSQL e worker filho; isso não equivale ao Next completo nem ao provedor real. Protocolo e consumidor v2 implementados, desligados por padrão; rollout limitado à empresa-piloto configurada no servidor. M02/M01 seguem parciais, sem homologação externa.
+- Próximo bloco: M03 (cópia Drive durável) e complementos M01 de identidade dos consumidores. Executar blocos completos com checkpoints internos, conforme autorização do usuário. M02 tem aceite local em M02-ACEITE-LOCAL.md; Docker/Supabase/Railway continuam externos pendentes, não reabrir pequenas entregas isoladas de mídia sem necessidade. Coleta de inventário operacional entregue, cobertura global/recibos/retenção seguem em M01/M04.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: CLI offline de inventário com contrato validado, classificação conservadora e relatório sem permissão de exclusão; 12 testes específicos e exemplo sintético. Docker permanece indisponível localmente, sem validação de container. Convivência legada protegida; produção não alterada, eventos em standby.
-- Últimas provas locais desta etapa: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos/lint focados, auditores e build webpack; Next dev completo e navegador IAB com storage simulado aprovados. Última rodada worker: 20 testes. Docker, provedores e CI remoto pendentes.
+- Última implementação: coletor de inventário pg/Supabase somente leitura, paginação e diagnósticos conservadores; remux para fontes compatíveis preservando pacotes; timeout independente do supervisor ensaiado. Nenhum backfill/exclusão/configuração externa.
+- Últimas provas locais do bloco: 718 unitários, 326 integrações, 26 runtime/RLS + verificador, 19 inventário e 21 worker; tipos/lint/auditores/build webpack aprovados. Next dev/IAB também aprovados no remux. Docker, provedores e CI remoto pendentes.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -42,7 +42,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
-| M02 | Worker privado | 04 | M01, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
+| M02 | Worker privado | 04 | M01, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -536,3 +536,16 @@ Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do
 - Preserva referência de original/publicação/aprovação/link e job ativo; coleta incompleta/recibos não conciliados impedem candidatura. Carência explícita e encerramento real exigidos. As evidências de completude são declaradas no snapshot, não verificadas pelo classificador. Coletor real ainda não implementado.
 - 12 testes passaram, incluindo execução do CLI e proteção contra sobrescrita; contrato/exemplo/comando documentados. CI executará essa suíte, sem execução remota nesta etapa.
 - Próximo: coleta paginada e consistente, inicialmente em fixtures, com falhas tornando resultado inconclusivo. M01/M02 parciais; inventário do acervo, política de retenção e qualquer exclusão permanecem fora deste recorte. Sem deploy.
+
+
+### Bloco consolidado — mídia, inventário e aceite M02
+
+- Autorização do usuário: executar blocos maiores completos, sem encerramentos a cada microetapa. Plano mestre atualizado nessa preferência; sem criar automações/agentes.
+- Coleta por CLI com configuração INVENTARIO_* explícita: PostgreSQL sob login app_user sem bypass/dono, REPEATABLE READ READ ONLY e keyset por id; lista SDK Supabase somente do bucket midia/prefixo da empresa, pastas/páginas limitadas, timeout, sem redirects. Exporta referências canônicas sem tokens. Não roda sobre banco real nesta entrega.
+- Duas passagens registram estabilidade observada; mudanças, falhas, páginas repetidas, metadados inválidos, orçamento e cancelamento nunca viram completude. Referências observadas nas duas leituras são preservadas. Cobertura operacional de Arquivo/Demanda/Aprovação não equivale a todos os módulos/JSON; recibos não conciliados e ausência de snapshot distribuído permanecem explícitos. Objetos sem vínculos continuam inconclusivos.
+- Fonte H.264 compatível agora usa remux privado faststart, preservando pacotes de vídeo. HEVC/dimensões superiores/áudio ou perfil incompatíveis usam transcode; todas as validações pós-saída continuam. Teste de timeout próprio do supervisor adicionado.
+- Next completo com fonte H.264, empresa/logins sintéticos, worker/SDK e storage local: checksum/original/acesso/revogação aprovados; IAB fez seek a 3 s e terminou em 6 s, 640×360, sem erro. Ambiente de ensaio encerrado/limpo.
+- M02 fechado tecnicamente conforme matriz M02-ACEITE-LOCAL.md e regra do plano para IMPLEMENTADO. Validação EXTERNA_PENDENTE mantém Docker/provedor/Railway/piloto/custo real explícitos; não é venda liberada. M01/M03/M04/I01 não foram concluídos por consequência.
+- Progresso de implementação técnica passa a 16/36 (44,4%); 16/38 (42,1%) incluindo publicação/piloto. Não corresponde a prontidão comercial.
+
+- Validação final do bloco: 718 unitários, 326 integrações, 26 runtime/RLS e verificador, 19 inventário, 21 worker, tipos/lint/auditores/build aprovados. Após revisão, integração focada e suíte de inventário repetidas para provar que lease real não é exportado: só o marcador `presente`. Build mantém aviso preexistente face-api.

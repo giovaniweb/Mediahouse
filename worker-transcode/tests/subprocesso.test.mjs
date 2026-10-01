@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { spawn, spawnSync } from "node:child_process"
+import { spawn, spawnSync, fork } from "node:child_process"
 import { createServer } from "node:http"
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -80,4 +80,15 @@ test("morte do worker durante ffmpeg encerra filho e permite limpeza; mede RSS s
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve))
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test("supervisor aplica timeout próprio mesmo sem cancelamento do worker", { timeout: 10000 }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "nuflow-timeout-"))
+  const inicio = Date.now()
+  const guard = fork(new URL("../subprocesso.mjs", import.meta.url), ["ffmpeg", JSON.stringify(["-v", "error", "-re", "-f", "lavfi", "-i", "color=size=160x90:rate=10", "-t", "60", "-f", "null", "-"]), "300", join(root, "marker.json"), String(process.pid)], { execArgv: [], stdio: ["ignore", "ignore", "ignore", "ipc"] })
+  try {
+    const code = await new Promise((resolve, reject) => { guard.once("error", reject); guard.once("close", resolve) })
+    assert.equal(code, 1)
+    assert.ok(Date.now() - inicio < 5000, "não espera os 60 segundos do vídeo")
+  } finally { if (guard.exitCode === null) guard.kill("SIGTERM"); await rm(root, {recursive:true,force:true}) }
 })

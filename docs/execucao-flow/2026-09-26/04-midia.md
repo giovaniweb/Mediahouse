@@ -127,3 +127,10 @@ Próxima evidência depende de executar o harness em Docker/cgroup v2; crash com
 ## Evidência de execução — 30/09/2026, sétimo recorte M01/M02
 
 Classificador offline de snapshot de inventário implementado, com relatório conservador por organização, referências, jobs e carência. 12 testes aprovados; CLI sem rede, sem sobrescrita e sem exclusão. Exemplo sintético e contrato no README do worker. Evidências de completude são declaradas pela origem; coletor automático ainda pendente. Docker continua indisponível, nenhuma validação de container presumida. M01/M02 parciais.
+
+
+## Bloco consolidado — 30/09/2026
+
+M02 implementado e revisado localmente, com homologação externa pendente conforme M02-ACEITE-LOCAL.md. Acrescentados remux de fontes compatíveis, preservação comprovada de pacotes e teste do timeout próprio do supervisor. Next/IAB validados também para remux. Não equivale a implantação/homologação de Docker ou Railway.
+
+Inventário recebeu coleta paginada com login restrito/READ ONLY, SDK de storage limitado à empresa e diagnóstico de estabilidade. Cobertura operacional não é global; flags de consistência/recibos permanecem falsas e objetos sem referência são inconclusivos. M01/M04 seguem parciais e nenhuma exclusão/backfill foi feita. Próximo bloco: Drive durável e seus consumidores de identidade.
