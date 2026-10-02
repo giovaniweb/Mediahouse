@@ -1,180 +1,52 @@
-import { comToken } from "@/lib/midia"
+import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { caminhoMidia, subirArquivo } from "@/lib/midia"
-import { quemRecebeTudo } from "@/lib/notificados"
-import { emSegundoPlano } from "@/lib/notificar"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
-import { declararOrg } from "@/lib/org-contexto"
+import { comToken, caminhoMidia, subirArquivo } from "@/lib/midia"
+import { comOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
-
-// GET /api/nf-upload/[token] — dados da NF (página pública)
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params
-
-  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
-  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
-  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
-  // banco que devolve só o id da empresa, sem abrir a tabela.
-  //
-  // O 404 aqui responde igual para credencial inválida e para credencial de
-  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
-  // um oráculo.
-  const orgDaCredencial = await orgPorCredencial("nota_fiscal", token)
-  if (!orgDaCredencial) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
-  declararOrg(orgDaCredencial)
-
-  const nf = await prisma.notaFiscalUpload.findUnique({
-    where: { token },
-    include: {
-      videomaker: { select: { nome: true } },
-      demanda: { select: { codigo: true, titulo: true, organizacaoId: true } },
-    },
-  })
-
-  if (!nf) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
-
-  return NextResponse.json({ ...nf, url: comToken(nf.url, token) }, { headers: { "Cache-Control": "private, no-store" } })
+import { PagamentoInvalido, receberNotaFiscal } from "@/lib/pagamentos"
+import { validarArquivoNF } from "@/lib/nota-fiscal-arquivo"
+const resposta=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store"}})
+type Params={params:Promise<{token:string}>}
+async function carregar(token:string,organizacaoId:string) {
+  if(!await prisma.organizacao.findFirst({where:{id:organizacaoId,ativo:true},select:{id:true}}))return null
+  const nf=await prisma.notaFiscalUpload.findFirst({where:{token,demanda:{organizacaoId}},include:{videomaker:{select:{nome:true,usuario:{select:{status:true}}}},demanda:{select:{codigo:true,titulo:true,videomakerId:true}}}})
+  if(!nf || nf.demanda.videomakerId!==nf.videomakerId || (nf.videomaker.usuario && nf.videomaker.usuario.status!=="ativo"))return null
+  const vinculo=await prisma.videomakerOrganizacao.findFirst({where:{organizacaoId,videomakerId:nf.videomakerId,status:{in:["ativo","preferencial"]},emListaNegra:false},select:{id:true}})
+  return vinculo ? nf : null
 }
-
-// POST /api/nf-upload/[token] — receber upload
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params
-
-  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
-  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
-  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
-  // banco que devolve só o id da empresa, sem abrir a tabela.
-  //
-  // O 404 aqui responde igual para credencial inválida e para credencial de
-  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
-  // um oráculo.
-  const orgDaCredencial = await orgPorCredencial("nota_fiscal", token)
-  if (!orgDaCredencial) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
-  declararOrg(orgDaCredencial)
-
-  const nf = await prisma.notaFiscalUpload.findUnique({
-    where: { token },
-    include: {
-      videomaker: { select: { nome: true, telefone: true } },
-      demanda: { select: { codigo: true, titulo: true, organizacaoId: true } },
-    },
+export async function GET(_req:NextRequest,{params}:Params) {
+  const {token}=await params,org=await orgPorCredencial("nota_fiscal",token)
+  if(!org)return resposta({error:"Link não encontrado"},404)
+  return comOrg(org,async()=>{
+    const nf=await carregar(token,org)
+    if(!nf)return resposta({error:"Link não encontrado"},404)
+    return resposta({id:nf.id,status:nf.status,nomeArquivo:nf.nomeArquivo,url:comToken(nf.url,token),videomaker:{nome:nf.videomaker.nome},demanda:{codigo:nf.demanda.codigo,titulo:nf.demanda.titulo}})
   })
-  if (!nf) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
-  if (nf.status !== "pendente") {
-    return NextResponse.json({ error: "Nota fiscal já foi enviada" }, { status: 400 })
-  }
-
-  const formData = await req.formData()
-  const file = formData.get("arquivo") as File | null
-  if (!file) return NextResponse.json({ error: "Arquivo obrigatório" }, { status: 400 })
-
-  // NOVO: Validação server-side do tipo de arquivo
-  const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg"]
-  const allowedExts = ["pdf", "png", "jpg", "jpeg"]
-  const ext = (file.name.split(".").pop() || "").toLowerCase()
-
-  if (!allowedExts.includes(ext) && !allowedTypes.includes(file.type)) {
-    return NextResponse.json(
-      { error: "Tipo de arquivo inválido. Envie PDF, PNG ou JPG." },
-      { status: 400 }
-    )
-  }
-
-  // NOVO: Limite de tamanho (20MB)
-  if (file.size > 20 * 1024 * 1024) {
-    return NextResponse.json(
-      { error: "Arquivo muito grande. Máximo 20MB." },
-      { status: 400 }
-    )
-  }
-
-  // Nota fiscal é o dado de maior risco aqui: tem CPF, valor e dados de
-  // pagamento. Vai direto para o bucket PRIVADO, sem período de convivência —
-  // NF nunca deveria ter sido pública.
-  const organizacaoId = nf.demanda?.organizacaoId
-  if (!organizacaoId) {
-    return NextResponse.json({ error: "Demanda sem organização" }, { status: 500 })
-  }
-
-  const arrayBuffer = await file.arrayBuffer()
-  const caminho = caminhoMidia({
-    organizacaoId,
-    tipo: "nf",
-    id: `${nf.demandaId}-${nf.videomakerId}`,
-    ext: ext || "pdf",
-  })
-  const url = await subirArquivo(caminho, arrayBuffer, file.type || "application/octet-stream")
-  if (!url) {
-    return NextResponse.json({ error: "Falha ao fazer upload do arquivo. Tente novamente." }, { status: 500 })
-  }
-
-  // Atualizar NF
-  await prisma.notaFiscalUpload.update({
-    where: { token },
-    data: {
-      url,
-      nomeArquivo: file.name,
-      status: "enviada",
-    },
-  })
-
-  // Atualizar CustoVideomaker se existir
-  await prisma.custoVideomaker.updateMany({
-    where: { demandaId: nf.demandaId, videomakerId: nf.videomakerId, statusPagamento: "pendente_nf" },
-    data: { notaFiscalUrl: url, statusPagamento: "nf_enviada" },
-  })
-
-  // NOVO: Notificar admin/gestor que NF foi recebida
-  emSegundoPlano(() => notificarGestoresNF(
-    nf.demanda.codigo,
-    nf.demanda.titulo,
-    nf.videomaker.nome,
-    nf.demanda.organizacaoId
-  ), "gestores-nf-recebida")
-
-  return NextResponse.json({ success: true })
 }
-
-/**
- * Notifica gestores/admins que uma NF foi enviada pelo videomaker
- */
-async function notificarGestoresNF(codigo: string, titulo: string, nomeVideomaker: string, organizacaoId: string) {
-  try {
-    const gestores = await quemRecebeTudo(organizacaoId)
-
-    const msg = `📄 *NF Recebida!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeVideomaker} enviou a nota fiscal.\n\nAcesse *Aprovações → Pagamentos* para aprovar.`
-
-    for (const g of gestores) {
-      if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId).catch(() => null)
-      }
+export async function POST(req:NextRequest,{params}:Params) {
+  const {token}=await params,org=await orgPorCredencial("nota_fiscal",token)
+  if(!org)return resposta({error:"Link não encontrado"},404)
+  return comOrg(org,async()=>{
+    try {
+      const nf=await carregar(token,org)
+      if(!nf)return resposta({error:"Link não encontrado"},404)
+      if(nf.status!=="pendente")return resposta({error:"Nota fiscal já enviada. Solicite revisão à equipe."},409)
+      const form=await req.formData(),file=form.get("arquivo")
+      if(!(file instanceof File))return resposta({error:"Arquivo obrigatório"},400)
+      if(file.size===0 || file.size>20*1024*1024)return resposta({error:"Envie um arquivo de até 20 MB."},400)
+      const buffer=await file.arrayBuffer()
+      const tipo=validarArquivoNF(file.name,file.type,new Uint8Array(buffer))
+      if(!tipo)return resposta({error:"Arquivo inválido. Envie PDF, PNG ou JPG com conteúdo e extensão correspondentes."},400)
+      const caminho=caminhoMidia({organizacaoId:org,tipo:"nf",id:`${nf.id}-${randomUUID()}`,ext:tipo.ext})
+      const url=await subirArquivo(caminho,buffer,tipo.mime)
+      if(!url)return resposta({error:"Não foi possível armazenar a nota fiscal."},503)
+      await prisma.$transaction(tx=>receberNotaFiscal(tx,{organizacaoId:org,notaId:nf.id,url,nomeArquivo:file.name.slice(0,255),ator:{organizacaoId:org,tecnico:`nf:${nf.id}`}}))
+      return resposta({success:true})
+    }catch(e){
+      if(e instanceof PagamentoInvalido)return resposta({error:e.message},e.status)
+      if(e instanceof TypeError)return resposta({error:"Formulário inválido"},400)
+      throw e
     }
-
-    // Cria alerta in-app também
-    const demanda = await prisma.demanda.findFirst({
-      where: { codigo, organizacaoId },
-      select: { id: true },
-    })
-    if (demanda) {
-      await prisma.alertaIA.create({
-        data: {
-          organizacaoId,
-          demandaId: demanda.id,
-          tipoAlerta: "nf_recebida",
-          mensagem: `📄 Nota fiscal recebida de ${nomeVideomaker} para ${codigo}. Aguardando aprovação do pagamento.`,
-          severidade: "aviso",
-          acaoSugerida: "Aprovar pagamento em Aprovações → Pagamentos",
-        },
-      }).catch(() => null)
-    }
-  } catch (e) {
-    console.error("[NF-Upload] Falha ao notificar gestores:", e)
-  }
+  })
 }

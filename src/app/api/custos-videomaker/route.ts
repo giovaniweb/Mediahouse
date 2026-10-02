@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   })
 
   // Calcular totais
-  const validos = custos.filter(c => Number.isFinite(c.valor) && c.valor >= 0)
+  const validos = custos.filter(c => Number.isFinite(c.valor) && c.valor >= 0 && (c.valor > 0 || c.valorConfirmadoEm !== null))
   const somar = (lista: typeof custos) => lista.reduce((s,c) => s.plus(new Prisma.Decimal(c.valor.toString()).toDecimalPlaces(2)), new Prisma.Decimal(0)).toNumber()
   const totalGasto = somar(validos)
   const totalPago = somar(validos.filter(c => pagamentoCusto(c.pago,c.statusPagamento) === "pago"))
@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
     if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
   }
 
+  if (demandaId && pago===true) return NextResponse.json({error:"Registre o custo do job, envie a NF e aprove antes de marcar o pagamento."},{status:409})
   if (pago !== undefined && typeof pago !== "boolean") return erroDeCampo("pago", "Informe um estado de pagamento válido.")
   if (tipo !== undefined && !["diaria", "mensalidade", "projeto", "bonus", "despesa", "equipamento"].includes(tipo)) return erroDeCampo("tipo", "Selecione um tipo de custo válido.")
   for (const [campo, valorData] of [["dataPagamento",dataPagamento],["dataVencimento",dataVencimento]]) {
