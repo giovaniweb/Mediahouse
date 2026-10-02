@@ -203,6 +203,8 @@ model Usuario {
   eventosCriados      EventoGestao[]          @relation("EventoGestaoCriador")
   eventoChecklistResp EventoGestaoChecklist[]
   eventoDocumentoResp EventoGestaoDocumento[]
+  cutflowSessoes      CutflowSessao[]
+  cutflowPuxadas      CutflowPuxada[]
 
   @@map("usuarios")
 }
@@ -653,6 +655,9 @@ model Demanda {
 
   /// Empresas que executam esta demanda por espelhamento. Ver ParceriaOrganizacao.
   compartilhamentos DemandaCompartilhamento[]
+
+  /// Computador do Cutflow que puxou o card para editar (trava contra edição dupla).
+  cutflowPuxada CutflowPuxada?
 
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
@@ -2159,6 +2164,8 @@ model ProducaoManual {
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
   lancamentosSetor LancamentoSetor[]
+  cutflowSessoes CutflowSessao[]
+  cutflowPuxadas CutflowPuxada[]
   lotesAcervo LoteAcervo[]
   copiasDrive CopiaDrive[]
   politicaIA PoliticaIA?
@@ -2715,20 +2722,28 @@ model LancamentoSetor {
 // Login do plugin sem senha no Premiere (fluxo de dispositivo, 30/09/2026): o
 // computador guarda um segredo e manda ao NuFlow só o hash dele; a pessoa, já
 // logada no navegador, autoriza; o plugin recebe UMA vez a sessão, da qual o
-// banco também só guarda o hash. Sem relações Prisma de propósito: as chaves
-// estrangeiras ficam no SQL e os modelos grandes (Demanda, Usuario) não mudam.
+// banco também só guarda o hash.
+//
+// As relações abaixo existiam só no SQL da migration (REFERENCES ... CASCADE).
+// Sem declará-las aqui, o banco migrado diverge do schema e o passo "Banco
+// migrado é idêntico ao schema" do CI reprova (corrigido na integração com a
+// melhorias, 02/10/2026). Declarar não muda o banco: as chaves já existem.
 model CutflowSessao {
   id              String    @id @default(cuid())
   organizacaoId   String
   usuarioId       String
   dispositivoHash String    @unique
   tokenHash       String?   @unique
-  nomeComputador  String?
+  nomeComputador  String?   @db.VarChar(80)
   entregueEm      DateTime?
   ultimoUsoEm     DateTime?
   expiraEm        DateTime
   revogadaEm      DateTime?
   createdAt       DateTime  @default(now())
+
+  organizacao Organizacao     @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  puxadas     CutflowPuxada[]
 
   @@index([organizacaoId])
   @@map("cutflow_sessoes")
@@ -2742,6 +2757,11 @@ model CutflowPuxada {
   usuarioId     String
   sessaoId      String
   puxadaEm      DateTime @default(now())
+
+  organizacao Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  demanda     Demanda       @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario     Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sessao      CutflowSessao @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
   @@map("cutflow_puxadas")
