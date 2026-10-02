@@ -1,3 +1,4 @@
+import { RecorteInvalido } from "@/lib/metricas-recorte"
 import { NextRequest, NextResponse } from "next/server"
 import { computeRelatorioExecutivo, orgPorRelatorioToken } from "@/lib/relatorio-executivo"
 
@@ -14,6 +15,11 @@ export async function GET(req: NextRequest) {
   if (!organizacaoId) {
     return NextResponse.json({ error: "Link inválido ou revogado" }, { status: 404 })
   }
-  const data = await computeRelatorioExecutivo(organizacaoId, sp.get("mes"), sp.get("area"))
-  return NextResponse.json(data)
+  try {
+    const data = await computeRelatorioExecutivo(organizacaoId, sp.get("mes"), sp.get("area"))
+    return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } })
+  } catch (e) {
+    if (e instanceof RecorteInvalido) return NextResponse.json({ error: e.message }, { status: 400 })
+    throw e
+  }
 }

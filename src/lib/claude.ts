@@ -190,7 +190,7 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
   },
   {
     name: "buscar_agenda_videomaker",
-    description: "Busca a agenda de um videomaker (externo) ou editor (videomaker interno). Mostra eventos + captações agendadas. Funciona com videomaker_id OU editor_id.",
+    description: "Busca a agenda de um videomaker (externo) ou editor (videomaker interno). Mostra eventos + captações autorizadas. Informe videomaker_id OU editor_id; busca por nome/telefone não é aceita.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -220,14 +220,14 @@ export const TOOLS_VIDEOOPS: Anthropic.Tool[] = [
         tipo: { type: "string", enum: ["captacao", "reuniao", "outro"], description: "Tipo do evento" },
         dia_todo: { type: "boolean", description: "Se é evento de dia todo" },
         demanda_id: { type: "string", description: "ID da demanda relacionada" },
-        forcar: { type: "boolean", description: "Se true, cria mesmo com conflito (use só se o usuário confirmar)" },
+        forcar: { type: "boolean", description: "Reservado: a IA não pode forçar conflitos. Oriente confirmação pelo aplicativo." },
       },
       required: ["titulo", "inicio"],
     },
   },
   {
     name: "enviar_whatsapp",
-    description: "Envia mensagem WhatsApp. Use como ÚLTIMA tool para responder ao usuário após executar as ações solicitadas.",
+    description: "Responde somente à conversa WhatsApp atual. Em agentes do aplicativo/cron, exige destinatário gestor ou participante da demanda_id informada. Nunca envia a número arbitrário.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -375,18 +375,10 @@ export const TOOLS_WHATSAPP: Anthropic.Tool[] = TOOLS_VIDEOOPS.filter(t =>
 // sistema não reconhece não deve conseguir criar demanda, agendar evento nem
 // mandar WhatsApp em nome da empresa — o webhook é a superfície mais exposta do
 // produto. Para desconhecido, sobra o subconjunto de leitura + a resposta.
-const TOOLS_WHATSAPP_ESCRITA = new Set([
-  "criar_demanda_rascunho",
-  "criar_evento_agenda",
-  "vincular_arquivo_demanda",
-  "salvar_ideia_video",
-  "solicitar_dados_demanda",
-])
-
-// `enviar_whatsapp` fica de fora do bloqueio: é como o agente responde a quem
-// escreveu. Ela só envia para o número que iniciou a conversa no prompt.
+// Contato externo só fornece um pedido restrito e recebe resposta na conversa.
+// O executor aplica a mesma política mesmo se o modelo pedir outra ferramenta.
 export const TOOLS_WHATSAPP_DESCONHECIDO: Anthropic.Tool[] = TOOLS_WHATSAPP.filter(
-  (t) => !TOOLS_WHATSAPP_ESCRITA.has(t.name)
+  (t) => ["enviar_whatsapp", "estruturar_demanda", "criar_demanda_rascunho"].includes(t.name)
 )
 
 // ─── Executor de ferramentas (chamado pelo agente) ────────────────────────────

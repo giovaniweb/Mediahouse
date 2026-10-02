@@ -10,8 +10,8 @@
 // assinada de curta duração.
 //
 // O caminho carrega a organização — `org/{organizacaoId}/{tipo}/{id}/arquivo` —
-// para a checagem de acesso não depender de consultar o banco a cada byte, e
-// para o dia da RLS o dono do arquivo já estar explícito no próprio caminho.
+// para localizar a empresa. A rota confere também o registro e o escopo de
+// quem pede antes de assinar; o caminho sozinho nunca autoriza a leitura.
 import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
 export const BUCKET_PRIVADO = "midia"
@@ -60,7 +60,9 @@ export function caminhoMidia(p: {
   id: string
   ext: string
 }): string {
-  return `org/${p.organizacaoId}/${p.tipo}/${p.id}/${Date.now()}.${p.ext.replace(/^\./, "")}`
+  const caminho = `org/${p.organizacaoId}/${p.tipo}/${p.id}/${Date.now()}.${p.ext.replace(/^\./, "")}`
+  if (!caminhoMidiaValido(caminho)) throw new Error("Caminho de mídia inválido")
+  return caminho
 }
 
 /** A URL que vai para o banco. É do NOSSO app, não do Supabase: as telas que já
@@ -75,20 +77,27 @@ export function urlDaMidia(caminho: string): string {
 export function caminhoDaUrl(url: string | null | undefined): string | null {
   if (!url) return null
   const m = url.match(/^\/api\/midia\/(.+)$/)
-  return m ? m[1] : null
+  return m && caminhoMidiaValido(m[1]) ? m[1] : null
 }
 
-/** Organização dona do arquivo, lida do próprio caminho. */
+/** Caminho canônico: recusa traversal, escapes, query e segmentos vazios. */
+export function caminhoMidiaValido(caminho: string): boolean {
+  const partes = caminho.split("/")
+  return partes.length >= 5 && partes[0] === "org" &&
+    ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos"].includes(partes[2]) &&
+    partes.every(p => /^[a-zA-Z0-9_.-]+$/.test(p) && p !== "." && p !== "..")
+}
+
 export function organizacaoDoCaminho(caminho: string): string | null {
-  const m = caminho.match(/^org\/([^/]+)\//)
-  return m ? m[1] : null
+  return caminhoMidiaValido(caminho) ? caminho.split("/")[1] : null
 }
 
 /** URL assinada para SUBIR. O cliente sobe direto para o Supabase com ela. */
 export async function urlDeUpload(caminho: string): Promise<{ uploadUrl: string; url: string } | null> {
+  if (!caminhoMidiaValido(caminho)) return null
   if (!(await garantirBucket())) return null
   const sb = cliente()
-  if (!sb) return null
+  if (!sb || !caminhoMidiaValido(caminho)) return null
   const { data, error } = await sb.storage.from(BUCKET_PRIVADO).createSignedUploadUrl(caminho)
   if (error || !data?.signedUrl) {
     console.error("[midia] Falha ao gerar URL de upload:", error?.message)
@@ -103,9 +112,11 @@ export async function subirArquivo(
   corpo: Buffer | ArrayBuffer,
   contentType: string
 ): Promise<string | null> {
+  if (!caminhoMidiaValido(caminho)) return null
   if (!(await garantirBucket())) return null
   const sb = cliente()
   if (!sb) return null
+  if (!caminhoMidiaValido(caminho)) return null
   const { error } = await sb.storage.from(BUCKET_PRIVADO).upload(caminho, corpo, { contentType, upsert: false })
   if (error) {
     console.error("[midia] Falha no upload:", error.message)
@@ -128,6 +139,7 @@ export async function urlAssinadaDeLeitura(
 ): Promise<string | null> {
   const sb = cliente()
   if (!sb) return null
+  if (!caminhoMidiaValido(caminho)) return null
   const { data, error } = await sb.storage
     .from(BUCKET_PRIVADO)
     .createSignedUrl(caminho, segundos)

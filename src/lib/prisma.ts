@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
-import { AsyncLocalStorage } from "node:async_hooks"
-import { orgAtual } from "@/lib/org-contexto"
+import { conexaoBanco } from "@/lib/banco-conexao"
+import { comRls } from "@/lib/prisma-rls"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -9,7 +9,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+  const adapter = new PrismaPg({ connectionString: conexaoBanco("app") })
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
@@ -44,91 +44,6 @@ export const prismaBase = base
 
 export const RLS_ATIVO = process.env.RLS_ATIVO === "sim"
 
-// Evita transação dentro de transação: a operação redespachada abaixo passa por
-// esta mesma extensão, e sem a marca abriria outra, e outra.
-const dentroDaTransacao = new AsyncLocalStorage<true>()
-
-function propriedadeDoModelo(model: string): string {
-  return model.charAt(0).toLowerCase() + model.slice(1)
-}
-
-type ClienteBruto = Record<string, Record<string, (a: unknown) => unknown>>
-
-/** Declara a empresa e executa, tudo numa transação em LOTE — uma ida ao banco. */
-function emLote<T>(organizacaoId: string, operacao: unknown): Promise<T> {
-  const declarar = base.$executeRaw`SELECT set_config('app.org_id', ${organizacaoId}, true)`
-  return base
-    .$transaction([declarar, operacao as ReturnType<typeof base.$executeRaw>])
-    .then(([, resultado]) => resultado as T)
-}
-
-function comRls(cliente: PrismaClient) {
-  return cliente.$extends({
-    name: "rls-por-organizacao",
-
-    client: {
-      // A aplicação usa `$transaction` em nove lugares — mudança de status,
-      // mesclagem de usuário, webhook do WhatsApp. Sem interceptar aqui, cada
-      // operação DENTRO dessas transações passaria pela extensão e tentaria
-      // abrir a PRÓPRIA transação: aninhamento que o Prisma recusa, ou pior,
-      // escritas que escapam do rollback e continuam gravadas quando a
-      // transação falha. Perda de atomicidade não aparece em teste feliz.
-      //
-      // A empresa é declarada UMA vez, no começo da transação de quem chamou, e
-      // a marca em `dentroDaTransacao` faz as operações internas passarem
-      // direto — elas já estão na conexão certa, com o ajuste certo.
-      async $transaction(this: unknown, arg: unknown, opcoes?: unknown) {
-        const organizacaoId = await orgAtual()
-        const chamar = (a: unknown, o?: unknown) =>
-          (base.$transaction as unknown as (x: unknown, y?: unknown) => Promise<unknown>)(a, o)
-
-        if (!organizacaoId) return chamar(arg, opcoes)
-
-        const declarar = base.$executeRaw`SELECT set_config('app.org_id', ${organizacaoId}, true)`
-
-        if (Array.isArray(arg)) {
-          const saida = (await dentroDaTransacao.run(true, () =>
-            chamar([declarar, ...arg], opcoes)
-          )) as unknown[]
-          return saida.slice(1)
-        }
-
-        const callback = arg as (tx: unknown) => Promise<unknown>
-        return dentroDaTransacao.run(true, () =>
-          chamar(async (tx: unknown) => {
-            await (tx as { $executeRawUnsafe: (q: string, ...p: unknown[]) => Promise<unknown> })
-              .$executeRawUnsafe(`SELECT set_config('app.org_id', $1, true)`, organizacaoId)
-            return callback(tx)
-          }, opcoes)
-        )
-      },
-    },
-
-    query: {
-      async $allOperations({ model, operation, args, query }) {
-        // Já dentro de uma transação nossa ou de quem chamou: a empresa já foi
-        // declarada naquela conexão, e abrir outra transação aqui quebraria a
-        // atomicidade de quem nos envolveu.
-        if (dentroDaTransacao.getStore()) return query(args)
-
-        // SQL cru declara a empresa por conta própria — é assim que a
-        // verificação de RLS e os helpers de credencial conseguem trabalhar.
-        if (!model) return query(args)
-
-        const organizacaoId = await orgAtual()
-
-        // Sem empresa declarada, a consulta vai sem `app.org_id`. Não é um furo:
-        // sob RLS o banco devolve vazio. É a falha FECHADA — chata de descobrir,
-        // incapaz de vazar.
-        if (!organizacaoId) return query(args)
-
-        const modelo = (base as unknown as ClienteBruto)[propriedadeDoModelo(model)]
-        const operacao = dentroDaTransacao.run(true, () => modelo[operation](args))
-        return emLote(organizacaoId, operacao)
-      },
-    },
-  }) as unknown as PrismaClient
-}
 
 export const prisma = globalForPrisma.prisma ?? (RLS_ATIVO ? comRls(base) : base)
 

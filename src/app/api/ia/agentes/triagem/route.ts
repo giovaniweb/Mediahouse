@@ -1,5 +1,5 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analisarComClaude, MODELO_POTENTE, extrairJSON } from "@/lib/claude"
 import { formatarData } from "@/lib/datas"
@@ -12,8 +12,8 @@ export const maxDuration = 60
 // POST /api/ia/agentes/triagem
 // Agente de Triagem: analisa uma nova demanda e sugere prioridade, videomaker ideal, riscos
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("verIA")
+  if (acesso instanceof NextResponse) return acesso
 
   const { demandaId } = await req.json()
   if (!demandaId) return NextResponse.json({ error: "demandaId obrigatório" }, { status: 400 })
@@ -21,12 +21,12 @@ export async function POST(req: NextRequest) {
   // Resolve a organização E confere que a demanda é dela. A rota buscava a
   // demanda por id sem checar dono, então bastava trocar o id para triar (e
   // pagar a chamada de IA de) demanda de outra empresa.
-  const guard = await requireDemandaOrg(session, demandaId)
+  const guard = await requireDemandaOrg({ user: { id: acesso.usuarioId, organizacaoId: acesso.organizacaoId } }, demandaId)
   if (guard instanceof NextResponse) return guard
   const { organizacaoId } = guard
 
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "triagem", organizacaoId, status: "executando", criadoPor: session.user?.id },
+    data: { agente: "triagem", organizacaoId, status: "executando", criadoPor: acesso.usuarioId },
   })
 
   try {
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         areasAtuacao: true,
         habilidades: true,
         demandas: {
-          where: { statusInterno: { notIn: ["postado", "entregue_cliente", "encerrado"] } },
+          where: { organizacaoId, statusInterno: { notIn: ["postado", "entregue_cliente", "encerrado"] } },
           select: { id: true },
         },
       },
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
     // Demandas similares para benchmarking
     const similares = await prisma.demanda.findMany({
       where: {
+        organizacaoId,
         tipoVideo: demanda.tipoVideo,
         statusInterno: { in: ["postado", "entregue_cliente"] },
         id: { not: demandaId },

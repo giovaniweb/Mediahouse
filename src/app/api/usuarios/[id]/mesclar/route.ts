@@ -1,8 +1,7 @@
+import { podeAdministrarIdentidade, numeroDeEmpresasDaIdentidade } from "@/lib/identidade-admin"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -12,14 +11,10 @@ type Params = { params: Promise<{ id: string }> }
 // desativa o secundário (global só se ele pertencer apenas a esta org; senão remove só a
 // membership desta org — não afeta outras empresas).
 export async function POST(req: NextRequest, { params }: Params) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão para mesclar usuários" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const { id: principalId } = await params
   const body = await req.json()
@@ -38,6 +33,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!memPrincipal) return NextResponse.json({ error: "Usuário principal não encontrado nesta organização" }, { status: 404 })
   if (!memSecundario) return NextResponse.json({ error: "Usuário secundário não encontrado nesta organização" }, { status: 404 })
 
+  const podeMesclar = await Promise.all([principalId, secundarioId].map(id => podeAdministrarIdentidade(acesso.usuarioId, organizacaoId, id)))
+  if (podeMesclar.some(pode => !pode)) return NextResponse.json({ error: "Mesclar identidade compartilhada requer administração da plataforma" }, { status: 403 })
+
   const [principal, secundario] = await Promise.all([
     prisma.usuario.findUnique({ where: { id: principalId } }),
     prisma.usuario.findUnique({ where: { id: secundarioId } }),
@@ -47,7 +45,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   // Demandas a migrar: SOMENTE da organização ativa
   const qtdDemandas = await prisma.demanda.count({ where: { organizacaoId, solicitanteId: secundarioId } })
   // Em quantas orgs o secundário está? Define se inativa global ou só remove o vínculo daqui.
-  const orgsDoSecundario = await prisma.usuarioOrganizacao.count({ where: { usuarioId: secundarioId } })
+  const orgsDoSecundario = await numeroDeEmpresasDaIdentidade(secundarioId)
   const soNestaOrg = orgsDoSecundario <= 1
 
   const ops = [

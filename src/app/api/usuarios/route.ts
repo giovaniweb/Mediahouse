@@ -1,21 +1,15 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 
 // GET /api/usuarios — Pessoas & Acessos da organização logada (admin/gestor).
 // ISOLADO por organização (via membership). Inclui categoria/função/áreas/papel.
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { searchParams } = new URL(req.url)
   const busca = searchParams.get("busca")?.trim()
@@ -53,12 +47,12 @@ export async function GET(req: NextRequest) {
     const [historicos, comentarios] = await Promise.all([
       prisma.historicoStatus.groupBy({
         by: ["usuarioId"],
-        where: { usuarioId: { in: ids } },
+        where: { usuarioId: { in: ids }, demanda: { organizacaoId } },
         _max: { createdAt: true },
       }),
       prisma.comentario.groupBy({
         by: ["usuarioId"],
-        where: { usuarioId: { in: ids } },
+        where: { usuarioId: { in: ids }, demanda: { organizacaoId } },
         _max: { createdAt: true },
       }),
     ])
@@ -102,13 +96,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/usuarios — cria pessoa + membership na organização logada (admin/gestor).
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão para criar usuários" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { nome, email, senha, tipo, telefone } = body

@@ -1,43 +1,24 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { getOrgId, semOrg } from "@/lib/org"
+import { NextResponse } from "next/server"
+import { requireAcesso } from "@/lib/acesso"
+import { criarEstadoDrive, origemDrive, DRIVE_STATE_COOKIE, DRIVE_STATE_TTL } from "@/lib/drive-oauth"
+import { validarChaveIntegracao } from "@/lib/integration-secret"
 
-/**
- * GET /api/auth/setup-drive
- * Redireciona o admin para o fluxo OAuth2 do Google (autorização de acesso ao Drive).
- * Requer sessão autenticada de admin ou gestor.
- */
-export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session || !["admin", "gestor"].includes(session.user?.tipo ?? "")) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
-
+export async function GET() {
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
   const clientId = process.env.GOOGLE_CLIENT_ID
-  if (!clientId) {
-    return NextResponse.json(
-      { error: "GOOGLE_CLIENT_ID não configurado. Adicione a variável de ambiente." },
-      { status: 500 }
-    )
-  }
-
-  const baseUrl = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim().replace(/\/$/, "")
-  const redirectUri = `${baseUrl}/api/auth/setup-drive/callback`
-
+  if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) return NextResponse.json({ error: "Conexão Google não configurada" }, { status: 503 })
+  let origem: string
+  try { validarChaveIntegracao(); origem = origemDrive() }
+  catch { return NextResponse.json({ error: "Proteção da conexão Google não configurada" }, { status: 503 }) }
+  const state = await criarEstadoDrive({ usuarioId: acesso.usuarioId, organizacaoId: acesso.organizacaoId })
   const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: "https://www.googleapis.com/auth/drive",
-    access_type: "offline",
-    prompt: "consent", // forçar novo refresh_token
-    // state carrega a org que iniciou o OAuth → o callback salva o token na
-    // ConfigEmpresa correta (sem findFirst global). Prefixo serve de CSRF básico.
-    state: `setup-drive:${organizacaoId}`,
+    client_id: clientId, redirect_uri: `${origem}/api/auth/setup-drive/callback`,
+    response_type: "code", scope: "https://www.googleapis.com/auth/drive",
+    access_type: "offline", prompt: "consent", state,
   })
-
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
-  return NextResponse.redirect(authUrl)
+  const resposta = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+  resposta.headers.set("Cache-Control", "no-store")
+  resposta.cookies.set(DRIVE_STATE_COOKIE, state, { httpOnly: true, secure: origem.startsWith("https:"), sameSite: "lax", path: "/api/auth/setup-drive", maxAge: DRIVE_STATE_TTL })
+  return resposta
 }

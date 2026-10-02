@@ -1,18 +1,13 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
-import { getOrgId, semOrg } from "@/lib/org"
 import { getBoardLists } from "@/lib/trello"
 import { configTrelloDaOrg } from "@/lib/trello-config"
 
 export async function GET() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   // A config vinha de `findFirst({ ativo: true })`: a primeira linha da tabela,
   // fosse de quem fosse. Agora ela só é entregue à empresa dona do board.

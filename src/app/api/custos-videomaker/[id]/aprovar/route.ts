@@ -1,8 +1,8 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmailFinanceiro } from "@/lib/email"
-import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { pertenceAOrg } from "@/lib/org"
 import { fiscaisDaEmpresa } from "@/lib/videomaker-vinculo"
 
 // POST /api/custos-videomaker/[id]/aprovar
@@ -11,16 +11,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("verCustos")
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({ error: "Sem permissão para alterar custos" }, { status: 403 })
 
-  const papel = (session.user as { tipo?: string }).tipo
-  if (!["admin", "gestor"].includes(papel ?? "")) {
-    return NextResponse.json({ error: "Apenas admin ou gestor pode aprovar pagamentos" }, { status: 403 })
-  }
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const { id: custoId } = await params
   const body = await req.json()

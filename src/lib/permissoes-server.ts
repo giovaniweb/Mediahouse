@@ -6,7 +6,7 @@
 // exatamente o tipo de coisa que alguém esquece. Aqui é impossível esquecer.
 import { prisma } from "@/lib/prisma"
 import { BASE_FALSE, permissaoEfetiva, type MapaPermissoes, type PermissaoKey } from "@/lib/permissoes"
-import type { PermissaoUsuario } from "@prisma/client"
+import type { Prisma, PermissaoUsuario } from "@prisma/client"
 
 export type { MapaPermissoes }
 
@@ -38,9 +38,10 @@ export async function temPermissao(
 export async function setPermissoes(
   usuarioId: string,
   organizacaoId: string,
-  valores: Partial<MapaPermissoes>
+  valores: Partial<MapaPermissoes>,
+  cliente: Pick<Prisma.TransactionClient, "permissaoUsuario"> = prisma
 ): Promise<PermissaoUsuario> {
-  return prisma.permissaoUsuario.upsert({
+  return cliente.permissaoUsuario.upsert({
     where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
     create: { usuarioId, organizacaoId, ...BASE_FALSE, ...valores },
     update: valores,
@@ -79,14 +80,22 @@ export async function permissoesEfetivas(
         papel: true,
         organizacaoId: true,
         usuario: { select: { status: true } },
+        organizacao: { select: { ativo: true } },
       },
     })
     .catch(() => null)
 
   // Sem vínculo não há o que herdar: a pessoa não é desta empresa.
-  if (!vinculo) return null
+  if (!vinculo?.organizacao.ativo) return null
 
-  const explicita = await getPermissoes(usuarioId, organizacaoId).catch(() => null)
+  // Erro de consulta não é ausência de configuração: nunca herdar um preset
+  // quando a leitura da restrição explícita falhou.
+  let explicita: PermissaoUsuario | null
+  try {
+    explicita = await getPermissoes(usuarioId, organizacaoId)
+  } catch {
+    return null
+  }
 
   const permissoes = permissaoEfetiva({
     membro: {

@@ -1,22 +1,18 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
+import { requireAcesso } from "@/lib/acesso"
+import { NextRequest, NextResponse } from "next/server"
 import { claude, MODELO_RAPIDO, SYSTEM_VIDEOOPS, TOOLS_VIDEOOPS } from "@/lib/claude"
+import { contextoUsuario } from "@/lib/ia-tool-contexto"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
-import { getOrgId } from "@/lib/org"
 import Anthropic from "@anthropic-ai/sdk"
 
 export const maxDuration = 60
 
 // POST /api/ia/chat — streaming chat com tool-use via SSE
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) {
-    return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) {
-    return new Response(JSON.stringify({ error: "Organização não encontrada na sessão" }), { status: 403 })
-  }
+  const acesso = await requireAcesso("verIA")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
+  const contexto = contextoUsuario(organizacaoId, acesso.usuarioId)
 
   const { messages } = await req.json() as {
     messages: Anthropic.MessageParam[]
@@ -82,7 +78,7 @@ export async function POST(req: NextRequest) {
                 const resultado = await executarFerramenta(
                   block.name,
                   block.input as Record<string, unknown>,
-                  organizacaoId
+                  contexto
                 )
 
                 toolResults.push({

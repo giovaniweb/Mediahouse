@@ -113,6 +113,8 @@ export default function CustosPage() {
   const [aba, setAba] = useState<"custos" | "producao">("custos")
   const [modoProducao, setModoProducao] = useState<"mes" | "ano">("mes")
   const [mesSelecionado, setMesSelecionado] = useState(() => new Date().toISOString().slice(0, 7))
+  const [filtroDe, setFiltroDe] = useState("")
+  const [filtroAte, setFiltroAte] = useState("")
   const [filtroVm, setFiltroVm] = useState("")
   const [filtroPago, setFiltroPago] = useState<"" | "true" | "false">("")
   const [modal, setModal] = useState(false)
@@ -121,10 +123,12 @@ export default function CustosPage() {
   const [expandido, setExpandido] = useState<string | null>(null)
 
   const params = new URLSearchParams()
+  if (filtroDe) params.set("de", filtroDe)
+  if (filtroAte) params.set("ate", filtroAte)
   if (filtroVm) params.set("videomakerId", filtroVm)
   if (filtroPago) params.set("pago", filtroPago)
 
-  const { data, mutate, isLoading } = useSWR<RespostaCustos>(
+  const { data, mutate, isLoading, error: erroCustos } = useSWR<RespostaCustos>(
     `/api/custos-videomaker?${params.toString()}`,
     fetcher
   )
@@ -605,7 +609,14 @@ export default function CustosPage() {
         )}
 
         {/* ── Filtros + Ação ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs text-zinc-400">De
+            <input aria-label="Data inicial dos custos" type="date" value={filtroDe} onChange={e => setFiltroDe(e.target.value)} className="block mt-1 bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-zinc-200" />
+          </label>
+          <label className="text-xs text-zinc-400">Até (dia completo)
+            <input aria-label="Data final dos custos" type="date" value={filtroAte} onChange={e => setFiltroAte(e.target.value)} className="block mt-1 bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-zinc-200" />
+          </label>
+          {(filtroDe || filtroAte) && <button onClick={() => { setFiltroDe(""); setFiltroAte("") }} className="text-xs text-zinc-400 py-2">Limpar período</button>}
           <div className="relative">
             <select
               value={filtroVm}
@@ -644,6 +655,8 @@ export default function CustosPage() {
           </button>
         </div>
 
+        {erroCustos && <p role="alert" className="text-sm text-red-300">{mensagemDeErro(erroCustos, "Não foi possível carregar os custos.")}</p>}
+        <p className="text-xs text-zinc-500">Datas de referência no horário de Brasília.</p>
         {/* ── Tabela de custos ───────────────────────────────────────── */}
         <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -666,12 +679,12 @@ export default function CustosPage() {
                   </td>
                 </tr>
               )}
-              {!isLoading && custos.length === 0 && (
+              {!isLoading && !erroCustos && custos.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-zinc-500">
                     <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>Nenhum custo registrado</p>
-                    <p className="text-xs mt-1">Registre o primeiro custo usando o botão acima</p>
+                    <p>Nenhum custo encontrado nos filtros</p>
+                    <p className="text-xs mt-1">Ajuste os filtros ou registre um custo usando o botão acima</p>
                   </td>
                 </tr>
               )}
@@ -704,7 +717,7 @@ export default function CustosPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-zinc-400">
-                      {new Date(c.dataReferencia).toLocaleDateString("pt-BR")}
+                      {new Date(c.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-white">
                       {fmt(c.valor)}

@@ -1,8 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { dimensoesParaTipo } from "@/lib/pessoas"
 import type { TipoUsuario } from "@prisma/client"
 
@@ -13,16 +11,13 @@ type Params = { params: Promise<{ id: string }> }
 // Promove um solicitante na ORGANIZAÇÃO ATIVA: atualiza Usuario.tipo (compat) e a
 // membership (papel/categoria/funcaoProfissional/areas). Só promove pessoa da org.
 export async function POST(req: NextRequest, { params }: Params) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarUsuarios")
+  if (acesso instanceof NextResponse) return acesso
 
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const { id } = await params
+  if (id === acesso.usuarioId) return NextResponse.json({ error: "Não é permitido promover a própria conta" }, { status: 403 })
   const body = await req.json()
   const { tipo } = body
 

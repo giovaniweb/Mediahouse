@@ -1,9 +1,7 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getBoardLists, getBoardCards } from "@/lib/trello"
-import { getOrgId, semOrg } from "@/lib/org"
 import { configTrelloDaOrg } from "@/lib/trello-config"
 
 // Reverse mapping: Trello list name → StatusVisivel
@@ -71,12 +69,9 @@ async function nextCode(): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   // A config vinha de `findFirst({ ativo: true })` e caía nas variáveis de
   // ambiente quando a tabela estava vazia. Nos dois caminhos, o gestor de uma
@@ -130,7 +125,7 @@ export async function POST(req: NextRequest) {
             cidade: "",
             statusVisivel: statusVisivel as import("@prisma/client").StatusVisivel,
             statusInterno: statusInterno as import("@prisma/client").StatusInterno,
-            solicitanteId: session.user.id,
+            solicitanteId: acesso.usuarioId,
             trelloCardId: card.id,
           },
         })
@@ -158,13 +153,10 @@ export async function POST(req: NextRequest) {
 
 // GET: Preview what will be imported (dry run)
 export async function GET() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const conf = await configTrelloDaOrg(organizacaoId)
   if (!conf.ok) return NextResponse.json({ error: conf.erro }, { status: conf.status })

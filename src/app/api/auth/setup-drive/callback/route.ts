@@ -1,104 +1,78 @@
+import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
-import { getOrgId } from "@/lib/org"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
+import { consumirEstadoDrive, origemDrive, DRIVE_STATE_COOKIE } from "@/lib/drive-oauth"
+import { cifrarTokenDrive, lerTokenDrive, validarChaveIntegracao } from "@/lib/integration-secret"
 
-/**
- * GET /api/auth/setup-drive/callback?code=...&state=setup-drive:<organizacaoId>
- * Callback OAuth2 do Google Drive. Troca o authorization code por tokens,
- * busca o email da conta, e salva o refresh_token na ConfigEmpresa da org
- * que iniciou o fluxo (org vem do state; revalidada pela sessão quando possível).
- */
+const tokensSchema = z.object({ access_token: z.string().min(1).max(16384), refresh_token: z.string().min(1).max(16384).optional() })
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const code = searchParams.get("code")
-  const state = searchParams.get("state")
-  const error = searchParams.get("error")
-
-  const baseUrl = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim().replace(/\/$/, "")
-
-  // Usuário recusou a autorização
-  if (error) {
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=recusado`)
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  let origem: string
+  try { origem = origemDrive(); validarChaveIntegracao() }
+  catch { return NextResponse.json({ error: "Proteção da conexão Google não configurada" }, { status: 503 }) }
+  const correlationId = correlacaoAuditoria()
+  const finalizar = async (estado: string) => {
+    if (estado !== "conectado") await comOrg(acesso.organizacaoId, () => registrarAuditoria(prisma, acesso, {
+      acao: "drive.conexao", recurso: "integracao", recursoId: "drive", correlationId,
+      resultado: ["autorizacao_invalida", "recusado"].includes(estado) ? "negado" : "falha", depois: { motivo: estado },
+    }))
+    const resposta = NextResponse.redirect(`${origem}/configuracoes?tab=drive&drive=${estado}`)
+    resposta.headers.set("Cache-Control", "no-store")
+    resposta.cookies.set(DRIVE_STATE_COOKIE, "", { httpOnly: true, secure: origem.startsWith("https:"), sameSite: "lax", path: "/api/auth/setup-drive", maxAge: 0 })
+    return resposta
   }
+  const state = req.nextUrl.searchParams.get("state")
+  if (!state || req.cookies.get(DRIVE_STATE_COOKIE)?.value !== state || !await consumirEstadoDrive(state, acesso)) return finalizar("autorizacao_invalida")
+  if (req.nextUrl.searchParams.has("error")) return finalizar("recusado")
+  const code = req.nextUrl.searchParams.get("code")
+  const clientId = process.env.GOOGLE_CLIENT_ID, clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  if (!code || !clientId || !clientSecret) return finalizar("sem_credenciais")
 
-  // Aceita "setup-drive" (legado) e "setup-drive:<org>" (atual)
-  if (!code || !state || !state.startsWith("setup-drive")) {
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=erro`)
-  }
-  const orgFromState = state.includes(":") ? state.split(":")[1] : null
-
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-
-  if (!clientId || !clientSecret) {
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=sem_credenciais`)
-  }
-
-  const redirectUri = `${baseUrl}/api/auth/setup-drive/callback`
-
-  // Trocar code por tokens
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  })
-
-  if (!tokenRes.ok) {
-    console.error("[setup-drive/callback] Falha ao trocar code:", await tokenRes.text())
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=erro_token`)
-  }
-
-  const { access_token, refresh_token } = (await tokenRes.json()) as {
-    access_token?: string
-    refresh_token?: string
-  }
-
-  if (!refresh_token || !access_token) {
-    console.error("[setup-drive/callback] refresh_token ausente na resposta do Google")
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=sem_refresh_token`)
-  }
-
-  // Buscar email da conta Google
-  const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-    headers: { Authorization: `Bearer ${access_token}` },
-  })
-
-  let email = "conta Google"
-  if (userRes.ok) {
-    const userInfo = (await userRes.json()) as { email?: string }
-    email = userInfo.email ?? email
-  }
-
-  // Resolve a org dona deste token: prioridade para a sessão atual (mais segura),
-  // com fallback para a org embutida no state. Nunca usa findFirst global.
-  const session = await auth().catch(() => null)
-  const orgFromSession = await getOrgId(session)
-  const organizacaoId = orgFromSession ?? orgFromState
-  if (!organizacaoId) {
-    return NextResponse.redirect(`${baseUrl}/configuracoes?tab=empresa&drive=erro_org`)
-  }
-
-  // Salvar na ConfigEmpresa da organização correta (sem findFirst global)
-  const existing = await prisma.configEmpresa.findFirst({ where: { organizacaoId }, select: { id: true } })
-  if (existing) {
-    await prisma.configEmpresa.update({
-      where: { id: existing.id },
-      data: { googleRefreshToken: refresh_token, googleDriveEmail: email, googleDriveConnectedAt: new Date() },
+  await comOrg(acesso.organizacaoId, () => registrarAuditoria(prisma, acesso, {
+    acao: "drive.conexao", recurso: "integracao", recursoId: "drive", resultado: "intencao", correlationId,
+  }))
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: `${origem}/api/auth/setup-drive/callback`, grant_type: "authorization_code" }),
+      signal: AbortSignal.timeout(20000),
     })
-  } else {
-    await prisma.configEmpresa.create({
-      data: { organizacaoId, googleRefreshToken: refresh_token, googleDriveEmail: email, googleDriveConnectedAt: new Date() },
+    if (!tokenRes.ok) return finalizar("erro_token")
+    const tokens = tokensSchema.safeParse(await tokenRes.json())
+    if (!tokens.success) return finalizar("erro_token")
+    const contaRes = await fetch("https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)", {
+      headers: { Authorization: `Bearer ${tokens.data.access_token}` }, signal: AbortSignal.timeout(20000),
     })
+    if (!contaRes.ok) return finalizar("erro_conta")
+    const conta = z.object({ user: z.object({ emailAddress: z.string().email() }) }).safeParse(await contaRes.json())
+    if (!conta.success) return finalizar("erro_conta")
+    const email = conta.data.user.emailAddress
+    // A pessoa pode perder o acesso enquanto aguarda o Google.
+    const atual = await requireAcesso("gerenciarConfig")
+    if (atual instanceof NextResponse || atual.usuarioId !== acesso.usuarioId || atual.organizacaoId !== acesso.organizacaoId) return finalizar("autorizacao_invalida")
+    const { organizacaoId } = acesso
+    await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      // Serializa callbacks distintos da mesma empresa sem rede dentro da transação.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${organizacaoId}, 0))`
+      const existentes = await tx.configEmpresa.findMany({ where: { organizacaoId }, take: 2 })
+      if (existentes.length > 1) throw new Error("Configuração duplicada requer conciliação")
+      const existing = existentes[0]
+      const token = tokens.data.refresh_token || (existing?.googleRefreshToken && existing.googleDriveEmail === email
+        ? lerTokenDrive(existing.googleRefreshToken, organizacaoId) : null)
+      if (!token) throw new Error("Reconexão necessária")
+      const data = { googleRefreshToken: cifrarTokenDrive(token, organizacaoId), googleDriveEmail: email, googleDriveConnectedAt: new Date() }
+      if (existing) await tx.configEmpresa.update({ where: { id: existing.id }, data })
+      else await tx.configEmpresa.create({ data: { organizacaoId, ...data } })
+      await registrarAuditoria(tx, acesso, { acao: "drive.conexao", recurso: "integracao", recursoId: "drive", correlationId,
+        antes: { conectado: !!existing?.googleRefreshToken }, depois: { conectado: true } })
+    }))
+    return finalizar("conectado")
+  } catch {
+    // Nunca registrar corpos de token, code, nonce, cabeçalhos ou credenciais.
+    return finalizar("erro_conexao")
   }
-
-  return NextResponse.redirect(
-    `${baseUrl}/configuracoes?tab=drive&drive=conectado&email=${encodeURIComponent(email)}`
-  )
 }

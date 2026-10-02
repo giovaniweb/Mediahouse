@@ -72,16 +72,14 @@ export async function POST(req: NextRequest) {
     // Atualiza a senha
     const senhaHash = await bcrypt.hash(novaSenha, 12)
 
-    await prisma.$transaction([
-      prisma.usuario.update({
-        where: { email: registro.email },
-        data: { senhaHash },
-      }),
-      prisma.passwordResetToken.update({
-        where: { token },
-        data: { usedAt: new Date() },
-      }),
-    ])
+    // O role de autenticação não pode atualizar usuarios diretamente. A função
+    // confere expiração/uso de novo, bloqueia o token e aplica a troca atomicamente.
+    const [resultado] = await prisma.$queryRaw<{ trocou: boolean }[]>`
+      SELECT public.redefinir_senha_por_token(${token}, ${senhaHash}) AS trocou
+    `
+    if (!resultado?.trocou) {
+      return NextResponse.json({ error: "Link inválido, expirado ou já utilizado" }, { status: 400 })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

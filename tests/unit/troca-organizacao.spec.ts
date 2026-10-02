@@ -1,84 +1,49 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Uma pessoa pode ser membro de várias empresas. A escolha de qual está ativa
-// viaja num cookie — e cookie é coisa que o cliente controla.
-//
-// A regra: o cookie é PALPITE, a membership é a autoridade. Toda requisição
-// reconfere no banco. Cookie forjado com o id da empresa de outra pessoa não dá
-// acesso a nada; a resolução cai no padrão como se ele não existisse.
-//
-// Antes disto, `getOrgId` devolvia a primeira membership por `createdAt` e quem
-// tivesse duas empresas ficava preso na mais antiga, sem como entrar na outra.
-
-const findUnique = vi.fn()
-const findFirst = vi.fn()
-let cookieValor: string | undefined
-
-// A resolução de empresa passou a usar `prismaAuth`, e não o cliente normal:
-// sob RLS, perguntar "em qual empresa eu estou" pelo cliente que filtra por
-// empresa é circular. Os dois ficam mockados — se a resolução voltar para o
-// cliente normal um dia, o teste continua verde, então o `rls.spec.ts` guarda
-// essa parte por leitura do fonte.
-const clienteFake = {
-  usuarioOrganizacao: {
-    findUnique: (...a: unknown[]) => findUnique(...a),
-    findFirst: (...a: unknown[]) => findFirst(...a),
-  },
-  organizacao: { findUnique: async () => null },
-  usuario: { findUnique: async () => null },
-}
-vi.mock("@/lib/prisma", () => ({ prisma: clienteFake, prismaBase: clienteFake }))
-vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: clienteFake }))
-vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: (n: string) => (n === "org_ativa" && cookieValor ? { value: cookieValor } : undefined) }),
+const { findUnique, findFirst, cookie } = vi.hoisted(() => ({
+  findUnique: vi.fn(), findFirst: vi.fn(), cookie: { valor: undefined as string | undefined },
 }))
-
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
+vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: { usuarioOrganizacao: { findUnique, findFirst } } }))
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => cookie.valor ? { value: cookie.valor } : undefined }) }))
 const { getOrgId } = await import("@/lib/org")
 const sessao = { user: { id: "u-1", organizacaoId: "org-token" } }
+const membro = (organizacaoId = "org-token", ativo = true, status = "ativo") => ({ organizacaoId, organizacao: { ativo }, usuario: { status } })
+beforeEach(() => { vi.clearAllMocks(); findUnique.mockReset(); findFirst.mockReset(); cookie.valor = undefined })
 
-beforeEach(() => {
-  findUnique.mockReset(); findFirst.mockReset(); cookieValor = undefined
-})
-
-describe("getOrgId com organização escolhida", () => {
-  it("respeita o cookie quando a membership existe", async () => {
-    cookieValor = "org-escolhida"
-    findUnique.mockResolvedValue({ organizacaoId: "org-escolhida" })
-
+describe("organização revalidada", () => {
+  it("respeita uma escolha válida", async () => {
+    cookie.valor = "org-escolhida"; findUnique.mockResolvedValue(membro(cookie.valor))
     expect(await getOrgId(sessao)).toBe("org-escolhida")
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { usuarioId_organizacaoId: { usuarioId: "u-1", organizacaoId: "org-escolhida" } },
-      select: { organizacaoId: true },
-    })
+    expect(findUnique.mock.calls[0][0].where.usuarioId_organizacaoId).toEqual({ usuarioId: "u-1", organizacaoId: cookie.valor })
   })
-
-  it("IGNORA cookie de empresa da qual a pessoa não é membro", async () => {
-    // O caso que importa: cookie forjado com o id da empresa de outra pessoa.
-    cookieValor = "org-de-outro"
-    findUnique.mockResolvedValue(null) // não há membership
-
-    expect(await getOrgId(sessao)).toBe("org-token") // cai no padrão
+  it("cookie inválido não redireciona a escrita para a empresa do JWT", async () => {
+    cookie.valor = "org-revogada"; findUnique.mockResolvedValue(null)
+    expect(await getOrgId(sessao)).toBeNull()
+    expect(findUnique).toHaveBeenCalledTimes(1); expect(findFirst).not.toHaveBeenCalled()
   })
-
-  it("ignora membership revogada e volta para a do token", async () => {
-    cookieValor = "org-antiga"
-    findUnique.mockResolvedValue(null)
+  it("revalida também a empresa do JWT", async () => {
+    findUnique.mockResolvedValue(membro())
     expect(await getOrgId(sessao)).toBe("org-token")
+    expect(findUnique).toHaveBeenCalledTimes(1)
   })
-
-  it("sem cookie, nem consulta a membership escolhida", async () => {
-    expect(await getOrgId(sessao)).toBe("org-token")
-    expect(findUnique).not.toHaveBeenCalled()
+  it("nega JWT cujo vínculo foi removido", async () => {
+    findUnique.mockResolvedValue(null); expect(await getOrgId(sessao)).toBeNull()
   })
-
-  it("token antigo sem organização cai na primeira membership", async () => {
-    findFirst.mockResolvedValue({ organizacaoId: "org-primeira" })
+  it.each([membro("org-token", false), membro("org-token", true, "inativo")])("nega empresa/pessoa inativa", async (valor) => {
+    findUnique.mockResolvedValue(valor); expect(await getOrgId(sessao)).toBeNull()
+  })
+  it("sessão legada só resolve vínculo ativo consultado no banco", async () => {
+    findFirst.mockResolvedValue(membro("org-primeira"))
     expect(await getOrgId({ user: { id: "u-1" } })).toBe("org-primeira")
+    expect(findFirst.mock.calls[0][0].where).toEqual({ usuarioId: "u-1", usuario: { status: "ativo" }, organizacao: { ativo: true } })
   })
-
-  it("sem sessão, não resolve nada", async () => {
-    expect(await getOrgId(null)).toBeNull()
-    expect(findUnique).not.toHaveBeenCalled()
+  it("não concede acesso quando a consulta falha", async () => {
+    findUnique.mockRejectedValue(new Error("banco indisponível"))
+    await expect(getOrgId(sessao)).rejects.toThrow("banco indisponível")
     expect(findFirst).not.toHaveBeenCalled()
+  })
+  it.each([null, { user: { organizacaoId: "org-token" } }])("nega ausência de identidade", async (session) => {
+    expect(await getOrgId(session)).toBeNull(); expect(findUnique).not.toHaveBeenCalled()
   })
 })

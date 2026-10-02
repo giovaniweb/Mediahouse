@@ -1,5 +1,7 @@
 "use client"
 
+import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
+import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
 import useSWR from "swr"
@@ -18,8 +20,6 @@ import {
   Zap,
   RefreshCw,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   Calendar,
   Target,
   Activity,
@@ -34,6 +34,7 @@ import { useMe } from "@/hooks/usePermissoes"
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Metricas {
+  operacional: { publicacoes: number | null; finalizadasSemData: number; manual: { aviso: string } }
   geradoEm: string
   periodo?: { de: string; ate: string; tipo: string }
   demandas: {
@@ -45,11 +46,11 @@ interface Metricas {
     emAtraso: number
     aguardandoAprovacao: number
     emEdicao: number
-    tempoMedioConclusao: number
+    tempoMedioConclusao: number | null
     porTipo: { tipo: string; count: number }[]
     porStatus: { status: string; count: number }[]
   }
-  custos: {
+  custos?: {
     totalMes: number
     totalSemana: number
     total30d: number
@@ -83,13 +84,11 @@ interface Metricas {
   tendencia: { semana: string; criadas: number; concluidas: number }[]
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface RelatorioGerado {
   id: string
   tipo: string
   periodo: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  conteudo: Record<string, any>
+  apresentacao: ApresentacaoRelatorio
   tokens: number
   modelo: string
   createdAt: string
@@ -101,15 +100,6 @@ const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 })
 
 const fmtNum = (v: number) => v.toLocaleString("pt-BR")
-
-const STATUS_LABELS: Record<string, string> = {
-  entrada: "Entrada",
-  producao: "Produção",
-  edicao: "Edição",
-  aprovacao: "Aprovação",
-  para_postar: "Para Postar",
-  finalizado: "Finalizado",
-}
 
 const TIPO_RELATORIO_LABELS: Record<string, string> = {
   produtividade_time: "Produtividade da Equipe",
@@ -328,356 +318,6 @@ function RelatorioBadge({ tipo }: { tipo: string }) {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RelatorioConteudo({ conteudo, tipo }: { conteudo: Record<string, any>; tipo: string }) {
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const toggle = (key: string) => setExpanded(expanded === key ? null : key)
-
-  // ── Produtividade ─────────────────────────────────────────────────────────
-  if (tipo === "produtividade_time") {
-    const score = conteudo.score_produtividade as number
-    const scoreCor = score >= 70 ? "text-green-400" : score >= 40 ? "text-amber-400" : "text-red-400"
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className={`text-5xl font-bold ${scoreCor}`}>{score}</div>
-          <div>
-            <div className="text-sm text-zinc-300 font-medium">Score de Produtividade</div>
-            <div className="text-xs text-zinc-500">Baseado em conclusões, SLA e eficiência</div>
-          </div>
-        </div>
-
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_executivo as string}</p>
-
-        {/* Pontos fortes */}
-        {Array.isArray(conteudo.pontos_fortes) && conteudo.pontos_fortes.length > 0 && (
-          <div>
-            <button onClick={() => toggle("fortes")} className="flex items-center gap-2 text-sm font-medium text-green-400 mb-2">
-              <CheckCircle2 className="w-4 h-4" />
-              Pontos Fortes ({(conteudo.pontos_fortes as string[]).length})
-              {expanded === "fortes" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "fortes" && (
-              <ul className="space-y-1">
-                {(conteudo.pontos_fortes as string[]).map((p, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                    <span className="text-green-500 mt-0.5">✓</span> {p}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Gargalos */}
-        {Array.isArray(conteudo.gargalos) && conteudo.gargalos.length > 0 && (
-          <div>
-            <button onClick={() => toggle("gargalos")} className="flex items-center gap-2 text-sm font-medium text-amber-400 mb-2">
-              <AlertTriangle className="w-4 h-4" />
-              Gargalos Identificados ({(conteudo.gargalos as unknown[]).length})
-              {expanded === "gargalos" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "gargalos" && (
-              <div className="space-y-2">
-                {(conteudo.gargalos as { problema: string; impacto: string; solucao: string }[]).map((g, i) => (
-                  <div key={i} className="bg-amber-950/30 border border-amber-800/30 rounded-lg p-3">
-                    <div className="text-sm font-medium text-amber-300">{g.problema}</div>
-                    <div className="text-xs text-zinc-400 mt-1">Impacto: {g.impacto}</div>
-                    <div className="text-xs text-emerald-400 mt-1">→ {g.solucao}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Oportunidades */}
-        {Array.isArray(conteudo.oportunidades_melhoria) && (
-          <div>
-            <button onClick={() => toggle("ops")} className="flex items-center gap-2 text-sm font-medium text-blue-400 mb-2">
-              <Target className="w-4 h-4" />
-              Oportunidades ({(conteudo.oportunidades_melhoria as unknown[]).length})
-              {expanded === "ops" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "ops" && (
-              <div className="space-y-2">
-                {(conteudo.oportunidades_melhoria as { area: string; acao: string; ganho_estimado: string }[]).map((o, i) => (
-                  <div key={i} className="bg-blue-950/20 border border-blue-800/30 rounded-lg p-3">
-                    <div className="text-xs font-medium text-blue-300 uppercase tracking-wide">{o.area}</div>
-                    <div className="text-sm text-zinc-300 mt-0.5">{o.acao}</div>
-                    <div className="text-xs text-green-400 mt-1">Ganho: {o.ganho_estimado}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Feedback do processo */}
-        {conteudo.feedback_processo && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              Feedback IA do Processo
-            </div>
-            <p className="text-sm text-zinc-300">{conteudo.feedback_processo as string}</p>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Análise de Custos ─────────────────────────────────────────────────────
-  if (tipo === "analise_custos") {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_financeiro as string}</p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-zinc-800 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-green-400">{fmt(conteudo.total_periodo as number)}</div>
-            <div className="text-xs text-zinc-500">Total do período</div>
-          </div>
-          <div className="bg-zinc-800 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-blue-400">{fmt(conteudo.custo_medio_video as number)}</div>
-            <div className="text-xs text-zinc-500">Custo médio/vídeo</div>
-          </div>
-        </div>
-
-        {conteudo.avaliacao_roi && (
-          <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-lg p-3">
-            <div className="text-xs font-medium text-emerald-400 mb-1">Avaliação ROI</div>
-            <p className="text-sm text-zinc-300">{conteudo.avaliacao_roi as string}</p>
-          </div>
-        )}
-
-        {Array.isArray(conteudo.videomakers_eficientes) && (
-          <div>
-            <button onClick={() => toggle("vms")} className="flex items-center gap-2 text-sm font-medium text-purple-400 mb-2">
-              <Users className="w-4 h-4" />
-              Eficiência por Videomaker
-              {expanded === "vms" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "vms" && (
-              <div className="space-y-2">
-                {(conteudo.videomakers_eficientes as { nome: string; custo_beneficio: string; recomendacao: string }[]).map((v, i) => (
-                  <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3">
-                    <div>
-                      <div className="text-sm font-medium text-white">{v.nome}</div>
-                      <div className="text-xs text-zinc-400 mt-0.5">{v.custo_beneficio}</div>
-                    </div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      v.recomendacao === "manter" ? "bg-green-500/20 text-green-300" :
-                      v.recomendacao === "aumentar" ? "bg-blue-500/20 text-blue-300" :
-                      "bg-red-500/20 text-red-300"
-                    }`}>
-                      {v.recomendacao}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {Array.isArray(conteudo.otimizacoes_contratacao) && (
-          <div>
-            <button onClick={() => toggle("otim")} className="flex items-center gap-2 text-sm font-medium text-amber-400 mb-2">
-              <TrendingUp className="w-4 h-4" />
-              Otimizações Sugeridas
-              {expanded === "otim" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "otim" && (
-              <div className="space-y-2">
-                {(conteudo.otimizacoes_contratacao as { tipo: string; descricao: string; economia_potencial: string }[]).map((o, i) => (
-                  <div key={i} className="bg-amber-950/20 border border-amber-800/30 rounded-lg p-3">
-                    <div className="text-xs font-semibold text-amber-300">{o.tipo}</div>
-                    <div className="text-sm text-zinc-300 mt-0.5">{o.descricao}</div>
-                    <div className="text-xs text-green-400 mt-1">Economia: {o.economia_potencial}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {conteudo.projecao_mes_seguinte && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 mb-1">
-              <Calendar className="w-3.5 h-3.5" /> Projeção Próximo Mês
-            </div>
-            <div className="text-lg font-bold text-white">
-              {fmt((conteudo.projecao_mes_seguinte as { valor_estimado: number }).valor_estimado)}
-            </div>
-            <div className="text-xs text-zinc-400 mt-0.5">
-              {(conteudo.projecao_mes_seguinte as { base_calculo: string }).base_calculo}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Relatório Geral (semanal/mensal/realtime) ──────────────────────────────
-  if (["semanal", "mensal", "realtime"].includes(tipo)) {
-    const saude = conteudo.saude_geral_sistema as number
-    const saudeCor = saude >= 70 ? "text-green-400" : saude >= 40 ? "text-amber-400" : "text-red-400"
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className={`text-4xl font-bold ${saudeCor}`}>{saude}</div>
-          <div>
-            <div className="text-sm font-medium text-zinc-300">Saúde Geral do Sistema</div>
-            <div className="text-xs text-zinc-500">{conteudo.titulo as string}</div>
-          </div>
-        </div>
-
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.resumo_executivo as string}</p>
-
-        {/* KPIs */}
-        {Array.isArray(conteudo.kpis) && (
-          <div className="grid grid-cols-2 gap-2">
-            {(conteudo.kpis as { nome: string; valor: string; tendencia: string; avaliacao: string }[]).map((kpi, i) => (
-              <div key={i} className="bg-zinc-800/60 border border-zinc-700/50 rounded-lg p-2.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wide">{kpi.nome}</span>
-                  {kpi.tendencia === "up" ? (
-                    <TrendingUp className={`w-3 h-3 ${kpi.avaliacao === "bom" ? "text-green-400" : "text-red-400"}`} />
-                  ) : kpi.tendencia === "down" ? (
-                    <TrendingDown className={`w-3 h-3 ${kpi.avaliacao === "bom" ? "text-green-400" : "text-red-400"}`} />
-                  ) : (
-                    <Minus className="w-3 h-3 text-zinc-500" />
-                  )}
-                </div>
-                <div className="text-sm font-bold text-white">{kpi.valor}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Destaques */}
-        {Array.isArray(conteudo.destaques_positivos) && conteudo.destaques_positivos.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-green-400 flex items-center gap-1.5 mb-2">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Destaques Positivos
-            </div>
-            {(conteudo.destaques_positivos as string[]).map((d, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span> {d}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Atenção */}
-        {Array.isArray(conteudo.pontos_atencao) && conteudo.pontos_atencao.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-amber-400 flex items-center gap-1.5 mb-2">
-              <AlertTriangle className="w-3.5 h-3.5" /> Pontos de Atenção
-            </div>
-            {(conteudo.pontos_atencao as string[]).map((p, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="text-amber-500 mt-0.5 flex-shrink-0">⚠</span> {p}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Ações */}
-        {Array.isArray(conteudo.acoes_recomendadas) && (
-          <div>
-            <button onClick={() => toggle("acoes")} className="flex items-center gap-2 text-sm font-medium text-blue-400 mb-2">
-              <Target className="w-4 h-4" />
-              Ações Recomendadas ({(conteudo.acoes_recomendadas as unknown[]).length})
-              {expanded === "acoes" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-            {expanded === "acoes" && (
-              <div className="space-y-2">
-                {(conteudo.acoes_recomendadas as { prioridade: string; acao: string; responsavel: string }[]).map((a, i) => (
-                  <div key={i} className="flex gap-3 bg-zinc-800/50 rounded-lg p-3">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded self-start mt-0.5 ${
-                      a.prioridade === "alta" ? "bg-red-500/20 text-red-300" :
-                      a.prioridade === "media" ? "bg-amber-500/20 text-amber-300" :
-                      "bg-zinc-600/30 text-zinc-400"
-                    }`}>{a.prioridade.toUpperCase()}</span>
-                    <div>
-                      <div className="text-sm text-zinc-200">{a.acao}</div>
-                      <div className="text-xs text-zinc-500 mt-0.5">→ {a.responsavel}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {conteudo.previsao_proximo_periodo && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-300">
-            <div className="text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" /> Previsão
-            </div>
-            {conteudo.previsao_proximo_periodo as string}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Performance Videomaker ────────────────────────────────────────────────
-  if (tipo === "performance_videomaker") {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-zinc-300 leading-relaxed">{conteudo.insights_equipe as string}</p>
-        {Array.isArray(conteudo.ranking_performance) && (
-          <div className="space-y-3">
-            {(conteudo.ranking_performance as {
-              posicao: number; nome: string; score_performance: number
-              pontos_fortes: string[]; areas_melhoria: string[]; recomendacao: string
-            }[]).map((vm, i) => (
-              <div key={i} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-zinc-500">#{vm.posicao}</span>
-                    <span className="text-sm font-medium text-white">{vm.nome}</span>
-                  </div>
-                  <div className={`text-lg font-bold ${vm.score_performance >= 70 ? "text-green-400" : vm.score_performance >= 40 ? "text-amber-400" : "text-red-400"}`}>
-                    {vm.score_performance}
-                  </div>
-                </div>
-                <p className="text-xs text-zinc-300 mb-2">{vm.recomendacao}</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-green-400 font-medium mb-1">Pontos Fortes</div>
-                    {vm.pontos_fortes.map((p, j) => <div key={j} className="text-zinc-400">• {p}</div>)}
-                  </div>
-                  <div>
-                    <div className="text-amber-400 font-medium mb-1">A Melhorar</div>
-                    {vm.areas_melhoria.map((p, j) => <div key={j} className="text-zinc-400">• {p}</div>)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {conteudo.proximo_passo && (
-          <div className="bg-blue-950/30 border border-blue-800/30 rounded-lg p-3 text-sm text-zinc-300">
-            <div className="text-xs font-medium text-blue-400 mb-1">Próximo Passo</div>
-            {conteudo.proximo_passo as string}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // Fallback
-  return (
-    <pre className="text-xs text-zinc-400 bg-zinc-900 rounded-lg p-3 overflow-auto max-h-64">
-      {JSON.stringify(conteudo, null, 2)}
-    </pre>
-  )
-}
-
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 type Periodo = "semana" | "mes" | "3meses" | "ano" | "custom"
@@ -760,7 +400,7 @@ export default function RelatoriosPage() {
     if (!mRes?.periodo) return null
     const de = new Date(mRes.periodo.de).getTime()
     const ate = new Date(mRes.periodo.ate).getTime()
-    const len = ate - de
+    const len = ate - de + 86_400_000
     const prevDe = new Date(de - len).toISOString().slice(0, 10)
     const prevAte = new Date(de - 86_400_000).toISOString().slice(0, 10)
     return `/api/relatorios/metricas?periodo=custom&de=${prevDe}&ate=${prevAte}&area=${resAreaParam}`
@@ -775,30 +415,27 @@ export default function RelatoriosPage() {
     ? `/api/producao-manual?area=${resAreaParam}&de=${mRes.periodo.de.slice(0, 10)}&ate=${mRes.periodo.ate.slice(0, 10)}`
     : null
   const { data: prodManual, mutate: mutateProdManual } = useSWR<{ producaoPorCategoria: Record<string, number>; totalManual: number; presencialPorCategoria: Record<string, number>; totalPresencial: number }>(pmUrl, fetcher)
-  // Produção manual do período anterior (para o delta de produção total)
-  const pmPrevUrl = abaAtiva === "resultados" && areaRes !== "eventos" && prevUrl && mRes?.periodo
-    ? (() => { const u = new URL(prevUrl, "http://x"); return `/api/producao-manual?area=${resAreaParam}&de=${u.searchParams.get("de")}&ate=${u.searchParams.get("ate")}` })()
-    : null
-  const { data: prodManualPrev } = useSWR<{ totalManual: number }>(pmPrevUrl, fetcher)
-
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
     try {
       const res = await fetch("/api/relatorios/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo }),
+        body: JSON.stringify({ tipo, area: areaRel, periodo, ...(periodo === "custom" ? { de: periodoCustomDe, ate: periodoCustomAte } : {}) }),
       })
       const data = await res.json()
-      if (data.conteudo) {
-        setRelatorioAtual({ ...data.relatorio, conteudo: data.conteudo })
+      if (!res.ok) throw new Error(data.error ?? "Não foi possível gerar o relatório")
+      if (data.relatorio) {
+        setRelatorioAtual(data.relatorio)
         setAbaAtiva("ia")
         await recarregarHistorico()
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível gerar o relatório")
     } finally {
       setGerando(null)
     }
-  }, [recarregarHistorico])
+  }, [recarregarHistorico, areaRel, periodo, periodoCustomDe, periodoCustomAte])
 
   const m = metricas
 
@@ -847,7 +484,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
                 {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
-                  <button key={a} onClick={() => setAreaRes(a)}
+                  <button key={a} onClick={() => { setAreaRes(a); if (a !== "eventos") setAreaRel(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
               </div>
@@ -904,7 +541,7 @@ export default function RelatoriosPage() {
                   const cats = prodManual?.producaoPorCategoria ?? {}
                   const nuflow = mRes?.producao?.videosEntreguesMes ?? 0
                   const totalManual = prodManual?.totalManual ?? 0
-                  const totalGeral = totalManual + nuflow
+
                   const cores = ["text-blue-400", "text-cyan-400", "text-emerald-400", "text-amber-400", "text-pink-400"]
                   const catEntries = Object.entries(cats)
                   const presencial = Object.entries(prodManual?.presencialPorCategoria ?? {})
@@ -917,11 +554,11 @@ export default function RelatoriosPage() {
                           ✏️ Editar números
                         </button>
                       </div>
-                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Volume de conteúdo (lançados + NuFlow) + frentes presenciais.</p>
+                      <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Fontes separadas: lançamentos mensais podem repetir entregas do sistema. Não somamos sem conciliação.</p>
                       <div className="grid lg:grid-cols-3 gap-5">
                         {/* Vídeos (2/3) */}
                         <div className="lg:col-span-2">
-                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{unidade} postados/entregues</div>
+                          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-2">{unidade} entregues</div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {catEntries.map(([cat, qtd], i) => (
                               <div key={cat} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
@@ -931,11 +568,11 @@ export default function RelatoriosPage() {
                             ))}
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 print:border-zinc-300 print:bg-white">
                               <div className="text-3xl font-bold text-emerald-400">{fmtNum(nuflow)}</div>
-                              <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Demandas NuFlow</div>
+                              <div className="text-sm text-zinc-400 mt-1 print:text-zinc-600">Entregáveis NuFlow</div>
                             </div>
                             <div className="rounded-xl border border-purple-700/50 bg-purple-950/30 p-4 print:border-zinc-400 print:bg-zinc-50">
-                              <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalGeral)}</div>
-                              <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Total geral</div>
+                              <div className="text-3xl font-bold text-white print:text-black">{fmtNum(totalManual)}</div>
+                              <div className="text-sm text-zinc-300 mt-1 print:text-zinc-600">Lançamentos manuais</div>
                             </div>
                           </div>
                         </div>
@@ -960,20 +597,21 @@ export default function RelatoriosPage() {
                   )
                 })()}
 
+                <p className="text-xs text-zinc-500">Publicações registradas: {mRes?.operacional.publicacoes ?? "Não medido"}. Finalizadas sem data confiável (fora do cálculo): {mRes?.operacional.finalizadasSemData ?? "—"}.</p>
                 {/* KPIs com comparação */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <KpiCard label={areaRes === "design" ? "Artes entregues" : "Vídeos entregues"} value={fmtNum(mRes?.producao?.videosEntreguesMes ?? 0)} atual={mRes?.producao?.videosEntreguesMes} anterior={mPrev?.producao?.videosEntreguesMes} />
                   <KpiCard label="Concluídas" value={fmtNum(mRes?.producao?.demandasFinalizadasMes ?? 0)} atual={mRes?.producao?.demandasFinalizadasMes} anterior={mPrev?.producao?.demandasFinalizadasMes} />
                   <KpiCard label="Criadas" value={fmtNum(mRes?.demandas?.totalMes ?? 0)} atual={mRes?.demandas?.totalMes} anterior={mPrev?.demandas?.totalMes} />
-                  <KpiCard label="Tempo médio" value={`${mRes?.demandas?.tempoMedioConclusao ?? 0}d`} atual={mRes?.demandas?.tempoMedioConclusao} anterior={mPrev?.demandas?.tempoMedioConclusao} inverter sub="menor é melhor" />
+                  <KpiCard label="Tempo médio" value={mRes?.demandas?.tempoMedioConclusao == null ? "Não medido" : `${mRes.demandas.tempoMedioConclusao}d`} atual={mRes?.demandas?.tempoMedioConclusao ?? undefined} anterior={mPrev?.demandas?.tempoMedioConclusao ?? undefined} inverter sub="menor é melhor" />
                   {(() => {
                     const valor = mRes?.producao?.valorPorDemanda ?? 200
-                    const totalAtual = (prodManual?.totalManual ?? 0) + (mRes?.producao?.videosEntreguesMes ?? 0)
-                    const totalAnt = (prodManualPrev?.totalManual ?? 0) + (mPrev?.producao?.videosEntreguesMes ?? 0)
+                    const totalAtual = mRes?.producao?.videosEntreguesMes ?? 0
+                    const totalAnt = mPrev?.producao?.videosEntreguesMes ?? 0
                     return (
                       <>
-                        <KpiCard label={`Custo médio/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
-                        <KpiCard label="Produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
+                        <KpiCard label={`Referência/${areaRes === "design" ? "arte" : "vídeo"}`} value={fmt(valor)} sub="valor médio de referência" />
+                        <KpiCard label="Índice de produção (R$)" value={fmt(totalAtual * valor)} atual={totalAtual * valor} anterior={totalAnt * valor} sub={`${fmtNum(totalAtual)} ${areaRes === "design" ? "artes" : "vídeos"} × ${fmt(valor)}`} />
                       </>
                     )
                   })()}
@@ -1026,7 +664,7 @@ export default function RelatoriosPage() {
               <span className="text-xs text-zinc-500 font-medium">Área:</span>
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
                 {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
-                  <button key={a} onClick={() => setAreaRel(a)}
+                  <button key={a} onClick={() => { setAreaRel(a); setAreaRes(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
                     {label}
                   </button>
@@ -1084,7 +722,7 @@ export default function RelatoriosPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <MetricCard icon={Film} label="Demandas Ativas" value={fmtNum(m?.demandas.totalAtivas ?? 0)} sub={`${m?.demandas.totalMes ?? 0} criadas no período`} cor="blue" />
               <MetricCard icon={CheckCircle2} label="Vídeos Entregues" value={fmtNum(m?.producao?.videosEntreguesMes ?? m?.producao?.videosEntregues30d ?? m?.demandas.concluidas30d ?? 0)} sub={`em ${m?.producao?.demandasFinalizadas30d ?? m?.demandas.concluidas30d ?? 0} demandas`} cor="green" />
-              <MetricCard icon={Clock} label="Tempo Médio" value={`${m?.demandas.tempoMedioConclusao ?? 0}d`} sub="Criação → finalização (c/ VM)" cor="zinc" />
+              <MetricCard icon={Clock} label="Tempo Médio" value={m?.demandas.tempoMedioConclusao == null ? "Não medido" : `${m.demandas.tempoMedioConclusao}d`} sub="Criação → conclusão atual" cor="zinc" />
               <MetricCard icon={AlertTriangle} label="Em Atraso" value={fmtNum(m?.demandas.emAtraso ?? 0)} sub={`${m?.alertas.criticos ?? 0} alertas críticos`} cor={m && m.demandas.emAtraso > 0 ? "red" : "zinc"} alert={m && m.demandas.emAtraso > 0} />
             </div>
 
@@ -1150,7 +788,7 @@ export default function RelatoriosPage() {
               <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
                 <h3 className="text-sm font-medium text-white mb-3">Top Custos (30d)</h3>
                 <div className="space-y-2.5">
-                  {m?.custos.topVideomakers.map((vm) => (
+                  {m?.custos?.topVideomakers.map((vm) => (
                     <div key={vm.id} className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-medium text-zinc-300">{vm.nome}</div>
@@ -1159,7 +797,7 @@ export default function RelatoriosPage() {
                       <div className="text-sm font-semibold text-green-400">{fmt(vm.totalGasto)}</div>
                     </div>
                   ))}
-                  {!m?.custos.topVideomakers.length && (
+                  {!m?.custos?.topVideomakers.length && (
                     <p className="text-xs text-zinc-500">Nenhum custo registrado</p>
                   )}
                 </div>
@@ -1238,7 +876,7 @@ export default function RelatoriosPage() {
                     </div>
                   </div>
                   <div className="p-4 max-h-[60vh] overflow-y-auto">
-                    <RelatorioConteudo conteudo={relatorioAtual.conteudo} tipo={relatorioAtual.tipo} />
+                    <ConteudoRelatorio apresentacao={relatorioAtual.apresentacao} referencia={relatorioAtual.id} />
                   </div>
                 </div>
               ) : (

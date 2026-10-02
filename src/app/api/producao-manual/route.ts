@@ -1,7 +1,8 @@
+import { recorteMetricas, RecorteInvalido } from "@/lib/metricas-recorte"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { pertenceAOrg } from "@/lib/org"
 import { lerInteiro } from "@/lib/numeros"
 
 function compDe(d: Date): number {
@@ -15,15 +16,15 @@ function podeEditar(tipo?: string) {
 // GET /api/producao-manual?de=YYYY-MM-DD&ate=YYYY-MM-DD&area=audiovisual
 // Retorna lançamentos no intervalo + total agregado por categoria.
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const sp = req.nextUrl.searchParams
-  const area = sp.get("area") === "design" ? "design" : "audiovisual"
-  const de = sp.get("de") ? new Date(sp.get("de")!) : new Date(new Date().getFullYear(), 0, 1)
-  const ate = sp.get("ate") ? new Date(sp.get("ate")!) : new Date()
+  let recorte
+  try { recorte = recorteMetricas(new URLSearchParams({ periodo: "ano", ...Object.fromEntries(sp) })) }
+  catch (e) { if (e instanceof RecorteInvalido) return NextResponse.json({ error: e.message }, { status: 400 }); throw e }
+  const area = recorte.area, de = new Date(recorte.de), ate = new Date(recorte.ate)
 
   const lancamentos = await prisma.producaoManual.findMany({
     where: { organizacaoId, area, competencia: { gte: compDe(de), lte: compDe(ate) } },
@@ -41,6 +42,10 @@ export async function GET(req: NextRequest) {
   const totalPresencial = Object.values(presencialPorCategoria).reduce((a, b) => a + b, 0)
 
   return NextResponse.json({
+    fonte: "lancamento_mensal",
+    recorte,
+    totalCombinado: null,
+    aviso: "Valores mensais; podem repetir entregas automáticas e não devem ser somados sem conciliação.",
     lancamentos,
     // compat + novos campos
     porCategoria: producaoPorCategoria,
@@ -53,13 +58,12 @@ export async function GET(req: NextRequest) {
 
 // POST /api/producao-manual — upsert { competencia, area, categoria, quantidade }
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!podeEditar((session.user as { tipo?: string }).tipo)) {
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  if (!podeEditar(acesso.papel)) {
     return NextResponse.json({ error: "Apenas admin/gestor podem lançar produção manual" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const competencia = lerInteiro(body.competencia)
@@ -82,13 +86,12 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/producao-manual?id=
 export async function DELETE(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!podeEditar((session.user as { tipo?: string }).tipo)) {
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  if (!podeEditar(acesso.papel)) {
     return NextResponse.json({ error: "Apenas admin/gestor" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
   const id = req.nextUrl.searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
   const reg = await prisma.producaoManual.findUnique({ where: { id }, select: { organizacaoId: true } })

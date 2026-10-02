@@ -79,8 +79,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({
     demanda: {
       ...publico,
+      linkFinal: comToken(publico.linkFinal, token),
+      arquivos: publico.arquivos.map(a => ({ ...a, url: comToken(a.url, token) })),
       thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
       organizacao,
     },
-  })
+  }, { headers: { "Cache-Control": "private, no-store" } })
 }

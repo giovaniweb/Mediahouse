@@ -12,7 +12,8 @@ type Resumo = {
   producaoPorCategoria: Record<string, number>
   nuflowVideos: number
   totalManual: number
-  totalGeral: number
+  totalGeral: null
+  aviso: string
   presencialPorCategoria: Record<string, number>
   producaoRS: number
   valorPorVideo: number
@@ -23,7 +24,7 @@ const fmtRS = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDi
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 // Lista de meses de Maio/2026 até o mês atual (descendente)
-export function opcoesMes(): { value: string; label: string }[] {
+function opcoesMes(): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = []
   const startY = 2026, startM = 5
   const now = new Date()
@@ -97,6 +98,7 @@ export default function RelatorioExecutivoMesPage() {
           </div>
         </div>
 
+        <p className="mb-4 text-sm text-zinc-400">Fontes manuais e entregas do sistema são separadas; pode haver sobreposição. Valores em reais são índice de referência das entregas do sistema, não receita.</p>
         {!token ? (
           <div className="py-24 text-center">
             <p className="text-lg font-semibold text-zinc-200">Link incompleto</p>
@@ -113,7 +115,7 @@ export default function RelatorioExecutivoMesPage() {
 
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
-                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-4">{unidade} postados/entregues</div>
+                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-4">{unidade} entregues</div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {cats.map(([cat, qtd], i) => (
                     <div key={cat} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -126,8 +128,8 @@ export default function RelatorioExecutivoMesPage() {
                     <div className="text-sm text-zinc-400 mt-2">Demandas NuFlow</div>
                   </div>
                   <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5">
-                    <div className="text-4xl font-extrabold text-white">{fmtNum(data.totalGeral)}</div>
-                    <div className="text-sm text-blue-200 mt-2">Total geral</div>
+                    <div className="text-4xl font-extrabold text-white">Não conciliado</div>
+                    <div className="text-sm text-blue-200 mt-2">Total entre fontes</div>
                   </div>
                 </div>
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex items-center justify-between">

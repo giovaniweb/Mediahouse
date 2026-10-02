@@ -1,8 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import type { Prioridade, StatusVisivel, StatusInterno } from "@prisma/client"
 import { validarPrazo } from "@/lib/datas"
 
@@ -199,12 +197,9 @@ interface TrelloExport {
 // ─── POST: Import from uploaded Trello JSON ──────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   let body: TrelloExport
   try {
@@ -328,7 +323,7 @@ export async function POST(req: NextRequest) {
           prioridade,
           statusVisivel,
           statusInterno,
-          solicitanteId: session.user.id,
+          solicitanteId: acesso.usuarioId,
           editorId,
           trelloCardId: card.id,
           dataLimite: prazo,

@@ -65,7 +65,7 @@ const sections = [
       { href: "/demandas", label: "Demandas", icon: Film },
       { href: "/coberturas", label: "Coberturas", icon: CalendarRange },
       { href: "/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
-      { href: "/galeria", label: "Galeria", icon: PlayCircle },
+      { href: "/biblioteca", label: "Biblioteca", icon: PlayCircle },
       // Externo = contratado por diária; interno = time da casa. O sistema inteiro
       // diz "videomaker interno" e "videomaker externo", e só isso — eram cinco
       // nomes para duas coisas, e cada tela usava um.

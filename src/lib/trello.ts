@@ -29,14 +29,13 @@ async function trelloRequest(cfg: TrelloConfig, path: string, method = "GET", bo
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10000),
-  })
+  }).catch(() => { throw new Error("Não foi possível acessar o Trello") })
 
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Trello API error ${res.status}: ${text}`)
+    throw new Error(`Falha na conexão Trello (HTTP ${res.status})`)
   }
 
-  return res.json()
+  return res.json().catch(() => { throw new Error("Resposta inválida do Trello") })
 }
 
 // Busca todas as listas do board

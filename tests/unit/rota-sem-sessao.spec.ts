@@ -64,6 +64,7 @@ describe("rota sem sessão declara a empresa", () => {
     const rel = relative(RAIZ, arquivo)
     const src = readFileSync(arquivo, "utf8")
     if (/\bawait auth\(\)/.test(src)) continue
+    if (/import \{ requireAcesso \} from "@\/lib\/acesso"/.test(src) && /\bawait requireAcesso\(/.test(src)) continue
     if (/declararOrg\(|comOrg\(/.test(src)) continue
     const modelos = [...new Set([...src.matchAll(/\bprisma\.(\w+)\./g)].map((m) => m[1]))]
     if (!modelos.some((m) => escopado[m])) continue
