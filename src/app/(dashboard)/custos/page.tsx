@@ -42,6 +42,9 @@ interface Custo {
   dataReferencia: string
   dataVencimento: string | null
   pago: boolean
+  statusPagamento: string
+  valorPendenteConfirmacao: boolean
+  pagamentoEmConflito: boolean
   dataPagamento: string | null
   videomaker: { id: string; nome: string; valorDiaria: number | null }
   demanda: { id: string; codigo: string; titulo: string } | null
@@ -86,6 +89,9 @@ export default function CustosPage() {
   const [salvando, setSalvando] = useState(false)
   const [marcandoPago, setMarcandoPago] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
+  const [confirmandoValor, setConfirmandoValor] = useState<string | null>(null)
+  const [valorTotal, setValorTotal] = useState("")
+  const [gravandoValor, setGravandoValor] = useState(false)
 
   const params = new URLSearchParams()
   if (filtroDe) params.set("de", filtroDe)
@@ -143,15 +149,33 @@ export default function CustosPage() {
     }
   }
 
+  const confirmarValor = async (id: string) => {
+    const valor = valorTotal.trim().replace(",", ".")
+    if (!/^\d{1,12}(\.\d{1,2})?$/.test(valor)) { toast.error("Informe o total do serviço com até duas casas decimais."); return }
+    setGravandoValor(true)
+    try {
+      const r = await fetch(`/api/custos-videomaker/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valor }) })
+      const resultado = await r.json()
+      if (!r.ok) throw new Error(resultado.error || "Não foi possível confirmar o valor")
+      setConfirmandoValor(null); setValorTotal(""); await mutate()
+      toast.success("Total confirmado. Confira a nota fiscal antes de aprovar o pagamento.")
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao confirmar valor") }
+    finally { setGravandoValor(false) }
+  }
+
   const marcarPago = async (id: string) => {
     setMarcandoPago(id)
     try {
-      await fetch(`/api/custos-videomaker/${id}`, {
+      const resposta = await fetch(`/api/custos-videomaker/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pago: true, dataPagamento: new Date().toISOString() }),
       })
+      const resultado = await resposta.json()
+      if (!resposta.ok) throw new Error(resultado.error || "Não foi possível registrar o pagamento")
       await mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao registrar pagamento")
     } finally {
       setMarcandoPago(null)
     }
@@ -231,7 +255,7 @@ export default function CustosPage() {
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-4 h-4 text-zinc-400" />
-              <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Total Gasto</span>
+              <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Total conhecido</span>
             </div>
             <div className="text-2xl font-bold text-white"><MoneyDisplay value={resumo?.totalGasto ?? 0} size="lg" /></div>
             <div className="text-xs text-zinc-500 mt-1">{custos.length} registros</div>
@@ -276,7 +300,7 @@ export default function CustosPage() {
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-purple-400" />
-              <h3 className="text-sm font-semibold text-white">Gasto por Videomaker</h3>
+              <h3 className="text-sm font-semibold text-white">Gasto conhecido por profissional</h3>
             </div>
             <div className="space-y-2">
               {porVm.map((v) => {
@@ -413,11 +437,11 @@ export default function CustosPage() {
                       {new Date(c.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-white">
-                      {fmt(c.valor)}
+                      {c.valorPendenteConfirmacao ? "A confirmar" : fmt(c.valor)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        {c.pago ? (
+                        {c.pagamentoEmConflito ? <span className="text-xs text-amber-400">Em conferência</span> : c.pago ? (
                           <span className="inline-flex items-center gap-1 text-[11px] text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded">
                             <CheckCircle2 className="w-3 h-3" /> Pago
                           </span>
@@ -430,14 +454,22 @@ export default function CustosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {!c.pago && (
-                        <button
+                      {c.pagamentoEmConflito ? <span className="text-xs text-amber-400">Conferir pagamento</span> : !c.pago && (
+                        c.valorPendenteConfirmacao ? (
+                          confirmandoValor === c.id ? <form className="space-y-2 max-w-60" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); confirmarValor(c.id) }}>
+                            <label className="block text-xs" htmlFor={`total-${c.id}`}>Total do serviço (R$)</label>
+                            <input id={`total-${c.id}`} inputMode="decimal" value={valorTotal} onChange={e => setValorTotal(e.target.value)} className="w-full rounded bg-zinc-900 border border-zinc-600 p-2 text-sm" required />
+                            <p className="text-xs text-zinc-400">Confira o combinado e a NF. Zero confirma gratuidade.</p>
+                            <button type="submit" disabled={gravandoValor} className="text-xs text-green-400 p-2">{gravandoValor ? "Salvando..." : "Confirmar total"}</button>
+                            <button type="button" disabled={gravandoValor} onClick={() => setConfirmandoValor(null)} className="text-xs p-2">Cancelar</button>
+                          </form> : <button onClick={e => { e.stopPropagation(); setConfirmandoValor(c.id); setValorTotal("") }} className="text-xs text-amber-400 p-2">Informar valor</button>
+                        ) : c.demandaId && c.statusPagamento !== "aguardando_pagamento" ? (
+                          <a href="/aprovacoes" onClick={e => e.stopPropagation()} className="text-xs text-amber-400 underline">Conferir NF e aprovação</a>
+                        ) : <button
                           onClick={(e) => { e.stopPropagation(); marcarPago(c.id) }}
                           disabled={marcandoPago === c.id}
                           className="text-[11px] text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                        >
-                          {marcandoPago === c.id ? "..." : "Marcar Pago"}
-                        </button>
+                        >{marcandoPago === c.id ? "..." : "Marcar Pago"}</button>
                       )}
                     </td>
                   </tr>

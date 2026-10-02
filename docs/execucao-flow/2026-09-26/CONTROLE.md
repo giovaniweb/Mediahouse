@@ -616,3 +616,9 @@ Bloco documentado em [C01-CONVITES-BASE-LOCAL.md](C01-CONVITES-BASE-LOCAL.md). E
 C01 iniciado, mas ainda parcial pelos caminhos legados e NF/pagamento. C02/C03 continuam parciais. Contagem atual: 18 implementados + 10 em execução + 10 a fazer = 38. Percentual de cartões completos permanece 18/36 técnicos (50%) ou 18/38 do plano (47,4%); não representa prontidão comercial.
 
 763 unitários; 371 integrações no conjunto completo mais o oitavo caso de convites validado no arquivo (372 casos distintos); 26 runtime e grants/RLS, tipos, build, auditores e schema diff aprovados. Lint sem erros, quatro avisos legados. Banco sintético agora contém 41 migrações. Próximo bloco financeiro: autorização e estados de NF/pagamento, total contratado e, em seguida, alocação/rateio/conciliação. Sem publicação nem contato externo.
+
+### C01/C02/C03 — 02/10/2026, bloco ampliado de NF e pagamentos
+
+Entrega e limites em [C01-C03-NF-PAGAMENTOS-LOCAL.md](C01-C03-NF-PAGAMENTOS-LOCAL.md). Decisão financeira compartilhada, autorização atual, proteção de pagos/documentos, NF privada transacional, emissão concorrente de token e tratamento explícito de parcelas ambíguas. Fluxo antigo por URL arbitrária descontinuado. Tela permite confirmar total desconhecido e orienta aprovação; conferida no navegador com fixture fictícia de R$ 500,50. Falhas de e-mail não marcam pagamento e não repetem envio em retry.
+
+769 unitários; 386 integrações completas + ajuste final financeiro validado em 29 casos (387 casos distintos no conjunto); tipos, build, lint e auditores aprovados. Sem migração ou publicação. C01/C02/C03 permanecem parciais; próximo bloco: total contratado/parcelas, alocação/rateio e conciliação, mantendo explícita a pendência de outbox de e-mail. Contagem continua 18 implementados +10 em execução +10 a fazer; 18/36 técnicos ou 18/38 no plano, sem transformar aprovação local em prontidão comercial.

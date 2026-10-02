@@ -9,7 +9,6 @@
   "_gerado_em": "2026-09-01",
   "permitidas": {},
   "justificadas": {
-    "src/app/api/me/nf-token/route.ts": "Idem: o token de NF sai do cruzamento usuário logado × demanda atribuída a ele. Recortar por empresa esconderia trabalho que é dele.",
     "src/app/api/publico/videomaker-info/[id]/route.ts": "Perfil público da rede na tela de QR: nome, cidade e estado. Nada privado, nada por empresa.",
     "src/lib/eventos-conclusao.ts": "Recalcula o percentual de UM evento, recebido por id. Quem chama já provou a posse do evento; o helper não escolhe alvo.",
     "src/lib/usuario-vinculos.ts": "A pergunta é global por natureza: dá para apagar este Usuario da plataforma inteira? Contar só os vínculos de uma empresa daria o número errado e apagaria dado de outra."
