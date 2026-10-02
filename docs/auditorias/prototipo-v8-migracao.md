@@ -619,3 +619,29 @@ Build e lint aprovados. `scripts/qa/capture-local.cjs` passou com Chrome, HTTP e
 ### 2026-10-02 — Captura visual estável do agendamento
 - Revisão visual concluída em 1440×900 e 390×900 após document.fonts.ready e dois frames. Capturas /tmp/nuflow-form-review-1440.png e /tmp/nuflow-form-review-390.png inspecionadas: formulário e CTA completos, sem duplicação de cabeçalho e sem overflow. Fecha a pendência de artefato de composição da captura anterior.
 - Nova observação: ícones nativos de data/hora têm contraste baixo no tema escuro; melhorar color-scheme dos controles em próxima alteração. Sem envio de formulário ou mudança de dados nesta verificação. Não equivale à revisão de todo o sistema.
+
+## 02/10/2026, noite — o Claude assume o preview
+
+A pedido do Giovani, a automação horária do Codex (`continuar-migra-o-local-nuflow-v8`) foi **pausada**
+(`status = "PAUSED"`; cópia do original em `~/MediaHouse/.automation-codex-v8.toml.bak`). O que estava solto foi
+guardado no commit `099dfbf` antes de qualquer mudança.
+
+Ajustes vindos da revisão do v8 contra o preview:
+- **Detalhe abre onde se age.** `ABA_DA_ACAO` (`lib/job-fase.ts`) dá a aba de cada um dos 27 status; o detalhe
+  abre nela, e não sempre em Pedido. Em outra aba, aparece "Ir para <aba>" abaixo da próxima ação. Mudar o status
+  depois não troca a aba da pessoa.
+- **Growth com uma frase só.** A tradução da próxima ação para Growth estava escrita no detalhe e em Meu trabalho, e
+  divergia (`fila_edicao`: "Iniciar criação" × "Preparar criativo para revisão"). Agora é `PROXIMA_ACAO_GROWTH`,
+  dentro de `proximaAcao()`.
+- **Concluído recolhido no quadro** (Audiovisual e Growth): faixa de 56 px com a contagem; abre e recolhe com um
+  clique. As colunas passaram a dividir a largura (mínimo 190 px, máximo 290 px): em 1440 px com o menu aberto o
+  quadro de Audiovisual cabe inteiro. Growth tem 8 colunas e continua rolando.
+- **Plural** nos contadores do quadro ("1 aberta", "1 concluída hoje").
+- Itens do v8 que **não** pediram mudança porque o preview já resolvia: atraso em vermelho na Lista; contadores
+  do card com ícone e rótulo; texto apontando para a aba inexistente "Arquivos e aprovação".
+
+Verificação: 623 testes unitários (8 novos em `job-fase.spec.ts`), `tsc` sem erro, lint dos arquivos alterados com
+os mesmos 9 avisos de antes e nenhum novo. No navegador, com login local: detalhe de demanda em revisão abriu em
+Entrega; "Ir para Entrega" apareceu em Pedido e levou de volta; Concluído abriu e recolheu; 1440 px sem rolagem
+lateral em Audiovisual; 375 px com uma coluna por tela e sem estouro da página; console sem erro.
+**Não verificado:** soltar card arrastado na coluna recolhida (não movi dado do banco local para testar).

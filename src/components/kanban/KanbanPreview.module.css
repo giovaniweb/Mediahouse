@@ -26,13 +26,21 @@
 }
 .scroll { flex: 1; height: auto; gap: 16px; padding-inline: 24px; }
 .column {
-  width: clamp(240px, 17vw, 290px);
+  /* As colunas dividem a largura do quadro. Com largura fixa de 245 px, seis
+     colunas passavam de 1440 px com o menu aberto e a última ficava fora da
+     tela. Abaixo de 190 px o card aperta demais, e aí o quadro volta a rolar. */
+  flex: 1 1 0;
+  width: auto;
+  min-width: 190px;
+  max-width: 290px;
   background: #15171d;
   border-radius: 14px;
   border-right-color: #ffffff0d;
   border-bottom-color: #ffffff0d;
   border-left-color: #ffffff0d;
 }
+/* Duas classes: precisa vencer também a largura do .column no celular. */
+.column.collapsed { flex: 0 0 56px; width: 56px; min-width: 0; }
 .heading { min-height: 64px; padding-inline: 16px; }
 .card { margin: 4px 3px 12px; }
 .card [data-card-surface] {
@@ -52,7 +60,7 @@
   .toolbar span { max-width: 180px; line-height: 1.5; }
   .toolbar button { padding: 10px; }
   .scroll { padding-inline: 12px; gap: 12px; }
-  .column { width: min(82vw, 320px); }
+  .column { flex: 0 0 auto; width: min(82vw, 320px); max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .board *, .board *::before, .board *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

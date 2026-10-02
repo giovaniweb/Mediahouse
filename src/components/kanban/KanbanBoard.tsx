@@ -84,6 +84,10 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   const [dragging, setDragging] = useState(false)
   const [modalDemandaId, setModalDemandaId] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
+  // Concluído começa recolhido: com seis colunas (oito no Growth) o quadro não
+  // cabia em 1440 px e a coluna que sobrava para fora era a de trabalho em
+  // andamento. Recolhida, ela continua recebendo card arrastado.
+  const [concluidoAberto, setConcluidoAberto] = useState(false)
 
   const scrollBy = useCallback((amount: number) => {
     scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
@@ -235,21 +239,38 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
         {COLS.map((col) => {
           const items = byCol(col.id)
           const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
+          const recolhida = col.id === "finalizado" && !concluidoAberto
+          const rotulo = labels?.[col.id] ?? col.label
           return (
             <div
               key={col.id}
               className={cn(
-                "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
+                "flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
+                recolhida ? "w-14" : "w-72",
                 col.color,
                 modern && styles.column,
+                modern && recolhida && styles.collapsed,
                 isBloqueada && "opacity-70"
               )}
             >
-              {/* Header da coluna */}
+              {recolhida ? (
+                <button
+                  type="button"
+                  onClick={() => setConcluidoAberto(true)}
+                  aria-expanded={false}
+                  aria-label={`Mostrar ${rotulo}: ${items.length} ${items.length === 1 ? "demanda" : "demandas"}`}
+                  className="flex flex-col items-center gap-3 px-1 py-3 text-zinc-300 hover:text-white transition-colors"
+                >
+                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
+                    {items.length}
+                  </span>
+                  <span className="font-semibold text-sm [writing-mode:vertical-rl] rotate-180">{rotulo}</span>
+                </button>
+              ) : (
               <div className={cn("flex items-center justify-between px-3 py-3", modern && styles.heading)}>
                 <div className="flex items-center gap-2">
                   <div className={cn("w-2 h-2 rounded-full", col.dot)} />
-                  <span className="font-semibold text-sm text-zinc-200">{labels?.[col.id] ?? col.label}</span>
+                  <span className="font-semibold text-sm text-zinc-200">{rotulo}</span>
                   <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
                     {items.length}
                   </span>
@@ -263,14 +284,26 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                   </Link>
                 )}
                 {col.id === "finalizado" && (
-                  <Link
-                    href="/historico"
-                    className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors ml-auto"
-                  >
-                    Ver todos →
-                  </Link>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <Link
+                      href="/historico"
+                      className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors"
+                    >
+                      Ver todos →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setConcluidoAberto(false)}
+                      aria-expanded={true}
+                      aria-label={`Recolher ${rotulo}`}
+                      className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
+              )}
 
               {/* Cards */}
               <StrictModeDroppable droppableId={col.id}>
@@ -286,7 +319,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                       snapshot.isDraggingOver && "bg-zinc-800/50"
                     )}
                   >
-                    {items.map((demanda, index) => (
+                    {!recolhida && items.map((demanda, index) => (
                       <Draggable isDragDisabled={orderStatus !== "idle"} key={demanda.id} draggableId={demanda.id} index={index}>
                         {(provided, snapshot) => (
                           <div
@@ -307,7 +340,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                         )}
                       </Draggable>
                     ))}
-                    {modern && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
+                    {modern && !recolhida && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
                     {provided.placeholder}
                   </div>
                 )}

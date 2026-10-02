@@ -18,6 +18,9 @@ const VISOES: { id: Visao; label: string; icone: typeof LayoutGrid }[] = [
   { id: "lista", label: "Lista", icone: List },
 ]
 
+// "1 abertas" aparecia toda vez que o filtro deixava uma demanda só.
+const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
+
 const ABAS: { id: AbaRapida; label: string }[] = [
   { id: "todos", label: "Todas" },
   { id: "minhas", label: "Minhas" },
@@ -70,10 +73,10 @@ export function BarraVisao({
       <p>{area === "growth" ? "Copy, criação e aprovação no mesmo fluxo." : "Do briefing à publicação, sem perder o contexto."}</p>
     </div>
     <div className={styles.counts} aria-label="Resumo das demandas filtradas">
-      <span><strong>{kpi.abertas}</strong> abertas</span>
-      <span data-tone="late"><strong>{kpi.atrasadas}</strong> atrasadas</span>
+      <span><strong>{kpi.abertas}</strong> {contagem(kpi.abertas, "aberta", "abertas")}</span>
+      <span data-tone="late"><strong>{kpi.atrasadas}</strong> {contagem(kpi.atrasadas, "atrasada", "atrasadas")}</span>
       <span data-tone="approval"><strong>{kpi.aprovacao}</strong> em aprovação</span>
-      <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> concluídas hoje</span>
+      <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> {contagem(kpi.concluidasHoje, "concluída", "concluídas")} hoje</span>
     </div>
     <div className={styles.viewRow}>
       <div className={styles.tabs} aria-label="Visualização do quadro">

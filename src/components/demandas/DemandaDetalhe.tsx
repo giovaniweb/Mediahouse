@@ -19,10 +19,13 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, RefreshCw, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft,
+  CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft, ArrowRight,
 } from "lucide-react"
 import Link from "next/link"
 import {
+  ABA_DA_ACAO,
+  ABA_LABEL,
+  type AbaDoDetalhe,
   captacaoIniciada,
   ehBloqueado,
   ehSolicitacaoDeCobertura,
@@ -263,7 +266,10 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
   const { modern } = useVisualPreview()
   const { presentation, setPresentation } = useDetailPresentation()
-  const [detailTab, setDetailTab] = useState("pedido")
+  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem de
+  // ABA_DA_ACAO quando a demanda carrega; depois só a pessoa troca — mudar o
+  // status enquanto ela trabalha não a arrasta para outra aba.
+  const [abaAtual, setAbaAtual] = useState<{ demandaId: string; aba: AbaDoDetalhe } | null>(null)
   const id = demandaId
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -314,6 +320,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
+  const abaDaAcao: AbaDoDetalhe | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  if (demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaDaAcao ?? "pedido" })
+  const detailTab: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  const setDetailTab = (aba: AbaDoDetalhe) => setAbaAtual({ demandaId: id, aba })
 
   // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
   // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
@@ -1280,12 +1290,17 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
         <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
         <section className={surface.nextAction}>
-          <strong>Próxima ação: {isGrowth ? ({editando: "Preparar criativo para revisão", fila_edicao: "Iniciar criação", editor_atribuido: "Iniciar criação", videomaker_notificado: "Aguardar aceite do responsável", videomaker_recusou: "Definir novo responsável"} as Record<string, string>)[demanda.statusInterno] ?? proximaAcao(demanda) : proximaAcao(demanda)}</strong>
+          <strong>Próxima ação: {proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
+          {abaDaAcao && detailTab !== abaDaAcao && (
+            <button type="button" className={surface.nextActionGo} onClick={() => setDetailTab(abaDaAcao)}>
+              Ir para {ABA_LABEL[abaDaAcao]} <ArrowRight size={15} aria-hidden="true" />
+            </button>
+          )}
         </section>
         <nav className={surface.detailTabs} aria-label="Seções da demanda">
-          {[["pedido", "Pedido"], ["entrega", "Entrega"], ["conversa", "Conversa"], ["equipe", "Equipe e contexto"]].map(([key, label]) => (
-            <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{label}</button>
+          {(["pedido", "entrega", "conversa", "equipe"] as const).map((key) => (
+            <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
         </nav>
       </div>}
