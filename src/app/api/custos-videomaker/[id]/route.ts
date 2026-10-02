@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { pertenceAOrg } from "@/lib/org"
+import { auth } from "@/lib/auth"
+import { acessoCustos } from "@/lib/acesso-custos"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
 // PATCH /api/custos-videomaker/[id] — atualizar custo (ex: marcar como pago)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await acessoCustos(await auth(), "escrever")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { id } = await params
   const body = await req.json()
@@ -46,10 +46,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE /api/custos-videomaker/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await acessoCustos(await auth(), "escrever")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { id } = await params
   const r = await prisma.custoVideomaker.deleteMany({ where: { id, organizacaoId } })
