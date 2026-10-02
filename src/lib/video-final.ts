@@ -1,12 +1,18 @@
-import { prisma } from "@/lib/prisma"
-import { precisaTranscodeConferindo, enqueueTranscode } from "@/lib/transcode"
+import { registrarArquivoDemanda } from "@/lib/arquivo-registro"
 
 /**
  * Registra uma nova versão do vídeo final de uma demanda e devolve o id do
- * Arquivo. Corpo movido de api/demandas/[id]/upload-video (30/09/2026) para o
- * Cutflow registrar a entrega do mesmo jeito que a tela. `nomeArquivo` é
- * opcional: link do Drive termina em "/view", que não é nome de arquivo.
- * `organizacaoId` é obrigatório e conferido contra o card.
+ * Arquivo. Existe para o Cutflow registrar a entrega do mesmo jeito que a tela.
+ *
+ * Na integração com a branch de melhorias (02/10/2026) o corpo antigo — contar
+ * versões, criar Arquivo e só depois atualizar o link — deu lugar a
+ * `registrarArquivoDemanda`, que faz tudo numa transação: confere a empresa,
+ * trava a demanda, não duplica a mesma URL e grava `linkFinal` junto. A
+ * conversão saiu daqui porque o Cutflow só entrega link do Drive, e referência
+ * externa não é baixada pelo conversor.
+ *
+ * `nomeArquivo` é opcional: link do Drive termina em "/view", que não é nome
+ * de arquivo.
  */
 export async function criarArquivoFinal(
   organizacaoId: string,
@@ -15,42 +21,7 @@ export async function criarArquivoFinal(
   thumbnailUrl?: string,
   nomeArquivoInformado?: string
 ): Promise<string> {
-  // Quem chama já conferiu a empresa; a função confere de novo porque grava num
-  // card por id, e um id de outra empresa não pode ganhar vídeo por engano.
-  const dono = await prisma.demanda.findFirst({ where: { id, organizacaoId }, select: { id: true } })
-  if (!dono) throw new Error("Demanda não encontrada nesta empresa.")
-  // Conta quantos registros já existem para atribuir sequência correta
-  const existingCount = await prisma.arquivo.count({
-    where: { demandaId: id, tipoArquivo: "final" },
-  })
   const nomeArquivo = nomeArquivoInformado ?? url.split("/").pop()?.split("?")[0] ?? "video.mp4"
-  // Confere o tipo real: arquivo sem extensão passava batido e chegava ao
-  // cliente como quicktime, que o Chrome não toca.
-  const ehTranscode = await precisaTranscodeConferindo(url)
-  const arq = await prisma.arquivo.create({
-    data: {
-      demandaId: id,
-      tipoArquivo: "final",
-      nomeArquivo,
-      url,
-      sequencia: existingCount + 1,
-      ...(thumbnailUrl ? { thumbnailUrl } : {}),
-      // "processing" só depois de o worker ACEITAR — ver abaixo. Marcar aqui
-      // deixava o arquivo eternamente "convertendo" mesmo sem worker nenhum.
-    },
-  })
-
-  // .mov/HEVC → enfileira conversão para MP4 (toca em qualquer dispositivo).
-  // O estado gravado reflete o que de fato aconteceu: "processing" quando o
-  // worker aceitou, "sem_worker" quando não há para onde mandar. A diferença
-  // importa — a segunda é um problema de configuração que precisa aparecer,
-  // não um vídeo que está convertendo.
-  if (ehTranscode) {
-    const aceito = await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
-    await prisma.arquivo.update({
-      where: { id: arq.id },
-      data: { transcodeStatus: aceito ? "processing" : "sem_worker" },
-    }).catch(() => null)
-  }
-  return arq.id
+  const { arquivo } = await registrarArquivoDemanda({ organizacaoId, demandaId: id, tipo: "final", url, nomeArquivo, thumbnailUrl })
+  return arquivo.id
 }
