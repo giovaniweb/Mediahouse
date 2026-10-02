@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
-import { diariasDaEmpresa, fiscaisDaEmpresaEmLote } from "@/lib/videomaker-vinculo"
+import { auth } from "@/lib/auth"
+import { acessoCustos } from "@/lib/acesso-custos"
+import { diariasDaEmpresa, fiscaisDaEmpresaEmLote, type FiscaisDaEmpresa } from "@/lib/videomaker-vinculo"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
 // GET /api/custos-videomaker — listar custos com filtros opcionais
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await acessoCustos(await auth(), "ler")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId, verCustos } = acesso
 
   const { searchParams } = new URL(req.url)
   const videomakerId = searchParams.get("videomakerId")
@@ -17,9 +18,6 @@ export async function GET(req: NextRequest) {
   const pago = searchParams.get("pago")
   const de = searchParams.get("de")
   const ate = searchParams.get("ate")
-
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
 
   const custos = await prisma.custoVideomaker.findMany({
     where: {
@@ -58,10 +56,10 @@ export async function GET(req: NextRequest) {
   // mais pesada. A forma do JSON é preservada (`custo.videomaker.chavePix`,
   // `.cpfCnpj`, `.valorDiaria`) para Custos e Aprovações não mudarem junto.
   const ids = custos.map((c) => c.videomakerId)
-  const [diarias, fiscais] = await Promise.all([
-    diariasDaEmpresa(ids, organizacaoId),
-    fiscaisDaEmpresaEmLote(ids, organizacaoId),
-  ])
+  // Sem `verCustos` (quem só aprova), a lista sai sem diária e sem dados fiscais.
+  const [diarias, fiscais] = verCustos
+    ? await Promise.all([diariasDaEmpresa(ids, organizacaoId), fiscaisDaEmpresaEmLote(ids, organizacaoId)])
+    : [new Map<string, number | null>(), new Map<string, FiscaisDaEmpresa>()]
 
   return NextResponse.json({
     custos: custos.map((c) => {
@@ -85,11 +83,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/custos-videomaker — registrar novo custo
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await acessoCustos(await auth(), "escrever")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { videomakerId, demandaId, tipo, valor, descricao, dataReferencia, dataVencimento, pago, dataPagamento, comprovante } = body
