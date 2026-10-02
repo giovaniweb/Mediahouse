@@ -16,9 +16,15 @@ export async function GET(req: NextRequest) {
   const fim = searchParams.get("fim")
   const contexto = searchParams.get("contexto") // contourline | freelance | pessoal | sistema
 
-  const dateFilter = inicio && fim ? {
-    inicio: { gte: new Date(inicio) },
-    fim: { lte: new Date(fim) },
+  const inicioData = inicio ? new Date(inicio) : null
+  const fimData = fim ? new Date(fim) : null
+  if ((inicio !== null || fim !== null) && (!inicioData || !fimData || !Number.isFinite(inicioData.getTime()) || !Number.isFinite(fimData.getTime()) || inicioData > fimData)) {
+    return NextResponse.json({ error: "Período inválido. Informe início e fim válidos." }, { status: 400 })
+  }
+  // Inclui compromissos que atravessam as bordas do período consultado.
+  const dateFilter = inicioData && fimData ? {
+    inicio: { lte: fimData },
+    fim: { gte: inicioData },
   } : {}
 
   const isAdmin = temPapel(session, "admin")

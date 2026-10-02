@@ -1049,7 +1049,7 @@ export default function PessoasAcessosPage() {
 
             {/* Tabela */}
             <div className={cn("border border-zinc-800 rounded-xl overflow-x-auto", modern && preview.table)}>
-              <table className="w-full text-sm min-w-[900px]">
+              <table aria-label="Pessoas da empresa" className="w-full text-sm min-w-[900px]">
                 <thead className="bg-zinc-800/50 border-b border-zinc-800">
                   <tr>
                     <th className="text-left px-3 py-3 text-xs font-semibold text-zinc-500">PESSOA</th>
@@ -1073,13 +1073,14 @@ export default function PessoasAcessosPage() {
                     return (
                       <tr
                         key={p.id}
+                        data-person-row
                         onClick={() => setPessoaAbertaId(p.id)}
                         className={cn(
                           "hover:bg-zinc-800/40 cursor-pointer group transition-colors",
                           pessoaAbertaId === p.id && "bg-zinc-800/60",
                         )}
                       >
-                        <td className="px-3 py-3 max-w-[230px]">
+                        <td data-column="Pessoa" className="px-3 py-3 max-w-[230px]">
                           <div className="flex items-center gap-2.5">
                             <div className={cn(
                               "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 overflow-hidden",
@@ -1098,12 +1099,12 @@ export default function PessoasAcessosPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Função" className="px-3 py-3">
                           {funcaoDe(p)
                             ? <span className="text-xs px-2 py-0.5 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-300">{funcaoDe(p)}</span>
                             : <span className="text-zinc-600">—</span>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Equipe" className="px-3 py-3">
                           {areas.length > 0 ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
                               <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", AREA_PONTO[areas[0]] ?? "bg-zinc-500")} />
@@ -1112,22 +1113,22 @@ export default function PessoasAcessosPage() {
                             </span>
                           ) : <span className="text-zinc-600">—</span>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Vínculo" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", VINCULO_COR[vinculo])}>
                             {VINCULO_LABEL[vinculo]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Nível" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", NIVEL_COR[nivel])}>
                             {NIVEL_LABEL[nivel]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Acesso" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap", PERFIL_COR[perfil])}>
                             {PERFIL_LABEL[perfil]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Status" className="px-3 py-3">
                           <span className={cn(
                             "text-[11px] font-medium px-2 py-0.5 rounded-full",
                             ativo ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-500",
@@ -1135,12 +1136,12 @@ export default function PessoasAcessosPage() {
                             {ativo ? "Ativo" : "Inativo"}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Atividade" className="px-3 py-3">
                           <span className={cn("text-xs", p.ultimaAtividade ? "text-zinc-400" : "text-zinc-600 italic")}>
                             {formatarAtividade(p.ultimaAtividade)}
                           </span>
                         </td>
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <td data-column="Ações" className="px-3 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end">
                             <MenuLinha itens={[
                               { label: "Editar pessoa", Icon: Pencil, run: () => setEditTarget(p) },

@@ -50,6 +50,8 @@ export const authConfig: NextAuthConfig = {
         "/",              // root → redireciona para /sobre (landing page)
         "/login",
         "/esqueci-senha",
+        "/comecar",
+        "/agendar-gravacao",
         "/redefinir-senha",
         "/avaliar",           // avaliação pública de videomaker via QR
         "/avaliar-editor",    // avaliação pública de editor

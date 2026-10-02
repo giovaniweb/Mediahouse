@@ -2,8 +2,8 @@
   isolation: isolate;
   min-height: 0;
   padding: 16px 0 8px;
-  border-radius: 24px;
-  background: radial-gradient(ellipse at 10% 0%, #7756b51a, transparent 55%), radial-gradient(ellipse at 100% 80%, #396cb518, transparent 50%), #111218;
+  border-radius: 0;
+  background: #0f1115;
 }
 .toolbar {
   display: flex;
@@ -26,9 +26,9 @@
 }
 .scroll { flex: 1; height: auto; gap: 16px; padding-inline: 24px; }
 .column {
-  width: clamp(280px, 22vw, 340px);
-  background: linear-gradient(160deg, #ffffff07, #ffffff02);
-  border-radius: 18px;
+  width: clamp(240px, 17vw, 290px);
+  background: #15171d;
+  border-radius: 14px;
   border-right-color: #ffffff0d;
   border-bottom-color: #ffffff0d;
   border-left-color: #ffffff0d;
@@ -38,7 +38,9 @@
 .card [data-card-surface] {
   border-radius: 14px;
   padding: 16px;
-  box-shadow: 0 4px 16px #00000018;
+  background: #242731;
+  border-color:#303342;
+  box-shadow:none;
 }
 .card p, .card button[aria-label^="Abrir demanda"] { line-height: 1.5; }
 .card button:focus-visible, .toolbar button:focus-visible { outline: 2px solid #c7b6f5; outline-offset: 3px; opacity: 1; }

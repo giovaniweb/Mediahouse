@@ -8,7 +8,7 @@
 
 import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import preview from "@/components/layout/AdminPreview.module.css"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   X, Mail, Phone, Copy, Check, CalendarDays, Link2, Briefcase, Users2, Award, BellRing,
   ShieldCheck, CircleDot, Clock, Pencil, ChevronDown, KeyRound, GitMerge,
@@ -94,6 +94,14 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("geral")
   const [menu, setMenu] = useState(false)
+  const fecharRef = useRef<HTMLButtonElement>(null)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  useEffect(() => {
+    const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    fecharRef.current?.focus()
+    return () => { if (anterior?.isConnected) anterior.focus() }
+  }, [])
 
   const vinculo = vinculoDe(pessoa)
   const nivel = nivelDe(pessoa)
@@ -115,11 +123,11 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   return (
     // z-50 para ficar acima do painel flutuante de foco (z-40), que mora no
     // canto inferior direito e cobriria justamente os botões de ação daqui.
-    <aside aria-label="Detalhes da pessoa" className={cn("fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl", modern && preview.personPanel)}>
+    <aside onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); if (menu) setMenu(false); else onCloseRef.current() } }} aria-label="Detalhes da pessoa" className={cn("fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl", modern && preview.personPanel)}>
       {/* Cabeçalho */}
       <div className="flex items-center justify-between px-5 h-14 border-b border-zinc-800 shrink-0">
         <p className="text-sm font-semibold text-zinc-100">Detalhes da pessoa</p>
-        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors" title="Fechar">
+        <button ref={fecharRef} aria-label="Fechar detalhes da pessoa" onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors" title="Fechar">
           <X className="w-4.5 h-4.5" />
         </button>
       </div>
@@ -154,6 +162,7 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
         {([["geral", "Visão geral"], ["acessos", "Acessos"]] as const).map(([id, label]) => (
           <button
             key={id}
+            aria-pressed={aba === id}
             onClick={() => setAba(id)}
             className={cn(
               "px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px",

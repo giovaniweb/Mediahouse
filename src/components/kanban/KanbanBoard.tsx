@@ -201,7 +201,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
       )}
       {previewAvailable && (
         <div className={styles.toolbar}>
-          <div><strong>Seu flow, à vista.</strong><span>Prévia visual · dados e ações reais do sistema</span></div>
+          <div><span>Arraste entre etapas ou abra os detalhes.</span></div>
           <button type="button" aria-pressed={modern} onClick={toggle}>
             {modern ? "Voltar ao clássico" : "Usar novo visual"}
           </button>

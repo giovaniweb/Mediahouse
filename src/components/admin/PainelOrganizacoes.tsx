@@ -6,7 +6,9 @@
 // `requireSuperAdmin` e os endpoints de organização estavam prontos desde a
 // Fase 1 do SaaS, e mesmo assim criar uma empresa exigia rodar `ts-node` na
 // máquina de alguém. Isso fazia de cada cliente novo uma tarefa de engenharia.
-import { useState } from "react"
+import styles from "./Organizations.module.css"
+import Link from "next/link"
+import { useEffect, useId, useRef, useState } from "react"
 import useSWR from "swr"
 import { Building2, Plus, Power, UserPlus, X, Users, ToggleLeft } from "lucide-react"
 import { toast } from "sonner"
@@ -40,13 +42,18 @@ type ModuloDaOrg = {
 }
 
 export function PainelOrganizacoes() {
-  const { data, mutate, isLoading } = useSWR<{ organizacoes: Org[] }>("/api/admin/organizacoes", fetcher)
+  const { data, mutate, isLoading, error } = useSWR<{ organizacoes: Org[] }>("/api/admin/organizacoes", fetcher)
   const [criando, setCriando] = useState(false)
   const [aberta, setAberta] = useState<Org | null>(null)
   const [modulosDe, setModulosDe] = useState<Org | null>(null)
+  const [alterando, setAlterando] = useState<string | null>(null)
+  const alteracaoEmCurso = useRef(false)
   const orgs = data?.organizacoes ?? []
 
   async function alternarAtivo(org: Org) {
+    if (alteracaoEmCurso.current) return
+    alteracaoEmCurso.current = true
+    setAlterando(org.id)
     try {
       const res = await fetch(`/api/admin/organizacoes/${org.id}`, {
         method: "PATCH",
@@ -55,21 +62,24 @@ export function PainelOrganizacoes() {
       })
       if (!res.ok) throw await erroDaResposta(res)
       toast.success(org.ativo ? `${org.nome} desligada` : `${org.nome} ligada`)
-      mutate()
+      await mutate()
     } catch (e) {
       toast.error(mensagemDeErro(e, "Não foi possível alterar a empresa."))
+    } finally {
+      alteracaoEmCurso.current = false
+      setAlterando(null)
     }
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <header className="flex items-start justify-between gap-4">
+    <div className={styles.page}>
+      <div className={styles.header}>
         <div>
           <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
-            <Building2 className="h-6 w-6 text-indigo-400" /> Organizações
+            <Building2 className="h-6 w-6 text-indigo-400" /> Administração do SaaS
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Controle da plataforma, acima das empresas. Cada organização é um cliente isolado.
+            Cadastre as empresas que usam o NuFlow e gerencie seus acessos e módulos. Cada empresa tem seu próprio espaço.
           </p>
         </div>
         <button
@@ -78,9 +88,20 @@ export function PainelOrganizacoes() {
         >
           <Plus className="h-4 w-4" /> Nova empresa
         </button>
-      </header>
+      </div>
 
-      {isLoading && <p className="text-sm text-zinc-500">Carregando...</p>}
+      <div className="flex flex-wrap gap-5 text-sm text-purple-300"><Link href="/admin/leads">Leads interessados no NuFlow →</Link><Link href="/comecar">Página de captura ↗</Link></div>
+
+      {isLoading ? <p role="status">Carregando empresas…</p> : error ? <div role="alert">Não foi possível carregar as empresas. <button onClick={() => mutate()}>Tentar novamente</button></div> : <>
+        <section className={styles.metrics} aria-label="Resumo das empresas">
+          <article><p>Empresas</p><strong>{orgs.length}</strong><small>Espaços cadastrados</small></article>
+          <article><p>Ativas</p><strong>{orgs.filter(o => o.ativo).length}</strong><small>Acesso habilitado</small></article>
+          <article><p>Desligadas</p><strong>{orgs.filter(o => !o.ativo).length}</strong><small>Acesso desabilitado</small></article>
+          <article><p>Vínculos de pessoas</p><strong>{orgs.reduce((n,o) => n + o._count.membros, 0)}</strong><small>Uma pessoa pode ter mais de um vínculo</small></article>
+        </section>
+        <h2 className={styles.sectionTitle}>Empresas</h2>
+        {orgs.length === 0 && <p>Nenhuma empresa cadastrada.</p>}
+      </>}
 
       <div className="grid gap-3">
         {orgs.map((org) => (
@@ -90,7 +111,7 @@ export function PainelOrganizacoes() {
               org.ativo ? "border-zinc-800 bg-zinc-900/60" : "border-zinc-800/60 bg-zinc-900/30 opacity-60"
             }`}
           >
-            <div className="flex items-center justify-between gap-4">
+            <div className={styles.company}>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-zinc-100 truncate">{org.nome}</span>
@@ -109,7 +130,7 @@ export function PainelOrganizacoes() {
                   Formulário público: <code className="text-zinc-500">/cadastrar-demanda?org={org.slug}</code>
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className={styles.actions}>
                 <button
                   onClick={() => setAberta(org)}
                   className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
@@ -123,6 +144,9 @@ export function PainelOrganizacoes() {
                   <ToggleLeft className="h-3.5 w-3.5" /> Módulos
                 </button>
                 <button
+                  disabled={alterando !== null}
+                  aria-busy={alterando === org.id}
+                  aria-label={alterando === org.id ? `Salvando ${org.nome}` : `${org.ativo ? "Desligar" : "Ligar"} empresa ${org.nome}`}
                   onClick={() => alternarAtivo(org)}
                   title={org.ativo ? "Desligar empresa" : "Ligar empresa"}
                   className={`rounded-lg border px-3 py-1.5 text-xs ${
@@ -207,7 +231,7 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
 }
 
 function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
-  const { data, mutate } = useSWR<{ membros: Membro[] }>(`/api/admin/organizacoes/${org.id}/usuarios`, fetcher)
+  const { data, mutate, isLoading, error } = useSWR<{ membros: Membro[] }>(`/api/admin/organizacoes/${org.id}/usuarios`, fetcher)
   const [email, setEmail] = useState("")
   const [papel, setPapel] = useState<string>("solicitante")
   const membros = data?.membros ?? []
@@ -231,10 +255,8 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
 
   async function desvincular(m: Membro) {
     try {
-      const res = await fetch(`/api/admin/organizacoes/${org.id}/usuarios`, {
+      const res = await fetch(`/api/admin/organizacoes/${org.id}/usuarios?usuarioId=${encodeURIComponent(m.usuario.id)}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuarioId: m.usuario.id }),
       })
       if (!res.ok) throw await erroDaResposta(res)
       toast.success(`${m.usuario.nome} saiu de ${org.nome}.`)
@@ -247,14 +269,16 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
   return (
     <Overlay titulo={`Pessoas · ${org.nome}`} onClose={onClose}>
       <div className="max-h-64 space-y-1 overflow-y-auto">
-        {membros.length === 0 && <p className="text-sm text-zinc-500">Ninguém vinculado ainda.</p>}
+        {isLoading && <p role="status">Carregando pessoas…</p>}
+        {error && <div role="alert">Não foi possível carregar as pessoas. <button onClick={() => mutate()}>Tentar novamente</button></div>}
+        {!isLoading && !error && membros.length === 0 && <p className="text-sm text-zinc-500">Ninguém vinculado ainda.</p>}
         {membros.map((m) => (
           <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-800/40 px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm text-zinc-200">{m.usuario.nome}</p>
               <p className="truncate text-xs text-zinc-500">{m.usuario.email ?? "sem e-mail"} · {m.papel}</p>
             </div>
-            <button onClick={() => desvincular(m)} title="Desvincular" className="shrink-0 text-zinc-600 hover:text-red-400">
+            <button onClick={() => desvincular(m)} aria-label={`Desvincular ${m.usuario.nome}`} title="Desvincular" className="shrink-0 text-zinc-600 hover:text-red-400">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -294,7 +318,7 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
 }
 
 function ModalModulos({ org, onClose }: { org: Org; onClose: () => void }) {
-  const { data, mutate } = useSWR<{ modulos: ModuloDaOrg[] }>(`/api/admin/organizacoes/${org.id}/modulos`, fetcher)
+  const { data, mutate, isLoading, error } = useSWR<{ modulos: ModuloDaOrg[] }>(`/api/admin/organizacoes/${org.id}/modulos`, fetcher)
   const modulos = data?.modulos ?? []
 
   async function alternar(m: ModuloDaOrg) {
@@ -317,6 +341,9 @@ function ModalModulos({ org, onClose }: { org: Org; onClose: () => void }) {
         O que esta empresa enxerga. Mudança vale no próximo carregamento de página.
       </p>
       <div className="space-y-2">
+        {isLoading && <p role="status">Carregando módulos…</p>}
+        {error && <div role="alert">Não foi possível carregar os módulos. <button onClick={() => mutate()}>Tentar novamente</button></div>}
+        {!isLoading && !error && modulos.length === 0 && <p>Nenhum módulo disponível.</p>}
         {modulos.map((m) => (
           <div key={m.chave} className="rounded-lg bg-zinc-800/40 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -356,19 +383,36 @@ function ModalModulos({ org, onClose }: { org: Org; onClose: () => void }) {
 }
 
 function Overlay({ titulo, children, onClose }: { titulo: string; children: React.ReactNode; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const element = dialog.current
+    element?.showModal()
+    return () => { element?.close(); previous?.focus() }
+  }, [])
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-zinc-100">{titulo}</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
+    <dialog ref={dialog} aria-labelledby={titleId} className={styles.dialog}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')).filter(e => e.getClientRects().length > 0)
+        const first = controls[0], last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+      }}
+      onCancel={(event) => { event.preventDefault(); onClose() }}
+      onClick={(event) => { if (event.target === event.currentTarget) {
+        const rect = event.currentTarget.getBoundingClientRect()
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose()
+      } }}>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id={titleId} className="font-medium text-zinc-100">{titulo}</h2>
+          <button autoFocus aria-label="Fechar" onClick={onClose} className={styles.close}><X className="h-4 w-4" /></button>
         </div>
         {children}
       </div>
-    </div>
+    </dialog>
   )
 }
 

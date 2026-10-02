@@ -1,5 +1,6 @@
 "use client"
 
+import styles from "@/components/layout/TeamSurface.module.css"
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -43,7 +44,7 @@ export default function EditorDetalhePage() {
   const userTipo = (session?.user as { tipo?: string } | undefined)?.tipo
   const isPrivileged = userTipo === "admin" || userTipo === "gestor"
 
-  const { data, mutate } = useSWR(`/api/editores/${id}`, fetcher)
+  const { data, error, isValidating, mutate } = useSWR(`/api/editores/${id}`, fetcher)
   const editor = data?.editor
 
   const [editing, setEditing] = useState(false)
@@ -55,7 +56,7 @@ export default function EditorDetalhePage() {
   const [nota, setNota] = useState(0)
   const [comentarioAvaliacao, setComentarioAvaliacao] = useState("")
   const [enviandoAvaliacao, setEnviandoAvaliacao] = useState(false)
-  const { data: dataAvaliacoes, mutate: mutateAvaliacoes } = useSWR(
+  const { data: dataAvaliacoes, error: erroAvaliacoes, mutate: mutateAvaliacoes } = useSWR(
     id ? `/api/editores/${id}/avaliar` : null, fetcher
   )
 
@@ -200,7 +201,11 @@ export default function EditorDetalhePage() {
       <>
         <Header title="Editor" />
         <main className="flex-1 p-6 flex items-center justify-center text-zinc-400">
-          <div className="animate-pulse">Carregando...</div>
+          {error ? <div role="alert">
+            <p>Não foi possível abrir este perfil.</p>
+            <button disabled={isValidating} onClick={() => mutate()} className="border rounded-lg px-4 py-3 mt-4">{isValidating ? "Tentando novamente…" : "Tentar novamente"}</button>
+            <Link href="/equipe" className="block mt-4">Voltar para a equipe</Link>
+          </div> : <p role="status">Carregando perfil…</p>}
         </main>
       </>
     )
@@ -223,7 +228,7 @@ export default function EditorDetalhePage() {
       <Header
         title={editor.nome}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => router.back()}
               className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg px-3 py-2"
@@ -272,7 +277,12 @@ export default function EditorDetalhePage() {
         }
       />
 
-      <main className="flex-1 p-6 max-w-4xl space-y-6">
+      <main className={`${styles.page} space-y-6`}>
+        <div>
+          <p className={styles.eyebrow}>AUDIOVISUAL / EQUIPE INTERNA</p>
+          <h1 className={styles.title}>{editor.nome}</h1>
+          <p className={styles.subtitle}>Perfil profissional, trabalhos e capacidade em um só lugar.</p>
+        </div>
         {/* Performance */}
         <VideomakerPerformance videomakerId={editor.id} tipo="interno" />
 
@@ -297,33 +307,39 @@ export default function EditorDetalhePage() {
 
         {/* Perfil */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-purple-900/50 border border-purple-800 flex items-center justify-center text-2xl font-bold text-purple-400">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4 min-w-0 w-full">
+              <div className="w-14 h-14 shrink-0 rounded-full bg-purple-900/50 border border-purple-800 flex items-center justify-center text-2xl font-bold text-purple-400">
                 {editor.nome?.charAt(0)}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 {editing ? (
-                  <input
+                  <input aria-label="Nome"
                     value={form.nome as string}
                     onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                    className="text-xl font-bold border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-white"
+                    className="w-full min-w-0 text-xl font-bold border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-white"
                   />
                 ) : (
-                  <h2 className="text-xl font-bold text-white">{editor.nome}</h2>
+                  <h2 className="text-xl font-bold text-white break-words">{editor.nome}</h2>
                 )}
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex flex-wrap items-center gap-1 mt-1">
+                  {erroAvaliacoes ? <span className="text-xs text-zinc-400">Avaliações indisponíveis</span>
+                    : !dataAvaliacoes ? <span className="text-xs text-zinc-400">Carregando avaliações…</span>
+                    : avaliacoes.length === 0 ? <span className="text-xs text-zinc-400">Sem avaliações registradas</span>
+                    : <>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <Star key={n} className={cn("w-4 h-4", n <= Math.round(editor.avaliacao ?? 0) ? "text-yellow-400 fill-yellow-400" : "text-zinc-700")} />
                   ))}
                   <span className="text-sm text-zinc-500 ml-1">{(editor.avaliacao ?? 0).toFixed(1)}</span>
                   <span className="text-xs text-zinc-600 ml-1">({avaliacoes.length} aval.)</span>
+                    </>}
+
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {editing ? (
-                <select
+                <select aria-label="Status"
                   value={form.status as string}
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
                   className="text-sm border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-200"
@@ -348,13 +364,13 @@ export default function EditorDetalhePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2 text-zinc-400">
               <MapPin className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
                 <div className="flex gap-2 flex-1">
-                  <input placeholder="Cidade" value={form.cidade as string} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
-                  <input placeholder="UF" maxLength={2} value={form.estado as string} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={`${inp} w-16`} />
+                  <input aria-label="Cidade" placeholder="Cidade" value={form.cidade as string} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
+                  <input aria-label="UF" placeholder="UF" maxLength={2} value={form.estado as string} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={`${inp} w-16`} />
                 </div>
               ) : (
                 <span>{[editor.cidade, editor.estado].filter(Boolean).join(", ") || "—"}</span>
@@ -364,7 +380,7 @@ export default function EditorDetalhePage() {
             <div className="flex items-center gap-2 text-zinc-400">
               <Phone className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
-                <input value={form.telefone as string} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={`${inp} flex-1`} placeholder="Telefone" />
+                <input aria-label="Telefone" value={form.telefone as string} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={`${inp} flex-1`} placeholder="Telefone" />
               ) : (
                 <span>{editor.telefone || "—"}</span>
               )}
@@ -373,7 +389,7 @@ export default function EditorDetalhePage() {
             <div className="flex items-center gap-2 text-zinc-400">
               <Mail className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
-                <input type="email" value={form.email as string} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`${inp} flex-1`} placeholder="E-mail" />
+                <input aria-label="E-mail" type="email" value={form.email as string} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`${inp} flex-1`} placeholder="E-mail" />
               ) : (
                 <span>{editor.email || "—"}</span>
               )}
@@ -383,7 +399,7 @@ export default function EditorDetalhePage() {
               <div className="flex items-center gap-2 text-zinc-400">
                 <Phone className="w-4 h-4 text-zinc-600 shrink-0" />
                 {editing ? (
-                  <input value={form.whatsapp as string} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className={`${inp} flex-1`} placeholder="WhatsApp" />
+                  <input aria-label="WhatsApp" value={form.whatsapp as string} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className={`${inp} flex-1`} placeholder="WhatsApp" />
                 ) : (
                   <span>WhatsApp: {editor.whatsapp}</span>
                 )}
@@ -397,7 +413,7 @@ export default function EditorDetalhePage() {
                 {editing ? (
                   <div className="flex items-center gap-1 flex-1">
                     <span className="text-xs text-zinc-500">R$</span>
-                    <input type="number" value={form.salario as string} onChange={(e) => setForm({ ...form, salario: e.target.value })} className={`${inp} flex-1`} placeholder="Salario" />
+                    <input aria-label="Salário" type="number" value={form.salario as string} onChange={(e) => setForm({ ...form, salario: e.target.value })} className={`${inp} flex-1`} placeholder="Salario" />
                   </div>
                 ) : (
                   <span className="font-semibold text-zinc-200 flex items-center gap-1">
@@ -411,7 +427,7 @@ export default function EditorDetalhePage() {
               <div className="flex items-center gap-2 text-zinc-400">
                 <span className="text-zinc-600 text-xs font-medium w-4">ID</span>
                 {editing ? (
-                  <input placeholder="CPF/CNPJ" value={form.cpfCnpj as string} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={`${inp} flex-1`} />
+                  <input aria-label="CPF/CNPJ" placeholder="CPF/CNPJ" value={form.cpfCnpj as string} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={`${inp} flex-1`} />
                 ) : (
                   <span className="font-mono text-xs">{editor.cpfCnpj}</span>
                 )}
@@ -422,7 +438,7 @@ export default function EditorDetalhePage() {
               <div className="flex items-center gap-2 text-zinc-400">
                 <span className="text-zinc-600 text-xs font-medium">PIX</span>
                 {editing ? (
-                  <input placeholder="Chave PIX" value={form.chavePix as string} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={`${inp} flex-1`} />
+                  <input aria-label="Chave PIX" placeholder="Chave PIX" value={form.chavePix as string} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={`${inp} flex-1`} />
                 ) : (
                   <div className="flex items-center gap-1">
                     <span className="font-mono text-xs truncate max-w-32">{editor.chavePix}</span>
@@ -462,7 +478,7 @@ export default function EditorDetalhePage() {
             {editing && (
               <div className="mt-2">
                 <label className="text-xs text-zinc-500">Limite de demandas</label>
-                <input
+                <input aria-label="Limite de demandas"
                   type="number" min="1"
                   value={form.cargaLimite as string}
                   onChange={(e) => setForm({ ...form, cargaLimite: e.target.value })}
@@ -560,11 +576,11 @@ export default function EditorDetalhePage() {
             <div className="mt-5 grid grid-cols-1 gap-3">
               <div>
                 <label className="text-xs text-zinc-500 mb-1 block">Portfolio (URL)</label>
-                <input value={form.portfolio as string} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} placeholder="https://..." />
+                <input aria-label="Portfólio" value={form.portfolio as string} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} placeholder="https://..." />
               </div>
               <div>
                 <label className="text-xs text-zinc-500 mb-1 block">Observacoes</label>
-                <textarea value={form.observacoes as string} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2}
+                <textarea aria-label="Observações" value={form.observacoes as string} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2}
                   className={`${inp} resize-none`} />
               </div>
             </div>

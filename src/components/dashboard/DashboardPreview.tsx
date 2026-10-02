@@ -41,14 +41,14 @@ export function DashboardPreview({ data, loading, b2c, ideias }: Props) {
   ]
   return <main className={styles.dashboard} aria-busy={loading}>
     <div className={styles.heading}>
-      <div><p className={styles.eyebrow}>VISÃO DA OPERAÇÃO · AUDIOVISUAL</p><h1>Clareza para o próximo passo.</h1><p>Prazos, entregas e equipe. Encontre o que precisa da sua atenção.</p></div>
-      <Link className={styles.action} href="/jobs">Abrir Jobs <ArrowUpRight size={16} /></Link>
+      <div><p className={styles.eyebrow}>VISÃO DA OPERAÇÃO · AUDIOVISUAL</p><h1>Sua operação, em perspectiva.</h1><p>Entregas, prazos e capacidade para decidir o próximo passo.</p></div>
+      <Link className={styles.action} href="/demandas/nova">Nova demanda <ArrowUpRight size={16} /></Link>
     </div>
     {loading && <p role="status" className={styles.muted}>Carregando indicadores…</p>}
     <div className={styles.metrics}>
       {metrics.map(({label,n,help,href,Icon,color}) => <Link key={label} href={href} className={styles.metric}>
         <div><span>{label}</span><Icon size={19} style={{color}} /></div>
-        <strong style={{color}}>{value(n)}</strong><small>{help}</small>
+        <strong>{value(n)}</strong><small>{help}</small>
       </Link>)}
     </div>
     <div className={styles.columns}>
@@ -74,6 +74,14 @@ export function DashboardPreview({ data, loading, b2c, ideias }: Props) {
         <p className={styles.note}>O alerta considera o peso dos trabalhos e o limite de carga cadastrado.</p>
       </section>
     </div>
+    <section className={styles.panel} aria-labelledby="decisions-title">
+      <div className={styles.panelHeading}><div><h2 id="decisions-title">Decisões de hoje</h2><p>Atalhos para o trabalho que precisa avançar</p></div></div>
+      <div className={styles.decisions}>
+        <Link href="/demandas?statusVisivel=aprovacao"><div><h3>Revisar entregas</h3><p>{value(m?.aguardandoAprovacao)} demandas em aprovação</p></div><ArrowUpRight size={18} /></Link>
+        <Link href="/demandas?atrasadas=1"><div><h3>Retomar prazos vencidos</h3><p>{value(m?.prazoCritico)} demandas atrasadas</p></div><ArrowUpRight size={18} /></Link>
+        <Link href="/equipe"><div><h3>Revisar distribuição da equipe</h3><p>{loading ? "Carregando capacidade…" : `${data?.cargaEditores?.filter(editor => editor.status === "sobrecarga").length ?? 0} editores com sobrecarga`}</p></div><ArrowUpRight size={18} /></Link>
+      </div>
+    </section>
     <div className={styles.focus}><HojeEmFoco /></div>
     <div className={styles.alerts}><AlertasIA alertas={data?.alertasAtivos ?? []} isLoading={loading} /></div>
     {(b2c || ideias) && <div className={styles.columns}>

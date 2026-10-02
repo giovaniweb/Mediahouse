@@ -1,5 +1,5 @@
 .overlay { background: #090b13c9; backdrop-filter: blur(8px); }
-.surface { background: #171922; border-color: #3b3d51; box-shadow: 0 28px 100px #0008; border-radius: 22px; }
+.surface { font-family:"Montserrat",ui-sans-serif,system-ui,sans-serif; background: #171922; border-color: #3b3d51; box-shadow: 0 28px 100px #0008; border-radius: 22px; }
 .surface input, .surface select, .surface textarea { border-radius: 10px; }
 .surface button:focus-visible, .surface input:focus-visible, .surface textarea:focus-visible, .surface select:focus-visible { outline: 2px solid #c3a8ff; outline-offset: 3px; }
 @media (max-width: 640px) {
@@ -10,3 +10,52 @@
   .surface button[aria-label="Fechar"] { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
   .detailWrap { padding: 0; }
 }
+
+.drawerWrap { padding:0; justify-content:flex-end; }
+.drawer { width:min(960px,94vw); max-width:960px; min-height:100dvh; margin:0; border-radius:20px 0 0 20px; animation:slideIn .2s ease-out; }
+@keyframes slideIn { from { transform:translateX(32px); opacity:.6; } to { transform:translateX(0); opacity:1; } }
+@media(max-width:640px) { .drawer { width:100%; border-radius:0; } }
+@media(prefers-reduced-motion:reduce) { .drawer { animation:none; } }
+
+.detailHeading { padding: 32px 30px 0; }
+.detailHeading h1 { font-size:clamp(24px,3vw,32px); font-weight:500; line-height:1.3; color:#f1f0f8; }
+.detailHeading > p { color:#a2a5b9; margin-top:16px; font-size:14px; }
+.detailTabs { display:flex; gap:24px; border-bottom:1px solid #303342; margin-top:28px; overflow-x:auto; }
+.detailTabs button { padding:14px 0; white-space:nowrap; color:#a2a5b9; border-bottom:2px solid transparent; font-size:15px; }
+.detailTabs button[aria-pressed="true"] { color:#b398ff; border-color:#b398ff; }
+.tabContent { display:block; padding:24px 30px 32px; }
+.tabSection:not([hidden]) { display:flex; flex-direction:column; gap:20px; }
+.tabContent > div { margin:0; }
+.tabContent > div + div .tabSection:not([hidden]) { margin-top:20px; }
+.tabSection > div, .tabSection > section { background:#191c24; border-color:#303342; border-radius:14px; }
+@media(max-width:640px) { .detailHeading {padding:24px 16px 0;} .tabContent {padding:20px 16px;} .detailTabs {gap:18px;} }
+
+.nextAction { margin-top:24px; padding:20px 0; border-block:1px solid #303342; }
+.nextAction strong { font-size:17px; font-weight:500; }
+.nextAction p { margin-top:10px; color:#a2a5b9; font-size:13px; line-height:1.6; }
+
+.detailToolbar { flex-wrap:wrap; background:#191c24; }
+.detailToolbar > div:last-child { flex-wrap:wrap; }
+@media(max-width:640px) {
+ .detailToolbar { align-items:flex-start; gap:12px; padding:16px; }
+ .detailToolbar > div:first-child { width:100%; padding-right:42px; flex-wrap:wrap; }
+ .detailToolbar > div:last-child { gap:8px; }
+ .detailToolbar > div:last-child button { font-size:11px; min-height:40px; }
+ .detailToolbar > div:last-child > button:last-child { position:absolute; top:8px; right:8px; }
+}
+
+@media(max-width:640px) { .detailToolbar > div:last-child {width:100%;min-width:0;} .detailToolbar > div:last-child > div {display:flex;flex-wrap:wrap;min-width:0;max-width:100%;gap:8px;} }
+
+.jobContext {background:#191b23;border-color:#303342;padding:22px;border-radius:14px;}
+.jobContext > div:first-child {display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.jobContext > div:first-child > span {color:#eeecf7;font-size:14px;}
+.jobContext > div:first-child > span > span:first-child {display:block;color:#a2a5b9;font-size:11px;margin-bottom:6px;}
+@media(max-width:520px){.jobContext {padding:16px;}.jobContext > div:first-child {grid-template-columns:1fr;gap:14px;}}
+
+.pageActions > div {flex-wrap:wrap;}
+@media(max-width:640px){.pageActions > div {gap:8px;}.pageActions button,.pageActions a {min-height:40px;}}
+
+.growthDelivery {padding:24px;background:#191b23;border-color:#303342;}
+.growthDeliveryGrid {display:grid;grid-template-columns:minmax(0,1fr);gap:24px;}
+.growthDeliveryGrid > * {min-width:0;}
+@media(min-width:1200px){.growthDeliveryGrid{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);}}

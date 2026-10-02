@@ -59,10 +59,12 @@ export function SeletorOrganizacao() {
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={trocando}
-        className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-sm text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-60"
+        aria-label={`Trocar empresa. Atual: ${ativa.nome}`}
+        aria-busy={trocando}
+        className="flex min-h-11 min-w-11 outline-none focus-visible:ring-2 focus-visible:ring-violet-400 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-sm text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-60"
       >
         <Building2 className="h-4 w-4 text-zinc-400" />
-        <span className="max-w-[10rem] truncate">{ativa?.nome}</span>
+        <span className="max-w-[5rem] sm:max-w-[10rem] truncate">{ativa?.nome}</span>
         <ChevronsUpDown className="h-3.5 w-3.5 text-zinc-500" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
@@ -70,13 +72,14 @@ export function SeletorOrganizacao() {
           <DropdownMenuItem
             key={org.id}
             onClick={() => trocar(org)}
-            className="flex items-center justify-between gap-2"
+            disabled={trocando}
+            className="flex min-h-11 items-center justify-between gap-2"
           >
             <span className="flex min-w-0 flex-col">
               <span className="truncate">{org.nome}</span>
               <span className="text-xs text-zinc-500 capitalize">{org.papel}</span>
             </span>
-            {org.ativa && <Check className="h-4 w-4 shrink-0 text-emerald-400" />}
+            {org.ativa && <><span className="sr-only">Empresa atual</span><Check aria-hidden="true" className="h-4 w-4 shrink-0 text-violet-400" /></>}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

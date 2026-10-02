@@ -1,5 +1,6 @@
 "use client"
 
+import { useDetailPresentation } from "@/components/demandas/useDetailPresentation"
 import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import { useDialogFocus } from "@/components/layout/useDialogFocus"
 import styles from "@/components/agenda/AgendaPreview.module.css"
@@ -16,7 +17,7 @@ import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek,
-  isToday, parseISO } from "date-fns"
+  isToday, parseISO, addWeeks, startOfDay, addDays } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
@@ -115,6 +116,8 @@ function ExportButton() {
 
 export default function AgendaPage() {
   const { modern } = useVisualPreview()
+  const { presentation, setPresentation } = useDetailPresentation()
+  const [view, setView] = useState<"month" | "week" | "list">("month")
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const [actionError, setActionError] = useState("")
@@ -129,12 +132,13 @@ export default function AgendaPage() {
 
   const inicioMes = startOfMonth(mesAtual)
   const fimMes = endOfMonth(mesAtual)
-  const inicioGrid = startOfWeek(inicioMes, { locale: ptBR })
-  const fimGrid = endOfWeek(fimMes, { locale: ptBR })
+  const semana = modern && view === "week"
+  const inicioGrid = startOfWeek(semana ? mesAtual : inicioMes, { locale: ptBR })
+  const fimGrid = endOfWeek(semana ? mesAtual : fimMes, { locale: ptBR })
   const diasGrid = eachDayOfInterval({ start: inicioGrid, end: fimGrid })
 
-  const qsInicio = format(inicioGrid, "yyyy-MM-dd")
-  const qsFim = format(fimGrid, "yyyy-MM-dd")
+  const qsInicio = encodeURIComponent(inicioGrid.toISOString())
+  const qsFim = encodeURIComponent(fimGrid.toISOString())
 
   const detailRef = useDialogFocus(!!eventoSelec, () => { if (!busyRef.current) setEventoSelec(null) })
   const formRef = useDialogFocus(showForm, () => { if (!busyRef.current) setShowForm(false) })
@@ -151,24 +155,17 @@ export default function AgendaPage() {
   }, [data, filtroCtx])
 
   const eventosNoDia = (dia: Date) =>
-    eventos.filter(e => isSameDay(parseISO(e.inicio), dia))
+    eventos.filter(e => parseISO(e.inicio) < addDays(startOfDay(dia), 1) && parseISO(e.fim) > startOfDay(dia))
 
   const eventosDoSelecionado = diaSelec ? eventosNoDia(diaSelec) : []
 
-  // Detecta conflitos (eventos sobrepostos em dias com contourline + freelance)
-  const conflitos = useMemo(() => {
-    const porDia = new Map<string, Evento[]>()
-    eventos.forEach(e => {
-      const key = format(parseISO(e.inicio), "yyyy-MM-dd")
-      porDia.set(key, [...(porDia.get(key) ?? []), e])
-    })
-    const dias: string[] = []
-    porDia.forEach((evts, dia) => {
-      const ctxs = new Set(evts.map(e => e.contexto))
-      if (ctxs.has("contourline") && ctxs.has("freelance")) dias.push(dia)
-    })
-    return dias
-  }, [eventos])
+  // Conflito exige sobreposição de horários, inclusive em dias de continuação.
+  const conflitos = diasGrid.filter(dia => {
+    const doDia = eventosNoDia(dia).filter(e => !["cancelado", "concluido"].includes(e.status))
+    return doDia.some(a => a.contexto === "contourline" && doDia.some(b =>
+      b.contexto === "freelance" && Math.max(+parseISO(a.inicio), +parseISO(b.inicio), +startOfDay(dia)) <
+        Math.min(+parseISO(a.fim), +parseISO(b.fim), +addDays(startOfDay(dia), 1))))
+  }).map(dia => format(dia, "yyyy-MM-dd"))
 
   // Form
   const [form, setForm] = useState({
@@ -234,7 +231,11 @@ export default function AgendaPage() {
           </div>
         }
       />
-      {modern && <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Espaço para cada compromisso.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>}
+      {modern && <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Seu tempo de criar.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>}
+      {modern && <div className={styles.viewBar}>
+        <div>{([["month", "Mês"], ["week", "Semana"], ["list", "Lista"]] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
+        <label>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+      </div>}
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar a agenda. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {isLoading && <p role="status" className={styles.error}>Carregando agenda…</p>}
       <main className={cn("flex-1 p-4 flex gap-4 overflow-hidden", modern && styles.agenda)}>
@@ -243,13 +244,13 @@ export default function AgendaPage() {
           {/* Controles */}
           <div className={cn("flex items-center justify-between mb-4", modern && styles.toolbar)}>
             <div className="flex items-center gap-2">
-              <button aria-label="Mês anterior" onClick={() => setMesAtual(m => subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
+              <button aria-label={semana ? "Semana anterior" : "Mês anterior"} onClick={() => setMesAtual(m => semana ? addWeeks(m, -1) : subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <h2 className="text-sm font-semibold text-zinc-200 capitalize min-w-36 text-center">
-                {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
+                {semana ? `${format(inicioGrid, "dd MMM", {locale:ptBR})} – ${format(fimGrid, "dd MMM yyyy", {locale:ptBR})}` : format(mesAtual, "MMMM yyyy", { locale: ptBR })}
               </h2>
-              <button aria-label="Próximo mês" onClick={() => setMesAtual(m => addMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
+              <button aria-label={semana ? "Próxima semana" : "Próximo mês"} onClick={() => setMesAtual(m => semana ? addWeeks(m, 1) : addMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronRight className="w-4 h-4" />
               </button>
               <button onClick={() => { const hoje = new Date(); setMesAtual(hoje); setDiaSelec(hoje) }} className="text-xs text-zinc-400 hover:text-zinc-200 ml-2 border border-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-800">Hoje</button>
@@ -286,7 +287,14 @@ export default function AgendaPage() {
           )}
 
           {/* Grid */}
-          <div className={cn("bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1", modern && styles.calendar)}>
+          {modern && view === "list" ? <section className={styles.eventList} aria-label="Compromissos do mês">
+            {eventos.filter(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes).sort((a,b) => a.inicio.localeCompare(b.inicio)).map(evento => <button key={evento.id} type="button" onClick={() => {setActionError(""); setEventoSelec(evento)}}>
+              <span>{format(parseISO(evento.inicio), "dd MMM", {locale:ptBR})}<small>{evento.diaTodo ? "Dia todo" : format(parseISO(evento.inicio), "HH:mm")}</small></span>
+              <div><strong>{evento.titulo}</strong><p>{evento.local || TIPO_OPTS.find(tipo => tipo.value === evento.tipo)?.label || evento.tipo}</p></div>
+              <ChevronRight size={18} />
+            </button>)}
+            {!isLoading && !eventos.some(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes) && <p>Nenhum compromisso neste mês com os filtros selecionados.</p>}
+          </section> : <div className={cn("bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1", modern && styles.calendar, semana && styles.week)}>
             {/* Cabeçalho dias da semana */}
             <div className="grid grid-cols-7 border-b border-zinc-800">
               {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
@@ -326,23 +334,23 @@ export default function AgendaPage() {
                     </div>
 
                     <div className="space-y-0.5">
-                      {evts.slice(0, 3).map(e => {
+                      {(semana ? evts : evts.slice(0, 3)).map(e => {
                         return (
                           <button aria-label={`Abrir evento: ${e.titulo}`} key={e.id}
                             onClick={(ev) => { ev.stopPropagation(); setActionError(""); setEventoSelec(e) }}
                             style={{ backgroundColor: e.cor ?? "#71717a" }}
                             className="block w-full text-left text-white text-[10px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80">
-                            {e.titulo}
+                            {semana && <span className={styles.eventTime}>{e.diaTodo ? "Dia todo" : isSameDay(parseISO(e.inicio), dia) ? format(parseISO(e.inicio), "HH:mm") : isSameDay(parseISO(e.fim), dia) ? `Até ${format(parseISO(e.fim), "HH:mm")}` : "Em andamento"}</span>}{e.titulo}
                           </button>
                         )
                       })}
-                      {evts.length > 3 && <div className="text-[10px] text-zinc-400 pl-1">+{evts.length - 3}</div>}
+                      {!semana && evts.length > 3 && <div className="text-[10px] text-zinc-400 pl-1">+{evts.length - 3}</div>}
                     </div>
                   </div>
                 )
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Legenda */}
           <div className="flex items-center gap-4 mt-3 flex-wrap">
@@ -433,8 +441,8 @@ export default function AgendaPage() {
 
       {/* Modal detalhe evento */}
       {eventoSelec && (
-        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", modern && surface.overlay)}>
-          <div ref={detailRef} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[90dvh] overflow-y-auto", modern && surface.surface, modern && styles.detail)}>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", modern && surface.overlay, modern && presentation === "drawer" && styles.drawerOverlay)}>
+          <div ref={detailRef} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[90dvh] overflow-y-auto", modern && surface.surface, modern && styles.detail, modern && presentation === "drawer" && styles.drawer)}>
             {(() => {
               const cfg = CONTEXTO_CONFIG[eventoSelec.contexto]
               return (
@@ -452,12 +460,13 @@ export default function AgendaPage() {
                     </button>
                   </div>
 
+                  {modern && <button type="button" className={styles.expand} onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>}
                   <div className="space-y-2 text-sm text-zinc-400 mb-4">
                     <div className="flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
                       {eventoSelec.diaTodo
                         ? format(parseISO(eventoSelec.inicio), "dd/MM/yyyy", { locale: ptBR })
-                        : `${format(parseISO(eventoSelec.inicio), "dd/MM HH:mm")} — ${format(parseISO(eventoSelec.fim), "HH:mm")}`
+                        : `${format(parseISO(eventoSelec.inicio), "dd/MM HH:mm")} — ${format(parseISO(eventoSelec.fim), "dd/MM HH:mm")}`
                       }
                     </div>
                     {eventoSelec.local && (

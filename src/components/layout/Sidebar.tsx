@@ -54,7 +54,9 @@ const sections = [
   {
     label: "Geral",
     items: [
+      { href: "/hoje", label: "Hoje", icon: Home },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/meu-trabalho", label: "Meu trabalho", icon: ClipboardCheck },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
@@ -118,7 +120,7 @@ const sections = [
     label: "Plataforma",
     superAdmin: true,
     items: [
-      { href: "/admin/organizacoes", label: "Organizações", icon: Building2 },
+      { href: "/admin/organizacoes", label: "Empresas do SaaS", icon: Building2 },
     ],
   },
   {
@@ -131,7 +133,7 @@ const sections = [
       { href: "/configuracoes", label: "Configurações", icon: Settings },
       // Terceirizar execução para outra empresa começa aqui: sem parceria
       // aceita pelos dois lados, o botão de terceirizar nem aparece no card.
-      { href: "/parcerias", label: "Parcerias", icon: Handshake },
+      { href: "/parcerias", label: "Compartilhamento", icon: Handshake },
     ],
   },
 ]
@@ -144,15 +146,11 @@ export function Sidebar() {
   const isItemActive = (href: string) => activeHref === href
   const navigation = modern ? sections.map(section => {
     if (section.label === "Geral") return { ...section, items: section.items.filter(item => item.href !== "/produtos") }
-    if (section.label === "Audiovisual") return { ...section, items: section.items.filter(item => !["/videomakers", "/equipe", "/custos"].includes(item.href)) }
     if (section.label === "Growth") return { ...section, items: section.items.filter(item => item.href !== "/configuracoes/linhas-projetos") }
     return section
   }).flatMap(section => section.label === "Geral" ? [section, {
     label: "Produtos",
     items: sections.flatMap(group => group.items).filter(item => ["/produtos", "/configuracoes/linhas-projetos"].includes(item.href)),
-  }] : section.label === "Audiovisual" ? [section, {
-    label: "Equipe audiovisual",
-    items: sections.flatMap(group => group.items).filter(item => ["/videomakers", "/equipe", "/custos"].includes(item.href)),
   }] : [section]) : sections
   const currentSection = navigation.find(section => section.items.some(item => isItemActive(item.href)))?.label ?? "Geral"
   const expandedLabel = expanded?.path === pathname ? expanded.label : currentSection
@@ -294,7 +292,11 @@ export function Sidebar() {
                   </button>
                 ) : <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">{section.label}</p>}
                 <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={modern && expandedLabel !== section.label} className="space-y-0.5">
-                  {visibleItems.map((item) => {
+                  {(() => {
+                    const teamHrefs = ["/videomakers", "/equipe", "/custos"]
+                    const teamItems = modern && section.label === "Audiovisual" ? visibleItems.filter(item => teamHrefs.includes(item.href)) : []
+                    const mainItems = visibleItems.filter(item => !teamItems.includes(item))
+                    const renderItem = (item: typeof visibleItems[number]) => {
                     const Icon = item.icon
                     const isActive = isItemActive(item.href)
 
@@ -314,7 +316,20 @@ export function Sidebar() {
                         {item.label}
                       </Link>
                     )
-                  })}
+                    }
+                    return <>
+                      {mainItems.map(renderItem)}
+                      {teamItems.length > 0 && <details open={teamItems.some(item => isItemActive(item.href))} className="group/team">
+                        <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-md px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white focus-visible:outline-2 focus-visible:outline-violet-400">
+                          <Users className="h-4 w-4 shrink-0" />
+                          <span className="flex-1">Equipe audiovisual</span>
+                          <ChevronDown className="h-4 w-4 group-open/team:rotate-180" />
+                        </summary>
+                        <div className="ml-5 border-l border-zinc-700 pl-2 space-y-0.5">{teamItems.map(renderItem)}</div>
+                      </details>}
+                    </>
+                  })()}
+
                 </div>
               </div>
             )

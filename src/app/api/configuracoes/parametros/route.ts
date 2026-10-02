@@ -56,6 +56,10 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const grupo = searchParams.get("grupo")
+  const incluirInativos = searchParams.get("incluirInativos") === "1"
+  if (incluirInativos && !["admin", "gestor"].includes(session.user?.tipo ?? "")) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   // Seed se estiver vazio (por organização)
   const count = await prisma.configParametro.count({ where: { organizacaoId } })
@@ -67,7 +71,7 @@ export async function GET(req: NextRequest) {
   }
 
   const parametros = await prisma.configParametro.findMany({
-    where: { organizacaoId, ...(grupo && { grupo }), ativo: true },
+    where: { organizacaoId, ...(grupo && { grupo }), ...(incluirInativos ? {} : { ativo: true }) },
     orderBy: [{ grupo: "asc" }, { ordem: "asc" }],
   })
 

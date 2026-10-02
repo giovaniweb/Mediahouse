@@ -5,11 +5,13 @@ import useSWR from "swr"
 import Link from "next/link"
 import { Header } from "@/components/layout/Header"
 import {
-  Search, Archive, ExternalLink, ChevronLeft, ChevronRight,
+  Search, ExternalLink, ChevronLeft, ChevronRight,
   Filter, X, CheckCircle2,
 } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 
+
+import styles from "@/components/layout/TeamSurface.module.css"
 
 interface Demanda {
   id: string
@@ -28,7 +30,7 @@ interface Demanda {
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "America/Sao_Paulo" })
 }
 
 const PAGE_SIZE = 50
@@ -50,8 +52,9 @@ export default function HistoricoPage() {
   if (deDate) params.set("de", deDate)
   if (ateDate) params.set("ate", ateDate)
 
+  const periodoInvertido = !!(deDate && ateDate && deDate > ateDate)
   const url = `/api/demandas?${params}`
-  const { data, isLoading } = useSWR(url, fetcher, { keepPreviousData: true })
+  const { data, error, isLoading, isValidating, mutate } = useSWR(periodoInvertido ? null : url, fetcher, { keepPreviousData: true })
 
   // Rótulos dos tipos vêm de Configurações → Parâmetros, para o filtro e a
   // tabela falarem a mesma língua do resto do sistema.
@@ -83,17 +86,15 @@ export default function HistoricoPage() {
     <>
       <Header title="Histórico de Demandas" />
 
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className={styles.page} style={{ paddingBottom: 100 }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/10 rounded-lg">
-              <Archive className="w-5 h-5 text-emerald-400" />
-            </div>
             <div>
-              <h1 className="text-xl font-bold text-zinc-100">Histórico Completo</h1>
+              <p className={styles.eyebrow}>WORKSPACE / HISTÓRICO</p>
+              <h1 className={styles.title}>O trabalho que já virou entrega.</h1>
               <p className="text-sm text-zinc-400">
-                {isLoading ? "Carregando…" : `${total.toLocaleString("pt-BR")} demandas concluídas`}
+                {periodoInvertido ? "Revise o período selecionado" : error ? "Histórico indisponível no momento" : isLoading ? "Carregando…" : `${total.toLocaleString("pt-BR")} demandas concluídas`}
               </p>
             </div>
           </div>
@@ -110,10 +111,11 @@ export default function HistoricoPage() {
 
         {/* Barra de busca + filtros */}
         <div className="flex flex-col gap-3 mb-5">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
+                aria-label="Buscar no histórico"
                 type="text"
                 placeholder="Buscar por título ou código…"
                 value={search}
@@ -122,6 +124,7 @@ export default function HistoricoPage() {
               />
             </div>
             <button
+              aria-expanded={showFiltros}
               onClick={() => setShowFiltros((v) => !v)}
               className={`flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors ${
                 temFiltros || showFiltros
@@ -143,7 +146,7 @@ export default function HistoricoPage() {
             <div className="flex gap-3 flex-wrap p-3 bg-zinc-800/50 border border-zinc-700 rounded-lg">
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-zinc-400">Tipo de vídeo</label>
-                <select
+                <select aria-label="Tipo de vídeo"
                   value={tipoVideo}
                   onChange={(e) => { setTipoVideo(e.target.value); setPage(1) }}
                   className="px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 outline-none"
@@ -159,7 +162,7 @@ export default function HistoricoPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-zinc-400">Finalizado de</label>
                 <input
-                  type="date"
+                  aria-label="Finalizado de" aria-invalid={periodoInvertido} aria-describedby={periodoInvertido ? "historico-periodo-erro" : undefined} type="date"
                   value={deDate}
                   onChange={(e) => { setDeDate(e.target.value); setPage(1) }}
                   className="px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 outline-none"
@@ -168,7 +171,7 @@ export default function HistoricoPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-zinc-400">Até</label>
                 <input
-                  type="date"
+                  aria-label="Até" aria-invalid={periodoInvertido} aria-describedby={periodoInvertido ? "historico-periodo-erro" : undefined} type="date"
                   value={ateDate}
                   onChange={(e) => { setAteDate(e.target.value); setPage(1) }}
                   className="px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 outline-none"
@@ -178,26 +181,29 @@ export default function HistoricoPage() {
           )}
         </div>
 
+        {periodoInvertido && <p id="historico-periodo-erro" role="alert" className="text-amber-300 mb-4">A data final deve ser igual ou posterior à data inicial.</p>}
+
         {/* Tabela */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-400 text-xs uppercase tracking-wide">
-                <th className="text-left px-4 py-3">Código</th>
+                <th className="hidden sm:table-cell text-left px-4 py-3">Código</th>
                 <th className="text-left px-4 py-3">Título</th>
                 <th className="text-left px-4 py-3 hidden md:table-cell">Tipo</th>
                 <th className="text-left px-4 py-3 hidden lg:table-cell">Videomaker</th>
                 <th className="text-left px-4 py-3 hidden lg:table-cell">Editor</th>
-                <th className="text-left px-4 py-3">Concluído em</th>
+                <th className="hidden sm:table-cell text-left px-4 py-3">Concluído em</th>
               </tr>
             </thead>
             <tbody>
-              {isLoading && (
+              {!periodoInvertido && error && <tr><td colSpan={6} className="p-6"><div role="alert"><p>Não foi possível carregar o histórico.</p><button disabled={isValidating} onClick={() => mutate()} className="text-purple-300">Tentar novamente</button></div></td></tr>}
+              {!periodoInvertido && !error && isLoading && (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-zinc-500">Carregando…</td>
                 </tr>
               )}
-              {!isLoading && demandas.length === 0 && (
+              {!periodoInvertido && !error && !isLoading && demandas.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center py-12">
                     <CheckCircle2 className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
@@ -210,20 +216,21 @@ export default function HistoricoPage() {
                   </td>
                 </tr>
               )}
-              {demandas.map((d) => (
+              {!periodoInvertido && !error && !isLoading && demandas.map((d) => (
                 <tr
                   key={d.id}
                   className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
                 >
-                  <td className="px-4 py-3">
+                  <td className="hidden sm:table-cell px-4 py-3">
                     <Link href={`/demandas/${d.id}`} className="font-mono text-xs text-zinc-400 hover:text-purple-400 transition-colors">
                       {d.codigo}
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/demandas/${d.id}`} className="text-zinc-200 hover:text-white font-medium transition-colors line-clamp-1">
+                    <Link href={`/demandas/${d.id}`} className="text-zinc-200 hover:text-white font-medium transition-colors block break-words [overflow-wrap:anywhere]">
                       {d.titulo}
                     </Link>
+                    <p className="sm:hidden text-xs text-zinc-400 mt-2 break-all">{d.codigo} · {fmtDate(d.finalizadaEm ?? d.updatedAt)}</p>
                     {d.produtos?.[0]?.produto?.nome && (
                       <span className="text-xs text-zinc-500">{d.produtos[0].produto.nome}</span>
                     )}
@@ -239,7 +246,7 @@ export default function HistoricoPage() {
                   <td className="px-4 py-3 hidden lg:table-cell text-zinc-400 text-xs">
                     {d.editor?.nome ?? <span className="text-zinc-600">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-zinc-400 text-xs whitespace-nowrap">
+                  <td className="hidden sm:table-cell px-4 py-3 text-zinc-400 text-xs whitespace-nowrap">
                     {fmtDate(d.finalizadaEm ?? d.updatedAt)}
                   </td>
                 </tr>
@@ -249,12 +256,12 @@ export default function HistoricoPage() {
         </div>
 
         {/* Paginação */}
-        {totalPages > 1 && (
+        {!periodoInvertido && !error && !isLoading && totalPages > 1 && (
           <div className="flex items-center justify-between mt-4">
             <span className="text-xs text-zinc-500">
               Página {page} de {totalPages} · {total} demandas
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}

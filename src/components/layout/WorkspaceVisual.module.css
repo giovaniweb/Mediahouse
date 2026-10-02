@@ -1,4 +1,4 @@
-.workspace { background: #101116; color: #f5f5fb; }
+.workspace { background:#0f1115; color:#f1f0f8; font-family:"Montserrat",ui-sans-serif,system-ui,sans-serif; }
 .workspace > aside { background: #171922; border-color: #303341; width: 244px; }
 .workspace > aside nav { scrollbar-width: thin; scrollbar-color: #44485b transparent; }
 .workspace > aside nav a { border-radius: 10px; min-height: 40px; }

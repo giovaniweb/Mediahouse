@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Suspense, useMemo, useState } from "react"
 import useSWR from "swr"
 import { useRouter } from "next/navigation"
@@ -10,11 +11,11 @@ import { fetcher } from "@/lib/fetcher"
 import { cn } from "@/lib/utils"
 import { ehHoje } from "@/lib/datas"
 import { estaAtrasada } from "@/lib/status"
-import { TIPO_COBERTURA, ehJob } from "@/lib/job-fase"
+import { TIPO_COBERTURA, ehJob, proximaAcao, responsavelAtual } from "@/lib/job-fase"
 import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import styles from "@/components/jobs/JobsPreview.module.css"
-import { Search } from "lucide-react"
+import { Search, Columns3, List, ChevronRight } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
@@ -58,6 +59,7 @@ type Opcao = { id: string; nome: string }
 function Quadro() {
   const router = useRouter()
   const { modern } = useVisualPreview()
+  const [view, setView] = useState<"kanban" | "list">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
   const [videomakerId, setVideomakerId] = useState("")
@@ -124,7 +126,9 @@ function Quadro() {
       <Header title="Jobs" />
       {modern && <div className={styles.intro}><div><p>OPERAÇÃO AUDIOVISUAL</p><h1>Seu próximo job. À vista.</h1></div><span>Captação, responsável e próximo passo em um só lugar.</span></div>}
 
-      <div className="px-4 pt-3 pb-2 space-y-2.5">
+      {modern && <div className={styles.summary} aria-label="Resumo dos jobs filtrados"><span><strong>{jobs.length}</strong> jobs</span><span><strong>{atrasados}</strong> atrasados</span><span><strong>{jobs.filter(j => j.dataCaptacao && ehHoje(j.dataCaptacao)).length}</strong> captações hoje</span></div>}
+      {modern && <div className={styles.views} aria-label="Visualização de Jobs"><button aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><Columns3 size={16}/>Kanban</button><button aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16}/>Lista</button></div>}
+      <div className={cn("px-4 pt-3 pb-2 space-y-2.5", modern && styles.controls)}>
         {/* Recortes principais (§35) */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {ABAS.map((a) => (
@@ -188,7 +192,10 @@ function Quadro() {
         {isLoading && todos.length === 0 ? (
           <p className="text-sm text-zinc-500 px-10 py-8">Carregando…</p>
         ) : error && !data ? null : (
-          <JobsQuadro jobs={jobs} onAbrir={abrir} />
+          modern && view === "list" ? <section className={styles.list} aria-label="Lista de Jobs">
+            {jobs.map(job => <Link key={job.id} href={`/jobs/${job.id}`}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></Link>)}
+            {jobs.length === 0 && <p>Nenhum job com os filtros selecionados.</p>}
+          </section> : <JobsQuadro jobs={jobs} onAbrir={abrir} />
         )}
       </div>
     </div>

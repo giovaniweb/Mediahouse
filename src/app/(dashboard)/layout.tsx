@@ -16,14 +16,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <NavegacaoMovelProvider>
         <WorkspaceVisual>
           <Sidebar />
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
             {/* Só aparece abaixo de md — no desktop a lateral é permanente. */}
-            <BarraMovel />
-            {children}
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+              <BarraMovel />
+              {children}
+            </div>
+            <PainelExecutor />
           </div>
         </WorkspaceVisual>
       </NavegacaoMovelProvider>
-      <PainelExecutor />
       {/* Avisos passaram para o topo: o painel do executor é permanente no canto
           inferior direito, e um toast por cima dele some sem ser lido. */}
       <Toaster

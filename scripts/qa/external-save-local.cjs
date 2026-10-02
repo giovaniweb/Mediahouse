@@ -1,0 +1,26 @@
+require('dotenv').config({path:'.env.local',quiet:true});
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict');
+const {PrismaClient}=require('@prisma/client'),{PrismaPg}=require('@prisma/adapter-pg');
+const url=new URL(process.env.DATABASE_URL);assert(url.hostname==='127.0.0.1'&&url.port==='55437'&&url.pathname==='/nuflow_local');
+const db=new PrismaClient({adapter:new PrismaPg({connectionString:url.toString()})});
+const email='qa-team-'+Date.now()+'@example.invalid';
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+const context=await browser.newContext({viewport:{width:1440,height:960}});
+await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+const page=await context.newPage();
+await page.goto('http://127.0.0.1:3108/login');
+await page.locator('[name=login]').fill('admin-a@nuflow.test');
+await page.locator('[name=password]').fill('NuFlow-Local-2026!');
+await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.waitForURL('**/dashboard');
+const created=await context.request.post('http://127.0.0.1:3108/api/videomakers',{data:{nome:'QA externo temporário',email,habilidades:['Drone'],chavePix:'qa-pix-sem-validade',valorDiaria:250,cidade:'Contagem'}});
+assert.equal(created.status(),201);const record=await created.json();
+assert.deepEqual((await db.videomaker.findUniqueOrThrow({where:{id:record.id}})).habilidades,['Drone']);
+const org=await db.organizacao.findUniqueOrThrow({where:{slug:'estudio-local-a'}});
+const fiscal=await db.videomakerDadosFiscais.findFirstOrThrow({where:{videomakerId:record.id,organizacaoId:org.id}});
+assert(fiscal.chavePix && fiscal.chavePix!=='qa-pix-sem-validade');
+const link=await db.videomakerOrganizacao.findFirstOrThrow({where:{videomakerId:record.id,organizacaoId:org.id}});assert.equal(Number(link.valorDiaria),250);
+const list=await context.request.get('http://127.0.0.1:3108/api/videomakers');const item=(await list.json()).videomakers.find(v=>v.id===record.id);assert(item);assert(!('chavePix' in item));
+await page.goto('http://127.0.0.1:3108/videomakers?visual=novo');await page.getByRole('heading',{name:'QA externo temporário',exact:true}).waitFor();
+console.log('PASS: habilidades persistidas, PIX armazenado cifrado na empresa, diária no vínculo, listagem sem PIX e card visível; sem mensagens');
+}finally{await db.videomaker.deleteMany({where:{email}});await db.usuario.deleteMany({where:{email}});await db.$disconnect();await browser.close()}})().catch(e=>{console.error(e);process.exit(1)});

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       ...(usuarioId ? { usuarioId } : {}),
     },
     include: {
-      _count: { select: { demandas: true } },
+      _count: { select: { demandas: true, avaliacoes: true } },
     },
     orderBy: [{ status: "asc" }, { nome: "asc" }],
   })
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       email: body.email,
       status: body.status ?? "ativo",
       areasAtuacao: body.areasAtuacao ?? [],
+      habilidades: body.habilidades ?? [],
       portfolio: body.portfolio,
       podeEditar: body.podeEditar ?? false,
       ...(body.tipoContrato ? { tipoContrato: body.tipoContrato } : {}),
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       status: body.status ?? "ativo",
       podeEditar: body.podeEditar ?? false,
     },
-    fiscal: { cpfCnpj: body.cpfCnpj, dadosBancarios: body.dadosBancarios },
+    fiscal: { cpfCnpj: body.cpfCnpj, chavePix: body.chavePix, dadosBancarios: body.dadosBancarios },
   })
 
   // Se usuarioId já foi fornecido, o usuário já existe — apenas vincula o Videomaker ao usuário

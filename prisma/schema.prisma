@@ -177,6 +177,10 @@ model Usuario {
   tipo       TipoUsuario   @default(solicitante)
   status     StatusUsuario @default(ativo)
   senhaHash  String
+  instagramUrl String?
+  linkedinUrl  String?
+  portfolioUrl String?
+  bio          String?
   avatarUrl  String?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
@@ -2374,4 +2378,19 @@ model UsuarioOrganizacao {
   @@unique([usuarioId, organizacaoId])
   @@index([organizacaoId])
   @@map("usuario_organizacao")
+}
+
+// Interessados comerciais na plataforma; leitura exclusiva do super-admin.
+model LeadComercial {
+  id String @id @default(cuid())
+  nome String
+  email String
+  telefone String
+  empresa String
+  mensagem String?
+  origem String?
+  campanha String?
+  consentimentoEm DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@map("leads_comerciais")
 }

@@ -43,3 +43,39 @@
 @media(min-width:1024px) { .people[data-person-open="true"] { padding-right:25rem; } }
 
 @media(max-width:640px) { .settingsPanel [data-settings-fields] { grid-template-columns:minmax(0,1fr); } .settingsPanel [data-settings-fields] > * { grid-column:auto; } }
+
+/* Pessoas: mesma hierarquia leve e abas sublinhadas do workspace aprovado. */
+.people .intro h1 {font-weight:500;letter-spacing:-.035em;}
+.people .tabs {background:transparent;border:0;border-bottom:1px solid #303342;border-radius:0;padding:0;gap:24px;}
+.people .tabs > button {border-radius:0;background:transparent;border-bottom:2px solid transparent;padding-inline:0;}
+.people .tabs > button[aria-pressed="true"] {background:transparent;color:#bca2fa;border-bottom-color:#ad87ff;}
+.personPanel {background:#191b23;}
+.personPanel button[aria-label="Fechar detalhes da pessoa"] {min-width:44px;min-height:44px;display:grid;place-items:center;}
+@media(max-width:640px){
+ .people .table {border:0;background:transparent;overflow:visible;}
+ .people .table table {min-width:0;display:block;}
+ .people .table thead {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+ .people .table tbody {display:block;}
+ .people .table tr[data-person-row] {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:18px;margin-bottom:14px;border:1px solid #303342;border-radius:16px;background:#191b23;}
+ .people .table tr[data-person-row] td {display:block;padding:0;max-width:none;min-width:0;overflow-wrap:anywhere;}
+ .people .table td[data-column]::before {content:attr(data-column);display:block;color:#a5a7bb;font-size:10px;letter-spacing:.04em;margin-bottom:7px;}
+ .people .table td[data-column="Pessoa"],.people .table td[data-column="Ações"] {grid-column:1/-1;}
+ .people .table td[data-column="Pessoa"] {border-bottom:1px solid #303342;padding-bottom:14px;}
+ .people .table td[data-column="Pessoa"]::before,.people .table td[data-column="Ações"]::before {display:none;}
+ .people .table td[data-column="Pessoa"] button {white-space:normal;min-height:32px;}
+ .people .table td[data-column="Ações"] button {min-width:44px;min-height:44px;}
+}
+
+.settings .intro h1 {font-weight:500;letter-spacing:-.035em;}
+.settingsPanel {background:#191b23;border-color:#303342;border-radius:18px;}
+.settingsNav button[aria-pressed="true"] {background:#ab86ff20;border-color:#ab86ff30;color:#bca2fa;}
+.settingsPanel a:focus-visible,.settingsPanel input:focus-visible,.settingsPanel select:focus-visible,.settingsPanel textarea:focus-visible {outline:2px solid #bca4ff;outline-offset:3px;}
+@media(max-width:900px){.settingsNav{max-width:100%;}.settingsNav button{min-height:48px;}}
+
+.parameterRow {min-width:0;}
+.parameterLabel {flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere;}
+.parameterActions {display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.parameterActions button {min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#b5b6c8;border-radius:8px;}
+.parameterActions button:focus-visible {outline:2px solid #c8b4ff;outline-offset:2px;}
+.parameterRow input {min-width:0;min-height:44px;}
+@media(max-width:640px){.parameterRow{flex-direction:column;align-items:stretch;}.parameterActions{justify-content:flex-end;}.parameterLabel{align-items:flex-start;flex-direction:column;}.parameterRow input{width:100%;font-size:16px;}}

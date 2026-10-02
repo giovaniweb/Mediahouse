@@ -18,6 +18,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
+  if (!["admin", "gestor"].includes(session.user?.tipo ?? "")) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+
   const { id } = await params
   const guard = await assertParamOrg(session, id)
   if (guard) return guard

@@ -9,11 +9,11 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
-import { ImportarPlanilhaModal } from "@/components/demandas/ImportarPlanilhaModal"
+import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
-import { DemandasTabela } from "@/components/demandas/DemandasTabela"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
-import { Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
+import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
 
@@ -49,13 +49,14 @@ function DemandasKanban() {
 
   // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
   // trabalha em planilha abre direto na Tabela na próxima vez, sem reconfigurar.
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>("todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-audiovisual"
 
   useEffect(() => {
     const salva = localStorage.getItem(CHAVE_VISAO) as Visao | null
-    if (salva === "kanban" || salva === "lista" || salva === "tabela") setVisao(salva)
+    if (salva === "kanban" || salva === "lista") setVisao(salva)
   }, [])
 
   function trocarVisao(v: Visao) {
@@ -72,7 +73,6 @@ function DemandasKanban() {
   const statusUrl = searchParamsUrl.get("statusVisivel") ?? ""
   const [toast, setToast] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null)
   const [showNovaDemandaModal, setShowNovaDemandaModal] = useState(false)
-  const [showImportar, setShowImportar] = useState(false)
 
   // Abrir o formulário por link. Existia uma página cheia em /demandas/nova que
   // fazia a mesma coisa que este modal — e tinha divergido dele. Agora os botões
@@ -285,15 +285,8 @@ function DemandasKanban() {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowImportar(true)}
-              title="Criar várias demandas a partir de uma planilha"
-              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Importar planilha
-            </button>
-            <button
               onClick={() => setShowNovaDemandaModal(true)}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className={actionStyles.newDemand}
             >
               <Plus className="w-4 h-4" /> Nova Demanda
             </button>
@@ -313,6 +306,13 @@ function DemandasKanban() {
       )}
 
       {/* Filtros */}
+
+
+      {/* Números + recortes + seletor de visão */}
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
+          area="audiovisual"
+          filters={(
       <BoardFilters>
       <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
@@ -394,10 +394,7 @@ function DemandasKanban() {
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
       </BoardFilters>
-
-      {/* Números + recortes + seletor de visão */}
-      <div className="px-4 pt-1 pb-3">
-        <BarraVisao
+          )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
@@ -409,20 +406,15 @@ function DemandasKanban() {
 
       {/* A visão escolhida. Kanban precisa de altura ancorada na viewport para a
           barra de rolagem ficar no rodapé; lista e tabela rolam com a página. */}
+      <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       {visao === "kanban" ? (
         <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
         </div>
       ) : (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          {visao === "lista"
-            ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
-            : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
+          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
         </div>
-      )}
-
-      {showImportar && (
-        <ImportarPlanilhaModal area="audiovisual" onClose={() => setShowImportar(false)} onImportado={() => mutate()} />
       )}
 
       {/* Modal Nova Demanda */}

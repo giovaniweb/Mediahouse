@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
   const editores = await prisma.editor.findMany({
     where,
     include: {
+      _count: { select: { avaliacoes: { where: { OR: [{ organizacaoId }, { organizacaoId: null }] } } } },
       demandas: {
         where: { statusVisivel: { notIn: ["finalizado"] } },
         select: { id: true, pesoDemanda: true, titulo: true, prioridade: true, statusVisivel: true },
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
       // o editor nem apareceria nesta lista, então o padrão é só defesa.
       cargaLimite: v?.cargaLimite ?? 5,
       status: (v?.status as "ativo" | "inativo") ?? e.status,
-      _count: { demandas: e.demandas.length },
+      _count: { demandas: e.demandas.length, avaliacoes: e._count.avaliacoes },
     }
   })
 

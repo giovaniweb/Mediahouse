@@ -1,18 +1,21 @@
 "use client"
 
-import { LayoutGrid, List, Table2, Inbox, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
+import type { ReactNode } from "react"
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import styles from "./BoardOverview.module.css"
+import { LayoutGrid, List, Inbox, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
+import { useDetailPresentation } from "./useDetailPresentation"
 import { cn } from "@/lib/utils"
 import type { Visao, AbaRapida, DemandaLista } from "./tipos-visao"
 import { calcularKpis } from "./tipos-visao"
 
 // Topo do quadro: os números que respondem "como estamos", o seletor de visão e
-// os recortes de uso diário. Fica igual nas três visões — muda o desenho embaixo,
+// os recortes de uso diário. Fica igual nas duas visões — muda o desenho embaixo,
 // não a navegação.
 
 const VISOES: { id: Visao; label: string; icone: typeof LayoutGrid }[] = [
   { id: "kanban", label: "Kanban", icone: LayoutGrid },
   { id: "lista", label: "Lista", icone: List },
-  { id: "tabela", label: "Tabela", icone: Table2 },
 ]
 
 const ABAS: { id: AbaRapida; label: string }[] = [
@@ -46,8 +49,10 @@ function Kpi({ icone: Icone, rotulo, valor, tom }: {
 }
 
 export function BarraVisao({
-  demandas, visao, onVisao, aba, onAba, total,
+  demandas, visao, onVisao, aba, onAba, total, filters, area = "audiovisual",
 }: {
+  filters?: ReactNode
+  area?: "audiovisual" | "growth"
   demandas: DemandaLista[]
   visao: Visao
   onVisao: (v: Visao) => void
@@ -55,10 +60,36 @@ export function BarraVisao({
   onAba: (a: AbaRapida) => void
   total: number
 }) {
+  const { presentation, setPresentation } = useDetailPresentation()
   const kpi = calcularKpis(demandas)
+  const { modern } = useVisualPreview()
+
+  if (modern) return <section className={styles.overview} aria-label="Controles do quadro">
+    <div className={styles.heading}>
+      <h1>{area === "growth" ? "Conteúdo que move." : "Produção em movimento."}</h1>
+      <p>{area === "growth" ? "Copy, criação e aprovação no mesmo fluxo." : "Do briefing à publicação, sem perder o contexto."}</p>
+    </div>
+    <div className={styles.counts} aria-label="Resumo das demandas filtradas">
+      <span><strong>{kpi.abertas}</strong> abertas</span>
+      <span data-tone="late"><strong>{kpi.atrasadas}</strong> atrasadas</span>
+      <span data-tone="approval"><strong>{kpi.aprovacao}</strong> em aprovação</span>
+      <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> concluídas hoje</span>
+    </div>
+    <div className={styles.viewRow}>
+      <div className={styles.tabs} aria-label="Visualização do quadro">
+        {VISOES.map(({id, label, icone: Icon}) => <button key={id} type="button" aria-label={`Ver como ${label.toLowerCase()}`} aria-pressed={visao === id} onClick={() => onVisao(id)}><Icon size={17} />{label}</button>)}
+      </div>
+      <label className={styles.opening}>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+    </div>
+    <div className={styles.filters}>{filters}</div>
+    <div className={styles.scopes} aria-label="Recortes das demandas">
+      {ABAS.map(item => <button key={item.id} type="button" aria-pressed={aba === item.id} onClick={() => onAba(item.id)}>{item.label}{aba === item.id && <span>{total}</span>}</button>)}
+    </div>
+  </section>
 
   return (
     <div data-board-summary className="space-y-3">
+      {filters}
       {/* Números do quadro */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-5 py-3.5">
         <Kpi icone={Inbox} rotulo="Demandas abertas" valor={kpi.abertas} tom="azul" />
@@ -88,7 +119,8 @@ export function BarraVisao({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center rounded-lg border border-zinc-700 bg-zinc-800 p-0.5">
+        <label className="ml-auto flex items-center gap-2 text-xs text-zinc-400">Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")} className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-2 text-zinc-200"><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+        <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-800 p-0.5">
           {VISOES.map((v) => {
             const Icone = v.icone
             return (

@@ -1,4 +1,4 @@
-import NextAuth from "next-auth"
+import NextAuth, { type Session } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 // O login lê `usuarios` ANTES de existir empresa — é a ordem do problema, não
 // um atalho. Sob RLS o cliente normal filtraria por uma empresa que ainda não foi
@@ -17,6 +17,28 @@ const loginSchema = z.object({
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    async session(params) {
+      const session = await authConfig.callbacks!.session!(params) as Session
+      const userId = session.user?.id
+      if (!userId) return session
+      const { cookies } = await import("next/headers")
+      const selected = (await cookies()).get("org_ativa")?.value
+      const memberships = await prismaAuth.usuarioOrganizacao.findMany({
+        where: { usuarioId: userId, organizacao: { ativo: true } },
+        orderBy: { createdAt: "asc" },
+        select: { organizacaoId: true, papel: true },
+      })
+      const membership = memberships.find(m => m.organizacaoId === selected)
+        ?? memberships.find(m => m.organizacaoId === session.user.organizacaoId)
+        ?? memberships[0]
+      session.user.organizacaoId = membership?.organizacaoId ?? null
+      session.user.papel = membership?.papel ?? null
+      session.user.tipo = membership?.papel ?? "solicitante"
+      return session
+    },
+  },
   // Sem PrismaAdapter: usando JWT puro com credentials, não precisamos de tabelas NextAuth no banco
   providers: [
     Credentials({

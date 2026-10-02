@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { useSearchParams } from "next/navigation"
 import { fetcher } from "@/lib/fetcher"
+import Link from "next/link"
 
 
 type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
@@ -471,9 +472,11 @@ const GRUPOS = [
 interface Param { id: string; valor: string; label: string; ativo: boolean; ordem: number }
 
 function TabParametros() {
+  const { data: session } = useSession()
+  const podeExcluir = session?.user?.tipo === "admin"
   const [grupo, setGrupo] = useState("departamentos")
-  const { data, mutate } = useSWR<{ parametros: Param[] }>(
-    `/api/configuracoes/parametros?grupo=${grupo}`, fetcher
+  const { data, error, isLoading, isValidating, mutate } = useSWR<{ parametros: Param[] }>(
+    `/api/configuracoes/parametros?grupo=${grupo}&incluirInativos=1`, fetcher
   )
   const params = data?.parametros ?? []
 
@@ -502,6 +505,7 @@ function TabParametros() {
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success("Parâmetro criado!")
       setNewLabel(""); setNewValor("")
+      if (!res.ok) throw await erroDaResposta(res)
       mutate()
     } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Erro") }
     finally { setSaving(false) }
@@ -509,35 +513,39 @@ function TabParametros() {
 
   async function toggleAtivo(p: Param) {
     try {
-      await fetch(`/api/configuracoes/parametros/${p.id}`, {
+      const res = await fetch(`/api/configuracoes/parametros/${p.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ativo: !p.ativo }),
       })
+      if (!res.ok) throw await erroDaResposta(res)
       mutate()
-    } catch { toast.error("Erro") }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   async function salvarEdit(p: Param) {
     try {
-      await fetch(`/api/configuracoes/parametros/${p.id}`, {
+      const res = await fetch(`/api/configuracoes/parametros/${p.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: editLabel }),
       })
+      if (!res.ok) throw await erroDaResposta(res)
       toast.success("Atualizado!")
       setEditing(null)
       mutate()
-    } catch { toast.error("Erro") }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   async function remover(p: Param) {
+    if (!podeExcluir) return
     if (!confirm(`Remover "${p.label}"?`)) return
     try {
-      await fetch(`/api/configuracoes/parametros/${p.id}`, { method: "DELETE" })
+      const res = await fetch(`/api/configuracoes/parametros/${p.id}`, { method: "DELETE" })
+      if (!res.ok) throw await erroDaResposta(res)
       toast.success("Removido")
       mutate()
-    } catch { toast.error("Erro") }
+    } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
   return (
@@ -554,49 +562,51 @@ function TabParametros() {
         ))}
       </div>
 
+      {error && <div role="alert" className="border border-rose-800 rounded-lg p-4 text-sm"><p>Não foi possível carregar os parâmetros.</p><button disabled={isValidating} onClick={() => mutate()} className="mt-2 min-h-11 text-purple-300">Tentar novamente</button></div>}
+      {isLoading && <p role="status">Carregando parâmetros…</p>}
       {/* Lista */}
       <div className="space-y-1.5">
-        {params.map((p) => (
-          <div key={p.id} className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors",
+        {!error && !isLoading && params.map((p) => (
+          <div key={p.id} className={cn(preview.parameterRow, "flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors",
             p.ativo ? "border-zinc-700 bg-zinc-800/50" : "border-zinc-800 bg-zinc-900 opacity-50"
           )}>
             {editing === p.id ? (
               <input
-                value={editLabel}
+                aria-label="Nome do parâmetro" value={editLabel}
                 onChange={e => setEditLabel(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") salvarEdit(p); if (e.key === "Escape") setEditing(null) }}
                 className="flex-1 bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500"
                 autoFocus
               />
             ) : (
-              <div className="flex-1 flex items-center gap-2">
+              <div className={preview.parameterLabel}>
                 <span className="text-sm text-zinc-200">{p.label}</span>
                 <span className="text-xs text-zinc-600 font-mono">{p.valor}</span>
               </div>
             )}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className={preview.parameterActions}>
               {editing === p.id ? (
                 <>
                   <button onClick={() => salvarEdit(p)} className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700">OK</button>
-                  <button onClick={() => setEditing(null)} className="text-xs border border-zinc-700 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-800">✕</button>
+                  <button aria-label="Cancelar edição" onClick={() => setEditing(null)} className="text-xs border border-zinc-700 text-zinc-400 px-2 py-1 rounded hover:bg-zinc-800">✕</button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => { setEditing(p.id); setEditLabel(p.label) }} className="text-zinc-600 hover:text-zinc-400 p-1">
+                  <button aria-label={`Editar ${p.label}`} onClick={() => { setEditing(p.id); setEditLabel(p.label) }} className="text-zinc-600 hover:text-zinc-400 p-1">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button onClick={() => toggleAtivo(p)} className="text-zinc-600 hover:text-zinc-400 p-1" title={p.ativo ? "Desativar" : "Ativar"}>
                     {p.ativo ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   </button>
-                  <button onClick={() => remover(p)} className="text-zinc-700 hover:text-red-500 p-1">
+                  {podeExcluir && <button aria-label={`Remover ${p.label}`}  onClick={() => remover(p)} className="text-zinc-700 hover:text-red-500 p-1">
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </button>}
                 </>
               )}
             </div>
           </div>
         ))}
-        {params.length === 0 && (
+        {!error && !isLoading && params.length === 0 && (
           <p className="text-sm text-zinc-600 text-center py-4">Nenhum parâmetro. Crie o primeiro abaixo.</p>
         )}
       </div>
@@ -1019,8 +1029,9 @@ function TabMeuPerfil() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-semibold text-zinc-100 mb-1">Meu Perfil Profissional</h3>
+        <h3 className="font-semibold text-zinc-100 mb-1">Atuação profissional</h3>
         <p className="text-sm text-zinc-500">Crie um perfil profissional para ser atribuído como editor ou videomaker em demandas.</p>
+        <Link href="/perfil" className="inline-flex text-sm text-purple-300 underline underline-offset-4 mt-3">Editar meus dados pessoais e senha ↗</Link>
       </div>
 
       {/* Perfil de Editor */}
@@ -1923,11 +1934,11 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
 
 export default function ConfiguracoesPage() {
   const { modern } = useVisualPreview()
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
   const [tab, setTab] = useState<Tab>("meu_perfil")
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: "meu_perfil", label: "Meu Perfil", icon: Settings },
+    { id: "meu_perfil", label: "Atuação profissional", icon: Settings },
     { id: "empresa", label: "Dados da Empresa", icon: Building2 },
     { id: "drive", label: "Google Drive", icon: HardDrive },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -1935,6 +1946,8 @@ export default function ConfiguracoesPage() {
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
     { id: "depoimentos", label: "Depoimentos", icon: Video },
   ]
+
+  if (sessionStatus === "loading") return <><Header title="Configurações"/><p role="status" className="p-6 text-zinc-400">Carregando suas configurações…</p></>
 
   if (!["admin", "gestor"].includes(session?.user?.tipo ?? "")) {
     return (
@@ -1988,7 +2001,7 @@ export default function ConfiguracoesPage() {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl p-6", modern && preview.settingsPanel)}>
+            <section aria-label={tabs.find(t => t.id === tab)?.label} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl p-6", modern && preview.settingsPanel)}>
               {tab === "meu_perfil" && <TabMeuPerfil />}
               {tab === "whatsapp" && (
                 <div className="space-y-8">
@@ -2007,7 +2020,7 @@ export default function ConfiguracoesPage() {
               {tab === "empresa" && <TabEmpresa />}
               {tab === "drive" && <TabGoogleDrive />}
               {tab === "depoimentos" && <TabDepoimentos />}
-            </div>
+            </section>
           </div>
         </div>
       </main>

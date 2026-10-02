@@ -1,3 +1,4 @@
+import { intervaloHistorico } from "@/lib/intervalo-historico"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
@@ -184,9 +185,11 @@ export async function GET(req: NextRequest) {
 
   // Filtro por data de finalização (usado pela página /historico)
   if (deParam || ateParam) {
-    const faixa = {
-      ...(deParam ? { gte: new Date(deParam) } : {}),
-      ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
+    let faixa
+    try {
+      faixa = intervaloHistorico(deParam, ateParam)
+    } catch {
+      return NextResponse.json({ error: "Informe um período válido para o histórico." }, { status: 400 })
     }
     and.push({ OR: [{ finalizadaEm: faixa }, { finalizadaEm: null, updatedAt: faixa }] })
   }
@@ -278,6 +281,8 @@ export async function GET(req: NextRequest) {
       orderBy: [
         { prioridade: "desc" },
         { createdAt: "desc" },
+        // Desempate único mantém a paginação estável quando datas coincidem.
+        { id: "desc" },
       ],
       ...(limit ? { take: limit } : {}),
       ...(offset ? { skip: offset } : {}),

@@ -122,10 +122,12 @@ export function PainelExecutor() {
     // z-30, abaixo do fundo escuro da gaveta (z-40) e da própria gaveta (z-50).
     // Em z-40 ele empatava com o fundo e, por vir depois no DOM, aparecia por
     // cima do menu aberto no celular.
-    <div className="fixed bottom-4 right-4 z-30 w-[19rem] max-w-[calc(100vw-2rem)]">
+    <div data-focus-panel className="relative shrink-0 z-30 w-full px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-zinc-950 md:fixed md:bottom-4 md:right-4 md:w-[19rem] md:max-w-[calc(100vw-2rem)] md:p-0 md:bg-transparent">
       <div className="rounded-xl border border-zinc-700 bg-zinc-900/95 backdrop-blur shadow-2xl shadow-black/50 overflow-hidden">
         {/* Cabeçalho — clicável inteiro para abrir/fechar */}
         <button
+          aria-expanded={aberto}
+          aria-controls="executor-conteudo"
           onClick={alternar}
           className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-zinc-800/60 transition-colors text-left"
         >
@@ -145,7 +147,7 @@ export function PainelExecutor() {
         </button>
 
         {aberto && (
-          <div className="border-t border-zinc-800 max-h-[26rem] overflow-y-auto">
+          <div id="executor-conteudo" className="absolute bottom-full left-3 right-3 rounded-t-xl bg-zinc-900 border border-zinc-700 max-h-[min(26rem,60dvh)] overflow-y-auto md:static md:rounded-none md:border-0 md:border-t md:border-zinc-800">
             {emFoco && (
               <div className="p-3 border-b border-zinc-800 bg-purple-500/5">
                 <div className="flex items-start justify-between gap-2 mb-1.5">

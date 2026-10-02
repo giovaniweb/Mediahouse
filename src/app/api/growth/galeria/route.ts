@@ -13,8 +13,16 @@ export async function GET(req: NextRequest) {
   if (!organizacaoId) return semOrg()
 
   const sp = req.nextUrl.searchParams
-  const page = Math.max(1, parseInt(sp.get("page") ?? "1"))
-  const limit = Math.min(48, Math.max(1, parseInt(sp.get("limit") ?? "24")))
+  const pageRaw = sp.get("page") ?? "1"
+  const limitRaw = sp.get("limit") ?? "24"
+  const page = Number(pageRaw)
+  const limit = Number(limitRaw)
+  if (!/^\d+$/.test(pageRaw) || !/^\d+$/.test(limitRaw) ||
+      !Number.isSafeInteger(page) || page < 1 ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 48 ||
+      (page - 1) * limit > 2147483647) {
+    return NextResponse.json({ error: "Paginação inválida. Use uma página positiva e limite entre 1 e 48." }, { status: 400 })
+  }
   const search = sp.get("search") ?? ""
   const linhaProjeto = sp.get("linhaProjeto") ?? ""
   const skip = (page - 1) * limit
@@ -47,10 +55,10 @@ export async function GET(req: NextRequest) {
         arquivos: {
           where: { tipoArquivo: "final" },
           select: { id: true, url: true, thumbnailUrl: true, sequencia: true, createdAt: true },
-          orderBy: { sequencia: "asc" },
+          orderBy: [{ sequencia: "asc" }, { id: "asc" }],
         },
       },
-      orderBy: [{ finalizadaEm: "desc" }, { updatedAt: "desc" }],
+      orderBy: [{ finalizadaEm: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
       skip,
       take: limit,
     }),

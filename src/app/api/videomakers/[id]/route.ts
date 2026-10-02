@@ -12,8 +12,7 @@ type Params = { params: Promise<{ id: string }> }
 // usuário logado de qualquer empresa alterava CPF/CNPJ, dados bancários, PIX e
 // valor de diária de um profissional com quem nunca trabalhou.
 //
-// "Vínculo" aqui é derivado do histórico (demanda, custo ou cobertura em comum).
-// Na fase de tenancy isso vira uma tabela VideomakerOrganizacao explícita.
+// Aceita o vínculo explícito criado no cadastro ou o histórico legado da empresa.
 // `undefined` significa "campo não enviado" e não pode virar UPDATE — senão uma
 // edição parcial apagaria o que não veio no corpo.
 function limparIndefinidos<T extends Record<string, unknown>>(o: T): Partial<T> {
@@ -37,11 +36,12 @@ function decifrarOuNulo(valor: string | null | undefined): string | null {
 }
 
 async function temVinculoComOrg(videomakerId: string, organizacaoId: string): Promise<boolean> {
-  const [demandas, custos] = await Promise.all([
+  const [vinculo, demandas, custos] = await Promise.all([
+    prisma.videomakerOrganizacao.findUnique({ where: { organizacaoId_videomakerId: { organizacaoId, videomakerId } }, select: { id: true } }),
     prisma.demanda.count({ where: { videomakerId, organizacaoId } }),
     prisma.custoVideomaker.count({ where: { videomakerId, organizacaoId } }),
   ])
-  return demandas > 0 || custos > 0
+  return Boolean(vinculo) || demandas > 0 || custos > 0
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -186,6 +186,15 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   if (!(await temVinculoComOrg(id, organizacaoId))) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
+
+  const [outrosVinculos, outrasDemandas, outrosCustos] = await Promise.all([
+    prisma.videomakerOrganizacao.count({ where: { videomakerId: id, organizacaoId: { not: organizacaoId } } }),
+    prisma.demanda.count({ where: { videomakerId: id, organizacaoId: { not: organizacaoId } } }),
+    prisma.custoVideomaker.count({ where: { videomakerId: id, organizacaoId: { not: organizacaoId } } }),
+  ])
+  if (outrosVinculos || outrasDemandas || outrosCustos) {
+    return NextResponse.json({ error: "Este profissional possui vínculos com outras empresas e não pode ser excluído da rede." }, { status: 409 })
   }
 
   await prisma.videomaker.delete({ where: { id } })

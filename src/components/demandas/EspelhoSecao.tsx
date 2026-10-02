@@ -50,12 +50,12 @@ export function EspelhoSecao({ demandaId }: { demandaId: string }) {
         body: JSON.stringify({ organizacaoDestinoId: destino, escopo }),
       })
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? "Erro ao terceirizar")
+      if (!res.ok) throw new Error(j.error ?? "Erro ao compartilhar")
       toast.success(`Execução com ${j.nomeDestino}.`)
       setDestino("")
       await mutate()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao terceirizar")
+      toast.error(e instanceof Error ? e.message : "Erro ao compartilhar")
     } finally {
       setSalvando(false)
     }
@@ -83,7 +83,7 @@ export function EspelhoSecao({ demandaId }: { demandaId: string }) {
   return (
     <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
       <h2 className="font-semibold text-zinc-300 mb-3 flex items-center gap-2">
-        <span aria-hidden>🤝</span> Execução terceirizada
+        <span aria-hidden>🤝</span> Execução compartilhada
       </h2>
 
       {ativos.length > 0 && (
@@ -133,7 +133,7 @@ export function EspelhoSecao({ demandaId }: { demandaId: string }) {
             disabled={!destino || salvando}
             className="w-full text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-100 px-3 py-1.5 rounded-lg disabled:opacity-40"
           >
-            {salvando ? "Enviando…" : "Terceirizar execução"}
+            {salvando ? "Enviando…" : "Compartilhar card"}
           </button>
           <p className="text-[11px] text-zinc-500">
             O card continua seu. Aprovação, publicação e prazo não saem da sua mão.

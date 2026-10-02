@@ -3,18 +3,17 @@
 import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Sparkles, Plus, Search, SlidersHorizontal, XCircle, UserCheck, FileSpreadsheet } from "lucide-react"
+import { Sparkles, Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO } from "@/lib/growth-conteudo"
 import { toast } from "sonner"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
-import { ImportarPlanilhaModal } from "@/components/demandas/ImportarPlanilhaModal"
+import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
-import { DemandasTabela } from "@/components/demandas/DemandasTabela"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -24,10 +23,8 @@ const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-no
 // Growth (gestão de conteúdos). Reutiliza a Demanda (area="design" internamente),
 // mas com kanban próprio de 8 colunas e SEM qualquer dependência de Eventos.
 export default function GrowthKanbanPage() {
-  const router = useRouter()
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
-  const [showImportar, setShowImportar] = useState(false)
 
   // Filtros — adaptados às peculiaridades do Growth (pessoas/responsável,
   // linha/projeto, tipo de conteúdo, produto) em vez de videomaker/editor.
@@ -40,13 +37,14 @@ export default function GrowthKanbanPage() {
 
   // Mesmas três visões do audiovisual, com preferência guardada em separado:
   // quem cuida de Growth pode querer tabela e quem cuida de vídeo, kanban.
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>("todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-growth"
 
   useEffect(() => {
     const salva = localStorage.getItem(CHAVE_VISAO) as Visao | null
-    if (salva === "kanban" || salva === "lista" || salva === "tabela") setVisao(salva)
+    if (salva === "kanban" || salva === "lista") setVisao(salva)
   }, [])
 
   function trocarVisao(v: Visao) {
@@ -129,11 +127,16 @@ export default function GrowthKanbanPage() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-400" /> Growth · Demandas</h1>
-        <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><Plus className="w-4 h-4" /> Nova Demanda</button>
-        <button onClick={() => setShowImportar(true)} title="Criar várias demandas a partir de uma planilha" className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg"><FileSpreadsheet className="w-4 h-4" /> Importar planilha</button>
+        <button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>
       </div>
 
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
+
+
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
+          area="growth"
+          filters={(
       <BoardFilters>
       <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
@@ -185,9 +188,7 @@ export default function GrowthKanbanPage() {
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
       </BoardFilters>
-
-      <div className="px-4 pt-1 pb-3">
-        <BarraVisao
+          )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
@@ -197,6 +198,7 @@ export default function GrowthKanbanPage() {
         />
       </div>
 
+      <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       {visao === "kanban" ? (
         <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard
@@ -212,14 +214,8 @@ export default function GrowthKanbanPage() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          {visao === "lista"
-            ? <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
-            : <DemandasTabela demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />}
+          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
         </div>
-      )}
-
-      {showImportar && (
-        <ImportarPlanilhaModal area="design" onClose={() => setShowImportar(false)} onImportado={() => mutate()} />
       )}
 
       <NovaDemandaGrowthModal

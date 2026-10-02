@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
-import { getOrgId } from "@/lib/org"
+import { getOrgId, semOrg } from "@/lib/org"
 
 // POST /api/videomakers/[id]/aprovar
 // Aprova um videomaker pendente: ativa, cria conta de acesso e notifica via WhatsApp
@@ -20,19 +20,23 @@ export async function POST(
   // Videomaker é GLOBAL; a org da sessão é usada para o WhatsApp e para escopar o alerta.
   const organizacaoId = await getOrgId(session)
 
+  if (!organizacaoId) return semOrg()
+
   const { id } = await params
+  const vinculo = await prisma.videomakerOrganizacao.findUnique({ where: { organizacaoId_videomakerId: { organizacaoId, videomakerId: id } } })
+  if (!vinculo) return NextResponse.json({ error: "Videomaker não encontrado nesta empresa" }, { status: 404 })
 
   const vm = await prisma.videomaker.findUnique({ where: { id } })
   if (!vm) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
-  if (vm.status !== "pendente") {
+  if (vinculo.status !== "pendente") {
     return NextResponse.json({ error: "Videomaker não está pendente" }, { status: 400 })
   }
 
   // 1. Ativar o videomaker
-  await prisma.videomaker.update({
-    where: { id },
-    data: { status: "ativo" },
-  })
+  await prisma.$transaction([
+    prisma.videomaker.update({ where: { id }, data: { status: "ativo" } }),
+    prisma.videomakerOrganizacao.update({ where: { id: vinculo.id }, data: { status: "ativo" } }),
+  ])
 
   // 2. Criar conta de acesso (se ainda não tem usuário vinculado)
   let senha: string | null = null
@@ -69,6 +73,7 @@ export async function POST(
     where: {
       tipoAlerta: "novo_videomaker_pendente",
       status: "ativo",
+      mensagem: `Novo videomaker cadastrado: ${vm.nome} — aguarda análise e aprovação.`,
       ...(organizacaoId ? { organizacaoId } : {}),
     },
     data: { status: "resolvido" },
@@ -79,7 +84,7 @@ export async function POST(
     contaCriada: !!senha,
     credenciaisEnviadas,
     mensagem: senha
-      ? `✅ Videomaker aprovado! Conta criada e credenciais enviadas via WhatsApp.`
+      ? (credenciaisEnviadas ? "Videomaker aprovado. Conta criada e credenciais enviadas via WhatsApp." : "Videomaker aprovado. Conta criada; envio de credenciais não confirmado.")
       : `✅ Videomaker aprovado! Conta de acesso já existia.`,
   })
 }
