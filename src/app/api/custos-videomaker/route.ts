@@ -7,14 +7,21 @@ import { z } from "zod"
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { diariasDaEmpresa, fiscaisDaEmpresaEmLote } from "@/lib/videomaker-vinculo"
+import { diariasDaEmpresa, fiscaisDaEmpresaEmLote, type FiscaisDaEmpresa } from "@/lib/videomaker-vinculo"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
 // GET /api/custos-videomaker — listar custos com filtros opcionais
+//
+// Lê quem tem `verCustos` ou `verAprovacoes`: a tela de Aprovações lista as
+// notas enviadas para quem aprova, e o líder audiovisual não tem `verCustos`.
+// Sem `verCustos`, a lista sai sem diária e sem CPF/CNPJ e PIX — regra do
+// hotfix de produção de 02/10/2026 (PR #73), mantida na integração.
 export async function GET(req: NextRequest) {
-  const acesso = await requireAcesso("verCustos")
+  const acesso = await requireAcesso()
   if (acesso instanceof NextResponse) return acesso
+  const verCustos = acesso.permissoes.verCustos
+  if (!verCustos && !acesso.permissoes.verAprovacoes) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const videomakerId = searchParams.get("videomakerId")
@@ -71,10 +78,9 @@ export async function GET(req: NextRequest) {
   // mais pesada. A forma do JSON é preservada (`custo.videomaker.chavePix`,
   // `.cpfCnpj`, `.valorDiaria`) para Custos e Aprovações não mudarem junto.
   const ids = custos.map((c) => c.videomakerId)
-  const [diarias, fiscais] = await Promise.all([
-    diariasDaEmpresa(ids, organizacaoId),
-    fiscaisDaEmpresaEmLote(ids, organizacaoId),
-  ])
+  const [diarias, fiscais] = verCustos
+    ? await Promise.all([diariasDaEmpresa(ids, organizacaoId), fiscaisDaEmpresaEmLote(ids, organizacaoId)])
+    : [new Map<string, number | null>(), new Map<string, FiscaisDaEmpresa>()]
 
   return NextResponse.json({
     custos: custos.map((c) => {

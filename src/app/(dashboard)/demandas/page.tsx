@@ -127,6 +127,9 @@ function DemandasKanban() {
   params.set("filaTrabalho", "1")
 
   params.set("area", "audiovisual")
+  // Cobertura tem quadro próprio (/jobs). Sem isto o mesmo registro aparecia
+  // nos dois lugares, e converter em Job não tirava a demanda daqui.
+  params.set("semCobertura", "1")
   if (search) params.set("search", search)
   if (filtroDepto) params.set("departamento", filtroDepto)
   if (filtroVM) params.set("videomakerId", filtroVM)

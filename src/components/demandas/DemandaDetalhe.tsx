@@ -19,7 +19,17 @@ import {
   CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft,
 } from "lucide-react"
 import Link from "next/link"
-import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
+import {
+  captacaoIniciada,
+  ehBloqueado,
+  ehSolicitacaoDeCobertura,
+  proximaAcao,
+  responsavelAtual,
+  rotuloDeEvento,
+} from "@/lib/job-fase"
+import { COLUNAS_LABEL } from "@/lib/status"
+import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
+import { ConverterEmDemanda } from "@/components/jobs/ConverterEmDemanda"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -347,6 +357,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     tipoVideo: demanda?.tipoVideo,
     departamento: demanda?.departamento,
   })
+
+  // A barra de ações é do videomaker DO job. A autorização de verdade está na
+  // guarda do servidor; aqui é só para não mostrar botão que não é dele.
+  const { data: meVM } = useSWR<{ videomaker: { id: string } | null }>(
+    ehCobertura ? "/api/me/videomaker" : null,
+    fetcher
+  )
+  const souOVideomakerDoJob =
+    !!meVM?.videomaker && !!demanda?.videomaker && meVM.videomaker.id === demanda.videomaker.id
 
   async function converterEmJob() {
     if (!demanda) return
@@ -1028,6 +1047,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // ── Link público de acompanhamento (somente leitura, revogável) ───────────
   // Sem edição local, o estado vem da própria demanda — assim reabrir o modal
   // mostra "Link ativo" para quem já compartilhou antes.
+  // Quem precisa agir agora — derivado do estado, como tudo no módulo de Jobs.
+  // Fica aqui, e não no topo do componente, porque é função pura e `demanda` já
+  // existe a partir deste ponto: calcular antes exigiria um fallback falso.
+  const responsavelDoJob = responsavelAtual(demanda)
+
   const linkPublico =
     linkPublicoLocal !== undefined
       ? linkPublicoLocal
@@ -1175,6 +1199,53 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       <main className="flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full">
         {/* ── Coluna principal ────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
+
+          {/* ── Camada de Job (cobertura) ───────────────────────────────────
+              Um Job É esta demanda, classificada como cobertura — mesmo
+              registro, mesmo id. Antes havia uma tela separada em /jobs/[id]
+              só para mostrar isto, e ela não editava nada. Agora o que é
+              próprio do Job mora aqui, e o resto da tela (editar, anexar,
+              atribuir videomaker, checklist, comentários) vem de graça.
+
+              De quem é a bola e qual é a próxima ação são derivados do estado
+              (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
+              só pintada. */}
+          {ehCobertura && (
+            <section className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+                <span className="text-zinc-400">
+                  <span className="text-zinc-600">Etapa </span>
+                  {COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}
+                </span>
+                <span className="text-zinc-400">
+                  <span className="text-zinc-600">Com </span>
+                  {responsavelDoJob.nome ?? responsavelDoJob.papel}
+                  {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
+                </span>
+                <span className={cn("ml-auto", ehBloqueado(demanda.statusInterno) ? "text-rose-400" : "text-zinc-300")}>
+                  {proximaAcao(demanda)}
+                </span>
+              </div>
+
+              {/* As ações objetivas do videomaker (§13). O componente decide
+                  sozinho o que cabe no estado atual, e some quando a bola não
+                  é dele — quem não é o videomaker do job não vê nada. */}
+              {souOVideomakerDoJob && (
+                <AcoesVideomaker
+                  jobId={demanda.id}
+                  statusInterno={demanda.statusInterno}
+                  captacaoIniciada={captacaoIniciada(demanda.historicos)}
+                  onExecutado={() => mutate()}
+                />
+              )}
+
+              {/* O caminho de volta: Job → Demanda. Veio da tela antiga de
+                  /jobs/[id] e mudou para cá quando ela passou a ser esta tela.
+                  Reclassificar é raro e de gestão, por isso fica discreto e no
+                  fim; o componente some sozinho para quem não pode converter. */}
+              <ConverterEmDemanda jobId={demanda.id} codigo={demanda.codigo} />
+            </section>
+          )}
 
           {isGrowth ? (
             <>
@@ -2271,7 +2342,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     ehEvento ? "bg-zinc-500" : "bg-purple-400")} />
                   <div>
                     <p className="text-xs font-medium text-zinc-300">
-                      {ehEvento ? (h.observacao ?? "Editou a demanda") : statusLabel(h.statusNovo, isGrowth)}
+                      {/* Num Job o histórico se lê como sequência de FATOS
+                          ("Videomaker aceitou"), não de estados ("Videomaker
+                          Aceitou"). São leituras diferentes: um badge diz onde
+                          o job está, uma linha de histórico diz o que houve.
+                          Só a cobertura usa esse vocabulário — STATUS_LABELS
+                          segue mandando no resto, intocado. */}
+                      {ehCobertura
+                        ? rotuloDeEvento(h.statusNovo, h.observacao)
+                        : ehEvento ? (h.observacao ?? "Editou a demanda") : statusLabel(h.statusNovo, isGrowth)}
                     </p>
                     <p className="text-[10px] text-zinc-500">
                       {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}

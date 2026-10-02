@@ -200,7 +200,36 @@ describe("Trello por empresa", () => {
     const esperado = papel === "admin" || papel === "gestor" ? 200 : 403
     expect((await GET()).status).toBe(esperado)
     expect((await trelloGET()).status).toBe(esperado)
-    expect((await custosGET(new NextRequest("http://localhost/api/custos-videomaker"))).status).toBe(esperado)
+    // Quem aprova notas (operacao, auxiliar_admin) lê a lista de custos — sem
+    // diária e sem dados fiscais. Regra do hotfix de produção (PR #73).
+    const aprova = papel === "operacao" || papel === "auxiliar_admin"
+    expect((await custosGET(new NextRequest("http://localhost/api/custos-videomaker"))).status).toBe(aprova ? 200 : esperado)
+  })
+  it("quem só aprova vê a nota sem diária, CPF/CNPJ e PIX, e não altera custo", async () => {
+    const vm = `${prefix}-vm`
+    await db.videomaker.create({ data: { id: vm, nome: "Videomaker sintético", telefone: `55${Date.now()}`.slice(0, 13) } })
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: orgA, videomakerId: vm, valorDiaria: 777 } })
+    await db.videomakerDadosFiscais.create({ data: { organizacaoId: orgA, videomakerId: vm, cpfCnpj: "cpf-sintetico" } })
+    await db.custoVideomaker.create({ data: { organizacaoId: orgA, videomakerId: vm, valor: 500, dataReferencia: new Date() } })
+    try {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel: "operacao" } })
+      const res = await custosGET(new NextRequest(`http://localhost/api/custos-videomaker?videomakerId=${vm}`))
+      expect(res.status).toBe(200)
+      const { custos } = await res.json()
+      expect(custos).toHaveLength(1)
+      expect(custos[0].videomaker).toMatchObject({ cpfCnpj: null, chavePix: null, valorDiaria: null })
+      expect((await custosPOST(new NextRequest("http://localhost/api/custos-videomaker", { method: "POST", body: "{}" }))).status).toBe(403)
+
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel: "admin" } })
+      const admin = await (await custosGET(new NextRequest(`http://localhost/api/custos-videomaker?videomakerId=${vm}`))).json()
+      expect(admin.custos[0].videomaker).toMatchObject({ cpfCnpj: "cpf-sintetico", valorDiaria: 777 })
+    } finally {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, data: { papel: "admin" } })
+      await db.custoVideomaker.deleteMany({ where: { videomakerId: vm } })
+      await db.videomakerDadosFiscais.deleteMany({ where: { videomakerId: vm } })
+      await db.videomakerOrganizacao.deleteMany({ where: { videomakerId: vm } })
+      await db.videomaker.deleteMany({ where: { id: vm } })
+    }
   })
   it("última atividade considera apenas demandas da empresa selecionada", async () => {
     const { GET: pessoasGET } = await import("@/app/api/usuarios/route")
