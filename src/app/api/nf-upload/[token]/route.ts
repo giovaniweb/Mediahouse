@@ -1,3 +1,4 @@
+import { comToken } from "@/lib/midia"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { caminhoMidia, subirArquivo } from "@/lib/midia"
@@ -36,7 +37,7 @@ export async function GET(
 
   if (!nf) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })
 
-  return NextResponse.json(nf)
+  return NextResponse.json({ ...nf, url: comToken(nf.url, token) }, { headers: { "Cache-Control": "private, no-store" } })
 }
 
 // POST /api/nf-upload/[token] — receber upload

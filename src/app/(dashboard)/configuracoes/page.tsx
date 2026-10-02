@@ -1203,11 +1203,12 @@ function TabEmpresa() {
   const salvar = async () => {
     setSaving(true)
     try {
-      await fetch("/api/config/empresa", {
+      const resposta = await fetch("/api/config/empresa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
+      if (!resposta.ok) throw new Error("Falha ao salvar")
       toast.success("Dados da empresa salvos!")
       mutate()
     } catch {
@@ -1347,11 +1348,12 @@ function TabGoogleDrive() {
     const folderId = extrairFolderId(folderInput)
     setSaving(true)
     try {
-      await fetch("/api/config/empresa", {
+      const resposta = await fetch("/api/config/empresa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ googleDriveFolderId: folderId || null }),
       })
+      if (!resposta.ok) throw new Error("Falha ao salvar")
       toast.success("Pasta do Drive salva!")
       mutate()
     } catch {
@@ -1406,7 +1408,7 @@ function TabGoogleDrive() {
                   setTesting(true)
                   setTestResult(null)
                   try {
-                    const res = await fetch("/api/auth/setup-drive/test")
+                    const res = await fetch("/api/auth/setup-drive/test", { method: "POST" })
                     const json = await res.json()
                     if (res.ok && json.ok) {
                       setTestResult({ ok: true, msg: `✅ Conexão OK! Arquivo de teste criado: ${json.fileName}` })
@@ -1905,8 +1907,10 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
     const tabParam = searchParams?.get("tab")
     if (tabParam === "empresa") onSetTab("empresa")
     if (tabParam === "drive") onSetTab("drive")
-    if (driveStatus === "conectado" && driveEmail) {
-      toast.success(`Google Drive conectado como ${driveEmail}!`)
+    if (driveStatus === "conectado") {
+      toast.success(driveEmail ? `Google Drive conectado como ${driveEmail}!` : "Google Drive conectado!")
+    } else if (driveStatus === "autorizacao_invalida") {
+      toast.error("A autorização expirou ou mudou de contexto. Inicie a conexão novamente.")
     } else if (driveStatus === "recusado") {
       toast.error("Autorização recusada. Tente novamente.")
     } else if (driveStatus && driveStatus.startsWith("erro")) {

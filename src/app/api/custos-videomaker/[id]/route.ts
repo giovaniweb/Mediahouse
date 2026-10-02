@@ -1,15 +1,15 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { pertenceAOrg } from "@/lib/org"
-import { auth } from "@/lib/auth"
-import { acessoCustos } from "@/lib/acesso-custos"
 import { lerValorMonetario } from "@/lib/numeros"
 import { erroDeCampo } from "@/lib/erros-api"
 
 // PATCH /api/custos-videomaker/[id] — atualizar custo (ex: marcar como pago)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const acesso = await acessoCustos(await auth(), "escrever")
+  const acesso = await requireAcesso("verCustos")
   if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({ error: "Sem permissão para alterar custos" }, { status: 403 })
   const { organizacaoId } = acesso
 
   const { id } = await params
@@ -46,8 +46,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE /api/custos-videomaker/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const acesso = await acessoCustos(await auth(), "escrever")
+  const acesso = await requireAcesso("verCustos")
   if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({ error: "Sem permissão para alterar custos" }, { status: 403 })
   const { organizacaoId } = acesso
 
   const { id } = await params

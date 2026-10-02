@@ -1,9 +1,9 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { executarAgenteComTools, MODELO_POTENTE } from "@/lib/claude"
+import { contextoUsuario } from "@/lib/ia-tool-contexto"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
-import { getOrgId, semOrg } from "@/lib/org"
 
 export const maxDuration = 180
 
@@ -13,13 +13,13 @@ export const maxDuration = 180
  * de melhoria de gestão, custo e produtividade — envia relatório ao gestor
  */
 export async function POST() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verIA")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
+  const contexto = contextoUsuario(organizacaoId, acesso.usuarioId)
 
   const execucao = await prisma.agenteExecucao.create({
-    data: { agente: "vistoria", organizacaoId, status: "executando", criadoPor: session.user?.id },
+    data: { agente: "vistoria", organizacaoId, status: "executando", criadoPor: acesso.usuarioId },
   })
 
   try {
@@ -102,7 +102,7 @@ Inclua um "Score de Saúde Geral" de 0-100 com justificativa.`
 
     const { resposta, tokens, ferramentasUsadas } = await executarAgenteComTools(
       prompt,
-      (n, i) => executarFerramenta(n, i, organizacaoId),
+      (n, i) => executarFerramenta(n, i, contexto),
       MODELO_POTENTE,
       20
     )

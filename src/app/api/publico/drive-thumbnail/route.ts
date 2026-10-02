@@ -2,33 +2,35 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAccessToken } from "@/lib/google-drive"
 import { prisma } from "@/lib/prisma"
 import { declararOrg } from "@/lib/org-contexto"
-import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { orgPublica } from "@/lib/org"
+import { PUBLICADO, SEM_CACHE_MIDIA } from "@/lib/publicacao-midia"
+import { driveFileId } from "@/lib/drive-file-id"
 
 // GET /api/publico/drive-thumbnail?fileId={id}
 // Rota pública: retorna thumbnail de arquivo do Drive usando service account.
 // A galeria pública usa este proxy para contornar a exigência de autenticação
 // da URL https://drive.google.com/thumbnail?id=X (que requer cookies de sessão Google).
-// Rota pública resolve a org pelo registro (Arquivo que contém o fileId) → usa o
-// Drive da empresa dona. Sem match, cai no fallback Contourline do helper (legado).
+// Apenas snapshots explicitamente publicados da empresa pública selecionada.
 export async function GET(req: NextRequest) {
   const fileId = req.nextUrl.searchParams.get("fileId")
   if (!fileId || !/^[a-zA-Z0-9_-]{10,}$/.test(fileId)) {
     return NextResponse.json({ error: "fileId inválido" }, { status: 400 })
   }
 
-  // A credencial é o próprio id do arquivo no Drive, que está dentro da URL
-  // guardada. Sem declarar a empresa, a busca abaixo volta vazia sob RLS e a
-  // miniatura some da galeria pública.
-  const organizacaoId = await orgPorCredencial("arquivo_por_url", fileId)
+  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
   if (!organizacaoId) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 })
   declararOrg(organizacaoId)
 
   try {
-    const arq = await prisma.arquivo.findFirst({
-      where: { url: { contains: fileId } },
-      select: { demanda: { select: { organizacaoId: true } } },
+    const arquivos = await prisma.arquivo.findMany({
+      where: { ...PUBLICADO, demanda: { organizacaoId }, publicacaoUrl: { contains: fileId } },
+      select: { publicacaoUrl: true },
     })
-    const token = await getAccessToken(arq?.demanda?.organizacaoId ?? undefined)
+    if (!arquivos.some(a => driveFileId(a.publicacaoUrl) === fileId)) {
+      return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404, headers: SEM_CACHE_MIDIA })
+    }
+    const token = await getAccessToken(organizacaoId)
+    if (!token) return NextResponse.json({ error: "Arquivo indisponível" }, { status: 502, headers: SEM_CACHE_MIDIA })
 
     // Busca metadados do arquivo incluindo thumbnailLink
     const metaRes = await fetch(
@@ -52,7 +54,7 @@ export async function GET(req: NextRequest) {
     const largerThumb = thumbUrl.replace(/=s\d+/, "=w400-h225")
 
     // Redirecionar para o URL do thumbnail (lh3.googleusercontent.com — público)
-    return NextResponse.redirect(largerThumb)
+    return NextResponse.redirect(largerThumb, { headers: SEM_CACHE_MIDIA })
   } catch (e) {
     console.error("[drive-thumbnail] Erro:", e)
     return NextResponse.json({ error: "Erro ao buscar thumbnail" }, { status: 500 })

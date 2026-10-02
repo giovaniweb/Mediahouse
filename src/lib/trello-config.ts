@@ -1,21 +1,6 @@
-// Credenciais do Trello — com dono explícito.
-//
-// `config_trello` não tem coluna de organização, e as três rotas de integração
-// liam a config com `findFirst({ ativo: true })`: qualquer gestor de qualquer
-// empresa pegava a primeira linha que existisse. Quando não havia linha nenhuma,
-// caíam em TRELLO_API_KEY/TRELLO_BOARD_ID do ambiente — um board só, o mesmo
-// para a plataforma inteira.
-//
-// Na prática isso significava que o gestor de uma empresa nova podia importar os
-// cards do Trello de OUTRA como demandas dele, e que o "sincronizar" mandava o
-// pipeline dele para o quadro alheio. O lote 1 escopou a consulta de demandas
-// dessa sincronização; faltava o outro lado — o destino continuava sendo o board
-// de sempre.
-//
-// Enquanto a tabela não tem dono (Fase 2), o dono é declarado: TRELLO_ORG diz de
-// quem é o board, por slug. Sem a variável, é a organização padrão da instalação
-// — que é exatamente quem usa o Trello hoje. Para todas as outras empresas a
-// integração responde "não configurada", que é a verdade.
+// Credenciais persistidas por empresa. O legado em ambiente pertence somente
+// ao slug TRELLO_ORG (ou ao padrão da instalação). Falha no banco não autoriza
+// fallback; uma configuração explicitamente desativada também não.
 import { prisma } from "@/lib/prisma"
 import { SLUG_ORG_PADRAO } from "@/lib/org"
 
@@ -41,8 +26,9 @@ const SLUG_DONO = process.env.TRELLO_ORG || SLUG_ORG_PADRAO
  */
 export async function configTrelloDaOrg(organizacaoId: string): Promise<ConfigTrelloResolvida> {
   const doBanco = await prisma.configTrello
-    .findFirst({ where: { organizacaoId, ativo: true }, orderBy: { createdAt: "desc" } })
-    .catch(() => null)
+    .findFirst({ where: { organizacaoId }, orderBy: { createdAt: "desc" } })
+
+  if (doBanco && !doBanco.ativo) return { ok: false, status: 400, erro: "Trello desativado para esta empresa" }
 
   if (doBanco) {
     return {

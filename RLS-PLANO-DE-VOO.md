@@ -1,5 +1,7 @@
 # RLS — plano de voo
 
+> Atualização de execução (S07, 28/09/2026): para a próxima implantação, seguir [S07-RUNTIME-RLS.md](docs/execucao-flow/2026-09-26/S07-RUNTIME-RLS.md). O roteiro atual exige conexões explícitas, prova com logins restritos e migração da recuperação por token. As decisões históricas abaixo não comprovam a configuração do ambiente publicado.
+
 Como ligar a tranca do banco sem derrubar a produção.
 
 *Atualizado em 03/09/2026: a seção 7 registra a decisão de mover o banco para

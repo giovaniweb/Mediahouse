@@ -1,7 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 
 // GET /api/relatorios/finalizadas-sem-video
 // Demandas audiovisuais marcadas finalizado/para_postar que NÃO têm nenhuma
@@ -10,11 +9,10 @@ import { getOrgId, semOrg } from "@/lib/org"
 // localizar a peça (Drive) e completar o link final / upload.
 // Org-scoped. Restrito a admin/gestor.
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
-  if (!["admin", "gestor"].includes(session.user.tipo ?? "")) {
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) {
     return NextResponse.json({ error: "Acesso restrito" }, { status: 403 })
   }
 

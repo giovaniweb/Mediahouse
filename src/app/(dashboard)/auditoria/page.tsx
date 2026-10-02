@@ -51,6 +51,7 @@ function descrever(r: Registro): string {
 }
 
 export default function AuditoriaPage() {
+  const [fonte, setFonte] = useState("seguranca")
   const [de, setDe] = useState(() => somarDias(hojeEmSaoPaulo(), -7))
   const [ate, setAte] = useState(() => hojeEmSaoPaulo())
   const [usuarioId, setUsuarioId] = useState("")
@@ -59,7 +60,7 @@ export default function AuditoriaPage() {
   const [buscaAtiva, setBuscaAtiva] = useState("")
   const [pagina, setPagina] = useState(1)
 
-  const params = new URLSearchParams({ de, ate, pagina: String(pagina) })
+  const params = new URLSearchParams({ fonte, de, ate, pagina: String(pagina) })
   if (usuarioId) params.set("usuarioId", usuarioId)
   if (tipo) params.set("tipo", tipo)
   if (buscaAtiva) params.set("busca", buscaAtiva)
@@ -95,7 +96,14 @@ export default function AuditoriaPage() {
             <input type="date" value={ate} onChange={(e) => trocarFiltro(() => setAte(e.target.value))} className={inputCls} />
           </div>
           <div>
-            <label className="block text-[11px] text-zinc-500 mb-1">Pessoa</label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">Registros
+            <select value={fonte} onChange={e => trocarFiltro(() => { setFonte(e.target.value); setTipo("") })} className={inputCls}>
+              <option value="seguranca">Ações administrativas</option><option value="demandas">Histórico das demandas</option>
+            </select>
+          </label>
+          </div>
+          <div>
+          <label className="block text-[11px] text-zinc-500 mb-1">Pessoa</label>
             <select value={usuarioId} onChange={(e) => trocarFiltro(() => setUsuarioId(e.target.value))} className={inputCls}>
               <option value="">Todas</option>
               {(pessoas?.responsaveis ?? []).map((p) => (
@@ -105,7 +113,7 @@ export default function AuditoriaPage() {
           </div>
           <div>
             <label className="block text-[11px] text-zinc-500 mb-1">Tipo</label>
-            <select value={tipo} onChange={(e) => trocarFiltro(() => setTipo(e.target.value))} className={inputCls}>
+            <select disabled={fonte === "seguranca"} value={tipo} onChange={(e) => trocarFiltro(() => setTipo(e.target.value))} className={inputCls}>
               <option value="">Tudo</option>
               <option value="status">Mudança de coluna</option>
               <option value="edicao">Edição de campo</option>

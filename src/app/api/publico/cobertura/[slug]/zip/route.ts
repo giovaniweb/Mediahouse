@@ -1,6 +1,7 @@
+import { resolverMidiaCobertura } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
+import { VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const archiver = require("archiver") as typeof import("archiver")
 import { Readable } from "stream"
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const cobertura = await prisma.eventoCobertura.findUnique({
     where: { slug },
     select: {
+      id: true,
       titulo: true,
       linkDownloadPublico: true,
       senhaDownload: true,
@@ -99,7 +101,8 @@ export async function GET(req: NextRequest, { params }: Params) {
         // O ZIP é montado no servidor: ele baixa cada arquivo. A URL guardada é
         // do nosso app e exige credencial — aqui não há sessão nem token, então
         // a assinatura é feita direto, com validade de máquina.
-        const origem = (await resolverParaAssinada(upload.url, VALIDADE_MAQUINA_SEGUNDOS)) ?? upload.url
+        const origem = await resolverMidiaCobertura(upload.url, organizacaoId, cobertura.id, VALIDADE_MAQUINA_SEGUNDOS)
+        if (!origem) continue
         const res = await fetch(origem)
         if (!res.ok || !res.body) continue
 

@@ -97,7 +97,7 @@ describe("o caminho de autenticação é separado", () => {
 })
 
 describe("a extensão que declara a empresa", () => {
-  const p = ler("src/lib/prisma.ts")
+  const p = ler("src/lib/prisma.ts") + ler("src/lib/prisma-rls.ts")
 
   it("nasce desligada", () => {
     expect(p).toContain('process.env.RLS_ATIVO === "sim"')

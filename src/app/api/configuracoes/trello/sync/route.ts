@@ -1,19 +1,14 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { syncDemandaTrello } from "@/lib/trello"
 import { configTrelloDaOrg } from "@/lib/trello-config"
 
 export async function POST() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   // O lote 1 escopou a CONSULTA de demandas, mas o destino continuava sendo o
   // board único das variáveis de ambiente: as demandas certas iam para o quadro

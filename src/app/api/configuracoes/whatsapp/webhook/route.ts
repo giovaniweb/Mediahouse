@@ -1,8 +1,6 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { registrarWebhookEntrada, origemPublica } from "@/lib/whatsapp-webhook"
 
 // POST /api/configuracoes/whatsapp/webhook — (re)registra o webhook de entrada
@@ -14,12 +12,10 @@ import { registrarWebhookEntrada, origemPublica } from "@/lib/whatsapp-webhook"
 //
 // A chave nunca sai do servidor: é lida do banco aqui dentro.
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  if (!ehGestor(session)) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
   if (!config?.instanceUrl || !config.apiKey || !config.instanceId) {

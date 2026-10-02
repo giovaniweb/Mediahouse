@@ -182,6 +182,7 @@ model Usuario {
   updatedAt  DateTime      @updatedAt
   superAdmin Boolean       @default(false) // gestão global de organizações (SaaS)
 
+  oauthDriveEstados   OAuthDriveEstado[]
   organizacoes        UsuarioOrganizacao[]
   demandasCriadas     Demanda[]               @relation("Solicitante")
   demandasGeridas     Demanda[]               @relation("Gestor")
@@ -717,6 +718,13 @@ model Arquivo {
   thumbnailUrl    String? // JPEG thumbnail no Supabase (gerado no cliente)
   transcodeStatus String? // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
   originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
+  // Divulgação opt-in. Snapshot preserva a versão que a gestão autorizou.
+  publicadoEm           DateTime?
+  publicadoPor          String?
+  revogadoEm            DateTime?
+  revogadoPor           String?
+  publicacaoUrl         String?
+  publicacaoThumbnailUrl String?
   createdAt       DateTime    @default(now())
 
   demanda Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
@@ -2115,6 +2123,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  eventosAuditoria EventoAuditoria[]
   id             String   @id @default(cuid())
   nome           String
   slug           String   @unique // ex: "contourline" (preparado p/ subdomínio futuro)
@@ -2126,6 +2135,7 @@ model Organizacao {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  oauthDriveEstados  OAuthDriveEstado[]
   membros            UsuarioOrganizacao[]
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
@@ -2374,4 +2384,44 @@ model UsuarioOrganizacao {
   @@unique([usuarioId, organizacaoId])
   @@index([organizacaoId])
   @@map("usuario_organizacao")
+}
+
+// Desafio OAuth de curta duração. O nonce original não é persistido.
+model OAuthDriveEstado {
+  hash          String    @id
+  organizacaoId String
+  usuarioId     String
+  expiraEm      DateTime
+  consumidoEm   DateTime?
+  createdAt     DateTime  @default(now())
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId, expiraEm])
+  @@map("oauth_drive_estados")
+}
+
+// Envelope append-only para o runtime; payload reduzido expira após 90 dias.
+model EventoAuditoria {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  atorTipo      String   @db.VarChar(16)
+  atorId        String   @db.VarChar(128)
+  acao          String   @db.VarChar(80)
+  recurso       String   @db.VarChar(40)
+  recursoId     String   @db.VarChar(128)
+  resultado     String   @db.VarChar(16)
+  correlationId String   @db.VarChar(64)
+  chave         String   @db.VarChar(64)
+  antes         Json?
+  depois        Json?
+  createdAt     DateTime @default(now())
+  payloadExpiraEm DateTime
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId, chave])
+  @@index([organizacaoId, createdAt, id])
+  @@index([payloadExpiraEm])
+  @@map("eventos_auditoria")
 }

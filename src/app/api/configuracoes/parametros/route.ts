@@ -1,7 +1,8 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { TIPOS_VIDEO_SEED, TIPOS_CRIATIVO_SEED } from "@/lib/tipos-demanda"
 
 // Seed inicial com valores hardcoded
@@ -49,10 +50,9 @@ const SEED_PARAMETROS = [
 
 // GET /api/configuracoes/parametros?grupo=departamentos
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const { searchParams } = new URL(req.url)
   const grupo = searchParams.get("grupo")
@@ -60,10 +60,10 @@ export async function GET(req: NextRequest) {
   // Seed se estiver vazio (por organização)
   const count = await prisma.configParametro.count({ where: { organizacaoId } })
   if (count === 0) {
-    await prisma.configParametro.createMany({
-      data: SEED_PARAMETROS.map((p) => ({ ...p, organizacaoId })),
-      skipDuplicates: true,
-    })
+    await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      const criados = await tx.configParametro.createMany({ data: SEED_PARAMETROS.map((p) => ({ ...p, organizacaoId })), skipDuplicates: true })
+      if (criados.count) await registrarAuditoria(tx, { organizacaoId, tecnico: "parametros.seed" }, { acao: "configuracao.alterada", recurso: "config_parametros", recursoId: organizacaoId, correlationId: correlacaoAuditoria(), depois: { alterados: criados.count } })
+    }))
   }
 
   const parametros = await prisma.configParametro.findMany({
@@ -86,15 +86,14 @@ export async function GET(req: NextRequest) {
 
 // POST /api/configuracoes/parametros — criar novo
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const papel = (session.user as { tipo?: string }).tipo
+  const papel = acesso.papel
   if (!["admin", "gestor"].includes(papel ?? "")) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { grupo, valor, label, ordem } = body
@@ -103,8 +102,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "grupo, valor e label são obrigatórios" }, { status: 400 })
   }
 
-  const p = await prisma.configParametro.create({
-    data: { grupo, valor, label, ordem: ordem ?? 0, organizacaoId },
-  })
+  const p = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+    const atual = await tx.configParametro.create({ data: { grupo, valor, label, ordem: ordem ?? 0, organizacaoId } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_parametro", recursoId: atual.id, correlationId: correlacaoAuditoria(), depois: { ativo: true, campos: ["grupo", "valor", "label", "ordem"] } })
+    return atual
+  }))
   return NextResponse.json({ parametro: p }, { status: 201 })
 }

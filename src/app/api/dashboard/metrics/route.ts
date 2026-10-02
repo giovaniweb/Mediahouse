@@ -1,3 +1,5 @@
+import { recorteMetricas } from "@/lib/metricas-recorte"
+import { metricasOperacionais } from "@/lib/metricas-operacionais"
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -12,34 +14,16 @@ export async function GET() {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  const hoje = new Date()
-  const inicioDia = new Date(hoje.setHours(0, 0, 0, 0))
-  const fimDia = new Date(hoje.setHours(23, 59, 59, 999))
-  const inicioSemana = new Date()
-  inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
-  const fimSemana = new Date(inicioSemana)
-  fimSemana.setDate(fimSemana.getDate() + 6)
-  const em7Dias = new Date()
-  em7Dias.setDate(em7Dias.getDate() + 7)
-
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-
   const [
-    novasHoje,
     urgentesAtivas,
     emEdicao,
     aguardandoAprovacao,
     paraPostar,
     atrasadas,
-    captacoesSemana,
-    expiracoesSemana,
     alertasAtivos,
     editores,
-    demandasMesRaw,
+    operacional,
   ] = await Promise.all([
-    prisma.demanda.count({
-      where: { area: "audiovisual", organizacaoId, createdAt: { gte: inicioDia, lte: fimDia } },
-    }),
     prisma.demanda.count({
       where: {
         area: "audiovisual", organizacaoId,
@@ -54,20 +38,7 @@ export async function GET() {
       where: {
         area: "audiovisual", organizacaoId,
         dataLimite: { lt: inicioDoDia() },
-        statusVisivel: { notIn: ["finalizado", "aprovacao", "para_postar"] },
-      },
-    }),
-    prisma.demanda.count({
-      where: {
-        area: "audiovisual", organizacaoId,
-        dataCaptacao: { gte: inicioSemana, lte: fimSemana },
-      },
-    }),
-    prisma.demanda.count({
-      where: {
-        area: "audiovisual", organizacaoId,
-        dataExpiracao: { gte: new Date(), lte: em7Dias },
-        statusVisivel: "finalizado",
+        statusVisivel: { not: "finalizado" },
       },
     }),
     prisma.alertaIA.findMany({
@@ -82,38 +53,14 @@ export async function GET() {
       where: { vinculos: { some: { organizacaoId, status: "ativo" } } },
       include: {
         demandas: {
-          where: { statusVisivel: { notIn: ["finalizado"] } },
+          where: { organizacaoId, area: "audiovisual", statusVisivel: { notIn: ["finalizado"] } },
           select: { pesoDemanda: true },
         },
       },
     }),
-    prisma.demanda.findMany({
-      where: {
-        area: "audiovisual", organizacaoId,
-        statusVisivel: "finalizado",
-        OR: [
-          { finalizadaEm: { gte: inicioMes } },
-          { finalizadaEm: null, updatedAt: { gte: inicioMes } },
-        ],
-      },
-      select: { id: true, linkFinal: true },
-    }),
+    metricasOperacionais(organizacaoId, recorteMetricas(new URLSearchParams({ periodo: "mes", area: "audiovisual" }))),
   ])
-
-  // Contar vídeos individuais entregues no mês (Arquivo final + legacy linkFinal)
-  const idsMes = demandasMesRaw.map(d => d.id)
-  const arquivosMes = idsMes.length > 0
-    ? await prisma.arquivo.groupBy({
-        by: ["demandaId"],
-        where: { demandaId: { in: idsMes }, tipoArquivo: "final" },
-        _count: { id: true },
-      })
-    : []
-  const arquivosMapMes = new Map(arquivosMes.map(a => [a.demandaId, a._count.id]))
-  const concluidasMes = demandasMesRaw.reduce(
-    (acc, d) => acc + (arquivosMapMes.get(d.id) ?? (d.linkFinal ? 1 : 0)),
-    0
-  )
+  const concluidasMes = operacional.entregaveis
 
   // Carga do vínculo desta empresa. O `tsc` foi quem achou este uso: a consulta
   // não tinha `select`, então trazia todas as colunas do perfil e o auditor não
@@ -131,8 +78,9 @@ export async function GET() {
   })
 
   return NextResponse.json({
+    operacional,
     metricas: {
-      demandasAtivas: emEdicao + aguardandoAprovacao + paraPostar + novasHoje,
+      demandasAtivas: operacional.ativas,
       urgentesHoje: urgentesAtivas,
       concluidasMes, // vídeos individuais entregues neste mês
       prazoCritico: atrasadas,

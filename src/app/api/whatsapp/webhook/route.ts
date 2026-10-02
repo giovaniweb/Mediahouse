@@ -7,259 +7,14 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, getWhatsappConfig } from "@/lib/whatsapp"
 import { decryptSecret } from "@/lib/secret-crypto"
 import { executarAgenteComTools, MODELO_WHATSAPP, TOOLS_WHATSAPP, TOOLS_WHATSAPP_DESCONHECIDO, SYSTEM_WHATSAPP } from "@/lib/claude"
+import { contextoWhatsApp } from "@/lib/ia-tool-contexto"
+import { identidadeWhatsApp, jidRecebidoVerificado } from "@/lib/whatsapp-identidade"
 import { executarFerramenta } from "@/lib/ia-tools-executor"
 import { downloadEvolutionMedia, uploadMedia } from "@/lib/storage"
 import { transcreverAudio } from "@/lib/transcription"
 import { declararOrg } from "@/lib/org-contexto"
 
 export const maxDuration = 60
-
-/**
- * Resolve o JID real (@s.whatsapp.net) a partir de um JID @lid.
- *
- * @lid é um identificador de privacidade do Meta/WhatsApp (multi-device).
- * A Evolution API NÃO consegue enviar para @lid — precisamos do @s.whatsapp.net.
- *
- * Estratégias (em ordem de confiabilidade):
- * 1. Cache local (MapaLidWhatsApp) — resoluções anteriores
- * 2. Participant do payload (Evolution API v2)
- * 3. Nosso banco (mensagemWhatsapp) — mensagem saída para este contato
- * 4. Evolution API findContacts/findMessages
- * 5. Evolution API fetchProfile
- *
- * REMOVIDA: busca por pushName (causava atribuição a pessoa errada)
- */
-async function resolveReplyJid(
-  remoteJid: string,
-  pushName?: string,
-  participant?: string,
-  organizacaoId?: string | null
-): Promise<{ replyJid: string; telefone: string }> {
-  const lidNumber = remoteJid.replace(/@lid$/, "").split(":")[0]
-  const fallback = { replyJid: remoteJid, telefone: lidNumber }
-
-  if (!remoteJid.endsWith("@lid")) {
-    const telefone = remoteJid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
-    return { replyJid: remoteJid, telefone }
-  }
-
-  // ── Estratégia 0: Cache local (MapaLidWhatsApp) ──────────────────────────
-  try {
-    const cached = await prisma.mapaLidWhatsApp.findFirst({
-      where: { lidJid: remoteJid, ...(organizacaoId && { organizacaoId }) },
-    })
-    if (cached) {
-      console.log(`[WH-LID] Resolvido via cache → ${cached.realJid}`)
-      return { replyJid: cached.realJid, telefone: cached.telefone }
-    }
-  } catch (e) {
-    console.warn("[WH-LID] Falha ao buscar cache:", e)
-  }
-
-  // ── Estratégia 1: participant do payload (Evolution API v2) ──────────────
-  if (participant) {
-    const pClean = participant.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").split(":")[0].replace(/\D/g, "")
-    if (pClean.length >= 10 && !pClean.includes("@")) {
-      const jid = pClean.startsWith("55") ? `${pClean}@s.whatsapp.net` : `55${pClean}@s.whatsapp.net`
-      const telefone = pClean.startsWith("55") ? pClean : `55${pClean}`
-      console.log(`[WH-LID] Resolvido via participant → ${jid}`)
-      // Salva no cache
-      await salvarCacheLid(remoteJid, jid, telefone, pushName, organizacaoId)
-      return { replyJid: jid, telefone }
-    }
-  }
-
-  // ── Estratégia 2: nosso banco tem alguma mensagem saída para este contato ──
-  try {
-    const msgSaida = await prisma.mensagemWhatsapp.findFirst({
-      where: {
-        ...(organizacaoId && { organizacaoId }),
-        direcao: "saida",
-        status: "enviado",
-        OR: [
-          { telefone: { contains: lidNumber.slice(-8) } },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      select: { telefone: true },
-    })
-    if (msgSaida?.telefone) {
-      const clean = msgSaida.telefone.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").split(":")[0]
-      if (clean.length >= 10 && !clean.includes("@")) {
-        const jid = clean.startsWith("55") ? `${clean}@s.whatsapp.net` : `55${clean}@s.whatsapp.net`
-        console.log(`[WH-LID] Resolvido via banco (saida) → ${jid}`)
-        await salvarCacheLid(remoteJid, jid, clean, pushName, organizacaoId)
-        return { replyJid: jid, telefone: clean.replace(/^55/, "") }
-      }
-    }
-  } catch (e) {
-    console.warn("[WH-LID] Falha na busca do banco:", e)
-  }
-
-  // ── Estratégia 3: Evolution API findContacts ──────────────────────────────
-  try {
-    const config = await getWhatsappConfig(organizacaoId)
-    if (config) {
-      const contactRes = await fetch(`${config.instanceUrl}/chat/findContacts/${config.instanceId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: config.apiKey },
-        body: JSON.stringify({ where: { id: remoteJid } }),
-        signal: AbortSignal.timeout(4000),
-      }).catch(() => null)
-
-      if (contactRes?.ok) {
-        const contacts = await contactRes.json()
-        const contact = Array.isArray(contacts) ? contacts[0] : contacts
-        const contactId = contact?.id ?? contact?.remoteJid ?? ""
-        if (contactId.endsWith("@s.whatsapp.net")) {
-          const tel = contactId.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
-          console.log(`[WH-LID] Resolvido via findContacts → ${contactId}`)
-          await salvarCacheLid(remoteJid, contactId, tel, pushName, organizacaoId)
-          return { replyJid: contactId, telefone: tel }
-        }
-        const cNumber = contact?.number ?? ""
-        if (cNumber && /^\d{10,}$/.test(cNumber.replace(/\D/g, ""))) {
-          const numClean = cNumber.replace(/\D/g, "")
-          const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
-          console.log(`[WH-LID] Resolvido via findContacts number → ${jid}`)
-          await salvarCacheLid(remoteJid, jid, numClean, pushName, organizacaoId)
-          return { replyJid: jid, telefone: numClean }
-        }
-      }
-
-      // Fallback: findMessages
-      const res = await fetch(`${config.instanceUrl}/chat/findMessages/${config.instanceId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: config.apiKey },
-        body: JSON.stringify({ where: { key: { remoteJid } } }),
-        signal: AbortSignal.timeout(4000),
-      }).catch(() => null)
-
-      if (res?.ok) {
-        const msgs = await res.json()
-        let ownerNumber = ""
-        try {
-          const instRes = await fetch(`${config.instanceUrl}/instance/fetchInstances`, {
-            headers: { apikey: config.apiKey },
-            signal: AbortSignal.timeout(3000),
-          })
-          if (instRes.ok) {
-            const instances = await instRes.json()
-            const inst = Array.isArray(instances)
-              ? instances.find((i: { instance?: { instanceName?: string } }) => i.instance?.instanceName === config.instanceId)
-              : null
-            const owner = inst?.instance?.owner ?? inst?.instance?.ownerJid ?? ""
-            ownerNumber = owner.replace(/@s\.whatsapp\.net$/, "")
-          }
-        } catch { /* ignora */ }
-
-        const sentMsg = Array.isArray(msgs) ? msgs.find(
-          (m: { key?: { remoteJid?: string; fromMe?: boolean } }) => {
-            const rjid = m.key?.remoteJid ?? ""
-            const rNumber = rjid.replace(/@s\.whatsapp\.net$/, "")
-            return rjid.endsWith("@s.whatsapp.net") &&
-              m.key?.fromMe &&
-              (!ownerNumber || rNumber !== ownerNumber) &&
-              rNumber !== lidNumber
-          }
-        ) : null
-        if (sentMsg?.key?.remoteJid) {
-          const realJid = sentMsg.key.remoteJid
-          const telefone = realJid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
-          console.log(`[WH-LID] Resolvido via Evolution findMessages → ${realJid}`)
-          await salvarCacheLid(remoteJid, realJid, telefone, pushName, organizacaoId)
-          return { replyJid: realJid, telefone }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("[WH-LID] Falha no findContacts/findMessages:", e)
-  }
-
-  // ── Estratégia 4: Evolution API fetchProfile ──────────────────────────────
-  try {
-    const config = await getWhatsappConfig(organizacaoId)
-    if (config) {
-      const profileRes = await fetch(`${config.instanceUrl}/chat/fetchProfile/${config.instanceId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: config.apiKey },
-        body: JSON.stringify({ number: remoteJid }),
-        signal: AbortSignal.timeout(4000),
-      }).catch(() => null)
-
-      if (profileRes?.ok) {
-        const profile = await profileRes.json()
-        const wuid = profile?.wuid ?? profile?.jid ?? ""
-        if (wuid && wuid.endsWith("@s.whatsapp.net")) {
-          const tel = wuid.replace(/@s\.whatsapp\.net$/, "").split(":")[0]
-          console.log(`[WH-LID] Resolvido via fetchProfile → ${wuid}`)
-          await salvarCacheLid(remoteJid, wuid, tel, pushName, organizacaoId)
-          return { replyJid: wuid, telefone: tel }
-        }
-        const num = profile?.number ?? profile?.numberExists ?? ""
-        if (num && /^\d{10,}$/.test(String(num).replace(/\D/g, ""))) {
-          const numClean = String(num).replace(/\D/g, "")
-          const jid = numClean.startsWith("55") ? `${numClean}@s.whatsapp.net` : `55${numClean}@s.whatsapp.net`
-          console.log(`[WH-LID] Resolvido via fetchProfile number → ${jid}`)
-          await salvarCacheLid(remoteJid, jid, numClean, pushName, organizacaoId)
-          return { replyJid: jid, telefone: numClean }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("[WH-LID] Falha no fetchProfile:", e)
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // NOTA: A busca por pushName (primeiro nome) foi REMOVIDA por segurança.
-  // Ela causava atribuição de mensagens à pessoa errada quando dois contatos
-  // compartilhavam o mesmo primeiro nome.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  // Se nada funcionou, loga como WARNING CRÍTICO e tenta enviar pelo lidNumber
-  console.error(`[WH-LID] ⚠️ CRÍTICO: @lid ${remoteJid} NÃO resolvido para "${pushName}" — usando lidNumber: ${lidNumber}`)
-
-  // Notifica admin sobre @lid não resolvido
-  await notificarAdminLidNaoResolvido(remoteJid, pushName ?? "desconhecido", lidNumber, organizacaoId)
-
-  return fallback
-}
-
-/**
- * Salva mapeamento @lid → JID real no cache
- */
-async function salvarCacheLid(lidJid: string, realJid: string, telefone: string, pushName?: string, organizacaoId?: string | null) {
-  if (!organizacaoId) return // cache de lid é por organização (não-crítico se faltar)
-  try {
-    await prisma.mapaLidWhatsApp.upsert({
-      where: { organizacaoId_lidJid: { organizacaoId, lidJid } },
-      create: { lidJid, realJid, telefone, pushName, organizacaoId },
-      update: { realJid, telefone, pushName, updatedAt: new Date() },
-    })
-  } catch (e) {
-    console.warn("[WH-LID] Falha ao salvar cache:", e)
-  }
-}
-
-/**
- * Notifica admin quando um @lid não pode ser resolvido
- */
-async function notificarAdminLidNaoResolvido(lidJid: string, pushName: string, lidNumber: string, organizacaoId?: string | null) {
-  try {
-    const admins = await quemRecebeTudo(organizacaoId)
-    for (const admin of admins) {
-      if (admin.telefone) {
-        await sendWhatsappMessage(
-          admin.telefone,
-          `⚠️ *NuFlow — Alerta*\n\nRecebemos uma mensagem de *${pushName}* mas não conseguimos identificar o número real (JID: ${lidJid}).\n\nPeça à pessoa para enviar o número dela por mensagem ou adicione o contato manualmente.`,
-          undefined, organizacaoId
-        ).catch(() => null)
-      }
-    }
-  } catch (e) {
-    console.warn("[WH-LID] Falha ao notificar admin:", e)
-  }
-}
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
@@ -319,36 +74,6 @@ function detectarMidia(message: Record<string, unknown>): MediaInfo | null {
   return null
 }
 
-// ─── Notifica admin sobre QUALQUER nova demanda ─────────────────────────────
-
-async function notificarAdminNovaDemanda(
-  codigo: string,
-  titulo: string,
-  nomeSolicitante: string,
-  telefone: string,
-  identidadeTipo: string,
-  organizacaoId?: string | null
-) {
-  try {
-    const admins = await quemRecebeTudo(organizacaoId)
-    const origem = identidadeTipo === "desconhecido" || identidadeTipo === "externo"
-      ? "📌 Solicitante EXTERNO"
-      : `📌 ${identidadeTipo}`
-
-    for (const admin of admins) {
-      if (admin.telefone) {
-        await sendWhatsappMessage(
-          admin.telefone,
-          `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${titulo}\n👤 ${nomeSolicitante} (${telefone})\n${origem}\n\nAcesse o sistema para aprovar.`,
-          undefined, organizacaoId
-        ).catch(() => null)
-      }
-    }
-  } catch (e) {
-    console.warn("[WH] Falha ao notificar admins:", e)
-  }
-}
-
 // ─── Processamento real ─────────────────────────────────────────────────────
 
 // Compara o segredo apresentado com o guardado (cifrado), em tempo constante.
@@ -384,20 +109,19 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
     console.warn("[WH] Payload sem instância — descartado")
     return
   }
-  const cfg = await prisma.configWhatsapp.findFirst({
+  const configs = await prisma.configWhatsapp.findMany({
     where: { OR: [{ instanceId: instanceName }, { instanceName }] },
-    select: { organizacaoId: true, webhookSecret: true },
-  }).catch(() => null)
-  if (!cfg?.organizacaoId) {
+    select: { organizacaoId: true, webhookSecret: true, organizacao: { select: { ativo: true } } },
+    take: 2,
+  }).catch(() => [])
+  const cfg = configs.length === 1 ? configs[0] : null
+  if (!cfg?.organizacaoId || !cfg.organizacao?.ativo) {
     console.warn(`[WH] Instância desconhecida "${instanceName}" — ignorando`)
     return
   }
 
   // ── Autenticação do webhook ────────────────────────────────────────────
-  // Enquanto a instância não tiver segredo configurado, seguimos processando
-  // (senão a integração em produção pararia no deploy) — mas com aviso, porque
-  // nesse estado qualquer um que descubra o nome da instância pode injetar
-  // mensagem. Configurado o segredo, ele passa a ser obrigatório.
+  // Sem segredo não existe origem confiável para identidade ou ferramentas.
   if (cfg.webhookSecret) {
     if (!segredoConfere(segredoApresentado, cfg.webhookSecret)) {
       // Descartar em silêncio é a mesma doença de sempre: a mensagem some, o
@@ -434,9 +158,10 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
     }
   } else {
     console.warn(
-      `[WH] Instância "${instanceName}" sem webhookSecret — endpoint aceita qualquer origem. ` +
+      `[WH] Instância "${instanceName}" sem webhookSecret — mensagem descartada. ` +
         `Configure em Configurações › WhatsApp e aponte a Evolution para a URL com ?s=<segredo>.`
     )
+    return
   }
 
   const orgId: string = cfg.organizacaoId  // garantido não-nulo daqui pra frente
@@ -538,9 +263,12 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
     }
   }
 
-  // Resolve JID real (passa participant do payload para ajudar na resolução @lid)
-  const participant = data.key?.participant ?? data.participant ?? ""
-  const { replyJid, telefone } = await resolveReplyJid(remoteJid, pushName, participant, organizacaoId)
+  const remetente = jidRecebidoVerificado(remoteJid, data.key?.remoteJidAlt)
+  if (!remetente) {
+    console.warn("[WH] Remetente sem vínculo verificável de número; mensagem não executada")
+    return
+  }
+  const { replyJid, telefone } = remetente
   // Atalho de resposta — sempre injeta a organização resolvida pela instância.
   const responder = (msg: string, demandaId?: string) => sendWhatsappMessage(replyJid, msg, demandaId, orgId)
 
@@ -569,12 +297,6 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   if (!telefone) return
   // Permite mensagens sem texto se tiver mídia
   if (!textoOriginal && !midia) return
-
-  // Se @lid não resolvido, ainda processa — a sendWhatsappMessage vai limpar o JID
-  // e tentar enviar pelo número puro (funciona na maioria dos casos)
-  if (replyJid.endsWith("@lid")) {
-    console.warn(`[WH] @lid não resolvido totalmente para "${pushName}" — tentando processar mesmo assim com número: ${telefone}`)
-  }
 
   // ── Processa mídia (download + upload storage) ────────────────────────
   if (midia) {
@@ -612,7 +334,7 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   const historicoRecente = await prisma.mensagemWhatsapp.findMany({
     where: {
       organizacaoId,
-      telefone: { contains: telefone.slice(-8) },
+      telefone: { in: [telefone, replyJid] },
       direcao: { in: ["entrada", "saida"] },
     },
     orderBy: { createdAt: "desc" },
@@ -653,49 +375,21 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   }
 
   // ── Identifica quem está falando ────────────────────────────────────────
-  const tel8 = telefone.slice(-8)
-  const telNorm = telefone.length >= 10 ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : telefone
-
-  const [videomaker, editor, usuario, contatoExistente] = await Promise.all([
-    // Videomaker externo é GLOBAL (rede compartilhada) — não escopar por org
-    prisma.videomaker.findFirst({
-      where: { telefone: { contains: tel8 } },
-      select: { id: true, nome: true, telefone: true, cidade: true },
-    }),
-    // Editor interno é privado da organização
-    prisma.editor.findFirst({
-      where: {
-        vinculos: { some: { organizacaoId: orgId } },
-        OR: [
-          { telefone: { contains: tel8 } },
-          { whatsapp: { contains: tel8 } },
-        ],
-      },
-      select: { id: true, nome: true, telefone: true },
-    }),
-    // Usuário só conta se for membro desta organização
-    prisma.usuario.findFirst({
-      where: { telefone: { contains: tel8 }, organizacoes: { some: { organizacaoId: orgId } } },
-      select: { id: true, nome: true, tipo: true, telefone: true },
-    }),
-    prisma.contatoWhatsApp.findFirst({
-      where: { telefone: { contains: tel8 }, organizacaoId: orgId },
-    }),
-  ])
+  const telNorm = telefone
+  const { videomaker, editor, usuario, contatoExistente } = await identidadeWhatsApp(orgId, telefone)
 
   // Auto-registra contato se é usuário/videomaker/editor conhecido mas sem ContatoWhatsApp
   if (!contatoExistente && (videomaker || editor || usuario)) {
     const ref = editor ?? videomaker ?? usuario
-    await prisma.contatoWhatsApp.upsert({
-      where: { organizacaoId_telefone: { organizacaoId: orgId, telefone: telNorm } },
-      create: {
+    await prisma.contatoWhatsApp.createMany({
+      data: [{
         telefone: telNorm,
         nome: ref!.nome,
         tipo: editor ? "editor" : videomaker ? "videomaker" : "usuario",
         referenciaId: ref!.id,
         organizacaoId: orgId,
-      },
-      update: {},
+      }],
+      skipDuplicates: true,
     }).catch(() => null)
   }
 
@@ -755,95 +449,28 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   // 2. Por videomakerId + qualquer status que indique pendência (cobre demandas normais onde o status não muda)
   // 3. Por última mensagem SAÍDA para este telefone com demandaId (fallback quando telefone não bate no Prisma)
   async function encontrarDemandaNotificada(vmId?: string): Promise<import("@prisma/client").Demanda | null> {
-    // Status que indicam "aguardando confirmação do videomaker"
-    const statusPendentes: StatusInterno[] = [
-      StatusInterno.videomaker_notificado,
-      StatusInterno.fila_edicao,
-      StatusInterno.captacao_agendada,
-      StatusInterno.editor_atribuido,
-    ]
-    // Status que indicam que a confirmação já foi processada ou a demanda está encerrada
-    const statusFechados: StatusInterno[] = [
-      StatusInterno.encerrado,
-      StatusInterno.postado,
-      StatusInterno.videomaker_aceitou,
-      StatusInterno.videomaker_recusou,
-      StatusInterno.entregue_cliente,
-      StatusInterno.expirado,
-    ]
-
-    if (vmId) {
-      // Tentativa 1: status explícito de notificação
-      const d = await prisma.demanda.findFirst({
-        where: { organizacaoId: orgId, videomakerId: vmId, statusInterno: { in: statusPendentes } },
-        orderBy: { updatedAt: "desc" },
-      })
-      if (d) return d
-
-      // Tentativa 2: qualquer demanda ativa deste VM que ainda não foi confirmada/encerrada
-      // (cobre casos onde o status não foi mudado para videomaker_notificado)
-      const d2 = await prisma.demanda.findFirst({
-        where: {
-          organizacaoId: orgId,
-          videomakerId: vmId,
-          statusInterno: { notIn: statusFechados },
-        },
-        orderBy: { updatedAt: "desc" },
-      })
-      if (d2) return d2
-    }
-
-    // Fallback 3: procura via última mensagem SAÍDA para este número com demandaId vinculada.
-    // Não filtra por statusInterno aqui — a checagem de status vem depois.
-    // Busca nas últimas 5 mensagens saídas para este número (mais robusto que pegar só a última)
-    const msgsSaida = await prisma.mensagemWhatsapp.findMany({
-      where: {
-        organizacaoId: orgId,
-        direcao: "saida",
-        telefone: { contains: tel8 },
-        demandaId: { not: null },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: { demandaId: true },
+    if (!vmId) return null
+    const candidatas = await prisma.demanda.findMany({
+      where: { organizacaoId: orgId, videomakerId: vmId, statusInterno: StatusInterno.videomaker_notificado },
+      take: 2,
     })
-
-    for (const msg of msgsSaida) {
-      if (!msg.demandaId) continue
-      const demanda = await prisma.demanda.findFirst({
-        where: {
-          organizacaoId: orgId,
-          id: msg.demandaId,
-          statusInterno: { notIn: statusFechados },
-        },
-      })
-      if (demanda) return demanda
-    }
-
-    return null
+    // SIM sem código não pode escolher arbitrariamente entre dois convites.
+    return candidatas.length === 1 ? candidatas[0] : null
   }
 
   if (textoUpper === "SIM" || textoUpper === "CONFIRMAR" || textoUpper === "SIM!" || textoUpper === "TOPO" || textoUpper === "TOPEI" || /^(SIM|CONFIRMAR|TOPO|TOPEI)[.!,\s]*$/.test(textoUpper)) {
     const demanda = await encontrarDemandaNotificada(videomaker?.id)
     if (demanda) {
-      await prisma.$transaction([
-        prisma.demanda.update({
-          where: { id: demanda.id },
-          // statusVisivel junto: sem ele o card ficava numa coluna do kanban
-          // que já não corresponde ao estado da demanda — o SIM avançava o
-          // status interno e o quadro continuava mostrando o anterior.
+      const alterada = await prisma.$transaction(async tx => {
+        const mudou = await tx.demanda.updateMany({
+          where: { id: demanda.id, organizacaoId: orgId, videomakerId: videomaker!.id, statusInterno: "videomaker_notificado" },
           data: { statusInterno: "videomaker_aceitou", statusVisivel: STATUS_PARA_COLUNA["videomaker_aceitou"] },
-        }),
-        prisma.historicoStatus.create({
-          data: {
-            demandaId: demanda.id,
-            statusAnterior: demanda.statusInterno,
-            statusNovo: "videomaker_aceitou",
-            origem: "whatsapp",
-            observacao: "Confirmado via WhatsApp",
-          },
-        }),
-      ])
+        })
+        if (mudou.count !== 1) return false
+        await tx.historicoStatus.create({ data: { demandaId: demanda.id, statusAnterior: demanda.statusInterno, statusNovo: "videomaker_aceitou", origem: "whatsapp", observacao: "Resposta via WhatsApp verificado" } })
+        return true
+      })
+      if (!alterada) { await responder("O convite mudou. Consulte a equipe antes de confirmar."); return }
       await responder(
         `✅ *Captação confirmada!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nÓtimo! Aguarde contato com mais detalhes. 🎬`,
         demanda.id
@@ -861,21 +488,16 @@ async function processarMensagem(body: unknown, segredoApresentado: string | nul
   if (textoUpper === "NÃO" || textoUpper === "NAO" || textoUpper === "RECUSAR" || textoUpper === "RECUSO" || /^(N[ÃA]O|RECUSAR|RECUSO)[.!,\s]*$/.test(textoUpper)) {
     const demanda = await encontrarDemandaNotificada(videomaker?.id)
     if (demanda) {
-      await prisma.$transaction([
-        prisma.demanda.update({
-          where: { id: demanda.id },
+      const alterada = await prisma.$transaction(async tx => {
+        const mudou = await tx.demanda.updateMany({
+          where: { id: demanda.id, organizacaoId: orgId, videomakerId: videomaker!.id, statusInterno: "videomaker_notificado" },
           data: { statusInterno: "videomaker_recusou", statusVisivel: STATUS_PARA_COLUNA["videomaker_recusou"], videomakerId: null },
-        }),
-        prisma.historicoStatus.create({
-          data: {
-            demandaId: demanda.id,
-            statusAnterior: demanda.statusInterno,
-            statusNovo: "videomaker_recusou",
-            origem: "whatsapp",
-            observacao: "Recusado via WhatsApp",
-          },
-        }),
-      ])
+        })
+        if (mudou.count !== 1) return false
+        await tx.historicoStatus.create({ data: { demandaId: demanda.id, statusAnterior: demanda.statusInterno, statusNovo: "videomaker_recusou", origem: "whatsapp", observacao: "Resposta via WhatsApp verificado" } })
+        return true
+      })
+      if (!alterada) { await responder("O convite mudou. Consulte a equipe antes de confirmar."); return }
       await responder(
         `Entendido, ${primeiroNome}. Escalaremos outro profissional para *${demanda.codigo}*. Obrigado! 🙏`,
         demanda.id
@@ -1083,17 +705,15 @@ REGRAS DE AGENDA:
 - Para consultar agenda: buscar_agenda_videomaker (funciona para editor também, passe editor_id).
 - SEMPRE termine com enviar_whatsapp para responder ao usuário.`
 
-  // Número não reconhecido não recebe as ferramentas de escrita: sem isso,
-  // qualquer pessoa que mande mensagem para o número da empresa cria demanda e
-  // evento no banco. Quem é da equipe, cliente cadastrado ou contato já
-  // conhecido segue com o conjunto completo.
-  const remetenteConhecido = identidade.tipo !== "desconhecido"
+  // A lista orienta o modelo; o executor revalida autoridade em cada chamada.
+  const remetenteConhecido = !!(usuario || editor || videomaker)
   const ferramentas = remetenteConhecido ? TOOLS_WHATSAPP : TOOLS_WHATSAPP_DESCONHECIDO
+  const contexto = contextoWhatsApp(orgId, replyJid, mediaUrl ?? undefined)
 
   try {
     await executarAgenteComTools(
       promptSecretaria,
-      (nome, input) => executarFerramenta(nome, input, organizacaoId),
+      (nome, input) => executarFerramenta(nome, input, contexto),
       MODELO_WHATSAPP,
       8,
       ferramentas,

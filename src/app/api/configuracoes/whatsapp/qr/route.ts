@@ -1,17 +1,15 @@
+import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { registrarWebhookEntrada, origemPublica } from "@/lib/whatsapp-webhook"
 
 // GET /api/configuracoes/whatsapp/qr — QR da instância Evolution DA ORGANIZAÇÃO logada.
 // Cada empresa tem sua própria instância (instanceName = nuflow_<slug>).
 // Org sem config → auto-provisiona usando a Evolution gerenciada (EVOLUTION_API_URL/KEY).
 export async function GET() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   let config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
 

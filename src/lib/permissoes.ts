@@ -325,6 +325,7 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   // O quadro de Jobs lê a mesma coisa que /demandas; reusa a permissão em vez
   // de criar uma chave nova que ninguém teria marcada.
   "/jobs": "verDemandas",
+  "/biblioteca": "verDemandas",
   "/aprovacoes": "verAprovacoes",
   "/aprovacoes/growth": "verAprovacoesGrowth",
   "/agenda": "verAgenda",

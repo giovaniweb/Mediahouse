@@ -14,7 +14,6 @@ import { prisma } from "@/lib/prisma"
 // usuarios, usuario_organizacao e organizacoes, que é exatamente o necessário
 // para responder isso e nada mais.
 import { prismaAuth } from "@/lib/prisma-auth"
-import type { Session } from "next-auth"
 
 type SessionUser = { id?: string; organizacaoId?: string | null }
 // Tipo estrutural mínimo aceito — cobre tanto a Session do NextAuth quanto os
@@ -25,44 +24,33 @@ type SessionShape = { user?: SessionUser | { id: string; tipo?: string } } | nul
 export const COOKIE_ORG_ATIVA = "org_ativa"
 
 /**
- * Resolve a organização ativa da sessão.
- *
- * Ordem: cookie escolhido pela pessoa → organização do token → primeira
- * membership (token antigo, evita forçar re-login).
- *
- * Por que o cookie e não o JWT: o `jwt` callback vive em `auth.config.ts`, que é
- * edge-safe e não pode falar com o Prisma — não daria para validar a membership
- * lá dentro. Aqui, do lado Node, o cookie é só o palpite: quem decide é a
- * consulta abaixo. Cookie forjado, membership removida ou empresa de outra
- * pessoa simplesmente não casa, e a resolução cai no padrão.
- *
- * Antes disto, quem tivesse duas empresas ficava preso na mais antiga por
- * `createdAt` — não havia como entrar na segunda.
+ * Cookie e JWT indicam a empresa desejada; somente o vínculo atual autoriza.
+ * Seleção inválida nega acesso, sem redirecionar uma escrita para outra empresa.
+ * Sessões legadas sem seleção usam o primeiro vínculo ativo validado no banco.
  */
 export async function getOrgId(session: SessionShape): Promise<string | null> {
   const u = session?.user as SessionUser | undefined
-  if (!u) return null
+  if (!u?.id) return null
 
-  if (u.id) {
-    const escolhida = await organizacaoEscolhida()
-    if (escolhida) {
-      // A autoridade é o banco: só vale se a pessoa for MESMO membro dela.
-      const m = await prismaAuth.usuarioOrganizacao.findUnique({
-        where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: escolhida } },
-        select: { organizacaoId: true },
+  const selecionada = (await organizacaoEscolhida()) || u.organizacaoId
+  const select = {
+    organizacaoId: true,
+    usuario: { select: { status: true } },
+    organizacao: { select: { ativo: true } },
+  } as const
+
+  const m = selecionada
+    ? await prismaAuth.usuarioOrganizacao.findUnique({
+        where: { usuarioId_organizacaoId: { usuarioId: u.id, organizacaoId: selecionada } },
+        select,
       })
-      if (m) return m.organizacaoId
-    }
-  }
+    : await prismaAuth.usuarioOrganizacao.findFirst({
+        where: { usuarioId: u.id, usuario: { status: "ativo" }, organizacao: { ativo: true } },
+        orderBy: { createdAt: "asc" },
+        select,
+      })
 
-  if (u.organizacaoId) return u.organizacaoId
-  if (!u.id) return null
-  const m = await prismaAuth.usuarioOrganizacao.findFirst({
-    where: { usuarioId: u.id },
-    orderBy: { createdAt: "asc" },
-    select: { organizacaoId: true },
-  })
-  return m?.organizacaoId ?? null
+  return m?.usuario.status === "ativo" && m.organizacao.ativo ? m.organizacaoId : null
 }
 
 /**
@@ -121,8 +109,8 @@ export async function requireSuperAdmin(
 ): Promise<{ usuarioId: string } | NextResponse> {
   const u = session?.user as SessionUser | undefined
   if (!u?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const usuario = await prismaAuth.usuario.findUnique({ where: { id: u.id }, select: { superAdmin: true } })
-  if (!usuario?.superAdmin) return NextResponse.json({ error: "Requer super-admin" }, { status: 403 })
+  const usuario = await prismaAuth.usuario.findUnique({ where: { id: u.id }, select: { superAdmin: true, status: true } })
+  if (!usuario?.superAdmin || usuario.status !== "ativo") return NextResponse.json({ error: "Requer super-admin" }, { status: 403 })
   return { usuarioId: u.id }
 }
 
@@ -142,7 +130,7 @@ export function pertenceAOrg(
 //   if (guard instanceof NextResponse) return guard
 //   const { organizacaoId } = guard
 export async function requireDemandaOrg(
-  session: Session | null,
+  session: SessionShape,
   demandaId: string
 ): Promise<{ organizacaoId: string } | NextResponse> {
   const organizacaoId = await getOrgId(session)

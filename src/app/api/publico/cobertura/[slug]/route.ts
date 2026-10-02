@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { resolverParaAssinada } from "@/lib/midia"
+import { resolverMidiaCobertura, SEM_CACHE_MIDIA } from "@/lib/publicacao-midia"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 
@@ -76,12 +76,12 @@ export async function GET(req: NextRequest, { params }: Params) {
   const uploadsAssinados = await Promise.all(
     coberturaPublica.uploads.map(async (u) => ({
       ...u,
-      url: (await resolverParaAssinada(u.url)) ?? u.url,
+      url: await resolverMidiaCobertura(u.url, organizacaoId, cobertura.id),
       ...("thumbnailUrl" in u
-        ? { thumbnailUrl: (await resolverParaAssinada(u.thumbnailUrl as string | null)) ?? u.thumbnailUrl }
+        ? { thumbnailUrl: await resolverMidiaCobertura(u.thumbnailUrl as string | null, organizacaoId, cobertura.id) }
         : {}),
     }))
   )
 
-  return NextResponse.json({ cobertura: { ...coberturaPublica, uploads: uploadsAssinados } })
+  return NextResponse.json({ cobertura: { ...coberturaPublica, uploads: uploadsAssinados.filter(u => u.url) } }, { headers: SEM_CACHE_MIDIA })
 }

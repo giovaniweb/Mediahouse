@@ -12,7 +12,7 @@ type Params = { params: Promise<{ id: string }> }
 // "Gabriel", nome escrito diferente, apelido) e permite validar quem foi marcado.
 const REGEX_MENCAO = /@\[([^\]]+)\]\(([a-z0-9]+)\)/gi
 
-export function extrairMencionados(texto: string): string[] {
+function extrairMencionados(texto: string): string[] {
   const ids = new Set<string>()
   for (const m of texto.matchAll(REGEX_MENCAO)) ids.add(m[2])
   return [...ids]

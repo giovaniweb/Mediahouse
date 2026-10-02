@@ -1,38 +1,37 @@
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { comOrg } from "@/lib/org-contexto"
+import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
+
+function apresentacao(config: {
+  id: string; instanceUrl: string; instanceId: string; instanceName: string | null;
+  ativo: boolean; apiKey: string; telefoneConectado: string | null;
+  pushName: string | null; connectedAt: Date | null; lastStatus: string | null;
+}) {
+  return {
+    id: config.id, instanceUrl: config.instanceUrl, instanceId: config.instanceId,
+    instanceName: config.instanceName, ativo: config.ativo,
+    apiKey: config.apiKey ? "••••••" : "",
+    telefoneConectado: config.telefoneConectado, pushName: config.pushName,
+    connectedAt: config.connectedAt, lastStatus: config.lastStatus,
+  }
+}
 
 export async function GET() {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
-  // Mascara a apiKey ao retornar
-  if (config) {
-    return NextResponse.json({
-      config: {
-        ...config,
-        apiKey: config.apiKey ? "••••••" + config.apiKey.slice(-4) : "",
-      },
-    })
-  }
-  return NextResponse.json({ config: null })
+  return NextResponse.json({ config: config ? apresentacao(config) : null })
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || !ehGestor(session)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
 
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const { organizacaoId } = acesso
 
   const body = await req.json()
   const { instanceUrl, apiKey, instanceId } = body
@@ -41,21 +40,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "instanceUrl e instanceId são obrigatórios" }, { status: 400 })
   }
 
-  const existing = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
-
-  const data = {
-    instanceUrl,
-    instanceId,
-    ativo: true,
-    ...(apiKey && !apiKey.startsWith("••••") && { apiKey }),
-  }
-
-  if (existing) {
-    const updated = await prisma.configWhatsapp.update({ where: { id: existing.id }, data })
-    return NextResponse.json({ config: updated })
-  } else {
-    if (!apiKey) return NextResponse.json({ error: "apiKey obrigatória" }, { status: 400 })
-    const created = await prisma.configWhatsapp.create({ data: { organizacaoId, instanceUrl, apiKey, instanceId, ativo: true } })
-    return NextResponse.json({ config: created })
-  }
+  return comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp:${organizacaoId}`}, 0))`
+    const existing = await tx.configWhatsapp.findFirst({ where: { organizacaoId } })
+    const data = { instanceUrl, instanceId, ativo: true, ...(apiKey && !apiKey.startsWith("••••") && { apiKey }) }
+    if (!existing && !apiKey) return NextResponse.json({ error: "apiKey obrigatória" }, { status: 400 })
+    if (existing && existing.instanceUrl === instanceUrl && existing.instanceId === instanceId && existing.ativo && (!data.apiKey || data.apiKey === existing.apiKey)) return NextResponse.json({ config: apresentacao(existing) })
+    const atual = existing
+      ? await tx.configWhatsapp.update({ where: { id: existing.id }, data })
+      : await tx.configWhatsapp.create({ data: { organizacaoId, instanceUrl, apiKey, instanceId, ativo: true } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_whatsapp", recursoId: atual.id, correlationId: correlacaoAuditoria(), antes: { ativo: !!existing?.ativo }, depois: { ativo: true, campos: ["credenciais"] } })
+    return NextResponse.json({ config: apresentacao(atual) })
+  }))
 }

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
+import { requireAcesso } from "@/lib/acesso"
+import { lerAuditoriaSeguranca } from "@/lib/auditoria-leitura"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import type { Prisma } from "@prisma/client"
 
@@ -20,24 +19,23 @@ export const dynamic = "force-dynamic"
 const POR_PAGINA = 50
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  // Registro de auditoria mostra a atividade de todo mundo — é leitura de gestão.
-  if (!ehGestor(session)) {
-    return NextResponse.json({ error: "Requer perfil de gestor" }, { status: 403 })
-  }
-
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
+  const acesso = await requireAcesso("verRelatorios")
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel)) return NextResponse.json({ error: "Requer gestão desta empresa" }, { status: 403 })
+  const { organizacaoId } = acesso
 
   const sp = req.nextUrl.searchParams
   const de = sp.get("de")
   const ate = sp.get("ate")
+  if ([de,ate].some(v => v && (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(Date.parse(v))))) return NextResponse.json({ error: "Período inválido" }, { status: 400 })
+  if (de && ate && de > ate) return NextResponse.json({ error: "Período inválido" }, { status: 400 })
+  if (sp.get("fonte") === "seguranca") return lerAuditoriaSeguranca(organizacaoId, sp, de || ate ? {
+    ...(de ? { gte: new Date(`${de}T00:00:00-03:00`) } : {}), ...(ate ? { lte: new Date(`${ate}T23:59:59.999-03:00`) } : {}),
+  } : undefined)
   const usuarioId = sp.get("usuarioId")
   const tipo = sp.get("tipo") // "edicao" | "responsavel" | "status"
   const busca = sp.get("busca")?.trim()
-  const pagina = Math.max(1, Number(sp.get("pagina") ?? "1") || 1)
+  const pagina = Math.min(10000, Math.max(1, Math.trunc(Number(sp.get("pagina") ?? "1")) || 1))
 
   const where: Prisma.HistoricoStatusWhereInput = {
     demanda: { organizacaoId },
@@ -70,7 +68,7 @@ export async function GET(req: NextRequest) {
   const [registros, total] = await Promise.all([
     prisma.historicoStatus.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: POR_PAGINA,
       skip: (pagina - 1) * POR_PAGINA,
       select: {
@@ -93,5 +91,5 @@ export async function GET(req: NextRequest) {
     pagina,
     porPagina: POR_PAGINA,
     temMais: pagina * POR_PAGINA < total,
-  })
+  }, { headers: { "Cache-Control": "private, no-store" } })
 }
