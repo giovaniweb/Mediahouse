@@ -63,8 +63,8 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
-  const [aiSuggestion, setAiSuggestion] = useState("")
-  const [aiLoading, setAiLoading] = useState(false)
+  const [suggestion, setSuggestion] = useState("")
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
 
   useEffect(() => {
     if (produto) setForm({ nome: produto.nome, descricao: produto.descricao ?? "", categoria: produto.categoria ?? "", peso: produto.peso, alertaDias: produto.alertaDias })
@@ -110,16 +110,16 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) { toast.error(mensagemDeErro(err)) }
   }
 
-  async function fetchAiSuggestion() {
-    setAiLoading(true); setAiSuggestion("")
+  async function fetchSuggestion() {
+    setSuggestionLoading(true); setSuggestion("")
     try {
-      const res = await fetch("/api/produtos/sugestoes")
+      const res = await fetch(`/api/produtos/sugestoes?produtoId=${encodeURIComponent(id)}`)
       const data = await res.json()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const match = data.sugestoes?.find((s: any) => s.id === id)
-      setAiSuggestion(match?.sugestao || "Nenhuma sugestão disponível.")
-    } catch { setAiSuggestion("Erro ao gerar sugestão.") }
-    finally { setAiLoading(false) }
+      if (!res.ok) throw new Error(data.error || "Não foi possível consultar a sugestão.")
+      const match = data.sugestoes?.find((s: { id: string; sugestao: string }) => s.id === id)
+      setSuggestion(match?.sugestao || "Nenhuma sugestão disponível.")
+    } catch (err) { setSuggestion(mensagemDeErro(err)) }
+    finally { setSuggestionLoading(false) }
   }
 
   if (!produto) {
@@ -418,15 +418,16 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
           )}
         </div>
 
-        {/* ── AI Suggestion ── */}
+        {/* ── Sugestão por regras ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-400" /><h2 className="font-semibold text-zinc-100">Sugestao IA</h2></div>
-            <button onClick={fetchAiSuggestion} disabled={aiLoading} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-700 text-purple-300 hover:bg-purple-600/30 transition-colors disabled:opacity-50">
-              {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Gerar
+            <div className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-400" /><h2 className="font-semibold text-zinc-100">Sugestão de conteúdo</h2></div>
+            <button onClick={fetchSuggestion} disabled={suggestionLoading} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-700 text-purple-300 hover:bg-purple-600/30 transition-colors disabled:opacity-50">
+              {suggestionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Consultar
             </button>
           </div>
-          <p className={cn("text-sm leading-relaxed", aiSuggestion ? "text-zinc-300" : "text-zinc-500")}>{aiSuggestion || "Clique em 'Gerar' para uma sugestao de conteudo."}</p>
+          <p className="text-xs text-zinc-500 mb-2">Orientação por regras, baseada no tempo sem conteúdo registrado.</p>
+          <p className={cn("text-sm leading-relaxed", suggestion ? "text-zinc-300" : "text-zinc-500")}>{suggestion || "Clique em 'Consultar' para uma sugestão de conteúdo."}</p>
         </div>
 
         {/* ── Linked Demands ── */}

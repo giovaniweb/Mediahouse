@@ -3,7 +3,11 @@ import { criarRelatorioV1, apresentarRelatorio, tiposRelatorio, lerRespostaRelat
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { analisarComClaude, MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
+import { MODELO_POTENTE, MODELO_RAPIDO } from "@/lib/claude"
+import { analisarComOrcamento, FalhaAnaliseIA } from "@/lib/ia-analise"
+import { CACHE_RELATORIO_MS, chaveRelatorioCache, cacheRelatorioValido } from "@/lib/relatorio-cache"
+import { criarOrcamentoIA } from "@/lib/ia-orcamento"
+import { LimiteIA } from "@/lib/ia-orcamento"
 import { recorteMetricas, RecorteInvalido } from "@/lib/metricas-recorte"
 import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
 import { comOrg } from "@/lib/org-contexto"
@@ -11,9 +15,9 @@ import { comOrg } from "@/lib/org-contexto"
 export async function POST(req: NextRequest) {
   const acesso = await requireAcesso("verRelatorios")
   if (acesso instanceof NextResponse) return acesso
-  const body = z.object({ tipo: tiposRelatorio, periodo: z.enum(["semanal", "mensal", "realtime", "semana", "mes", "3meses", "ano", "custom"]).optional(), area: z.enum(["audiovisual", "design", "growth"]).optional(), de: z.string().optional(), ate: z.string().optional(), mes: z.string().optional() }).strict().safeParse(await req.json().catch(() => null))
+  const body = z.object({ analiseIA: z.boolean().optional().default(false), tipo: tiposRelatorio, periodo: z.enum(["semanal", "mensal", "realtime", "semana", "mes", "3meses", "ano", "custom"]).optional(), area: z.enum(["audiovisual", "design", "growth"]).optional(), de: z.string().optional(), ate: z.string().optional(), mes: z.string().optional() }).strict().safeParse(await req.json().catch(() => null))
   if (!body.success) return NextResponse.json({ error: "Tipo ou período inválido" }, { status: 400 })
-  const { tipo, ...filtros } = body.data
+  const { tipo, analiseIA, ...filtros } = body.data
   // Bancos legados misturam finanças: só novos snapshots operacionais podem dispensar verCustos.
   const financeiro = acesso.permissoes.verCustos
   if (!financeiro && ["analise_custos", "otimizacao_contratacao", "performance_videomaker"].includes(tipo)) return NextResponse.json({ error: "Este relatório exige acesso financeiro" }, { status: 403 })
@@ -25,15 +29,43 @@ export async function POST(req: NextRequest) {
     const dados = await comOrg(acesso.organizacaoId, () => metricasRelatorio(acesso.organizacaoId,recorte,financeiro))
     const snapshot = snapshotDoRelatorio(dados)
     const operacional = snapshot.metricas
-    const modelo = tipo === "realtime" ? MODELO_RAPIDO : MODELO_POTENTE
-    const { texto, tokens } = await analisarComClaude(`Analise o snapshot autorizado do relatório ${tipo}. Responda em português com uma análise textual concisa, sem HTML. Não invente números, nomes, rankings, publicações ou dados ausentes. Os valores null significam não medido. As fontes manuais são mensais e NÃO podem ser somadas às entregas automáticas: pode haver duplicação. Custos abrangem apenas lançamentos vinculados à área selecionada. Não trate o índice de referência de produção como receita ou lucro. Explique limitações relevantes.\nSNAPSHOT:\n${JSON.stringify(snapshot)}`, "", modelo)
+    let modelo = "regras-v1"
+    let texto = "Relatório de indicadores calculados pelo sistema. A análise textual de IA não foi solicitada.", tokens = 0
+    let chaveCache: string | undefined
+    if (analiseIA) {
+      modelo = tipo === "realtime" ? MODELO_RAPIDO : MODELO_POTENTE
+      try {
+        // Opt-in e autorização atuais antecedem o cache; desativação também vale para reuso.
+        const uso = await criarOrcamentoIA(prisma).resumo(acesso.organizacaoId)
+        if (!uso.habilitadaEfetiva) throw new LimiteIA("indisponivel")
+        chaveCache = chaveRelatorioCache({ organizacaoId: acesso.organizacaoId, usuarioId: acesso.usuarioId, financeiro, tipo, modelo, snapshot })
+        const agora = new Date()
+        const anterior = await comOrg(acesso.organizacaoId, () => prisma.relatorioIA.findFirst({
+          where: { organizacaoId: acesso.organizacaoId, tipo, modelo, createdAt: { gte: new Date(+agora - CACHE_RELATORIO_MS), lte: agora }, conteudo: { path: ["cacheIA", "chave"], equals: chaveCache } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        }))
+        const documentoAnterior = anterior && cacheRelatorioValido(anterior.conteudo, chaveCache)
+        if (anterior && documentoAnterior) {
+          const { conteudo: _conteudoAnterior, ...metadadosAnteriores } = anterior
+          return NextResponse.json({ relatorio: { ...metadadosAnteriores, apresentacao: apresentarRelatorio(documentoAnterior) }, tokens: 0, reutilizado: true }, { headers: { "Cache-Control": "private, no-store" } })
+        }
+        const analise = await analisarComOrcamento(`Analise o snapshot autorizado do relatório ${tipo}. Responda em português com uma análise textual concisa, sem HTML. Não invente números, nomes, rankings, publicações ou dados ausentes. Os valores null significam não medido. As fontes manuais são mensais e NÃO podem ser somadas às entregas automáticas: pode haver duplicação. Custos abrangem apenas lançamentos vinculados à área selecionada. Não trate o índice de referência de produção como receita ou lucro. Explique limitações relevantes.\nSNAPSHOT:\n${JSON.stringify(snapshot)}`, "", modelo, { organizacaoId: acesso.organizacaoId, usuarioId: acesso.usuarioId, finalidade: `relatorio.${tipo}` })
+        texto = analise.texto
+        tokens = analise.tokens
+      } catch (e) {
+        if (!(e instanceof LimiteIA) && !(e instanceof FalhaAnaliseIA)) throw e
+        texto = `${e.message} Os indicadores abaixo foram calculados pelo sistema, sem análise textual de IA.`
+        modelo = "regras-v1"
+      }
+    }
     const documento = criarRelatorioV1(lerRespostaRelatorio(texto), { tipo, periodo: `${recorte.de} a ${recorte.ate}`, area: recorte.area, origem: "manual", geradoEm: operacional.geradoEm, inicio: recorte.inicio, fim: recorte.fim }, snapshot)
+    if (chaveCache && modelo !== "regras-v1" && documento.conteudo.formato !== "invalido") documento.cacheIA = { chave: chaveCache, versao: 1 }
     const relatorio = await comOrg(acesso.organizacaoId, () => prisma.relatorioIA.create({ data: { organizacaoId: acesso.organizacaoId, tipo, periodo: documento.metadados.periodo, conteudo: documento, tokens, modelo } }))
     const { conteudo: _conteudo, ...metadados } = relatorio
-    return NextResponse.json({ relatorio: { ...metadados, apresentacao: apresentarRelatorio(documento) }, tokens }, { headers: { "Cache-Control": "private, no-store" } })
+    return NextResponse.json({ relatorio: { ...metadados, apresentacao: apresentarRelatorio(documento) }, tokens, reutilizado: false }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (e) {
     if (e instanceof RecorteInvalido) return NextResponse.json({ error: e.message }, { status: 400 })
     console.error("Erro ao gerar relatório")
-    return NextResponse.json({ error: "Erro ao gerar relatório com IA" }, { status: 500 })
+    return NextResponse.json({ error: "Erro ao gerar relatório" }, { status: 500 })
   }
 }

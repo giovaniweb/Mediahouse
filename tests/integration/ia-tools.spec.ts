@@ -1,3 +1,4 @@
+import { processarInbox } from "@/lib/whatsapp-inbox"
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { randomUUID } from "node:crypto"
@@ -9,7 +10,7 @@ vi.mock("@/app/api/demandas/route", () => ({ notificarLideresAudiovisual: vi.fn(
 vi.mock("@/lib/claude", () => ({ executarAgenteComTools: vi.fn(), MODELO_WHATSAPP: "teste", TOOLS_WHATSAPP: [], TOOLS_WHATSAPP_DESCONHECIDO: [], SYSTEM_WHATSAPP: "teste" }))
 vi.mock("@/lib/storage", () => ({ downloadEvolutionMedia: vi.fn(), uploadMedia: vi.fn() }))
 vi.mock("@/lib/transcription", () => ({ transcreverAudio: vi.fn() }))
-vi.mock("@/lib/secret-crypto", () => ({ decryptSecret: (s: string) => s }))
+vi.mock("@/lib/secret-crypto", () => ({ decryptSecret: (s: string) => s, encryptSecret: (s: string) => s }))
 import { POST as webhook } from "@/app/api/whatsapp/webhook/route"
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
@@ -42,6 +43,13 @@ afterAll(async () => {
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 describe("executor autorizado", () => {
+  it("combina status, atraso e parada sem sobrescrever status solicitado",async()=>{
+    await db.demanda.update({where:{id:own},data:{statusInterno:"editando",statusVisivel:"edicao",dataLimite:new Date(Date.now()-5*86400_000),updatedAt:new Date(Date.now()-5*86400_000)}})
+    await db.demanda.update({where:{id:hidden},data:{statusInterno:"fila_edicao",statusVisivel:"edicao",dataLimite:new Date(Date.now()-5*86400_000),updatedAt:new Date(Date.now()-5*86400_000)}})
+    const r=await chamar("buscar_demandas",{status:"editando",em_atraso:true,paradas_ha_dias:3},gestor())
+    expect(r.demandas.map((d:{id:string})=>d.id)).toEqual([own])
+  })
+
   it("nega contexto ausente, string antiga e objeto forjado", async () => {
     for (const ctx of [undefined, a, { organizacaoId: a, principal: { tipo: "sistema", agente: "vistoria" } }]) expect(JSON.parse(await executarFerramenta("buscar_metricas", {}, ctx as ContextoFerramenta))).toHaveProperty("erro")
   })
@@ -92,7 +100,7 @@ describe("executor autorizado", () => {
     for (const nome of ["buscar_demandas", "buscar_metricas", "listar_gestores", "buscar_ideias", "buscar_videomakers"]) expect(await chamar(nome, {}, ctx)).toHaveProperty("erro")
     expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "Vazamento" }, ctx)).toHaveProperty("erro")
     expect(sendWhatsappMessage).not.toHaveBeenCalled()
-    expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Resposta" }, ctx)).toHaveProperty("enviado", true)
+    expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Resposta" }, ctx)).toHaveProperty("agendado", true)
     expect(sendWhatsappMessage).toHaveBeenCalledWith(externo, "Resposta", undefined, a)
   })
   it("rascunho externo não forja solicitante ou publica", async () => {
@@ -106,7 +114,7 @@ describe("executor autorizado", () => {
     expect(await chamar("enviar_whatsapp", { telefone: externo, mensagem: "Invasão" }, ctx)).toHaveProperty("erro")
     expect(await chamar("enviar_whatsapp", { telefone: telOutro, mensagem: "Outro", demanda_id: own }, ctx)).toHaveProperty("erro")
     expect(sendWhatsappMessage).not.toHaveBeenCalled()
-    expect(await chamar("enviar_whatsapp", { telefone: tel, mensagem: "Prazo", demanda_id: own }, ctx)).toHaveProperty("enviado", true)
+    expect(await chamar("enviar_whatsapp", { telefone: tel, mensagem: "Prazo", demanda_id: own }, ctx)).toHaveProperty("agendado", true)
   })
   it("mesmo sufixo em outro DDD/empresa não confunde identidade", async () => {
     const r = await comOrg(a, () => identidadeWhatsApp(a, telOutro)); expect(r.usuario).toBeNull(); expect(r.videomaker?.id).toBe(outro)
@@ -114,18 +122,20 @@ describe("executor autorizado", () => {
   })
   it("webhook sem segredo, com segredo errado e LID solto não executa convite", async () => {
     await db.demanda.update({ where: { id: own }, data: { statusInterno: "videomaker_notificado" } })
-    const enviar = (secret: string, remoteJid = `${tel}@s.whatsapp.net`) => webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": secret }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), remoteJid }, message: { conversation: "SIM" } } }) }))
+    const enviar = (secret: string, remoteJid = `${tel}@s.whatsapp.net`) => webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": secret }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), fromMe: false, remoteJid }, message: { conversation: "SIM" } } }) }))
     await enviar("errado")
     await enviar("segredo-sintetico", "12345678@lid")
     await db.configWhatsapp.update({ where: { organizacaoId: a }, data: { webhookSecret: null } })
     try { await enviar("segredo-sintetico") } finally { await db.configWhatsapp.update({ where: { organizacaoId: a }, data: { webhookSecret: "segredo-sintetico" } }) }
+    await processarInbox(a)
     expect((await db.demanda.findUniqueOrThrow({ where: { id: own } })).statusInterno).toBe("videomaker_notificado")
     expect(sendWhatsappMessage).not.toHaveBeenCalled()
   })
   it("dois SIM autenticados gravam uma única transição/histórico", async () => {
     await db.demanda.update({ where: { id: own }, data: { statusInterno: "videomaker_notificado" } })
-    const enviar = () => webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": "segredo-sintetico" }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), remoteJid: `${tel}@s.whatsapp.net` }, message: { conversation: "SIM" } } }) }))
+    const enviar = () => webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": "segredo-sintetico" }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), fromMe: false, remoteJid: `${tel}@s.whatsapp.net` }, message: { conversation: "SIM" } } }) }))
     await Promise.all([enviar(), enviar()])
+    await processarInbox(a)
     expect((await db.demanda.findUniqueOrThrow({ where: { id: own } })).statusInterno).toBe("videomaker_aceitou")
     expect(await db.historicoStatus.count({ where: { demandaId: own, statusNovo: "videomaker_aceitou" } })).toBe(1)
   })
@@ -148,7 +158,8 @@ describe("executor autorizado", () => {
   it("SIM sem código não escolhe entre dois convites pendentes", async () => {
     await db.demanda.updateMany({ where: { id: { in: [own, hidden] } }, data: { videomakerId: vm, statusInterno: "videomaker_notificado" } })
     try {
-      await webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": "segredo-sintetico" }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), remoteJid: `${tel}@s.whatsapp.net` }, message: { conversation: "SIM" } } }) }))
+      await webhook(new NextRequest("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-webhook-secret": "segredo-sintetico" }, body: JSON.stringify({ instance: p, event: "messages.upsert", data: { key: { id: randomUUID(), fromMe: false, remoteJid: `${tel}@s.whatsapp.net` }, message: { conversation: "SIM" } } }) }))
+      await processarInbox(a)
       expect(await db.demanda.count({ where: { id: { in: [own, hidden] }, statusInterno: "videomaker_notificado" } })).toBe(2)
     } finally { await db.demanda.update({ where: { id: hidden }, data: { videomakerId: outro, statusInterno: "pedido_criado" } }) }
   })
@@ -159,7 +170,7 @@ describe("executor autorizado", () => {
     const e = await db.eventoAuditoria.findFirstOrThrow({ where: { organizacaoId: a, recursoId: r.id, acao: "ia.mutacao" } })
     expect(e.atorTipo).toBe("tecnico"); expect(e.atorId).toBe("agente.vistoria"); expect(JSON.stringify(e)).not.toContain("conteudo-privado")
     const antes = await db.eventoAuditoria.count({ where: { organizacaoId: a, acao: "ia.envio" } })
-    expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "conteudo-privado-auditoria" }, gestor())).toHaveProperty("enviado",true)
+    expect(await chamar("enviar_whatsapp", { telefone: telAdmin, mensagem: "conteudo-privado-auditoria" }, gestor())).toHaveProperty("agendado",true)
     const envios = await db.eventoAuditoria.findMany({ where: { organizacaoId: a, acao: "ia.envio" }, orderBy: { createdAt: "desc" }, take: 2 })
     expect(await db.eventoAuditoria.count({ where: { organizacaoId: a, acao: "ia.envio" } })).toBe(antes+2)
     expect(new Set(envios.map(e => e.correlationId)).size).toBe(1)

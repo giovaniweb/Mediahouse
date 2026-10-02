@@ -1,48 +1,31 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireEventoAccess } from "@/lib/eventos-access"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
 import type { StatusEventoGestao } from "@prisma/client"
 
-// GET /api/eventos/dashboard — métricas gerais do módulo
 export async function GET() {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  const agora = new Date()
-  const ATIVOS = { notIn: ["finalizado", "cancelado"] as StatusEventoGestao[] }
-
-  const [proximos, emProducao, atrasados, finalizados, orcamentoAgg, custosEventoAgg, docsPendentes, pagamentosPendentes] =
-    await Promise.all([
-      prisma.eventoGestao.count({ where: { status: ATIVOS, dataInicio: { gte: agora } } }),
-      prisma.eventoGestao.count({ where: { status: { in: ["producao", "execucao"] } } }),
-      prisma.eventoGestao.count({ where: { status: ATIVOS, dataFim: { lt: agora } } }),
-      prisma.eventoGestao.count({ where: { status: "finalizado" } }),
-      prisma.eventoGestao.aggregate({ _sum: { orcamentoPrevisto: true } }),
-      prisma.custoEvento.aggregate({ _sum: { valorPrevisto: true, valorReal: true } }),
-      prisma.eventoGestaoDocumento.count({ where: { status: "pendente" } }),
-      prisma.custoEvento.count({ where: { pago: false } }),
-    ])
-
-  // Custo audiovisual: CustoVideomaker das demandas vinculadas a eventos
-  const demandasEvento = await prisma.demanda.findMany({
-    where: { eventoGestaoId: { not: null } },
-    select: { id: true },
-  })
-  const demandaIds = demandasEvento.map((d) => d.id)
-  const custoAv = demandaIds.length
-    ? await prisma.custoVideomaker.aggregate({ where: { demandaId: { in: demandaIds } }, _sum: { valor: true } })
-    : { _sum: { valor: 0 } }
-
-  const totalGasto = (custosEventoAgg._sum.valorReal ?? custosEventoAgg._sum.valorPrevisto ?? 0) + (custoAv._sum.valor ?? 0)
-
-  return NextResponse.json({
-    proximos,
-    emProducao,
-    atrasados,
-    finalizados,
-    totalPrevisto: orcamentoAgg._sum.orcamentoPrevisto ?? 0,
-    totalGasto,
-    docsPendentes,
-    pagamentosPendentes,
-  })
+  const acesso = await requireAcesso("verEventos")
+  if (acesso instanceof NextResponse) return acesso
+  const organizacaoId = acesso.organizacaoId
+  try {
+    const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      const agora = new Date(), ativos = { notIn: ["finalizado", "cancelado"] as StatusEventoGestao[] }
+      const proximos = await tx.eventoGestao.count({ where: { organizacaoId, status: ativos, dataInicio: { gte: agora } } })
+      const emProducao = await tx.eventoGestao.count({ where: { organizacaoId, status: { in: ["producao", "execucao"] } } })
+      const atrasados = await tx.eventoGestao.count({ where: { organizacaoId, status: ativos, dataFim: { lt: agora } } })
+      const finalizados = await tx.eventoGestao.count({ where: { organizacaoId, status: "finalizado" } })
+      const docsPendentes = await tx.eventoGestaoDocumento.count({ where: { evento: { organizacaoId }, status: "pendente", ...(acesso.permissoes.verFinanceiroEvento ? {} : { categoria: { not: "contratos" as const } }) } })
+      let financeiro = null
+      if (acesso.permissoes.verFinanceiroEvento) {
+        const orcamentos = await tx.eventoGestao.aggregate({ where: { organizacaoId }, _sum: { orcamentoPrevisto: true } })
+        const custos = await tx.custoEvento.aggregate({ where: { evento: { organizacaoId } }, _sum: { valorPrevisto: true, valorReal: true } })
+        const itensSemRealizado = await tx.custoEvento.count({ where: { evento: { organizacaoId }, valorReal: null } })
+        const pagamentosPendentes = await tx.custoEvento.count({ where: { evento: { organizacaoId }, pago: false } })
+        financeiro = { totalPrevisto: orcamentos._sum.orcamentoPrevisto, custosPrevistos: custos._sum.valorPrevisto, realizadoInformado: custos._sum.valorReal, itensSemRealizado, pagamentosPendentes }
+      }
+      return { proximos, emProducao, atrasados, finalizados, docsPendentes, financeiro }
+    }, { isolationLevel: "RepeatableRead" }))
+    return NextResponse.json(resultado, { headers: { "Cache-Control": "private, no-store" } })
+  } catch { return NextResponse.json({ error: "Não foi possível consultar os indicadores de eventos." }, { status: 503 }) }
 }

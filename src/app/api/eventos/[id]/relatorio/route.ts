@@ -1,80 +1,64 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireEventoAccess } from "@/lib/eventos-access"
-import { requireEventoGestaoOrg } from "@/lib/org"
-import { analisarComClaude, MODELO_POTENTE } from "@/lib/claude"
+import { requireAcesso } from "@/lib/acesso"
+import { comOrg } from "@/lib/org-contexto"
 
+const moeda = (valor: number | null) => valor === null ? "Não informado" : valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+const data = (valor: Date) => valor.toLocaleDateString("pt-BR", { timeZone: "UTC" })
 type Params = { params: Promise<{ id: string }> }
 
-// POST /api/eventos/[id]/relatorio — gera relatório final do evento com IA
+/** Resumo factual. Não avalia desempenho nem depende de provedor de IA. */
 export async function POST(_req: NextRequest, { params }: Params) {
-  const session = await requireEventoAccess()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
+  const acesso = await requireAcesso("verEventos")
+  if (acesso instanceof NextResponse) return acesso
   const { id } = await params
-  const guard = await requireEventoGestaoOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const evento = await prisma.eventoGestao.findUnique({
-    where: { id },
-    include: {
-      checklist: true,
-      documentos: true,
-      custos: { include: { fornecedor: { select: { nome: true } } } },
-      demandas: { select: { titulo: true, tipoVideo: true, statusVisivel: true } },
-      responsavel: { select: { nome: true } },
-    },
-  })
-  if (!evento) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
-
-  const demandaIds = (await prisma.demanda.findMany({ where: { eventoGestaoId: id }, select: { id: true } })).map((d) => d.id)
-  const custoAv = demandaIds.length
-    ? await prisma.custoVideomaker.aggregate({ where: { demandaId: { in: demandaIds } }, _sum: { valor: true } })
-    : { _sum: { valor: 0 } }
-
-  const tarefasOk = evento.checklist.filter((t) => t.concluido).length
-  const custoEvento = evento.custos.reduce((a, c) => a + (c.valorReal ?? c.valorPrevisto), 0)
-  const custoTotal = custoEvento + (custoAv._sum.valor ?? 0)
-
-  const contexto = `
-EVENTO: ${evento.nome} (${evento.tipo})
-Período: ${evento.dataInicio.toLocaleDateString("pt-BR")} a ${evento.dataFim.toLocaleDateString("pt-BR")}
-Local: ${evento.local ?? "—"} · ${evento.cidade ?? "—"}/${evento.estado ?? "—"}
-Responsável: ${evento.responsavel?.nome ?? "—"}
-Status: ${evento.status} · Conclusão: ${evento.percentualConclusao}%
-Objetivo: ${evento.objetivo ?? "—"}
-
-CHECKLIST: ${tarefasOk}/${evento.checklist.length} tarefas concluídas
-DOCUMENTOS: ${evento.documentos.length} (${evento.documentos.map((d) => d.nome).join(", ") || "nenhum"})
-PEÇAS AUDIOVISUAIS (demandas): ${evento.demandas.map((d) => `${d.titulo} [${d.statusVisivel}]`).join("; ") || "nenhuma"}
-
-FINANCEIRO:
-Orçamento previsto: R$ ${evento.orcamentoPrevisto ?? 0}
-Custo fornecedores: R$ ${custoEvento.toFixed(2)}
-Custo audiovisual: R$ ${(custoAv._sum.valor ?? 0).toFixed(2)}
-Custo total: R$ ${custoTotal.toFixed(2)}
-Custos por categoria: ${evento.custos.map((c) => `${c.categoria}: R$${(c.valorReal ?? c.valorPrevisto).toFixed(2)}`).join(", ") || "—"}
-`.trim()
-
-  const prompt = `Você é um analista de produção de eventos. Com base nos dados acima, gere um RELATÓRIO FINAL DO EVENTO em markdown, conciso e executivo, com as seções:
-## Resumo do Evento
-## Entregas Audiovisuais
-## Financeiro (previsto x real, destaques)
-## Pendências e Pontos de Atenção
-## Aprendizados para Próximos Eventos
-Use linguagem objetiva em português do Brasil.`
-
+  const organizacaoId = acesso.organizacaoId
   try {
-    const { texto } = await analisarComClaude(prompt, contexto, MODELO_POTENTE)
-    await prisma.eventoGestaoLog.create({
-      data: { eventoId: id, usuarioId: session.user.id, acao: "relatorio_gerado", detalhe: "Relatório final gerado por IA" },
-    }).catch(() => null)
-    return NextResponse.json({ relatorio: texto })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    const credits = msg.includes("credit balance") || msg.includes("insufficient")
-    return NextResponse.json(
-      { error: credits ? "Saldo insuficiente na API Anthropic. Adicione créditos para gerar o relatório." : `Erro ao gerar relatório: ${msg}` },
-      { status: 500 }
-    )
+    const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+      const evento = await tx.eventoGestao.findFirst({
+        where: { id, organizacaoId },
+        select: { nome: true, status: true, dataInicio: true, dataFim: true, local: true, cidade: true,
+          responsavel: { select: { nome: true } },
+          checklist: { select: { concluido: true } },
+          _count: { select: { documentos: { where: acesso.permissoes.verFinanceiroEvento ? {} : { categoria: { not: "contratos" } } } } },
+          demandas: { where: { organizacaoId }, select: { statusVisivel: true } },
+        },
+      })
+      if (!evento) return null
+      const concluidas = evento.checklist.filter(t => t.concluido).length
+      const entregasConcluidas = evento.demandas.filter(d => d.statusVisivel === "finalizado").length
+      const linhas = [
+        `Resumo do evento: ${evento.nome}`,
+        `Período: ${data(evento.dataInicio)} a ${data(evento.dataFim)}`,
+        `Local: ${evento.local ?? "Não informado"} · ${evento.cidade ?? "Não informada"}`,
+        `Responsável: ${evento.responsavel?.nome ?? "Não atribuído"}`,
+        `Status registrado: ${evento.status}`,
+        "", "Acompanhamento",
+        `Checklist: ${concluidas} de ${evento.checklist.length} itens concluídos.`,
+        `Pendências do checklist: ${evento.checklist.length - concluidas}.`,
+        `Documentos cadastrados: ${evento._count.documentos}.`,
+        `Demandas vinculadas: ${evento.demandas.length}; com status finalizado: ${entregasConcluidas}.`,
+        "Status finalizado não confirma publicação nem aprovação de todos os arquivos.",
+      ]
+      if (acesso.permissoes.verFinanceiroEvento) {
+        const financeiro = await tx.eventoGestao.findFirstOrThrow({ where: { id, organizacaoId }, select: { orcamentoPrevisto: true, custos: { select: { valorPrevisto: true, valorReal: true } } } })
+        const realizados = financeiro.custos.filter(c => c.valorReal !== null)
+        const av = acesso.permissoes.verCustos ? await tx.custoVideomaker.aggregate({ where: { organizacaoId, demanda: { organizacaoId, eventoGestaoId: id } }, _sum: { valor: true }, _count: true }) : null
+        linhas.push("", "Financeiro — lançamentos registrados",
+          `Orçamento previsto do evento: ${moeda(financeiro.orcamentoPrevisto)}.`,
+          `Previsão dos itens de custo: ${financeiro.custos.length ? moeda(financeiro.custos.reduce((s, c) => s + c.valorPrevisto, 0)) : "Sem lançamentos"}.`,
+          `Valor realizado informado: ${moeda(realizados.length ? realizados.reduce((s, c) => s + c.valorReal!, 0) : null)}.`,
+          `Itens sem valor realizado informado: ${financeiro.custos.length - realizados.length}.`,
+          ...(av ? [`Custos audiovisuais vinculados: ${av._count ? moeda(av._sum.valor) : "Sem lançamentos"}.`] : []),
+          "Custos do evento e audiovisuais são apresentados separadamente: os registros podem se sobrepor. Valores previstos não substituem realizados; estes lançamentos não comprovam pagamento.")
+      }
+      linhas.push("", "Resumo calculado a partir dos registros atuais, sem IA. Não mede qualidade, alcance ou retorno do evento.")
+      await tx.eventoGestaoLog.create({ data: { eventoId: id, usuarioId: acesso.usuarioId, acao: "relatorio_gerado", detalhe: "Resumo por regras, sem IA; financeiro conforme permissão." } })
+      return { relatorio: linhas.join("\n"), origem: "regras-v1", tokens: 0 }
+    }, { isolationLevel: "RepeatableRead" }))
+    if (!resultado) return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+    return NextResponse.json(resultado, { headers: { "Cache-Control": "private, no-store" } })
+  } catch {
+    return NextResponse.json({ error: "Não foi possível gerar o resumo do evento. Tente novamente." }, { status: 503 })
   }
 }

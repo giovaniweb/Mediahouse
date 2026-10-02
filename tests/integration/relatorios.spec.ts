@@ -5,12 +5,13 @@ const { estado, analisar } = vi.hoisted(() => ({ estado: { sessao: null as null 
 vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@/lib/claude", () => ({ analisarComClaude: analisar, MODELO_POTENTE: "simulado", MODELO_RAPIDO: "simulado", extrairJSON: (s: string) => { try { return JSON.parse(s) } catch { return null } } }))
+vi.mock("@/lib/ia-analise", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/ia-analise")>(), analisarComOrcamento: analisar }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET } from "@/app/api/relatorios/route"
 import { POST } from "@/app/api/relatorios/gerar/route"
 const p = `rel-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, u = `${p}-u`
-const gerar = (body: unknown) => POST(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify(body) }))
+const gerar = (body: unknown) => POST(new NextRequest("http://localhost/api/relatorios/gerar", { method: "POST", body: JSON.stringify({ analiseIA: true, ...(body as Record<string, unknown>) }) }))
 beforeAll(async () => {
   await db.organizacao.createMany({ data: [a,b].map(id => ({ id, nome: id, slug: id })) })
   await db.usuario.create({ data: { id: u, nome: u, tipo: "admin", senhaHash: "sem-login" } })

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 /** Número completo; LID nunca é telefone. Sem busca por sufixo ou nome. */
@@ -11,16 +12,16 @@ export function telefoneCompleto(valor: unknown): string | null {
   return /^[1-9]\d{9,14}$/.test(digits) ? digits : null
 }
 
-export async function identidadeWhatsApp(organizacaoId: string, telefone: string) {
+export async function identidadeWhatsApp(organizacaoId: string, telefone: string, db: Pick<Prisma.TransactionClient, "usuario" | "editor" | "videomaker" | "contatoWhatsApp"> = prisma) {
   const alvo = telefoneCompleto(`${telefone}@s.whatsapp.net`)
   if (!alvo) throw new Error("Remetente não verificável")
   // Normalização em memória preserva números formatados legados, sempre dentro
   // da empresa. Índice canônico poderá substituir esta leitura na migração O02.
   const [usuarios, editores, videomakers, contatos] = await Promise.all([
-    prisma.usuario.findMany({ where: { organizacoes: { some: { organizacaoId } }, telefone: { not: null } }, select: { id: true, nome: true, telefone: true, status: true, organizacoes: { where: { organizacaoId }, select: { papel: true } } } }),
-    prisma.editor.findMany({ where: { vinculos: { some: { organizacaoId, status: "ativo" } } }, select: { id: true, nome: true, telefone: true, whatsapp: true, usuarioId: true, usuario: { select: { status: true } } } }),
-    prisma.videomaker.findMany({ where: { vinculos: { some: { organizacaoId, status: { in: ["ativo", "preferencial"] }, emListaNegra: false } } }, select: { id: true, nome: true, telefone: true, cidade: true, usuarioId: true, usuario: { select: { status: true } } } }),
-    prisma.contatoWhatsApp.findMany({ where: { organizacaoId }, select: { id: true, nome: true, telefone: true } }),
+    db.usuario.findMany({ where: { organizacoes: { some: { organizacaoId } }, telefone: { not: null } }, select: { id: true, nome: true, telefone: true, status: true, organizacoes: { where: { organizacaoId }, select: { papel: true } } } }),
+    db.editor.findMany({ where: { vinculos: { some: { organizacaoId, status: "ativo" } } }, select: { id: true, nome: true, telefone: true, whatsapp: true, usuarioId: true, usuario: { select: { status: true } } } }),
+    db.videomaker.findMany({ where: { vinculos: { some: { organizacaoId, status: { in: ["ativo", "preferencial"] }, emListaNegra: false } } }, select: { id: true, nome: true, telefone: true, cidade: true, usuarioId: true, usuario: { select: { status: true } } } }),
+    db.contatoWhatsApp.findMany({ where: { organizacaoId }, select: { id: true, nome: true, telefone: true } }),
   ])
   const us = usuarios.filter(u => telefoneCompleto(u.telefone) === alvo)
   const ed = editores.filter(u => telefoneCompleto(u.telefone) === alvo || telefoneCompleto(u.whatsapp) === alvo)

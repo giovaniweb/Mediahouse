@@ -1,3 +1,7 @@
+import { receberEntrada, processarInbox } from "@/lib/whatsapp-inbox"
+import { encryptSecret } from "@/lib/secret-crypto"
+import { criarFila, enfileirar } from "@/lib/fila-duravel"
+import { criarOrcamentoIA } from "@/lib/ia-orcamento"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { PrismaClient } from "@prisma/client"
@@ -174,4 +178,131 @@ describe("Prisma conectado como runtime sem bypass", () => {
     expect((await admin.demanda.findUniqueOrThrow({ where: { id: da } })).titulo).toBe(da)
   })
 
+})
+
+describe("fila sob login runtime sem bypass", () => {
+  it("isola jobs/eventos, recusa contexto ausente e completa efeito local", async () => {
+    const fila = criarFila(db)
+    const criar = (org: string) => comOrg(org,()=>db.$transaction(tx=>enfileirar(tx,{
+      organizacaoId:org,tipo:"teste.runtime",referencia:org,chave:"runtime",expiraEm:new Date(Date.now()+60_000),
+    })))
+    const [ja,jb] = await Promise.all([criar(a),criar(b)])
+    expect(await comOrg(null,()=>db.jobAutomacao.count())).toBe(0)
+    expect((await comOrg(a,()=>db.jobAutomacao.findMany())).map(j=>j.id)).toEqual([ja.id])
+    await expect(comOrg(a,()=>db.$transaction(tx=>enfileirar(tx,{
+      organizacaoId:b,tipo:"teste.runtime",referencia:b,chave:"forjada",expiraEm:new Date(Date.now()+60_000),
+    })))).rejects.toThrow()
+    const [j] = await fila.reivindicar(a)
+    expect(j.id).toBe(ja.id)
+    expect(await fila.concluirLocal({id:j.id,organizacaoId:b,leaseToken:j.leaseToken!},async()=>{})).toBe(false)
+    expect(await fila.concluirLocal({id:j.id,organizacaoId:a,leaseToken:j.leaseToken!},async tx=>{
+      await tx.organizacao.update({where:{id:a},data:{nome:"efeito runtime"}})
+    })).toBe(true)
+    expect((await comOrg(b,()=>db.jobAutomacao.findUniqueOrThrow({where:{id:jb.id}}))).estado).toBe("pendente")
+    expect(await comOrg(b,()=>db.eventoJob.count({where:{jobId:ja.id}}))).toBe(0)
+    await expect(comOrg(a,()=>db.eventoJob.deleteMany({where:{jobId:ja.id}}))).rejects.toThrow()
+    await expect(comOrg(a,()=>db.jobAutomacao.delete({where:{id:ja.id}}))).rejects.toThrow()
+  })
+})
+
+describe("bootstrap e inbox WhatsApp sob RLS",()=>{
+  it("resolve só a instância, autentica e persiste com isolamento sem credencial de dono",async()=>{
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    const instance = `${p}-whatsapp`
+    try {
+      await admin.configWhatsapp.create({data:{organizacaoId:a,instanceId:instance,instanceUrl:"https://example.invalid",apiKey:"nao-usar",webhookSecret:encryptSecret("segredo-runtime")}})
+      const payload={instance,event:"messages.upsert",data:{key:{id:"ID-SINTETICO",fromMe:false,remoteJid:"5511999990001@s.whatsapp.net"},message:{conversation:"Olá"}}}
+      await expect(receberEntrada(payload,"errado")).rejects.toThrow("nao_autorizado")
+      expect((await receberEntrada(payload,"segredo-runtime")).resultado).toBe("persistido")
+      expect(await comOrg(null,()=>db.inboxWhatsapp.count())).toBe(0)
+      expect(await comOrg(b,()=>db.inboxWhatsapp.count())).toBe(0)
+      expect(await comOrg(a,()=>db.inboxWhatsapp.count())).toBe(1)
+      expect((await processarInbox(a)).concluidos).toBe(1)
+      await expect(prismaAuth.$queryRaw`SELECT * FROM public.whatsapp_instancia_org(${instance})`).rejects.toThrow()
+      await expect(prismaAuth.inboxWhatsapp.count()).rejects.toThrow()
+      await expect(comOrg(a,()=>db.inboxWhatsapp.deleteMany())).rejects.toThrow()
+    } finally {vi.unstubAllEnvs()}
+  })
+})
+
+describe("outbox sob RLS",()=>{
+  it("envia pelo runtime, isola recibos e bloqueia exclusão da trilha",async()=>{
+    const {criarSaida,processarSaidas}=await import("@/lib/whatsapp-outbox")
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    vi.stubEnv("WHATSAPP_EVOLUTION_CONTRATO","2.3.7")
+    const http=vi.mocked(fetch)
+    http.mockResolvedValueOnce(Response.json({key:{id:"PROV-RUNTIME"}}))
+    try {
+      await admin.usuario.update({where:{id:u},data:{telefone:"5511999990001"}})
+      await admin.configWhatsapp.update({where:{organizacaoId:a},data:{ativo:true}})
+      const s=await comOrg(a,()=>db.$transaction(tx=>criarSaida(tx,{organizacaoId:a,origem:"manual",referencia:u,chave:"runtime-saida",telefone:"5511999990001",texto:"Sintético",expiraEm:new Date(Date.now()+60000)})))
+      expect((await processarSaidas(a)).aceitos).toBe(1)
+      expect(await comOrg(b,()=>db.saidaWhatsapp.count())).toBe(0)
+      expect(await comOrg(null,()=>db.tentativaWhatsapp.count())).toBe(0)
+      const instance=`${p}-whatsapp`
+      await receberEntrada({instance,event:"messages.update",data:{keyId:"PROV-RUNTIME",remoteJid:"5511999990001@s.whatsapp.net",fromMe:true,status:"READ"}},"segredo-runtime")
+      expect((await comOrg(a,()=>db.saidaWhatsapp.findUniqueOrThrow({where:{id:s.id}}))).estado).toBe("lido")
+      await expect(comOrg(a,()=>db.reciboWhatsapp.deleteMany())).rejects.toThrow()
+      await expect(comOrg(a,()=>db.saidaWhatsapp.delete({where:{id:s.id}}))).rejects.toThrow()
+      await expect(prismaAuth.saidaWhatsapp.count()).rejects.toThrow()
+    } finally {vi.unstubAllEnvs()}
+  })
+})
+
+
+describe("regras O04 no runtime",()=>{
+  it("deriva notificarEm sob role restrito e cria intenção com isolamento",async()=>{
+    vi.stubEnv("EMAIL_ENCRYPTION_KEY","chave-sintetica-runtime-inbox")
+    try {
+      const {executarRotina}=await import("@/lib/automacoes-regras")
+      const e=await comOrg(a,()=>db.evento.create({data:{organizacaoId:a,titulo:"Runtime sintético",usuarioId:u,inicio:new Date(Date.now()+30*60000),fim:new Date(Date.now()+90*60000),lembreteMinutos:120}}))
+      expect(e.notificarEm?.getTime()).toBe(e.inicio.getTime()-120*60000)
+      const adulterado=await comOrg(a,()=>db.evento.update({where:{id:e.id},data:{notificarEm:new Date(0)}}))
+      expect(adulterado.notificarEm).toEqual(e.notificarEm)
+      const r=await executarRotina(a,"lembretes")
+      expect(r.intencoesCriadas).toBe(1)
+      expect(await comOrg(b,()=>db.saidaWhatsapp.count({where:{origem:"regra"}}))).toBe(0)
+      expect(await comOrg(null,()=>db.evento.count())).toBe(0)
+      await comOrg(a,()=>db.organizacao.update({where:{id:a},data:{ambienteTeste:true}}))
+      expect(await executarRotina(a,"alertas")).toHaveProperty("ignorada")
+    } finally {vi.unstubAllEnvs()}
+  })
+})
+
+
+describe("saúde O05 sob RLS",()=>{
+  it("consulta recibos correlacionados e pausa com auditoria no runtime",async()=>{
+    const {saudeWhatsapp,acompanharConsumidor,saudeConsumidores}=await import("@/lib/automacoes-saude")
+    const {controlarSaida}=await import("@/lib/whatsapp-outbox")
+    const s=await comOrg(a,()=>db.saidaWhatsapp.findFirstOrThrow({where:{origem:"regra",estado:"aguardando"}}))
+    await controlarSaida(a,s.id,u,"pausar")
+    expect((await saudeWhatsapp(a)).pausadas).toBe(1)
+    expect((await saudeWhatsapp(b)).pausadas).toBe(0)
+    await acompanharConsumidor(a,"whatsapp-inbox",async()=>({dados:true,contadores:{concluidos:0,falhos:1,pendentes:0}}))
+    expect((await saudeConsumidores(a))[0].estado).toBe("parcial")
+    expect((await saudeConsumidores(b))[0].estado).toBe("sem_registro")
+    expect(await comOrg(a,()=>db.eventoAuditoria.count({where:{acao:"whatsapp.pausar"}}))).toBe(1)
+  })
+})
+
+
+describe("orçamento O06 sob RLS", () => {
+  it("reserva e reconcilia com role restrito; impede leitura/escrita cruzada e exclusão", async () => {
+    await admin.organizacao.update({ where: { id: a }, data: { ambienteTeste: false } })
+    const controle = criarOrcamentoIA(db)
+    const r = await controle.reservar({ organizacaoId: a, usuarioId: u, finalidade: "relatorio.semanal" }, "claude-haiku-4-5", 100, 100)
+    await controle.iniciar(r)
+    await controle.reconciliar(r, { entrada: 10, saida: 20, cacheLeitura: null, cacheEscrita: null, provedorId: "msg-runtime" })
+    expect((await controle.resumo(a)).tokensMedidos).toBe(30)
+    expect(await comOrg(b, () => db.consumoIA.findMany())).toEqual([])
+    expect(await comOrg(null, () => db.consumoIA.count())).toBe(0)
+    await expect(comOrg(b, () => db.consumoIA.update({ where: { id: r.id }, data: { debitoTokens: 0 } }))).rejects.toThrow()
+    await expect(comOrg(a, () => db.consumoIA.deleteMany())).rejects.toThrow()
+    await expect(prismaAuth.consumoIA.count()).rejects.toThrow()
+    await comOrg(a, () => db.politicaIA.create({ data: { organizacaoId: a, tokensDia: 1000 } }))
+    expect(await comOrg(b, () => db.politicaIA.findMany())).toEqual([])
+    await expect(comOrg(b, () => db.politicaIA.update({ where: { organizacaoId: a }, data: { habilitada: false } }))).rejects.toThrow()
+    await expect(prismaAuth.politicaIA.count()).rejects.toThrow()
+    await expect(comOrg(a, () => db.politicaIA.deleteMany())).rejects.toThrow()
+  })
 })

@@ -1,0 +1,1 @@
+ALTER TABLE saidas_whatsapp ADD COLUMN pausada BOOLEAN NOT NULL DEFAULT false;

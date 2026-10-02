@@ -6,7 +6,6 @@ import {
   Lightbulb,
   Plus,
   Search,
-  Sparkles,
   TrendingUp,
   Calendar,
   CheckCircle,
@@ -65,12 +64,6 @@ const ORIGEM_ICONS: Record<string, typeof Instagram> = {
   outro: ExternalLink,
 }
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) return <span className="text-[10px] text-zinc-600">Sem score</span>
-  const color = score >= 70 ? "text-emerald-400 bg-emerald-500/15" : score >= 40 ? "text-amber-400 bg-amber-500/15" : "text-red-400 bg-red-500/15"
-  return <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", color)}>{score}</span>
-}
-
 export default function IdeiasPage() {
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [search, setSearch] = useState("")
@@ -81,7 +74,6 @@ export default function IdeiasPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showNewModal, setShowNewModal] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [analyzing, setAnalyzing] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
   // Debounce search
@@ -114,18 +106,6 @@ export default function IdeiasPage() {
       body: JSON.stringify({ ids: Array.from(selected), action }),
     })
     setSelected(new Set())
-    mutate()
-  }
-
-  async function handleAnalyzeBatch() {
-    setAnalyzing(true)
-    await fetch("/api/ideias/analisar-batch", { method: "POST" })
-    setAnalyzing(false)
-    mutate()
-  }
-
-  async function handleAnalyzeOne(id: string) {
-    await fetch(`/api/ideias/${id}/analisar`, { method: "POST" })
     mutate()
   }
 
@@ -177,14 +157,7 @@ export default function IdeiasPage() {
           <p className="text-sm text-zinc-500 mt-1">Capture, analise e transforme ideias em demandas</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleAnalyzeBatch}
-            disabled={analyzing}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 text-sm transition-colors disabled:opacity-50"
-          >
-            <Sparkles className="w-4 h-4" />
-            {analyzing ? "Analisando..." : "Analisar Novas"}
-          </button>
+
           <button
             onClick={() => setShowNewModal(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm transition-colors"
@@ -200,7 +173,7 @@ export default function IdeiasPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KPICard icon={Lightbulb} iconColor="text-yellow-400" label="Total Ideias" value={kpi.totalIdeias} sub={`${kpi.novas} novas`} />
           <KPICard icon={CheckCircle} iconColor="text-green-400" label="Aprovadas" value={kpi.aprovadas + kpi.emProducao + kpi.realizadas} sub={`${kpi.realizadas} realizadas`} />
-          <KPICard icon={TrendingUp} iconColor="text-purple-400" label="Taxa Conversão" value={`${kpi.taxaConversao}%`} sub={kpi.mediaScoreIA ? `Score médio: ${kpi.mediaScoreIA}` : "Sem análises"} />
+          <KPICard icon={TrendingUp} iconColor="text-purple-400" label="Taxa Conversão" value={`${kpi.taxaConversao}%`} sub="Ideias transformadas em demandas" />
           <KPICard icon={Calendar} iconColor="text-blue-400" label="Este Mês" value={kpi.ideiasEsteMes} sub={`${kpi.porOrigem?.find((o: { origem: string }) => o.origem === "whatsapp")?.count || 0} via WhatsApp`} />
         </div>
       )}
@@ -227,7 +200,6 @@ export default function IdeiasPage() {
               className="appearance-none pl-3 pr-8 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-300 outline-none"
             >
               <option value="createdAt">Mais recentes</option>
-              <option value="scoreIA">Score IA</option>
               <option value="produto">Produto</option>
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
@@ -349,7 +321,6 @@ export default function IdeiasPage() {
                     />
                     <h3 className="text-sm font-medium text-zinc-200 truncate">{ideia.titulo}</h3>
                   </div>
-                  <ScoreBadge score={ideia.scoreIA} />
                 </div>
 
                 {/* Description */}
@@ -402,13 +373,7 @@ export default function IdeiasPage() {
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {ideia.status !== "realizada" && ideia.status !== "em_producao" && !ideia.demanda && (
                       <>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleAnalyzeOne(ideia.id) }}
-                          className="p-1 rounded text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10"
-                          title="Analisar com IA"
-                        >
-                          <Brain className="w-3.5 h-3.5" />
-                        </button>
+
                         <button
                           onClick={(e) => { e.stopPropagation(); handleConvert(ideia.id) }}
                           className="p-1 rounded text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10"
@@ -453,7 +418,6 @@ export default function IdeiasPage() {
         <DetailModal
           ideia={detailIdeia}
           onClose={() => setDetailId(null)}
-          onAnalyze={() => handleAnalyzeOne(detailIdeia.id)}
           onConvert={() => handleConvert(detailIdeia.id)}
           onDelete={() => handleDelete(detailIdeia.id)}
           onUpdateStatus={(s) => handleUpdateStatus(detailIdeia.id, s)}
@@ -496,10 +460,9 @@ function KPICard({ icon: Icon, iconColor, label, value, sub }: {
   )
 }
 
-function DetailModal({ ideia, onClose, onAnalyze, onConvert, onDelete, onUpdateStatus, produtos, onUpdate }: {
+function DetailModal({ ideia, onClose, onConvert, onDelete, onUpdateStatus, produtos, onUpdate }: {
   ideia: IdeiaVideo
   onClose: () => void
-  onAnalyze: () => void
   onConvert: () => void
   onDelete: () => void
   onUpdateStatus: (s: string) => void
@@ -525,7 +488,6 @@ function DetailModal({ ideia, onClose, onAnalyze, onConvert, onDelete, onUpdateS
                 <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", statusCfg.bg, statusCfg.color)}>
                   {statusCfg.label}
                 </span>
-                <ScoreBadge score={ideia.scoreIA} />
               </div>
             </div>
             <button onClick={onClose} className="p-1 text-zinc-500 hover:text-white">
@@ -610,7 +572,8 @@ function DetailModal({ ideia, onClose, onAnalyze, onConvert, onDelete, onUpdateS
 
           {/* AI Analysis */}
           {ideia.analiseIA && (
-            <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4">
+            <details className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4">
+              <summary className="cursor-pointer text-sm">Análise antiga de IA (referência histórica)</summary>
               <div className="flex items-center gap-2 mb-2">
                 <Brain className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-medium text-purple-400">Análise IA</span>
@@ -625,7 +588,7 @@ function DetailModal({ ideia, onClose, onAnalyze, onConvert, onDelete, onUpdateS
               {ideia.sugestaoPrioridade && (
                 <p className="text-xs text-zinc-500">Prioridade: <span className="text-zinc-300 capitalize">{ideia.sugestaoPrioridade}</span></p>
               )}
-            </div>
+            </details>
           )}
 
           {/* Linked demand */}
@@ -656,11 +619,7 @@ function DetailModal({ ideia, onClose, onAnalyze, onConvert, onDelete, onUpdateS
 
           {/* Actions */}
           <div className="flex gap-2 pt-2 border-t border-zinc-800">
-            {!ideia.analiseIA && (
-              <button onClick={onAnalyze} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700">
-                <Brain className="w-4 h-4" /> Analisar com IA
-              </button>
-            )}
+
             {canConvert && (
               <button onClick={onConvert} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700">
                 <ArrowRight className="w-4 h-4" /> Converter em Demanda

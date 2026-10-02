@@ -54,12 +54,13 @@ export async function POST(req: Request) {
       undefined, organizacaoId
     )
 
-    if (result?.key?.id) {
+    if (result?.id) {
       return NextResponse.json({
         ok: true,
         status: state,
-        mensagemEnviada: true,
-        messageId: result.key.id,
+        mensagemEnviada: false,
+        mensagemAgendada: true,
+        saidaId: result.id,
         para: numero,
       })
     } else {

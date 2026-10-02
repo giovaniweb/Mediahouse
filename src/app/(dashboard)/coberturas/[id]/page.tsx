@@ -7,7 +7,7 @@ import Link from "next/link"
 import {
   ArrowLeft, CalendarRange, Users, CheckSquare, Upload, BarChart2, MapPin, Clock,
   Plus, Check, Loader2, ExternalLink, Trash2, Copy, QrCode, Play, Download,
-  User, ChevronRight, X, AlertCircle
+  User, X, AlertCircle
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@/lib/utils"
@@ -70,12 +70,10 @@ type Cobertura = {
 }
 
 type RelatorioConteudo = {
-  resumo_executivo?: string
-  performance_equipe?: { nome: string; funcao: string; uploads_realizados: number; avaliacao: string; pontos_fortes: string }[]
-  destaques_por_dia?: { dia: number; destaque: string; volume: number; melhoria: string }[]
-  recomendacoes?: string[]
-  score_producao?: number
-  pontos_atencao?: string[]
+  resumo_executivo: string
+  equipe: { nome: string; funcao: string; arquivos: number }[]
+  arquivos_por_dia: { dia: number; arquivos: number }[]
+  pontos_atencao: string[]
 }
 
 
@@ -290,7 +288,7 @@ export default function EventoDetailPage() {
     { id: "equipe", label: "Equipe", icon: Users },
     { id: "checklist", label: "Checklist", icon: CheckSquare },
     { id: "uploads", label: "Uploads", icon: Upload },
-    { id: "relatorio", label: "Relatório IA", icon: BarChart2 },
+    { id: "relatorio", label: "Resumo", icon: BarChart2 },
   ]
 
   const diaOptions = Array.from({ length: cobertura.totalDias }, (_, i) => i + 1)
@@ -632,6 +630,7 @@ export default function EventoDetailPage() {
       {/* Tab: Relatório IA */}
       {tab === "relatorio" && (
         <div className="space-y-4">
+          <p className="text-sm text-zinc-400">Resumo calculado dos registros atuais, sem consumo de IA.</p>
           {!relatorioConteudo && !gerandoRelatorio && (
             <div className="text-center py-12">
               <BarChart2 className="w-10 h-10 mx-auto mb-3 text-zinc-600" />
@@ -640,66 +639,35 @@ export default function EventoDetailPage() {
                 onClick={gerarRelatorio}
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg"
               >
-                Gerar Relatório IA
+                Gerar resumo da cobertura
               </button>
             </div>
           )}
           {gerandoRelatorio && (
             <div className="text-center py-12">
               <Loader2 className="w-8 h-8 mx-auto mb-3 text-purple-400 animate-spin" />
-              <p className="text-sm text-zinc-400">Analisando evento com IA...</p>
+              <p className="text-sm text-zinc-400">Consultando os registros da cobertura…</p>
             </div>
           )}
           {relatorioConteudo && (
             <div className="space-y-4">
-              {relatorioConteudo.score_producao !== undefined && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-purple-600/20 border-2 border-purple-500 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-purple-300">{relatorioConteudo.score_producao}</span>
-                  </div>
-                  <div>
-                    <p className="text-xs text-zinc-500 uppercase tracking-wide">Score de Produção</p>
-                    <p className="text-sm text-zinc-300 mt-1">
-                      {relatorioConteudo.score_producao >= 80 ? "Excelente performance! 🎉" :
-                       relatorioConteudo.score_producao >= 60 ? "Boa performance, com pontos a melhorar." :
-                       "Performance abaixo do esperado. Veja as recomendações."}
-                    </p>
-                  </div>
-                </div>
-              )}
               {relatorioConteudo.resumo_executivo && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                   <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Resumo Executivo</h4>
                   <p className="text-sm text-zinc-300 whitespace-pre-wrap">{relatorioConteudo.resumo_executivo}</p>
                 </div>
               )}
-              {relatorioConteudo.performance_equipe && relatorioConteudo.performance_equipe.length > 0 && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Performance da Equipe</h4>
-                  <div className="space-y-3">
-                    {relatorioConteudo.performance_equipe.map((m, i) => (
-                      <div key={i} className="border-l-2 border-purple-600/40 pl-3">
-                        <p className="text-sm font-medium text-zinc-200">{m.nome} <span className="text-zinc-500 text-xs">({m.funcao})</span></p>
-                        <p className="text-xs text-zinc-400 mt-0.5">{m.avaliacao}</p>
-                        <p className="text-xs text-emerald-400 mt-0.5">✓ {m.pontos_fortes}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {relatorioConteudo.recomendacoes && relatorioConteudo.recomendacoes.length > 0 && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Recomendações</h4>
-                  <ul className="space-y-1.5">
-                    {relatorioConteudo.recomendacoes.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                        <ChevronRight className="w-3.5 h-3.5 text-purple-400 mt-0.5 shrink-0" />
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-semibold text-zinc-400 uppercase">Arquivos por integrante</h4>
+                <p className="text-xs text-zinc-500">Volume registrado, sem avaliação de desempenho.</p>
+                {relatorioConteudo.equipe.map((m, i) => <p key={i} className="text-sm text-zinc-300">{m.nome} ({m.funcao}): {m.arquivos} arquivos</p>)}
+                {!relatorioConteudo.equipe.length && <p className="text-sm text-zinc-400">Nenhum integrante cadastrado.</p>}
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <h4 className="text-xs font-semibold text-zinc-400 uppercase">Arquivos por dia</h4>
+                {relatorioConteudo.arquivos_por_dia.map(d => <p key={d.dia} className="text-sm text-zinc-300">Dia {d.dia}: {d.arquivos} arquivos</p>)}
+                {!relatorioConteudo.arquivos_por_dia.length && <p className="text-sm text-zinc-400">Nenhum arquivo registrado.</p>}
+              </div>
               {relatorioConteudo.pontos_atencao && relatorioConteudo.pontos_atencao.length > 0 && (
                 <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl p-4">
                   <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wide mb-2">⚠️ Pontos de Atenção</h4>

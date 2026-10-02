@@ -103,30 +103,26 @@ async function buscarDemandas(input: Record<string, unknown>, organizacaoId: str
   const limite = (input.limite as number) ?? 25
   const hoje = new Date()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { organizacaoId, AND: [filtro] }
+  const condicoes: Prisma.DemandaWhereInput[] = [filtro]
+  const where: Prisma.DemandaWhereInput = { organizacaoId, AND: condicoes }
 
   if (input.status) {
-    where.statusInterno = input.status
+    condicoes.push({statusInterno: input.status as Prisma.EnumStatusInternoFilter["equals"]})
   }
   if (input.prioridade) {
-    where.prioridade = input.prioridade
+    condicoes.push({prioridade: input.prioridade as Prisma.EnumPrioridadeFilter["equals"]})
   }
   if (input.em_atraso) {
     where.dataLimite = { lt: inicioDoDia() }
     where.statusVisivel = {
       notIn: ["aprovacao", "para_postar", "finalizado"],
     }
-    where.statusInterno = {
-      notIn: ["postado", "entregue_cliente", "encerrado", "expirado"],
-    }
+    condicoes.push({statusInterno: {notIn: ["postado", "entregue_cliente", "encerrado", "expirado"]}})
   }
   if (input.paradas_ha_dias) {
     const limite_data = new Date(hoje.getTime() - (input.paradas_ha_dias as number) * 86400000)
     where.updatedAt = { lt: limite_data }
-    where.statusInterno = {
-      notIn: ["postado", "entregue_cliente", "encerrado", "expirado"],
-    }
+    condicoes.push({statusInterno: {notIn: ["postado", "entregue_cliente", "encerrado", "expirado"]}})
   }
 
   const demandas = await prisma.demanda.findMany({
@@ -689,7 +685,7 @@ async function enviarWhatsapp(input: Record<string, unknown>, organizacaoId: str
 
   const resultado = await enviarAuditado(telefone, mensagem, (input.demanda_id as string) ?? undefined, organizacaoId)
   return JSON.stringify({
-    enviado: !!resultado,
+    agendado: !!resultado,
     telefone,
     preview: mensagem.slice(0, 120),
   })
@@ -903,18 +899,18 @@ async function solicitarDadosDemanda(input: Record<string, unknown>, organizacao
   const msgCompleta = `📋 *NuFlow — ${demanda.codigo}*\n\n${mensagem}\n\n_Responda esta mensagem com as informações solicitadas._`
 
   const resultado = await enviarAuditado(telefone, msgCompleta, demanda.id, organizacaoId)
-  const enviado = !!resultado
+  const agendado = !!resultado
 
   // O texto de `mensagem` afirmava o envio mesmo com `resultado === null`. O
   // agente lia isso e reportava ao gestor que o solicitante tinha sido avisado —
   // pior que silêncio, é confirmação falsa. Agora a frase segue o que aconteceu.
   return JSON.stringify({
-    enviado,
+    agendado,
     telefone,
     demanda_codigo: demanda.codigo,
     dados_faltantes: (input.dados_faltantes as string) || "dados gerais",
-    mensagem: enviado
-      ? `Mensagem enviada para o solicitante de ${demanda.codigo}`
+    mensagem: agendado
+      ? `Mensagem agendada para o solicitante de ${demanda.codigo}`
       : `FALHA: não foi possível entregar a mensagem para ${telefone} (demanda ${demanda.codigo}). Não afirme ao usuário que o solicitante foi avisado.`,
   })
 }

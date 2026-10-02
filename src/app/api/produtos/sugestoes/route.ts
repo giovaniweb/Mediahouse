@@ -1,111 +1,30 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
-import { getOrgId, semOrg } from "@/lib/org"
-import Anthropic from "@anthropic-ai/sdk"
+import { comOrg } from "@/lib/org-contexto"
+import { sugerirConteudoProduto } from "@/lib/produtos-sugestoes"
 
+/** Consulta determinística: abrir/atualizar esta tela nunca chama um provedor de IA. */
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
-
-  const produtos = await prisma.produto.findMany({
-    where: { ativo: true, organizacaoId },
-    include: {
-      _count: { select: { demandas: true } },
-    },
-  })
-
-  const now = new Date()
-
-  const scored = produtos.map((p) => {
-    const refDate = p.ultimoConteudo ?? p.createdAt
-    const diasSemConteudo = Math.floor(
-      (now.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
-    )
-    const score = p.peso * (diasSemConteudo / Math.max(p.alertaDias, 1))
-
-    return {
-      id: p.id,
-      nome: p.nome,
-      categoria: p.categoria,
-      diasSemConteudo,
-      peso: p.peso,
-      alertaDias: p.alertaDias,
-      totalConteudos: p.totalConteudos,
-      score: Math.round(score * 100) / 100,
-      sugestao: "",
-    }
-  })
-
-  // Sort by score DESC, take top 10
-  scored.sort((a, b) => b.score - a.score)
-  const top10 = scored.slice(0, 10)
-
-  // Use Claude API to generate suggestions for top 5
-  const top5 = top10.slice(0, 5)
-
-  if (top5.length > 0 && process.env.ANTHROPIC_API_KEY) {
-    try {
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-      const produtosInfo = top5
-        .map(
-          (p, i) =>
-            `${i + 1}. "${p.nome}" (categoria: ${p.categoria || "sem categoria"}, ${p.diasSemConteudo} dias sem conteúdo, peso: ${p.peso}, score: ${p.score})`
-        )
-        .join("\n")
-
-      const response = await client.messages.create({
-        model: "claude-haiku-4-5-20250315",
-        max_tokens: 1024,
-        messages: [
-          {
-            role: "user",
-            content: `Você é um especialista em marketing de conteúdo audiovisual. Para cada produto abaixo, sugira UMA ideia breve e criativa de conteúdo em vídeo (máximo 2 frases). Responda APENAS em JSON array, sem markdown, sem explicação. Formato: [{"nome": "...", "sugestao": "..."}]
-
-Produtos que precisam de conteúdo urgentemente:
-${produtosInfo}`,
-          },
-        ],
-      })
-
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : ""
-
-      try {
-        // Extract JSON from response (handle potential markdown wrapping)
-        const jsonMatch = text.match(/\[[\s\S]*\]/)
-        if (jsonMatch) {
-          const sugestoes: { nome: string; sugestao: string }[] = JSON.parse(
-            jsonMatch[0]
-          )
-
-          for (const sug of sugestoes) {
-            const match = top5.find(
-              (p) => p.nome.toLowerCase() === sug.nome.toLowerCase()
-            )
-            if (match) {
-              match.sugestao = sug.sugestao
-            }
-          }
-
-          // If exact name match fails, assign by index
-          for (let i = 0; i < Math.min(sugestoes.length, top5.length); i++) {
-            if (!top5[i].sugestao && sugestoes[i]?.sugestao) {
-              top5[i].sugestao = sugestoes[i].sugestao
-            }
-          }
-        }
-      } catch {
-        // If JSON parsing fails, just continue without suggestions
-      }
-    } catch {
-      // If Claude API fails, continue without AI suggestions
-    }
+  const acesso = await requireAcesso("verProdutos")
+  if (acesso instanceof NextResponse) return acesso
+  const produtoId = req.nextUrl.searchParams.get("produtoId")
+  if (produtoId !== null && (!produtoId.trim() || produtoId.length > 200)) {
+    return NextResponse.json({ error: "Produto inválido" }, { status: 400 })
   }
-
-  return NextResponse.json({ sugestoes: top10 })
+  try {
+    const produtos = await comOrg(acesso.organizacaoId, () => prisma.produto.findMany({
+      where: { ativo: true, organizacaoId: acesso.organizacaoId, ...(produtoId ? { id: produtoId } : {}) },
+      select: { id: true, nome: true, categoria: true, ultimoConteudo: true, createdAt: true, peso: true, alertaDias: true, totalConteudos: true },
+    }))
+    if (produtoId && !produtos.length) {
+      return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
+    }
+    const agora = new Date()
+    const sugestoes = produtos.map(p => sugerirConteudoProduto(p, agora))
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 10)
+    return NextResponse.json({ sugestoes, origem: "regras-v1" }, { headers: { "Cache-Control": "private, no-store" } })
+  } catch {
+    return NextResponse.json({ error: "Não foi possível consultar as sugestões. Tente novamente." }, { status: 503 })
+  }
 }
