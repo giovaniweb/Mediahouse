@@ -17,6 +17,7 @@ import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
+import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
@@ -201,6 +202,27 @@ export async function GET(req: NextRequest) {
       // manhã cedo, no mesmo dia da entrega.
       dataLimite: { lt: inicioDoDia() },
       statusVisivel: { notIn: STATUS_PRAZO_PAUSADO as never[] },
+    })
+  }
+
+  // ?semCobertura=1 — tira do resultado o que pertence ao fluxo de Jobs.
+  //
+  // Uma solicitação de cobertura e uma demanda comum vivem na mesma tabela e se
+  // distinguem só pela classificação (ver lib/job-fase.ts). Depois que /jobs
+  // passou a ser a esteira das coberturas, o quadro de Demandas mostrava as
+  // mesmas 28 duas vezes — uma em cada quadro.
+  //
+  // É OPT-IN de propósito, e não o padrão: quem chama esta rota precisando das
+  // coberturas continua recebendo. A tela de Aprovações é o caso que prova —
+  // é lá que a solicitação de cobertura é aprovada como Job, e escondê-la ali
+  // tornaria o fluxo inalcançável. `/historico`, a busca de produtos e a
+  // contagem por solicitante também seguem vendo tudo.
+  //
+  // O NOT/OR espelha o OR de `ehSolicitacaoDeCobertura`: basta UMA das marcas
+  // para o registro ser do outro quadro, então excluir exige negar as duas.
+  if (searchParams.get("semCobertura") === "1") {
+    and.push({
+      NOT: { OR: [{ tipoVideo: TIPO_COBERTURA }, { departamento: DEPARTAMENTO_COBERTURA }] },
     })
   }
 

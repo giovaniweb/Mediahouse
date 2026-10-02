@@ -692,3 +692,61 @@ describe("a conversão não muda o que o registro é", () => {
     expect(ehJob({ ...m, statusInterno: "aguardando_triagem", statusVisivel: "entrada" })).toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OS DOIS QUADROS SÃO COMPLEMENTARES
+//
+// Depois que /jobs virou a esteira das coberturas, o quadro de Demandas passa
+// `semCobertura=1` e exclui exatamente o que /jobs inclui. Estes testes prendem
+// a complementaridade: nenhum registro em dois quadros, nenhum em nenhum.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("/demandas e /jobs não se sobrepõem", () => {
+  // O filtro do quadro de Demandas, em TypeScript. O servidor faz o mesmo com
+  // `NOT { OR: [tipoVideo, departamento] }` — se um dos dois lados mudar sem o
+  // outro, um registro some dos dois quadros ou aparece nos dois.
+  const filtroDemandas = (d: { tipoVideo?: string | null; departamento?: string | null }) =>
+    !(d.tipoVideo === TIPO_COBERTURA || d.departamento === DEPARTAMENTO_COBERTURA)
+
+  const amostra = [
+    { departamento: "audiovisual", tipoVideo: "reels" },
+    { departamento: "audiovisual", tipoVideo: "video_institucional" },
+    { departamento: "outros", tipoVideo: "youtube" },
+    { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: TIPO_COBERTURA },
+    // As duas combinações em que só UMA marca está presente — é onde um NOT
+    // mal escrito falharia.
+    { departamento: DEPARTAMENTO_COBERTURA, tipoVideo: "reels" },
+    { departamento: "audiovisual", tipoVideo: TIPO_COBERTURA },
+    { departamento: null, tipoVideo: null },
+  ]
+
+  it("cada registro cai em exatamente um quadro", () => {
+    for (const d of amostra) {
+      const emDemandas = filtroDemandas(d)
+      const emJobs = ehSolicitacaoDeCobertura(d)
+      expect(emDemandas !== emJobs, `${d.departamento}/${d.tipoVideo} caiu em ${emDemandas && emJobs ? "dois" : "nenhum"} quadro`).toBe(true)
+    }
+  })
+
+  it("uma marca só já tira do quadro de Demandas", () => {
+    // Espelha o OR: excluir só pelo tipoVideo deixaria a de departamento
+    // `eventos` visível nos dois lugares.
+    expect(filtroDemandas({ departamento: DEPARTAMENTO_COBERTURA, tipoVideo: "reels" })).toBe(false)
+    expect(filtroDemandas({ departamento: "audiovisual", tipoVideo: TIPO_COBERTURA })).toBe(false)
+  })
+
+  it("converter em Job tira de /demandas e põe em /jobs", () => {
+    const antes = { departamento: "audiovisual", tipoVideo: "reels" }
+    expect(filtroDemandas(antes)).toBe(true)
+    expect(ehSolicitacaoDeCobertura(antes)).toBe(false)
+
+    const depois = conversaoDeFluxo(antes, "job")!
+    expect(filtroDemandas(depois)).toBe(false)
+    expect(ehSolicitacaoDeCobertura(depois)).toBe(true)
+  })
+
+  it("converter de volta devolve para /demandas", () => {
+    const volta = conversaoDeFluxo(umaCobertura, "demanda")!
+    expect(filtroDemandas(volta)).toBe(true)
+    expect(ehSolicitacaoDeCobertura(volta)).toBe(false)
+  })
+})
