@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
   const usuarioId = searchParams.get("usuarioId")
+  const organizacaoId = await getOrgId(session)
 
   // O `omit` que existia aqui virou desnecessário: as colunas sensíveis não
   // moram mais no perfil global. Elas vivem em videomaker_dados_fiscais e
@@ -22,7 +23,9 @@ export async function GET(req: NextRequest) {
       ...(usuarioId ? { usuarioId } : {}),
     },
     include: {
-      _count: { select: { demandas: true } },
+      // As estrelas do cartão só aparecem com avaliação registrada; sem a
+      // contagem, não apareciam nunca. Mesmo recorte do detalhe de avaliações.
+      _count: { select: { demandas: true, ...(organizacaoId ? { avaliacoes: { where: { OR: [{ organizacaoId }, { organizacaoId: null }] } } } : {}) } },
     },
     orderBy: [{ status: "asc" }, { nome: "asc" }],
   })

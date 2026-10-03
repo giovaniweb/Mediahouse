@@ -303,3 +303,32 @@ describe("Trello por empresa", () => {
     }
   })
 })
+
+describe("parâmetros desativados no gerenciador", () => {
+  const ler = async (query: string) => {
+    const { GET: parametrosGET } = await import("@/app/api/configuracoes/parametros/route")
+    return parametrosGET(new NextRequest(`http://localhost/api/configuracoes/parametros?${query}`))
+  }
+  beforeEach(async () => {
+    await db.usuarioOrganizacao.upsert({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgA } }, create: { usuarioId: usuario, organizacaoId: orgA, papel: "admin", areas: [] }, update: { papel: "admin" } })
+    await db.configParametro.deleteMany({ where: { organizacaoId: orgA } })
+    await db.configParametro.createMany({ data: [
+      { organizacaoId: orgA, grupo: "tipos_video", valor: `${prefix}-ativo`, label: "Ativo", ordem: 1 },
+      { organizacaoId: orgA, grupo: "tipos_video", valor: `${prefix}-inativo`, label: "Desativado", ordem: 2, ativo: false },
+    ] })
+  })
+  it("gerenciador vê os desativados para poder reativar; o resto do sistema, não", async () => {
+    const valores = async (q: string) => ((await (await ler(q)).json()).parametros as { valor: string }[]).map(p => p.valor)
+    expect(await valores("grupo=tipos_video&incluirInativos=1")).toEqual([`${prefix}-ativo`, `${prefix}-inativo`])
+    expect(await valores("grupo=tipos_video")).toEqual([`${prefix}-ativo`])
+  })
+  it("ver desativados exige gerenciar configurações", async () => {
+    estado.cookie = orgB
+    await db.permissaoUsuario.create({ data: { usuarioId: usuario, organizacaoId: orgB } })
+    try {
+      expect((await ler("grupo=tipos_video&incluirInativos=1")).status).toBe(403)
+    } finally {
+      await db.permissaoUsuario.delete({ where: { usuarioId_organizacaoId: { usuarioId: usuario, organizacaoId: orgB } } })
+    }
+  })
+})
