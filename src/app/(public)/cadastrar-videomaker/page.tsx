@@ -3,18 +3,24 @@
 import styles from "@/components/public/Recruitment.module.css"
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
-import { Film, CheckCircle2, ArrowLeft, Plus, X } from "lucide-react"
+import { CheckCircle2, ArrowLeft, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { sufixoOrg } from "@/lib/org-publica-cliente"
+import { urlComOrg } from "@/lib/org-publica-cliente"
+import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
+import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
 
 const AREAS = ["Casamento", "Eventos Corporativos", "Clipes Musicais", "Documentário", "Publicidade", "Redes Sociais / Reels", "Institucional", "Esportes", "Gastronomia", "Moda & Beauty", "Imóveis", "Jornalismo"]
 
 export default function CadastrarVideomakerdPage() {
+  const destino = useEmpresaDestino()
   const [passo, setPasso] = useState(1)
   const etapaRef = useRef<HTMLDivElement>(null)
-  const primeiroPasso = useRef(true)
+  // O foco vai para o título só quando a etapa MUDA. Com uma flag de "primeira
+  // vez", o efeito duplo do modo estrito marcava o título já na abertura.
+  const passoAnterior = useRef(passo)
   useEffect(() => {
-    if (primeiroPasso.current) { primeiroPasso.current = false; return }
+    if (passoAnterior.current === passo) return
+    passoAnterior.current = passo
     etapaRef.current?.querySelector<HTMLHeadingElement>("h2")?.focus()
   }, [passo])
   function avancar() {
@@ -70,7 +76,7 @@ export default function CadastrarVideomakerdPage() {
     setLoading(true)
     setErro(null)
     try {
-      const res = await fetch(`/api/publico/videomaker${sufixoOrg()}`, {
+      const res = await fetch(urlComOrg("/api/publico/videomaker"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -79,14 +85,10 @@ export default function CadastrarVideomakerdPage() {
           redesSociais: form.redesSociais.filter(Boolean),
         }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        const msgs = typeof json.error === "string" ? json.error : Object.values(json.error ?? {}).flat().join(", ")
-        throw new Error(msgs || json.error || "Erro ao enviar")
-      }
+      if (!res.ok) throw new Error(await erroDaResposta(res))
       setEnviado(true)
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro desconhecido")
+      setErro(erroDeEnvio(e))
     } finally {
       setLoading(false)
     }
@@ -103,7 +105,7 @@ export default function CadastrarVideomakerdPage() {
           <p className="text-zinc-400 mb-8">
             Recebemos suas informações e nossa equipe irá analisar em breve. Se houver uma oportunidade, a equipe poderá entrar em contato pelo e-mail ou WhatsApp informado.
           </p>
-          <Link href="/sobre" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
+          <Link href={destino.inicio} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
             <ArrowLeft className="w-4 h-4" /> Voltar ao início
           </Link>
         </div>
@@ -116,13 +118,8 @@ export default function CadastrarVideomakerdPage() {
       {/* Nav */}
       <nav className="border-b border-zinc-800">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/sobre" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-              <Film className="w-4 h-4 text-zinc-900" />
-            </div>
-            <span className="font-bold text-white">NuFlow</span>
-          </Link>
-          <Link href="/sobre" className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
+          <MarcaEmpresa destino={destino} />
+          <Link href={destino.inicio} className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar
           </Link>
         </div>
@@ -131,8 +128,9 @@ export default function CadastrarVideomakerdPage() {
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-white mb-2">Seu olhar. Novas possibilidades.</h1>
-          <p className="text-zinc-400">Apresente seu trabalho. A empresa responsável pelo link vai analisar seu perfil e entrar em contato se houver uma oportunidade.</p>
+          <p className="text-zinc-400">{destino.estado === "pronto" ? `Apresente seu trabalho para ${destino.empresa.nome}. A equipe vai analisar seu perfil e entrar em contato se houver uma oportunidade.` : "Apresente seu trabalho. A empresa responsável pelo link vai analisar seu perfil e entrar em contato se houver uma oportunidade."}</p>
         </div>
+        <AvisoDestino destino={destino} />
 
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">

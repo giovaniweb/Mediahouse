@@ -55,6 +55,7 @@ export const authConfig: NextAuthConfig = {
         "/avaliar-editor",    // avaliação pública de editor
         "/cadastrar-demanda", // formulário público de demanda
         "/cadastrar-videomaker", // cadastro público de videomaker
+        "/c",                 // área pública de cada empresa (/c/<slug>); /painel confere a sessão por conta própria
         "/sobre",             // página pública sobre
         "/aprovar",           // aprovação de vídeo pelo cliente
         "/api/aprovacao-video", // API da aprovação pública (GET token + POST aprovar/feedback)

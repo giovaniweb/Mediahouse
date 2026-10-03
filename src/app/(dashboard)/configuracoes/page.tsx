@@ -1,6 +1,7 @@
 "use client"
 
 import { SaudeAutomacoes } from "@/components/automacoes/SaudeAutomacoes"
+import { AreaPublicaEmpresa } from "@/components/configuracoes/AreaPublicaEmpresa"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
@@ -1105,6 +1106,7 @@ function TabEmpresa() {
 
   return (
     <div className="space-y-6">
+      <AreaPublicaEmpresa />
       <div>
         <h3 className="font-semibold text-zinc-200 flex items-center gap-2 mb-1">
           <Building2 className="w-4 h-4 text-emerald-400" /> Dados da Empresa

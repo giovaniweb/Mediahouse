@@ -126,8 +126,8 @@ export function PainelOrganizacoes() {
                 </p>
                 {/* O slug é o que identifica a empresa nos links públicos — quem
                     compartilha formulário precisa dele à mão. */}
-                <p className="mt-1 text-[11px] text-zinc-600">
-                  Formulário público: <code className="text-zinc-500">/cadastrar-demanda?org={org.slug}</code>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Área pública: <Link href={`/c/${org.slug}`} target="_blank" className="text-purple-300 hover:underline"><code>/c/{org.slug}</code></Link>
                 </p>
               </div>
               <div className={styles.actions}>
@@ -207,7 +207,7 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
         valor={slug}
         onChange={setSlug}
         placeholder="gerado a partir do nome"
-        ajuda="Vai nos links públicos: /cadastrar-demanda?org=slug. Só minúsculas, números e hífen."
+        ajuda="Vira o endereço da área pública da empresa: /c/slug. Só minúsculas, números e hífen."
       />
       <Campo
         rotulo="E-mail do admin (opcional)"
