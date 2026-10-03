@@ -184,7 +184,7 @@ export async function executarRotina(org:string,rotina:Rotina,usuarioId?:string)
     const atividade=await atividadeElegivel(org,rotina)
     if(!atividade) return {...r,ignorada:"sem_atividade"}
     // Remover referências não pode depender de notificação apenas agendada. Política de mídia em M04.
-    if(rotina==="limpeza") return {...r,ignorada:"limpeza_automatica_suspensa_ate_M04"}
+    if(rotina==="limpeza") return {...r,ignorada:"retencao_sem_exclusao_automatica"}
     const execucao=await prisma.agenteExecucao.create({data:{organizacaoId:org,agente:`${rotina}-regras`,criadoPor:usuarioId,status:"executando",tokens:0}})
     try {
       if(["alertas","monitor","prazos","briefing"].includes(rotina)) await resolverAlertas(org)

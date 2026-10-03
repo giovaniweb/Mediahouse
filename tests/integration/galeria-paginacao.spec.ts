@@ -54,4 +54,21 @@ describe("paginação das galerias", () => {
     await db.arquivo.update({ where: { id: `${p}-f1` }, data: { revogadoEm: new Date() } })
     expect((await (await publica(req(`org=${a}`))).json()).total).toBe(3)
   })
+  it("filtros, prévia com falha, link aprovado e qualidade de Growth", async () => {
+    await db.demanda.update({where:{id:`${p}-recente`},data:{linhaProjeto:"Projeto Teste",responsavelId:u}})
+    await db.arquivo.update({where:{id:`${p}-f2`},data:{transcodeStatus:"failed"}})
+    const filtro=await (await privada(req(`tipo=reels&projeto=Projeto%20Teste&pessoa=${encodeURIComponent(u)}`))).json()
+    expect(filtro.total).toBe(2);expect(filtro.videos.some((v:{estadoPrevia:string})=>v.estadoPrevia==="falhou")).toBe(true)
+    for(const [nome,tipo] of [["sem-peca","administrativo"],["falta-peca","post"],["link-aprovado","post"]]) await db.demanda.create({data:{id:`${p}-${nome}`,organizacaoId:a,solicitanteId:u,codigo:`${p}-${nome}`,titulo:nome,descricao:"sintético",cidade:"teste",departamento:"growth",area:"design",tipoVideo:tipo,statusVisivel:"finalizado"}})
+    await db.aprovacaoVideo.create({data:{demandaId:`${p}-link-aprovado`,status:"aprovado",urlVideo:"https://example.invalid/aprovado"}})
+    const aprovadas=await (await privada(req("area=design&search=link-aprovado"))).json();expect(aprovadas.videos[0].linkFinal).toBe("https://example.invalid/aprovado")
+    const qualidade=await (await privada(req("area=design&qualidade=sem_final"))).json();expect(qualidade.pendencias.map((d:{titulo:string})=>d.titulo)).toEqual(["falta-peca"])
+    await db.arquivo.update({where:{id:`${p}-f2`},data:{originalUrl:"https://example.invalid/original-f2"}})
+    await db.aprovacaoVideo.createMany({data:[{demandaId:`${p}-recente`,status:"aprovado",urlVideo:"https://example.invalid/original-f2"},{demandaId:`${p}-recente`,status:"aprovado",urlVideo:"https://example.invalid/entrega-adicional"}]})
+    const combinado=await (await privada(req("search=recente"))).json();expect(combinado.total).toBe(3)
+    await db.permissaoUsuario.create({data:{organizacaoId:a,usuarioId:u,verDemandas:false}})
+    try { expect((await privada(req())).status).toBe(403) } finally { await db.permissaoUsuario.deleteMany({where:{organizacaoId:a,usuarioId:u}}) }
+    estado.sessao=null;expect((await privada(req("qualidade=sem_final"))).status).toBe(401)
+  })
+
 })

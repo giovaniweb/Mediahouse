@@ -13,6 +13,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/drive",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/agentes?agente=alertas",
       "schedule": "0 12 * * *"
     },

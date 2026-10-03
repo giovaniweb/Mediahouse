@@ -1,3 +1,6 @@
+import { prisma } from "@/lib/prisma"
+import { verificarPastaDrive } from "@/lib/drive-copias"
+import { ErroCopiaDrive } from "@/lib/drive-copia-provedor"
 import { NextResponse } from "next/server"
 import { requireAcesso } from "@/lib/acesso"
 import { criarSessaoUploadDrive } from "@/lib/google-drive"
@@ -46,4 +49,11 @@ export async function POST() {
     console.error("[setup-drive/test]", msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
+
+export async function GET() {
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  try { return NextResponse.json(await verificarPastaDrive(prisma,acesso.organizacaoId), { headers: { "Cache-Control": "private, no-store" } }) }
+  catch (e) { return NextResponse.json({ error: e instanceof ErroCopiaDrive ? e.codigo : "Não foi possível verificar a pasta." }, { status: 409 }) }
 }

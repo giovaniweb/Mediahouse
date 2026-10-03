@@ -31,7 +31,10 @@
     "test:integration:prepare": "node scripts/teste-integracao.mjs migrate",
     "db:cifrar-drive": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register scripts/cifrar-drive.ts",
     "test:runtime": "node scripts/teste-runtime-rls.mjs",
-    "verificar:runtime": "node scripts/verificar-runtime-rls.mjs"
+    "verificar:runtime": "node scripts/verificar-runtime-rls.mjs",
+    "test:inventario": "node --test tests/inventario/*.test.mjs",
+    "midia:inventario": "node scripts/inventario-midia.mjs",
+    "midia:coletar": "node scripts/coletar-inventario-midia.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

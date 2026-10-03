@@ -707,6 +707,7 @@ model ChecklistItem {
 }
 
 model Arquivo {
+  copiasDrive CopiaDrive[]
   id              String      @id @default(cuid())
   demandaId       String
   tipoArquivo     TipoArquivo
@@ -717,6 +718,21 @@ model Arquivo {
   sequencia       Int? // ordem na demanda: 1, 2, 3... → Drive: 001, 002, 003
   thumbnailUrl    String? // JPEG thumbnail no Supabase (gerado no cliente)
   transcodeStatus String? // null | "processing" | "done" | "skipped" | "failed" (HEVC→MP4)
+  // Identidade da FONTE original; não muda quando url recebe uma prévia.
+  // Organização e uso continuam em demanda.organizacaoId e tipoArquivo.
+  fonteProvedor   String?
+  fonteBucket     String?
+  fonteObjectKey  String?
+  fonteReferencia String? // Drive fileId ou referência externa; nunca token Supabase
+  fonteVersao     Int?    // versão interna; null no legado não inventariado
+  fonteMimeDeclarado String? // informado no upload, não equivale a codec verificado
+  fonteSha256     String? // calculado somente quando o servidor recebeu os bytes
+  // Recibo da prévia v2; identifica a tentativa que concluiu sem alterar a fonte.
+  previewObjectKey String?
+  previewSha256 String?
+  previewTamanho Int?
+  previewFonteVersao Int?
+  previewJobId String?
   originalUrl     String? // backup da URL original (HEVC) antes de trocar para MP4
   // Divulgação opt-in. Snapshot preserva a versão que a gestão autorizou.
   publicadoEm           DateTime?
@@ -2131,6 +2147,8 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  lotesAcervo LoteAcervo[]
+  copiasDrive CopiaDrive[]
   politicaIA PoliticaIA?
   consumosIA ConsumoIA[]
   ambienteTeste Boolean @default(false)
@@ -2612,4 +2630,49 @@ model ConsumoIA {
   @@index([organizacaoId, periodo])
   @@index([organizacaoId, estado, expiraEm])
   @@map("consumos_ia")
+}
+
+// Cópia privada do original; nunca substitui Arquivo.url ou linkFinal.
+model CopiaDrive {
+  id String @id @default(cuid())
+  organizacaoId String
+  arquivoId String
+  fonteVersao Int
+  fonteBucket String
+  fonteObjectKey String
+  fonteSha256 String?
+  pastaId String
+  conexao String
+  chave String @unique
+  driveFileId String?
+  driveVersion String?
+  sha256 String?
+  md5 String?
+  tamanho Int?
+  estado String @default("pendente")
+  erro String?
+  concluidoEm DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields:[organizacaoId],references:[id],onDelete:Cascade)
+  arquivo Arquivo @relation(fields:[arquivoId],references:[id],onDelete:Cascade)
+  @@unique([organizacaoId,arquivoId,fonteVersao,pastaId,conexao], map: "copias_drive_identidade_key")
+  @@index([organizacaoId,estado,createdAt])
+  @@map("copias_drive")
+}
+
+// Plano de manutenção explícito; contém somente referências e hashes, não bytes/segredos.
+model LoteAcervo {
+  id String @id @default(cuid())
+  organizacaoId String
+  operadorId String
+  snapshot Json
+  resultado Json?
+  estado String @default("simulado")
+  expiraEm DateTime
+  createdAt DateTime @default(now())
+  aplicadoEm DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, createdAt])
+  @@map("lotes_acervo")
 }

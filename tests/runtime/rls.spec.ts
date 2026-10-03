@@ -1,3 +1,9 @@
+import { reivindicarConversao, concluirConversao } from "@/lib/midia-worker"
+vi.mock("@/lib/midia", async importOriginal => ({ ...await importOriginal<object>(),
+  urlAssinadaDeLeitura: async (p: string) => `https://storage.invalid/${p}`,
+  urlDeUpload: async (p: string) => ({ uploadUrl: `https://storage.invalid/${p}`, url: `/api/midia/${p}` }),
+}))
+import { registrarArquivoDemanda } from "@/lib/arquivo-registro"
 import { receberEntrada, processarInbox } from "@/lib/whatsapp-inbox"
 import { encryptSecret } from "@/lib/secret-crypto"
 import { criarFila, enfileirar } from "@/lib/fila-duravel"
@@ -79,6 +85,43 @@ describe("Prisma conectado como runtime sem bypass", () => {
       expect(await tx.demanda.count()).toBe(1)
       expect(await comOrg(b, () => db.demanda.findMany({ select: { id: true } }))).toEqual([{ id: dbid }])
     }))
+  })
+  it("grava identidade com runtime e recusa vínculo na outra empresa", async () => {
+    const url = `/api/midia/org/${a}/videos/${da}/runtime.mp4`
+    const resultado = await comOrg(a, () => registrarArquivoDemanda({ organizacaoId: a, demandaId: da, tipo: "final", url, nomeArquivo: "runtime.mp4" }))
+    try {
+      expect(await comOrg(a, () => db.jobAutomacao.count({ where: { referencia: resultado.arquivo.id, tipo: "midia.preparar" } }))).toBe(1)
+      expect(resultado.arquivo.fonteObjectKey).toBe(`org/${a}/videos/${da}/runtime.mp4`)
+      expect(await comOrg(b, () => db.arquivo.findFirst({ where: { id: resultado.arquivo.id } }))).toBeNull()
+      await expect(comOrg(b, () => registrarArquivoDemanda({ organizacaoId: a, demandaId: da, tipo: "final", url, nomeArquivo: "runtime.mp4" }))).rejects.toThrow("Demanda não encontrada")
+    } finally {
+      await admin.jobAutomacao.deleteMany({ where: { organizacaoId: a, referencia: resultado.arquivo.id } })
+      await admin.arquivo.delete({ where: { id: resultado.arquivo.id } })
+      await admin.demanda.update({ where: { id: da }, data: { linkFinal: null } })
+    }
+  })
+  it("runtime conclui prévia privada com recibo e nega callback na outra empresa", async () => {
+    const url = `/api/midia/org/${a}/videos/${da}/worker.mov`
+    const { arquivo } = await comOrg(a, () => registrarArquivoDemanda({ organizacaoId: a, demandaId: da, tipo: "final", url, nomeArquivo: "worker.mov" }))
+    const fetchAnterior = globalThis.fetch
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, headers: new Headers({ "content-type": "video/mp4", "content-length": "123" }) }))
+    try {
+      const j = (await reivindicarConversao(a))!
+      expect(j).not.toBeNull()
+      const r = { jobId: j.jobId, leaseToken: j.leaseToken, fonteVersao: 1, perfil: "h264-720p-v1" as const,
+        objectKey: new URL(j.uploadUrl).pathname.slice(1), sha256: "a".repeat(64), tamanho: 123,
+        mime: "video/mp4" as const, codec: "h264" as const, codecAudio: null, largura: 160, altura: 90, duracao: 1 }
+      expect(await concluirConversao(b, r)).toBe(false)
+      expect(await concluirConversao(a, r)).toBe(true)
+      expect(await concluirConversao(a, r)).toBe(true)
+      expect((await comOrg(a, () => db.arquivo.findUniqueOrThrow({ where: { id: arquivo.id } }))).previewObjectKey).toBe(r.objectKey)
+      expect(await comOrg(b, () => db.arquivo.findFirst({ where: { id: arquivo.id } }))).toBeNull()
+    } finally {
+      vi.stubGlobal("fetch", fetchAnterior)
+      await admin.jobAutomacao.deleteMany({ where: { organizacaoId: a, referencia: arquivo.id } })
+      await admin.arquivo.delete({ where: { id: arquivo.id } })
+      await admin.demanda.update({ where: { id: da }, data: { linkFinal: null } })
+    }
   })
   it("auth resolve identidade e empresa mas não lê demanda", async () => {
     expect((await prismaAuth.usuario.findUnique({ where: { id: u } }))?.id).toBe(u)
