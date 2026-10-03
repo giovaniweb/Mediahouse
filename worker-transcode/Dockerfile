@@ -10,9 +10,9 @@ WORKDIR /app
 
 # Sem dependências externas — só Node nativo
 COPY package.json ./
-COPY index.mjs ./
+COPY index.mjs converter.mjs consumer.mjs start.mjs temporarios.mjs subprocesso.mjs ./
 
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["node", "index.mjs"]
+CMD ["node", "start.mjs"]

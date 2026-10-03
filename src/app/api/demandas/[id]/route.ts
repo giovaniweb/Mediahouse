@@ -1,3 +1,4 @@
+import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { marcadorConclusao } from "@/lib/job-transicoes"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
@@ -333,6 +334,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
           after(async () => {
             for (const aprovacao of aprovacoesCopy) {
               try {
+                // No piloto, cópias são solicitadas pela fila em Configurações > Google Drive.
+                if (driveCopiaAtiva(orgIdDrive)) continue
                 const urlVideo = aprovacao.urlVideo
                 if (!urlVideo || !urlVideo.includes("supabase")) continue
 

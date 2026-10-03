@@ -1,3 +1,4 @@
+import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -172,6 +173,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const aprovacaoSnap = aprovacao
     after(async () => {
       try {
+        // No piloto, cópias são solicitadas pela fila em Configurações > Google Drive.
+        if (driveCopiaAtiva(demandaOrg.organizacaoId)) return
         const urlVideo = aprovacaoSnap.urlVideo
         // Só transfere vídeos hospedados no Supabase; URLs externas (YouTube, Drive, etc.) ficam como estão
         if (!urlVideo || !urlVideo.includes("supabase")) return

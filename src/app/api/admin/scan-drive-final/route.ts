@@ -1,3 +1,4 @@
+import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
 
   const demanda = await prisma.demanda.findUnique({
     where: { id: body.demandaId },
-    select: { id: true },
+    select: { id: true, organizacaoId: true },
   })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
       tipoArquivo: "final",
       nomeArquivo: body.nomeArquivo ?? "video-final",
       url: body.url,
+      ...metadadosFonte(body.url, demanda.organizacaoId, demanda.id),
       origem: "backfill-drive",
       sequencia: 1,
     },

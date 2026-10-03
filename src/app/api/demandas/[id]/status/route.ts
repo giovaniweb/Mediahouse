@@ -1,3 +1,4 @@
+import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { NextRequest, NextResponse, after } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -208,6 +209,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           after(async () => {
             for (const aprovacao of aprovacoesCopy) {
               try {
+                // No piloto, cópias são solicitadas pela fila em Configurações > Google Drive.
+                if (driveCopiaAtiva(organizacaoId)) continue
                 const urlVideo = aprovacao.urlVideo
                 if (!urlVideo || !urlVideo.includes("supabase")) continue
                 const dem = await prisma.demanda.findUnique({

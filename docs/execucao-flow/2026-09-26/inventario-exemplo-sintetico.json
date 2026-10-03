@@ -1,0 +1,42 @@
+{
+  "versao": 1,
+  "organizacaoId": "empresa-exemplo",
+  "observadoEm": "2026-09-30T12:00:00Z",
+  "carenciaHoras": 48,
+  "evidencia": {
+    "storageCompleto": true,
+    "referenciasCompletas": true,
+    "jobsCompletos": true,
+    "recibosConciliados": true,
+    "consistente": true
+  },
+  "objetos": [
+    {
+      "bucket": "midia",
+      "chave": "org/empresa-exemplo/videos/demanda-exemplo/previews/arquivo-exemplo/1/h264-720p-v1/job-exemplo-lease-antigo.mp4",
+      "bytes": 1000,
+      "criadoEm": "2026-09-20T12:00:00Z"
+    }
+  ],
+  "referencias": [],
+  "arquivos": [
+    {
+      "id": "arquivo-exemplo",
+      "demandaId": "demanda-exemplo",
+      "organizacaoId": "empresa-exemplo"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job-exemplo",
+      "tipo": "midia.converter",
+      "organizacaoId": "empresa-exemplo",
+      "arquivoId": "arquivo-exemplo",
+      "fonteVersao": 1,
+      "perfil": "h264-720p-v1",
+      "estado": "concluido",
+      "encerradoEm": "2026-09-21T12:00:00Z",
+      "leaseToken": null
+    }
+  ]
+}

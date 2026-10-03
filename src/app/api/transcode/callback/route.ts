@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     const organizacaoId = await orgPorCredencial("arquivo", arquivoId)
     if (!organizacaoId) return NextResponse.json({ error: "arquivo não encontrado" }, { status: 404 })
     declararOrg(organizacaoId)
+    if (workerMidiaAtivo(organizacaoId) || await prisma.arquivo.findFirst({ where: { id: arquivoId, previewJobId: { not: null }, demanda: { organizacaoId } }, select: { id: true } })) return NextResponse.json({ error: "callback_legado_recusado" }, { status: 409 })
   }
 
   // Sucesso: troca a URL do vídeo pelo MP4 em todos os lugares

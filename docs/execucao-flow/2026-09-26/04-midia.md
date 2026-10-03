@@ -59,3 +59,78 @@ Não executar backfill no acervo real durante implementação. Ensaiar com arqui
 **Testes:** final com 29/30/31 dias, reaberto, data nula, Growth sem vídeo por natureza, permissão restrita, ação repetida e storage ausente.
 
 **Aceite:** sumir do quadro não apaga serviço/custo; pendência de acervo é visível sem acusar perda comprovada; nenhuma promessa de redução de GB sem inventário de armazenamento.
+
+
+## Evidência de execução — 30/09/2026, primeiro recorte M01
+
+Implementado localmente `midia-identidade.ts` e integrado ao transcode: classificação sem download, host de storage exato, vínculo de objeto com demanda/empresa antes da rede, renovação de assinatura e nenhuma alternativa para URL arbitrária. Reconversão/manutenção deixam de declarar aceite inexistente. Foram aprovados 712 unitários e 19 integrações focadas, tipos/lint/auditores e build webpack. Serviços externos simulados.
+
+M01 permanece EM_EXECUCAO. Não há migração ou identidade persistida ainda. Próximo recorte: campos aditivos e metadados dos uploads, evento transacional e compatibilidade dos canais legados. Drive, galeria e worker completo continuam pendentes; nenhum backfill no acervo ou publicação foi feito. Detalhes e limitações no CONTROLE.md.
+
+
+## Evidência de execução — 30/09/2026, segundo recorte M01
+
+Metadados da fonte original persistidos por migração aditiva, sem preencher o legado. Canais existentes de criação recebem identidade reconhecível; uploads que passam pelo servidor recebem tamanho/hash reais e MIME explicitamente declarado. Registro de upload da demanda e link operacional agora são transacionais e reenvios da mesma confirmação não duplicam o arquivo. Documentos não alteram links de vídeos e brutos passam a ter Arquivo. Interface trata falha HTTP na confirmação.
+
+Provas locais: 717 unitários, 305 integrações, 25 runtime/RLS, verificador de roles, tipos/build, lint sem erros e auditores. Migração aplicada só no banco sintético. M01 continua parcial: evento durável, consumidores por identidade persistida, preview/cópia/revisão Drive e inventário permanecem pendentes; detalhes no CONTROLE.md. Próximo: evento de processamento na transação e consumidor com lease em M02. Nenhuma homologação de worker/Drive real nesta etapa.
+
+
+## Evidência de execução — 30/09/2026, terceiro recorte M01
+
+Upload da demanda registra intenção `midia.preparar` na transação, com identidade por arquivo/versão/perfil. Preparador local integrado ao cron usa lease e cria `midia.converter` atomicamente, sem rede. A preparação retoma após lease vencido e rejeita versão/empresa inválida. Prazo de 7 dias; sem backfill de uploads anteriores. 717 unitários, 310 integrações, 25 runtime/RLS, verificador de roles, tipos/lint/auditores/build aprovados.
+
+**Limite de ativação:** ainda não há consumidor de conversão para esses jobs. Caminho legado permanece. Próximo recorte é M02: worker privado e callback versionado/idempotente, conciliando jobs com conversões legadas para não duplicar efeitos. Não confundir conclusão da preparação com conclusão do vídeo. M01 segue parcial nos demais itens.
+
+
+## Evidência de execução — 30/09/2026, primeiro recorte M02
+
+Motor `worker-transcode/converter.mjs` adicionado e ensaiado: 13 testes com ffmpeg/ffprobe reais e storage local simulado. Suporta MOV/H.264, MOV/HEVC, MP4/HEVC e vertical, com/sem áudio; saída MP4/H.264/AAC privada por tentativa, faststart, até 1280 px sem ampliar, limites de 100 MiB/10 min, validação pós-conversão, hash/tamanho e cancelamento cooperativo. 717 unitários do app continuam aprovados. Medidas e limites no CONTROLE.md e README do worker.
+
+M02 EM_EXECUCAO. Motor não está ligado ao entrypoint legado nem à fila; próximo recorte é o consumidor com assinatura por lease e callback versionado. Sem CI remoto/Docker/navegador/Railway real ou teste de reinício abrupto. O teto de concorrência e o aborto do motor são locais; garantia durável de retomada ainda depende dessa integração. Nenhum original real foi usado.
+
+
+## Evidência de execução — 30/09/2026, segundo recorte M02
+
+Consumidor v2 ligado ao protocolo claim/renew/complete/fail, com recibo local persistido e callback idempotente no banco. API confere empresa/versão/lease e objeto no storage; conclusão e aplicação da prévia são atômicas, preservando original/publicação. Ativação desligada e restrita à empresa-piloto; legado protegido. Migração de recibo só no banco sintético.
+
+Provas: 717 unitários, 321 integrações distintas, 26 runtime/RLS e verificador, 18 testes worker, tipos/lint do app/auditores/build. Motor e protocolo foram testados separadamente; falta ensaio em processos ponta a ponta, reinício abrupto, limpeza/reconciliação e navegador. M02 parcial. Contrato/configuração e limites no README do worker; nenhum deploy ou configuração externa.
+
+
+## Evidência de execução — 30/09/2026, terceiro recorte M02
+
+Ensaio em processos com worker/ffmpeg real, rotas reais via adaptador HTTP, PostgreSQL e storage sintético. SIGKILL após upload recupera com novo lease e limpa temporário seguro; após commit recupera recibo sem repetir upload. Prévia entrega bytes com hash esperado mediante token válido, com recusa sem autorização ou após revogação. Startup limpa somente temporários marcados seguros de PID inexistente, preservando subprocessos/arquivos desconhecidos.
+
+Não equivale ao Next completo, navegador, RLS no mesmo fluxo ou storage real. Queda durante ffmpeg, pico de memória, Docker e coleta de órfãos remotos permanecem pendentes. M02 parcial; nenhuma publicação. Detalhes no CONTROLE.md e README do worker.
+
+
+## Evidência de execução — 30/09/2026, quarto recorte M02
+
+Supervisor separado encerra ffmpeg/ffprobe se o worker perder a conexão IPC, inclusive após SIGKILL. Teste real durante conversão comprova término do filho, limpeza segura e conversão seguinte; 20 testes worker e 13 integrações focadas aprovados. Pico RSS amostrado de 294 MiB num clipe sintético 1080p30/8s, sem impor limite ou extrapolar para produção.
+
+Próximo: Next completo com credenciais sintéticas restritas e reprodução/seek/autorização no navegador. Docker, queda simultânea do supervisor, memória sob carga e órfãos remotos seguem pendentes. M02 parcial, sem deploy.
+
+
+## Evidência de execução — 30/09/2026, quinto recorte M02
+
+Next completo em dev/webpack, worker real, logins restritos com RLS e SDK Supabase contra storage local simulado. Corrigido contexto de empresa separado entre bundles Next que causava 404 com token válido. Navegador IAB reproduziu prévia sintética de 6 s, avançou para 3 s e terminou sem erro; página pública real exibiu card e abriu o vídeo. Recusa sem token, outra demanda, revogação e expiração simulada comprovadas por HTTP.
+
+Ensaio encerrado e limpo. Produção/container/provedor real ainda não homologados; M02 parcial. Detalhes e comando reproduzível no README do worker e CONTROLE.md.
+
+
+## Evidência de execução — 30/09/2026, sexto recorte M02
+
+Ensaio de Docker preparado com limite real de memória/CPU/processos, runner que reprova OOM e job de CI. Docker/Podman ausentes localmente: execução explicitamente não validada, nenhum pico de container disponível. Critérios de inventário de órfãos documentados, sem implementar ou executar exclusão.
+
+Próxima evidência depende de executar o harness em Docker/cgroup v2; crash completo/volume e inventário remoto permanecem pendentes. M02 parcial.
+
+
+## Evidência de execução — 30/09/2026, sétimo recorte M01/M02
+
+Classificador offline de snapshot de inventário implementado, com relatório conservador por organização, referências, jobs e carência. 12 testes aprovados; CLI sem rede, sem sobrescrita e sem exclusão. Exemplo sintético e contrato no README do worker. Evidências de completude são declaradas pela origem; coletor automático ainda pendente. Docker continua indisponível, nenhuma validação de container presumida. M01/M02 parciais.
+
+
+## Bloco consolidado — 30/09/2026
+
+M02 implementado e revisado localmente, com homologação externa pendente conforme M02-ACEITE-LOCAL.md. Acrescentados remux de fontes compatíveis, preservação comprovada de pacotes e teste do timeout próprio do supervisor. Next/IAB validados também para remux. Não equivale a implantação/homologação de Docker ou Railway.
+
+Inventário recebeu coleta paginada com login restrito/READ ONLY, SDK de storage limitado à empresa e diagnóstico de estabilidade. Cobertura operacional não é global; flags de consistência/recibos permanecem falsas e objetos sem referência são inconclusivos. M01/M04 seguem parciais e nenhuma exclusão/backfill foi feita. Próximo bloco: Drive durável e seus consumidores de identidade.

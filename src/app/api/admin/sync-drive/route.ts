@@ -1,135 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
-import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
-import { criarSessaoUploadDrive } from "@/lib/google-drive"
-import { getOrgId, semOrg } from "@/lib/org"
+import { driveCopiaAtiva, enfileirarCopiasDrive, statusCopiasDrive } from "@/lib/drive-copias"
+import { ErroCopiaDrive } from "@/lib/drive-copia-provedor"
 
-// POST /api/admin/sync-drive
-// Faz upload em lote para o Google Drive de todos os vídeos finais que ainda estão no Supabase.
-// Atualiza Arquivo.url com a URL do Drive, MAS MANTÉM linkFinal como URL do Supabase.
+export async function GET() {
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  try { return NextResponse.json(await statusCopiasDrive(prisma,acesso.organizacaoId), { headers: { "Cache-Control": "private, no-store" } }) }
+  catch { return NextResponse.json({ error: "Não foi possível consultar as cópias." }, { status: 503, headers: { "Cache-Control": "private, no-store" } }) }
+}
+/** Só enfileira. A cópia verificada aparece no GET após o consumidor concluir. */
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session || session.user.tipo !== "admin") {
-    return NextResponse.json({ error: "Apenas admins podem sincronizar" }, { status: 401 })
-  }
-  const organizacaoId = await getOrgId(session)
-  if (!organizacaoId) return semOrg()
-
-  // Buscar demandas finalizadas/para_postar com linkFinal no Supabase (apenas da org do admin)
-  const demandas = await prisma.demanda.findMany({
-    where: {
-      organizacaoId,
-      statusVisivel: { in: ["finalizado", "para_postar"] },
-      linkFinal: { contains: "supabase" },
-    },
-    include: {
-      arquivos: {
-        where: { tipoArquivo: "final" },
-        orderBy: { sequencia: "asc" },
-      },
-      produtos: {
-        select: { produto: { select: { nome: true } } },
-        take: 1,
-      },
-    },
-  })
-
-  const sanitize = (s: string) => s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
-
-  let processados = 0
-  let erros = 0
-  const detalhes: { codigo: string; status: "ok" | "erro"; detalhe: string }[] = []
-
-  for (const dem of demandas) {
-    // Se não há Arquivo, usa o linkFinal diretamente
-    const arquivos = dem.arquivos.length > 0
-      ? dem.arquivos
-      : [{ id: null, url: dem.linkFinal!, sequencia: 1, thumbnailUrl: null }]
-
-    for (const arq of arquivos) {
-      const urlVideo = arq.url
-      if (!urlVideo || !urlVideo.includes("supabase")) continue
-
-      try {
-        const seq = arq.sequencia ?? 1
-        const seqStr = String(seq).padStart(3, "0")
-
-        // Construir nome: [produto]_[titulo]_[codigo]_001.ext
-        const parts: string[] = []
-        const prod = dem.produtos?.[0]?.produto?.nome
-        if (prod) parts.push(sanitize(prod).substring(0, 30))
-        parts.push(sanitize(dem.titulo).substring(0, 40))
-        parts.push(dem.codigo)
-        const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
-        const fileName = `${parts.join("_")}_${seqStr}.${ext}`
-
-        // Stream: buscar do Supabase
-        // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
-        // o servidor não consegue buscá-la direto. Assina aqui, com validade de
-        // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
-        // não bastam para vídeo grande.
-        const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
-        const supaRes = await fetch(origem)
-        if (!supaRes.ok || !supaRes.body) {
-          erros++
-          detalhes.push({ codigo: dem.codigo, status: "erro", detalhe: `Supabase retornou ${supaRes.status}` })
-          continue
-        }
-
-        const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
-        if (fileSize <= 0) {
-          erros++
-          detalhes.push({ codigo: dem.codigo, status: "erro", detalhe: "Content-Length ausente — impossível fazer upload Drive" })
-          continue
-        }
-
-        const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
-
-        // Upload para Drive
-        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, organizacaoId)
-
-        const driveRes = await fetch(sessionUri, {
-          method: "PUT",
-          headers: {
-            "Content-Type":   contentType,
-            "Content-Length": String(fileSize),
-            "Content-Range":  `bytes 0-${fileSize - 1}/${fileSize}`,
-          },
-          body: supaRes.body,
-          // @ts-ignore
-          duplex: "half",
-        })
-
-        if (driveRes.status === 200 || driveRes.status === 201) {
-          // Atualiza Arquivo.url → Drive URL (para download)
-          // NÃO atualiza linkFinal (mantém Supabase para galeria)
-          if (arq.id) {
-            await prisma.arquivo.update({ where: { id: arq.id }, data: { url: publicUrl } })
-          }
-          processados++
-          detalhes.push({ codigo: dem.codigo, status: "ok", detalhe: `Drive: ${publicUrl}` })
-        } else {
-          const errText = await driveRes.text().catch(() => "")
-          erros++
-          detalhes.push({ codigo: dem.codigo, status: "erro", detalhe: `Drive HTTP ${driveRes.status}: ${errText.slice(0, 100)}` })
-        }
-      } catch (e) {
-        erros++
-        detalhes.push({
-          codigo: dem.codigo,
-          status: "erro",
-          detalhe: e instanceof Error ? e.message : String(e),
-        })
-      }
-    }
-  }
-
-  return NextResponse.json({
-    ok: true,
-    total: demandas.length,
-    processados,
-    erros,
-    detalhes,
-  })
+  const acesso = await requireAcesso("gerenciarConfig")
+  if (acesso instanceof NextResponse) return acesso
+  if (!driveCopiaAtiva(acesso.organizacaoId)) return NextResponse.json({ error: "Sincronização em homologação; piloto ainda não ativado para esta empresa." }, { status: 409 })
+  let body: { cursor?: string }
+  try { body = await req.json() } catch { return NextResponse.json({ error: "Informe um objeto JSON." }, { status: 400 }) }
+  if (!body || typeof body !== "object" || (body.cursor !== undefined && typeof body.cursor !== "string")) return NextResponse.json({ error: "Cursor inválido." }, { status: 400 })
+  try { return NextResponse.json({ ok: true, ...await enfileirarCopiasDrive(prisma,acesso.organizacaoId,body.cursor) }, { status: 202 }) }
+  catch (e) { return NextResponse.json({ error: e instanceof ErroCopiaDrive ? e.codigo : "Não foi possível enfileirar o lote." }, { status: e instanceof ErroCopiaDrive ? 409 : 500 }) }
 }

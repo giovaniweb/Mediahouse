@@ -1,16 +1,18 @@
 # Controle da execução do Flow
 
-Última atualização: 30/09/2026 — estimativa monetária de IA com preços datados; eventos seguem adiados; sem deploy.
+Última atualização: 01/10/2026 — bloco M04 implementado e ensaiado localmente: biblioteca, recuperação por lote, histórico e retenção sem exclusão. Sem deploy.
 
 ## Checkpoint de retomada
 
 - Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
 - Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
-- Próxima frente fora de eventos: M01 — identidade da mídia, base para Drive/biblioteca. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
+- Próximo bloco: C01–C03 (profissionais/contratos e custo do setor), em entrega coesa com checkpoints internos. M02/M03 continuam com homologação externa pendente; M04 tem aceite em M04-ACEITE-LOCAL.md. Não reabrir pequenas fatias já validadas sem evidência nova. M01/inventário global continuam parciais.
 - O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
 - Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Última implementação: estimativa em USD do consumo confirmado de IA (recorte O06 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
-- Últimas provas locais: 692 unitários, 293 integrações distintas, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Este recorte altera estimativa de consumo, painel existente e testes; eventos não foram retomados.
+- Última implementação: biblioteca com filtros e estado de prévia; qualidade “sem referência final” integrada ao acervo; fila paginada com regra de 30 dias em Audiovisual/Growth; histórico sem data inventada; simulação/aplicação auditada por lote e retomada de relatórios. Originais, prévias, finais, custos e registros preservados.
+- Provas locais: 748 unitários, 353 integrações, 26 runtime/RLS + verificador; tipos, lint sem erros, auditores e build webpack. Migração aditiva ensaiada e schema sem divergência. Sem ensaio visual nem Storage real nesta etapa.
+- Banco sintético de retomada: PostgreSQL local porta 55449, banco nuflow_test, diretório /private/tmp/nuflow-drive-20261001-pg. O cluster anterior 55439 perdeu arquivos internos e foi substituído para ensaio completo das migrações; agora são 39.
+- Progresso: 18/36 cartões técnicos implementados (50%); 18/38 incluindo publicação/piloto (47,4%). Percentual de implementação, não de prontidão para venda.
 - Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
@@ -41,10 +43,10 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
-| M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| M01 | Identidade da mídia | 04 | S06, O01 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
+| M02 | Worker privado | 04 | M01, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
+| M03 | Sync Drive | 04 | M01, S04, O01 | IMPLEMENTADO | EXTERNA_PENDENTE | CONFERIDA | NAO_PUBLICADO |
+| M04 | Biblioteca e histórico | 04 | M01, M02, M03, R04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C03 | Painel e conciliação | 05 | C02, R02, R03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -411,3 +413,159 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - Painel mostra total estimado ou subtotal parcial, sem conversão/fatura. Valores antigos não são reescritos; documentação em O06-LIMITES-IA.md.
 - 692 unitários e 293 integrações distintas aprovados (suite + recorte de 33 após atualizar expectativa do adaptador); build/tipos, lint sem erros/avisos e auditores aprovados. Sem migration, chamada paga, mensagem ou deploy. Homologação externa/visual e comparação de fatura pendentes.
 - Próximo: M01 — identidade única de mídia para preparar Drive/biblioteca. Eventos seguem em standby; não reiniciar seu desenvolvimento.
+
+
+### 30/09/2026 — M01 parcial: identidade de leitura e fonte do transcode
+
+- Adaptador distingue objeto Supabase privado/legado, referência Drive e link externo. URL assinada identifica o objeto sem incorporar token. Host Supabase precisa coincidir exatamente com a configuração; recusa caminhos ambíguos, escapes, credenciais e protocolos inseguros.
+- Antes de assinar ou baixar, transcode exige caminho de vídeo da demanda e vínculo exato no banco com arquivo/original ou linkFinal, sempre na organização autorizada. HEAD e envio ao worker não seguem redirects e possuem timeout. Falha de assinatura não encaminha a URL original como alternativa. Links externos permanecem cadastrados, mas não são baixados por esse serviço.
+- Upload registra Arquivo antes de consultar metadados remotos. Reconversão e manutenção contam somente serviços aceitos; legado da manutenção recebeu filtro explícito de organização.
+- Provas: 712 unitários (20 novos), 19 integrações de mídia com PostgreSQL sintético (5 novas), tipos, lint, auditores e build webpack. Build mantém aviso preexistente de face-api. Integrações usam assinatura e worker simulados; não comprovam execução real de conversão.
+- Sem migração, backfill, alteração de originais, publicação ou chamadas pagas. Eventos continuam em standby.
+- M01 segue parcial: faltam colunas aditivas de identidade/versão/checksum/preview/cópia Drive, gravação consistente em todos os canais, evento transacional e adaptação dos demais consumidores. A comparação exata com URL registrada é uma proteção transitória; a identidade ainda não está persistida no banco. Deduplicação/idempotência, callback e corrida de estado após aceite continuam em M02. O status legado sem_worker ainda agrega ausência de configuração, recusa e falha de envio.
+- Próxima unidade: mapear os canais de criação de Arquivo e adicionar persistência compatível de metadados, sem backfill real; só então avançar worker/Drive/biblioteca.
+
+
+### 30/09/2026 — M01 parcial: metadados de fonte e registro de upload
+
+- Migração aditiva `20260930000000_identidade_fonte_arquivo`: provedor, bucket, chave, referência, versão interna, MIME declarado e SHA-256 da fonte. Legado permanece nulo; organização e uso continuam na demanda e no tipoArquivo. Sem duplicar organização nem inventar MIME/codec/hash. Campos da fonte não mudam quando a URL de reprodução recebe preview.
+- Criadores de Arquivo (upload de demanda, anexo público, ferramenta WhatsApp, recuperação auditada e confirmação Drive) passam a extrair metadados quando a referência é reconhecível. Caminhos privados incompatíveis não recebem identidade inferida. Os dois canais que recebem bytes no servidor calculam hash/tamanho; confirmação de upload do navegador ignora metadados fornecidos pelo cliente.
+- `registrarArquivoDemanda` revalida organização no banco, serializa confirmações por demanda e grava Arquivo/link operacional na mesma transação. Reenvio da mesma URL/tipo não duplica nem recoloca arquivo antigo como link principal. Sequência usa máximo + 1. POST agora cria Arquivo, brutos também; documento não altera linkBrutos. Uploads novos recusam referência privada de outra empresa/demanda/tipo.
+- DemandaDetalhe confere a resposta da gravação e não anuncia sucesso diante de falha HTTP. Conversão inicia depois do commit, apenas em nova confirmação; atualização de estado não sobrescreve callback que já concluiu.
+- Provas: migração no PostgreSQL descartável, 717 unitários, 305 integrações (7 novas), 25 runtime/RLS (1 novo), verificador de roles, tipos, build webpack, lint sem erros e auditores aprovados. Serviços externos simulados. Sem publicação/migração de produção, backfill ou alteração do acervo.
+- Limites: M01 segue parcial. Faltam evento transacional de processamento, consumo da identidade persistida pelos demais serviços, identidade de preview/cópia e revisão Drive, codec verificado e inventário. FonteVersao=1 é versão interna inicial, não comprova imutabilidade de objeto externo. Identidade nula mantém leitura legada. Caminhos de edição direta de linkFinal/linkBrutos e registros administrativos ainda não usam o serviço idempotente; exclusão permanece no fluxo legado. Metadados extraídos de URL não comprovam que o objeto existe no storage. Upload que termina no storage mas falha no banco pode deixar órfão; não há remoção automática.
+- Próximo recorte: evento durável junto do registro e início do consumidor M02; fila/lease e callback versionado antes de homologar worker real. Eventos de negócio continuam em standby.
+
+
+### 30/09/2026 — M01 parcial: intenção atômica e preparação recuperável
+
+- Upload final elegível (identidade Supabase da própria demanda) grava `midia.preparar` na transação de Arquivo/link. Chave por arquivo, versão e perfil `h264-720p-v1`; payload contém só versão/perfil, nunca URL assinada. Documento, bruto e referência Drive/externa não geram conversão local. A confirmação repetida mantém a intenção original.
+- `prepararMidias` reivindica até 2 jobs com lease da fila existente, revalida empresa/arquivo/versão e cria `midia.converter` atomicamente com a conclusão da preparação. Arquivo removido/versão incompatível falha definitivamente; falha transitória usa retry limitado. Validade de 7 dias desde o registro, sem renovação silenciosa. Job vencido é terminal, não garantia de retenção indefinida.
+- Cron de agentes chama apenas essa preparação local, com autenticação/cursor e limite de tempo já existentes. Sem IA, download, rede ou execução ffmpeg nessa rotina. Cadência real segue o cron existente, não processamento imediato.
+- Conversão M02 ainda NÃO é consumida. O caminho legado de tentativa imediata continua; a fila registra a intenção para evolução, mas NÃO comprova retomada automática da conversão. Worker atual ainda assume uploads público e não possui idempotência/lease: não ativar retries remotos até adaptar saída privada/callback e conciliar conversões legadas já iniciadas/concluídas. A preparação concluída não significa vídeo convertido.
+- Provas: 717 unitários; 310 integrações (5 novas, cobrindo intenção única, retomada de lease vencido, rollback, versão/empresa e exclusão de referências externas); 25 runtime/RLS com intenção de mídia sob role restrita; verificador de roles, tipos, lint, auditores e build webpack. Sem migração nova, backfill, publicação ou processamento de mídia real.
+- M01 permanece EM_EXECUCAO; M02 não foi dado como concluído. Pendências de preview/revisão Drive/inventário e canais fora do upload de demanda permanecem.
+
+### Percentual solicitado — fotografia de 30/09/2026
+
+Contagem dos cartões, sem pesos por complexidade ou estimativa de horas:
+
+| Medida | Contagem | Percentual | Interpretação |
+| --- | --- | --- | --- |
+| Etapas técnicas concluídas (F00–L01) | 15 de 36 | 41,7% | IMPLEMENTADO; 7 parciais e 14 ainda A_FAZER |
+| Plano completo, incluindo publicação/piloto | 15 de 38 | 39,5% | L02 e L03 ainda não executados |
+| Etapas técnicas com alguma prova local | 22 de 36 | 61,1% | Inclui 7 parciais; não equivale a aceitação completa |
+| Prontidão para vender | Não homologada | Não mensurável com as provas atuais | L01/L02/L03, integrações reais e piloto continuam pendentes |
+
+Não somar percentuais das linhas. Os cartões têm tamanhos diferentes; estes números medem cobertura do plano e não esforço, qualidade integral ou percentual de funcionalidades de produção. O módulo de eventos permanece em standby e não é contado como entregue por ter sido adiado.
+
+
+### 30/09/2026 — M02 parcial: motor privado ensaiado com ffmpeg
+
+- `worker-transcode/converter.mjs`: executa conversão, não é servidor/consumidor e não confirma aceite em memória. Contrato restrito a organização/demanda/arquivo/versão/job/lease/perfil, origem no host de storage configurado e saída derivada no bucket midia por tentativa. Nenhuma service role entra no motor. Perfis e paths não são comandos livres.
+- Streaming de entrada/saída, teto 100 MiB inclusive sem Content-Length, duração até 10 min, dimensões de entrada limitadas, subprocessos com timeout, duas threads e sem protocolos de rede. Diretório isolado; limpa em término/erro/aborto cooperativo. SHA-256 original/prévia, MIME/codec/dimensões/duração, tempo e tamanho retornados; original preservado. Uma conversão por instância; saturação recusa trabalho.
+- MP4/H.264/AAC (quando houver áudio), yuv420p/faststart, CRF 23/veryfast, maior dimensão até 1280 px, sem ampliar. Valida saída por ffprobe antes do envio. Rejeita pixel não quadrado e rotações não múltiplas de 90° neste recorte.
+- 13 testes reais locais: MOV/H.264 com áudio, MOV/HEVC e MP4/HEVC sem áudio, vertical, inválido/playlist, duração >10 min, tamanho declarado e streaming >100 MiB, hash divergente, falha de download/upload, redirect, concorrência/aborto, caminhos/versões. Checagem independente do MP4 enviado, faststart, proporção e integridade do original. Mais 717 unitários do app aprovados. Node --check passou; ESLint do projeto ignora a pasta do worker, portanto não certificou estes arquivos.
+- Clipes sintéticos de 1 segundo (esta máquina; não extrapolar para produção): H.264 MOV 20.970→26.273 bytes/75 ms; HEVC MOV 11.270→10.706/61 ms; HEVC MP4 11.319→10.706/58 ms; vertical 720×1440→640×1280, 230.265→145.421 bytes/104 ms. Compressão não garantida. Pico de memória do subprocesso, qualidade/HDR, custos reais e reprodução em navegador não medidos.
+- CI dedicado adicionado para instalar ffmpeg e executar a suíte; execução remota pendente. Docker copia o módulo novo, mas entrypoint index.mjs permanece legado e não chama o motor. README reescrito com contrato/limites/pendências, removendo exemplo fixo de segredo. Não usar o exemplo anterior em novos ambientes; eventual rotação real pertence à preparação de publicação.
+- **Não ativo:** consumidor midia.converter, emissão de URLs assinadas por lease, renovação, callback idempotente, persistência/validação final da prévia, reconciliação com transcode legado, crash/restart abrupto e limpeza de órfãos. Aborto cooperativo testado não equivale a recuperação após SIGKILL. Nenhum deploy, arquivo real ou serviço pago usado. M02 EM_EXECUCAO; M01 continua parcial. Eventos continuam em standby.
+
+### Atualização do percentual após o motor local
+
+Continua **15/36 = 41,7% das etapas técnicas concluídas** e **15/38 = 39,5% do plano completo**. Agora são 8 etapas parciais e 13 técnicas ainda não iniciadas. M02 ganhou provas locais, sem ser contado como concluído: 23/36 cartões têm alguma prova local (63,9%), o que não equivale a homologação. Venda continua não homologada; publicação/piloto pendentes.
+
+### 30/09/2026 — M02 parcial: protocolo e consumidor v2
+
+- Migração aditiva `20260930010000_recibo_preview`: chave, SHA-256, tamanho, versão-fonte e job da prévia. RLS e fonte original preservados; aplicada apenas no banco sintético.
+- `/api/transcode/worker`: segredo dedicado, corpo até 8 KiB, no-store, ações claim/renew/complete/fail. Desligado por padrão e restrito à empresa configurada no servidor; cliente não escolhe organização. Fila O01 ganhou teto opcional por empresa: v2 pede 1; consumidores anteriores mantêm seus limites.
+- Claim prepara intenções, revalida fonte/versão/empresa/estado e assina fora da transação; verifica lease novamente antes da resposta. Renew corta autorização após mudança de versão/pausa. Legacy processing não recebe outro processamento; done/skipped são tratados como concluídos.
+- Callback exige job/lease/versão/perfil/destino da tentativa e HEAD compatível em existência/MIME/tamanho. Atualização CAS do arquivo, linkFinal e aprovação pendente + conclusão são atômicas. Retry após commit perdido confere recibo persistido. SHA-256/codec/dimensões são atestados pelo worker autenticado, não recalculados no app. Snapshot público e fonte não mudam. Replay do upload original depois da prévia não duplica Arquivo.
+- Consumidor renova a cada 20 s, aborta na perda/incerteza e persiste recibo em diretório configurado (write/fsync/rename) antes da confirmação. Três tentativas de callback; resposta incerta mantém recibo para próximo ciclo/reinício. 503 preserva retry; 409 encerra recibo obsoleto. Poll 30 s ocioso/1 s após conclusão. Start/Docker selecionam v2 só pela flag; default legado.
+- Na empresa ativada, disparos/callbacks legados são bloqueados. Preview v2 continua protegida contra callback legado após desligar flag. Preflight precisa reconciliar conversões antigas em andamento e jobs expirados; não há backfill ou recuperação administrativa automática. Nenhuma flag externa foi ativada.
+- Provas: 717 unitários, 321 integrações distintas (11 novas; 23 focadas repetidas após ajuste de replay), 26 runtime/RLS (1 nova conclusão de preview sob role restrita), verificador, 18 testes worker (5 novos do consumidor), tipos/lint do app/auditores/build. Storage/assinatura/HEAD simulados no protocolo; motor validado separadamente com ffmpeg real. Sem acervo/custo externo.
+- Pendências: processo ponta a ponta, SIGKILL/reinício abrupto, limpeza pós-crash, inventário/reconciliação de objetos órfãos, memória/navegador, UX de estados, homologação Railway/Storage e credenciais multiempresa. Crash após upload antes de salvar recibo, volume perdido ou lease expirado pode repetir computação; conclusão é idempotente, conversão não é exactly-once. Recibo não autoriza publicar fora do lease. M02 permanece EM_EXECUCAO.
+- Percentual: 15/36 etapas técnicas completas (41,7%), 8 parciais; plano completo 15/38 (39,5%). Progresso dentro do worker não equivale a cartão concluído; venda não homologada.
+
+
+### M02 — 30/09/2026, terceiro recorte: queda de processo e temporários
+
+- Worker real em processo filho, com FFmpeg/FFprobe e clipe HEVC sintético; rotas reais do protocolo e de mídia servidas por adaptador HTTP de teste, PostgreSQL local e storage simulado. Não executa o servidor Next completo.
+- SIGKILL depois de gravar o upload, antes de responder: mantém original, expira lease da fixture, reinicia com outra autorização/chave, limpa temporário marcado seguro e recusa callback antigo. O objeto remoto órfão é preservado, não apagado automaticamente.
+- SIGKILL depois do commit, antes da resposta: recupera recibo persistido, confirma idempotentemente e não repete upload. Apenas um evento de conclusão. Token válido entrega bytes com hash esperado; sem token/token inválido/revogado recusa acesso. Storage sem assinatura recusa acesso.
+- Temporários no volume de estado, com marcador de PID/fase. Só remove marcadores seguros de processo inexistente; preserva symlinks, dados desconhecidos e fase de subprocesso. Volume exclusivo por instância/namespace; não usar este mecanismo para coordenar hosts diferentes.
+- Pendências explícitas: Next completo com credenciais restritas neste mesmo ensaio, navegador, Docker/Railway, memória, subprocessos após SIGKILL durante conversão, expiração real de URLs assinadas e coleta de órfãos remotos. Login administrativo na suíte de integração; RLS continua coberto separadamente pelo ensaio runtime anterior.
+- M01/M02 continuam parciais; 15 de 36 cartões técnicos implementados (41,7%). Sem publicação, configuração externa ou mídia real.
+
+- Validação deste recorte: 323 integrações, 19 testes do worker, TypeScript sem erros, lint dos arquivos novos sem erros e diff sem problemas. CI preparado para instalar FFmpeg antes da integração; execução remota não realizada.
+
+
+### M02 — 30/09/2026, quarto recorte: supervisão durante conversão
+
+- Supervisor Node separado por execução de ffmpeg/ffprobe. Detecta desconexão IPC do worker, encerra somente o filho próprio e espera seu término antes de marcar o temporário seguro. Aborto/timeout são encaminhados ao supervisor; o worker aguarda sua saída antes de limpar. Argumentos Node de teste não são herdados pelo fork.
+- Ensaio com SIGKILL do worker enquanto FFmpeg real converte um clipe 1080p30 de 8 segundos: filho encerrado, nenhum upload, temporário seguro removido e conversão seguinte concluída. 20 testes do worker e 13 integrações focadas aprovados.
+- RSS local amostrado: 294 MiB para worker+supervisor+conversor, 13 amostras com intervalo mínimo de 25 ms. Não é teto de memória, cgroup, teste de 4K/8K ou dimensionamento de Railway.
+- Next completo/navegador, runtime restrito no mesmo fluxo, container/Docker, queda simultânea do supervisor, memória sob carga, URLs assinadas expiradas e coleta remota seguem pendentes. Roteiro da próxima prova no README do worker.
+- M02 continua parcial. 15/36 cartões técnicos (41,7%); nenhum deploy ou ajuste externo.
+
+
+### M02/S07 — 30/09/2026, quinto recorte: Next completo e navegador
+
+- `scripts/ensaio-midia/next-local.mjs`: Next dev webpack real, dois logins descartáveis app_user/app_auth sem bypass, RLS ativo, SDK Supabase real contra servidor loopback que simula assinatura/storage privado e Range. Bootstrap administrativo apenas das fixtures; aplicação não recebe conexão administrativa. Recusa arquivos .env de desenvolvimento e limita fetch a loopback.
+- Vídeo sintético MOV/HEVC com áudio, 640×360, 24 fps, 6 segundos, convertido pelo worker real. Fonte preservada, um upload e checksum conferido. Testa ausência de token, token de outra demanda, revogação e expiração acelerada de assinatura no simulador.
+- Encontrado 404 indevido no token válido: bundles distintos tinham cópias de AsyncLocalStorage, enquanto Prisma era compartilhado no processo. Contexto agora é singleton global; dados continuam isolados por execução assíncrona. Teste de regressão recarrega módulos e intercala empresas/contexto nulo/aninhado.
+- Navegador IAB: metadados 640×360/6 s/sem erro; seek a 3 s e reprodução até ended em 6 s. Página real `/d/token` exibiu Material final; URL do card abriu vídeo nativo com mesmos metadados. Player de medição pertence ao harness, não é nova interface do produto. Três requisições Range observadas.
+- Revogação impede novas assinaturas; URL emitida antes continuou válida até sua expiração simulada. Não prometer revogação instantânea de URLs já emitidas. Assinatura real Supabase, produção/Railway e outros navegadores ainda pendentes.
+- Processos do ensaio encerrados, fixtures/roles/diretório temporário removidos. Nenhum deploy ou uso de acervo real. M02 continua parcial; 15/36 cartões técnicos concluídos (41,7%).
+
+- Regressão aprovada: 718 unitários, 323 integrações, 26 runtime/RLS + verificador, tipos, lint focado, auditores e build webpack. Build mantém aviso preexistente de dependência dinâmica face-api.
+
+
+### M02/I01 — 30/09/2026, sexto recorte: preparo de container e critérios de órfãos
+
+- Verificação local: nenhum executável Docker/Podman disponível. Harness retorna código 2 e mensagem explícita de ensaio não executado. Não instalar runtime nem atribuir pico RSS anterior a um container.
+- Script `scripts/ensaio-midia/container.mjs` constrói imagem atual e imagem de testes; execução sem rede, sem volumes do host, usuário node, read-only, init, capacidades removidas, 768 MiB, 2 CPUs, 256 processos e tmpfs limitado. Tags e container únicos são removidos ao final, sem prune.
+- Runner exige cgroup v2 e limite real, registra memory.peak e deltas de OOM/oom_kill; falha ou OOM reprova. CI recebeu job dedicado. Contexto Docker em allowlist não envia credenciais/estado local.
+- Critérios de futuro inventário remoto registrados no README: preservar referências atuais/originais/publicadas/aprovações, jobs e recibos em reconciliação; inventário incompleto é inconclusivo; candidato antigo sem referência ainda exige revisão/política. Nenhum inventário nem exclusão remota realizados.
+- M02/I01 não concluídos. Container real, crash do container/volume, memória sob carga e inventário remoto seguem pendentes. Sem publicação.
+
+- Validação local do preparo: 20 testes worker sequenciais aprovados, lint do script/sintaxe Node/diff aprovados. Sem Docker, launcher recusou execução (código 2); sem cgroup, runner recusou validação (código 1). Nenhum resultado de container inferido desses checks.
+
+
+### M01/M02 — 30/09/2026, sétimo recorte: classificador offline de inventário
+
+- Docker/Podman continuam indisponíveis no PATH; não atribuir aprovação de container. Avanço independente no cruzamento de objetos/referências/jobs via snapshot JSON local, sem rede nem .env.
+- CLI gera relatório novo 0600 com classes preservar/inconclusivo/fora_escopo/revisar e contagens/bytes. Não sobrescreve entrada/saída, não exclui nada, não estima economia. Rejeita URL assinada, campos desconhecidos, nomes ambíguos e referências inconsistentes de arquivo/job.
+- Preserva referência de original/publicação/aprovação/link e job ativo; coleta incompleta/recibos não conciliados impedem candidatura. Carência explícita e encerramento real exigidos. As evidências de completude são declaradas no snapshot, não verificadas pelo classificador. Coletor real ainda não implementado.
+- 12 testes passaram, incluindo execução do CLI e proteção contra sobrescrita; contrato/exemplo/comando documentados. CI executará essa suíte, sem execução remota nesta etapa.
+- Próximo: coleta paginada e consistente, inicialmente em fixtures, com falhas tornando resultado inconclusivo. M01/M02 parciais; inventário do acervo, política de retenção e qualquer exclusão permanecem fora deste recorte. Sem deploy.
+
+
+### Bloco consolidado — mídia, inventário e aceite M02
+
+- Autorização do usuário: executar blocos maiores completos, sem encerramentos a cada microetapa. Plano mestre atualizado nessa preferência; sem criar automações/agentes.
+- Coleta por CLI com configuração INVENTARIO_* explícita: PostgreSQL sob login app_user sem bypass/dono, REPEATABLE READ READ ONLY e keyset por id; lista SDK Supabase somente do bucket midia/prefixo da empresa, pastas/páginas limitadas, timeout, sem redirects. Exporta referências canônicas sem tokens. Não roda sobre banco real nesta entrega.
+- Duas passagens registram estabilidade observada; mudanças, falhas, páginas repetidas, metadados inválidos, orçamento e cancelamento nunca viram completude. Referências observadas nas duas leituras são preservadas. Cobertura operacional de Arquivo/Demanda/Aprovação não equivale a todos os módulos/JSON; recibos não conciliados e ausência de snapshot distribuído permanecem explícitos. Objetos sem vínculos continuam inconclusivos.
+- Fonte H.264 compatível agora usa remux privado faststart, preservando pacotes de vídeo. HEVC/dimensões superiores/áudio ou perfil incompatíveis usam transcode; todas as validações pós-saída continuam. Teste de timeout próprio do supervisor adicionado.
+- Next completo com fonte H.264, empresa/logins sintéticos, worker/SDK e storage local: checksum/original/acesso/revogação aprovados; IAB fez seek a 3 s e terminou em 6 s, 640×360, sem erro. Ambiente de ensaio encerrado/limpo.
+- M02 fechado tecnicamente conforme matriz M02-ACEITE-LOCAL.md e regra do plano para IMPLEMENTADO. Validação EXTERNA_PENDENTE mantém Docker/provedor/Railway/piloto/custo real explícitos; não é venda liberada. M01/M03/M04/I01 não foram concluídos por consequência.
+- Progresso de implementação técnica passa a 16/36 (44,4%); 16/38 (42,1%) incluindo publicação/piloto. Não corresponde a prontidão comercial.
+
+- Validação final do bloco: 718 unitários, 326 integrações, 26 runtime/RLS e verificador, 19 inventário, 21 worker, tipos/lint/auditores/build aprovados. Após revisão, integração focada e suíte de inventário repetidas para provar que lease real não é exportado: só o marcador `presente`. Build mantém aviso preexistente face-api.
+
+
+### M03 / 01-10-2026 — bloco completo de cópia Drive para piloto
+
+Base: `30c5592`, checkout/branch acima. Entrega e limites em [M03-ACEITE-LOCAL.md](M03-ACEITE-LOCAL.md). Migração aditiva de cópias com RLS, produtor paginado, fila O01, consumidor autenticado com lease renovável, ID remoto pré-alocado, checksum/versão, reconciliação após resposta perdida e UI de acompanhamento. Leitura de pasta separada da criação de arquivo de teste. Produtores/upload direto legados bloqueados no piloto. Original/prévia não mudam. Sem LLM.
+
+Validação local: 738 unitários, 341 integrações, 26 runtime + verificador. Testes do novo fluxo usam Google simulado e login PostgreSQL sem bypass. Tipos/lint/auditores/build e diff de schema conferidos. Corrigidos índice truncado e DELETE herdado durante ensaio da migração inédita no banco sintético.
+
+Externos pendentes: conta/pasta Google de homologação, agendamento, permissões herdadas, ensaio de perda de resposta no provedor, limites de execução e avaliação de Shared Drive. Limites locais: 100 MiB, cinco tentativas, um arquivo por chamada, enfileiramento manual; sem reabertura automática de jobs terminais e sem backfill do acervo. Nenhum deploy/push/configuração externa realizado. Próximo bloco: M04 com cobertura conservadora do inventário M01.
+
+
+### M04 / 01-10-2026 — bloco biblioteca, recuperação e retenção
+
+Base `5dcb7a4`. Entrega documentada em [M04-ACEITE-LOCAL.md](M04-ACEITE-LOCAL.md). Biblioteca unifica arquivos/artes/links aprovados, acrescenta filtros e estado de prévia; página de entregas sem vídeo vira filtro de qualidade e sai do menu. Audiovisual/Growth consultam fila paginada com corte de 30 dias, preservando legado sem data e todos os registros. Histórico não inventa conclusão por atualização.
+
+Recuperação antiga bloqueada: simular até 25 demandas, revisar, aplicar lote persistido com operador/hash/validade, transação serializável, auditoria e relatório antes/depois. Últimos lotes podem ser retomados. Não promove bruto, não publica e não apaga. Política explícita preserva original/prévia/final; sem promessa de economia de GB ou confirmação de arquivo remoto.
+
+Provas: 748 unitários, 353 integrações, 26 runtime + verificador, tipos/lint/auditores/build, diff de schema sem divergência. Migração somente em banco sintético. Permissões, versão de prévia, URLs inseguras, concorrência, expiração e dados alterados conferidos. Pendentes externos: revisão visual com equipe e homologação/publicação autorizada. Índice de entregáveis R04 continua em memória; inventário físico global/retenção destrutiva não foram declarados concluídos. Próximo bloco: C01–C03.

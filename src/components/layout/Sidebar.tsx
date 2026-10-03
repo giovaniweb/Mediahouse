@@ -34,7 +34,6 @@ import {
   Sparkles,
   Handshake,
   Layers,
-  VideoOff,
   ScrollText,
   X,
 } from "lucide-react"
@@ -104,7 +103,6 @@ const sections = [
       { href: "/relatorios", label: "Relatórios", icon: BarChart2 },
       // Era item fixo do audiovisual: um relatório de diagnóstico promovido ao menu
       // principal. Continua acessível, mas junto dos outros relatórios.
-      { href: "/relatorios/finalizadas-sem-video", label: "Entregas sem vídeo", icon: VideoOff },
     ],
   },
   {

@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!Dockerfile.ensaio
+!package.json
+!index.mjs
+!start.mjs
+!consumer.mjs
+!converter.mjs
+!subprocesso.mjs
+!temporarios.mjs
+!ensaio-container.mjs
+!tests/
+!tests/*.test.mjs

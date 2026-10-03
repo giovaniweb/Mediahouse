@@ -56,7 +56,7 @@ Os números da auditoria são um retrato, não constantes para testes de regress
 | WhatsApp | Pedido, aceite de convite identificado, plano do dia e atualização/entrega |
 | Quatro jobs | Até quatro sugestões permitidas e explicáveis; não promessa de duração nem atribuição automática |
 | Plataforma | Onboarding assistido e limites por empresa; billing automático fica fora desta primeira entrega |
-| Execução | Um executor, tarefas pequenas e checkpoints; sem subagentes ou sistemas novos de orquestração |
+| Execução | Um executor, blocos maiores completos com checkpoints internos; seguir tarefas independentes sem pedir “próximo” a cada fatia. Sem subagentes ou sistemas novos de orquestração |
 
 Nomes de tabelas/serviços novos nos cadernos são propostas de contrato. Antes de criar, conferir se já existe equivalente. Reutilizar os helpers de escopo, permissão, mídia e transições; não manter duas fontes de verdade.
 
