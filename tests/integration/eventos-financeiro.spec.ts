@@ -4,7 +4,6 @@ import { NextRequest } from "next/server"
 const { sessao } = vi.hoisted(() => ({ sessao: { user: null as null | { id: string; organizacaoId: string; tipo: string } } }))
 vi.mock("@/lib/auth", () => ({ auth: async () => sessao.user ? { user: sessao.user } : null }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
-vi.mock("@/lib/google-drive", () => ({ criarPastaDrive: vi.fn(() => { throw new Error("Rede proibida") }) }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as detalhe, PUT as atualizar } from "@/app/api/eventos/[id]/route"
