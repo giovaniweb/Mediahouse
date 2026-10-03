@@ -1,0 +1,46 @@
+.pagina { padding: 16px 24px 40px; display: flex; flex-direction: column; gap: 16px; color: #eeeef5; }
+.atalhos { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; }
+.atalhos a { color: #c7b6f5; }
+.atalhos a:hover { color: #e4dafd; }
+
+.barra { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.busca { position: relative; flex: 1 1 280px; max-width: 420px; display: flex; align-items: center; }
+.busca svg { position: absolute; left: 12px; color: #8d8ca3; pointer-events: none; }
+.busca input { width: 100%; min-height: 40px; padding: 8px 12px 8px 36px; border-radius: 10px; border: 1px solid #303342; background: #191b23; color: #eeeef5; font-size: 14px; }
+.busca input::placeholder { color: #8d8ca3; }
+.total { color: #a2a1b8; font-size: 13px; }
+.baixar { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border-radius: 10px; border: 1px solid #303342; color: #e4e4ef; font-size: 14px; }
+.baixar:hover:not(:disabled) { border-color: #4a4e63; }
+.baixar:disabled { opacity: .45; cursor: not-allowed; }
+
+.aviso, .vazio { color: #a2a1b8; font-size: 14px; }
+.vazio { padding: 40px 16px; text-align: center; border: 1px dashed #303342; border-radius: 14px; }
+.erro { padding: 12px 16px; border-radius: 12px; border: 1px solid #f8717155; background: #f871711a; color: #fca5a5; font-size: 14px; }
+.erro button { margin-left: 8px; text-decoration: underline; }
+
+.tabela { border: 1px solid #242733; border-radius: 14px; overflow: hidden; background: #15171e; }
+.cabeca, .linha { display: grid; grid-template-columns: 150px minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, .8fr); gap: 16px; padding: 14px 18px; align-items: start; }
+.cabeca { background: #191b23; color: #a2a1b8; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.linha { border-top: 1px solid #242733; font-size: 14px; }
+.linha:hover { background: #191b23; }
+.data { color: #a2a1b8; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pessoa, .contato, .origem { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.pessoa strong { font-weight: 500; color: #f4f4fa; }
+.pessoa > span { color: #a2a1b8; }
+.pessoa details summary { cursor: pointer; color: #c7b6f5; font-size: 13px; width: fit-content; }
+.pessoa details p { margin-top: 6px; color: #d4d4e0; line-height: 1.6; white-space: pre-wrap; }
+.contato a { display: inline-flex; align-items: center; gap: 6px; color: #c7b6f5; width: fit-content; }
+.contato a:hover { color: #e4dafd; text-decoration: underline; }
+.contato svg { flex-shrink: 0; }
+.origem { color: #d4d4e0; }
+.origem small { color: #a2a1b8; font-size: 12px; }
+
+.pagina :is(a, button, input, summary):focus-visible, .atalhos a:focus-visible { outline: 2px solid #bca2fa; outline-offset: 3px; border-radius: 4px; }
+
+/* No celular cada contato vira um bloco; o cabeçalho de colunas sai. */
+@media (max-width: 860px) {
+  .pagina { padding: 12px 24px 32px; }
+  .cabeca { display: none; }
+  .linha { grid-template-columns: 1fr; gap: 8px; padding: 16px; }
+  .baixar { margin-left: 0; }
+}

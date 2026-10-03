@@ -7,6 +7,7 @@
 // Fase 1 do SaaS, e mesmo assim criar uma empresa exigia rodar `ts-node` na
 // máquina de alguém. Isso fazia de cada cliente novo uma tarefa de engenharia.
 import { useState } from "react"
+import Link from "next/link"
 import useSWR from "swr"
 import { Building2, Plus, Power, UserPlus, X, Users, ToggleLeft } from "lucide-react"
 import { toast } from "sonner"
@@ -70,6 +71,10 @@ export function PainelOrganizacoes() {
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
             Controle da plataforma, acima das empresas. Cada organização é um cliente isolado.
+          </p>
+          <p className="mt-3 flex flex-wrap gap-5 text-sm">
+            <Link href="/admin/leads" className="text-purple-300 hover:text-purple-200">Interessados no NuFlow →</Link>
+            <Link href="/comecar" className="text-purple-300 hover:text-purple-200">Página de captura ↗</Link>
           </p>
         </div>
         <button
