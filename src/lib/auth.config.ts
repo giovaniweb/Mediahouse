@@ -45,6 +45,11 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user
       const { pathname } = request.nextUrl
 
+      // Identidade pública: sem isto, a prévia de um link compartilhado no
+      // WhatsApp pedia login para buscar o logo e saía sem imagem.
+      if (["/logo.png", "/favicon-16.png", "/favicon-32.png", "/apple-touch-icon.png",
+        "/icon-192.png", "/icon-512.png", "/manifest.json"].includes(pathname)) return true
+
       // Rotas públicas — não precisam de autenticação
       const publicPaths = [
         "/",              // root → redireciona para /sobre (landing page)
