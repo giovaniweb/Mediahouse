@@ -6,12 +6,12 @@
 .story h2 strong {font-weight:650;display:block;color:#c8b4ff;margin-top:10px;}
 .story p {color:#b0b2c4;font-size:15px;line-height:1.8;max-width:430px;margin-top:24px;}
 .flow {margin-top:36px;display:flex;gap:8px;flex-wrap:wrap;}
-.flow span {border:1px solid #515066;border-radius:8px;padding:9px 12px;font-size:11px;color:#ccc8df;}
+.flow span {border:1px solid #515066;border-radius:8px;padding:9px 12px;font-size:12px;color:#ccc8df;}
 .story footer {color:#a2a5b9;font-size:12px;}
 .content {display:flex;align-items:center;justify-content:center;padding:48px 28px;}
 .panel {width:100%;max-width:420px;}
 .panel h1 {font-size:30px;font-weight:500;letter-spacing:-.035em;line-height:1.25;margin:14px 0;}
-.eyebrow {font-size:10px;letter-spacing:.16em;color:#b398ff;font-weight:600;}
+.eyebrow {font-size:11px;letter-spacing:.16em;color:#b398ff;font-weight:600;}
 .description {font-size:14px;line-height:1.8;color:#a2a5b9;margin-bottom:30px;}
 .form {display:grid;gap:20px;}
 .field {display:grid;gap:9px;}

@@ -1,5 +1,5 @@
 .page {padding:32px;flex:1;min-width:0;overflow:auto;background:#101115;color:#eeeef5;font-family:Montserrat,sans-serif;}
-.eyebrow {font-size:10px;letter-spacing:.18em;color:#a5a7bb;margin-bottom:14px;}
+.eyebrow {font-size:11px;letter-spacing:.18em;color:#a5a7bb;margin-bottom:14px;}
 .page h1 {font-size:34px;font-weight:500;letter-spacing:-.04em;}
 .subtitle {color:#a5a7bb;margin:10px 0 28px;font-size:15px;}
 .filters {display:flex;gap:10px;flex-wrap:wrap;}
@@ -14,7 +14,7 @@
 .row h2 {font-size:19px;font-weight:500;overflow-wrap:anywhere;}
 .action {color:#bca2fa;font-size:14px;margin:8px 0;}
 .meta {color:#a5a7bb;font-size:12px;line-height:1.7;overflow-wrap:anywhere;}
-.stage {font-size:11px;border:1px solid #ab86ff30;color:#bca2fa;background:#ab86ff20;padding:5px 8px;border-radius:6px;white-space:nowrap;}
+.stage {font-size:12px;border:1px solid #ab86ff30;color:#bca2fa;background:#ab86ff20;padding:5px 8px;border-radius:6px;white-space:nowrap;}
 .stage[data-stage=producao]{color:#9dbbff;background:#90afff20;}.stage[data-stage=aprovacao]{color:#ecc687;background:#e5b46320;}
 .late {color:#ee9aac;}.row:hover h2 {color:#c9b4ff;}
 .empty h2 {font-size:19px;font-weight:500;}.empty p {color:#a5a7bb;margin-top:10px;font-size:14px;line-height:1.8;}

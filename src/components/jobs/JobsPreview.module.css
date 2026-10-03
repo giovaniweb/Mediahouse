@@ -1,6 +1,6 @@
 .page { height: 100%; min-height: 0; background: #101116; }
 .intro { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:24px 28px 12px; }
-.intro p { color:#b39aff; font-size:10px; letter-spacing:.14em; font-weight:600; }
+.intro p { color:#b39aff; font-size:11px; letter-spacing:.14em; font-weight:600; }
 .intro h1 { color:#f5f5fb; font-size:clamp(20px,2vw,28px); font-weight:600; margin-top:6px; }
 .intro > span { color:#a0a4b8; font-size:12px; max-width:260px; line-height:1.6; }
 .board { padding-top:12px; }
@@ -34,7 +34,7 @@
 .list {margin:12px 28px;border:1px solid #303342;border-radius:16px;background:#191b23;overflow:auto;max-height:100%;padding:0 22px;}
 .list > a {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0;border-bottom:1px solid #303342;}
 .list > a:last-child {border-bottom:0;}
-.list small {font-size:11px;color:#a2a5b9;}
+.list small {font-size:12px;color:#a2a5b9;}
 .list strong {display:block;font-size:17px;font-weight:500;color:#f0eef8;margin:6px 0;}
 .list span {display:block;color:#b398ff;font-size:13px;margin:8px 0;}
 .list p {color:#a2a5b9;font-size:13px;line-height:1.6;}

@@ -1,6 +1,6 @@
 .page { background:#101116; padding:28px; }
 .heading { margin-bottom:28px; }
-.heading > p { color:#b39aff; font-size:10px; letter-spacing:.14em; font-weight:600; }
+.heading > p { color:#b39aff; font-size:11px; letter-spacing:.14em; font-weight:600; }
 .heading h1 { font-size:28px; font-weight:600; letter-spacing:-.03em; margin:8px 0; }
 .heading > span { color:#a0a4b8; font-size:13px; }
 .tabs { border:1px solid #303341; background:#191b23; border-radius:14px; padding:6px; overflow-x:auto; gap:6px; }

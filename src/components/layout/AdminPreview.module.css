@@ -2,7 +2,7 @@
 .intro { margin-bottom:28px; align-items:center; }
 .intro h1 { font-size:clamp(26px,3vw,36px); font-weight:650; letter-spacing:-1px; line-height:1.2; }
 .intro p:not(.eyebrow) { color:#a9aabd; font-size:14px; line-height:1.7; margin-top:10px; }
-.eyebrow { color:#b8a3ec; font-size:10px; letter-spacing:1.8px; font-weight:700; margin-bottom:10px; }
+.eyebrow { color:#b8a3ec; font-size:11px; letter-spacing:1.8px; font-weight:700; margin-bottom:10px; }
 .metrics > button { min-height:94px; border-radius:16px; background:linear-gradient(130deg,#20212d,#191b24); border-color:#323442; }
 .metrics > button[aria-pressed="true"] { border-color:#a68be0; background:linear-gradient(125deg,#322941,#222333); }
 .metrics > button p:first-child { color:#b6b7c6; white-space:normal; }
@@ -11,7 +11,7 @@
 .tabs > button { white-space:nowrap; min-height:44px; flex-shrink:0; border:0; border-radius:10px; margin:0; color:#aeb0c1; }
 .tabs > button[aria-pressed="true"] { background:#353047; color:#e2d4ff; }
 .table { max-width:100%; border-radius:18px; border-color:#303341; background:#171922; }
-.table th { background:#20222e; padding-top:16px; padding-bottom:16px; color:#b1b3c3; letter-spacing:.5px; font-size:10px; }
+.table th { background:#20222e; padding-top:16px; padding-bottom:16px; color:#b1b3c3; letter-spacing:.5px; font-size:11px; }
 .table td { padding-top:17px; padding-bottom:17px; }
 .table tbody tr:hover { background:#252735; }
 .settingsLayout { max-width:1320px; gap:28px; }
@@ -58,7 +58,7 @@
  .people .table tbody {display:block;}
  .people .table tr[data-person-row] {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:18px;margin-bottom:14px;border:1px solid #303342;border-radius:16px;background:#191b23;}
  .people .table tr[data-person-row] td {display:block;padding:0;max-width:none;min-width:0;overflow-wrap:anywhere;}
- .people .table td[data-column]::before {content:attr(data-column);display:block;color:#a5a7bb;font-size:10px;letter-spacing:.04em;margin-bottom:7px;}
+ .people .table td[data-column]::before {content:attr(data-column);display:block;color:#a5a7bb;font-size:11px;letter-spacing:.04em;margin-bottom:7px;}
  .people .table td[data-column="Pessoa"],.people .table td[data-column="Ações"] {grid-column:1/-1;}
  .people .table td[data-column="Pessoa"] {border-bottom:1px solid #303342;padding-bottom:14px;}
  .people .table td[data-column="Pessoa"]::before,.people .table td[data-column="Ações"]::before {display:none;}

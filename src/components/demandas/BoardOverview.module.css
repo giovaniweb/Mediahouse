@@ -11,7 +11,7 @@
 .tabs { display:flex; gap:24px; }
 .tabs button {display:flex;align-items:center;gap:8px;padding:12px 0;color:#9b9fb4;border-bottom:2px solid transparent;font-size:13px;min-height:44px;}
 .tabs button[aria-pressed="true"] {color:#b398ff;border-color:#b398ff;}
-.opening {display:flex;align-items:center;gap:8px;color:#9b9fb4;font-size:11px;}
+.opening {display:flex;align-items:center;gap:8px;color:#9b9fb4;font-size:12px;}
 .opening select {background:#191c24;border:1px solid #303342;color:#e7e6ef;padding:8px 12px;border-radius:8px;min-height:40px;}
 .filters > div > div > div {padding:8px 0 16px;background:transparent;border:0;}
 .filters input,.filters select {background:#191c24;border-color:#303342;min-height:40px;}

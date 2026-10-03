@@ -43,7 +43,7 @@
  .detailToolbar { align-items:flex-start; gap:12px; padding:16px; }
  .detailToolbar > div:first-child { width:100%; padding-right:42px; flex-wrap:wrap; }
  .detailToolbar > div:last-child { gap:8px; }
- .detailToolbar > div:last-child button { font-size:11px; min-height:40px; }
+ .detailToolbar > div:last-child button { font-size:12px; min-height:40px; }
  .detailToolbar > div:last-child > button:last-child { position:absolute; top:8px; right:8px; }
 }
 
@@ -52,7 +52,7 @@
 .jobContext {background:#191b23;border-color:#303342;padding:22px;border-radius:14px;}
 .jobContext > div:first-child {display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 .jobContext > div:first-child > span {color:#eeecf7;font-size:14px;}
-.jobContext > div:first-child > span > span:first-child {display:block;color:#a2a5b9;font-size:11px;margin-bottom:6px;}
+.jobContext > div:first-child > span > span:first-child {display:block;color:#a2a5b9;font-size:12px;margin-bottom:6px;}
 @media(max-width:520px){.jobContext {padding:16px;}.jobContext > div:first-child {grid-template-columns:1fr;gap:14px;}}
 
 .pageActions > div {flex-wrap:wrap;}
