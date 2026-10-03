@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { Sparkles, Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
 import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
@@ -17,6 +17,7 @@ import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { normalizarVisao } from "@/components/demandas/tipos-visao"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
+import { Header } from "@/components/layout/Header"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
@@ -128,15 +129,13 @@ export default function GrowthKanbanPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-        <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-400" /> Growth · Demandas</h1>
-        <button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>
-      </div>
+      <Header title="Growth · Demandas" actions={<button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>} />
 
-      <div className="flex flex-wrap gap-3 px-4 py-2 text-sm">
-        <button disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button><span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span><button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button><a href="/historico" className="underline">Histórico completo</a>
+      {/* Paginação da fila: discreta, porque só aparece de verdade acima de 100 demandas. */}
+      <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm text-zinc-400">
+        <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button><span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span><button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button><a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
         {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="text-xs text-amber-400">Há concluídos legados sem data nesta página; continuam visíveis até revisão.</p>}
-      </div>
+      </nav>
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
 
 

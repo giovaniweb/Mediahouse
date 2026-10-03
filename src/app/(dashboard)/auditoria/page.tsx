@@ -11,6 +11,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
 import { LABEL_STATUS } from "@/components/demandas/tipos-visao"
@@ -84,6 +85,7 @@ export default function AuditoriaPage() {
   return (
     <>
       <Header title="Registro de Auditoria" />
+      <PageIntro eyebrow="SISTEMA / AUDITORIA" title="Quem fez o quê, e quando." description="Ações administrativas e automações, filtradas por período, pessoa e tipo." />
 
       <div className="p-6 space-y-4">
         <div className="flex flex-wrap items-end gap-3">

@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import { fetcher } from "@/lib/fetcher"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 
 type Parceria = {
   parceriaId: string
@@ -99,6 +100,7 @@ export default function ParceriasPage() {
   return (
     <>
       <Header title="Compartilhamento entre empresas" />
+      <PageIntro eyebrow="SISTEMA / COMPARTILHAMENTO" title="Trabalho junto com outras empresas." description="Conecte empresas parceiras do NuFlow para dividir a execução de cards, sem que o card mude de dono." />
       <div className="p-4 md:p-6 space-y-5 max-w-3xl">
         <p className="text-sm text-zinc-400">
           Uma conexão permite compartilhar a execução de cards com outra empresa do NuFlow —
