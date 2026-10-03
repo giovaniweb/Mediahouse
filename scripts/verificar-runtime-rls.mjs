@@ -21,8 +21,17 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_table_privilege(current_user,'public.eventos_auditoria','UPDATE,DELETE') AS altera_auditoria,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.eventos_auditoria'::regclass) AS rls_auditoria,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.demandas'::regclass) AS rls_demandas,
-      (SELECT relrowsecurity FROM pg_class WHERE oid='public.oauth_drive_estados'::regclass) AS rls_oauth`)
-    const ok = r.login_direto && !r.privilegio_elevado && !r.dono &&
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.oauth_drive_estados'::regclass) AS rls_oauth,
+      has_table_privilege(current_user,'public.leads_comerciais','SELECT') AS le_leads,
+      has_table_privilege(current_user,'public.leads_comerciais','INSERT') AS insere_leads,
+      has_table_privilege(current_user,'public.leads_comerciais','UPDATE,DELETE') AS altera_leads,
+      has_table_privilege(current_user,'public.limites_publicos','SELECT,INSERT,UPDATE,DELETE') AS usa_limites,
+      has_function_privilege(current_user,'public.consumir_limite_publico(text,integer,integer)','EXECUTE') AS consome_limite,
+      (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.leads_comerciais'::regclass,'public.limites_publicos'::regclass)) AS rls_leads_limites`)
+    // Formulário de interesse: a aplicação só insere lead e só chega aos limites pela função.
+    const leadsOk = r.rls_leads_limites && !r.le_leads && !r.altera_leads && !r.usa_limites &&
+      (tipo === "app" ? r.insere_leads && r.consome_limite : !r.insere_leads && !r.consome_limite)
+    const ok = leadsOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

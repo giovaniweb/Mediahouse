@@ -17,6 +17,7 @@ import {
   DollarSign,
   UserCog,
   Building2,
+  Inbox,
   Home,
   BrainCircuit,
   Package,
@@ -116,6 +117,7 @@ const sections = [
     superAdmin: true,
     items: [
       { href: "/admin/organizacoes", label: "Organizações", icon: Building2 },
+      { href: "/admin/leads", label: "Interessados", icon: Inbox },
     ],
   },
   {

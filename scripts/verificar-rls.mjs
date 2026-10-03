@@ -357,12 +357,14 @@ const { rows: semPolitica } = await c.query(`
   WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity
     AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)
   ORDER BY c.relname`)
-const previstas = ["chat_ia_mensagens", "produtos_servico_evento", "sessions"]
+// limites_publicos: só a função SECURITY DEFINER consumir_limite_publico toca
+// nela (migration 20261003000000); a aplicação não lê nem escreve direto.
+const previstas = ["chat_ia_mensagens", "limites_publicos", "produtos_servico_evento", "sessions"]
 const inesperadas = semPolitica.map((r) => r.relname).filter((t) => !previstas.includes(t))
 conferir(
   inesperadas.length === 0,
   inesperadas.length === 0
-    ? `RLS ligada sem política só nas 3 previstas (${previstas.join(", ")})`
+    ? `RLS ligada sem política só nas ${previstas.length} previstas (${previstas.join(", ")})`
     : `tabelas ficariam vazias para a aplicação: ${inesperadas.join(", ")}`
 )
 
