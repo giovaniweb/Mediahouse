@@ -6,7 +6,6 @@
 // 12 campos para responder "qual é o WhatsApp dele?". O painel separa as duas
 // coisas: ler é o estado padrão, editar é um clique explícito.
 
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useEffect, useRef } from "react"
 import {
@@ -91,7 +90,6 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   acoes: AcoesPessoa
   onClose: () => void
 }) {
-  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("geral")
   const [menu, setMenu] = useState(false)
   const fecharRef = useRef<HTMLButtonElement>(null)
@@ -123,7 +121,7 @@ export function PainelPessoa({ pessoa, perfilHref, acoes, onClose }: {
   return (
     // z-50 para ficar acima do painel flutuante de foco (z-40), que mora no
     // canto inferior direito e cobriria justamente os botões de ação daqui.
-    <aside onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); if (menu) setMenu(false); else onCloseRef.current() } }} aria-label="Detalhes da pessoa" className={cn("fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl", modern && preview.personPanel)}>
+    <aside onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); if (menu) setMenu(false); else onCloseRef.current() } }} aria-label="Detalhes da pessoa" className={cn("fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l border-zinc-800 bg-zinc-950 flex flex-col shadow-2xl", preview.personPanel)}>
       {/* Cabeçalho */}
       <div className="flex items-center justify-between px-5 h-14 border-b border-zinc-800 shrink-0">
         <p className="text-sm font-semibold text-zinc-100">Detalhes da pessoa</p>

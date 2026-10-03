@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useVisualPreview } from "./useVisualPreview"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -136,18 +135,17 @@ const sections = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { modern, available, toggle } = useVisualPreview()
   const [expanded, setExpanded] = useState<{ path: string; label: string | null } | null>(null)
   const activeHref = sections.flatMap(section => section.items).filter(item => pathname === item.href || pathname.startsWith(item.href + "/")).sort((a, b) => b.href.length - a.href.length)[0]?.href
   const isItemActive = (href: string) => activeHref === href
-  const navigation = modern ? sections.map(section => {
+  const navigation = sections.map(section => {
     if (section.label === "Geral") return { ...section, items: section.items.filter(item => item.href !== "/produtos") }
     if (section.label === "Growth") return { ...section, items: section.items.filter(item => item.href !== "/configuracoes/linhas-projetos") }
     return section
   }).flatMap(section => section.label === "Geral" ? [section, {
     label: "Produtos",
     items: sections.flatMap(group => group.items).filter(item => ["/produtos", "/configuracoes/linhas-projetos"].includes(item.href)),
-  }] : [section]) : sections
+  }] : [section])
   const currentSection = navigation.find(section => section.items.some(item => isItemActive(item.href)))?.label ?? "Geral"
   const expandedLabel = expanded?.path === pathname ? expanded.label : currentSection
   const { data: me } = useMe()
@@ -279,18 +277,16 @@ export function Sidebar() {
 
             return (
               <div key={section.label}>
-                {modern ? (
-                  <button type="button" aria-expanded={expandedLabel === section.label}
+                <button type="button" aria-expanded={expandedLabel === section.label}
                     aria-controls={`menu-${section.label.replaceAll(" ", "-")}`}
                     onClick={() => setExpanded({ path: pathname, label: expandedLabel === section.label ? null : section.label })}
                     className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-zinc-300 rounded-lg hover:bg-white/5">
                     {section.label}<ChevronDown className={cn("w-4 h-4 transition-transform", expandedLabel === section.label && "rotate-180")} />
                   </button>
-                ) : <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">{section.label}</p>}
-                <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={modern && expandedLabel !== section.label} className="space-y-0.5">
+                <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={expandedLabel !== section.label} className="space-y-0.5">
                   {(() => {
                     const teamHrefs = ["/videomakers", "/equipe", "/custos"]
-                    const teamItems = modern && section.label === "Audiovisual" ? visibleItems.filter(item => teamHrefs.includes(item.href)) : []
+                    const teamItems = section.label === "Audiovisual" ? visibleItems.filter(item => teamHrefs.includes(item.href)) : []
                     const mainItems = visibleItems.filter(item => !teamItems.includes(item))
                     const renderItem = (item: typeof visibleItems[number]) => {
                     const Icon = item.icon
@@ -332,10 +328,6 @@ export function Sidebar() {
           })}
         </nav>
 
-        {available && <button type="button" onClick={toggle} aria-pressed={modern}
-          className="mx-3 mb-3 rounded-xl border border-violet-400/30 px-3 py-2 text-xs text-violet-200 hover:bg-violet-400/10">
-          {modern ? "Voltar ao visual clássico" : "Usar novo visual"}
-        </button>}
         {/* User info + Logout */}
         {me && (
           <div className="px-3 py-3 border-t border-zinc-800">

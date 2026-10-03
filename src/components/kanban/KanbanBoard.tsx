@@ -10,7 +10,6 @@ import { estaAtrasada } from "@/lib/status"
 import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
 import { salvarOrdem } from "@/lib/kanban-order"
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import styles from "./KanbanPreview.module.css"
 import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
 
@@ -72,7 +71,6 @@ const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
 export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal" }: KanbanBoardProps) {
-  const { available: previewAvailable, modern, toggle } = useVisualPreview()
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const savingOrder = useRef(false)
@@ -196,19 +194,11 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
 
   return (
     <>
-    <div className={cn("relative h-full flex flex-col", modern && styles.board)}>
+    <div className={cn("relative h-full flex flex-col", styles.board)}>
       {orderStatus !== "idle" && (
         <div role={orderStatus === "error" ? "alert" : "status"} className="px-4 py-3 text-sm text-zinc-200">
           {orderStatus === "saving" ? "Salvando ordem…" : "Não foi possível salvar toda a ordem. Algumas posições podem ter sido gravadas."}
           {orderStatus === "error" && <button type="button" className="ml-3 underline" onClick={() => window.location.reload()}>Recarregar quadro para conferir</button>}
-        </div>
-      )}
-      {previewAvailable && (
-        <div className={styles.toolbar}>
-          <div><span>Arraste entre etapas ou abra os detalhes.</span></div>
-          <button type="button" aria-pressed={modern} onClick={toggle}>
-            {modern ? "Voltar ao clássico" : "Usar novo visual"}
-          </button>
         </div>
       )}
       {/* Botões de navegação */}
@@ -230,7 +220,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     <DragDropContext onDragEnd={handleDragEnd}>
       <div
         ref={scrollRef}
-        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging", modern && styles.scroll)}
+        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging", styles.scroll)}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -248,8 +238,8 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                 "flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
                 recolhida ? "w-14" : "w-72",
                 col.color,
-                modern && styles.column,
-                modern && recolhida && styles.collapsed,
+                styles.column,
+                recolhida && styles.collapsed,
                 isBloqueada && "opacity-70"
               )}
             >
@@ -267,7 +257,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                   <span className="font-semibold text-sm [writing-mode:vertical-rl] rotate-180">{rotulo}</span>
                 </button>
               ) : (
-              <div className={cn("flex items-center justify-between px-3 py-3", modern && styles.heading)}>
+              <div className={cn("flex items-center justify-between px-3 py-3", styles.heading)}>
                 <div className="flex items-center gap-2">
                   <div className={cn("w-2 h-2 rounded-full", col.dot)} />
                   <span className="font-semibold text-sm text-zinc-200">{rotulo}</span>
@@ -327,7 +317,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
                             data-card
-                            className={cn(snapshot.isDragging && "rotate-1 opacity-90", modern && styles.card)}
+                            className={cn(snapshot.isDragging && "rotate-1 opacity-90", styles.card)}
                           >
                             <DemandaCard
                               demanda={demanda}
@@ -340,7 +330,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                         )}
                       </Draggable>
                     ))}
-                    {modern && !recolhida && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
+                    {!recolhida && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
                     {provided.placeholder}
                   </div>
                 )}

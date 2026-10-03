@@ -1,6 +1,5 @@
 "use client"
 
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import { useDialogFocus } from "@/components/layout/useDialogFocus"
 import styles from "./ApprovalsPreview.module.css"
 import surface from "@/components/demandas/DemandSurface.module.css"
@@ -67,7 +66,6 @@ export type AreaAprovacao = "audiovisual" | "design"
 // no audiovisual.
 
 export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
-  const { modern } = useVisualPreview()
   const ehAudiovisual = area === "audiovisual"
   const rotuloArea = ehAudiovisual ? "Audiovisual" : "Growth"
   const q = `&area=${area}`
@@ -208,10 +206,10 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <RefreshCw className="w-3.5 h-3.5" /> Auto-atualiza
         </div>
       } />
-      <main className={cn("flex-1 p-6", modern && styles.page)}>
-        {modern && <div className={styles.heading}><p>APROVAÇÕES · {rotuloArea.toUpperCase()}</p><h1>Uma decisão. O próximo passo.</h1><span>Revise o pedido, confira os detalhes e encaminhe o trabalho.</span></div>}
+      <main className={cn("flex-1 p-6", styles.page)}>
+        <div className={styles.heading}><p>APROVAÇÕES · {rotuloArea.toUpperCase()}</p><h1>Uma decisão. O próximo passo.</h1><span>Revise o pedido, confira os detalhes e encaminhe o trabalho.</span></div>
         {/* Tabs */}
-        <div aria-label="Filtrar aprovações" className={cn("flex gap-2 mb-6 border-b border-zinc-800 pb-0", modern && styles.tabs)}>
+        <div aria-label="Filtrar aprovações" className={cn("flex gap-2 mb-6 border-b border-zinc-800 pb-0", styles.tabs)}>
           {abas.map((t) => (
             <button
               key={t.id}
@@ -331,8 +329,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
       {/* Modal recusa */}
       {modal && (
-        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm", modern && surface.overlay)}>
-          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="approval-refuse-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4", modern && surface.surface)}>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm", surface.overlay)}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="approval-refuse-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4", surface.surface)}>
             <h3 id="approval-refuse-title" className="font-semibold text-white mb-1">Recusar Demanda</h3>
             <p className="text-sm text-zinc-400 mb-4">Motivo da recusa (comunicado ao solicitante via WhatsApp).</p>
             <textarea aria-label="Motivo da recusa"

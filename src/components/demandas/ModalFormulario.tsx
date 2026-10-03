@@ -10,7 +10,6 @@
 
 import { useEffect, useRef, useId } from "react"
 import { X, Plus } from "lucide-react"
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import styles from "./DemandSurface.module.css"
 import { cn } from "@/lib/utils"
 
@@ -32,7 +31,6 @@ export function ModalFormulario({
   aberto, titulo, icone: Icone = Plus, aoTentarFechar, aoConfirmar,
   rotuloConfirmar, ocupado, children, className,
 }: ModalFormularioProps) {
-  const { modern } = useVisualPreview()
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -89,7 +87,7 @@ export function ModalFormulario({
   return (
     <div
       ref={overlayRef}
-      className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm", modern && styles.overlay)}
+      className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm", styles.overlay)}
       onMouseDown={e => { pressionouNoFundo.current = e.target === overlayRef.current }}
       onClick={e => {
         if (e.target === overlayRef.current && pressionouNoFundo.current) aoTentarFechar()
@@ -98,7 +96,7 @@ export function ModalFormulario({
     >
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={cn(
         "flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/60",
-        modern && styles.surface,
+        styles.surface,
         className
       )}>
 

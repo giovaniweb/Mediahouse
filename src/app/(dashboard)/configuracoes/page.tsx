@@ -1,8 +1,6 @@
 "use client"
 
-import { ManagementSurface, ManagementIntro } from "@/components/layout/ManagementSurface"
 import { SaudeAutomacoes } from "@/components/automacoes/SaudeAutomacoes"
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
@@ -1815,7 +1813,6 @@ function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
 }
 
 export default function ConfiguracoesPage() {
-  const { modern } = useVisualPreview()
   const { data: session, status: sessionStatus } = useSession()
   const [tab, setTab] = useState<Tab>("meu_perfil")
 
@@ -1833,9 +1830,8 @@ export default function ConfiguracoesPage() {
 
   if (!["admin", "gestor"].includes(session?.user?.tipo ?? "")) {
     return (
-      <ManagementSurface>
+      <>
         <Header title="Configurações" />
-      <ManagementIntro title="Configurações" description="Ajuste as conexões e as preferências da sua equipe." />
         <main className="flex-1 p-6 flex items-center justify-center">
           <div className="text-center text-zinc-400">
             <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -1843,23 +1839,22 @@ export default function ConfiguracoesPage() {
             <p className="text-sm mt-1">Somente administradores e gestores podem acessar as configurações.</p>
           </div>
         </main>
-      </ManagementSurface>
+      </>
     )
   }
 
   return (
-    <ManagementSurface>
+    <>
       <Header title="Configurações" />
-      <ManagementIntro title="Configurações" description="Ajuste as conexões e as preferências da sua equipe." />
       {/* Handler do callback OAuth2 do Google Drive (sem renderização visual) */}
       <Suspense fallback={null}>
         <DriveCallbackHandler onSetTab={setTab} />
       </Suspense>
-      <main className={cn("flex-1 p-6", modern && preview.settings)}>
-        {modern && <div className={preview.intro}><div><p className={preview.eyebrow}>SEU ESPAÇO DE TRABALHO</p><h1>Configurações</h1><p>Identidade da empresa, integrações e preferências em um só lugar.</p></div></div>}
-        <div data-settings-layout className={cn("max-w-5xl mx-auto flex gap-6", modern && preview.settingsLayout)}>
+      <main className={cn("flex-1 p-6", preview.settings)}>
+        <div className={preview.intro}><div><p className={preview.eyebrow}>SEU ESPAÇO DE TRABALHO</p><h1>Configurações</h1><p>Identidade da empresa, integrações e preferências em um só lugar.</p></div></div>
+        <div data-settings-layout className={cn("max-w-5xl mx-auto flex gap-6", preview.settingsLayout)}>
           {/* Sidebar Nav */}
-          <nav data-settings-nav aria-label="Seções de configurações" className={cn("w-48 shrink-0", modern && preview.settingsNav)}>
+          <nav data-settings-nav aria-label="Seções de configurações" className={cn("w-48 shrink-0", preview.settingsNav)}>
             <div className="sticky top-6 space-y-0.5">
               {tabs.map((t) => {
                 const Icon = t.icon
@@ -1885,7 +1880,7 @@ export default function ConfiguracoesPage() {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <section data-settings-panel aria-label={tabs.find(t => t.id === tab)?.label} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl p-6", modern && preview.settingsPanel)}>
+            <section data-settings-panel aria-label={tabs.find(t => t.id === tab)?.label} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl p-6", preview.settingsPanel)}>
               {tab === "meu_perfil" && <TabMeuPerfil />}
               {tab === "whatsapp" && (
                 <div className="space-y-8">
@@ -1908,7 +1903,7 @@ export default function ConfiguracoesPage() {
           </div>
         </div>
       </main>
-    </ManagementSurface>
+    </>
   )
 }
 

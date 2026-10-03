@@ -1,7 +1,6 @@
 "use client"
 
 import { useDetailPresentation } from "@/components/demandas/useDetailPresentation"
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import { useDialogFocus } from "@/components/layout/useDialogFocus"
 import styles from "@/components/agenda/AgendaPreview.module.css"
 import surface from "@/components/demandas/DemandSurface.module.css"
@@ -115,7 +114,6 @@ function ExportButton() {
 }
 
 export default function AgendaPage() {
-  const { modern } = useVisualPreview()
   const { presentation, setPresentation } = useDetailPresentation()
   const [view, setView] = useState<"month" | "week" | "list">("month")
   const [busy, setBusy] = useState(false)
@@ -132,7 +130,7 @@ export default function AgendaPage() {
 
   const inicioMes = startOfMonth(mesAtual)
   const fimMes = endOfMonth(mesAtual)
-  const semana = modern && view === "week"
+  const semana = view === "week"
   const inicioGrid = startOfWeek(semana ? mesAtual : inicioMes, { locale: ptBR })
   const fimGrid = endOfWeek(semana ? mesAtual : fimMes, { locale: ptBR })
   const diasGrid = eachDayOfInterval({ start: inicioGrid, end: fimGrid })
@@ -231,18 +229,18 @@ export default function AgendaPage() {
           </div>
         }
       />
-      {modern && <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Seu tempo de criar.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>}
-      {modern && <div className={styles.viewBar}>
+      <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Seu tempo de criar.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>
+      <div className={styles.viewBar}>
         <div>{([["month", "Mês"], ["week", "Semana"], ["list", "Lista"]] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
         <label>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
-      </div>}
+      </div>
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar a agenda. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {isLoading && <p role="status" className={styles.error}>Carregando agenda…</p>}
-      <main className={cn("flex-1 p-4 flex gap-4 overflow-hidden", modern && styles.agenda)}>
+      <main className={cn("flex-1 p-4 flex gap-4 overflow-hidden", styles.agenda)}>
         {/* COLUNA ESQUERDA — Calendário */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Controles */}
-          <div className={cn("flex items-center justify-between mb-4", modern && styles.toolbar)}>
+          <div className={cn("flex items-center justify-between mb-4", styles.toolbar)}>
             <div className="flex items-center gap-2">
               <button aria-label={semana ? "Semana anterior" : "Mês anterior"} onClick={() => setMesAtual(m => semana ? addWeeks(m, -1) : subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronLeft className="w-4 h-4" />
@@ -287,14 +285,14 @@ export default function AgendaPage() {
           )}
 
           {/* Grid */}
-          {modern && view === "list" ? <section className={styles.eventList} aria-label="Compromissos do mês">
+          {view === "list" ? <section className={styles.eventList} aria-label="Compromissos do mês">
             {eventos.filter(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes).sort((a,b) => a.inicio.localeCompare(b.inicio)).map(evento => <button key={evento.id} type="button" onClick={() => {setActionError(""); setEventoSelec(evento)}}>
               <span>{format(parseISO(evento.inicio), "dd MMM", {locale:ptBR})}<small>{evento.diaTodo ? "Dia todo" : format(parseISO(evento.inicio), "HH:mm")}</small></span>
               <div><strong>{evento.titulo}</strong><p>{evento.local || TIPO_OPTS.find(tipo => tipo.value === evento.tipo)?.label || evento.tipo}</p></div>
               <ChevronRight size={18} />
             </button>)}
             {!isLoading && !eventos.some(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes) && <p>Nenhum compromisso neste mês com os filtros selecionados.</p>}
-          </section> : <div className={cn("bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1", modern && styles.calendar, semana && styles.week)}>
+          </section> : <div className={cn("bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1", styles.calendar, semana && styles.week)}>
             {/* Cabeçalho dias da semana */}
             <div className="grid grid-cols-7 border-b border-zinc-800">
               {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
@@ -368,7 +366,7 @@ export default function AgendaPage() {
         </div>
 
         {/* COLUNA DIREITA — Eventos do dia selecionado */}
-        <div className={cn("w-72 shrink-0 flex flex-col gap-3", modern && styles.dayPanel)}>
+        <div className={cn("w-72 shrink-0 flex flex-col gap-3", styles.dayPanel)}>
           {diaSelec && (
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
@@ -441,8 +439,8 @@ export default function AgendaPage() {
 
       {/* Modal detalhe evento */}
       {eventoSelec && (
-        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", modern && surface.overlay, modern && presentation === "drawer" && styles.drawerOverlay)}>
-          <div ref={detailRef} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[90dvh] overflow-y-auto", modern && surface.surface, modern && styles.detail, modern && presentation === "drawer" && styles.drawer)}>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", surface.overlay, presentation === "drawer" && styles.drawerOverlay)}>
+          <div ref={detailRef} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[90dvh] overflow-y-auto", surface.surface, styles.detail, presentation === "drawer" && styles.drawer)}>
             {(() => {
               const cfg = CONTEXTO_CONFIG[eventoSelec.contexto]
               return (
@@ -460,7 +458,7 @@ export default function AgendaPage() {
                     </button>
                   </div>
 
-                  {modern && <button type="button" className={styles.expand} onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>}
+                  <button type="button" className={styles.expand} onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>
                   <div className="space-y-2 text-sm text-zinc-400 mb-4">
                     <div className="flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
@@ -484,12 +482,12 @@ export default function AgendaPage() {
                     )}
                   </div>
 
-                  {modern && <div className={styles.metadata}>
+                  <div className={styles.metadata}>
                     <div><span>Tipo</span><strong>{TIPO_OPTS.find(t => t.value === eventoSelec.tipo)?.label ?? eventoSelec.tipo}</strong></div>
                     <div><span>Visibilidade</span><strong>{eventoSelec.privado ? "Privado" : "Conforme acesso à agenda"}</strong></div>
                     {eventoSelec.videomaker && <div><span>Videomaker</span><strong>{eventoSelec.videomaker.nome}</strong></div>}
                     {eventoSelec.demanda && <Link href={`/demandas/${eventoSelec.demanda.id}`}>Abrir demanda vinculada →</Link>}
-                  </div>}
+                  </div>
                   {actionError && <p role="alert" className={styles.error}>{actionError}</p>}
                   {isAdmin && (
                     <button disabled={busy} onClick={() => deletarEvento(eventoSelec.id)}
@@ -506,9 +504,9 @@ export default function AgendaPage() {
 
       {/* Modal criar evento */}
       {showForm && (
-        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", modern && surface.overlay)}>
-          <div ref={formRef} role="dialog" aria-modal="true" aria-labelledby="event-form-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]", modern && surface.surface, modern && styles.form)}>
-            <div className={cn("flex items-center justify-between mb-4", modern && styles.toolbar)}>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", surface.overlay)}>
+          <div ref={formRef} role="dialog" aria-modal="true" aria-labelledby="event-form-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]", surface.surface, styles.form)}>
+            <div className={cn("flex items-center justify-between mb-4", styles.toolbar)}>
               <h3 id="event-form-title" className="font-semibold text-zinc-200">Novo Evento</h3>
               <button aria-label="Fechar" disabled={busy} onClick={() => setShowForm(false)}><X className="w-4 h-4 text-zinc-500" /></button>
             </div>

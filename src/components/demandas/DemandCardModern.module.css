@@ -16,6 +16,8 @@
 .people [data-tone="2"] {background:#88aaff30;color:#a2bcff;}
 .date {white-space:nowrap;}
 .late {color:#e497ab;}
+/* Vence em até 3 dias: o mesmo aviso âmbar que o card antigo dava. */
+.soon {color:#f0c27a;}
 .posting {order:5;}
 .card button:focus-visible {outline:2px solid #b398ff;outline-offset:3px;opacity:1;}
 @media(hover:none) {.top button {opacity:1;min-width:32px;min-height:32px;display:grid;place-items:center;}}

@@ -1,6 +1,5 @@
 "use client"
 
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import styles from "./JobsPreview.module.css"
 import { useRef } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -39,7 +38,6 @@ export function JobsQuadro({
   jobs: JobDoQuadro[]
   onAbrir: (id: string) => void
 }) {
-  const { modern } = useVisualPreview()
   const scrollRef = useRef<HTMLDivElement>(null)
   const rolar = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })
 
@@ -59,7 +57,7 @@ export function JobsQuadro({
       })
 
   return (
-    <div className={cn("relative h-full flex flex-col", modern && styles.board)}>
+    <div className={cn("relative h-full flex flex-col", styles.board)}>
       <button
         onClick={() => rolar(-320)}
         className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
@@ -88,7 +86,7 @@ export function JobsQuadro({
               aria-label={ROTULOS[coluna]}
               className={cn(
                 "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
-                CORES[coluna], modern && styles.column
+                CORES[coluna], styles.column
               )}
             >
               <header className="px-3 py-2.5 flex items-center justify-between border-b border-zinc-800">
@@ -108,7 +106,7 @@ export function JobsQuadro({
 
               <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                 {itens.map((job) => (
-                  <JobCard key={job.id} modern={modern} job={job} onAbrir={onAbrir} />
+                  <JobCard key={job.id} job={job} onAbrir={onAbrir} />
                 ))}
                 {itens.length === 0 && (
                   <p className="text-xs text-zinc-600 text-center py-6">Nenhum job</p>

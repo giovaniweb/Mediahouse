@@ -1,7 +1,6 @@
 "use client"
 
 import { useDetailPresentation } from "./useDetailPresentation"
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import surface from "./DemandSurface.module.css"
 import { useState, useEffect, useRef } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
@@ -27,7 +26,6 @@ import {
   ABA_LABEL,
   type AbaDoDetalhe,
   captacaoIniciada,
-  ehBloqueado,
   ehSolicitacaoDeCobertura,
   proximaAcao,
   responsavelAtual,
@@ -264,7 +262,6 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 }
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
-  const { modern } = useVisualPreview()
   const { presentation, setPresentation } = useDetailPresentation()
   // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem de
   // ABA_DA_ACAO quando a demanda carrega; depois só a pessoa troca — mudar o
@@ -1195,9 +1192,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   // Mesma prévia e ações, uma única instância: Entrega no v8, topo no clássico.
   const entregaGrowth = isGrowth ? (
-              <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", modern && surface.growthDelivery)}>
-                {modern && <h2 className="text-lg font-medium mb-5">Entrega · prévia do criativo</h2>}
-                <div className={modern ? surface.growthDeliveryGrid : "grid lg:grid-cols-[1fr_360px] gap-5 items-start"}>
+              <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", surface.growthDelivery)}>
+                <h2 className="text-lg font-medium mb-5">Entrega · prévia do criativo</h2>
+                <div className={surface.growthDeliveryGrid}>
                   <ArteViewer artes={artesPrevia} />
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -1290,7 +1287,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
         </div>
       )}
-      {modern && <div className={surface.detailHeading}>
+      <div className={surface.detailHeading}>
         <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
         <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
         <section className={surface.nextAction}>
@@ -1307,12 +1304,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
         </nav>
-      </div>}
-      <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", modern && surface.tabContent)}>
+      </div>
+      <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", surface.tabContent)}>
         {/* ── Coluna principal ────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
 
-          <div hidden={modern && detailTab !== "pedido"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Camada de Job (cobertura) ───────────────────────────────────
               Um Job É esta demanda, classificada como cobertura — mesmo
               registro, mesmo id. Antes havia uma tela separada em /jobs/[id]
@@ -1324,7 +1321,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
               só pintada. */}
           {ehCobertura && (
-            <section aria-label="Operação do Job" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3", modern && surface.jobContext)}>
+            <section aria-label="Operação do Job" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3", surface.jobContext)}>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
                 <span className="text-zinc-400">
                   <span className="text-zinc-600">Etapa </span>
@@ -1334,9 +1331,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   <span className="text-zinc-600">Responsável atual </span>
                   {responsavelDoJob.nome ?? responsavelDoJob.papel}
                   {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
-                </span>
-                <span hidden={modern} className={cn("ml-auto", ehBloqueado(demanda.statusInterno) ? "text-rose-400" : "text-zinc-300")}>
-                  {proximaAcao(demanda)}
                 </span>
               </div>
 
@@ -1362,7 +1356,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {isGrowth ? (
             <>
-              {!modern && entregaGrowth}
 
               {/* Briefing */}
               <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -1379,20 +1372,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </>
           ) : (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-4">
-            {modern && <h2 className="text-lg font-medium">Briefing</h2>}
-            {!modern && <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <InlineEdit
-                  value={demanda.titulo ?? ""}
-                  canEdit={podeEditar}
-                  tipo="text"
-                  placeholder="Sem título"
-                  onSave={(v) => salvarCampo({ titulo: v })}
-                  display={<span className="text-xl font-bold text-zinc-100 leading-tight">{demanda.titulo || "Sem título"}</span>}
-                />
-              </div>
-              <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
-            </div>}
+            <h2 className="text-lg font-medium">Briefing</h2>
 
             <InlineEdit
               value={demanda.descricao ?? ""}
@@ -1534,7 +1514,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
@@ -1829,8 +1809,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={modern && detailTab !== "entrega"} className={modern ? surface.tabSection : "contents"}>
-          {modern && entregaGrowth}
+          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
+          {entregaGrowth}
           {/* ── Links ────────────────────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
@@ -2168,7 +2148,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2211,12 +2191,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={modern && detailTab !== "pedido"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Checklist ─────────────────────────────────────────────────── */}
           <ChecklistSection demandaId={id as string} />
 
           </div>
-          <div hidden={modern && detailTab !== "conversa"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
               campo que não existe no modelo (é `comentario`) — os comentários
@@ -2232,7 +2212,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
         <div className="space-y-4">
-          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
@@ -2314,7 +2294,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           </div>
-          <div hidden={modern && detailTab !== "entrega"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
           {/* Aprovação — Growth usa a prévia compartilhada em Entrega (topo no clássico). */}
           {!isGrowth && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
@@ -2381,7 +2361,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={modern && detailTab !== "conversa"} className={modern ? surface.tabSection : "contents"}>
+          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
@@ -2610,15 +2590,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     // barra de rolagem —, e quem estava editando um campo perdia o contexto no meio.
     return (
       <div
-        className={cn("fixed inset-0 z-[60] bg-black/70 overflow-y-auto", modern && surface.overlay)}
+        className={cn("fixed inset-0 z-[60] bg-black/70 overflow-y-auto", surface.overlay)}
         onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
       >
         <div
-          className={cn("min-h-full w-full flex items-start justify-center p-4", modern && surface.detailWrap, presentation === "drawer" && surface.drawerWrap)}
+          className={cn("min-h-full w-full flex items-start justify-center p-4", surface.detailWrap, presentation === "drawer" && surface.drawerWrap)}
           onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
         >
-          <div className={cn("w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden", modern && surface.surface, presentation === "drawer" && surface.drawer)} role="dialog" aria-modal="true" aria-label="Detalhes da demanda" onClick={(e) => e.stopPropagation()}>
-            <div className={cn("sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur", modern && surface.detailToolbar)}>
+          <div className={cn("w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden", surface.surface, presentation === "drawer" && surface.drawer)} role="dialog" aria-modal="true" aria-label="Detalhes da demanda" onClick={(e) => e.stopPropagation()}>
+            <div className={cn("sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur", surface.detailToolbar)}>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-mono text-sm text-zinc-300">{demanda.codigo}</span>
                 <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
@@ -2640,7 +2620,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   return (
     <>
-      <Header title={demanda.codigo} actions={modern ? <div className={surface.pageActions}>{acoes}</div> : acoes} />
+      <Header title={demanda.codigo} actions={<div className={surface.pageActions}>{acoes}</div>} />
       {corpo}
     </>
   )

@@ -1,6 +1,5 @@
 "use client"
 
-import { useVisualPreview } from "@/components/layout/useVisualPreview"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
@@ -488,7 +487,6 @@ function Filtro({ valor, onChange, children }: {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function PessoasAcessosPage() {
-  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("pessoas")
 
   // Filtros da aba Pessoas
@@ -809,10 +807,10 @@ export default function PessoasAcessosPage() {
     <>
       <Header />
 
-      <main data-person-open={!!pessoaAberta} className={cn("flex-1 p-6 space-y-5 transition-[padding]", modern && preview.people, pessoaAberta && "lg:pr-[25rem]")}>
+      <main data-person-open={!!pessoaAberta} className={cn("flex-1 p-6 space-y-5 transition-[padding]", preview.people, pessoaAberta && "lg:pr-[25rem]")}>
 
         {/* Título + ação principal */}
-        <div className={cn("flex items-start justify-between gap-4", modern && preview.intro)}>
+        <div className={cn("flex items-start justify-between gap-4", preview.intro)}>
           <div>
             <h1 className="text-2xl font-semibold text-zinc-100">Pessoas &amp; Acessos</h1>
             <p className="text-sm text-zinc-500 mt-1">
@@ -830,7 +828,7 @@ export default function PessoasAcessosPage() {
         {/* Números — cada card é também um filtro */}
         <div className={cn(
           "grid gap-3 grid-cols-2 md:grid-cols-3",
-          modern && preview.metrics,
+          preview.metrics,
           // Com o painel aberto sobra menos largura: cinco colunas só a partir
           // do 2xl, senão os rótulos viram "Tot…" e o número perde o nome.
           pessoaAberta ? "2xl:grid-cols-5" : "lg:grid-cols-5",
@@ -860,7 +858,7 @@ export default function PessoasAcessosPage() {
         </div>
 
         {/* Abas */}
-        <div className={cn("flex items-center gap-0 border-b border-zinc-800", modern && preview.tabs)}>
+        <div className={cn("flex items-center gap-0 border-b border-zinc-800", preview.tabs)}>
           {abas.map(t => (
             <button
               key={t.id}
@@ -1048,7 +1046,7 @@ export default function PessoasAcessosPage() {
             </div>
 
             {/* Tabela */}
-            <div className={cn("border border-zinc-800 rounded-xl overflow-x-auto", modern && preview.table)}>
+            <div className={cn("border border-zinc-800 rounded-xl overflow-x-auto", preview.table)}>
               <table aria-label="Pessoas da empresa" className="w-full text-sm min-w-[900px]">
                 <thead className="bg-zinc-800/50 border-b border-zinc-800">
                   <tr>
