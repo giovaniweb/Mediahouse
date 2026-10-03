@@ -23,7 +23,9 @@ export const metadata: Metadata = {
     siteName: "NuFlow",
     type: "website",
     url: "https://nuflow.space",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "NuFlow" }],
   },
+  twitter: { card: "summary", title: "NuFlow", description: "Jobs, prazos e aprovações em um só lugar.", images: ["/icon-512.png"] },
 }
 
 export default function RootLayout({
