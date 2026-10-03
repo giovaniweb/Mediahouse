@@ -5,7 +5,6 @@ export const configEmpresaPatch = z.object({
   cnpj: texto, razaoSocial: texto, nomeFantasia: texto,
   endereco: texto, bairro: texto, cidade: texto, estado: texto, cep: texto,
   email: texto, telefone: texto, pixKey: texto, pixTipo: texto, observacoesNF: texto,
-  googleDriveFolderId: z.string().trim().regex(/^[a-zA-Z0-9_-]{10,200}$/).nullable().optional(),
 }).strict()
 
 // Allowlist: novos campos no banco nunca passam automaticamente para o cliente.
@@ -16,5 +15,5 @@ export const empresaFaturamentoSelect = {
 } as const
 export const empresaAdministrativaSelect = {
   ...empresaFaturamentoSelect,
-  id: true, googleDriveFolderId: true, googleDriveEmail: true, googleDriveConnectedAt: true,
+  id: true,
 } as const

@@ -4,7 +4,6 @@ import { NextRequest } from "next/server"
 const { sessao } = vi.hoisted(() => ({ sessao: { user: null as null | { id: string; organizacaoId: string; tipo: string } } }))
 vi.mock("@/lib/auth", () => ({ auth: async () => sessao.user ? { user: sessao.user } : null }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
-vi.mock("@/lib/google-drive", () => ({ criarPastaDrive: vi.fn() }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { POST as criarDoc, PATCH as editarDoc, DELETE as excluirDoc } from "@/app/api/eventos/[id]/documentos/route"

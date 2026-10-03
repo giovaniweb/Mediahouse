@@ -20,7 +20,6 @@ import { comOrg } from "@/lib/org-contexto"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { prismaBase } from "@/lib/prisma"
-import { criarEstadoDrive, consumirEstadoDrive } from "@/lib/drive-oauth"
 import { NextRequest } from "next/server"
 import { POST as redefinirSenha } from "@/app/api/auth/redefinir-senha/route"
 import { GET as demandaPublica } from "@/app/api/publico/demanda/[token]/route"
@@ -132,13 +131,6 @@ describe("Prisma conectado como runtime sem bypass", () => {
     expect(await orgPorCredencial("demanda_publica", `${da}-token`)).toBe(a)
     expect(await orgPorCredencial("demanda_publica", "invalido")).toBeNull()
     expect(await comOrg(a, () => db.demanda.findMany({ select: { id: true } }))).toEqual([{ id: da }])
-  })
-  it("OAuth consome estado uma única vez e não atravessa empresa", async () => {
-    const state = await criarEstadoDrive({ usuarioId: u, organizacaoId: a })
-    expect(await comOrg(b, () => db.oAuthDriveEstado.count())).toBe(0)
-    expect(await consumirEstadoDrive(state, { usuarioId: u, organizacaoId: b })).toBe(false)
-    expect(await consumirEstadoDrive(state, { usuarioId: u, organizacaoId: a })).toBe(true)
-    expect(await consumirEstadoDrive(state, { usuarioId: u, organizacaoId: a })).toBe(false)
   })
   it("acompanhamento público funciona pelo handler com runtime restrito", async () => {
     const r = await comOrg(null, () => demandaPublica(new NextRequest("http://localhost/api/publico/demanda/x"), { params: Promise.resolve({ token: `${da}-token` }) }))

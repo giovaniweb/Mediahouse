@@ -8,15 +8,12 @@ vi.mock("@/lib/midia", async () => {
   const real = await vi.importActual<typeof import("@/lib/midia")>("@/lib/midia")
   return { ...real, urlAssinadaDeLeitura: assinar, resolverParaAssinada: async (u: string | null) => u && real.caminhoDaUrl(u) ? assinar(real.caminhoDaUrl(u)!) : u }
 })
-vi.mock("@/lib/google-drive", () => ({ getAccessToken: vi.fn() }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as galeria } from "@/app/api/publico/galeria/route"
 import { GET as midia } from "@/app/api/midia/[...caminho]/route"
 import { POST as publicar } from "@/app/api/biblioteca/[id]/publicacao/route"
 import { GET as biblioteca } from "@/app/api/biblioteca/route"
-import { GET as thumbnail } from "@/app/api/publico/drive-thumbnail/route"
-import { getAccessToken } from "@/lib/google-drive"
 const p = `media-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, admin = `${p}-admin`, leitor = `${p}-leitor`, vm = `${p}-vm`
 const d1 = `${p}-d1`, d2 = `${p}-d2`, d3 = `${p}-d3`, arq = `${p}-arq`, arq2 = `${p}-arq2`, arq3 = `${p}-arq3`
 const path = (org: string, d: string, tipo = "videos", nome = "1.mp4") => `org/${org}/${tipo}/${d}/${nome}`
@@ -39,7 +36,7 @@ beforeAll(async () => {
   await db.demandaCompartilhamento.create({ data: { id: `${p}-espelho`, demandaId: d1, organizacaoOrigemId: a, organizacaoDestinoId: b, nomeOrigem: "A", nomeDestino: "B", criadoPorId: admin } })
 })
 beforeEach(async () => {
-  estado.sessao = null; assinar.mockClear(); vi.mocked(getAccessToken).mockClear()
+  estado.sessao = null; assinar.mockClear()
   await db.arquivo.update({ where: { id: arq }, data: { publicadoEm: null, publicadoPor: null, revogadoEm: null, revogadoPor: null, publicacaoUrl: null, publicacaoThumbnailUrl: null, url: url(a,d1) } })
 })
 afterAll(async () => {
@@ -143,10 +140,5 @@ describe("publicação explícita e autorização por objeto", () => {
       expect((await biblioteca(new NextRequest("http://localhost/api/biblioteca?area=design"))).status).toBe(403)
       expect((await ler(path(a,d1))).status).toBe(404)
     } finally { await db.demanda.update({ where: { id: d1 }, data: { area: "audiovisual" } }) }
-  })
-  it("Drive privado não aciona o provedor de thumbnails", async () => {
-    await db.arquivo.update({ where: { id: arq }, data: { url: "https://drive.google.com/file/d/arquivoPrivado123/view" } })
-    expect((await thumbnail(new NextRequest(`http://localhost/api/publico/drive-thumbnail?org=${a}&fileId=arquivoPrivado123`))).status).toBe(404)
-    expect(getAccessToken).not.toHaveBeenCalled()
   })
 })
