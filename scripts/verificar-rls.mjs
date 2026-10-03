@@ -358,7 +358,7 @@ const { rows: semPolitica } = await c.query(`
     AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)
   ORDER BY c.relname`)
 // limites_publicos: só a função SECURITY DEFINER consumir_limite_publico toca
-// nela (migration 20261003000000); a aplicação não lê nem escreve direto.
+// nela (migration 20260929095000); a aplicação não lê nem escreve direto.
 const previstas = ["chat_ia_mensagens", "limites_publicos", "produtos_servico_evento", "sessions"]
 const inesperadas = semPolitica.map((r) => r.relname).filter((t) => !previstas.includes(t))
 conferir(
