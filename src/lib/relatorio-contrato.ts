@@ -41,7 +41,7 @@ const corpo = z.discriminatedUnion("formato", [
   z.object({ formato: z.literal("estruturado"), dados: estruturado }),
   z.object({ formato: z.literal("invalido"), erro: z.literal("CONTEUDO_INVALIDO") }),
 ])
-export const relatorioV1Schema = z.object({ versao: z.literal(1), metadados: metadadosSchema, snapshot: snapshotSchema.nullable(), conteudo: corpo }).strict()
+export const relatorioV1Schema = z.object({ versao: z.literal(1), metadados: metadadosSchema, snapshot: snapshotSchema.nullable(), conteudo: corpo, cacheIA: z.object({ chave: z.string().regex(/^[a-f0-9]{64}$/), versao: z.literal(1) }).strict().optional() }).strict()
 export type RelatorioV1 = z.infer<typeof relatorioV1Schema>
 export type ApresentacaoRelatorio = {
   estado: "texto" | "estruturado" | "invalido"

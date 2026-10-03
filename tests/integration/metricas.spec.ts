@@ -6,6 +6,7 @@ vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@/lib/claude", () => ({ analisarComClaude: analisar, executarAgenteComTools: agente, MODELO_POTENTE: "simulado", MODELO_RAPIDO: "simulado" }))
 vi.mock("@/lib/notificar", () => ({ emSegundoPlano: vi.fn() }))
+vi.mock("@/lib/ia-analise", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/ia-analise")>(), analisarComOrcamento: analisar }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as metricas } from "@/app/api/relatorios/metricas/route"
@@ -68,13 +69,13 @@ describe("mesmos indicadores em todos os consumidores", () => {
     await db.permissaoUsuario.create({ data: { usuarioId: u, organizacaoId: a, ...PRESETS.admin, verCustos: false } })
     const r = await (await metricas(request(`/api/relatorios/metricas?${setembro}`))).json()
     expect(r.custos).toBeUndefined(); expect(JSON.stringify(r)).not.toContain("9876.54")
-    const resp = await gerar(post({ tipo: "mensal", mes: "2026-09" })); expect(resp.status).toBe(200)
+    const resp = await gerar(post({ tipo: "mensal", mes: "2026-09", analiseIA: true })); expect(resp.status).toBe(200)
     const g = await resp.json(); expect(g.relatorio.apresentacao.snapshot.custoTotal).toBeNull(); expect(analisar.mock.calls[0][0]).not.toContain("9876.54")
     const l = await (await historico(request("/api/relatorios"))).json(); expect(l.relatorios.some((v: {id: string}) => v.id === g.relatorio.id)).toBe(true)
     expect((await gerar(post({ tipo: "analise_custos" }))).status).toBe(403)
   })
   it("snapshot emitido permanece congelado após reabrir e concluir novamente", async () => {
-    const g = await (await gerar(post({ tipo: "mensal", mes: "2026-09" }))).json()
+    const g = await (await gerar(post({ tipo: "mensal", mes: "2026-09", analiseIA: true }))).json()
     const id = `${p}-fora`, params = { params: Promise.resolve({ id }) }
     expect((await mover(post({ statusInterno: "editando" }),params)).status).toBe(200)
     expect((await db.demanda.findUniqueOrThrow({ where: { id } })).finalizadaEm).toBeNull()
@@ -93,16 +94,13 @@ describe("mesmos indicadores em todos os consumidores", () => {
   })
   it("cron semanal persiste o mesmo contrato sem consultar métricas por ferramentas ou expor custos", async () => {
     vi.stubEnv("CRON_SECRET", "cron-local-sintetico")
-    agente.mockImplementation(async (prompt: string, executar: (nome: string, input: unknown) => Promise<string>) => {
-      expect(prompt).toContain("SNAPSHOT:"); expect(prompt).not.toContain("9876.54")
-      expect(await executar("buscar_metricas",{})).toContain("Use o snapshot")
-      return { resposta: "Vistoria sintética", tokens: 1 }
-    })
+    agente.mockImplementation(() => { throw new Error("LLM não permitido em rotina") })
     try {
       const response = await cron(new NextRequest("http://localhost/api/cron/agentes?agente=vistoria", { headers: { authorization: "Bearer cron-local-sintetico" } }))
       expect(response.status).toBe(200)
-      const saved = await db.relatorioIA.findFirstOrThrow({ where: { organizacaoId: a, tipo: "semanal" }, orderBy: { createdAt: "desc" } })
-      expect(saved.conteudo).toMatchObject({ metadados: { area: "audiovisual", origem: "agente" }, snapshot: { custoTotal: null, metricas: { versao: 1, recorte: { tipo: "semana" } } } })
+      const saved = await db.relatorioIA.findFirstOrThrow({ where: { organizacaoId: a, tipo: "semanal", chaveRegra: { startsWith: "semanal:v1:audiovisual:" } }, orderBy: { createdAt: "desc" } })
+      expect(saved.conteudo).toMatchObject({ metadados: { area: "audiovisual", origem: "agente" }, snapshot: { custoTotal: null, metricas: { versao: 1, recorte: { tipo: "custom" } } } })
+      expect(agente).not.toHaveBeenCalled()
     } finally { vi.unstubAllEnvs() }
   })
   it("datas inválidas não consomem IA", async () => {

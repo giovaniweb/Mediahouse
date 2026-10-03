@@ -1,18 +1,17 @@
 # Controle da execução do Flow
 
-Última atualização: 29/09/2026 — R04: galeria paginada por entregável; sem deploy.
+Última atualização: 30/09/2026 — estimativa monetária de IA com preços datados; eventos seguem adiados; sem deploy.
 
 ## Checkpoint de retomada
 
-- Tarefa em andamento: R04 implementado e validado localmente; S01/S02/S03 conservam recortes pendentes.
-- Próxima tarefa: O01 — fila durável; manter os recortes pendentes de S02/S03 visíveis.
-- Checkout de execução: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria.
-- Fonte auditada: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
-- Base: origin/main 7750b33dae75cd0a742da02e37d58ac56fb06860; fetch conferido em 26/09.
-- Última alteração: contagem/ordem por entregável, data estimada e tratamento de falha na galeria.
-- Verificações R04: 674 unitários e 127 integrações locais; build/tipos/lint e auditores. Nenhuma migração nova; configuração real do provedor permanece pendente.
-- Validações externas conhecidas: runtime RLS, OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto.
-- Decisão pendente que impede começar: nenhuma; F00/F01 preparam a base.
+- Diretrizes vigentes: DECISAO-IA-ESSENCIAL.md e DECISAO-EVENTOS-ADIADOS.md. Priorizar o núcleo em uso e simplificar antes de ampliar ferramentas.
+- Eventos em standby: não iniciar a criação atômica de evento/checklist/demandas nem outras evoluções do módulo. A indicação anterior dessa próxima etapa foi revogada pelo usuário. Redesenho/plano ficam para conversa futura.
+- Próxima frente fora de eventos: M01 — identidade da mídia, base para Drive/biblioteca. O06 tem cache/TTL, política auditada e preços de referência implementados; homologação e limites documentados permanecem pendentes. Demais tarefas mantêm a fila e dependências.
+- O06/U01 parciais. S01/S02/S03 conservam pendências; adiamento de eventos não equivale a concluir sua segurança nem a desligar fluxos existentes.
+- Checkout: /Users/giovanigomes/MediaHouse/nuflow-melhorias; branch melhorias/execucao-auditoria. Fonte original: /Users/giovanigomes/MediaHouse/videoops; não pressupor árvore limpa.
+- Última implementação: estimativa em USD do consumo confirmado de IA (recorte O06 de 30/09). Proteções anteriores de eventos preservadas; nenhuma publicação foi realizada nesta sequência.
+- Últimas provas locais: 692 unitários, 293 integrações distintas, build webpack/tipos, lint e auditores aprovados; ensaio visual autenticado e runtime específico dos últimos recortes pendentes. Este recorte altera estimativa de consumo, painel existente e testes; eventos não foram retomados.
+- Validações externas conhecidas: OAuth/Drive, WhatsApp/recibos, e-mail, transcrição, worker, restauração e piloto; sem presumir homologação em produção.
 
 ## Fila de tarefas
 
@@ -36,12 +35,12 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | R02 | Métricas e recortes | 02 | R01, S01 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R03 | Filtro de custos | 02 | S03, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
 | R04 | Ordem e paginação de galeria | 02 | S06 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
-| O01 | Fila durável | 03 | F01, S07, S08 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| O02 | Inbox WhatsApp | 03 | O01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| O03 | Outbox e recibos | 03 | O01, O02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| O04 | Regras e lembretes | 03 | O03, R01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| O05 | Alertas e saúde | 03 | O02, O03, O04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| O01 | Fila durável | 03 | F01, S07, S08 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
+| O02 | Inbox WhatsApp | 03 | O01, S05 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
+| O03 | Outbox e recibos | 03 | O01, O02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
+| O04 | Regras e lembretes | 03 | O03, R01, R02 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
+| O05 | Alertas e saúde | 03 | O02, O03, O04 | IMPLEMENTADO | INTEGRADA_ISOLADA | CONFERIDA | NAO_PUBLICADO |
+| O06 | Limites e uso de IA | 03 | S03, S05, O01, R02 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | M01 | Identidade da mídia | 04 | S06, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M02 | Worker privado | 04 | M01, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | M03 | Sync Drive | 04 | M01, S04, O01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -49,7 +48,7 @@ Legenda de cadernos: 01 fundação/segurança; 02 relatórios; 03 automações; 
 | C01 | Convite e contrato | 05 | S01, S08, O03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C02 | Competência e lançamento | 05 | C01, S03, S07 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | C03 | Painel e conciliação | 05 | C02, R02, R03 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
-| U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
+| U01 | Navegação e remoções | 06 | F00, S03, R04, O05, M04 | EM_EXECUCAO | INTEGRADA_ISOLADA | PENDENTE | NAO_PUBLICADO |
 | U02 | Próxima ação e quatro jobs | 06 | U01, C01, R02 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | U03 | Secretária delimitada | 06 | U02, O02, O03, O06, M01, S05 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
 | U04 | Equipe e parcerias | 06 | C01, S06, S07, U01 | A_FAZER | NAO_EXECUTADA | PENDENTE | NAO_PUBLICADO |
@@ -243,3 +242,172 @@ S04 implementado e revisado localmente sobre o commit 9f039f7. A fatia de config
 - 674 unitários, 127 integrações, build/tipos, lint sem erros e auditores locais. Sem migração/deploy.
 - Limite: índice completo do escopo em memória; sem benchmark de escala ou validação visual autenticada. Detalhes/assinaturas restritos à página.
 - Próxima ação: O01 — fila durável; manter pendências S01/S02/S03.
+
+### O01 — fila durável (29/09/2026)
+
+- Base e384fbf; contrato de integração/limites em O01-FILA-DURAVEL.md.
+- Jobs e eventos com RLS; intenção única por empresa/tipo/chave, claim atômico, limite de dois leases por empresa, renovação, backoff limitado, expiração, cancelamento e retomada.
+- Efeito local e conclusão na mesma transação, com recusa de token antigo. Primeiro consumidor: recuperação de execuções interrompidas, agora dentro do escopo da empresa no cron.
+- 674 unitários, 141 integrações, 19 testes runtime sem bypass, verificador de grants/RLS, build/tipos/lint e auditores aprovados.
+- Migração 20260929040000_fila_duravel aplicada só no PostgreSQL descartável. Sem deploy, cron novo, IA paga ou mensagem real.
+- Limite: rotinas de envio/IA ainda não migradas; estados de entrega/timeout ambíguo pertencem a O03. Não prometer exactly-once externo nem worker contínuo.
+- Próxima ação: O02 — inbox WhatsApp persistida e autenticada, com contrato do provedor conferido.
+
+### O02 — inbox WhatsApp (29/09/2026)
+
+- Base 9bfe28e; contrato/limites em O02-INBOX-WHATSAPP.md. Instalação Evolution não confirmada; emissor oficial 2.3.7 é referência, não homologação.
+- Inbox cifrada e job atômicos; chave própria por empresa/instância/ID, retorno 503 antes de persistir, descartes explícitos e bootstrap RLS restrito.
+- Processamento local retomável de SIM/NÃO, revalidando convite/identidade/validade. Demais mensagens aguardam automação; respostas/download/transcrição/IA inline removidos deste caminho para não duplicar efeitos externos.
+- Consumidor técnico sem IA, protegido por CRON_SECRET, paginado por empresa; after como otimização e cron existente como retomada. Sem agendamento novo; cadência/cursor em L02.
+- Retenção de conteúdo de sete dias com limpeza em lotes; mantém chave. Job válido por 24h. Rejeição/expiração da fila não equivale a mensagem respondida.
+- 677 unitários, 155 integrações, 20 testes runtime, build/tipos/lint e auditores locais. Migração 20260929050000_inbox_whatsapp só no banco descartável.
+- NÃO publicar isoladamente: O03 precisa ligar confirmações/saída; conversa completa depende de O06/U03. Confirmar versão/payload real e ensaio L02. Sem mensagens ou chamadas pagas.
+- Próxima ação: O03 — outbox, recibos e tratamento de resultado desconhecido.
+
+### O03 — outbox e recibos (29/09/2026)
+
+- Base 26422dc; contrato, operação e limites em O03-OUTBOX-WHATSAPP.md. Revisão própria, sem homologação externa.
+- Intenção/job atômicos, tentativas filhas, checkpoint de incerteza antes da rede, backoff limitado e reenvio manual auditado. Confirmações locais da inbox participam da transação de negócio.
+- Recibos autenticados e monotônicos; tela diferencia agendamento, aceitação, entrega e leitura. Histórico antigo preservado sem reenvio/reinterpretação. Retenção cifrada de sete dias.
+- 677 unitários, 169 integrações, 21 runtime, verificador de grants/RLS, build/tipos, lint sem erros e auditores aprovados. Dez avisos preexistentes de lint nas telas e aviso face-api no build. Logs /private/tmp/nuflow-o03-*.log.
+- Migração 20260929060000_outbox_whatsapp só no banco descartável. Sem publicação, registro remoto de webhook, mensagens ou chamadas pagas.
+- Contrato Evolution real não confirmado; worker exige WHATSAPP_EVOLUTION_CONTRATO após homologação. Não configurar arbitrariamente. Resultado desconhecido sem ID continua bloqueado para reenvio e requer investigação no provedor.
+- Adaptador legado ainda usa chave diária por conteúdo e não participa da transação original. O04 migra regras/chaves/contadores e remove LLM dessas rotinas. O05 completa a saúde; O06/U03 completam a conversa. Não declarar WhatsApp comercial homologado.
+- Próxima ação: O04 — regras, lembretes e snapshots recorrentes determinísticos com produtor atômico.
+
+### O04 — regras, lembretes e resumos (29/09/2026)
+
+- Base 3b804ea; contrato, critérios e limites em O04-REGRAS-E-LEMBRETES.md. Revisão própria, sem homologação externa.
+- Cron e quatro ações manuais de monitoramento substituídos por regras versionadas, sem LLM. Alertas únicos com resolução/reabertura, páginas de 100 e filtros combinados sem sobrescrever status. Cobrança restrita à NF pendente, não ao pagamento pelo prestador.
+- notificarEm derivado pelo banco; cron atrasado ainda atende evento futuro. Intenção/job por regra na transação; alteração de horário/responsável, conclusão e pagamento invalidam antes da rede. Contadores antigos não são marcados como envio.
+- Snapshot da semana anterior fechada por área, deduplicado e com zero tokens. Empresas inativas/de teste/sem atividade elegível não geram execução comercial. Ambiente de teste exige marcação explícita antes da publicação.
+- Limpeza automática de links suspensa até M04; não apoiar exclusão em agendamento de aviso. Briefing simplificado para central de alertas; análises de capacidade/custo por IA removidas desses quatro comandos, sem prometer diagnósticos não implementados.
+- 682 unitários, 179 integrações, 22 runtime, build/tipos, lint sem erros, grants/RLS e auditores aprovados. Um aviso preexistente de lint na tela IA e face-api no build. Logs /private/tmp/nuflow-o04-*.log.
+- Migração 20260929070000_regras_deterministicas apenas no banco descartável. Sem deploy, mensagens ou chamadas pagas. Homologação Evolution, agendador seguindo cursor, benchmark de volume e interface de saúde pendentes. Demais produtores legados fora destas rotinas conservam limitações O03.
+- Próxima ação: O05 — apresentar saúde por evidências e permitir ações individuais auditadas sobre saídas.
+
+### O05 — saúde e ações auditadas (29/09/2026)
+
+- Base e00b416; contrato e operação em O05-SAUDE-E-ALERTAS.md. Revisão própria, sem homologação externa.
+- Conexão reportada, inbox, aceite, recibo correlacionado e fila separados. Polling local; erro não vira zero e silêncio não implica falha.
+- Heartbeat técnico dos dois consumidores; resumo parcial inclui falha antes da rede. Atraso exige cadência real; sem registro/cadência são explícitos. Continuidade do cursor permanece L02.
+- Pausa, retomada e cancelamento por intenção com lock compartilhado e auditoria atômica. Revisão evita worker antigo; nenhuma ação opera depois do checkpoint de envio. Reenvio conserva O03.
+- Alertas com filtros, paginação e detalhes; inclui responsável externo. Leitura por capacidade/empresa/escopo e alterações auditadas. Erro de interface visível.
+- 684 unitários, 190 integrações, 23 runtime, tipos, lint sem erros e auditores/grants aprovados. Nove avisos preexistentes de lint; face-api no build. Build inicial aprovado; build final e nova repetição de runtime impedidos por falta de disco (ENOSPC), mesmo após remover artefatos desta tarefa. Repetir após liberar espaço; configuração original de build restaurada. Logs /private/tmp/nuflow-o05-*.log.
+- Migração 20260929080000_pausa_saida_whatsapp somente no banco descartável. Sem mensagens, IA paga, deploy ou cron novo. Cadência, Evolution, benchmark/retenção das batidas e ensaio visual pendentes.
+- Próxima ação: liberar espaço e repetir validação final; depois O06 — limites concorrentes e medição de consumo de IA.
+
+
+### O05 — recuperação da validação (29/09/2026)
+
+- Build webpack com configuração original aprovado após recuperação de espaço.
+- PostgreSQL descartável retomado na porta 55439; 23 runtime e verificação de grants/RLS aprovados novamente. Nenhum acesso ao banco de produção.
+- Evidências: /private/tmp/nuflow-o05-build-recovery.log e /private/tmp/nuflow-o05-runtime-recovery.log. Encerrada a pendência local de ENOSPC; permanecem validações externas.
+
+### O06 — primeiro recorte: sugestões sem chamada paga (29/09/2026)
+
+- Base 29d8088; detalhes, limites e sequência em O06-LIMITES-IA.md.
+- GET de sugestões não instancia provedor nem usa chave de API; orientação editorial por regras em todos os produtos retornados. Consulta direta corrige produto fora do top 10.
+- Capacidade verProdutos, empresa revalidada, contexto explícito de banco, filtro de ativos, 404 uniforme e erro 503 legível. Tela informa origem por regras.
+- 687 unitários e 195 integrações aprovados; build webpack final, tipos e auditores aprovados. Lint sem erros, um aviso preexistente na tela de produto.
+- Sem migração, mensagem, IA paga ou deploy. O06 continua EM_EXECUCAO: ainda não existe teto agregado de IA nem medição central; demais caminhos pagos permanecem para o próximo recorte.
+
+
+### O06 — segundo recorte: orçamento e relatórios protegidos (29/09/2026)
+
+- Base 03a5282; contrato/limitações em O06-LIMITES-IA.md.
+- Política por empresa com defaults finitos; reserva transacional, simultaneidade, checkpoint único, expiração apenas pré-envio e débito desconhecido mantido até conciliação. Uso de entrada/saída/cache separado; sem preço inventado.
+- Adaptador de texto com contexto explícito, tamanho/saída limitados, timeout e sem retry automático. Primeiro consumidor: geração manual de relatórios; fallback conserva snapshot e informa indisponibilidade/consumo pendente.
+- Central de IA mostra detalhe restrito a gerenciarConfig, com cobertura explicitamente parcial. Medido/reserva/desconhecido separados; erro não vira zero.
+- 687 unitários, 212 integrações e 24 runtime; build webpack, grants/RLS, tipos, lint sem erros e auditores aprovados. Provedores falsos e banco descartável; sem IA paga, mensagem ou deploy.
+- Migration 20260929090000_orcamento_ia somente no banco descartável. Persistência deve preceder futura publicação. Restante de chamadas, cache/opt-out, preços e edição auditada da política continuam pendentes; O06 permanece EM_EXECUCAO.
+
+
+### O06/U01 — menos ferramentas, IA no contexto (29/09/2026)
+
+- Base 98b2f37. Diretriz do usuário e contrato em DECISAO-IA-ESSENCIAL.md; substitui a próxima etapa anterior de migrar chat/triagem/loops.
+- Central/chat/falso teste de secretária retirados; /ia redireciona a Alertas. Chat/triagem autenticados retornam 410 sem efeito; loop LLM e catálogo/prompt sem consumidor removidos.
+- Monitor permanece como Verificar pendências em Alertas, com verAlertas + gerenciarConfig. Sem LLM nem envio nesta ação. Cron O04 preservado.
+- Relatórios têm dois atalhos principais (semana/mês) e opt-in analiseIA=false por padrão. Sem opt-in não reserva nem chama provedor. Painel técnico recolhido foi para Relatórios. Histórico permanece legível.
+- 687 unitários, 215 integrações, build/tipos/lint sem erros e auditores aprovados. Sem nova migration, exclusão de dados, mensagem, IA paga ou deploy; ensaio visual autenticado pendente.
+- Não há telemetria de uso de produção nesta decisão. Demais análises contextuais possuem caminhos próprios e precisam de avaliação de utilidade antes de migrar. O06/U01 não concluídos; U03 é evolução futura, sem reintrodução automática de secretária.
+
+
+### O06/U01 — retirar opiniões automáticas de demandas e ideias (29/09/2026)
+
+- Base b6bf7f2; decisão e critérios em DECISAO-IA-ESSENCIAL.md.
+- Retirada a recomendação de aprovar/recusar demanda e pontuação de ideias individual/lote, incluindo endpoints pagos. Sessão e capacidade continuam exigidas; clientes antigos recebem 410.
+- Preservados cadastro/conversão de ideias, aprovação humana e histórico. Notas antigas ficam em detalhe recolhido; a conversão deixa de aplicar prioridade/tipo sugeridos pela IA anterior.
+- 687 unitários, 217 integrações, build/tipos, lint sem erros e auditores aprovados. Dez avisos preexistentes de lint. Sem migration, exclusão de dados, mensagem, IA paga ou deploy.
+- Próximo: briefing e relatórios de eventos/coberturas; ainda usam chamadas legadas fora do orçamento. Não declarar O06 completa. Conversão de ideias tem dívida anterior de atomicidade/alocação de código; não coberta pelo teste simples de preservação deste recorte.
+
+
+### O06/U01 — resumos factuais de eventos e coberturas (29/09/2026)
+
+- Base 2db2309. Relatórios convertidos em regras sem LLM; telas usam Resumo e removem avaliações de desempenho. Helper pago legado sem consumidores removido.
+- Capacidade, vínculo e empresa explícitos; leitura consistente e log na mesma transação. Cobertura conta arquivos por dia/pessoa, sem expor membro de outra cobertura. Evento separa previsto/realizado e só consulta financeiro com verCustos.
+- Histórico de cobertura preserva categoria legada semanal e período cobertura-ID; renderização histórica completa e sua política de acesso continuam pendentes. Evento mantém resposta/log, sem persistir corpo. GET principal de eventos ainda precisa corrigir exposição financeira e mistura de previstos/realizados (S03/R03); proteção deste recorte é do resumo.
+- 687 unitários e 224 integrações aprovados, incluindo isolamento, permissões, valores ausentes/zero, contagem de fotos/vídeos, falha de banco e ausência de IA. Build webpack/tipos aprovados; lint sem erros, seis avisos preexistentes; auditores de tenancy/perfil aprovados. Logs /private/tmp/nuflow-eventos-regras-*.log.
+- Sem migration, exclusão, mensagem, chamada paga ou deploy; ensaio visual autenticado e benchmark pendentes.
+- Próximo: importação de briefing PDF, com autorização e orçamento próprios, limites de documento e validação de saída. Revisar consumidores de eventos, coberturas e campo. O06/U01 permanecem parciais.
+
+
+### O06/U01 — briefing PDF com limites e revisão (29/09/2026)
+
+- Base b00bc17. Importação opcional preservada; vínculo/capacidade por destino, empresa derivada da sessão. PDF limitado na leitura real e no arquivo (3 MiB), contagem prévia, orçamento diário/concorrência compartilhados e sem retry.
+- Validação estrutural, datas/período e listas; respostas truncadas/inválidas não preenchem formulário. Consumo confirmado persiste mesmo se saída inválida; timeout de geração mantém débito desconhecido. Sem logs com PDF/texto bruto.
+- Eventos, coberturas e campo informam limite/revisão; campo oferece criação manual após qualquer erro. Painel de consumo inclui briefing. Não cria eventos automaticamente.
+- 687 unitários e 245 integrações distintas aprovados (243 na suíte + 21 no recorte final, duas novas); build webpack/tipos, lint sem erros e auditores aprovados. Onze avisos preexistentes em campo, face-api no build. Logs /private/tmp/nuflow-briefing-*.log.
+- Sem migration nova, chamada paga, mensagem ou deploy. Contagem é estimativa, sem garantia de teto monetário; PDF real/OCR, páginas e comportamento visual não homologados. Detalhes em DECISAO-IA-ESSENCIAL.md.
+- Próximo em O06: política de consumo editável com auditoria; cache/TTL e preços datados continuam pendentes. Manter também dívida S03/R03 do GET principal de eventos (permissão financeira e previsto/realizado). O06/U01 continuam parciais.
+
+
+### O06 — ajustar limites com auditoria (29/09/2026)
+
+- Base 1ce2f47. Painel existente recebe habilitação, tokens/dia e simultaneidade, sem nova Central. Valores técnicos preservados.
+- Permissão gerenciarConfig e empresa revalidada; alteração/auditoria atômicas sob o lock do orçamento. Comparação dos valores anteriores evita sobrescrita concorrente divergente; no-op não duplica evento.
+- Desativação bloqueia futuros checkpoints; consumo, reservas e chamadas já enviadas são preservados. Redução não libera dívida nem cria saldo fictício.
+- 687 unitários, 261 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-politica-*.log; aviso face-api anterior. Sem migração nova, chamada paga, produção ou deploy; interface autenticada ainda não homologada.
+- Próximo: S03/R03 — revisar permissão financeira e separação previsto/realizado no GET principal de eventos. Cache/TTL, preços datados e homologação de O06 permanecem pendentes.
+
+
+### S03/R03 — financeiro estruturado de eventos (29/09/2026)
+
+- Base 794e690; contrato, escopo e dívidas em S03-EVENTOS-FINANCEIRO.md. Lista, detalhe, dashboard e resumo aplicam verFinanceiroEvento; agregado audiovisual exige também verCustos. Empresa explícita nas consultas. Escritas de custos/orçamento protegidas e respostas de criação/edição sem dados financeiros.
+- Previsto/realizado/ausente/zero separados; soma evento+AV retirada por possível dupla contagem. GET do detalhe não altera o registro. Telas ajustadas ao contrato.
+- 687 unitários, 269 integrações, build webpack/tipos, lint sem erros/avisos e auditores aprovados; face-api mantém aviso anterior. Sem nova migration, rede externa, mensagem, IA paga ou deploy. Ensaio visual autenticado/runtime específico pendentes. Logs /private/tmp/nuflow-eventos-fin-*.log.
+- Próximo: documentos/aprovações de eventos, especialmente classificação de conteúdo financeiro e autorização de suas APIs. Não concluir segurança de todo o módulo: criação não atômica, logs best-effort, relações e exclusão legada continuam pendentes. O06 mantém cache/TTL, preços datados e homologação pendentes.
+
+
+### S03 — documentos e aprovações protegidos (29/09/2026)
+
+- Base 16a85b0. Contrato e limites em S03-DOCUMENTOS-APROVACOES.md. Contratos e aprovações financeiras exigem verFinanceiroEvento, inclusive contagens. Autorizações de API revalidam vínculo/empresa; tela segue os gates.
+- Decisão exige admin/gestor/gestor_eventos da empresa. Transição pendente→decidida serializada; divergência concorrente é 409 e retry idêntico não duplica. Documento decidido não é reaberto/substituído/excluído por leitor.
+- Schemas validam links, status, datas e campos. Auditoria de operações atômica sem copiar URLs/textos; falha reverte escrita. Interface mostra falhas, sem limpar formulário como se tivesse sucesso.
+- 687 unitários, 281 integrações e build webpack/tipos aprovados; lint sem erros/avisos e auditores aprovados. Logs /private/tmp/nuflow-documentos-*.log. Sem migration, rede externa, IA paga, mensagem ou deploy. Ensaio visual/runtime específico pendentes.
+- Classificação depende da categoria contratos; texto livre/documento mal classificado e compartilhamento externo continuam limitações. Não declarar sigilo completo.
+- Próximo: criação atômica/auditada de evento, checklist e demandas. Demais dívidas de exclusão/checklist/relações e O06 continuam no controle.
+
+
+### Decisão do usuário — eventos em standby (29/09/2026)
+
+- Base 8049a4b. Registradas as duas ideias em DECISAO-EVENTOS-ADIADOS.md: briefing→cards e gestão do departamento de eventos. Não definir a arquitetura agora.
+- Retirada da sequência imediata a criação atômica/auditada de eventos. Indicações anteriores de “próximo” nessa frente ficam substituídas por esta decisão.
+- Sem alteração de código, dados, disponibilidade, navegação ou produção. Correções existentes preservadas; retomada exige conversa e plano futuro.
+
+
+### O06 — cache autorizado de relatórios (30/09/2026)
+
+- Base 3769e51. Empresa/pessoa/tipo/modelo/permissão/snapshot iguais permitem reutilizar relatório válido salvo há até 15 minutos. Nova consulta dos indicadores antecede o reuso. Opt-out/desativação respeitados.
+- Sem novo registro de relatório/consumo no hit; prazo e geração originais preservados e aviso na interface. Contrato e limites em O06-LIMITES-IA.md. Sem schema/migration ou nova infraestrutura.
+- 687 unitários, 289 integrações distintas, build webpack/tipos e auditores aprovados; lint sem erros, três avisos anteriores de relatórios e aviso face-api no build. Logs /private/tmp/nuflow-cache-*.log.
+- Sem chamada paga, mensagem ou deploy. Não elimina corridas entre primeiras gerações simultâneas; teto de orçamento continua vigente. Ensaio visual/pago e escala pendentes.
+- Próximo: preços datados e apresentação de estimativa monetária, sem prometer equivalência à fatura. Eventos permanecem em standby.
+
+
+### O06 — referência de custo em USD (30/09/2026)
+
+- Base a9b2ed0. Preços oficiais conferidos, referência versionada e janela de revisão de 30 dias. Estimativa usa categorias confirmadas por modelo, empresa e competência; não inventa valor de reservas, cache com TTL desconhecido, modelos ausentes ou chamadas fora da referência.
+- Painel mostra total estimado ou subtotal parcial, sem conversão/fatura. Valores antigos não são reescritos; documentação em O06-LIMITES-IA.md.
+- 692 unitários e 293 integrações distintas aprovados (suite + recorte de 33 após atualizar expectativa do adaptador); build/tipos, lint sem erros/avisos e auditores aprovados. Sem migration, chamada paga, mensagem ou deploy. Homologação externa/visual e comparação de fatura pendentes.
+- Próximo: M01 — identidade única de mídia para preparar Drive/biblioteca. Eventos seguem em standby; não reiniciar seu desenvolvimento.

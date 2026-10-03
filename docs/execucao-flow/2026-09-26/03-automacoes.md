@@ -74,6 +74,8 @@ O produto precisa comprovar o efeito de cada rotina. “Cron executou” não si
 
 ## O06 — Orçamento e uso de IA por empresa/operação
 
+**Revisão de escopo em 29/09:** prevalece [IA essencial](DECISAO-IA-ESSENCIAL.md). Chat, triagem autônoma e loops foram retirados; não migrá-los nem reativá-los para cumprir o plano antigo. Provar 410 sem chamadas/efeitos substitui o teste de loop nesses caminhos. Limites e cache se aplicam aos recursos mantidos.
+
 **Arquivos:** claude.ts, api/ia/**, relatorios/gerar, transcrição, schema/serviço de consumo e módulos de organização.
 
 1. Centralizar chamadas em um adaptador com finalidade, empresa, ator, modelo e limite de saída. Separar input, output, cache quando disponível, duração, resultado e tentativa.

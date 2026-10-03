@@ -59,7 +59,7 @@ export function AlertasIA({ alertas, isLoading }: AlertasIAProps) {
     <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
         <h2 className="font-semibold text-zinc-100 flex items-center gap-2">
-          <Bell className="w-4 h-4 text-purple-400" /> Alertas IA
+          <Bell className="w-4 h-4 text-purple-400" /> Alertas
         </h2>
         {visible.length > 0 && (
           <span className="bg-red-500/15 text-red-400 text-xs font-bold px-2.5 py-0.5 rounded-full border border-red-500/20">

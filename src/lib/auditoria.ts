@@ -2,21 +2,25 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BASE_FALSE, PRESETS } from "@/lib/permissoes"
 
-export const ACOES_AUDITORIA = ["manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
+export const ACOES_AUDITORIA = ["evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
 export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }
 
-const booleanos = new Set([...Object.keys(BASE_FALSE), "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
-const motivos = new Set(["autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
+const booleanos = new Set([...Object.keys(BASE_FALSE), "habilitada", "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
+const motivos = new Set(["config_corrigida","provedor_normalizado","destinatario_revalidado","autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
 const contadores = new Set(["processados", "pulados", "erros", "alterados"])
 // Somente nomes de campos, jamais valores fiscais/contato/credenciais.
-const campos = new Set(["cnpj", "razaoSocial", "nomeFantasia", "endereco", "bairro", "cidade", "estado", "cep", "email", "telefone", "pixKey", "pixTipo", "observacoesNF", "googleDriveFolderId", "nome", "status", "senhaHash", "categoria", "funcaoProfissional", "areas", "papel", "liderAudiovisual", "recebeTodosAvisos", "boardId", "credenciais", "emailsFinanceiro", "label", "ordem", "ativo", "grupo", "valor"])
+const campos = new Set(["url", "linkExterno", "observacoes", "prazo", "cnpj", "razaoSocial", "nomeFantasia", "endereco", "bairro", "cidade", "estado", "cep", "email", "telefone", "pixKey", "pixTipo", "observacoesNF", "googleDriveFolderId", "nome", "status", "senhaHash", "categoria", "funcaoProfissional", "areas", "papel", "liderAudiovisual", "recebeTodosAvisos", "boardId", "credenciais", "emailsFinanceiro", "label", "ordem", "ativo", "grupo", "valor"])
 export function payloadAuditoria(entrada?: Record<string, unknown>): Prisma.InputJsonObject {
   const saida: Record<string, boolean | number | string | string[]> = {}
   for (const [k,v] of Object.entries(entrada ?? {})) {
     if (booleanos.has(k) && typeof v === "boolean") saida[k] = v
     else if (contadores.has(k) && Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 1000000) saida[k] = v as number
+    else if (k === "tokensDia" && Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 1000000) saida[k] = v as number
+    else if (k === "simultaneas" && Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= 5) saida[k] = v as number
+    else if (k === "operacao" && typeof v === "string" && ["criar", "editar", "excluir"].includes(v)) saida[k] = v
+    else if (k === "decisao" && typeof v === "string" && ["pendente", "enviado", "em_analise", "aprovado", "reprovado", "finalizado"].includes(v)) saida[k] = v
     else if (k === "motivo" && typeof v === "string" && motivos.has(v)) saida[k] = v
     else if (k === "papel" && typeof v === "string" && Object.hasOwn(PRESETS,v)) saida[k] = v
     else if (k === "campos" && Array.isArray(v)) saida[k] = [...new Set(v.filter(x => typeof x === "string" && campos.has(x)))].sort()

@@ -1,0 +1,13 @@
+{
+  "event": "messages.upsert",
+  "instance": "instancia-sintetica",
+  "data": {
+    "key": {"id": "MSG-SINTETICA-001", "remoteJid": "5511999990001@s.whatsapp.net", "fromMe": false},
+    "pushName": "Pessoa sintética",
+    "message": {"conversation": "SIM"},
+    "messageTimestamp": 1790632800
+  },
+  "date_time": "2026-09-28T22:00:00.000Z",
+  "apikey": "NAO-PERSISTIR-SEGREDO-SINTETICO",
+  "server_url": "https://example.invalid"
+}

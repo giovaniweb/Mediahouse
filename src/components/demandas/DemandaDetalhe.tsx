@@ -15,7 +15,7 @@ import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
-  AlertTriangle, RefreshCw, Sparkles, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
+  AlertTriangle, RefreshCw, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
   CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft,
 } from "lucide-react"
 import Link from "next/link"
@@ -2320,9 +2320,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
-          {/* Análise IA rápida */}
-          <IACard demandaId={id as string} />
-
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
@@ -2582,60 +2579,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       <Header title={demanda.codigo} actions={acoes} />
       {corpo}
     </>
-  )
-}
-
-// ── Componente: Análise IA inline ─────────────────────────────────────────────
-function IACard({ demandaId }: { demandaId: string }) {
-  const [analise, setAnalise] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  async function analisar() {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/ia/analisar-demanda", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaId }),
-      })
-      const text = await res.text()
-      let json: { error?: string; sugestao?: string } = {}
-      try { json = JSON.parse(text) } catch { /* not JSON */ }
-      if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || "Erro na análise IA"))
-      setAnalise(json.sugestao ?? "Sem sugestão retornada.")
-    } catch (e) {
-      toast.error(mensagemDeErro(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="font-semibold text-zinc-300 flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-purple-400" /> Análise IA
-        </h2>
-        {!analise && (
-          <button
-            onClick={analisar}
-            disabled={loading}
-            className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 flex items-center gap-1"
-          >
-            <Sparkles className={cn("w-3 h-3", loading && "animate-pulse")} />
-            {loading ? "Analisando..." : "Analisar"}
-          </button>
-        )}
-      </div>
-      {analise ? (
-        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
-          <p className="text-xs text-purple-300 leading-relaxed">{analise}</p>
-          <button onClick={() => setAnalise(null)} className="text-[10px] text-purple-400 hover:underline mt-2">Limpar</button>
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-500">Clique em &quot;Analisar&quot; para obter insights da IA sobre esta demanda.</p>
-      )}
-    </div>
   )
 }
 

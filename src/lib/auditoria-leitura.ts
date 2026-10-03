@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 
 const rotulos: Record<string,string> = {
+  "evento.documento": "Documento do evento alterado", "evento.aprovacao": "Aprovação do evento registrada",
   "acesso.negado": "Acesso bloqueado", "permissoes.alteradas": "Permissões alteradas", "usuario.alterado": "Pessoa atualizada", "usuario.removido": "Acesso da pessoa removido",
   "configuracao.alterada": "Configuração alterada", "trello.conexao": "Conexão Trello", "drive.conexao": "Conexão Google Drive", "arquivo.publicacao": "Publicação no portfólio",
   "manutencao.custos": "Custos retroativos", "manutencao.arquivos": "Arquivos retroativos", "manutencao.credenciais": "Proteção de credenciais", "manutencao.retencao": "Limpeza de detalhes vencidos",

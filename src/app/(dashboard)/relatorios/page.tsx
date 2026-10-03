@@ -1,5 +1,6 @@
 "use client"
 
+import { ConsumoIA } from "@/components/automacoes/ConsumoIA"
 import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
 import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
 import { useState, useCallback, useEffect } from "react"
@@ -21,7 +22,6 @@ import {
   RefreshCw,
   Sparkles,
   Calendar,
-  Target,
   Activity,
   ArrowUpRight,
   Printer,
@@ -415,16 +415,18 @@ export default function RelatoriosPage() {
     ? `/api/producao-manual?area=${resAreaParam}&de=${mRes.periodo.de.slice(0, 10)}&ate=${mRes.periodo.ate.slice(0, 10)}`
     : null
   const { data: prodManual, mutate: mutateProdManual } = useSWR<{ producaoPorCategoria: Record<string, number>; totalManual: number; presencialPorCategoria: Record<string, number>; totalPresencial: number }>(pmUrl, fetcher)
+  const [analiseIA, setAnaliseIA] = useState(false)
   const gerarRelatorio = useCallback(async (tipo: string) => {
     setGerando(tipo)
     try {
       const res = await fetch("/api/relatorios/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, area: areaRel, periodo, ...(periodo === "custom" ? { de: periodoCustomDe, ate: periodoCustomAte } : {}) }),
+        body: JSON.stringify({ tipo, analiseIA, area: areaRel, periodo, ...(periodo === "custom" ? { de: periodoCustomDe, ate: periodoCustomAte } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Não foi possível gerar o relatório")
+      if (data.reutilizado) toast.success("Análise recente reaproveitada: dados iguais, sem nova chamada de IA.")
       if (data.relatorio) {
         setRelatorioAtual(data.relatorio)
         setAbaAtiva("ia")
@@ -434,8 +436,9 @@ export default function RelatoriosPage() {
       toast.error(error instanceof Error ? error.message : "Não foi possível gerar o relatório")
     } finally {
       setGerando(null)
+      setAnaliseIA(false)
     }
-  }, [recarregarHistorico, areaRel, periodo, periodoCustomDe, periodoCustomAte])
+  }, [recarregarHistorico, areaRel, periodo, periodoCustomDe, periodoCustomAte, analiseIA])
 
   const m = metricas
 
@@ -450,15 +453,20 @@ export default function RelatoriosPage() {
           @page { margin: 12mm; }
         }
       `}</style>
-      <Header title="Relatórios IA" />
+      <Header title="Relatórios" />
       <main className="flex-1 p-6 space-y-6">
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" disabled={gerando !== null} checked={analiseIA} onChange={e => setAnaliseIA(e.target.checked)} className="mt-1" />
+          <span>Incluir análise de IA no próximo relatório <span className="block text-zinc-400">Opcional, usa o saldo da empresa. Análises idênticas de até 15 minutos são reaproveitadas. Os indicadores funcionam sem IA.</span></span>
+        </label>
+        <ConsumoIA />
 
         {/* ── Abas ───────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
           {[
             { key: "resultados", label: "Resultados", icon: BarChart2 },
             { key: "realtime", label: "Tempo Real", icon: Activity },
-            { key: "ia", label: "Análise IA", icon: Sparkles },
+            { key: "ia", label: "Gerar relatório", icon: Sparkles },
             { key: "historico", label: "Histórico", icon: Calendar },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -654,7 +662,7 @@ export default function RelatoriosPage() {
                   className="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition-colors"
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${gerando === "realtime" ? "animate-pulse" : ""}`} />
-                  {gerando === "realtime" ? "Analisando..." : "Análise IA"}
+                  {gerando === "realtime" ? "Gerando..." : "Gerar relatório"}
                 </button>
               </div>
             </div>
@@ -806,18 +814,14 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        {/* ── ABA: Análise IA ────────────────────────────────────────────── */}
+        {/* ── ABA: Gerar relatório ────────────────────────────────────────────── */}
         {abaAtiva === "ia" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Painel de geração */}
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-white">Gerar Análise IA</h2>
+              <h2 className="text-sm font-semibold text-white">Gerar relatório</h2>
 
               {[
-                { tipo: "produtividade_time", label: "Produtividade da Equipe", desc: "Score, gargalos, feedback do processo", icon: Activity },
-                { tipo: "analise_custos", label: "Análise de Custos", desc: "ROI, otimização, projeção financeira", icon: DollarSign },
-                { tipo: "performance_videomaker", label: "Performance Videomakers", desc: "Ranking individual, pontos fortes", icon: Users },
-                { tipo: "otimizacao_contratacao", label: "Otimização de Contratação", desc: "Modelo ideal, KPIs, melhorias", icon: Target },
                 { tipo: "semanal", label: "Resumo Semanal", desc: "Visão geral da semana atual", icon: Calendar },
                 { tipo: "mensal", label: "Relatório Mensal", desc: "Análise completa do mês", icon: BarChart2 },
               ].map(({ tipo, label, desc, icon: Icon }) => (
@@ -883,7 +887,7 @@ export default function RelatoriosPage() {
                 <div className="h-full min-h-64 flex flex-col items-center justify-center text-center border border-dashed border-zinc-700 rounded-xl p-8">
                   <Sparkles className="w-10 h-10 text-zinc-600 mb-3" />
                   <p className="text-zinc-500 font-medium">Selecione um tipo de análise</p>
-                  <p className="text-xs text-zinc-600 mt-1">A IA irá analisar os dados do sistema e gerar insights</p>
+                  <p className="text-xs text-zinc-600 mt-1">Os indicadores são calculados pelo sistema. A análise de IA é opcional.</p>
                 </div>
               )}
             </div>
@@ -902,7 +906,7 @@ export default function RelatoriosPage() {
               <div className="text-center py-12 text-zinc-500">
                 <BarChart2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p>Nenhum relatório gerado ainda.</p>
-                <p className="text-xs mt-1">Use a aba "Análise IA" para gerar o primeiro relatório.</p>
+                <p className="text-xs mt-1">Use a aba Gerar relatório para criar o primeiro registro.</p>
               </div>
             )}
 

@@ -83,7 +83,7 @@ export async function registrarWebhookEntrada(
 
   const base = config.instanceUrl.replace(/\/$/, "")
   const url = `${origem.replace(/\/$/, "")}/api/whatsapp/webhook?s=${segredoPlano}`
-  const eventos = ["MESSAGES_UPSERT", "CONNECTION_UPDATE"]
+  const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE"]
 
   try {
     const res = await fetch(`${base}/webhook/set/${config.instanceId}`, {
