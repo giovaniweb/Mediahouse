@@ -10,9 +10,11 @@ import styles from "./Organizations.module.css"
 import Link from "next/link"
 import { useEffect, useId, useRef, useState } from "react"
 import useSWR from "swr"
-import { Building2, Plus, Power, UserPlus, X, Users, ToggleLeft } from "lucide-react"
+import { Plus, Power, UserPlus, X, Users, ToggleLeft } from "lucide-react"
 import { toast } from "sonner"
 import { fetcher } from "@/lib/fetcher"
+import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 type Org = {
@@ -72,25 +74,20 @@ export function PainelOrganizacoes() {
   }
 
   return (
+    <>
+    {/* O mesmo cabeçalho das outras telas (barra + abertura), em vez de um
+        título próprio com ícone: a área do SaaS é parte do sistema. */}
+    <Header title="Empresas do SaaS" />
+    <PageIntro eyebrow="PLATAFORMA / EMPRESAS" title="Cada empresa, seu espaço." description="Cadastre as empresas que usam o NuFlow e gerencie acessos, módulos e a área pública de cada uma.">
+      <button
+        onClick={() => setCriando(true)}
+        className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-500"
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" /> Nova empresa
+      </button>
+    </PageIntro>
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
-            <Building2 className="h-6 w-6 text-indigo-400" /> Administração do SaaS
-          </h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Cadastre as empresas que usam o NuFlow e gerencie seus acessos e módulos. Cada empresa tem seu próprio espaço.
-          </p>
-        </div>
-        <button
-          onClick={() => setCriando(true)}
-          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          <Plus className="h-4 w-4" /> Nova empresa
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-5 text-sm text-purple-300"><Link href="/admin/leads">Leads interessados no NuFlow →</Link><Link href="/comecar">Página de captura ↗</Link></div>
+      <div className="flex flex-wrap gap-5 text-sm text-purple-300"><Link href="/admin/leads">Interessados no NuFlow →</Link><Link href="/comecar">Página de captura ↗</Link></div>
 
       {isLoading ? <p role="status">Carregando empresas…</p> : error ? <div role="alert">Não foi possível carregar as empresas. <button onClick={() => mutate()}>Tentar novamente</button></div> : <>
         <section className={styles.metrics} aria-label="Resumo das empresas">
@@ -167,6 +164,7 @@ export function PainelOrganizacoes() {
       {aberta && <ModalPessoas org={aberta} onClose={() => { setAberta(null); mutate() }} />}
       {modulosDe && <ModalModulos org={modulosDe} onClose={() => setModulosDe(null)} />}
     </div>
+    </>
   )
 }
 

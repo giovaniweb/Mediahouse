@@ -1,8 +1,14 @@
-"use client"
-import useSWR from "swr"
-import Link from "next/link"
-import {Header} from "@/components/layout/Header"
-import {fetcher} from "@/lib/fetcher"
-import styles from "./page.module.css"
-type Lead={id:string;nome:string;email:string;telefone:string;empresa:string;mensagem:string|null;origem:string|null;campanha:string|null;createdAt:string}
-export default function Leads(){const {data,error,isLoading,mutate}=useSWR<{leads:Lead[]}>("/api/admin/leads",fetcher);return <><Header title="Leads do NuFlow"/><main className={styles.page}><p>ADMINISTRAÇÃO DO SAAS</p><h1>Novas conversas começam aqui.</h1><p>Os 100 contatos mais recentes interessados no NuFlow. Acesso exclusivo da administração da plataforma.</p><div className={styles.links}><Link href="/comecar">Abrir página de captura ↗</Link><Link href="/admin/organizacoes">Empresas do SaaS →</Link></div>{isLoading&&<p role="status">Carregando contatos…</p>}{error&&<div role="alert">Não foi possível abrir os leads. Esta área exige acesso de administrador do SaaS. <button onClick={()=>void mutate()}>Tentar novamente</button></div>}{data?.leads.length===0&&<section>Nenhum contato recebido ainda. Use o link da página de captura nas suas campanhas.</section>}<div className={styles.grid}>{data?.leads.map(l=><article key={l.id}><small>{new Date(l.createdAt).toLocaleString("pt-BR")}</small><h2>{l.nome}</h2><p>{l.empresa}</p><a href={`mailto:${l.email}`}>{l.email}</a><p>{l.telefone}</p>{l.mensagem&&<blockquote>{l.mensagem}</blockquote>}<small>Origem: {l.origem||"Não informada"}{l.campanha?` · Campanha: ${l.campanha}`:""}</small></article>)}</div></main></>}
+import { notFound } from "next/navigation"
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/org"
+import { ListaInteressados } from "@/components/admin/ListaInteressados"
+
+// Mesma porta de /admin/organizacoes: a checagem acontece no servidor, antes de
+// sair HTML. Antes a página era só cliente — a API negava, mas a casca da tela
+// abria para qualquer pessoa logada. Para quem não é super-admin, não existe.
+export default async function InteressadosPage() {
+  const guard = await requireSuperAdmin(await auth())
+  if (guard instanceof NextResponse) notFound()
+  return <ListaInteressados />
+}
