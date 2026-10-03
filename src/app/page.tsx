@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
-import Boreal from "@/components/landing/Boreal"
+import Landing from "@/components/landing/Landing"
 import "@/components/layout/Montserrat.css"
 
 export const metadata: Metadata = {
   title: "NuFlow — Mais tempo para criar",
-  description: "Organize demandas, acompanhe seus jobs e encontre mais tempo para ser criativo. Conheça o flow do NuFlow.",
+  description: "Organize demandas, agenda, equipe e aprovações num só lugar. Avisos pelo WhatsApp na hora certa. Conheça o flow do NuFlow.",
   alternates: { canonical: "/" },
   openGraph: {
     title: "NuFlow — Mais tempo para criar",
@@ -15,10 +15,10 @@ export const metadata: Metadata = {
 
 export default function RootPage() {
   // O número de vendas vem só da configuração: nada de telefone pessoal como
-  // reserva no código. Sem ele, a conversa leva ao formulário de interesse.
+  // reserva no código. Sem ele, "Conversar" leva ao formulário de interesse.
   const phone = (process.env.NUFLOW_SALES_WHATSAPP ?? "").replace(/\D/g, "")
   const contactUrl = /^\d{10,15}$/.test(phone)
     ? `https://wa.me/${phone}?text=${encodeURIComponent("Olá! Quero conhecer o NuFlow.")}`
     : null
-  return <main><Boreal contactUrl={contactUrl} /></main>
+  return <Landing contactUrl={contactUrl} />
 }
