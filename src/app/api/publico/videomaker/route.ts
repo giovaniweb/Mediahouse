@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPublica } from "@/lib/org"
+import { barrarExcesso } from "@/lib/limite-formulario"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { z } from "zod"
 import { declararOrg } from "@/lib/org-contexto"
@@ -26,7 +27,8 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  // Corpo que não é JSON vira 400 de validação, não 500.
+  const body = await req.json().catch(() => null)
   const parsed = schema.safeParse(body)
 
   if (!parsed.success) {
@@ -34,19 +36,6 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data
-
-  // Duplicidade: e-mail vive no perfil global; CPF/CNPJ mora nos dados fiscais
-  // por empresa desde que o perfil global parou de guardar dado privado.
-  const [porEmail, porDocumento] = await Promise.all([
-    data.email ? prisma.videomaker.findFirst({ where: { email: data.email }, select: { id: true } }) : null,
-    data.cpfCnpj
-      ? prisma.videomakerDadosFiscais.findFirst({ where: { cpfCnpj: data.cpfCnpj }, select: { id: true } })
-      : null,
-  ])
-
-  if (porEmail || porDocumento) {
-    return NextResponse.json({ error: "Já existe um cadastro com este e-mail ou CNPJ/CPF." }, { status: 409 })
-  }
 
   // A organização que vai receber e aprovar este cadastro. Vem do `?org=` do
   // formulário; sem ele, `orgPublica` cai na Contourline (legado). É a MESMA org
@@ -63,6 +52,24 @@ export async function POST(req: NextRequest) {
       { error: "Cadastro indisponível no momento. Tente novamente em instantes." },
       { status: 503 }
     )
+  }
+
+  // O limite vem ANTES da conferência de duplicidade: sem ele, o 409 "já existe
+  // um cadastro com este e-mail" servia para testar e-mails à vontade.
+  const barrado = await barrarExcesso(req.headers, "videomaker", organizacaoId)
+  if (barrado) return barrado
+
+  // Duplicidade: e-mail vive no perfil global; CPF/CNPJ mora nos dados fiscais
+  // por empresa desde que o perfil global parou de guardar dado privado.
+  const [porEmail, porDocumento] = await Promise.all([
+    data.email ? prisma.videomaker.findFirst({ where: { email: data.email }, select: { id: true } }) : null,
+    data.cpfCnpj
+      ? prisma.videomakerDadosFiscais.findFirst({ where: { cpfCnpj: data.cpfCnpj }, select: { id: true } })
+      : null,
+  ])
+
+  if (porEmail || porDocumento) {
+    return NextResponse.json({ error: "Já existe um cadastro com este e-mail ou CNPJ/CPF." }, { status: 409 })
   }
 
   // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
