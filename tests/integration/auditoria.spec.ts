@@ -80,13 +80,8 @@ describe("auditoria de operações reais", () => {
     const r = await ler(new NextRequest("http://localhost/api/auditoria?fonte=seguranca")); expect(r.headers.get("cache-control")).toContain("no-store")
     const body = await r.json(); expect(body.eventos).toHaveLength(1); expect(body.eventos[0].organizacaoId).toBe(a); expect(body.eventos[0].depois).toBeNull()
   })
-  it("manutenção concorrente cria um único final e mantém arquivo privado", async () => {
-    await db.arquivo.deleteMany({ where: { demandaId: d } })
-    await db.demanda.update({ where: { id: d }, data: { linkFinal: "https://example.invalid/final.mp4" } })
-    const r = await Promise.all([backfillAuditado("arquivos",ator),backfillAuditado("arquivos",ator)])
-    expect(r.reduce((n,v) => n+v.processados,0)).toBe(1)
-    const arquivo = await db.arquivo.findFirstOrThrow({ where: { demandaId: d } }); expect(arquivo.publicadoEm).toBeNull()
-    expect(await db.eventoAuditoria.count({ where: { organizacaoId: a, acao: "manutencao.arquivos", recurso: "arquivo", resultado: "sucesso" } })).toBe(1)
+  it("backfill legado não cria arquivos sem lote revisado", async () => {
+    await expect(backfillAuditado("arquivos",ator)).rejects.toThrow("lote simulado")
   })
   it("retenção técnica remove só payload vencido e preserva envelope", async () => {
     await registrarAuditoria(db,ator,{ acao: "configuracao.alterada", recurso: "config_empresa", recursoId: a, correlationId: correlacaoAuditoria(), depois: { ativo: true } })

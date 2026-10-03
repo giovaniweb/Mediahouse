@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { uploadMedia } from "@/lib/storage"
@@ -112,6 +114,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       tipoArquivo: "documento",
       url,
       nomeArquivo: nomeLimpo,
+      ...metadadosFonte(url, demanda.organizacaoId, demandaId),
+      tamanho: buffer.byteLength,
+      fonteMimeDeclarado: arquivo.type,
+      fonteSha256: createHash("sha256").update(buffer).digest("hex"),
     },
     select: { id: true, nomeArquivo: true, url: true },
   })

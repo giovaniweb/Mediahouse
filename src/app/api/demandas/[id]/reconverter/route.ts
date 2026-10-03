@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  if (workerMidiaAtivo(guard.organizacaoId)) return NextResponse.json({ error: "Conversão gerenciada pela fila de mídia; reconversão legada desativada nesta empresa." }, { status: 409 })
 
   // Pega o Arquivo final ativo (maior sequência) que ainda seja .mov
   const arq = await prisma.arquivo.findFirst({
@@ -31,17 +33,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!dem?.linkFinal || !precisaTranscode(dem.linkFinal)) {
       return NextResponse.json({ error: "Nenhum vídeo .mov para converter" }, { status: 400 })
     }
-    await enqueueTranscode({ demandaId: id, sourceUrl: dem.linkFinal })
-    return NextResponse.json({ ok: true, enfileirado: true, legado: true })
+    const aceito = await enqueueTranscode({ organizacaoId: guard.organizacaoId, demandaId: id, sourceUrl: dem.linkFinal })
+    return NextResponse.json({ ok: true, enfileirado: aceito, legado: true })
   }
 
+  if (arq.previewJobId) return NextResponse.json({ error: "Prévia gerenciada pelo worker v2" }, { status: 409 })
   const fonte = arq.originalUrl ?? arq.url
   if (!precisaTranscode(fonte)) {
     return NextResponse.json({ error: "Vídeo já está em MP4 (nada a converter)" }, { status: 400 })
   }
 
-  await prisma.arquivo.update({ where: { id: arq.id }, data: { transcodeStatus: "processing" } })
-  await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: fonte })
+  const aceito = await enqueueTranscode({ organizacaoId: guard.organizacaoId, arquivoId: arq.id, demandaId: id, sourceUrl: fonte })
 
-  return NextResponse.json({ ok: true, enfileirado: true })
+  await prisma.arquivo.update({ where: { id: arq.id }, data: { transcodeStatus: aceito ? "processing" : "sem_worker" } })
+  return NextResponse.json({ ok: true, enfileirado: aceito })
 }

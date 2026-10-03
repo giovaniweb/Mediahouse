@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 
 // Integração com o worker de transcodificação (HEVC/.mov → MP4 H.264).
 // O worker roda separado (Railway/Render) — ver pasta worker-transcode/.
@@ -5,7 +6,24 @@
 
 // Vídeos .mov/.qt são candidatos a conversão. O worker decide via ffprobe se
 // realmente precisa (HEVC → re-encode; H.264 em .mov → remux; senão skip).
-import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
+import { urlAssinadaDeLeitura, VALIDADE_MAQUINA_SEGUNDOS, BUCKET_PRIVADO } from "@/lib/midia"
+import { identificarMidia, videoDaDemanda } from "@/lib/midia-identidade"
+import { prisma } from "@/lib/prisma"
+
+type FonteTranscode = { organizacaoId: string; demandaId: string; arquivoId?: string; sourceUrl: string }
+
+/** O chamador já autorizou a operação; aqui confirmamos vínculo e origem antes da rede. */
+async function fonteAutorizada(opts: FonteTranscode): Promise<string | null> {
+  const identidade = identificarMidia(opts.sourceUrl)
+  if (!videoDaDemanda(identidade, opts.organizacaoId, opts.demandaId) || identidade?.provedor !== "supabase") return null
+  const vinculado = opts.arquivoId
+    ? await prisma.arquivo.findFirst({ where: { id: opts.arquivoId, demandaId: opts.demandaId,
+      demanda: { organizacaoId: opts.organizacaoId }, OR: [{ url: opts.sourceUrl }, { originalUrl: opts.sourceUrl }] }, select: { id: true } })
+    : await prisma.demanda.findFirst({ where: { id: opts.demandaId, organizacaoId: opts.organizacaoId, linkFinal: opts.sourceUrl }, select: { id: true } })
+  if (!vinculado) return null
+  if (identidade.bucket === BUCKET_PRIVADO) return urlAssinadaDeLeitura(identidade.objectKey, VALIDADE_MAQUINA_SEGUNDOS)
+  return `${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin}/storage/v1/object/public/${identidade.bucket}/${identidade.objectKey}`
+}
 
 export function precisaTranscode(url: string | null | undefined): boolean {
   if (!url) return false
@@ -27,7 +45,7 @@ const EXTENSOES_WEB = [".mp4", ".m4v", ".webm", ".ogg", ".ogv"]
  * Só vai à rede quando a extensão não decide: `.mov` já é conclusivo, e `.mp4`
  * também. Falha de rede devolve o palpite da extensão, nunca quebra o upload.
  */
-export async function precisaTranscodeConferindo(url: string | null | undefined): Promise<boolean> {
+export async function precisaTranscodeConferindo(url: string | null | undefined, contexto?: Omit<FonteTranscode, "sourceUrl">): Promise<boolean> {
   if (!url) return false
   const limpa = url.split("?")[0].toLowerCase()
   if (limpa.endsWith(".mov") || limpa.endsWith(".qt")) return true
@@ -35,8 +53,11 @@ export async function precisaTranscodeConferindo(url: string | null | undefined)
 
   try {
     // URL do bucket privado não responde a um HEAD anônimo. Assina antes.
-    const alvo = (await resolverParaAssinada(url, VALIDADE_MAQUINA_SEGUNDOS)) ?? url
-    const r = await fetch(alvo, { method: "HEAD", signal: AbortSignal.timeout(8000) })
+    if (!contexto) return false
+    const alvo = await fonteAutorizada({ ...contexto, sourceUrl: url })
+    if (!alvo) return false
+    const r = await fetch(alvo, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(8000) })
+    if (!r.ok) return false
     const tipo = r.headers.get("content-type")?.toLowerCase() ?? ""
     return tipo.includes("quicktime") || tipo.includes("x-m4v")
   } catch {
@@ -53,14 +74,8 @@ export async function precisaTranscodeConferindo(url: string | null | undefined)
  * conversão nenhuma — e nenhum arquivo jamais em "done". O transcode nunca
  * rodou em produção, e nada no sistema dizia isso.
  */
-export async function enqueueTranscode(opts: {
-  arquivoId?: string
-  demandaId: string
-  sourceUrl: string
-}): Promise<boolean> {
-  // O worker é externo e não tem como se autenticar no nosso app: recebe uma URL
-  // assinada de 2h, tempo de baixar e converter um vídeo grande.
-  const sourceUrl = (await resolverParaAssinada(opts.sourceUrl, VALIDADE_MAQUINA_SEGUNDOS)) ?? opts.sourceUrl
+export async function enqueueTranscode(opts: FonteTranscode): Promise<boolean> {
+  if (workerMidiaAtivo(opts.organizacaoId)) return false
   const worker = process.env.TRANSCODE_WORKER_URL?.replace(/\/$/, "")
   const secret = process.env.TRANSCODE_SECRET
   if (!worker || !secret) {
@@ -68,8 +83,12 @@ export async function enqueueTranscode(opts: {
     return false
   }
   try {
+    const sourceUrl = await fonteAutorizada(opts)
+    if (!sourceUrl) return false
     const res = await fetch(`${worker}/transcode`, {
       method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
       headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
       // `opts` com a sourceUrl já assinada — o worker baixa direto do Supabase.
       body: JSON.stringify({ ...opts, sourceUrl }),

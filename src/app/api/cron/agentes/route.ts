@@ -1,3 +1,4 @@
+import { prepararMidias } from "@/lib/midia-fila"
 import { acompanharConsumidor } from "@/lib/automacoes-saude"
 import { timingSafeEqual } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
@@ -25,16 +26,17 @@ export async function GET(req:NextRequest) {
     try {
       const dados=await acompanharConsumidor(org.id,`agentes:${agente}`,async()=>{
       const fila=await recuperarExecucoesDuravel(org.id)
+      const midia=await prepararMidias(org.id)
       const inbox=await processarInbox(org.id)
       await limparConteudoInbox(org.id)
       const regras=await comOrg(org.id,()=>executarRotina(org.id,agente as Rotina))
       const saidas=await processarSaidas(org.id)
-      return {dados:{organizacaoId:org.id,fila,inbox,regras,saidas},contadores:{concluidos:fila.concluidos+inbox.concluidos+saidas.aceitos,falhos:fila.falhos+inbox.falhos+saidas.falhos+saidas.desconhecidos,pendentes:regras.intencoesCriadas}}
+      return {dados:{organizacaoId:org.id,fila,midia,inbox,regras,saidas},contadores:{concluidos:midia.concluidos+fila.concluidos+inbox.concluidos+saidas.aceitos,falhos:midia.falhos+fila.falhos+inbox.falhos+saidas.falhos+saidas.desconhecidos,pendentes:regras.intencoesCriadas}}
       })
       resultados.push(dados)
     } catch {resultados.push({organizacaoId:org.id,erro:"falha_local"})}
   }
-  const parcial=resultados.some(r=>"erro" in r || ("saidas" in r && (r.saidas.falhos+r.saidas.desconhecidos+r.inbox.falhos+r.fila.falhos)>0))
+  const parcial=resultados.some(r=>"erro" in r || ("saidas" in r && (r.saidas.falhos+r.saidas.desconhecidos+r.inbox.falhos+r.fila.falhos+r.midia.falhos)>0))
   return NextResponse.json({ok:!parcial,parcial,agente,organizacoes:resultados.length,resultados,
     nextCursor:resultados.length<orgs.length?resultados.at(-1)?.organizacaoId??cursor??null:null})
 }

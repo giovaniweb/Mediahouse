@@ -21,7 +21,12 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import { cache } from "react"
 
-const armazenamento = new AsyncLocalStorage<{ organizacaoId: string | null }>()
+// Next pode carregar este módulo em bundles distintos enquanto o Prisma é
+// compartilhado no processo. Ambos precisam enxergar o mesmo contexto RLS.
+const globalOrg = globalThis as unknown as {
+  nuflowOrgContexto?: AsyncLocalStorage<{ organizacaoId: string | null }>
+}
+const armazenamento = globalOrg.nuflowOrgContexto ??= new AsyncLocalStorage<{ organizacaoId: string | null }>()
 
 /**
  * Roda `fn` declarando a empresa para todas as consultas dentro dela.

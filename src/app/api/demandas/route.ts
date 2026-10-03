@@ -1,3 +1,5 @@
+import { filtroFilaTrabalho, estadoHistorico } from "@/lib/acervo-regras"
+import { numeroPagina } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
@@ -108,8 +110,8 @@ export async function GET(req: NextRequest) {
   // Paginação (usada pela página /historico)
   const limitParam = searchParams.get("limit")
   const offsetParam = searchParams.get("offset")
-  const limit = limitParam ? Math.min(200, parseInt(limitParam)) : undefined
-  const offset = offsetParam ? parseInt(offsetParam) : undefined
+  const limit = limitParam ? numeroPagina(limitParam, 50, 200) : undefined
+  const offset = offsetParam && /^\d{1,7}$/.test(offsetParam) ? Number(offsetParam) : 0
   const videomakerId = searchParams.get("videomakerId") ?? undefined
   const designerId = searchParams.get("designerId") ?? undefined
   let area = searchParams.get("area") ?? undefined
@@ -160,6 +162,7 @@ export async function GET(req: NextRequest) {
   // terceirizado duas vezes. Ver PLANO-ESPELHAMENTO-CROSS-TENANT.md §2.4.
   const where: Record<string, unknown> = {}
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
+  if (searchParams.get("filaTrabalho") === "1") and.push(filtroFilaTrabalho())
   if (area) where.area = area
   if (departamento) where.departamento = departamento
   if (prioridade) where.prioridade = prioridade
@@ -196,7 +199,7 @@ export async function GET(req: NextRequest) {
       if (e instanceof RecorteInvalido) return erroDeCampo(e.campo ?? "de", e.message)
       throw e
     }
-    and.push({ OR: [{ finalizadaEm: faixa }, { finalizadaEm: null, updatedAt: faixa }] })
+    and.push({ finalizadaEm: faixa })
   }
 
   // ?atrasadas=1 — prazo vencido, exceto onde o prazo fica suspenso porque a bola
@@ -286,6 +289,7 @@ export async function GET(req: NextRequest) {
       orderBy: [
         { prioridade: "desc" },
         { createdAt: "desc" },
+        { id: "asc" },
       ],
       ...(limit ? { take: limit } : {}),
       ...(offset ? { skip: offset } : {}),
@@ -297,6 +301,7 @@ export async function GET(req: NextRequest) {
   // aresta, só se desenha "🤝 Terceirizado" ou "🤝 Contourline".
   const comEspelho = demandas.map(({ compartilhamentos, ...d }) => ({
     ...d,
+    estadoHistorico: estadoHistorico(d.statusVisivel,d.finalizadaEm),
     espelho: espelhoDoCard(compartilhamentos, organizacaoId),
   }))
 

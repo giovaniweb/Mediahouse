@@ -66,7 +66,9 @@ export default function GrowthKanbanPage() {
     setFiltroResp(""); setFiltroLinha(""); setFiltroTipo(""); setFiltroProduto(""); setSoMinhas(false)
   }
 
+  const [navegacaoFila,setNavegacaoFila] = useState({filtro:"",pagina:1})
   const params = new URLSearchParams()
+  params.set("filaTrabalho","1")
   params.set("area", "design")
   if (search) params.set("search", search)
   if (soMinhas || aba === "minhas") params.set("mine", "1")
@@ -77,17 +79,14 @@ export default function GrowthKanbanPage() {
   if (filtroTipo) params.set("tipoVideo", filtroTipo)
   if (filtroProduto) params.set("produtoId", filtroProduto)
 
+  const chaveFiltro = params.toString()
+  const paginaFila = navegacaoFila.filtro === chaveFiltro ? navegacaoFila.pagina : 1
+  const mudarPagina = (pagina:number) => setNavegacaoFila({filtro:chaveFiltro,pagina})
+  params.set("limit","100"); params.set("offset",String((paginaFila-1)*100))
   const { data, mutate } = useSWR(`/api/demandas?${params}`, fetcher, { refreshInterval: 15000 })
   const demandasAll = data?.demandas ?? []
 
-  // Esconde finalizados com mais de 30 dias (mantém o board enxuto)
-  const TRINTA = 30 * 24 * 60 * 60 * 1000
-  const agora = Date.now()
-  const demandas = demandasAll.filter((d: { statusInterno: string; finalizadaEm?: string | null }) => {
-    if (growthColunaDe(d.statusInterno) !== "finalizado") return true
-    const ref = d.finalizadaEm ? new Date(d.finalizadaEm).getTime() : 0
-    return agora - ref <= TRINTA
-  })
+  const demandas = demandasAll
 
   const handleMove = useCallback(async (demandaId: string, novaColuna: string) => {
     const statusInterno = GROWTH_COLUNA_PARA_STATUS[novaColuna as GrowthColunaId]
@@ -125,6 +124,10 @@ export default function GrowthKanbanPage() {
         <button onClick={() => setShowImportar(true)} title="Criar várias demandas a partir de uma planilha" className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-3 py-1.5 rounded-lg"><FileSpreadsheet className="w-4 h-4" /> Importar planilha</button>
       </div>
 
+      <div className="flex flex-wrap gap-3 px-4 py-2 text-sm">
+        <button disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button><span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span><button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button><a href="/historico" className="underline">Histórico completo</a>
+        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="text-xs text-amber-400">Há concluídos legados sem data nesta página; continuam visíveis até revisão.</p>}
+      </div>
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
       <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">

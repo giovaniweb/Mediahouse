@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { ROTINAS } from "@/lib/automacoes-regras"
-export const CONSUMIDORES=["whatsapp-inbox",...ROTINAS.map(r=>`agentes:${r}`)]
+export const CONSUMIDORES=["whatsapp-inbox",...ROTINAS.map(r=>`agentes:${r}`),"drive-copias"]
 export type ContadoresSaude={concluidos:number;falhos:number;pendentes:number}
 /** Sem cadência configurada não se inventa diagnóstico de cron atrasado. */
 export function cadenciaMinutos(consumidor:string,config=process.env.AUTOMACOES_CADENCIAS_MINUTOS) {

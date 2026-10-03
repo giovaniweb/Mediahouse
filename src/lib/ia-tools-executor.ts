@@ -1,3 +1,4 @@
+import { metadadosFonte } from "@/lib/arquivo-fonte"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { registrarAuditoria, correlacaoAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 /**
@@ -937,6 +938,7 @@ async function vincularArquivoDemanda(input: Record<string, unknown>, organizaca
       tipoArquivo: ((input.tipo as string) || "referencia") as import("@prisma/client").TipoArquivo,
       nomeArquivo: input.nome_arquivo as string,
       url: input.url_arquivo as string,
+      ...metadadosFonte(input.url_arquivo as string, organizacaoId, demandaId),
       origem: "whatsapp",
     },
   }))

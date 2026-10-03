@@ -1,3 +1,6 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
+import { createHash } from "node:crypto"
+import { fonteUploadValida, registrarArquivoDemanda } from "@/lib/arquivo-registro"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -41,7 +44,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
-  const body = await req.json()
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Corpo inválido" }, { status: 400 })
   // url pode ser null para excluir — apenas undefined é inválido
   const url: string | null = body.url ?? null
   const tipo = body.tipo as string
@@ -50,6 +54,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
+  }
+
+  if ((url !== null && (typeof url !== "string" || !fonteUploadValida(url, guard.organizacaoId, id, tipo === "brutos" ? "bruto" : tipo as "final" | "documento"))) ||
+    (thumbnailUrl !== undefined && (typeof thumbnailUrl !== "string" || !fonteUploadValida(thumbnailUrl, guard.organizacaoId, id, "thumbnail"))) ||
+    (body.nomeArquivo !== undefined && typeof body.nomeArquivo !== "string")) {
+    return NextResponse.json({ error: "Referência de mídia inválida para esta demanda" }, { status: 422 })
   }
 
   // ── Documento: cria/deleta Arquivo, sem tocar em linkFinal/linkBrutos ─────
@@ -62,9 +72,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const nomeArquivo = (body.nomeArquivo as string | undefined)
         ?? url.split("/").pop()?.split("?")[0]
         ?? "documento"
-      const arq = await prisma.arquivo.create({
-        data: { demandaId: id, tipoArquivo: "documento", nomeArquivo, url },
-      })
+      const { arquivo: arq } = await registrarArquivoDemanda({ organizacaoId: guard.organizacaoId, demandaId: id, tipo: "documento", nomeArquivo, url })
       return NextResponse.json({ ok: true, url, arqId: arq.id })
     }
     return NextResponse.json({ error: "url ou arquivoId obrigatório para documento" }, { status: 400 })
@@ -84,56 +92,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true, url: ultimo?.url ?? null, campo })
   }
 
-  // ── Salvar nova URL ───────────────────────────────────────────────────────
-  let arqId: string | undefined
-  if (url && tipo === "final") {
-    // Conta quantos registros já existem para atribuir sequência correta
-    const existingCount = await prisma.arquivo.count({
-      where: { demandaId: id, tipoArquivo: "final" },
-    })
-    const nomeArquivo = url.split("/").pop()?.split("?")[0] ?? "video.mp4"
-    // Confere o tipo real: arquivo sem extensão passava batido e chegava ao
-    // cliente como quicktime, que o Chrome não toca.
-    const ehTranscode = await precisaTranscodeConferindo(url)
-    const arq = await prisma.arquivo.create({
-      data: {
-        demandaId: id,
-        tipoArquivo: "final",
-        nomeArquivo,
-        url,
-        sequencia: existingCount + 1,
-        ...(thumbnailUrl ? { thumbnailUrl } : {}),
-        // "processing" só depois de o worker ACEITAR — ver abaixo. Marcar aqui
-        // deixava o arquivo eternamente "convertendo" mesmo sem worker nenhum.
-      },
-    })
-    arqId = arq.id
-
-    // .mov/HEVC → enfileira conversão para MP4 (toca em qualquer dispositivo).
-    // O estado gravado reflete o que de fato aconteceu: "processing" quando o
-    // worker aceitou, "sem_worker" quando não há para onde mandar. A diferença
-    // importa — a segunda é um problema de configuração que precisa aparecer,
-    // não um vídeo que está convertendo.
-    if (ehTranscode) {
-      const aceito = await enqueueTranscode({ arquivoId: arq.id, demandaId: id, sourceUrl: url })
-      await prisma.arquivo.update({
-        where: { id: arq.id },
-        data: { transcodeStatus: aceito ? "processing" : "sem_worker" },
-      }).catch(() => null)
-    }
+  if (url) {
+    const { arquivo: arq, criado } = await registrarArquivoDemanda({ organizacaoId: guard.organizacaoId, demandaId: id,
+      tipo: tipo === "final" ? "final" : "bruto", url, nomeArquivo: body.nomeArquivo ?? url.split("/").pop()?.split("?")[0] ?? "arquivo", thumbnailUrl })
+    // Somente após commit e uma vez por confirmação; fila durável será integrada em M02.
+    if (criado && tipo === "final") await iniciarConversao(url, guard.organizacaoId, id, arq.id)
+    return NextResponse.json({ ok: true, url, campo, arqId: arq.id })
   }
+  await prisma.demanda.update({ where: { id }, data: { [campo]: null } })
+  return NextResponse.json({ ok: true, url: null, campo })
+}
 
-  // Sempre atualiza o campo linkFinal/linkBrutos (backward compat)
-  // Se thumbnailUrl foi fornecida, salva também em Demanda.thumbnailUrl (acesso rápido para galeria)
-  await prisma.demanda.update({
-    where: { id },
-    data: {
-      [campo]: url,
-      ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    },
-  })
-
-  return NextResponse.json({ ok: true, url, campo, arqId })
+async function iniciarConversao(url: string, organizacaoId: string, demandaId: string, arquivoId: string) {
+  if (workerMidiaAtivo(organizacaoId)) return
+  if (await precisaTranscodeConferindo(url, { organizacaoId, demandaId, arquivoId })) {
+    const aceito = await enqueueTranscode({ organizacaoId, arquivoId, demandaId, sourceUrl: url })
+    await prisma.arquivo.updateMany({ where: { id: arquivoId, transcodeStatus: null }, data: { transcodeStatus: aceito ? "processing" : "sem_worker" } })
+  }
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
@@ -148,7 +123,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const file = formData.get("file") as File | null
   const tipo = formData.get("tipo") as string | null
 
-  if (!file) return NextResponse.json({ error: "Arquivo obrigatório" }, { status: 400 })
+  if (!(file instanceof File)) return NextResponse.json({ error: "Arquivo obrigatório" }, { status: 400 })
   if (!tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: `tipo deve ser: ${TIPOS_VALIDOS.join(", ")}` }, { status: 400 })
   }
@@ -173,17 +148,14 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const ext = EXT_MAPA[file.type] ?? "mp4"
   // Bucket privado, com a organização no caminho.
-  const caminho = caminhoMidia({ organizacaoId: guard.organizacaoId, tipo: "videos", id: `${id}/${tipo}`, ext })
+  const caminho = caminhoMidia({ organizacaoId: guard.organizacaoId, tipo: tipo === "documento" ? "docs" : "videos", id: `${id}/${tipo}`, ext })
   const arrayBuffer = await file.arrayBuffer()
   const url = await subirArquivo(caminho, arrayBuffer, file.type || "video/mp4")
   if (!url) return NextResponse.json({ error: "Falha ao fazer upload. Tente novamente." }, { status: 500 })
 
-  // Atualiza o campo correto na demanda
-  const campo = tipo === "final" ? "linkFinal" : "linkBrutos"
-  await prisma.demanda.update({
-    where: { id },
-    data: { [campo]: url },
-  })
-
-  return NextResponse.json({ ok: true, url, campo })
+  const { arquivo: arq, criado } = await registrarArquivoDemanda({ organizacaoId: guard.organizacaoId, demandaId: id,
+    tipo: tipo === "brutos" ? "bruto" : tipo as "final" | "documento", url, nomeArquivo: file.name,
+    tamanho: file.size, mimeDeclarado: file.type, sha256: createHash("sha256").update(Buffer.from(arrayBuffer)).digest("hex") })
+  if (criado && tipo === "final") await iniciarConversao(url, guard.organizacaoId, id, arq.id)
+  return NextResponse.json({ ok: true, url, campo: tipo === "documento" ? null : tipo === "final" ? "linkFinal" : "linkBrutos", arqId: arq.id })
 }

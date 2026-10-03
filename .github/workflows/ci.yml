@@ -10,6 +10,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  worker-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Worker isolado com limite real e relatório de cgroup
+        run: node scripts/ensaio-midia/container.mjs
+
+  worker-midia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar ffmpeg para clipes sintéticos
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Conversão privada sem provedores reais
+        run: npm test --prefix worker-transcode
+
   verificar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -59,6 +83,9 @@ jobs:
       - name: Testes unitários
         run: npm test
 
+      - name: Inventário offline de mídia sem exclusão
+        run: npm run test:inventario
+
       # Impede a 59ª rota sem escopo de organização. A allowlist em
       # scripts/tenancy-allowlist.json guarda a dívida conhecida e só encolhe.
       - name: Isolamento multiempresa (auditor estático)
@@ -81,6 +108,9 @@ jobs:
       # migration — o mesmo descuido que deixou o banco sem histórico até agora.
       # (Compara banco × schema em vez de migrations × schema: assim não precisa
       # de shadow database, que o CLI do Prisma 7 só aceita via config.)
+      - name: Instalar ffmpeg para ensaio de queda do worker
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Integração de autorização com banco sintético
         run: npm run test:integration
         env:

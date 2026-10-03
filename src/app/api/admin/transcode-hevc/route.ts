@@ -1,3 +1,4 @@
+import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -6,7 +7,7 @@ import { enqueueTranscode } from "@/lib/transcode"
 
 // POST /api/admin/transcode-hevc
 // Enfileira a conversão para MP4 de todos os vídeos finais .mov/.qt que ainda não foram convertidos.
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const session = await auth()
   const tipo = (session?.user as { tipo?: string } | undefined)?.tipo
   if (!session || !["admin", "gestor"].includes(tipo ?? "")) {
@@ -20,12 +21,14 @@ export async function POST(req: NextRequest) {
   // marcava `processing` em arquivo alheio e mandava a URL para o worker.
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+  if (workerMidiaAtivo(organizacaoId)) return NextResponse.json({ error: "Conversão gerenciada pela fila de mídia; reconversão legada desativada nesta empresa." }, { status: 409 })
 
   // Arquivos finais .mov/.qt ainda não convertidos (transcodeStatus != done)
   const arquivos = await prisma.arquivo.findMany({
     where: {
       demanda: { organizacaoId },
       tipoArquivo: "final",
+      previewJobId: null,
       OR: [{ url: { endsWith: ".mov" } }, { url: { endsWith: ".MOV" } }, { url: { endsWith: ".qt" } }],
       NOT: { transcodeStatus: "done" },
     },
@@ -34,14 +37,15 @@ export async function POST(req: NextRequest) {
 
   let enfileirados = 0
   for (const a of arquivos) {
-    await prisma.arquivo.update({ where: { id: a.id }, data: { transcodeStatus: "processing" } }).catch(() => null)
-    await enqueueTranscode({ arquivoId: a.id, demandaId: a.demandaId, sourceUrl: a.url })
-    enfileirados++
+    const aceito = await enqueueTranscode({ organizacaoId, arquivoId: a.id, demandaId: a.demandaId, sourceUrl: a.url })
+    await prisma.arquivo.update({ where: { id: a.id }, data: { transcodeStatus: aceito ? "processing" : "sem_worker" } })
+    if (aceito) enfileirados++
   }
 
   // Demandas legadas: linkFinal .mov sem registro Arquivo final
   const legadas = await prisma.demanda.findMany({
     where: {
+      organizacaoId,
       OR: [{ linkFinal: { endsWith: ".mov" } }, { linkFinal: { endsWith: ".MOV" } }, { linkFinal: { endsWith: ".qt" } }],
       arquivos: { none: { tipoArquivo: "final" } },
     },
@@ -49,8 +53,8 @@ export async function POST(req: NextRequest) {
   })
   for (const d of legadas) {
     if (!d.linkFinal) continue
-    await enqueueTranscode({ demandaId: d.id, sourceUrl: d.linkFinal })
-    enfileirados++
+    const aceito = await enqueueTranscode({ organizacaoId, demandaId: d.id, sourceUrl: d.linkFinal })
+    if (aceito) enfileirados++
   }
 
   return NextResponse.json({ ok: true, enfileirados })
