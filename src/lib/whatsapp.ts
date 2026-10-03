@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto"
+import { after } from "next/server"
+import { comOrg } from "@/lib/org-contexto"
+import { criarSaida, processarSaidas } from "@/lib/whatsapp-outbox"
 /**
  * WhatsApp service via Evolution API
  */
@@ -66,146 +70,21 @@ export function alternar9oDigito(numero: string): string | null {
   return null
 }
 
-function enviarTexto(
-  config: { instanceUrl: string; instanceId: string; apiKey: string },
-  numero: string,
-  mensagem: string
-) {
-  return fetch(`${config.instanceUrl}/message/sendText/${config.instanceId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: config.apiKey },
-    body: JSON.stringify({
-      number: numero,
-      textMessage: { text: mensagem },
-      options: { delay: 1200, presence: "composing" },
-    }),
-    signal: AbortSignal.timeout(15000),
-  })
-}
-
+/** Adaptador legado: persiste intenção. "aguardando" NÃO significa entrega.
+ * Regras O04 devem fornecer chave própria na mesma transação do fato.
+ */
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null) {
-  const orgId = await resolverOrgEnvio(demandaId, organizacaoId)
-
-  // Sem empresa não há o que registrar. A linha de log nascia sem dono e ficava
-  // invisível para TODAS as telas — inclusive /mensagens, que filtra por
-  // empresa. Era lixo com aparência de rastro: ninguém encontrava, e quem
-  // procurasse a mensagem perdida concluiria que ela nunca foi tentada.
-  if (!orgId) {
-    console.error("[WhatsApp] Envio sem organização — nada enviado e nada registrado.", { telefone, demandaId })
-    return null
-  }
-
-  const config = await getWhatsappConfig(orgId)
-  if (!config) {
-    // Org sem WhatsApp conectado — NÃO quebra o fluxo: registra a tentativa e segue.
-    console.warn(`[WhatsApp] Org ${orgId ?? "?"} sem WhatsApp conectado — pulando envio`)
-    await prisma.mensagemWhatsapp.create({
-      data: {
-        telefone: telefone.replace(/\D/g, ""),
-        tipoMensagem: "text",
-        conteudo: mensagem,
-        direcao: "saida",
-        status: "sem_config",
-        organizacaoId: orgId,
-        ...(demandaId && { demandaId }),
-      },
-    }).catch(() => null)
-    return null
-  }
-
-  // IMPORTANTE: SEMPRE enviar apenas o número puro (sem @s.whatsapp.net / @lid).
-  // A Evolution API normaliza internamente — números brasileiros têm quirk do 9º dígito:
-  // ex: 5531992271043 → JID real 553192271043@s.whatsapp.net (sem o 9 extra).
-  // Se enviarmos o JID direto, a API retorna "exists: false".
-  let numero = telefone
-    .replace(/@s\.whatsapp\.net$/, "")
-    .replace(/@lid$/, "")
-    .replace(/:.*/g, "")        // remove sufixos tipo :123
-    .replace(/\D/g, "")         // só dígitos
-
-  if (!numero) return null
-
-  // Garante DDI 55 para números brasileiros
-  if (numero.length === 10 || numero.length === 11) {
-    numero = "55" + numero
-  }
-
-  console.log(`[WhatsApp] Enviando para: ${numero} (original: ${telefone})`)
-
+  const orgId=await resolverOrgEnvio(demandaId,organizacaoId)
+  if(!orgId) return null
   try {
-    // O quirk do 9º dígito não é teórico: medido em produção, número de 13
-    // dígitos (com o 9) falhava em 706 de 874 envios — 81% — enquanto o de 12
-    // dígitos entregava 81%. A Evolution devolve "exists: false" quando o JID
-    // real da conta não tem o 9. Aqui tentamos o formato alternativo antes de
-    // desistir, em vez de registrar a falha e ficar quieto.
-    let res = await enviarTexto(config, numero, mensagem)
-    let json = await res.json().catch(() => ({}))
-
-    const alternativo = alternar9oDigito(numero)
-    if (!res.ok && alternativo) {
-      console.warn(`[WhatsApp] ${numero} recusado (${res.status}) — tentando ${alternativo}`)
-      const res2 = await enviarTexto(config, alternativo, mensagem)
-      const json2 = await res2.json().catch(() => ({}))
-      if (res2.ok) {
-        console.log(`[WhatsApp] Entregue no formato alternativo: ${alternativo}`)
-        numero = alternativo
-      }
-      res = res2
-      json = json2
-    }
-
-    if (!res.ok) {
-      console.error(`[WhatsApp] Evolution API erro ${res.status}:`, JSON.stringify(json))
-    } else {
-      console.log(`[WhatsApp] Mensagem enviada para ${numero} — key: ${json?.key?.id ?? "?"}`)
-    }
-
-    // O motivo da recusa vinha só no console da Vercel, que expira. Guardado no
-    // banco, ele fica ao lado da mensagem — e responde "por que o fulano não
-    // recebeu" sem ninguém ter que caçar log.
-    const motivo = res.ok
-      ? null
-      : `HTTP ${res.status}: ${JSON.stringify(json).slice(0, 400)}`
-
-    // Loga no banco
-    await prisma.mensagemWhatsapp.create({
-      data: {
-        telefone: numero,
-        tipoMensagem: "text",
-        conteudo: mensagem,
-        direcao: "saida",
-        status: res.ok ? "enviado" : "falhou",
-        ...(motivo && { erro: motivo }),
-        tentativas: alternativo && !res.ok ? 2 : 1,
-        organizacaoId: orgId,
-        ...(demandaId && { demandaId }),
-      },
-    }).catch(e => console.error("[WhatsApp] Erro ao salvar msg:", e))
-
-    return json
-  } catch (e) {
-    console.error("[WhatsApp] Erro ao enviar:", e)
-    // Falha de rede/timeout é justamente o que acontece quando a instância cai.
-    // Antes o erro era engolido e a mensagem sumia sem deixar rastro — quem
-    // esperava o aviso simplesmente não recebia e ninguém ficava sabendo.
-    // Registrar como "falhou" mantém o conteúdo para reenvio e torna a queda
-    // visível em /mensagens.
-    await prisma.mensagemWhatsapp.create({
-      data: {
-        telefone: numero,
-        tipoMensagem: "text",
-        conteudo: mensagem,
-        direcao: "saida",
-        status: "falhou",
-        // Timeout e queda de rede são o sintoma da instância morta. Sem o texto
-        // do erro, essa falha era indistinguível de "número inválido".
-        erro: (e instanceof Error ? `${e.name}: ${e.message}` : String(e)).slice(0, 400),
-        organizacaoId: orgId,
-        ...(demandaId && { demandaId }),
-      },
-    }).catch(err => console.error("[WhatsApp] Erro ao salvar msg falhada:", err))
-    return null
-  }
+    const chave=createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex")
+    const saida=await comOrg(orgId,()=>prisma.$transaction(tx=>criarSaida(tx,{
+      organizacaoId:orgId,chave,origem:"legado",referencia:demandaId??"aviso",telefone,texto:mensagem,expiraEm:new Date(Date.now()+86400_000),
+    })))
+    try {after(async()=>{await processarSaidas(orgId).catch(()=>undefined)})} catch { /* consumidor técnico retoma */ }
+    if(["falhou","cancelado","expirado","desconhecido"].includes(saida.estado)) return null
+    return {id:saida.id,status:saida.estado}
+  } catch { console.error("[WhatsApp] Intenção não persistida"); return null }
 }
 
 // Templates de mensagens.

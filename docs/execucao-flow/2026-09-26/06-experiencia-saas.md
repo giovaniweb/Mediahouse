@@ -4,6 +4,8 @@ Simplificar a navegação sem reescrever os fluxos nem ocultar erros. Reutilizar
 
 ## U01 — Navegação consolidada e retirada de Tabela/importação
 
+**Recorte implementado em 29/09:** [IA essencial](DECISAO-IA-ESSENCIAL.md). Central retirada, /ia redirecionado, chat/triagem encerrados no servidor e recursos operacionais reposicionados. U01 permanece parcial; navegação geral e demais critérios abaixo não estão concluídos.
+
 **Arquivos:** components/layout/Sidebar.tsx e navegação móvel, lib/modulos.ts, lib/permissoes.ts, páginas Demandas/Jobs, componentes/demandas/BarraVisao, modal e API importar.
 
 1. Reaproveitar do preview a retirada de Tabela/importação após conferir diff. Remover caminhos de execução/importações mortos; preferência antiga tabela volta para Kanban. Não deixar endpoint de importação acessível com botão apenas escondido.
@@ -29,6 +31,8 @@ Simplificar a navegação sem reescrever os fluxos nem ocultar erros. Reutilizar
 **Aceite visual:** pedido simples usa uma sequência curta com resumo; encontrar trabalho e entregar não exige navegar por vários módulos. Três roteiros sintéticos registrados com cliques/erros; teclado, foco, rótulo e layout móvel conferidos.
 
 ## U03 — Secretária com quatro fluxos delimitados
+
+**Prioridade revisada pelo usuário:** evolução futura, após comprovação de necessidade. Não reconstruir chat/secretária como parte automática da O06. Preservar inbox/aceite SIM/NÃO/outbox já implementados. Ver [IA essencial](DECISAO-IA-ESSENCIAL.md).
 
 **Arquivos:** webhook/consumidor inbox, executor autorizado, serviço de conversa, formulários de demanda e U02/C01.
 

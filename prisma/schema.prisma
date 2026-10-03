@@ -763,6 +763,8 @@ model Comentario {
 }
 
 model AlertaIA {
+  chaveRegra String?
+  @@unique([organizacaoId, chaveRegra])
   organizacaoId String
   id            String           @id @default(cuid())
   demandaId     String?
@@ -818,6 +820,7 @@ model ConfigWhatsapp {
   telefoneConectado String?
   pushName          String?
   connectedAt       DateTime?
+  connectionEventoEm DateTime?
   lastStatus        String?
   ativo             Boolean   @default(false)
   createdAt         DateTime  @default(now())
@@ -829,6 +832,7 @@ model ConfigWhatsapp {
 }
 
 model MensagemWhatsapp {
+  inboxId String? @unique
   organizacaoId String
   id            String          @id @default(cuid())
   demandaId     String?
@@ -935,6 +939,8 @@ enum StatusEvento {
 }
 
 model Evento {
+  notificarEm DateTime? // Derivado pelo banco de inicio - lembreteMinutos
+  @@index([organizacaoId, notificarEm])
   organizacaoId String
   id            String         @id @default(cuid())
   titulo        String
@@ -1041,6 +1047,8 @@ enum TipoRelatorio {
 }
 
 model RelatorioIA {
+  chaveRegra String?
+  @@unique([organizacaoId, chaveRegra])
   organizacaoId String
   id            String        @id @default(cuid())
   tipo          TipoRelatorio
@@ -2123,7 +2131,16 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  politicaIA PoliticaIA?
+  consumosIA ConsumoIA[]
+  ambienteTeste Boolean @default(false)
   eventosAuditoria EventoAuditoria[]
+  jobsAutomacao JobAutomacao[]
+  inboxWhatsapp InboxWhatsapp[]
+  saidasWhatsapp SaidaWhatsapp[]
+  tentativasWhatsapp TentativaWhatsapp[]
+  recibosWhatsapp ReciboWhatsapp[]
+  eventosJob EventoJob[]
   id             String   @id @default(cuid())
   nome           String
   slug           String   @unique // ex: "contourline" (preparado p/ subdomínio futuro)
@@ -2426,6 +2443,176 @@ model EventoAuditoria {
   @@map("eventos_auditoria")
 }
 
+// Intenção durável; conclusão de execução não significa entrega de mensagem.
+model JobAutomacao {
+  id String @id @default(cuid())
+  organizacaoId String
+  tipo String @db.VarChar(80)
+  versao Int @default(1)
+  referencia String @db.VarChar(128)
+  chave String @db.VarChar(128)
+  payload Json @default("{}")
+  estado String @default("pendente") @db.VarChar(16)
+  agendadoPara DateTime @default(now())
+  expiraEm DateTime
+  tentativas Int @default(0)
+  maxTentativas Int @default(5)
+  leaseAte DateTime?
+  leaseToken String?
+  erro String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  finishedAt DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  eventos EventoJob[]
+  @@unique([organizacaoId, tipo, chave])
+  @@index([organizacaoId, estado, agendadoPara, id])
+  @@map("jobs_automacao")
+}
+
+// Histórico reduzido de transições, sem payload, corpo de mensagem ou erro bruto.
+model EventoJob {
+  id String @id @default(cuid())
+  organizacaoId String
+  jobId String
+  tentativa Int
+  evento String @db.VarChar(24)
+  motivo String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  job JobAutomacao @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, jobId, createdAt])
+  @@map("eventos_job")
+}
+
+// Conteúdo reduzido/cifrado: limpar após 7 dias, conservar chave de deduplicação.
+model InboxWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  instanceId String @db.VarChar(128)
+  providerMessageId String @db.VarChar(128)
+  contrato String @default("evolution-envelope-v1") @db.VarChar(40)
+  conteudoCifrado String?
+  estado String @default("pendente") @db.VarChar(32)
+  resultado String? @db.VarChar(40)
+  demandaId String?
+  createdAt DateTime @default(now())
+  processadoEm DateTime?
+  conteudoExpiraEm DateTime
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId, instanceId, providerMessageId])
+  @@index([organizacaoId, conteudoExpiraEm])
+  @@map("inbox_whatsapp")
+}
+
+model SaidaWhatsapp {
+  pausada Boolean @default(false)
+  regraContexto Json?
+  id String @id @default(cuid())
+  organizacaoId String
+  chave String @db.VarChar(128)
+  revisao Int @default(0)
+  origem String @db.VarChar(16)
+  referencia String @db.VarChar(128)
+  destinatarioTipo String @db.VarChar(24)
+  destinatarioId String @db.VarChar(128)
+  telefoneHash String @db.VarChar(64)
+  telefoneCifrado String?
+  conteudoCifrado String?
+  instanceId String? @db.VarChar(128)
+  providerMessageId String? @db.VarChar(128)
+  estado String @default("aguardando") @db.VarChar(24)
+  motivo String? @db.VarChar(40)
+  tentativas Int @default(0)
+  proximaTentativa DateTime?
+  expiraEm DateTime
+  conteudoExpiraEm DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  registros TentativaWhatsapp[]
+  @@unique([organizacaoId,chave])
+  @@unique([organizacaoId,instanceId,providerMessageId])
+  @@index([organizacaoId,estado,createdAt])
+  @@map("saidas_whatsapp")
+}
+model TentativaWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  saidaId String
+  numero Int
+  leaseToken String
+  resultado String @db.VarChar(24)
+  httpStatus Int?
+  providerMessageId String? @db.VarChar(128)
+  motivo String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  saida SaidaWhatsapp @relation(fields: [saidaId], references: [id], onDelete: Cascade)
+  @@unique([saidaId,numero])
+  @@index([organizacaoId,saidaId])
+  @@map("tentativas_whatsapp")
+}
+model ReciboWhatsapp {
+  id String @id @default(cuid())
+  organizacaoId String
+  instanceId String @db.VarChar(128)
+  providerMessageId String @db.VarChar(128)
+  telefoneHash String @db.VarChar(64)
+  chave String @db.VarChar(64)
+  estado String @db.VarChar(24)
+  ocorridoEm DateTime
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@unique([organizacaoId,chave])
+  @@index([organizacaoId,instanceId,providerMessageId])
+  @@map("recibos_whatsapp")
+}
+
+
+// O06: orçamento em tokens. Preço ausente não equivale a custo zero.
+model PoliticaIA {
+  organizacaoId String @id
+  habilitada Boolean @default(true)
+  tokensDia Int @default(100000)
+  simultaneas Int @default(2)
+  entradaBytes Int @default(32768)
+  saidaTokens Int @default(4096)
+  updatedAt DateTime @updatedAt
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@map("politicas_ia")
+}
+
+model ConsumoIA {
+  id String @id @default(cuid())
+  organizacaoId String
+  usuarioId String
+  finalidade String @db.VarChar(80)
+  modelo String @db.VarChar(80)
+  tentativa Int @default(1)
+  estado String @default("reservado") @db.VarChar(20)
+  token String
+  periodo DateTime @db.Date
+  reservaTokens Int
+  entradaBytes Int
+  limiteSaida Int
+  debitoTokens Int
+  entradaTokens Int?
+  saidaTokens Int?
+  cacheLeituraTokens Int?
+  cacheEscritaTokens Int?
+  duracaoMs Int?
+  provedorId String? @db.VarChar(128)
+  expiraEm DateTime
+  iniciadoEm DateTime?
+  concluidoEm DateTime?
+  createdAt DateTime @default(now())
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  @@index([organizacaoId, periodo])
+  @@index([organizacaoId, estado, expiraEm])
+  @@map("consumos_ia")
+}
 
 /// Contato de quem quer conhecer o NuFlow (landing → /comecar). Global de
 /// propósito: ainda não é cliente de nenhuma empresa. A rota pública só insere

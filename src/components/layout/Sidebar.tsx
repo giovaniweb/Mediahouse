@@ -19,7 +19,6 @@ import {
   Building2,
   Inbox,
   Home,
-  BrainCircuit,
   Package,
   LogOut,
   Lightbulb,
@@ -97,8 +96,7 @@ const sections = [
   {
     label: "Analytics",
     items: [
-      { href: "/ia", label: "Central IA", icon: BrainCircuit },
-      { href: "/alertas", label: "Alertas IA", icon: Bell },
+      { href: "/alertas", label: "Alertas", icon: Bell },
       // A fila de avisos não entregues só era alcançável por um badge que sumia
       // depois de 24 h — e /mensagens, a outra porta, está congelada. Resultado:
       // 716 mensagens falharam em 30 dias sem ninguém ver. Agora tem porta fixa.

@@ -16,6 +16,32 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_any_column_privilege(current_user,'public.usuarios','UPDATE') AS edita_usuarios,
       has_function_privilege(current_user,'public.redefinir_senha_por_token(text,text)','EXECUTE') AS troca_por_token,
       has_table_privilege(current_user,'public.demandas','SELECT') AS le_demandas,
+      has_table_privilege(current_user,'public.consumos_ia','SELECT,INSERT,UPDATE') AS usa_consumo_ia,
+      has_table_privilege(current_user,'public.politicas_ia','SELECT,INSERT,UPDATE') AS usa_politica_ia,
+      has_table_privilege(current_user,'public.consumos_ia','DELETE') AS apaga_consumo_ia,
+      has_table_privilege(current_user,'public.politicas_ia','DELETE') AS apaga_politica_ia,
+      (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.consumos_ia'::regclass,'public.politicas_ia'::regclass)) AS rls_ia,
+      has_table_privilege(current_user,'public.saidas_whatsapp','SELECT') AS le_saidas,
+      has_table_privilege(current_user,'public.tentativas_whatsapp','SELECT') AS le_tentativas,
+      has_table_privilege(current_user,'public.recibos_whatsapp','SELECT') AS le_recibos,
+      has_table_privilege(current_user,'public.saidas_whatsapp','DELETE') AS apaga_saidas,
+      has_table_privilege(current_user,'public.tentativas_whatsapp','DELETE') AS apaga_tentativas,
+      has_table_privilege(current_user,'public.recibos_whatsapp','UPDATE,DELETE') AS altera_recibos,
+      (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.saidas_whatsapp'::regclass,'public.tentativas_whatsapp'::regclass,'public.recibos_whatsapp'::regclass)) AS rls_saidas,
+      has_table_privilege(current_user,'public.inbox_whatsapp','SELECT') AS le_inbox,
+      has_table_privilege(current_user,'public.inbox_whatsapp','INSERT') AS insere_inbox,
+      has_table_privilege(current_user,'public.inbox_whatsapp','DELETE') AS apaga_inbox,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.inbox_whatsapp'::regclass) AS rls_inbox,
+      has_function_privilege(current_user,'public.whatsapp_instancia_org(text)','EXECUTE') AS resolve_instancia,
+      has_table_privilege(current_user,'public.jobs_automacao','SELECT') AS le_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','INSERT') AS insere_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','UPDATE') AS atualiza_fila,
+      has_table_privilege(current_user,'public.jobs_automacao','DELETE') AS apaga_fila,
+      has_table_privilege(current_user,'public.eventos_job','SELECT') AS le_eventos_job,
+      has_table_privilege(current_user,'public.eventos_job','INSERT') AS insere_eventos_job,
+      has_table_privilege(current_user,'public.eventos_job','UPDATE,DELETE') AS altera_eventos_job,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.jobs_automacao'::regclass) AS rls_fila,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.eventos_job'::regclass) AS rls_eventos_job,
       has_table_privilege(current_user,'public.eventos_auditoria','SELECT') AS le_auditoria,
       has_table_privilege(current_user,'public.eventos_auditoria','INSERT') AS insere_auditoria,
       has_table_privilege(current_user,'public.eventos_auditoria','UPDATE,DELETE') AS altera_auditoria,
@@ -28,10 +54,18 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_table_privilege(current_user,'public.limites_publicos','SELECT,INSERT,UPDATE,DELETE') AS usa_limites,
       has_function_privilege(current_user,'public.consumir_limite_publico(text,integer,integer)','EXECUTE') AS consome_limite,
       (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.leads_comerciais'::regclass,'public.limites_publicos'::regclass)) AS rls_leads_limites`)
+    const filaOk = tipo === "app"
+      ? r.le_fila && r.insere_fila && r.atualiza_fila && !r.apaga_fila && r.le_eventos_job && r.insere_eventos_job && !r.altera_eventos_job && r.rls_fila && r.rls_eventos_job
+      : !r.le_fila && !r.insere_fila && !r.atualiza_fila && !r.apaga_fila && !r.le_eventos_job && !r.insere_eventos_job && !r.altera_eventos_job
+    const inboxOk = tipo === "app" ? r.le_inbox && r.insere_inbox && !r.apaga_inbox && r.rls_inbox && r.resolve_instancia
+      : !r.le_inbox && !r.insere_inbox && !r.apaga_inbox && !r.resolve_instancia
+    const saidasOk = tipo === "app" ? r.le_saidas && r.le_tentativas && r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos && r.rls_saidas
+      : !r.le_saidas && !r.le_tentativas && !r.le_recibos && !r.apaga_saidas && !r.apaga_tentativas && !r.altera_recibos
+    const iaOk = r.rls_ia && !r.apaga_consumo_ia && !r.apaga_politica_ia && (tipo === "app" ? r.usa_consumo_ia && r.usa_politica_ia : !r.usa_consumo_ia && !r.usa_politica_ia)
     // Formulário de interesse: a aplicação só insere lead e só chega aos limites pela função.
     const leadsOk = r.rls_leads_limites && !r.le_leads && !r.altera_leads && !r.usa_limites &&
       (tipo === "app" ? r.insere_leads && r.consome_limite : !r.insere_leads && !r.consome_limite)
-    const ok = leadsOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const ok = leadsOk && iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

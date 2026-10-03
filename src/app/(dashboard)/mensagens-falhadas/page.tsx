@@ -1,155 +1,77 @@
 "use client"
-
-import { useState } from "react"
+import {SaudeAutomacoes} from "@/components/automacoes/SaudeAutomacoes"
+import {useState} from "react"
 import useSWR from "swr"
-import Link from "next/link"
-import { Header } from "@/components/layout/Header"
-import { AlertTriangle, RefreshCw, Loader2, CheckCircle2, MessageCircleOff } from "lucide-react"
-import { toast } from "sonner"
-import { fetcher } from "@/lib/fetcher"
+import {Header} from "@/components/layout/Header"
+import {fetcher} from "@/lib/fetcher"
+import {toast} from "sonner"
 
-
-interface MensagemFalhada {
-  id: string
-  telefone: string
-  conteudo: string
-  status: string
-  createdAt: string
-  demanda?: { id: string; codigo: string; titulo: string } | null
-}
-
-function quando(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit",
-  })
-}
-
+type Saida={id:string;origem:string;referencia:string;destinatarioTipo:string;pausada:boolean;podePausar:boolean;podeRetomar:boolean;podeCancelar:boolean;estado:string;motivo:string|null;tentativas:number;createdAt:string;proximaTentativa:string|null;podeTentar:boolean;registros:Array<{numero:number;motivo:string|null;createdAt:string;httpStatus:number|null;resultado:string}>}
+const origens:Record<string,string>={inbox:"Resposta à conversa",manual:"Envio manual",legado:"Notificação anterior",regra:"Regra automática"}
+const destinos:Record<string,string>={inbox:"Remetente da conversa",usuario:"Pessoa da equipe",editor:"Editor",videomaker:"Videomaker"}
+const estados:Record<string,string>={aguardando:"Aguardando tentativa",aceito:"Aceita pelo provedor",entregue:"Entrega confirmada",lido:"Leitura confirmada",falhou:"Falhou",desconhecido:"Resultado desconhecido",expirado:"Prazo encerrado",cancelado:"Cancelada"}
+const motivos:Record<string,string>={sem_config:"Verifique a conexão do WhatsApp.",contrato_nao_validado:"A integração precisa ser validada antes do envio.",
+  regra_resolvida:"A condição do aviso mudou ou já foi resolvida.",
+  destinatario_alterado:"O vínculo ou número do destinatário mudou.",objeto_alterado:"O trabalho mudou desde a criação do aviso.",
+  timeout_ou_rede:"O provedor pode ter aceitado. Confira os recibos no provedor; não reenvie.",envio_iniciado:"Tentativa iniciada sem confirmação. Não reenvie.",
+  resposta_inconclusiva:"Resposta incompleta do provedor. Confira os recibos no provedor.",rejeitado_provedor:"O provedor recusou a tentativa.",
+  limite_provedor:"Aguardando o prazo indicado pelo provedor.",erro_provedor:"Falha temporária do provedor.",tentativas_esgotadas:"Limite de tentativas ou validade atingido."}
+const quando=(data:string)=>new Date(data).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})
 export default function MensagensFalhadasPage() {
-  const { data, isLoading, mutate } = useSWR<{ mensagens: MensagemFalhada[]; total: number }>(
-    "/api/mensagens-falhadas?limit=200", fetcher
-  )
-  const [reenviando, setReenviando] = useState<string | null>(null)
-  const [reenviandoTudo, setReenviandoTudo] = useState(false)
-
-  const mensagens = data?.mensagens ?? []
-  const total = data?.total ?? 0
-
-  async function reenviar(ids: string[], rotulo: string) {
-    const res = await fetch("/api/mensagens-falhadas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      toast.error(json.error ?? "Erro ao reenviar")
-      return
-    }
-    if (json.enviadas === 0) {
-      toast.error("Nenhuma foi entregue — verifique se o WhatsApp está conectado.")
-    } else if (json.falharam > 0) {
-      toast.warning(`${json.enviadas} entregue(s), ${json.falharam} continuam falhando.`)
-    } else {
-      toast.success(`${rotulo} entregue(s).`)
-    }
-    mutate()
+  const [cursor,setCursor]=useState(""),[ocupada,setOcupada]=useState<string|null>(null),[motivo,setMotivo]=useState("config_corrigida")
+  const {data,error,isLoading,mutate}=useSWR<{mensagens:Saida[];total:number;tentativas:number;legado:number;nextCursor:string|null}>(`/api/mensagens-falhadas?cursor=${encodeURIComponent(cursor)}`,fetcher)
+  async function tentar(id:string,acao="tentar") {
+    setOcupada(id)
+    try {
+      const r=await fetch("/api/mensagens-falhadas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,motivo,acao})})
+      const b=await r.json()
+      if(!r.ok) throw new Error(b.error || "Não foi possível agendar")
+      toast.success(acao==="pausar"?"Saída pausada.":acao==="cancelar"?"Saída cancelada.":"Tentativa agendada. Isso não confirma entrega.")
+      await mutate()
+    } catch(e) {toast.error(e instanceof Error ? e.message : "Falha ao agendar")}
+    finally {setOcupada(null)}
   }
-
-  return (
-    <>
-      <Header title="Avisos não entregues" />
-
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/10 rounded-lg">
-              <AlertTriangle className="w-5 h-5 text-red-400" />
+  return <>
+    <Header title="Saídas do WhatsApp"/>
+    <main className="flex-1 overflow-y-auto p-6 space-y-4">
+      <SaudeAutomacoes/>
+      <h1 className="text-xl font-semibold">Saídas do WhatsApp</h1>
+      <p className="text-sm text-muted-foreground">Aceitação pelo provedor, entrega e leitura são etapas diferentes.</p>
+      {error ? <div role="alert">Não foi possível carregar. <button onClick={()=>mutate()} className="underline">Tentar novamente</button></div>
+        : isLoading ? <p>Carregando…</p> : <>
+          <p>{data?.total ?? 0} intenções · {data?.tentativas ?? 0} tentativas</p>
+          {!!data?.legado && <p className="text-sm text-muted-foreground">{data.legado} registros antigos preservados. Eles não comprovam entrega e não serão reenviados por esta tela.</p>}
+          {!data?.mensagens.length && <p>Nenhuma saída nesta página.</p>}
+          <label className="block text-sm">Motivo para tentar novamente
+            <select value={motivo} onChange={e=>setMotivo(e.target.value)} className="ml-3 rounded border bg-background p-2">
+              <option value="config_corrigida">Corrigi a conexão/configuração</option>
+              <option value="provedor_normalizado">O provedor voltou a funcionar</option>
+              <option value="destinatario_revalidado">Conferi o destinatário</option>
+            </select>
+          </label>
+          {data?.mensagens.map(s=><article key={s.id} className="rounded-xl border p-4 space-y-2">
+            <div className="font-medium">{s.pausada?"Pausada":estados[s.estado] ?? s.estado}</div>
+            <p className="text-sm text-muted-foreground">{quando(s.createdAt)} · {s.tentativas} tentativa(s)</p>
+            {s.motivo && <p>{motivos[s.motivo] ?? "Confira o estado antes de uma nova ação."}</p>}
+            {!!s.registros[0] && <p className="text-sm">Última tentativa: {quando(s.registros[0].createdAt)}{s.registros[0].httpStatus ? ` · HTTP ${s.registros[0].httpStatus}` : ""}</p>}
+            {s.proximaTentativa && <p className="text-sm">Próxima tentativa: {quando(s.proximaTentativa)}</p>}
+            <details className="text-sm"><summary className="cursor-pointer">Origem e tentativas</summary>
+              <p>Origem: {origens[s.origem]??s.origem} · destinatário: {destinos[s.destinatarioTipo]??s.destinatarioTipo}</p>
+              <p className="break-all">Referência de suporte: {s.referencia}</p>
+              {s.registros.map(t=><p key={t.numero}>Tentativa {t.numero}: {estados[t.resultado]??t.resultado} · {quando(t.createdAt)}{t.httpStatus?` · HTTP ${t.httpStatus}`:""}</p>)}
+            </details>
+            <div className="flex gap-3 flex-wrap">
+              {s.podePausar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"pausar")} className="underline">Pausar</button>}
+              {s.podeRetomar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"retomar")} className="underline">Retomar</button>}
+              {s.podeCancelar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id,"cancelar")} className="underline">Cancelar esta saída</button>}
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-zinc-100">Avisos não entregues</h1>
-              <p className="text-sm text-zinc-400 max-w-2xl">
-                {isLoading
-                  ? "Carregando…"
-                  : total === 0
-                  ? "Tudo em dia — nenhum aviso ficou pelo caminho."
-                  : `${total.toLocaleString("pt-BR")} mensagem(ns) que o sistema tentou enviar e não chegaram. Costuma acontecer quando a conexão do WhatsApp cai.`}
-              </p>
-            </div>
+            {s.podeTentar && <button disabled={ocupada!==null} onClick={()=>tentar(s.id)} className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50">{ocupada===s.id ? "Agendando…" : "Tentar novamente"}</button>}
+          </article>)}
+          <div className="flex gap-4">
+            {cursor && <button onClick={()=>setCursor("")}>Voltar ao início</button>}
+            {data?.nextCursor && <button onClick={()=>setCursor(data.nextCursor!)}>Próxima página</button>}
           </div>
-
-          {mensagens.length > 0 && (
-            <button
-              onClick={async () => {
-                setReenviandoTudo(true)
-                await reenviar(mensagens.map((m) => m.id), "Todas")
-                setReenviandoTudo(false)
-              }}
-              disabled={reenviandoTudo}
-              className="flex items-center gap-2 shrink-0 px-3 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-60"
-            >
-              {reenviandoTudo
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Reenviando…</>
-                : <><RefreshCw className="w-4 h-4" /> Reenviar todas ({mensagens.length})</>}
-            </button>
-          )}
-        </div>
-
-        {!isLoading && total === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
-            <p className="text-zinc-300 font-medium">Nenhum aviso pendente</p>
-            <p className="text-sm text-zinc-500 mt-1">
-              Se o WhatsApp cair, as mensagens perdidas aparecem aqui para reenvio.
-            </p>
-          </div>
-        )}
-
-        {mensagens.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800">
-            {mensagens.map((m) => (
-              <div key={m.id} className="flex items-start gap-4 p-4">
-                <MessageCircleOff className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-zinc-200">{m.telefone}</span>
-                    {m.demanda && (
-                      <Link
-                        href={`/demandas/${m.demanda.id}`}
-                        className="text-xs font-mono text-purple-400 hover:text-purple-300 transition-colors"
-                      >
-                        {m.demanda.codigo}
-                      </Link>
-                    )}
-                    <span className="text-xs text-zinc-500">{quando(m.createdAt)}</span>
-                    {m.status === "sem_config" && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        SEM CONFIGURAÇÃO
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-zinc-400 whitespace-pre-wrap line-clamp-3">{m.conteudo}</p>
-                </div>
-
-                <button
-                  onClick={async () => {
-                    setReenviando(m.id)
-                    await reenviar([m.id], "Mensagem")
-                    setReenviando(null)
-                  }}
-                  disabled={reenviando === m.id || reenviandoTudo}
-                  className="flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded-lg transition-colors disabled:opacity-60"
-                >
-                  {reenviando === m.id
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <RefreshCw className="w-3.5 h-3.5" />}
-                  Reenviar
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-    </>
-  )
+        </>}
+    </main>
+  </>
 }

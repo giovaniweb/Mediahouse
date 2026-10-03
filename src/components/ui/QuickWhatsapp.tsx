@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Send, MessageSquare, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -22,6 +22,7 @@ function formatTelefone(tel: string) {
 }
 
 export function QuickWhatsapp({ telefone, nome, label, className }: QuickWhatsappProps) {
+  const chaveEnvio=useRef<{chave:string;assinatura:string}|null>(null)
   const [expanded, setExpanded] = useState(false)
   const [mensagem, setMensagem] = useState("")
   const [enviando, setEnviando] = useState(false)
@@ -33,13 +34,16 @@ export function QuickWhatsapp({ telefone, nome, label, className }: QuickWhatsap
     if (!mensagem.trim()) return
     setEnviando(true)
     try {
+      const assinatura=JSON.stringify([digits,mensagem])
+      if(chaveEnvio.current?.assinatura!==assinatura) chaveEnvio.current={chave:crypto.randomUUID(),assinatura}
       const res = await fetch("/api/whatsapp/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: digits, mensagem }),
+        body: JSON.stringify({ telefone: digits, mensagem, chave:chaveEnvio.current.chave }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(`Mensagem enviada para ${nome}!`)
+      toast.success(`Mensagem agendada para ${nome}.`)
+      chaveEnvio.current=null
       setEnviado(true)
       setMensagem("")
       setTimeout(() => {
