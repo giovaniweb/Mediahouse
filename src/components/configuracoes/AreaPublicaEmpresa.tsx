@@ -12,7 +12,8 @@ type Org = { id: string; nome: string; slug: string; ativa: boolean }
 
 const LINKS = [
   { caminho: "", titulo: "Área da empresa", texto: "A página de entrada, com todos os caminhos abaixo." },
-  { caminho: "/pedido", titulo: "Pedir um vídeo", texto: "Formulário de pedido, inclusive gravação em evento." },
+  { caminho: "/pedido", titulo: "Pedir um vídeo ou conteúdo", texto: "Formulário de pedido: vídeo, post, criativo." },
+  { caminho: "/pedido?tipo=cobertura", titulo: "Agendar gravação (Job)", texto: "O mesmo pedido, já como cobertura. Entra em Aprovações e, aprovado, vira Job." },
   { caminho: "/videomaker", titulo: "Cadastro de videomaker", texto: "Para quem quer trabalhar com a equipe." },
   { caminho: "/galeria", titulo: "Galeria", texto: "Os vídeos publicados pela empresa." },
   { caminho: "/entrar", titulo: "Entrar", texto: "Login que já abre esta empresa." },

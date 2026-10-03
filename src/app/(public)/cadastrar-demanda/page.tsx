@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
-  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles,
+  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles, Save,
 } from "lucide-react"
 import { AreaReferencia } from "@/components/publico/AreaReferencia"
 // A mesma casca do cadastro de videomaker: fonte, cores e uma coluna no celular.
@@ -143,10 +143,14 @@ export default function CadastrarDemandaPage() {
       .then(r => r.json()).then(d => setTiposCriativo(d.parametros ?? [])).catch(() => {})
   }, [])
 
-  // Restaura rascunho salvo ao montar (apenas uma vez)
+  // Restaura rascunho salvo ao montar (apenas uma vez). Antes dele, o `?tipo=`
+  // do link — "Agendar gravação" da área da empresa chega com a cobertura já
+  // escolhida; um rascunho salvo continua mandando.
   useEffect(() => {
     if (typeof window === "undefined") return
     try {
+      const tipoDoLink = new URLSearchParams(window.location.search).get("tipo")
+      if (tipoDoLink === "video" || tipoDoLink === "conteudo" || tipoDoLink === "cobertura") setTipo(tipoDoLink)
       const raw = localStorage.getItem(chaveRascunho())
       if (!raw) return
       const saved = JSON.parse(raw)
@@ -188,9 +192,10 @@ export default function CadastrarDemandaPage() {
       step,
       _savedAt: savedAt,
     }
+    // Sem setDraftInfo aqui: o aviso "Rascunho restaurado" é só para o que veio
+    // de uma visita anterior. Antes ele aparecia na primeira letra digitada.
     try {
       localStorage.setItem(chaveRascunho(), JSON.stringify(draft))
-      setDraftInfo({ savedAt })
     } catch { /* ignora erros de quota */ }
   }, [
     enviado, nomeCliente, email, telefone, empresa, tipo,
@@ -355,7 +360,7 @@ export default function CadastrarDemandaPage() {
       <div className="max-w-2xl mx-auto px-6 py-10">
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Solicitar Projeto de Vídeo</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">{tipo === "cobertura" ? "Agendar gravação ou entrega" : "Pedir um vídeo ou conteúdo"}</h1>
           <p className="text-zinc-400 text-sm">{destino.estado === "pronto" ? `Preencha os dados abaixo. O pedido vai direto para ${destino.empresa.nome}.` : "Preencha os dados abaixo e a equipe entra em contato."}</p>
         </div>
         <AvisoDestino destino={destino} />
@@ -390,7 +395,7 @@ export default function CadastrarDemandaPage() {
         {draftInfo && !draftDismissed && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-6 flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
-              <span className="text-amber-400 mt-0.5 shrink-0">💾</span>
+              <Save className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
               <div>
                 <p className="text-sm font-medium text-amber-300">Rascunho restaurado</p>
                 <p className="text-xs text-amber-200/70 mt-0.5">
@@ -409,8 +414,8 @@ export default function CadastrarDemandaPage() {
         )}
 
         {erro && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {erro}
+          <div role="alert" className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> {erro}
           </div>
         )}
 
