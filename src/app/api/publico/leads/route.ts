@@ -8,7 +8,7 @@ import { consumirLimitePublico, hashDoIp } from "@/lib/limite-publico"
 //
 // Contato da PLATAFORMA, não de uma empresa: quem preenche ainda não é cliente
 // de ninguém. A rota só insere — sem RETURNING e sem SELECT — porque o role
-// público tem INSERT e nunca leitura da lista (migration 20260929095000).
+// público tem INSERT e nunca leitura da lista (migration 20261001005000).
 const schema = z.object({
   nome: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254),
