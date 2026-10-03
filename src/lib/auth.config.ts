@@ -60,6 +60,7 @@ export const authConfig: NextAuthConfig = {
         "/avaliar-editor",    // avaliação pública de editor
         "/cadastrar-demanda", // formulário público de demanda
         "/cadastrar-videomaker", // cadastro público de videomaker
+        "/comecar",           // formulário de interesse da landing (só insere em leads_comerciais)
         "/c",                 // área pública de cada empresa (/c/<slug>); /painel confere a sessão por conta própria
         "/sobre",             // página pública sobre
         "/aprovar",           // aprovação de vídeo pelo cliente
