@@ -5,6 +5,7 @@ import { z } from "zod"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { orgPublica } from "@/lib/org"
+import { barrarExcesso } from "@/lib/limite-formulario"
 import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
 import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
@@ -50,7 +51,8 @@ function gerarCodigo(): string {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  // Corpo que não é JSON vira 400 de validação, não 500.
+  const body = await req.json().catch(() => null)
   const parsed = schema.safeParse(body)
 
   if (!parsed.success) {
@@ -58,6 +60,18 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data
+
+  // `?org=<slug>` identifica a empresa dona do formulário (o portal /c/<slug>
+  // sempre manda); sem ele, a padrão — os links antigos da Contourline.
+  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
+  if (!organizacaoId) {
+    return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })
+  }
+
+  // Antes de criar o solicitante, a demanda e o aviso aos gestores: 20 pedidos
+  // por hora por empresa e IP.
+  const barrado = await barrarExcesso(req.headers, "demanda", organizacaoId)
+  if (barrado) return barrado
 
   // Busca ou cria usuário solicitante externo
   // Prioridade: telefone (evita duplicatas), depois email
@@ -110,14 +124,6 @@ export async function POST(req: NextRequest) {
 
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
-
-  // TEMPORÁRIO (Fase 1): o formulário público é fixado na organização Contourline.
-  // Futuro: o formulário deve receber slug/token da empresa para multiempresa real.
-  // `?org=<slug>` identifica a empresa dona do formulário; sem ele, a padrão.
-  const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
-  if (!organizacaoId) {
-    return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })
-  }
 
   // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
   // onde deduzi-la, e sem declaração o banco devolve vazio.

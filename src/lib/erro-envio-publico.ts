@@ -8,11 +8,15 @@
 export const ENVIO_INCERTO =
   "Não conseguimos confirmar o envio. Ele pode ter sido registrado: antes de enviar de novo, aguarde alguns minutos e confira com a equipe."
 export const SEM_CONEXAO = "Sem conexão com o servidor. Confira sua internet e tente de novo."
+export const INDISPONIVEL = "Não foi possível receber agora. Tente de novo em alguns minutos."
 
 /** Lê a resposta de erro: validação vira a lista de campos; o resto, uma frase clara. */
 export async function erroDaResposta(res: Response): Promise<string> {
-  if (res.status >= 500) return ENVIO_INCERTO
+  // 503 é recusa antes de gravar (serviço ocupado): a mensagem do servidor
+  // serve. Os outros 5xx podem ter vindo depois de gravar — daí o aviso.
+  if (res.status >= 500 && res.status !== 503) return ENVIO_INCERTO
   const corpo = await res.json().catch(() => null) as { error?: unknown } | null
+  if (res.status === 503) return typeof corpo?.error === "string" && corpo.error.trim() ? corpo.error : INDISPONIVEL
   const erro = corpo?.error
   if (typeof erro === "string" && erro.trim()) return erro
   if (erro && typeof erro === "object") {
