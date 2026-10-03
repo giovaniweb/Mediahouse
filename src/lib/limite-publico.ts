@@ -4,7 +4,7 @@
 // Vercel cada requisição pode cair numa instância diferente, então cada uma vê
 // poucas tentativas e ninguém barra o spam. Aqui a contagem fica em
 // `limites_publicos`, que só a função `consumir_limite_publico` (SECURITY
-// DEFINER, migration 20261003000000) lê e escreve.
+// DEFINER, migration 20260929095000) lê e escreve.
 //
 // `prismaBase` de propósito, como em org-por-credencial: a chamada acontece
 // antes de haver empresa, e a função não depende de RLS.
