@@ -248,6 +248,8 @@ export type JobParaLeitura = {
   responsavel?: { nome: string } | null
   responsaveis?: { usuario: { nome: string } }[] | null
   gestor?: { nome: string } | null
+  /** "design" é Growth: muda o vocabulário da próxima ação, não a etapa. */
+  area?: string | null
 }
 
 /** Quem executa a produção: editor, designer ou o responsável interno (Growth). */
@@ -348,7 +350,76 @@ export function proximaAcao(job: JobParaLeitura): string {
   ) {
     return "Publicado"
   }
-  return PROXIMA_ACAO[job.statusInterno]
+  return (ehGrowth(job) ? PROXIMA_ACAO_GROWTH[job.statusInterno] : undefined) ?? PROXIMA_ACAO[job.statusInterno]
+}
+
+// Growth percorre os mesmos status, mas não tem videomaker nem edição de vídeo:
+// tem um responsável que cria a peça. Antes esta tradução estava escrita duas
+// vezes, no detalhe e em Meu trabalho, e as duas discordavam — `fila_edicao`
+// era "Iniciar criação" numa tela e "Preparar criativo para revisão" na outra.
+export const PROXIMA_ACAO_GROWTH: Partial<Record<StatusInterno, string>> = {
+  editor_atribuido:      "Iniciar criação",
+  fila_edicao:           "Iniciar criação",
+  editando:              "Preparar criativo para revisão",
+  videomaker_notificado: "Aguardar aceite do responsável",
+  videomaker_recusou:    "Definir novo responsável",
+}
+
+export function ehGrowth(job: { area?: string | null }): boolean {
+  return String(job.area ?? "").toLowerCase() === "design"
+}
+
+// ── ONDE SE AGE (detalhe da demanda) ─────────────────────────────────────────
+//
+// O detalhe tem quatro abas e abria sempre em Pedido, enquanto a ação da etapa
+// costuma estar em outra: quem edita procura Entrega, quem distribui procura
+// Equipe. Aqui fica a aba de cada status, para o detalhe abrir nela e o botão
+// ao lado da próxima ação levar até lá. `null` quando não sobra ação a fazer.
+//
+// Record completo de propósito: um status novo não compila sem decidir a aba.
+export type AbaDoDetalhe = "pedido" | "equipe" | "entrega" | "conversa"
+
+export const ABA_LABEL: Record<AbaDoDetalhe, string> = {
+  pedido: "Pedido",
+  equipe: "Equipe e contexto",
+  entrega: "Entrega",
+  conversa: "Conversa",
+}
+
+export const ABA_DA_ACAO: Record<StatusInterno, AbaDoDetalhe | null> = {
+  // Aprovar ou recusar a entrada: o aviso com os botões fica em Pedido.
+  aguardando_aprovacao_interna: "pedido",
+  urgencia_pendente_aprovacao:  "pedido",
+  // Triagem e distribuição: atribuição de videomaker, editor e designer.
+  pedido_criado:                "equipe",
+  aguardando_triagem:           "equipe",
+  urgencia_aprovada:            "equipe",
+  planejamento:                 "equipe",
+  videomaker_recusou:           "equipe",
+  videomaker_notificado:        "equipe",
+  brutos_enviados:              "equipe",
+  // Captação: as ações do videomaker ficam no bloco do Job, em Pedido.
+  videomaker_aceitou:           "pedido",
+  captacao_agendada:            "pedido",
+  // Material, versões, link de aprovação e publicação ficam em Entrega.
+  captacao_realizada:           "entrega",
+  editor_atribuido:             "entrega",
+  fila_edicao:                  "entrega",
+  editando:                     "entrega",
+  edicao_finalizada:            "entrega",
+  revisao_pendente:             "entrega",
+  ajuste_solicitado:            "entrega",
+  aprovado:                     "entrega",
+  postagem_pendente:            "entrega",
+  // Bloqueio se resolve conversando.
+  impedimento:                  "conversa",
+  // Nada a fazer.
+  postado:                      null,
+  entregue_cliente:             null,
+  contagem_15_dias_iniciada:    null,
+  lembrete_15_dias_enviado:     null,
+  expirado:                     null,
+  encerrado:                    null,
 }
 
 // ── PRAZO E RISCO (§33) ──────────────────────────────────────────────────────

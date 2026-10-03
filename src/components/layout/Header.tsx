@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { signOut, useSession } from "next-auth/react"
 import { LogOut, User, Settings, Home } from "lucide-react"
 import {
@@ -14,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { NotificationBell } from "@/components/layout/NotificationBell"
 import { SeletorOrganizacao } from "@/components/layout/SeletorOrganizacao"
-import { UserProfileModal } from "@/components/layout/UserProfileModal"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 
 const TIPO_LABEL: Record<string, string> = {
@@ -35,7 +34,7 @@ const TIPO_LABEL: Record<string, string> = {
 export function Header({ title, actions }: { title?: string; actions?: React.ReactNode }) {
   const { data: session } = useSession()
   const user = session?.user
-  const [showProfile, setShowProfile] = useState(false)
+  const router = useRouter()
 
   return (
     <>
@@ -68,7 +67,7 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
 
           {/* Avatar com dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="outline-none">
+            <DropdownMenuTrigger aria-label="Abrir menu da conta" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950">
               <Avatar className="h-8 w-8 cursor-pointer">
                 {user?.image && <AvatarImage src={user.image} />}
                 <AvatarFallback className="bg-zinc-900 text-white text-xs">
@@ -83,7 +82,7 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => setShowProfile(true)}
+                onClick={() => router.push("/perfil")}
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <User className="w-4 h-4" />
@@ -111,7 +110,6 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
         </div>
       </header>
 
-      {showProfile && <UserProfileModal onClose={() => setShowProfile(false)} />}
     </>
   )
 }

@@ -29,7 +29,7 @@ export function TagEspelho({ espelho, className }: { espelho?: EspelhoDoCard | n
 
   // Da origem: "quem está fazendo isto por mim". Do destino: "de quem é isto".
   // São perguntas diferentes, e por isso o rótulo não é o mesmo dos dois lados.
-  const texto = daOrigem ? `Terceirizado · ${espelho.contraparte}` : `Origem: ${espelho.contraparte}`
+  const texto = daOrigem ? `Compartilhado · ${espelho.contraparte}` : `Origem: ${espelho.contraparte}`
 
   const titulo = daOrigem
     ? soAcompanha
@@ -71,7 +71,7 @@ export function FaixaEspelho({ espelho }: { espelho?: EspelhoDoCard | null }) {
   const soAcompanha = espelho.escopo === "acompanhar"
 
   const titulo = daOrigem
-    ? `Execução terceirizada para ${espelho.contraparte}`
+    ? `Execução compartilhada para ${espelho.contraparte}`
     : `Card de ${espelho.contraparte}`
 
   const explicacao = daOrigem

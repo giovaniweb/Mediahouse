@@ -1,0 +1,9 @@
+.page {background:radial-gradient(ellipse at 50% 0,#7654b822,transparent 55%),#101116;color:#eeecf7;font-family:Montserrat,Arial,sans-serif;min-height:100dvh;}
+.page h1{font-size:clamp(28px,4vw,42px);font-weight:500;letter-spacing:-.035em;line-height:1.2;}
+.page h2{font-weight:500;}
+.page :global(.bg-zinc-900){background:#191b23;border-color:#303342;}
+.page :is(input,textarea){background:#22242f;border-color:#3b3e50;min-height:48px;font-size:16px;}
+.page :is(input,textarea,button,a):focus-visible{outline:2px solid #b398ff;outline-offset:3px;}
+.page button:global(.bg-white){background:#9571ed;color:white;}
+.page :global(.text-zinc-500){color:#a2a5b9;}
+@media(max-width:480px){.page :global(.grid-cols-2){grid-template-columns:1fr;}.page :global(.col-span-2){grid-column:span 1 / span 1;}}

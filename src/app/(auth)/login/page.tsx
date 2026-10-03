@@ -1,23 +1,10 @@
 "use client"
-
 import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Eye, EyeOff, ArrowRight } from "lucide-react"
 import { loginAction } from "./actions"
-
-const schema = z.object({
-  login: z.string().min(1, "Email ou telefone obrigatório"),
-  password: z.string().min(1, "Senha obrigatória"),
-})
-
-type FormData = z.infer<typeof schema>
-
+import styles from "@/components/auth/AuthSurface.module.css"
 export default function LoginPage() {
   // useSearchParams exige Suspense para a página poder ser pré-renderizada.
   return (
@@ -28,8 +15,9 @@ export default function LoginPage() {
 }
 
 function FormularioLogin() {
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [error,setError]=useState("")
+  const [loading,setLoading]=useState(false)
+  const [visible,setVisible]=useState(false)
   // O middleware manda o link completo; ao servidor vai só o caminho, e só se for
   // deste mesmo endereço (a validação final é de destinoDoLogin, no servidor).
   const bruto = useSearchParams().get("callbackUrl")
@@ -38,88 +26,23 @@ function FormularioLogin() {
     const u = bruto ? new URL(bruto, window.location.origin) : null
     if (u && u.origin === window.location.origin) destino = u.pathname + u.search + u.hash
   } catch {}
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) })
-
-  async function onSubmit(data: FormData) {
-    setLoading(true)
-    setError("")
-
-    // Server Action: login e redirect acontecem no servidor — sem problema de cookie no browser
-    const result = await loginAction(data.login, data.password, destino)
-
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
-    }
-    // Se não há erro, o server action redireciona (para o callbackUrl validado ou /dashboard)
+  async function submit(event:React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if(loading)return
+    const data=new FormData(event.currentTarget)
+    setLoading(true);setError("")
+    try {
+      // Server Action: login e redirect acontecem no servidor (callbackUrl validado ou /dashboard).
+      const result=await loginAction(String(data.get("login")).trim(),String(data.get("password")),destino)
+      if(result?.error){setError(result.error);setLoading(false)}
+    } catch {setError("Não foi possível entrar agora. Verifique sua conexão e tente novamente.");setLoading(false)}
   }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 mb-6">
-            <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
-            <span className="text-xl font-semibold tracking-tight">NuFlow</span>
-          </div>
-          <h1 className="text-2xl font-semibold text-zinc-900">Entrar</h1>
-          <p className="text-sm text-zinc-500 mt-1">Operação audiovisual centralizada</p>
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="login">Email ou Telefone</Label>
-            <Input
-              id="login"
-              type="text"
-              placeholder="seu@email.com ou (31) 99999-9999"
-              autoComplete="email"
-              {...register("login")}
-            />
-            {errors.login && (
-              <p className="text-xs text-red-500">{errors.login.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Senha</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              {...register("password")}
-            />
-            {errors.password && (
-              <p className="text-xs text-red-500">{errors.password.message}</p>
-            )}
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Entrando..." : "Entrar"}
-          </Button>
-
-          <div className="text-center">
-            <Link
-              href="/esqueci-senha"
-              className="text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
-            >
-              Esqueci minha senha
-            </Link>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
+  return <section className={styles.panel} aria-labelledby="auth-title">
+    <p className={styles.eyebrow}>BEM-VINDO AO SEU WORKSPACE</p><h1 id="auth-title">Entre no seu flow.</h1><p className={styles.description}>Seus jobs, sua equipe e o próximo passo estão aqui.</p>
+    <form onSubmit={submit} className={styles.form} aria-busy={loading}>
+      <div className={styles.field}><label htmlFor="login">E-mail ou telefone</label><input id="login" name="login" autoComplete="username" required placeholder="Seu e-mail ou telefone" autoCapitalize="none" spellCheck={false}/></div>
+      <div className={styles.field}><label htmlFor="password">Senha</label><div className={styles.password}><input id="password" name="password" type={visible?"text":"password"} autoComplete="current-password" required placeholder="Sua senha"/><button type="button" aria-label={visible?"Ocultar senha":"Mostrar senha"} aria-pressed={visible} onClick={()=>setVisible(!visible)}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div>
+      {error&&<p role="alert" className={styles.error}>{error}</p>}
+      <button className={styles.primary} disabled={loading} type="submit">{loading?"Entrando…":"Entrar"}<ArrowRight size={16}/></button>
+    </form><div className={styles.links}><Link href="/esqueci-senha">Esqueci minha senha</Link><Link href="/comecar">Quero usar o NuFlow</Link></div>
+  </section>
 }

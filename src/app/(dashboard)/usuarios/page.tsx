@@ -1,5 +1,7 @@
 "use client"
 
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import preview from "@/components/layout/AdminPreview.module.css"
 import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
@@ -486,6 +488,7 @@ function Filtro({ valor, onChange, children }: {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function PessoasAcessosPage() {
+  const { modern } = useVisualPreview()
   const [aba, setAba] = useState<Aba>("pessoas")
 
   // Filtros da aba Pessoas
@@ -806,10 +809,10 @@ export default function PessoasAcessosPage() {
     <>
       <Header />
 
-      <main className={cn("flex-1 p-6 space-y-5 transition-[padding]", pessoaAberta && "lg:pr-[25rem]")}>
+      <main data-person-open={!!pessoaAberta} className={cn("flex-1 p-6 space-y-5 transition-[padding]", modern && preview.people, pessoaAberta && "lg:pr-[25rem]")}>
 
         {/* Título + ação principal */}
-        <div className="flex items-start justify-between gap-4">
+        <div className={cn("flex items-start justify-between gap-4", modern && preview.intro)}>
           <div>
             <h1 className="text-2xl font-semibold text-zinc-100">Pessoas &amp; Acessos</h1>
             <p className="text-sm text-zinc-500 mt-1">
@@ -827,6 +830,7 @@ export default function PessoasAcessosPage() {
         {/* Números — cada card é também um filtro */}
         <div className={cn(
           "grid gap-3 grid-cols-2 md:grid-cols-3",
+          modern && preview.metrics,
           // Com o painel aberto sobra menos largura: cinco colunas só a partir
           // do 2xl, senão os rótulos viram "Tot…" e o número perde o nome.
           pessoaAberta ? "2xl:grid-cols-5" : "lg:grid-cols-5",
@@ -836,6 +840,7 @@ export default function PessoasAcessosPage() {
             return (
               <button
                 key={c.label}
+                aria-pressed={selecionado}
                 onClick={() => { setAba("pessoas"); c.aplicar() }}
                 className={cn(
                   "flex items-center gap-3 rounded-xl border bg-zinc-900/60 px-4 py-3.5 text-left transition-colors",
@@ -855,10 +860,11 @@ export default function PessoasAcessosPage() {
         </div>
 
         {/* Abas */}
-        <div className="flex items-center gap-0 border-b border-zinc-800">
+        <div className={cn("flex items-center gap-0 border-b border-zinc-800", modern && preview.tabs)}>
           {abas.map(t => (
             <button
               key={t.id}
+              aria-pressed={aba === t.id}
               onClick={() => { setAba(t.id); setShowForm(false); setConflito(null) }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px",
@@ -1042,8 +1048,8 @@ export default function PessoasAcessosPage() {
             </div>
 
             {/* Tabela */}
-            <div className="border border-zinc-800 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm min-w-[900px]">
+            <div className={cn("border border-zinc-800 rounded-xl overflow-x-auto", modern && preview.table)}>
+              <table aria-label="Pessoas da empresa" className="w-full text-sm min-w-[900px]">
                 <thead className="bg-zinc-800/50 border-b border-zinc-800">
                   <tr>
                     <th className="text-left px-3 py-3 text-xs font-semibold text-zinc-500">PESSOA</th>
@@ -1067,13 +1073,14 @@ export default function PessoasAcessosPage() {
                     return (
                       <tr
                         key={p.id}
+                        data-person-row
                         onClick={() => setPessoaAbertaId(p.id)}
                         className={cn(
                           "hover:bg-zinc-800/40 cursor-pointer group transition-colors",
                           pessoaAbertaId === p.id && "bg-zinc-800/60",
                         )}
                       >
-                        <td className="px-3 py-3 max-w-[230px]">
+                        <td data-column="Pessoa" className="px-3 py-3 max-w-[230px]">
                           <div className="flex items-center gap-2.5">
                             <div className={cn(
                               "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 overflow-hidden",
@@ -1085,19 +1092,19 @@ export default function PessoasAcessosPage() {
                                 : iniciais(p.nome)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-zinc-100 truncate">{p.nome}</p>
+                              <button type="button" onClick={event => { event.stopPropagation(); setPessoaAbertaId(p.id) }} className="block max-w-full text-left font-medium text-zinc-100 truncate focus-visible:outline-2 focus-visible:outline-purple-400 focus-visible:outline-offset-4" aria-label={`Abrir pessoa: ${p.nome}`}>{p.nome}</button>
                               <p className="text-xs text-zinc-500 truncate">
                                 {p.email || <span className="italic text-zinc-600">sem e-mail</span>}
                               </p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Função" className="px-3 py-3">
                           {funcaoDe(p)
                             ? <span className="text-xs px-2 py-0.5 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-300">{funcaoDe(p)}</span>
                             : <span className="text-zinc-600">—</span>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Equipe" className="px-3 py-3">
                           {areas.length > 0 ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
                               <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", AREA_PONTO[areas[0]] ?? "bg-zinc-500")} />
@@ -1106,22 +1113,22 @@ export default function PessoasAcessosPage() {
                             </span>
                           ) : <span className="text-zinc-600">—</span>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Vínculo" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", VINCULO_COR[vinculo])}>
                             {VINCULO_LABEL[vinculo]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Nível" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", NIVEL_COR[nivel])}>
                             {NIVEL_LABEL[nivel]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Acesso" className="px-3 py-3">
                           <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap", PERFIL_COR[perfil])}>
                             {PERFIL_LABEL[perfil]}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Status" className="px-3 py-3">
                           <span className={cn(
                             "text-[11px] font-medium px-2 py-0.5 rounded-full",
                             ativo ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-500",
@@ -1129,12 +1136,12 @@ export default function PessoasAcessosPage() {
                             {ativo ? "Ativo" : "Inativo"}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td data-column="Atividade" className="px-3 py-3">
                           <span className={cn("text-xs", p.ultimaAtividade ? "text-zinc-400" : "text-zinc-600 italic")}>
                             {formatarAtividade(p.ultimaAtividade)}
                           </span>
                         </td>
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <td data-column="Ações" className="px-3 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end">
                             <MenuLinha itens={[
                               { label: "Editar pessoa", Icon: Pencil, run: () => setEditTarget(p) },

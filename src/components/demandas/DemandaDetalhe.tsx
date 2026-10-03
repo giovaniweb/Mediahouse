@@ -1,5 +1,8 @@
 "use client"
 
+import { useDetailPresentation } from "./useDetailPresentation"
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import surface from "./DemandSurface.module.css"
 import { useState, useEffect, useRef } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
@@ -16,10 +19,13 @@ import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, RefreshCw, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
-  CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft,
+  CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft, ArrowRight,
 } from "lucide-react"
 import Link from "next/link"
 import {
+  ABA_DA_ACAO,
+  ABA_LABEL,
+  type AbaDoDetalhe,
   captacaoIniciada,
   ehBloqueado,
   ehSolicitacaoDeCobertura,
@@ -258,6 +264,12 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 }
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
+  const { modern } = useVisualPreview()
+  const { presentation, setPresentation } = useDetailPresentation()
+  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem de
+  // ABA_DA_ACAO quando a demanda carrega; depois só a pessoa troca — mudar o
+  // status enquanto ela trabalha não a arrasta para outra aba.
+  const [abaAtual, setAbaAtual] = useState<{ demandaId: string; aba: AbaDoDetalhe } | null>(null)
   const id = demandaId
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -308,6 +320,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
+  const abaDaAcao: AbaDoDetalhe | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  if (demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaDaAcao ?? "pedido" })
+  const detailTab: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  const setDetailTab = (aba: AbaDoDetalhe) => setAbaAtual({ demandaId: id, aba })
 
   // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
   // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
@@ -1177,81 +1193,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     demanda.descricao
   )
 
-  const corpo = (
-    <>
-      <FaixaEspelho espelho={espelho} />
-      {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
-      {aprovacaoAberta && demanda.linkCliente && (
-        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
-          <div className="min-h-full flex items-start justify-center p-4">
-            <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
-                <span className="text-sm font-semibold text-zinc-200">Aprovação — {demanda.codigo}</span>
-                <button onClick={() => { setAprovacaoAberta(false); mutate() }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5">
-                <AprovacaoCriativo token={demanda.linkCliente.split("/aprovar/")[1]} onAprovado={() => mutate()} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      <main className="flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full">
-        {/* ── Coluna principal ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
-
-          {/* ── Camada de Job (cobertura) ───────────────────────────────────
-              Um Job É esta demanda, classificada como cobertura — mesmo
-              registro, mesmo id. Antes havia uma tela separada em /jobs/[id]
-              só para mostrar isto, e ela não editava nada. Agora o que é
-              próprio do Job mora aqui, e o resto da tela (editar, anexar,
-              atribuir videomaker, checklist, comentários) vem de graça.
-
-              De quem é a bola e qual é a próxima ação são derivados do estado
-              (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
-              só pintada. */}
-          {ehCobertura && (
-            <section className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Etapa </span>
-                  {COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}
-                </span>
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Com </span>
-                  {responsavelDoJob.nome ?? responsavelDoJob.papel}
-                  {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
-                </span>
-                <span className={cn("ml-auto", ehBloqueado(demanda.statusInterno) ? "text-rose-400" : "text-zinc-300")}>
-                  {proximaAcao(demanda)}
-                </span>
-              </div>
-
-              {/* As ações objetivas do videomaker (§13). O componente decide
-                  sozinho o que cabe no estado atual, e some quando a bola não
-                  é dele — quem não é o videomaker do job não vê nada. */}
-              {souOVideomakerDoJob && (
-                <AcoesVideomaker
-                  jobId={demanda.id}
-                  statusInterno={demanda.statusInterno}
-                  captacaoIniciada={captacaoIniciada(demanda.historicos)}
-                  onExecutado={() => mutate()}
-                />
-              )}
-
-              {/* O caminho de volta: Job → Demanda. Veio da tela antiga de
-                  /jobs/[id] e mudou para cá quando ela passou a ser esta tela.
-                  Reclassificar é raro e de gestão, por isso fica discreto e no
-                  fim; o componente some sozinho para quem não pode converter. */}
-              <ConverterEmDemanda jobId={demanda.id} codigo={demanda.codigo} />
-            </section>
-          )}
-
-          {isGrowth ? (
-            <>
-              {/* ── HERO Growth: arte + aprovação no topo ─────────────────── */}
-              <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-                <div className="grid lg:grid-cols-[1fr_360px] gap-5 items-start">
+  // Mesma prévia e ações, uma única instância: Entrega no v8, topo no clássico.
+  const entregaGrowth = isGrowth ? (
+              <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", modern && surface.growthDelivery)}>
+                {modern && <h2 className="text-lg font-medium mb-5">Entrega · prévia do criativo</h2>}
+                <div className={modern ? surface.growthDeliveryGrid : "grid lg:grid-cols-[1fr_360px] gap-5 items-start"}>
                   <ArteViewer artes={artesPrevia} />
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -1322,7 +1268,101 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     )}
                   </div>
                 </div>
+              </section>
+  ) : null
+
+  const corpo = (
+    <>
+      <FaixaEspelho espelho={espelho} />
+      {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
+      {aprovacaoAberta && demanda.linkCliente && (
+        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
+          <div className="min-h-full flex items-start justify-center p-4">
+            <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
+                <span className="text-sm font-semibold text-zinc-200">Aprovação — {demanda.codigo}</span>
+                <button onClick={() => { setAprovacaoAberta(false); mutate() }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
               </div>
+              <div className="p-5">
+                <AprovacaoCriativo token={demanda.linkCliente.split("/aprovar/")[1]} onAprovado={() => mutate()} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {modern && <div className={surface.detailHeading}>
+        <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
+        <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+        <section className={surface.nextAction}>
+          <strong>Próxima ação: {proximaAcao(demanda)}</strong>
+          <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
+          {abaDaAcao && detailTab !== abaDaAcao && (
+            <button type="button" className={surface.nextActionGo} onClick={() => setDetailTab(abaDaAcao)}>
+              Ir para {ABA_LABEL[abaDaAcao]} <ArrowRight size={15} aria-hidden="true" />
+            </button>
+          )}
+        </section>
+        <nav className={surface.detailTabs} aria-label="Seções da demanda">
+          {(["pedido", "entrega", "conversa", "equipe"] as const).map((key) => (
+            <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
+          ))}
+        </nav>
+      </div>}
+      <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", modern && surface.tabContent)}>
+        {/* ── Coluna principal ────────────────────────────────────────────── */}
+        <div className="lg:col-span-2 space-y-5">
+
+          <div hidden={modern && detailTab !== "pedido"} className={modern ? surface.tabSection : "contents"}>
+          {/* ── Camada de Job (cobertura) ───────────────────────────────────
+              Um Job É esta demanda, classificada como cobertura — mesmo
+              registro, mesmo id. Antes havia uma tela separada em /jobs/[id]
+              só para mostrar isto, e ela não editava nada. Agora o que é
+              próprio do Job mora aqui, e o resto da tela (editar, anexar,
+              atribuir videomaker, checklist, comentários) vem de graça.
+
+              De quem é a bola e qual é a próxima ação são derivados do estado
+              (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
+              só pintada. */}
+          {ehCobertura && (
+            <section aria-label="Operação do Job" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3", modern && surface.jobContext)}>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+                <span className="text-zinc-400">
+                  <span className="text-zinc-600">Etapa </span>
+                  {COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}
+                </span>
+                <span className="text-zinc-400">
+                  <span className="text-zinc-600">Responsável atual </span>
+                  {responsavelDoJob.nome ?? responsavelDoJob.papel}
+                  {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
+                </span>
+                <span hidden={modern} className={cn("ml-auto", ehBloqueado(demanda.statusInterno) ? "text-rose-400" : "text-zinc-300")}>
+                  {proximaAcao(demanda)}
+                </span>
+              </div>
+
+              {/* As ações objetivas do videomaker (§13). O componente decide
+                  sozinho o que cabe no estado atual, e some quando a bola não
+                  é dele — quem não é o videomaker do job não vê nada. */}
+              {souOVideomakerDoJob && (
+                <AcoesVideomaker
+                  jobId={demanda.id}
+                  statusInterno={demanda.statusInterno}
+                  captacaoIniciada={captacaoIniciada(demanda.historicos)}
+                  onExecutado={() => mutate()}
+                />
+              )}
+
+              {/* O caminho de volta: Job → Demanda. Veio da tela antiga de
+                  /jobs/[id] e mudou para cá quando ela passou a ser esta tela.
+                  Reclassificar é raro e de gestão, por isso fica discreto e no
+                  fim; o componente some sozinho para quem não pode converter. */}
+              <ConverterEmDemanda jobId={demanda.id} codigo={demanda.codigo} />
+            </section>
+          )}
+
+          {isGrowth ? (
+            <>
+              {!modern && entregaGrowth}
 
               {/* Briefing */}
               <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -1339,7 +1379,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </>
           ) : (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-4">
-            <div className="flex items-start justify-between gap-3">
+            {modern && <h2 className="text-lg font-medium">Briefing</h2>}
+            {!modern && <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <InlineEdit
                   value={demanda.titulo ?? ""}
@@ -1351,7 +1392,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
               <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
-            </div>
+            </div>}
 
             <InlineEdit
               value={demanda.descricao ?? ""}
@@ -1492,6 +1533,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </div>
+          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
@@ -1785,6 +1828,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </div>
+          <div hidden={modern && detailTab !== "entrega"} className={modern ? surface.tabSection : "contents"}>
+          {modern && entregaGrowth}
           {/* ── Links ────────────────────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
@@ -2121,6 +2167,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </div>
+          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2162,9 +2210,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </div>
+          <div hidden={modern && detailTab !== "pedido"} className={modern ? surface.tabSection : "contents"}>
           {/* ── Checklist ─────────────────────────────────────────────────── */}
           <ChecklistSection demandaId={id as string} />
 
+          </div>
+          <div hidden={modern && detailTab !== "conversa"} className={modern ? surface.tabSection : "contents"}>
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
               campo que não existe no modelo (é `comentario`) — os comentários
@@ -2175,10 +2227,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             comentarios={demanda.comentarios ?? []}
             onEnviado={() => mutate()}
           />
+          </div>
         </div>
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
         <div className="space-y-4">
+          <div hidden={modern && detailTab !== "equipe"} className={modern ? surface.tabSection : "contents"}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
@@ -2259,7 +2313,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           </div>
 
-          {/* Aprovação — no Growth fica no hero (topo). Aqui só audiovisual. */}
+          </div>
+          <div hidden={modern && detailTab !== "entrega"} className={modern ? surface.tabSection : "contents"}>
+          {/* Aprovação — Growth usa a prévia compartilhada em Entrega (topo no clássico). */}
           {!isGrowth && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <h2 className="font-semibold text-zinc-300 mb-3">{copy.approvalTitle}</h2>
@@ -2324,6 +2380,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </div>
+          <div hidden={modern && detailTab !== "conversa"} className={modern ? surface.tabSection : "contents"}>
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
@@ -2362,12 +2420,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               })}
             </div>
           </div>
+          </div>
         </div>
       </main>
 
       {/* Modal gerar link de aprovação (upload ou URL) */}
       {showLinkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="font-semibold text-zinc-200 mb-1">
               {linkModalTipo === "brutos" ? copy.rawUploadModalTitle : copy.uploadModalTitle}
@@ -2514,7 +2573,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         const { type, embedUrl } = getEmbedUrl(playerUrl)
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4"
             onClick={() => setPlayerUrl(null)}
           >
             <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
@@ -2551,20 +2610,21 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     // barra de rolagem —, e quem estava editando um campo perdia o contexto no meio.
     return (
       <div
-        className="fixed inset-0 z-[60] bg-black/70 overflow-y-auto"
+        className={cn("fixed inset-0 z-[60] bg-black/70 overflow-y-auto", modern && surface.overlay)}
         onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
       >
         <div
-          className="min-h-full w-full flex items-start justify-center p-4"
+          className={cn("min-h-full w-full flex items-start justify-center p-4", modern && surface.detailWrap, presentation === "drawer" && surface.drawerWrap)}
           onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
         >
-          <div className="w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+          <div className={cn("w-full max-w-6xl my-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden", modern && surface.surface, presentation === "drawer" && surface.drawer)} role="dialog" aria-modal="true" aria-label="Detalhes da demanda" onClick={(e) => e.stopPropagation()}>
+            <div className={cn("sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur", modern && surface.detailToolbar)}>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-mono text-sm text-zinc-300">{demanda.codigo}</span>
                 <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
               </div>
               <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200" aria-label={presentation === "drawer" ? "Abrir em janela ampliada" : "Abrir em painel lateral"}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>
                 {acoes}
                 <button onClick={() => onClose?.()} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar">
                   <X className="w-4 h-4" />
@@ -2580,7 +2640,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   return (
     <>
-      <Header title={demanda.codigo} actions={acoes} />
+      <Header title={demanda.codigo} actions={modern ? <div className={surface.pageActions}>{acoes}</div> : acoes} />
       {corpo}
     </>
   )

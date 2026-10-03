@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils"
 import { estaAtrasada } from "@/lib/status"
 import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
+import { salvarOrdem } from "@/lib/kanban-order"
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import styles from "./KanbanPreview.module.css"
 import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
 
 export type ColunaDef = { id: string; label: string; color: string; dot: string }
@@ -69,8 +72,11 @@ const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
 export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal" }: KanbanBoardProps) {
+  const { available: previewAvailable, modern, toggle } = useVisualPreview()
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
+  const savingOrder = useRef(false)
+  const [orderStatus, setOrderStatus] = useState<"idle" | "saving" | "error">("idle")
   const scrollRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef(false)
   const startX = useRef(0)
@@ -78,6 +84,10 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   const [dragging, setDragging] = useState(false)
   const [modalDemandaId, setModalDemandaId] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
+  // Concluído começa recolhido: com seis colunas (oito no Growth) o quadro não
+  // cabia em 1440 px e a coluna que sobrava para fora era a de trabalho em
+  // andamento. Recolhida, ela continua recebendo card arrastado.
+  const [concluidoAberto, setConcluidoAberto] = useState(false)
 
   const scrollBy = useCallback((amount: number) => {
     scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
@@ -105,7 +115,8 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     setDragging(false)
   }, [])
 
-  function handleDragEnd(result: DropResult) {
+  async function handleDragEnd(result: DropResult) {
+    if (savingOrder.current || orderStatus === "error") return
     if (!result.destination) return
     const destinoCol = result.destination.droppableId
     const origemCol = result.source.droppableId
@@ -137,14 +148,17 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
       // Update local order optimistically
       setLocalOrder(prev => ({ ...prev, [origemCol]: reordered.map(d => d.id) }))
 
-      // Persist positions to API
-      reordered.forEach((d, idx) => {
-        fetch(`/api/demandas/${d.id}/posicao`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ posicaoKanban: idx }),
-        }).catch(console.error)
-      })
+      savingOrder.current = true
+      setOrderStatus("saving")
+      try {
+        await salvarOrdem(reordered.map(d => d.id))
+        setOrderStatus("idle")
+      } catch {
+        setLocalOrder(prev => ({ ...prev, [origemCol]: colItems.map(d => d.id) }))
+        setOrderStatus("error")
+      } finally {
+        savingOrder.current = false
+      }
       return
     }
 
@@ -182,7 +196,21 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
 
   return (
     <>
-    <div className="relative h-full flex flex-col">
+    <div className={cn("relative h-full flex flex-col", modern && styles.board)}>
+      {orderStatus !== "idle" && (
+        <div role={orderStatus === "error" ? "alert" : "status"} className="px-4 py-3 text-sm text-zinc-200">
+          {orderStatus === "saving" ? "Salvando ordem…" : "Não foi possível salvar toda a ordem. Algumas posições podem ter sido gravadas."}
+          {orderStatus === "error" && <button type="button" className="ml-3 underline" onClick={() => window.location.reload()}>Recarregar quadro para conferir</button>}
+        </div>
+      )}
+      {previewAvailable && (
+        <div className={styles.toolbar}>
+          <div><span>Arraste entre etapas ou abra os detalhes.</span></div>
+          <button type="button" aria-pressed={modern} onClick={toggle}>
+            {modern ? "Voltar ao clássico" : "Usar novo visual"}
+          </button>
+        </div>
+      )}
       {/* Botões de navegação */}
       <button
         onClick={() => scrollBy(-320)}
@@ -202,7 +230,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     <DragDropContext onDragEnd={handleDragEnd}>
       <div
         ref={scrollRef}
-        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging")}
+        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging", modern && styles.scroll)}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -211,20 +239,38 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
         {COLS.map((col) => {
           const items = byCol(col.id)
           const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
+          const recolhida = col.id === "finalizado" && !concluidoAberto
+          const rotulo = labels?.[col.id] ?? col.label
           return (
             <div
               key={col.id}
               className={cn(
-                "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
+                "flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
+                recolhida ? "w-14" : "w-72",
                 col.color,
+                modern && styles.column,
+                modern && recolhida && styles.collapsed,
                 isBloqueada && "opacity-70"
               )}
             >
-              {/* Header da coluna */}
-              <div className="flex items-center justify-between px-3 py-3">
+              {recolhida ? (
+                <button
+                  type="button"
+                  onClick={() => setConcluidoAberto(true)}
+                  aria-expanded={false}
+                  aria-label={`Mostrar ${rotulo}: ${items.length} ${items.length === 1 ? "demanda" : "demandas"}`}
+                  className="flex flex-col items-center gap-3 px-1 py-3 text-zinc-300 hover:text-white transition-colors"
+                >
+                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
+                    {items.length}
+                  </span>
+                  <span className="font-semibold text-sm [writing-mode:vertical-rl] rotate-180">{rotulo}</span>
+                </button>
+              ) : (
+              <div className={cn("flex items-center justify-between px-3 py-3", modern && styles.heading)}>
                 <div className="flex items-center gap-2">
                   <div className={cn("w-2 h-2 rounded-full", col.dot)} />
-                  <span className="font-semibold text-sm text-zinc-200">{labels?.[col.id] ?? col.label}</span>
+                  <span className="font-semibold text-sm text-zinc-200">{rotulo}</span>
                   <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
                     {items.length}
                   </span>
@@ -233,21 +279,31 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                   )}
                 </div>
                 {col.id === "entrada" && !isBloqueada && (
-                  <Link href="/demandas?nova=1">
-                    <button className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
-                      <Plus className="w-4 h-4" />
-                    </button>
+                  <Link href="/demandas?nova=1" aria-label="Criar demanda" className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
+                    <Plus className="w-4 h-4" />
                   </Link>
                 )}
                 {col.id === "finalizado" && (
-                  <Link
-                    href="/historico"
-                    className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors ml-auto"
-                  >
-                    Ver todos →
-                  </Link>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <Link
+                      href="/historico"
+                      className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors"
+                    >
+                      Ver todos →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setConcluidoAberto(false)}
+                      aria-expanded={true}
+                      aria-label={`Recolher ${rotulo}`}
+                      className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
+              )}
 
               {/* Cards */}
               <StrictModeDroppable droppableId={col.id}>
@@ -263,15 +319,15 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                       snapshot.isDraggingOver && "bg-zinc-800/50"
                     )}
                   >
-                    {items.map((demanda, index) => (
-                      <Draggable key={demanda.id} draggableId={demanda.id} index={index}>
+                    {!recolhida && items.map((demanda, index) => (
+                      <Draggable isDragDisabled={orderStatus !== "idle"} key={demanda.id} draggableId={demanda.id} index={index}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
                             data-card
-                            className={cn(snapshot.isDragging && "rotate-1 opacity-90")}
+                            className={cn(snapshot.isDragging && "rotate-1 opacity-90", modern && styles.card)}
                           >
                             <DemandaCard
                               demanda={demanda}
@@ -284,6 +340,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                         )}
                       </Draggable>
                     ))}
+                    {modern && !recolhida && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
                     {provided.placeholder}
                   </div>
                 )}

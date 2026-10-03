@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import useSWR from "swr"
 import {
   Lightbulb,
@@ -23,6 +23,8 @@ import {
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
 
+
+import styles from "@/components/layout/TeamSurface.module.css"
 
 interface IdeiaVideo {
   id: string
@@ -76,13 +78,11 @@ export default function IdeiasPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
 
-  // Debounce search
-  const searchTimeoutRef = { current: null as ReturnType<typeof setTimeout> | null }
-  const handleSearch = (v: string) => {
-    setSearch(v)
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    searchTimeoutRef.current = setTimeout(() => setSearchDebounced(v), 300)
-  }
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchDebounced(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+  const handleSearch = (value: string) => setSearch(value)
 
   const params = new URLSearchParams()
   if (statusFilter) params.set("status", statusFilter)
@@ -91,7 +91,7 @@ export default function IdeiasPage() {
   if (produtoFilter) params.set("produtoId", produtoFilter)
   if (origemFilter) params.set("origem", origemFilter)
 
-  const { data, mutate } = useSWR(`/api/ideias?${params}`, fetcher)
+  const { data, error, isLoading, isValidating, mutate } = useSWR(`/api/ideias?${params}`, fetcher)
   const { data: kpi } = useSWR("/api/ideias/kpi", fetcher)
   const { data: produtos } = useSWR("/api/produtos?all=true", fetcher)
 
@@ -146,15 +146,13 @@ export default function IdeiasPage() {
   const detailIdeia = ideias.find((i) => i.id === detailId)
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto space-y-6">
+    <div className={`${styles.page} space-y-6`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Lightbulb className="w-7 h-7 text-yellow-400" />
-            Banco de Ideias
-          </h1>
-          <p className="text-sm text-zinc-500 mt-1">Capture, analise e transforme ideias em demandas</p>
+          <p className={styles.eyebrow}>WORKSPACE / IDEIAS</p>
+          <h1 className={styles.title}>Um lugar para a próxima ideia.</h1>
+          <p className={styles.subtitle}>Reúna referências, organize possibilidades e transforme ideias em trabalho.</p>
         </div>
         <div className="flex items-center gap-2">
 
@@ -180,11 +178,11 @@ export default function IdeiasPage() {
 
       {/* Filters */}
       <div className="space-y-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
+            <input aria-label="Buscar ideias"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Buscar ideias..."
@@ -194,7 +192,7 @@ export default function IdeiasPage() {
 
           {/* Sort */}
           <div className="relative">
-            <select
+            <select aria-label="Ordenar ideias"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               className="appearance-none pl-3 pr-8 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-300 outline-none"
@@ -249,6 +247,7 @@ export default function IdeiasPage() {
         {/* Status chips */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            aria-pressed={!statusFilter}
             onClick={() => setStatusFilter("")}
             className={cn(
               "px-3 py-1 rounded-full text-xs font-medium transition-colors",
@@ -260,6 +259,7 @@ export default function IdeiasPage() {
           {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
             <button
               key={key}
+              aria-pressed={statusFilter === key}
               onClick={() => setStatusFilter(statusFilter === key ? "" : key)}
               className={cn(
                 "px-3 py-1 rounded-full text-xs font-medium transition-colors",
@@ -285,7 +285,7 @@ export default function IdeiasPage() {
       )}
 
       {/* Ideas Grid */}
-      {ideias.length === 0 ? (
+      {error ? <div role="alert" className="bg-zinc-900 border border-zinc-800 rounded-xl p-6"><p>Não foi possível carregar as ideias.</p><button disabled={isValidating} onClick={() => mutate()} className="text-purple-300">Tentar novamente</button></div> : isLoading ? <p role="status">Carregando ideias…</p> : ideias.length === 0 ? (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-12 text-center">
           <Lightbulb className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-zinc-400 mb-2">Nenhuma ideia encontrada</h3>

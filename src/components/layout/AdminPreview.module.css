@@ -1,0 +1,81 @@
+.people,.settings { min-width:0; padding:32px; color:#eaeaf2; }
+.intro { margin-bottom:28px; align-items:center; }
+.intro h1 { font-size:clamp(26px,3vw,36px); font-weight:650; letter-spacing:-1px; line-height:1.2; }
+.intro p:not(.eyebrow) { color:#a9aabd; font-size:14px; line-height:1.7; margin-top:10px; }
+.eyebrow { color:#b8a3ec; font-size:10px; letter-spacing:1.8px; font-weight:700; margin-bottom:10px; }
+.metrics > button { min-height:94px; border-radius:16px; background:linear-gradient(130deg,#20212d,#191b24); border-color:#323442; }
+.metrics > button[aria-pressed="true"] { border-color:#a68be0; background:linear-gradient(125deg,#322941,#222333); }
+.metrics > button p:first-child { color:#b6b7c6; white-space:normal; }
+.metrics > button p:last-child { font-size:28px; line-height:1.3; }
+.tabs { overflow-x:auto; gap:6px; padding:5px; border:1px solid #303341; border-radius:14px; background:#171922; }
+.tabs > button { white-space:nowrap; min-height:44px; flex-shrink:0; border:0; border-radius:10px; margin:0; color:#aeb0c1; }
+.tabs > button[aria-pressed="true"] { background:#353047; color:#e2d4ff; }
+.table { max-width:100%; border-radius:18px; border-color:#303341; background:#171922; }
+.table th { background:#20222e; padding-top:16px; padding-bottom:16px; color:#b1b3c3; letter-spacing:.5px; font-size:10px; }
+.table td { padding-top:17px; padding-bottom:17px; }
+.table tbody tr:hover { background:#252735; }
+.settingsLayout { max-width:1320px; gap:28px; }
+.settingsNav { width:230px; }
+.settingsNav button { min-height:48px; padding:12px 14px; color:#aeb0c1; margin-bottom:4px; border:1px solid transparent; border-radius:12px; }
+.settingsNav button[aria-pressed="true"] { background:#2f2a41; border-color:#534363; color:#e7dcff; }
+.settingsPanel { background:linear-gradient(140deg,#20222d,#181a23); border-color:#333543; padding:30px; border-radius:20px; }
+.settingsPanel input,.settingsPanel select,.settingsPanel textarea { max-width:100%; }
+.personPanel { background:linear-gradient(165deg,#232330,#171922); border-color:#3a3c4b; box-shadow:-20px 0 70px #0006; }
+.personPanel button { min-height:36px; }
+.people button:focus-visible,.settings button:focus-visible,.personPanel button:focus-visible { outline:2px solid #bca4ff; outline-offset:3px; }
+@media(max-width:900px) {
+ .settingsLayout { flex-direction:column; gap:20px; }
+ .settingsNav { width:100%; min-width:0; }
+ .settingsNav > div { position:static; display:flex; overflow-x:auto; gap:6px; padding:4px; }
+ .settingsNav button { width:auto; flex-shrink:0; white-space:nowrap; margin:0; }
+}
+@media(max-width:640px) {
+ .people,.settings { padding:20px 16px; }
+ .intro { flex-direction:column; align-items:stretch; gap:18px; margin-bottom:22px; }
+ .intro h1 { font-size:28px; }
+ .intro > button { justify-content:center; min-height:44px; }
+ .metrics > button { padding:12px; gap:8px; min-height:90px; }
+ .metrics > button p:last-child { font-size:25px; }
+ .settingsPanel { padding:20px 16px; }
+ .personPanel { max-width:none; }
+}
+
+@media(min-width:1024px) { .people[data-person-open="true"] { padding-right:25rem; } }
+
+@media(max-width:640px) { .settingsPanel [data-settings-fields] { grid-template-columns:minmax(0,1fr); } .settingsPanel [data-settings-fields] > * { grid-column:auto; } }
+
+/* Pessoas: mesma hierarquia leve e abas sublinhadas do workspace aprovado. */
+.people .intro h1 {font-weight:500;letter-spacing:-.035em;}
+.people .tabs {background:transparent;border:0;border-bottom:1px solid #303342;border-radius:0;padding:0;gap:24px;}
+.people .tabs > button {border-radius:0;background:transparent;border-bottom:2px solid transparent;padding-inline:0;}
+.people .tabs > button[aria-pressed="true"] {background:transparent;color:#bca2fa;border-bottom-color:#ad87ff;}
+.personPanel {background:#191b23;}
+.personPanel button[aria-label="Fechar detalhes da pessoa"] {min-width:44px;min-height:44px;display:grid;place-items:center;}
+@media(max-width:640px){
+ .people .table {border:0;background:transparent;overflow:visible;}
+ .people .table table {min-width:0;display:block;}
+ .people .table thead {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+ .people .table tbody {display:block;}
+ .people .table tr[data-person-row] {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:18px;margin-bottom:14px;border:1px solid #303342;border-radius:16px;background:#191b23;}
+ .people .table tr[data-person-row] td {display:block;padding:0;max-width:none;min-width:0;overflow-wrap:anywhere;}
+ .people .table td[data-column]::before {content:attr(data-column);display:block;color:#a5a7bb;font-size:10px;letter-spacing:.04em;margin-bottom:7px;}
+ .people .table td[data-column="Pessoa"],.people .table td[data-column="Ações"] {grid-column:1/-1;}
+ .people .table td[data-column="Pessoa"] {border-bottom:1px solid #303342;padding-bottom:14px;}
+ .people .table td[data-column="Pessoa"]::before,.people .table td[data-column="Ações"]::before {display:none;}
+ .people .table td[data-column="Pessoa"] button {white-space:normal;min-height:32px;}
+ .people .table td[data-column="Ações"] button {min-width:44px;min-height:44px;}
+}
+
+.settings .intro h1 {font-weight:500;letter-spacing:-.035em;}
+.settingsPanel {background:#191b23;border-color:#303342;border-radius:18px;}
+.settingsNav button[aria-pressed="true"] {background:#ab86ff20;border-color:#ab86ff30;color:#bca2fa;}
+.settingsPanel a:focus-visible,.settingsPanel input:focus-visible,.settingsPanel select:focus-visible,.settingsPanel textarea:focus-visible {outline:2px solid #bca4ff;outline-offset:3px;}
+@media(max-width:900px){.settingsNav{max-width:100%;}.settingsNav button{min-height:48px;}}
+
+.parameterRow {min-width:0;}
+.parameterLabel {flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere;}
+.parameterActions {display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.parameterActions button {min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#b5b6c8;border-radius:8px;}
+.parameterActions button:focus-visible {outline:2px solid #c8b4ff;outline-offset:2px;}
+.parameterRow input {min-width:0;min-height:44px;}
+@media(max-width:640px){.parameterRow{flex-direction:column;align-items:stretch;}.parameterActions{justify-content:flex-end;}.parameterLabel{align-items:flex-start;flex-direction:column;}.parameterRow input{width:100%;font-size:16px;}}

@@ -1,0 +1,17 @@
+"use client"
+import { useState } from "react"
+import { SlidersHorizontal, ChevronDown } from "lucide-react"
+import { useVisualPreview } from "@/components/layout/useVisualPreview"
+import styles from "./BoardFilters.module.css"
+
+export function BoardFilters({ children }: { children: React.ReactNode }) {
+  const { modern } = useVisualPreview()
+  const [open, setOpen] = useState(false)
+  if (!modern) return <>{children}</>
+  return <div className={styles.filters}>
+    <button type="button" className={styles.toggle} aria-expanded={open} onClick={() => setOpen(v => !v)}>
+      <SlidersHorizontal size={16} /> Buscar e filtrar <ChevronDown size={16} />
+    </button>
+    <div className={open ? styles.open : styles.closed}>{children}</div>
+  </div>
+}
