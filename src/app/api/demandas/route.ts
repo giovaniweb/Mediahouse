@@ -15,6 +15,7 @@ import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
+import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
@@ -182,11 +183,18 @@ export async function GET(req: NextRequest) {
   if (escopoMinhas) and.push(escopoMinhas)
   if (responsavelId) and.push(whereResponsavel(responsavelId))
 
-  // Filtro por data de finalização (usado pela página /historico)
+  // Filtro por data de finalização (usado pela página /historico).
+  //
+  // Dia de calendário no fuso de Brasília, fim exclusivo — o mesmo recorte das
+  // métricas. Antes, `new Date("AAAA-MM-DD")` era meia-noite UTC e o setHours
+  // usava o fuso do servidor: na Vercel (UTC), "até 02/10" cortava às 20h59 de
+  // Brasília e "de 26/09" começava às 21h do dia 25.
   if (deParam || ateParam) {
-    const faixa = {
-      ...(deParam ? { gte: new Date(deParam) } : {}),
-      ...(ateParam ? { lte: new Date(new Date(ateParam).setHours(23, 59, 59, 999)) } : {}),
+    let faixa
+    try { faixa = intervaloCalendario(deParam, ateParam) }
+    catch (e) {
+      if (e instanceof RecorteInvalido) return erroDeCampo(e.campo ?? "de", e.message)
+      throw e
     }
     and.push({ OR: [{ finalizadaEm: faixa }, { finalizadaEm: null, updatedAt: faixa }] })
   }

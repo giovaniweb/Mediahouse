@@ -16,9 +16,20 @@ export async function GET(req: NextRequest) {
   const fim = searchParams.get("fim")
   const contexto = searchParams.get("contexto") // contourline | freelance | pessoal | sistema
 
-  const dateFilter = inicio && fim ? {
-    inicio: { gte: new Date(inicio) },
-    fim: { lte: new Date(fim) },
+  // Interseção com o período, não contenção. Antes exigia o evento INTEIRO
+  // dentro da janela (inicio >= começo E fim <= fim): compromisso que começava
+  // antes da semana e terminava dentro dela, ou que atravessava a semana, sumia.
+  // Período pela metade, data inválida ou invertida é erro, não lista vazia.
+  if (!!inicio !== !!fim) return NextResponse.json({ error: "Informe inicio e fim juntos" }, { status: 400 })
+  const periodoInicio = inicio ? new Date(inicio) : null
+  const periodoFim = fim ? new Date(fim) : null
+  if (periodoInicio && periodoFim &&
+    (Number.isNaN(periodoInicio.getTime()) || Number.isNaN(periodoFim.getTime()) || periodoInicio > periodoFim)) {
+    return NextResponse.json({ error: "Período inválido" }, { status: 400 })
+  }
+  const dateFilter = periodoInicio && periodoFim ? {
+    inicio: { lte: periodoFim },
+    fim: { gte: periodoInicio },
   } : {}
 
   const isAdmin = temPapel(session, "admin")
