@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
+import { prismaAdmin } from "@/lib/prisma-admin"
 import { getOrgId, semOrg } from "@/lib/org"
 import { encryptSecret, decryptSecret } from "@/lib/secret-crypto"
 
@@ -36,12 +37,31 @@ function decifrarOuNulo(valor: string | null | undefined): string | null {
   }
 }
 
+// Vínculo explícito (videomaker_organizacao) ou histórico (demanda, custo).
+// Sem o explícito, o candidato recém-cadastrado pelo link da empresa — que ainda
+// não tem demanda nem custo — dava 404 no PUT/DELETE da própria empresa.
 async function temVinculoComOrg(videomakerId: string, organizacaoId: string): Promise<boolean> {
-  const [demandas, custos] = await Promise.all([
+  const [vinculos, demandas, custos] = await Promise.all([
+    prisma.videomakerOrganizacao.count({ where: { videomakerId, organizacaoId } }),
     prisma.demanda.count({ where: { videomakerId, organizacaoId } }),
     prisma.custoVideomaker.count({ where: { videomakerId, organizacaoId } }),
   ])
-  return demandas > 0 || custos > 0
+  return vinculos > 0 || demandas > 0 || custos > 0
+}
+
+// O perfil é da rede: apagá-lo leva junto, por cascade, vínculos, dados fiscais
+// e custos de TODAS as empresas, e solta o videomaker das demandas delas. Só pode
+// sair quando nenhuma outra empresa o usa. Conta pelo cliente administrativo
+// porque, com RLS ligado, o cliente comum não enxerga as outras empresas e
+// sempre responderia zero.
+async function usadoPorOutraEmpresa(videomakerId: string, organizacaoId: string): Promise<boolean> {
+  const outra = { not: organizacaoId }
+  const [vinculos, demandas, custos] = await Promise.all([
+    prismaAdmin.videomakerOrganizacao.count({ where: { videomakerId, organizacaoId: outra } }),
+    prismaAdmin.demanda.count({ where: { videomakerId, organizacaoId: outra } }),
+    prismaAdmin.custoVideomaker.count({ where: { videomakerId, organizacaoId: outra } }),
+  ])
+  return vinculos > 0 || demandas > 0 || custos > 0
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -177,7 +197,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!organizacaoId) return semOrg()
 
   // Excluir apaga o profissional da REDE inteira, não só desta empresa — daí o
-  // gate mais estrito: admin/gestor e apenas de quem já trabalhou com ele.
+  // gate mais estrito: admin/gestor, só de quem tem vínculo com ele e só quando
+  // nenhuma outra empresa o usa (usadoPorOutraEmpresa).
   if (!ehGestor(session)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
@@ -186,6 +207,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   if (!(await temVinculoComOrg(id, organizacaoId))) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
+
+  if (await usadoPorOutraEmpresa(id, organizacaoId)) {
+    return NextResponse.json({
+      error: "Este profissional também trabalha com outra empresa, então o perfil não pode ser apagado da rede. " +
+        "Para tirá-lo da sua equipe, marque-o como inativo ou coloque-o na lista negra.",
+    }, { status: 409 })
   }
 
   await prisma.videomaker.delete({ where: { id } })

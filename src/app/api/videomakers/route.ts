@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
-import { getOrgId } from "@/lib/org"
+import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
+  const organizacaoId = await getOrgId(session)
+  if (!organizacaoId) return semOrg()
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get("status")
@@ -16,10 +19,15 @@ export async function GET(req: NextRequest) {
   // O `omit` que existia aqui virou desnecessário: as colunas sensíveis não
   // moram mais no perfil global. Elas vivem em videomaker_dados_fiscais e
   // videomaker_organizacao, por empresa, e são lidas só onde há vínculo.
+  //
+  // O perfil é da rede, mas o CANDIDATO pendente é da empresa que o recebeu pelo
+  // link de cadastro: nome, telefone e e-mail de quem se candidatou à empresa B
+  // não aparecem para a empresa A. Fora do pendente, a rede segue visível.
   const videomakers = await prisma.videomaker.findMany({
     where: {
-      ...(status ? { status: status as "ativo" | "inativo" | "preferencial" } : {}),
+      ...(status ? { status: status as "ativo" | "inativo" | "preferencial" | "pendente" } : {}),
       ...(usuarioId ? { usuarioId } : {}),
+      OR: [{ status: { not: "pendente" } }, { vinculos: { some: { organizacaoId } } }],
     },
     include: {
       _count: { select: { demandas: true } },
