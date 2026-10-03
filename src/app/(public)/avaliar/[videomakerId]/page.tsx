@@ -3,6 +3,7 @@
 import { useState, use, useEffect } from "react"
 import { Star, Send, CheckCircle2, AlertCircle, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 
 interface Params {
   videomakerId: string
@@ -26,6 +27,7 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
   const [videomakerNome, setVideomakerNome] = useState<string | null>(null)
   const [videomakerLocal, setVideomakerLocal] = useState<string | null>(null)
   const [loadingInfo, setLoadingInfo] = useState(true)
+  const [naoEncontrado, setNaoEncontrado] = useState(false)
 
   const [nota, setNota] = useState(0)
   const [hovered, setHovered] = useState(0)
@@ -43,7 +45,12 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
 
   useEffect(() => {
     fetch(`/api/publico/videomaker-info/${videomakerId}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        // 404 é link que não aponta para ninguém; falha de rede segue com o
+        // formulário (o envio diz o que houve).
+        if (r.status === 404) { setNaoEncontrado(true); return {} }
+        return r.json()
+      })
       .then((data) => {
         if (data.videomaker) {
           setVideomakerNome(data.videomaker.nome)
@@ -86,6 +93,10 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
     } finally {
       setEnviando(false)
     }
+  }
+
+  if (naoEncontrado) {
+    return <LinkIndisponivel titulo="Link de avaliação indisponível" texto="Este link não corresponde a nenhum profissional. Peça um novo link a quem enviou." />
   }
 
   if (resultado === "ok") {

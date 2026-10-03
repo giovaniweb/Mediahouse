@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Upload, Check, Loader2, FileText, AlertTriangle } from "lucide-react"
+import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 
 interface NFData {
   id: string
@@ -57,17 +58,7 @@ export default function NFUploadPage() {
     )
   }
 
-  if (erro && !nf) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md text-center">
-          <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-zinc-100 mb-2">Link Indisponivel</h1>
-          <p className="text-zinc-400">{erro}</p>
-        </div>
-      </div>
-    )
-  }
+  if (erro && !nf) return <LinkIndisponivel texto={erro} />
 
   if (sucesso || nf?.status === "enviada") {
     return (
