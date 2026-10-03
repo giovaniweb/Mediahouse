@@ -25,7 +25,7 @@ import {
   Calendar,
   Activity,
   ArrowUpRight,
-  Printer,
+  Printer, Pencil, X,
 } from "lucide-react"
 import { hojeEmSaoPaulo, somarMeses } from "@/lib/datas"
 import { fetcher } from "@/lib/fetcher"
@@ -241,7 +241,7 @@ function EditarProducaoManualModal({ area, onClose, onSaved }: { area: string; o
             <div key={i} className="flex items-center gap-2">
               <input value={l.categoria} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, categoria: e.target.value } : x))} placeholder={placeholder} className={inputCls + " flex-1"} />
               <input type="number" value={l.quantidade} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, quantidade: e.target.value } : x))} placeholder="0" className={inputCls + " w-20"} />
-              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} className="text-zinc-600 hover:text-red-400 p-1">✕</button>
+              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} aria-label="Remover linha" className="text-zinc-600 hover:text-red-400 p-1"><X className="w-4 h-4" aria-hidden="true" /></button>
             </div>
           ))}
           <button onClick={() => setLinhas((ls) => [...ls, { categoria: "", quantidade: "" }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar</button>
@@ -494,7 +494,7 @@ export default function RelatoriosPage() {
             {/* Controles (área + período + imprimir) */}
             <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
+                {([["audiovisual", "Audiovisual"], ["design", "Growth"], ["eventos", "Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
                   <button key={a} onClick={() => { setAreaRes(a); if (a !== "eventos") setAreaRel(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
@@ -561,8 +561,8 @@ export default function RelatoriosPage() {
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 print:border-zinc-300 print:bg-white">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="text-lg font-bold text-white print:text-black">Produção do período</h3>
-                        <button onClick={() => setShowEditarProd(true)} className="text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
-                          ✏️ Editar números
+                        <button onClick={() => setShowEditarProd(true)} className="inline-flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />Editar números
                         </button>
                       </div>
                       <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Fontes separadas: lançamentos mensais podem repetir entregas do sistema. Não somamos sem conciliação.</p>
@@ -664,7 +664,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-zinc-500 font-medium">Área:</span>
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
+                {([["audiovisual", "Audiovisual"], ["design", "Growth"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
                   <button key={a} onClick={() => { setAreaRel(a); setAreaRes(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
                     {label}
