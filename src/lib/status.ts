@@ -117,7 +117,7 @@ export function venceHoje(d: { dataLimite?: string | Date | null; statusVisivel?
 /**
  * Dias inteiros de atraso, ou null quando o número não é confiável. O banco tem
  * datas corrompidas (ano 0001, ano 0026) que renderizariam "atrasada há 700 mil
- * dias" — nesses casos o chamador mostra só "ATRASADA".
+ * dias" — nesses casos o chamador mostra só "Atrasada".
  */
 export function diasDeAtraso(d: { dataLimite?: string | Date | null; statusVisivel?: string | null }): number | null {
   if (!estaAtrasada(d)) return null

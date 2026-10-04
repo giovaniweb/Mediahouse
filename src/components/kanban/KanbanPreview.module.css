@@ -31,8 +31,10 @@
      tela. Abaixo de 190 px o card aperta demais, e aí o quadro volta a rolar. */
   flex: 1 1 0;
   width: auto;
-  min-width: 190px;
-  max-width: 290px;
+  /* 240 px: abaixo disso o card de produção real (código, prazo, etiquetas)
+     quebrava em linhas de uma palavra. Com muitas etapas o quadro rola de lado. */
+  min-width: 240px;
+  max-width: 300px;
   background: #15171d;
   border-radius: 14px;
   border-right-color: #ffffff0d;
@@ -41,11 +43,15 @@
 }
 /* Duas classes: precisa vencer também a largura do .column no celular. */
 .column.collapsed { flex: 0 0 56px; width: 56px; min-width: 0; }
-.heading { min-height: 64px; padding-inline: 16px; }
-.card { margin: 4px 3px 12px; }
+.heading { min-height: 52px; padding-inline: 14px; }
+/* Rolagem de cada coluna: discreta, só aparece quando há o que rolar. */
+.column :global(.kanban-scroll) { scrollbar-width: thin; scrollbar-color: #ffffff1f transparent; }
+.column :global(.kanban-scroll)::-webkit-scrollbar { width: 6px; }
+.column :global(.kanban-scroll)::-webkit-scrollbar-thumb { background: #ffffff1f; border-radius: 6px; }
+.card { margin: 2px 2px 10px; }
 .card [data-card-surface] {
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 12px 14px;
   background: #242731;
   border-color:#303342;
   box-shadow:none;
