@@ -1,0 +1,67 @@
+.board {
+  isolation: isolate;
+  min-height: 0;
+  padding: 16px 0 8px;
+  border-radius: 0;
+  background: #0f1115;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+  padding: 8px 24px 20px;
+  color: #f2effa;
+}
+.toolbar strong { display: block; font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
+.toolbar span { display: block; margin-top: 4px; font-size: 12px; color: #b4b2c4; }
+.toolbar button {
+  border: 1px solid #aaa0c34d;
+  border-radius: 24px;
+  padding: 10px 16px;
+  background: #8c79bc15;
+  font-size: 12px;
+  cursor: pointer;
+}
+.scroll { flex: 1; height: auto; gap: 16px; padding-inline: 24px; }
+.column {
+  /* As colunas dividem a largura do quadro. Com largura fixa de 245 px, seis
+     colunas passavam de 1440 px com o menu aberto e a última ficava fora da
+     tela. Abaixo de 190 px o card aperta demais, e aí o quadro volta a rolar. */
+  flex: 1 1 0;
+  width: auto;
+  min-width: 190px;
+  max-width: 290px;
+  background: #15171d;
+  border-radius: 14px;
+  border-right-color: #ffffff0d;
+  border-bottom-color: #ffffff0d;
+  border-left-color: #ffffff0d;
+}
+/* Duas classes: precisa vencer também a largura do .column no celular. */
+.column.collapsed { flex: 0 0 56px; width: 56px; min-width: 0; }
+.heading { min-height: 64px; padding-inline: 16px; }
+.card { margin: 4px 3px 12px; }
+.card [data-card-surface] {
+  border-radius: 14px;
+  padding: 16px;
+  background: #242731;
+  border-color:#303342;
+  box-shadow:none;
+}
+.card p, .card button[aria-label^="Abrir demanda"] { line-height: 1.5; }
+.card button:focus-visible, .toolbar button:focus-visible { outline: 2px solid #c7b6f5; outline-offset: 3px; opacity: 1; }
+.card:focus-within button { opacity: 1; }
+@media (hover: none) { .card button { opacity: 1; } }
+@media (max-width: 640px) {
+  .toolbar { align-items: flex-start; padding: 4px 12px 16px; gap: 8px; }
+  .toolbar strong { font-size: 16px; }
+  .toolbar span { max-width: 180px; line-height: 1.5; }
+  .toolbar button { padding: 10px; }
+  .scroll { padding-inline: 12px; gap: 12px; }
+  .column { flex: 0 0 auto; width: min(82vw, 320px); max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board *, .board *::before, .board *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

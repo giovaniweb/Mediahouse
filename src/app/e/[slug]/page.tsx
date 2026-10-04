@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import { QRCodeSVG } from "qrcode.react"
+import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 import {
   Download, Play, X, Lock, CalendarRange, MapPin, Clock,
   Film, Loader2, ChevronDown, ChevronUp, CheckCircle2,
@@ -539,6 +540,7 @@ export default function EventoPublicoPage() {
   const [senhaErro, setSenhaErro] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [naoEncontrado, setNaoEncontrado] = useState(false)
   const [cobertura, setCobertura] = useState<CoberturaPublica | null>(null)
   const [playerUpload, setPlayerUpload] = useState<Upload | null>(null)
   const [showQR, setShowQR] = useState(false)
@@ -566,7 +568,8 @@ export default function EventoPublicoPage() {
         return
       }
       if (!res.ok) {
-        setError(json.error ?? "Evento não encontrado")
+        setError(res.status === 404 ? null : json.error ?? null)
+        setNaoEncontrado(true)
         setLoading(false)
         return
       }
@@ -649,6 +652,7 @@ export default function EventoPublicoPage() {
   }
 
   // ── Error ──
+  if (naoEncontrado && !error) return <LinkIndisponivel titulo="Evento não encontrado" texto="Este link pode ter expirado ou ser inválido. Peça um novo link a quem enviou." />
   if (error || !cobertura) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
@@ -656,8 +660,8 @@ export default function EventoPublicoPage() {
           <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
             <Film className="w-8 h-8 text-red-400" />
           </div>
-          <h2 className="text-lg font-bold text-white mb-1">Evento não encontrado</h2>
-          <p className="text-zinc-400 text-sm">{error ?? "Este link pode ter expirado ou ser inválido."}</p>
+          <h2 className="text-lg font-bold text-white mb-1">Não foi possível abrir o evento</h2>
+          <p className="text-zinc-400 text-sm">{error ?? "Recarregue a página em alguns instantes."}</p>
         </div>
       </div>
     )

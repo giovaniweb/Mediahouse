@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { useParams } from "next/navigation"
 import { Truck, Loader2, Upload, CheckCircle2, FileText, MapPin, Calendar } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
+import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 
 type Custo = {
   id: string; descricao: string; categoria: string; valorPrevisto: number; valorReal: number | null
@@ -29,7 +30,7 @@ export default function PortalFornecedorPage() {
   const { data, mutate, isLoading } = useSWR<{ fornecedor: Fornecedor }>(`/api/publico/fornecedor/${token}`, fetcher)
 
   if (isLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
-  if (!data?.fornecedor) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">Portal não encontrado.</div>
+  if (!data?.fornecedor) return <LinkIndisponivel titulo="Portal indisponível" texto="Este link de fornecedor não existe mais ou foi desativado. Peça um novo link à empresa." />
 
   const f = data.fornecedor
 

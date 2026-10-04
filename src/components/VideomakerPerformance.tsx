@@ -15,7 +15,7 @@ interface Props {
 
 export function VideomakerPerformance({ videomakerId, compact, tipo = "externo" }: Props) {
   const apiBase = tipo === "interno" ? "/api/editores" : "/api/videomakers"
-  const { data, isLoading } = useSWR(`${apiBase}/${videomakerId}/performance`, fetcher)
+  const { data, error, isLoading, isValidating, mutate } = useSWR(`${apiBase}/${videomakerId}/performance`, fetcher)
 
   if (isLoading) {
     return (
@@ -25,7 +25,24 @@ export function VideomakerPerformance({ videomakerId, compact, tipo = "externo" 
     )
   }
 
+  if (error) return (
+    <div role="alert" className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <p className="text-sm text-zinc-300">Não foi possível carregar o desempenho.</p>
+      <button disabled={isValidating} onClick={() => mutate()} className="mt-3 border border-zinc-600 rounded-lg px-4 py-3 text-sm text-purple-300">
+        {isValidating ? "Tentando novamente…" : "Recarregar desempenho"}
+      </button>
+    </div>
+  )
+
   if (!data) return null
+
+  if (data.totalDemandas === 0) return (
+    <section aria-label="Desempenho" className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <h3 className="font-semibold text-zinc-100">Desempenho</h3>
+      <p className="mt-3 text-sm text-zinc-300">Ainda não há demandas para calcular o desempenho.</p>
+      <p className="mt-2 text-xs text-zinc-400">Os indicadores aparecerão conforme os trabalhos forem registrados.</p>
+    </section>
+  )
 
   const taxa = data.taxaConclusao ?? 0
   const performanceColor = taxa >= 80 ? "text-emerald-400" : taxa >= 60 ? "text-amber-400" : "text-red-400"
@@ -60,7 +77,7 @@ export function VideomakerPerformance({ videomakerId, compact, tipo = "externo" 
       </div>
 
       {/* Stats */}
-      <div className={cn("px-5 py-4 grid gap-4", compact ? "grid-cols-2 px-4 py-3" : "grid-cols-4")}>
+      <div className={cn("px-5 py-4 grid gap-4", compact ? "grid-cols-2 px-4 py-3" : "grid-cols-2 sm:grid-cols-4")}>
         <div>
           <div className="flex items-center gap-1.5 mb-1">
             <Film className="w-3.5 h-3.5 text-blue-400" />
@@ -74,7 +91,7 @@ export function VideomakerPerformance({ videomakerId, compact, tipo = "externo" 
             <Clock className="w-3.5 h-3.5 text-amber-400" />
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Tempo Medio</span>
           </div>
-          <p className="text-lg font-bold text-white">{data.tempoMedioDias}d</p>
+          <p className="text-lg font-bold text-white">{data.concluidas > 0 ? `${data.tempoMedioDias}d` : "—"}</p>
           <p className="text-[10px] text-zinc-600">dias p/ concluir</p>
         </div>
         <div>
@@ -83,7 +100,7 @@ export function VideomakerPerformance({ videomakerId, compact, tipo = "externo" 
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Custo Total</span>
           </div>
           <p className="text-lg font-bold text-white">{fmt(data.custoTotal)}</p>
-          <p className="text-[10px] text-zinc-600">{fmt(data.custoMedioPorVideo)}/video</p>
+          <p className="text-[10px] text-zinc-600">{data.concluidas > 0 ? `${fmt(data.custoMedioPorVideo)}/vídeo` : "Sem entregas concluídas"}</p>
         </div>
         <div>
           <div className="flex items-center gap-1.5 mb-1">

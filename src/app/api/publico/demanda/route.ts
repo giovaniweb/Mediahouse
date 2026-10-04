@@ -6,7 +6,7 @@ import { calcularPeso } from "@/lib/peso-demanda"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { orgPublica } from "@/lib/org"
 import { barrarExcesso } from "@/lib/limite-formulario"
-import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
 import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
@@ -62,8 +62,8 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // `?org=<slug>` identifica a empresa dona do formulário; sem ele, a padrão —
-  // os links antigos da Contourline.
+  // `?org=<slug>` identifica a empresa dona do formulário (o portal /c/<slug>
+  // sempre manda); sem ele, a padrão — os links antigos da Contourline.
   const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
   if (!organizacaoId) {
     return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })

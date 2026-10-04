@@ -20,7 +20,7 @@ vi.mock("@/lib/org", () => ({ orgPublica: (...a: unknown[]) => orgPublica(...a) 
 vi.mock("@/lib/org-contexto", () => ({ declararOrg: () => {} }))
 vi.mock("@/lib/whatsapp", () => ({ sendWhatsappMessage: vi.fn() }))
 vi.mock("@/lib/notificar", () => ({ emSegundoPlano: vi.fn() }))
-vi.mock("@/app/api/demandas/route", () => ({ notificarLideresAudiovisual: vi.fn() }))
+vi.mock("@/lib/lideres-audiovisual", () => ({ notificarLideresAudiovisual: vi.fn() }))
 vi.mock("@/lib/videomaker-dados", () => ({ gravarDadosPrivadosVideomaker: vi.fn() }))
 
 // Qualquer toque no banco antes do limite derruba o teste com nome claro.

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, Play, ExternalLink, Loader2, Download, Sparkles, Film } from "lucide-react"
-import { sufixoOrg } from "@/lib/org-publica-cliente"
+import { urlComOrg } from "@/lib/org-publica-cliente"
+import { useEmpresaDestino, MarcaEmpresa } from "@/components/publico/EmpresaDestino"
 
 interface Video {
   id: string
@@ -323,6 +324,11 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
 // ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function GaleriaPage() {
+  const destino = useEmpresaDestino()
+  // Dentro da área da empresa (/c/<slug>/galeria), os atalhos levam à área dela;
+  // no link antigo, às páginas de sempre.
+  const naArea = destino.inicio.startsWith("/c/")
+  const nomeEmpresa = destino.estado === "pronto" ? destino.empresa.nome : null
   const [search, setSearch] = useState("")
   const [tipo, setTipo] = useState("")
   const [produtoId, setProdutoId] = useState("")
@@ -340,7 +346,7 @@ export default function GaleriaPage() {
 
   // Buscar produtos para o filtro (público)
   useEffect(() => {
-    fetch(`/api/publico/produtos${sufixoOrg()}`)
+    fetch(urlComOrg("/api/publico/produtos"))
       .then((r) => r.json())
       .then((d) => setProdutos(d.produtos ?? []))
       .catch(() => {})
@@ -361,7 +367,7 @@ export default function GaleriaPage() {
       if (q) params.set("search", q)
       if (t) params.set("tipo", t)
       if (pid) params.set("produtoId", pid)
-      const res = await fetch(`/api/publico/galeria?${params}${sufixoOrg("&")}`)
+      const res = await fetch(urlComOrg(`/api/publico/galeria?${params}`))
       if (!res.ok) {
         throw new Error("Não foi possível carregar a galeria. Tente novamente.")
       }
@@ -435,19 +441,14 @@ export default function GaleriaPage() {
       <header className="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           {/* Logo */}
-          <a href="/sobre" className="flex items-center gap-2 flex-shrink-0">
-            <img src="/logo.png" alt="NuFlow" className="w-8 h-8 rounded-lg" />
-            <span className="font-bold text-lg tracking-tight text-white">NuFlow</span>
-          </a>
+          <MarcaEmpresa destino={destino} />
 
           {/* Nav links */}
           <div className="flex items-center gap-6 text-sm text-zinc-400">
-            <a href="/sobre#como-funciona" className="hover:text-white transition-colors hidden md:block">Como funciona</a>
-            <a href="/sobre#seja-parceiro" className="hover:text-white transition-colors hidden md:block">Seja Parceiro</a>
-            <a href="/galeria" className="text-white font-medium hidden md:block">Galeria</a>
-            <a href="/cadastrar-demanda" className="hover:text-white transition-colors hidden md:block">Abrir Demanda</a>
+            <a href={naArea ? `${destino.inicio}/videomaker` : "/sobre#seja-parceiro"} className="hover:text-white transition-colors hidden md:block">Seja parceiro</a>
+            <a href={naArea ? `${destino.inicio}/pedido` : (destino.estado === "pronto" ? `/cadastrar-demanda?org=${destino.empresa.slug}` : "/cadastrar-demanda")} className="hover:text-white transition-colors hidden md:block">Pedir um vídeo</a>
             <a
-              href="/login"
+              href={naArea ? `${destino.inicio}/entrar` : "/login"}
               className="bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 transition-colors"
             >
               Acessar Sistema
@@ -467,7 +468,7 @@ export default function GaleriaPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-medium mb-6">
             <Sparkles className="w-3.5 h-3.5" />
-            Portfólio de Vídeos NuFlow
+            {nomeEmpresa ? `Portfólio de ${nomeEmpresa}` : "Portfólio de vídeos"}
           </div>
 
           {/* Headline */}

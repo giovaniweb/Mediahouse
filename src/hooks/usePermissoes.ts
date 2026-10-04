@@ -1,5 +1,7 @@
 "use client"
 
+import type { Modulo } from "@/lib/modulos"
+
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
 
@@ -23,7 +25,9 @@ export interface MeData {
   permissoes: Record<string, boolean> & { id: string; usuarioId: string }
   /** Módulos que ESTA empresa tem. Antes eram constantes compiladas no bundle,
    *  iguais para todo mundo — ver src/lib/modulos.ts. */
-  modulos: Record<"growth" | "eventos" | "ideias" | "mensagens", boolean>
+  // Tipo do catálogo, e não a lista escrita à mão: módulo novo (cutflow, 30/09)
+  // entra aqui sozinho, sem o menu deixar de reconhecê-lo.
+  modulos: Record<Modulo, boolean>
 }
 
 export function useMe() {

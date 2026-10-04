@@ -1,15 +1,37 @@
 "use client"
 
-import { useState } from "react"
+import styles from "@/components/public/Recruitment.module.css"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
-import { Film, CheckCircle2, ArrowLeft, Plus, X } from "lucide-react"
+import { CheckCircle2, ArrowLeft, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { sufixoOrg } from "@/lib/org-publica-cliente"
+import { urlComOrg } from "@/lib/org-publica-cliente"
+import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
+import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
 
 const AREAS = ["Casamento", "Eventos Corporativos", "Clipes Musicais", "Documentário", "Publicidade", "Redes Sociais / Reels", "Institucional", "Esportes", "Gastronomia", "Moda & Beauty", "Imóveis", "Jornalismo"]
 
 export default function CadastrarVideomakerdPage() {
+  const destino = useEmpresaDestino()
   const [passo, setPasso] = useState(1)
+  const etapaRef = useRef<HTMLDivElement>(null)
+  // O foco vai para o título só quando a etapa MUDA. Com uma flag de "primeira
+  // vez", o efeito duplo do modo estrito marcava o título já na abertura.
+  const passoAnterior = useRef(passo)
+  useEffect(() => {
+    if (passoAnterior.current === passo) return
+    passoAnterior.current = passo
+    etapaRef.current?.querySelector<HTMLHeadingElement>("h2")?.focus()
+  }, [passo])
+  function avancar() {
+    const campos = etapaRef.current?.querySelectorAll<HTMLInputElement>("input")
+    for (const campo of campos ?? []) {
+      campo.setCustomValidity(campo.required && !campo.value.trim() ? "Preencha este campo." : "")
+      if (!campo.reportValidity()) return
+    }
+    setErro(null)
+    setPasso(p => p + 1)
+  }
   const [enviado, setEnviado] = useState(false)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -50,10 +72,11 @@ export default function CadastrarVideomakerdPage() {
   }
 
   async function enviar() {
+    if (loading) return
     setLoading(true)
     setErro(null)
     try {
-      const res = await fetch(`/api/publico/videomaker${sufixoOrg()}`, {
+      const res = await fetch(urlComOrg("/api/publico/videomaker"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -62,14 +85,10 @@ export default function CadastrarVideomakerdPage() {
           redesSociais: form.redesSociais.filter(Boolean),
         }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        const msgs = Object.values(json.error ?? {}).flat().join(", ")
-        throw new Error(msgs || json.error || "Erro ao enviar")
-      }
+      if (!res.ok) throw new Error(await erroDaResposta(res))
       setEnviado(true)
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro desconhecido")
+      setErro(erroDeEnvio(e))
     } finally {
       setLoading(false)
     }
@@ -77,16 +96,16 @@ export default function CadastrarVideomakerdPage() {
 
   if (enviado) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className={cn(styles.page,"flex items-center justify-center px-6")}>
         <div className="max-w-md text-center">
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-white mb-3">Cadastro enviado!</h2>
           <p className="text-zinc-400 mb-8">
-            Recebemos suas informações e nossa equipe irá analisar em breve. Você receberá um contato via e-mail ou WhatsApp.
+            Recebemos suas informações e nossa equipe irá analisar em breve. Se houver uma oportunidade, a equipe poderá entrar em contato pelo e-mail ou WhatsApp informado.
           </p>
-          <Link href="/sobre" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
+          <Link href={destino.inicio} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
             <ArrowLeft className="w-4 h-4" /> Voltar ao início
           </Link>
         </div>
@@ -95,17 +114,12 @@ export default function CadastrarVideomakerdPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className={styles.page}>
       {/* Nav */}
       <nav className="border-b border-zinc-800">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/sobre" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-              <Film className="w-4 h-4 text-zinc-900" />
-            </div>
-            <span className="font-bold text-white">NuFlow</span>
-          </Link>
-          <Link href="/sobre" className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
+          <MarcaEmpresa destino={destino} />
+          <Link href={destino.inicio} className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar
           </Link>
         </div>
@@ -113,9 +127,10 @@ export default function CadastrarVideomakerdPage() {
 
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Seja um Videomaker Parceiro</h1>
-          <p className="text-zinc-400">Faça parte da nossa rede e receba projetos regularmente</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Seu olhar. Novas possibilidades.</h1>
+          <p className="text-zinc-400">{destino.estado === "pronto" ? `Apresente seu trabalho para ${destino.empresa.nome}. A equipe vai analisar seu perfil e entrar em contato se houver uma oportunidade.` : "Apresente seu trabalho. A empresa responsável pelo link vai analisar seu perfil e entrar em contato se houver uma oportunidade."}</p>
         </div>
+        <AvisoDestino destino={destino} />
 
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
@@ -136,39 +151,39 @@ export default function CadastrarVideomakerdPage() {
 
         {/* Erro */}
         {erro && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6">
+          <div role="alert" className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6">
             {erro}
           </div>
         )}
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+        <div ref={etapaRef} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
           {/* Passo 1 — Empresa */}
           {passo === 1 && (
             <>
-              <h2 className="text-lg font-semibold text-white mb-4">Dados da Empresa / PJ</h2>
+              <h2 tabIndex={-1} className="text-lg font-semibold text-white mb-4">Dados da Empresa / PJ</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">CNPJ / CPF *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.cpfCnpj} onChange={e => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0001-00" />
+                    aria-label="CNPJ ou CPF" required minLength={11} inputMode="numeric" value={form.cpfCnpj} onChange={e => { e.target.setCustomValidity(""); set("cpfCnpj", e.target.value) }} placeholder="00.000.000/0001-00" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Razão Social</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.razaoSocial} onChange={e => set("razaoSocial", e.target.value)} placeholder="Empresa LTDA" />
+                    aria-label="Razão social" value={form.razaoSocial} onChange={e => { e.target.setCustomValidity(""); set("razaoSocial", e.target.value) }} placeholder="Empresa LTDA" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Nome Fantasia</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.nomeFantasia} onChange={e => set("nomeFantasia", e.target.value)} placeholder="Nome Fantasia" />
+                    aria-label="Nome fantasia" value={form.nomeFantasia} onChange={e => { e.target.setCustomValidity(""); set("nomeFantasia", e.target.value) }} placeholder="Nome Fantasia" />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-zinc-400 block mb-1.5">Nome do Representante / Responsável *</label>
+                  <label className="text-xs font-medium text-zinc-400 block mb-1.5">Nome do Representante / Responsável (opcional)</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.representante} onChange={e => set("representante", e.target.value)} placeholder="João da Silva" />
+                    aria-label="Representante" value={form.representante} onChange={e => { e.target.setCustomValidity(""); set("representante", e.target.value) }} placeholder="João da Silva" />
                 </div>
               </div>
-              <button onClick={() => setPasso(2)} disabled={!form.cpfCnpj}
+              <button onClick={avancar}
                 className="w-full bg-white text-zinc-900 font-semibold py-3 rounded-xl mt-2 hover:bg-zinc-100 transition-colors disabled:opacity-40">
                 Continuar →
               </button>
@@ -178,42 +193,42 @@ export default function CadastrarVideomakerdPage() {
           {/* Passo 2 — Contato */}
           {passo === 2 && (
             <>
-              <h2 className="text-lg font-semibold text-white mb-4">Contato & Localização</h2>
+              <h2 tabIndex={-1} className="text-lg font-semibold text-white mb-4">Contato & Localização</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Nome Completo *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.nome} onChange={e => set("nome", e.target.value)} placeholder="João da Silva" />
+                    aria-label="Nome completo" required minLength={2} autoComplete="name" value={form.nome} onChange={e => { e.target.setCustomValidity(""); set("nome", e.target.value) }} placeholder="João da Silva" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">E-mail *</label>
                   <input type="email" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.email} onChange={e => set("email", e.target.value)} placeholder="joao@email.com" />
+                    aria-label="E-mail" required autoComplete="email" value={form.email} onChange={e => { e.target.setCustomValidity(""); set("email", e.target.value) }} placeholder="joao@email.com" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">WhatsApp *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.telefone} onChange={e => set("telefone", e.target.value)} placeholder="(11) 99999-9999" />
+                    aria-label="WhatsApp" required minLength={10} inputMode="tel" autoComplete="tel" value={form.telefone} onChange={e => { e.target.setCustomValidity(""); set("telefone", e.target.value) }} placeholder="(11) 99999-9999" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Cidade *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.cidade} onChange={e => set("cidade", e.target.value)} placeholder="São Paulo" />
+                    aria-label="Cidade" required minLength={2} autoComplete="address-level2" value={form.cidade} onChange={e => { e.target.setCustomValidity(""); set("cidade", e.target.value) }} placeholder="São Paulo" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Estado *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.estado} onChange={e => set("estado", e.target.value)} placeholder="SP" maxLength={2} />
+                    aria-label="Estado" required minLength={2} autoComplete="address-level1" value={form.estado} onChange={e => { e.target.setCustomValidity(""); set("estado", e.target.value) }} placeholder="SP" maxLength={2} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Endereço Completo</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.endereco} onChange={e => set("endereco", e.target.value)} placeholder="Rua das Flores, 123 — Bairro" />
+                    aria-label="Endereço" value={form.endereco} onChange={e => { e.target.setCustomValidity(""); set("endereco", e.target.value) }} placeholder="Rua das Flores, 123 — Bairro" />
                 </div>
               </div>
               <div className="flex gap-3 mt-2">
                 <button onClick={() => setPasso(1)} className="flex-1 border border-zinc-700 text-zinc-300 font-medium py-3 rounded-xl hover:border-zinc-500 transition-colors">← Voltar</button>
-                <button onClick={() => setPasso(3)} disabled={!form.nome || !form.email || !form.telefone || !form.cidade}
+                <button onClick={avancar}
                   className="flex-1 bg-white text-zinc-900 font-semibold py-3 rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-40">
                   Continuar →
                 </button>
@@ -224,22 +239,22 @@ export default function CadastrarVideomakerdPage() {
           {/* Passo 3 — Financeiro & Portfolio */}
           {passo === 3 && (
             <>
-              <h2 className="text-lg font-semibold text-white mb-4">Financeiro & Portfólio</h2>
+              <h2 tabIndex={-1} className="text-lg font-semibold text-white mb-4">Financeiro & Portfólio</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-medium text-zinc-400 block mb-1.5">Chave PIX *</label>
+                  <label className="text-xs font-medium text-zinc-400 block mb-1.5">Chave PIX (opcional)</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.chavePix} onChange={e => set("chavePix", e.target.value)} placeholder="CPF, e-mail ou chave aleatória" />
+                    aria-label="Chave PIX" value={form.chavePix} onChange={e => { e.target.setCustomValidity(""); set("chavePix", e.target.value) }} placeholder="CPF, e-mail ou chave aleatória" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Valor da Diária (R$)</label>
                   <input type="number" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.valorDiaria} onChange={e => set("valorDiaria", e.target.value)} placeholder="800" />
+                    aria-label="Valor da diária" value={form.valorDiaria} onChange={e => { e.target.setCustomValidity(""); set("valorDiaria", e.target.value) }} placeholder="800" />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Link do Portfólio</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    value={form.portfolio} onChange={e => set("portfolio", e.target.value)} placeholder="https://meusite.com ou Vimeo/YouTube" />
+                    aria-label="Portfólio" value={form.portfolio} onChange={e => { e.target.setCustomValidity(""); set("portfolio", e.target.value) }} placeholder="https://meusite.com ou Vimeo/YouTube" />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-2">Redes Sociais</label>
@@ -265,7 +280,7 @@ export default function CadastrarVideomakerdPage() {
                 <label className="text-xs font-medium text-zinc-400 block mb-2">Áreas de Atuação</label>
                 <div className="flex flex-wrap gap-2">
                   {AREAS.map((a) => (
-                    <button key={a} onClick={() => toggleArea(a)}
+                    <button key={a} aria-pressed={form.areasAtuacao.includes(a)} onClick={() => toggleArea(a)}
                       className={cn("text-xs px-3 py-1.5 rounded-full border transition-colors",
                         form.areasAtuacao.includes(a)
                           ? "bg-white text-zinc-900 border-white"
@@ -280,13 +295,13 @@ export default function CadastrarVideomakerdPage() {
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1.5">Observações adicionais</label>
                 <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10 resize-none"
-                  rows={3} value={form.observacoes} onChange={e => set("observacoes", e.target.value)}
+                  rows={3} aria-label="Observações" value={form.observacoes} onChange={e => { e.target.setCustomValidity(""); set("observacoes", e.target.value) }}
                   placeholder="Equipamentos, experiências, certificações, etc." />
               </div>
 
               <div className="flex gap-3 mt-2">
                 <button onClick={() => setPasso(2)} className="flex-1 border border-zinc-700 text-zinc-300 font-medium py-3 rounded-xl hover:border-zinc-500 transition-colors">← Voltar</button>
-                <button onClick={enviar} disabled={loading || !form.chavePix}
+                <button onClick={enviar} disabled={loading}
                   className="flex-1 bg-white text-zinc-900 font-semibold py-3 rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-40">
                   {loading ? "Enviando..." : "Enviar Cadastro ✓"}
                 </button>

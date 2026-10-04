@@ -266,7 +266,10 @@ describe("fila do Social (§31)", () => {
 // RESPONSÁVEL ATUAL, PRÓXIMA AÇÃO E RISCO — o que o card do quadro mostra
 // ─────────────────────────────────────────────────────────────────────────────
 import {
+  ABA_DA_ACAO,
+  ABA_LABEL,
   PROXIMA_ACAO,
+  PROXIMA_ACAO_GROWTH,
   nivelDeRisco,
   proximaAcao,
   responsavelAtual,
@@ -356,6 +359,62 @@ describe("próxima ação (§32)", () => {
     expect(
       proximaAcao({ statusInterno: "postagem_pendente", linkPostagem: "https://ig/p/1" })
     ).toBe("Publicado")
+  })
+
+  // O vocabulário do Growth estava escrito no detalhe e em Meu trabalho, e as
+  // duas cópias divergiam em `fila_edicao` e `editor_atribuido`.
+  it("Growth tem uma frase só para o mesmo status, em qualquer tela", () => {
+    expect(proximaAcao({ statusInterno: "fila_edicao", area: "design" })).toBe("Iniciar criação")
+    expect(proximaAcao({ statusInterno: "editor_atribuido", area: "design" })).toBe("Iniciar criação")
+    expect(proximaAcao({ statusInterno: "editando", area: "design" })).toBe("Preparar criativo para revisão")
+    expect(proximaAcao({ statusInterno: "videomaker_recusou", area: "design" })).toBe("Definir novo responsável")
+  })
+
+  it("só a área design troca o vocabulário", () => {
+    expect(proximaAcao({ statusInterno: "fila_edicao", area: "DESIGN" })).toBe("Iniciar criação")
+    expect(proximaAcao({ statusInterno: "fila_edicao", area: "audiovisual" })).toBe("Na fila de edição")
+    expect(proximaAcao({ statusInterno: "fila_edicao", area: null })).toBe("Na fila de edição")
+    expect(proximaAcao({ statusInterno: "fila_edicao", area: "" })).toBe("Na fila de edição")
+    expect(proximaAcao({ statusInterno: "fila_edicao" })).toBe("Na fila de edição")
+  })
+
+  it("status sem frase própria de Growth usa a geral, e publicado continua vencendo", () => {
+    expect(proximaAcao({ statusInterno: "revisao_pendente", area: "design" })).toBe("Aguardando aprovação")
+    expect(
+      proximaAcao({ statusInterno: "postagem_pendente", area: "design", linkPostagem: "https://ig/p/1" })
+    ).toBe("Publicado")
+  })
+
+  it("as frases de Growth só usam status que existem", () => {
+    for (const s of Object.keys(PROXIMA_ACAO_GROWTH)) expect(TODOS).toContain(s)
+  })
+})
+
+describe("aba onde se age (detalhe da demanda)", () => {
+  it("a tabela cobre exatamente o enum", () => {
+    expect(Object.keys(ABA_DA_ACAO).sort()).toEqual([...TODOS].sort())
+  })
+
+  it("toda aba apontada existe no detalhe", () => {
+    for (const s of TODOS) {
+      const aba = ABA_DA_ACAO[s]
+      if (aba !== null) expect(Object.keys(ABA_LABEL), `${s} → ${aba}`).toContain(aba)
+    }
+  })
+
+  it("quem edita vai para Entrega; quem distribui, para Equipe; a entrada, para Pedido", () => {
+    expect(ABA_DA_ACAO.editando).toBe("entrega")
+    expect(ABA_DA_ACAO.ajuste_solicitado).toBe("entrega")
+    expect(ABA_DA_ACAO.brutos_enviados).toBe("equipe")
+    expect(ABA_DA_ACAO.aguardando_triagem).toBe("equipe")
+    expect(ABA_DA_ACAO.aguardando_aprovacao_interna).toBe("pedido")
+    expect(ABA_DA_ACAO.impedimento).toBe("conversa")
+  })
+
+  it("sem ação a fazer não há aba para onde mandar", () => {
+    for (const s of ["postado", "entregue_cliente", "expirado", "encerrado"] as const) {
+      expect(ABA_DA_ACAO[s]).toBeNull()
+    }
   })
 })
 

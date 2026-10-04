@@ -77,8 +77,10 @@ export default function RelatorioExecutivoMesPage() {
     <div className="min-h-screen bg-[#0a1228] text-zinc-100">
       <style>{`@media print { body { background:#0a1228 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .no-print { display:none !important } }`}</style>
 
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="flex items-start justify-between gap-4 mb-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+        {/* No celular os controles descem para baixo do título: lado a lado, a
+            página ficava com 552 px de largura em tela de 390. */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="NuFlow" className="w-9 h-9 rounded-lg" />
             <div>
@@ -86,7 +88,7 @@ export default function RelatorioExecutivoMesPage() {
               <p className="text-sm text-blue-300/80">{area === "design" ? "Growth (Artes)" : "Audiovisual"} · {mesLabel}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 no-print">
+          <div className="flex flex-wrap items-center gap-2 no-print">
             <div className="flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5">
               <button onClick={() => trocarArea("audiovisual")} className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${area === "audiovisual" ? "bg-blue-600 text-white" : "text-zinc-400"}`}><Film className="w-3.5 h-3.5" /> Audiovisual</button>
               <button onClick={() => trocarArea("design")} className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-md ${area === "design" ? "bg-blue-600 text-white" : "text-zinc-400"}`}><Palette className="w-3.5 h-3.5" /> Growth</button>

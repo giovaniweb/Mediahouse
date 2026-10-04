@@ -1,0 +1,27 @@
+.page {padding:32px;flex:1;min-width:0;overflow:auto;background:#101115;color:#eeeef5;font-family:Montserrat,sans-serif;}
+.eyebrow {font-size:11px;letter-spacing:.18em;color:#a5a7bb;margin-bottom:14px;}
+.page h1 {font-size:34px;font-weight:500;letter-spacing:-.04em;}
+.subtitle {color:#a5a7bb;margin:10px 0 28px;font-size:15px;}
+.filters {display:flex;gap:10px;flex-wrap:wrap;}
+.filters button,.retry {padding:10px 16px;min-height:44px;border:1px solid #303342;background:#191b23;border-radius:10px;color:#a5a7bb;}
+.filters button[aria-pressed=true] {color:#bca2fa;background:#ab86ff20;border-color:#8265b2;}
+.hint {color:#a5a7bb;font-size:12px;line-height:1.6;margin:16px 0 24px;}
+.panel {background:#191b23;border:1px solid #303342;border-radius:18px;padding:8px 26px;}
+.panel > [role],.empty {padding:24px 0;}
+.row {display:flex;align-items:center;gap:20px;padding:24px 0;border-bottom:1px solid #303342;}
+.row:last-child {border-bottom:0;}
+.row > div {flex:1;min-width:0;}
+.row h2 {font-size:19px;font-weight:500;overflow-wrap:anywhere;}
+.action {color:#bca2fa;font-size:14px;margin:8px 0;}
+.meta {color:#a5a7bb;font-size:12px;line-height:1.7;overflow-wrap:anywhere;}
+.stage {font-size:12px;border:1px solid #ab86ff30;color:#bca2fa;background:#ab86ff20;padding:5px 8px;border-radius:6px;white-space:nowrap;}
+.stage[data-stage=producao]{color:#9dbbff;background:#90afff20;}.stage[data-stage=aprovacao]{color:#ecc687;background:#e5b46320;}
+.late {color:#ee9aac;}.row:hover h2 {color:#c9b4ff;}
+.empty h2 {font-size:19px;font-weight:500;}.empty p {color:#a5a7bb;margin-top:10px;font-size:14px;line-height:1.8;}
+.retry {display:flex;align-items:center;gap:8px;margin-top:16px;}
+.page :is(a,button):focus-visible{outline:2px solid #bca2fa;outline-offset:4px;}
+@media(max-width:640px){.page{padding:24px 16px;}.page h1{font-size:28px;}.panel{padding:0 18px;}.row{flex-wrap:wrap;gap:12px;}.row>div{flex-basis:100%;}.row h2{font-size:17px;}.row>svg{margin-left:auto;}}
+.sectionTitle {font-size:23px;font-weight:500;padding-top:22px;}
+.panel + .panel {margin-top:24px;}
+.more {display:inline-flex;align-items:center;min-height:44px;margin:12px 0;color:#bca2fa;font-size:14px;}
+.row h3 {font-size:17px;font-weight:500;overflow-wrap:anywhere;margin-bottom:6px;}

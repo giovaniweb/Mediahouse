@@ -1,0 +1,8 @@
+.filters { flex-shrink: 0; }
+.toggle { display: none; }
+@media (max-width: 767px) {
+  .toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; color: #d8d2e7; font-size: 13px; border-bottom: 1px solid #303341; }
+  .toggle:focus-visible { outline: 2px solid #b39aff; outline-offset: -3px; }
+  .closed { display: none; }
+  .open > div { max-height: 35dvh; overflow-y: auto; }
+}

@@ -12,7 +12,6 @@ import { PageIntro } from "@/components/layout/PageIntro"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { csvDeInteressados, linkWhatsapp } from "@/lib/interessados"
-import "@/components/layout/Montserrat.css"
 import styles from "./Interessados.module.css"
 
 export type Interessado = { id: string; nome: string; email: string; telefone: string; empresa: string; mensagem: string | null; origem: string | null; campanha: string | null; createdAt: string }

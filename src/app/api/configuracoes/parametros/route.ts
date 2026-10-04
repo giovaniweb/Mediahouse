@@ -50,12 +50,15 @@ const SEED_PARAMETROS = [
 
 // GET /api/configuracoes/parametros?grupo=departamentos
 export async function GET(req: NextRequest) {
-  const acesso = await requireAcesso()
-  if (acesso instanceof NextResponse) return acesso
-  const { organizacaoId } = acesso
-
   const { searchParams } = new URL(req.url)
   const grupo = searchParams.get("grupo")
+  // O gerenciador de Configurações lista também os desativados, para poder
+  // reativá-los; sem isto, desativar um tipo era sem volta pela tela. Ver os
+  // inativos é gerenciar: pede a mesma permissão do PATCH.
+  const incluirInativos = searchParams.get("incluirInativos") === "1"
+  const acesso = await requireAcesso(incluirInativos ? "gerenciarConfig" : undefined)
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
   // Seed se estiver vazio (por organização)
   const count = await prisma.configParametro.count({ where: { organizacaoId } })
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
   }
 
   const parametros = await prisma.configParametro.findMany({
-    where: { organizacaoId, ...(grupo && { grupo }), ativo: true },
+    where: { organizacaoId, ...(grupo && { grupo }), ...(incluirInativos ? {} : { ativo: true }) },
     orderBy: [{ grupo: "asc" }, { ordem: "asc" }],
   })
 

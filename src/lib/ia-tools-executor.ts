@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { listarDepartamentos } from "@/lib/departamentos"
-import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
 import { inicioDoDia, prazoVencido } from "@/lib/datas"
 
 const auditoriaFerramenta = new AsyncLocalStorage<{ ator: AtorAuditoria; correlationId: string }>()

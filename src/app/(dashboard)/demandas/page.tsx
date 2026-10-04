@@ -4,11 +4,14 @@ import { useState, useCallback, useEffect, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
+import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { normalizarVisao } from "@/components/demandas/tipos-visao"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
@@ -47,6 +50,7 @@ function DemandasKanban() {
 
   // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
   // prefere uma lista abre direto na Lista na próxima vez, sem reconfigurar.
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>("todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-audiovisual"
@@ -279,26 +283,29 @@ function DemandasKanban() {
 
   return (
     <>
-      <div className="flex items-center gap-3 px-6 py-2 text-sm">
-        <button disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p-1)}>Anterior</button>
-        <span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span>
-        <button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p+1)}>Próxima</button>
-        <a href="/historico" className="underline">Histórico completo</a>
-      </div>
-      {demandas.some((d: {statusVisivel:string;finalizadaEm?:string|null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) && <p className="px-6 text-xs text-amber-400">Há concluídos legados sem data nesta página. Eles continuam visíveis até revisão; nenhuma data foi inventada.</p>}
       <Header
         title="Demandas"
         actions={
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowNovaDemandaModal(true)}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className={actionStyles.newDemand}
             >
               <Plus className="w-4 h-4" /> Nova Demanda
             </button>
           </div>
         }
       />
+
+      {/* Paginação da fila (onda D): vinha acima do cabeçalho, sem estilo. Os botões
+          só aparecem quando há mais de uma página (100 por página). */}
+      <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-6 pt-3 text-sm text-zinc-400">
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p-1)}>Anterior</button>}
+        <span>{(data?.total ?? 0) > 100 ? `Página ${paginaFila} · ` : ""}{data?.total ?? 0} {(data?.total ?? 0) === 1 ? "demanda" : "demandas"} na fila</span>
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p+1)}>Próxima</button>}
+        <a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
+        {demandas.some((d: {statusVisivel:string;finalizadaEm?:string|null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) && <p className="w-full text-xs text-amber-400">Há concluídos antigos sem data nesta página. Eles continuam visíveis até a revisão; nenhuma data foi inventada.</p>}
+      </nav>
 
       {/* Toast de feedback */}
       {toast && (
@@ -312,6 +319,14 @@ function DemandasKanban() {
       )}
 
       {/* Filtros */}
+
+
+      {/* Números + recortes + seletor de visão */}
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
+          area="audiovisual"
+          filters={(
+      <BoardFilters>
       <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -391,10 +406,8 @@ function DemandasKanban() {
         <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
-
-      {/* Números + recortes + seletor de visão */}
-      <div className="px-4 pt-1 pb-3">
-        <BarraVisao
+      </BoardFilters>
+          )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
@@ -406,16 +419,16 @@ function DemandasKanban() {
 
       {/* A visão escolhida. Kanban precisa de altura ancorada na viewport para a
           barra de rolagem ficar no rodapé; a lista rola com a página. */}
+      <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       {visao === "kanban" ? (
-        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+        <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
         </div>
       ) : (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
+          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
         </div>
       )}
-
 
       {/* Modal Nova Demanda */}
       <NovaDemandaModal

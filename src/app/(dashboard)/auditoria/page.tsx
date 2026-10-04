@@ -11,6 +11,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
 import { LABEL_STATUS } from "@/components/demandas/tipos-visao"
@@ -26,6 +27,8 @@ type Registro = {
   createdAt: string
   usuario: { id: string; nome: string } | null
   demanda: { id: string; codigo: string; titulo: string } | null
+  /** Só nas ações administrativas: recurso e id, para conferir ou buscar. */
+  referencia?: string
 }
 
 const inputCls =
@@ -33,6 +36,10 @@ const inputCls =
 
 // Cada origem do histórico ganha uma cor: o olho separa o que foi pessoa do que
 // foi automação sem precisar ler.
+const NOME_ORIGEM: Record<string, string> = {
+  manual: "Pessoa", kanban: "Quadro", automacao: "Automação", ia: "IA", whatsapp: "WhatsApp",
+}
+
 const COR_ORIGEM: Record<string, string> = {
   manual: "bg-zinc-700/60 text-zinc-300",
   kanban: "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30",
@@ -84,6 +91,7 @@ export default function AuditoriaPage() {
   return (
     <>
       <Header title="Registro de Auditoria" />
+      <PageIntro eyebrow="SISTEMA / AUDITORIA" title="Quem fez o quê, e quando." description="Ações administrativas e automações, filtradas por período, pessoa e tipo." />
 
       <div className="p-6 space-y-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -183,10 +191,13 @@ export default function AuditoriaPage() {
                           </Link>
                         ) : <span className="text-zinc-600">—</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-zinc-300">{descrever(r)}</td>
+                      <td className="px-3 py-2.5 text-zinc-300">
+                        {descrever(r)}
+                        {r.referencia && <span className="block mt-0.5 font-mono text-[11px] text-zinc-500 truncate" title={r.referencia}>{r.referencia}</span>}
+                      </td>
                       <td className="px-3 py-2.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${COR_ORIGEM[r.origem] ?? COR_ORIGEM.manual}`}>
-                          {r.origem}
+                          {NOME_ORIGEM[r.origem] ?? r.origem}
                         </span>
                       </td>
                     </tr>

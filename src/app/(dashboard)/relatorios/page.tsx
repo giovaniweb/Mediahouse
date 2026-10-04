@@ -1,5 +1,7 @@
 "use client"
 
+import { ManagementSurface, ManagementIntro } from "@/components/layout/ManagementSurface"
+
 import { ConsumoIA } from "@/components/automacoes/ConsumoIA"
 import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
 import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
@@ -23,7 +25,7 @@ import {
   Calendar,
   Activity,
   ArrowUpRight,
-  Printer,
+  Printer, Pencil, X,
 } from "lucide-react"
 import { hojeEmSaoPaulo, somarMeses } from "@/lib/datas"
 import { fetcher } from "@/lib/fetcher"
@@ -239,7 +241,7 @@ function EditarProducaoManualModal({ area, onClose, onSaved }: { area: string; o
             <div key={i} className="flex items-center gap-2">
               <input value={l.categoria} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, categoria: e.target.value } : x))} placeholder={placeholder} className={inputCls + " flex-1"} />
               <input type="number" value={l.quantidade} onChange={(e) => setLinhas((ls) => ls.map((x, idx) => idx === i ? { ...x, quantidade: e.target.value } : x))} placeholder="0" className={inputCls + " w-20"} />
-              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} className="text-zinc-600 hover:text-red-400 p-1">✕</button>
+              <button onClick={() => setLinhas((ls) => ls.filter((_, idx) => idx !== i))} aria-label="Remover linha" className="text-zinc-600 hover:text-red-400 p-1"><X className="w-4 h-4" aria-hidden="true" /></button>
             </div>
           ))}
           <button onClick={() => setLinhas((ls) => [...ls, { categoria: "", quantidade: "" }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar</button>
@@ -439,7 +441,7 @@ export default function RelatoriosPage() {
   const m = metricas
 
   return (
-    <>
+    <ManagementSurface>
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -450,15 +452,19 @@ export default function RelatoriosPage() {
         }
       `}</style>
       <Header title="Relatórios" />
+      <ManagementIntro title="Relatórios" description="Acompanhe as entregas e os resultados, um recorte de cada vez." />
       <main className="flex-1 p-6 space-y-6">
-        <label className="flex items-start gap-2 text-sm">
+        <details className="rounded-xl border border-zinc-800 p-4">
+          <summary className="cursor-pointer text-sm text-zinc-400">Análise opcional com IA</summary>
+        <label className="flex items-start gap-2 text-sm mt-4">
           <input type="checkbox" disabled={gerando !== null} checked={analiseIA} onChange={e => setAnaliseIA(e.target.checked)} className="mt-1" />
           <span>Incluir análise de IA no próximo relatório <span className="block text-zinc-400">Opcional, usa o saldo da empresa. Análises idênticas de até 15 minutos são reaproveitadas. Os indicadores funcionam sem IA.</span></span>
         </label>
         <ConsumoIA />
+        </details>
 
         {/* ── Abas ───────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
+        <div data-management-tabs aria-label="Visões de relatórios" className="flex items-center gap-1 bg-zinc-800/60 rounded-xl p-1 w-fit">
           {[
             { key: "resultados", label: "Resultados", icon: BarChart2 },
             { key: "realtime", label: "Tempo Real", icon: Activity },
@@ -467,6 +473,7 @@ export default function RelatoriosPage() {
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              aria-pressed={abaAtiva === key}
               onClick={() => setAbaAtiva(key as typeof abaAtiva)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 abaAtiva === key
@@ -487,7 +494,7 @@ export default function RelatoriosPage() {
             {/* Controles (área + período + imprimir) */}
             <div className="flex items-center justify-between gap-3 flex-wrap print:hidden">
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Growth"], ["eventos", "🎟️ Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
+                {([["audiovisual", "Audiovisual"], ["design", "Growth"], ["eventos", "Eventos"]] as const).filter(([a]) => a === "audiovisual" || (a === "design" && !!me?.modulos?.growth) || (a === "eventos" && !!me?.modulos?.eventos)).map(([a, label]) => (
                   <button key={a} onClick={() => { setAreaRes(a); if (a !== "eventos") setAreaRel(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${areaRes === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
                 ))}
@@ -554,8 +561,8 @@ export default function RelatoriosPage() {
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 print:border-zinc-300 print:bg-white">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="text-lg font-bold text-white print:text-black">Produção do período</h3>
-                        <button onClick={() => setShowEditarProd(true)} className="text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
-                          ✏️ Editar números
+                        <button onClick={() => setShowEditarProd(true)} className="inline-flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg print:hidden">
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />Editar números
                         </button>
                       </div>
                       <p className="text-xs text-zinc-500 mb-4 print:text-zinc-600">Fontes separadas: lançamentos mensais podem repetir entregas do sistema. Não somamos sem conciliação.</p>
@@ -657,7 +664,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-zinc-500 font-medium">Área:</span>
               <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5 gap-0.5">
-                {([["audiovisual", "🎬 Audiovisual"], ["design", "🎨 Design"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
+                {([["audiovisual", "Audiovisual"], ["design", "Growth"]] as const).filter(([a]) => a === "audiovisual" || !!me?.modulos?.growth).map(([a, label]) => (
                   <button key={a} onClick={() => { setAreaRel(a); setAreaRes(a) }}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${areaRel === a ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
                     {label}
@@ -721,7 +728,7 @@ export default function RelatoriosPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <a href="/custos" className="p-4 border border-zinc-700 rounded-xl text-sm">Custos reais do setor →<p className="text-xs text-zinc-400 mt-2">Valores registrados por competência e pendências de conferência.</p></a>
+              <a data-finance-link href="/custos" className="p-4 border border-zinc-700 rounded-xl text-sm">Custos reais do setor →<p className="text-xs text-zinc-400 mt-2">Valores registrados por competência e pendências de conferência.</p></a>
               <MetricCard icon={Users} label="Videomakers" value={`${m?.videomakers.ativos ?? 0}/${m?.videomakers.total ?? 0}`} sub="Ativos / Total" cor="purple" />
               <MetricCard icon={Zap} label="Urgentes" value={fmtNum(m?.demandas.urgentes ?? 0)} sub={`${m?.demandas.aguardandoAprovacao ?? 0} aguardando aprovação`} cor={m && m.demandas.urgentes > 0 ? "amber" : "zinc"} />
             </div>
@@ -908,6 +915,6 @@ export default function RelatoriosPage() {
         )}
 
       </main>
-    </>
+    </ManagementSurface>
   )
 }

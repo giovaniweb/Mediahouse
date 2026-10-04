@@ -3,12 +3,16 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
-  Film, Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
-  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles,
+  Video, Camera, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight,
+  Send, Loader2, MapPin, Calendar, Clock, Link2, User, Mail, Phone, AlertTriangle, Check, Sparkles, Save,
 } from "lucide-react"
 import { AreaReferencia } from "@/components/publico/AreaReferencia"
+// A mesma casca do cadastro de videomaker: fonte, cores e uma coluna no celular.
+import superficie from "@/components/public/Recruitment.module.css"
 import { formatarBR } from "@/lib/datas"
-import { sufixoOrg } from "@/lib/org-publica-cliente"
+import { slugDaPagina, urlComOrg } from "@/lib/org-publica-cliente"
+import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
+import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
 
 /* ═══════════════════════════════════════════════════════════════════════
    STYLES
@@ -47,6 +51,12 @@ function Field({ label, children, error, hint, required }: {
    ═══════════════════════════════════════════════════════════════════════ */
 
 const DRAFT_KEY = "nuflow-demanda-draft"
+// Um rascunho por empresa: com a chave única, o pedido começado para uma empresa
+// reaparecia no formulário de outra. O link sem slug mantém a chave antiga.
+function chaveRascunho() {
+  const slug = slugDaPagina()
+  return slug ? `${DRAFT_KEY}:${slug}` : DRAFT_KEY
+}
 
 function formatDraftDate(iso: string): string {
   try {
@@ -63,6 +73,7 @@ function formatDraftDate(iso: string): string {
    ═══════════════════════════════════════════════════════════════════════ */
 
 export default function CadastrarDemandaPage() {
+  const destino = useEmpresaDestino()
   const [loading, setLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
   const [codigoGerado, setCodigoGerado] = useState("")
@@ -116,7 +127,7 @@ export default function CadastrarDemandaPage() {
     setLocalEvento(""); setDataEvento(""); setHoraEvento("")
     setClienteNome(""); setClienteTelefone(""); setClienteEmail("")
     setStep(0); setErrors({}); setDraftInfo(null); setDraftDismissed(false)
-    if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
+    if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho())
   }
 
   // Vocabulário de tipos — o mesmo que a equipe gerencia em Configurações →
@@ -126,17 +137,21 @@ export default function CadastrarDemandaPage() {
   const [tiposCriativo, setTiposCriativo] = useState<{ valor: string; label: string }[]>([])
 
   useEffect(() => {
-    fetch(`/api/publico/parametros?grupo=tipos_video${sufixoOrg()}`)
+    fetch(urlComOrg("/api/publico/parametros?grupo=tipos_video"))
       .then(r => r.json()).then(d => setTiposVideo(d.parametros ?? [])).catch(() => {})
-    fetch(`/api/publico/parametros?grupo=tipos_criativo${sufixoOrg()}`)
+    fetch(urlComOrg("/api/publico/parametros?grupo=tipos_criativo"))
       .then(r => r.json()).then(d => setTiposCriativo(d.parametros ?? [])).catch(() => {})
   }, [])
 
-  // Restaura rascunho salvo ao montar (apenas uma vez)
+  // Restaura rascunho salvo ao montar (apenas uma vez). Antes dele, o `?tipo=`
+  // do link — "Agendar gravação" da área da empresa chega com a cobertura já
+  // escolhida; um rascunho salvo continua mandando.
   useEffect(() => {
     if (typeof window === "undefined") return
     try {
-      const raw = localStorage.getItem(DRAFT_KEY)
+      const tipoDoLink = new URLSearchParams(window.location.search).get("tipo")
+      if (tipoDoLink === "video" || tipoDoLink === "conteudo" || tipoDoLink === "cobertura") setTipo(tipoDoLink)
+      const raw = localStorage.getItem(chaveRascunho())
       if (!raw) return
       const saved = JSON.parse(raw)
       if (saved.nomeCliente) setNomeCliente(saved.nomeCliente)
@@ -177,9 +192,10 @@ export default function CadastrarDemandaPage() {
       step,
       _savedAt: savedAt,
     }
+    // Sem setDraftInfo aqui: o aviso "Rascunho restaurado" é só para o que veio
+    // de uma visita anterior. Antes ele aparecia na primeira letra digitada.
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
-      setDraftInfo({ savedAt })
+      localStorage.setItem(chaveRascunho(), JSON.stringify(draft))
     } catch { /* ignora erros de quota */ }
   }, [
     enviado, nomeCliente, email, telefone, empresa, tipo,
@@ -255,18 +271,13 @@ export default function CadastrarDemandaPage() {
         clienteFinalTelefone: clienteTelefone || undefined,
         clienteFinalEmail: clienteEmail || undefined,
       }
-      const res = await fetch(`/api/publico/demanda${sufixoOrg()}`, {
+      const res = await fetch(urlComOrg("/api/publico/demanda"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
+      if (!res.ok) throw new Error(await erroDaResposta(res))
       const json = await res.json()
-      if (!res.ok) {
-        const msgs = typeof json.error === "object"
-          ? Object.values(json.error).flat().join(", ")
-          : json.error
-        throw new Error(msgs || "Erro ao enviar")
-      }
       setCodigoGerado(json.codigo)
 
       // Anexos sobem depois: o upload é por demandaId e a demanda acabou de
@@ -291,10 +302,10 @@ export default function CadastrarDemandaPage() {
         }
       }
 
-      if (typeof window !== "undefined") localStorage.removeItem(DRAFT_KEY)
+      if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho())
       setEnviado(true)
     } catch (err: unknown) {
-      setErro(err instanceof Error ? err.message : "Erro desconhecido")
+      setErro(erroDeEnvio(err))
     } finally {
       setLoading(false)
     }
@@ -306,7 +317,7 @@ export default function CadastrarDemandaPage() {
 
   if (enviado) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-6">
+      <div className={cn(superficie.page, "flex items-center justify-center px-6")}>
         <div className="max-w-md text-center">
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-white" />
@@ -322,7 +333,7 @@ export default function CadastrarDemandaPage() {
           <p className="text-zinc-400 mb-6">
             Nossa equipe irá analisar sua solicitação e entrar em contato em até 24 horas pelo WhatsApp informado.
           </p>
-          <Link href="/sobre" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
+          <Link href={destino.inicio} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
             <ArrowLeft className="w-4 h-4" /> Voltar ao início
           </Link>
         </div>
@@ -335,17 +346,12 @@ export default function CadastrarDemandaPage() {
      ═══════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className={superficie.page}>
       {/* Nav */}
       <nav className="border-b border-zinc-800">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/sobre" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-              <Film className="w-4 h-4 text-zinc-900" />
-            </div>
-            <span className="font-bold text-white">NuFlow</span>
-          </Link>
-          <Link href="/sobre" className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
+          <MarcaEmpresa destino={destino} />
+          <Link href={destino.inicio} className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar
           </Link>
         </div>
@@ -354,9 +360,10 @@ export default function CadastrarDemandaPage() {
       <div className="max-w-2xl mx-auto px-6 py-10">
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Solicitar Projeto de Vídeo</h1>
-          <p className="text-zinc-400 text-sm">Preencha os dados abaixo e nossa equipe entrará em contato</p>
+          <h1 className="text-2xl font-bold text-white mb-2">{tipo === "cobertura" ? "Agendar gravação ou entrega" : "Pedir um vídeo ou conteúdo"}</h1>
+          <p className="text-zinc-400 text-sm">{destino.estado === "pronto" ? `Preencha os dados abaixo. O pedido vai direto para ${destino.empresa.nome}.` : "Preencha os dados abaixo e a equipe entra em contato."}</p>
         </div>
+        <AvisoDestino destino={destino} />
 
         {/* Progress Steps */}
         <div className="flex items-center gap-2 mb-8 justify-center">
@@ -388,7 +395,7 @@ export default function CadastrarDemandaPage() {
         {draftInfo && !draftDismissed && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-6 flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
-              <span className="text-amber-400 mt-0.5 shrink-0">💾</span>
+              <Save className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
               <div>
                 <p className="text-sm font-medium text-amber-300">Rascunho restaurado</p>
                 <p className="text-xs text-amber-200/70 mt-0.5">
@@ -407,8 +414,8 @@ export default function CadastrarDemandaPage() {
         )}
 
         {erro && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {erro}
+          <div role="alert" className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> {erro}
           </div>
         )}
 

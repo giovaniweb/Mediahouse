@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import styles from "@/components/layout/TeamSurface.module.css"
+import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { Header } from "@/components/layout/Header"
@@ -34,6 +35,7 @@ interface Editor {
   estado: string
   telefone: string
   email: string
+  _count?: { avaliacoes?: number }
   avaliacao: number
   status: keyof typeof statusConfig
   areasAtuacao: string[]
@@ -48,7 +50,7 @@ export default function EquipePage() {
   const [showForm, setShowForm] = useState(false)
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
   const [busca, setBusca] = useState("")
-  const { data, mutate } = useSWR("/api/editores", fetcher)
+  const { data, error, isLoading, isValidating, mutate } = useSWR("/api/editores", fetcher)
   const editores: Editor[] = data?.editores ?? []
 
   const lista = editores.filter((ed) => {
@@ -91,12 +93,26 @@ export default function EquipePage() {
           </button>
         }
       />
-      <main className="flex-1 p-6">
+      <main className={styles.page}>
+        <p className={styles.eyebrow}>AUDIOVISUAL / EQUIPE INTERNA</p>
+        <h1 className={styles.title}>Pessoas, talento e capacidade.</h1>
+        <p className={styles.subtitle}>Veja quem está na equipe e a distribuição dos trabalhos em andamento.</p>
+        {error ? (
+          <div role="alert" className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
+            <p>Não foi possível carregar a equipe.</p>
+            <button disabled={isValidating} onClick={() => mutate()} className="mt-3 px-4 rounded-lg border border-purple-400 text-purple-300">
+              {isValidating ? "Tentando novamente…" : "Tentar novamente"}
+            </button>
+          </div>
+        ) : isLoading ? (
+          <p role="status" className="text-zinc-400 py-8">Carregando equipe…</p>
+        ) : <>
         {/* Filtros */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Filter className="h-4 w-4 text-zinc-500" />
           {(["todos", "ativo", "inativo"] as FiltroStatus[]).map((f) => (
             <button
+              aria-pressed={filtro === f}
               key={f}
               onClick={() => setFiltro(f)}
               className={cn(
@@ -155,13 +171,14 @@ export default function EquipePage() {
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
+            aria-label="Buscar na equipe"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome, cidade, especialidade..."
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-zinc-700"
           />
           {busca && (
-            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">{"\u2715"}</button>
+            <button aria-label="Limpar busca" onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">{"\u2715"}</button>
           )}
         </div>
 
@@ -194,6 +211,7 @@ export default function EquipePage() {
                     </div>
 
                     <div className="flex items-center gap-1 mb-3">
+                      {(ed._count?.avaliacoes ?? 0) === 0 ? <span className="text-xs text-zinc-400">Sem avaliações registradas</span> : <>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <Star
                           key={n}
@@ -201,6 +219,8 @@ export default function EquipePage() {
                         />
                       ))}
                       <span className="text-xs text-zinc-500 ml-1">{(ed.avaliacao ?? 0).toFixed(1)}</span>
+                      </>}
+
                     </div>
 
                     {/* Carga */}
@@ -279,9 +299,10 @@ export default function EquipePage() {
         {lista.length === 0 && (
           <div className="text-center py-16 text-zinc-500">
             <p className="text-lg font-medium mb-1">Nenhum editor encontrado</p>
-            <p className="text-sm">Clique em &quot;Cadastrar&quot; para adicionar o primeiro.</p>
+            <p className="text-sm">{busca.trim() || filtro !== "todos" ? "Ajuste a busca ou os filtros para encontrar pessoas." : "Clique em Cadastrar para adicionar o primeiro."}</p>
           </div>
         )}
+        </>}
       </main>
 
       {showForm && <EditorForm onClose={() => { setShowForm(false); mutate() }} />}
@@ -290,6 +311,13 @@ export default function EquipePage() {
 }
 
 function EditorForm({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previous = document.activeElement as HTMLElement | null
+    dialog?.showModal()
+    return () => { dialog?.close(); previous?.focus() }
+  }, [])
   const { data: session } = useSession()
   const userTipo = (session?.user as { tipo?: string } | undefined)?.tipo
   const isPrivileged = userTipo === "admin" || userTipo === "gestor"
@@ -353,62 +381,61 @@ function EditorForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+    <dialog ref={dialogRef} onCancel={onClose} aria-labelledby="editor-form-title" className={styles.formPanel}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
-          <h2 className="font-semibold text-white">Cadastrar Editor</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none">&times;</button>
+          <h2 id="editor-form-title" className="font-medium text-white text-xl">Cadastrar videomaker interno</h2>
+          <button aria-label="Fechar cadastro" onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none">&times;</button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-400 mb-1">Nome *</label>
-              <input required placeholder="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inp} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label htmlFor="editor-nome" className="block text-xs text-zinc-400 mb-1">Nome *</label>
+              <input id="editor-nome" required placeholder="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Telefone</label>
-              <input placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={inp} />
+              <label htmlFor="editor-telefone" className="block text-xs text-zinc-400 mb-1">Telefone</label>
+              <input id="editor-telefone" placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">WhatsApp</label>
-              <input placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className={inp} />
+              <label htmlFor="editor-whatsapp" className="block text-xs text-zinc-400 mb-1">WhatsApp</label>
+              <input id="editor-whatsapp" placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className={inp} />
             </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-400 mb-1">E-mail</label>
-              <input type="email" placeholder="email@exemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inp} />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Cidade</label>
-              <input placeholder="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
+            <div className="sm:col-span-2">
+              <label htmlFor="editor-email" className="block text-xs text-zinc-400 mb-1">E-mail</label>
+              <input id="editor-email" type="email" placeholder="email@exemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">UF</label>
-              <input placeholder="SP" maxLength={2} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={inp} />
+              <label htmlFor="editor-cidade" className="block text-xs text-zinc-400 mb-1">Cidade</label>
+              <input id="editor-cidade" placeholder="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
+            </div>
+            <div>
+              <label htmlFor="editor-estado" className="block text-xs text-zinc-400 mb-1">UF</label>
+              <input id="editor-estado" placeholder="SP" maxLength={2} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={inp} />
             </div>
             {isPrivileged && (
               <div>
-                <label className="block text-xs text-zinc-400 mb-1">Salario (R$)</label>
-                <input type="number" placeholder="0,00" value={form.salario} onChange={(e) => setForm({ ...form, salario: e.target.value })} className={inp} />
+                <label htmlFor="editor-salario" className="block text-xs text-zinc-400 mb-1">Salario (R$)</label>
+                <input id="editor-salario" type="number" placeholder="0,00" value={form.salario} onChange={(e) => setForm({ ...form, salario: e.target.value })} className={inp} />
               </div>
             )}
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Limite de demandas</label>
-              <input type="number" placeholder="5" value={form.cargaLimite} onChange={(e) => setForm({ ...form, cargaLimite: e.target.value })} className={inp} />
+              <label htmlFor="editor-cargaLimite" className="block text-xs text-zinc-400 mb-1">Limite de demandas</label>
+              <input id="editor-cargaLimite" type="number" placeholder="5" value={form.cargaLimite} onChange={(e) => setForm({ ...form, cargaLimite: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inp}>
+              <label htmlFor="editor-status" className="block text-xs text-zinc-400 mb-1">Status</label>
+              <select id="editor-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inp}>
                 <option value="ativo">Ativo</option>
                 <option value="inativo">Inativo</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">CPF/CNPJ</label>
-              <input placeholder="000.000.000-00" value={form.cpfCnpj} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={inp} />
+              <label htmlFor="editor-cpfCnpj" className="block text-xs text-zinc-400 mb-1">CPF/CNPJ</label>
+              <input id="editor-cpfCnpj" placeholder="000.000.000-00" value={form.cpfCnpj} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Chave PIX</label>
-              <input placeholder="CPF, e-mail, telefone ou chave" value={form.chavePix} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={inp} />
+              <label htmlFor="editor-chavePix" className="block text-xs text-zinc-400 mb-1">Chave PIX</label>
+              <input id="editor-chavePix" placeholder="CPF, e-mail, telefone ou chave" value={form.chavePix} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={inp} />
             </div>
           </div>
 
@@ -416,7 +443,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-zinc-400 mb-2">Areas de atuacao</p>
             <div className="flex flex-wrap gap-1.5">
               {areas.map((a) => (
-                <button type="button" key={a} onClick={() => toggleArea(a)}
+                <button type="button" key={a} aria-pressed={form.areasAtuacao.includes(a)} onClick={() => toggleArea(a)}
                   className={cn("text-xs px-2 py-1 rounded border transition-colors",
                     form.areasAtuacao.includes(a)
                       ? "bg-purple-600 border-purple-700 text-white"
@@ -432,7 +459,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-zinc-400 mb-2">Especialidades</p>
             <div className="flex flex-wrap gap-1.5">
               {specs.map((s) => (
-                <button type="button" key={s} onClick={() => toggleSpec(s)}
+                <button type="button" key={s} aria-pressed={form.especialidade.includes(s)} onClick={() => toggleSpec(s)}
                   className={cn("text-xs px-2 py-1 rounded border transition-colors",
                     form.especialidade.includes(s)
                       ? "bg-purple-600 border-purple-700 text-white"
@@ -455,13 +482,13 @@ function EditorForm({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Portfolio (URL)</label>
-            <input placeholder="https://..." value={form.portfolio} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} />
+            <label htmlFor="editor-portfolio" className="block text-xs text-zinc-400 mb-1">Portfolio (URL)</label>
+            <input id="editor-portfolio" placeholder="https://..." value={form.portfolio} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} />
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Observacoes</label>
-            <textarea placeholder="Observacoes sobre o editor..." value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className={`${inp} resize-none`} />
+            <label htmlFor="editor-observacoes" className="block text-xs text-zinc-400 mb-1">Observacoes</label>
+            <textarea id="editor-observacoes" placeholder="Observacoes sobre o editor..." value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className={`${inp} resize-none`} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
@@ -471,8 +498,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </dialog>
   )
 }
 

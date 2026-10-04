@@ -1,0 +1,393 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+// Cutflow (30/09/2026): o plugin do Premiere entra com o login do NuFlow e edita
+// os cards atribuídos ao editor "Cutflow". O que não pode regredir:
+//
+//   1. toda chamada do plugin confere sessão, módulo da empresa e permissão da
+//      pessoa — faltou uma, 401/403 e nada é tocado;
+//   2. o link do navegador não entrega a sessão: só quem tem o segredo do
+//      computador a recebe, e uma vez só;
+//   3. dois computadores não editam o mesmo card;
+//   4. pasta que o NuFlow não enxerga, ou link que não é do Drive, nunca vira
+//      lista vazia calada.
+
+process.env.NEXTAUTH_SECRET = "segredo-de-teste-com-mais-de-32-caracteres"
+
+const db = {
+  cutflowSessao: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+  cutflowPuxada: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  editorOrganizacao: { findMany: vi.fn() },
+  demanda: { findMany: vi.fn(), findFirst: vi.fn() },
+  historicoStatus: { create: vi.fn() },
+  usuario: { findUnique: vi.fn(), findMany: vi.fn() },
+  organizacao: { findUnique: vi.fn() },
+}
+vi.mock("@/lib/prisma", () => ({ prisma: db, prismaBase: db }))
+const orgPorCredencial = vi.fn()
+vi.mock("@/lib/org-por-credencial", () => ({ orgPorCredencial: (...a: unknown[]) => orgPorCredencial(...a) }))
+const declararOrg = vi.fn()
+vi.mock("@/lib/org-contexto", () => ({ declararOrg: (...a: unknown[]) => declararOrg(...a) }))
+const moduloAtivo = vi.fn()
+vi.mock("@/lib/modulos-org", () => ({ moduloAtivo: (...a: unknown[]) => moduloAtivo(...a) }))
+const permissoesEfetivas = vi.fn()
+vi.mock("@/lib/permissoes-server", () => ({ permissoesEfetivas: (...a: unknown[]) => permissoesEfetivas(...a) }))
+const sessaoNavegador = vi.fn()
+vi.mock("@/lib/auth", () => ({ auth: () => sessaoNavegador() }))
+vi.mock("@/lib/org", () => ({ getOrgId: async () => "org-A", semOrg: () => new Response(null, { status: 403 }) }))
+const mudarStatus = vi.fn()
+vi.mock("@/lib/mudar-status", () => ({ mudarStatus: (...a: unknown[]) => mudarStatus(...a) }))
+const criarArquivoFinal = vi.fn()
+vi.mock("@/lib/video-final", () => ({ criarArquivoFinal: (...a: unknown[]) => criarArquivoFinal(...a) }))
+
+const L = await import("@/lib/cutflow")
+const { POST: conectar } = await import("@/app/api/cutflow/conectar/route")
+const { POST: autorizar } = await import("@/app/api/cutflow/autorizar/route")
+const { POST: buscarSessao } = await import("@/app/api/cutflow/sessao/route")
+const { GET: fila } = await import("@/app/api/cutflow/fila/route")
+const { POST: puxar } = await import("@/app/api/cutflow/fila/[id]/puxar/route")
+const { GET: arquivos } = await import("@/app/api/cutflow/demandas/[id]/arquivos/route")
+const { POST: abrirEnvio } = await import("@/app/api/cutflow/demandas/[id]/envio/route")
+const { POST: concluirEnvio } = await import("@/app/api/cutflow/demandas/[id]/envio/concluir/route")
+const respostaStatus = (ok: boolean, error?: string) => ({ ok, json: async () => (error ? { error } : {}) })
+
+const TOKEN = "t".repeat(43)
+const HASH = L.hashCutflow("segredo-do-computador-com-bastante-tamanho")
+const req = (body?: unknown, token: string | null = TOKEN) =>
+  ({
+    headers: new Headers({ ...(token ? { authorization: `Bearer ${token}` } : {}), "x-forwarded-for": "1.2.3.4" }),
+    json: async () => body,
+    nextUrl: new URL("https://nuflow.space/api/cutflow/conectar"),
+  }) as never
+const params = (id: string) => ({ params: Promise.resolve({ id }) })
+const futuro = () => new Date(Date.now() + 86_400_000)
+
+function sessaoValida(extra: Record<string, unknown> = {}) {
+  orgPorCredencial.mockResolvedValue("org-A")
+  db.cutflowSessao.findUnique.mockResolvedValue({
+    id: "s-1", organizacaoId: "org-A", usuarioId: "u-1", nomeComputador: "Mac do Giovani",
+    revogadaEm: null, expiraEm: futuro(), ultimoUsoEm: new Date(), ...extra,
+  })
+  moduloAtivo.mockResolvedValue(true)
+  permissoesEfetivas.mockResolvedValue({ papel: "editor", permissoes: { usarCutflow: true } })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  db.usuario.findUnique.mockResolvedValue({ nome: "Giovani", email: "g@x" })
+  db.organizacao.findUnique.mockResolvedValue({ nome: "Media House" })
+  mudarStatus.mockResolvedValue(respostaStatus(true))
+})
+
+describe("peças da biblioteca", () => {
+  it("pedido assinado volta igual e recusa adulteração, vencimento e lixo", () => {
+    const p = L.assinarPedido(HASH, "Mac")
+    expect(L.lerPedido(p)).toMatchObject({ dispositivoHash: HASH, nomeComputador: "Mac" })
+    const [b64, ass] = p.split(".")
+    const outro = Buffer.from(JSON.stringify({ h: "a".repeat(64), n: "Mac", e: Date.now() + 60_000 })).toString("base64url")
+    expect(L.lerPedido(`${outro}.${ass}`)).toBeNull()
+    expect(L.lerPedido(`${b64}.${ass.slice(0, -2)}xx`)).toBeNull()
+    expect(L.lerPedido(L.assinarPedido(HASH, "Mac", Date.now() - L.VALIDADE_PEDIDO_MS - 1))).toBeNull()
+    for (const lixo of ["", "a.b", null, undefined, "x".repeat(3000)]) expect(L.lerPedido(lixo as string)).toBeNull()
+  })
+
+  it("código de confirmação é estável, curto e muda com o computador", () => {
+    const c = L.codigoDeConfirmacao(HASH)
+    expect(c).toMatch(/^[A-Z2-9]{3}-[A-Z2-9]{3}$/)
+    expect(L.codigoDeConfirmacao(HASH)).toBe(c)
+    expect(L.codigoDeConfirmacao(L.hashCutflow("outro"))).not.toBe(c)
+  })
+
+  it("pasta do Drive só de URL oficial de pasta", () => {
+    expect(L.pastaDoDrive("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMn")).toBe("1AbCdEfGhIjKlMn")
+    expect(L.pastaDoDrive("https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view")).toBeNull()
+    expect(L.pastaDoDrive("http://drive.google.com/drive/folders/1AbCdEfGhIjKlMn")).toBeNull()
+    expect(L.pastaDoDrive("https://we.tl/t-abc")).toBeNull()
+    expect(L.pastaDoDrive(null)).toBeNull()
+  })
+})
+
+describe("autenticação de toda chamada do plugin", () => {
+  const chamar = (token: string | null = TOKEN) => L.autenticarCutflow(req(undefined, token))
+  const status = async (r: unknown) => (r as Response).status
+
+  it("sem token ou token curto: 401 sem consultar nada", async () => {
+    for (const t of [null, "curto"]) expect(await status(await chamar(t))).toBe(401)
+    expect(orgPorCredencial).not.toHaveBeenCalled()
+  })
+
+  it("credencial que não casa (vencida, revogada, de ninguém): 401 e nada é declarado", async () => {
+    orgPorCredencial.mockResolvedValue(null)
+    expect(await status(await chamar())).toBe(401)
+    expect(declararOrg).not.toHaveBeenCalled()
+    expect(db.cutflowSessao.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("sessão revogada, vencida ou de outra empresa: 401", async () => {
+    for (const extra of [{ revogadaEm: new Date() }, { expiraEm: new Date(Date.now() - 1) }, { organizacaoId: "org-B" }]) {
+      sessaoValida(extra)
+      expect(await status(await chamar())).toBe(401)
+    }
+  })
+
+  it("módulo desligado na empresa: 403 motivo modulo", async () => {
+    sessaoValida(); moduloAtivo.mockResolvedValue(false)
+    const r = (await chamar()) as Response
+    expect(r.status).toBe(403)
+    expect((await r.json()).motivo).toBe("modulo")
+  })
+
+  it("sem a permissão usarCutflow, ou sem vínculo determinável: 403 motivo permissao", async () => {
+    for (const v of [{ papel: "editor", permissoes: { usarCutflow: false } }, null]) {
+      sessaoValida(); permissoesEfetivas.mockResolvedValue(v)
+      const r = (await chamar()) as Response
+      expect(r.status).toBe(403)
+      expect((await r.json()).motivo).toBe("permissao")
+    }
+  })
+
+  it("tudo certo: declara a empresa e devolve o contexto; renova só se o último uso é antigo", async () => {
+    sessaoValida()
+    const ctx = await chamar()
+    expect(ctx).toMatchObject({ organizacaoId: "org-A", usuarioId: "u-1", sessaoId: "s-1" })
+    expect(declararOrg).toHaveBeenCalledWith("org-A")
+    expect(orgPorCredencial).toHaveBeenCalledWith("cutflow_sessao", L.hashCutflow(TOKEN))
+    expect(db.cutflowSessao.update).not.toHaveBeenCalled()
+    sessaoValida({ ultimoUsoEm: new Date(Date.now() - 2 * 3600_000) })
+    await chamar()
+    expect(db.cutflowSessao.update).toHaveBeenCalledOnce()
+  })
+})
+
+describe("login do plugin (fluxo de dispositivo)", () => {
+  it("conectar recusa hash inválido e devolve link com pedido e código", async () => {
+    expect((await conectar(req({ dispositivoHash: "abc" }, null))).status).toBe(400)
+    const r = await conectar(req({ dispositivoHash: HASH, nomeComputador: "Mac <script>" }, null))
+    const d = await r.json()
+    expect(d.url).toMatch(/^https:\/\/.+\/cutflow\/conectar\?pedido=/)
+    expect(d.confirmacao).toBe(L.codigoDeConfirmacao(HASH))
+    const pedido = L.lerPedido(decodeURIComponent(d.url.split("pedido=")[1]))
+    expect(pedido?.nomeComputador).toBe("Mac script")
+  })
+
+  it("autorizar exige sessão do navegador, pedido válido, módulo e permissão", async () => {
+    sessaoNavegador.mockResolvedValue(null)
+    expect((await autorizar(req({ pedido: L.assinarPedido(HASH, "Mac") }, null))).status).toBe(401)
+    sessaoNavegador.mockResolvedValue({ user: { id: "u-1" } })
+    expect((await autorizar(req({ pedido: "adulterado.x" }, null))).status).toBe(400)
+    moduloAtivo.mockResolvedValue(false)
+    expect((await autorizar(req({ pedido: L.assinarPedido(HASH, "Mac") }, null))).status).toBe(403)
+    moduloAtivo.mockResolvedValue(true)
+    permissoesEfetivas.mockResolvedValue({ papel: "social", permissoes: { usarCutflow: false } })
+    expect((await autorizar(req({ pedido: L.assinarPedido(HASH, "Mac") }, null))).status).toBe(403)
+    expect(db.cutflowSessao.create).not.toHaveBeenCalled()
+  })
+
+  it("autorizar grava empresa, pessoa e hash — nunca devolve a sessão", async () => {
+    sessaoNavegador.mockResolvedValue({ user: { id: "u-1" } })
+    moduloAtivo.mockResolvedValue(true)
+    permissoesEfetivas.mockResolvedValue({ papel: "editor", permissoes: { usarCutflow: true } })
+    const r = await autorizar(req({ pedido: L.assinarPedido(HASH, "Mac") }, null))
+    expect(r.status).toBe(200)
+    expect(await r.json()).toEqual({ autorizado: true })
+    expect(db.cutflowSessao.create.mock.calls[0][0].data).toMatchObject({ organizacaoId: "org-A", usuarioId: "u-1", dispositivoHash: HASH })
+    db.cutflowSessao.create.mockRejectedValue({ code: "P2002" })
+    expect((await autorizar(req({ pedido: L.assinarPedido(HASH, "Mac") }, null))).status).toBe(409)
+  })
+
+  it("buscar a sessão: pendente até autorizar, entregue uma vez, guardada só como hash", async () => {
+    expect((await buscarSessao(req({ dispositivo: "curto" }, null))).status).toBe(400)
+    orgPorCredencial.mockResolvedValue(null)
+    expect((await buscarSessao(req({ dispositivo: "segredo-do-computador-com-bastante-tamanho" }, null))).status).toBe(202)
+
+    orgPorCredencial.mockResolvedValue("org-A")
+    db.cutflowSessao.updateMany.mockResolvedValue({ count: 0 })  // outra pergunta levou antes
+    expect((await buscarSessao(req({ dispositivo: "segredo-do-computador-com-bastante-tamanho" }, null))).status).toBe(202)
+
+    db.cutflowSessao.updateMany.mockResolvedValue({ count: 1 })
+    db.cutflowSessao.findUnique.mockResolvedValue({ usuarioId: "u-1" })
+    const r = await buscarSessao(req({ dispositivo: "segredo-do-computador-com-bastante-tamanho" }, null))
+    const d = await r.json()
+    expect(r.status).toBe(200)
+    const chamada = db.cutflowSessao.updateMany.mock.calls.at(-1)![0]
+    expect(chamada.where).toMatchObject({ organizacaoId: "org-A", dispositivoHash: HASH, tokenHash: null, revogadaEm: null })
+    expect(chamada.data.tokenHash).toBe(L.hashCutflow(d.token))
+    expect(chamada.data.tokenHash).not.toBe(d.token)
+    expect(orgPorCredencial).toHaveBeenLastCalledWith("cutflow_dispositivo", HASH)
+  })
+})
+
+describe("fila do editor Cutflow", () => {
+  it("sem editor Cutflow, ou com dois, avisa em vez de escolher", async () => {
+    sessaoValida()
+    db.editorOrganizacao.findMany.mockResolvedValue([])
+    expect((await (await fila(req())).json()).aviso).toMatch(/Cadastre um editor chamado "Cutflow"/)
+    db.editorOrganizacao.findMany.mockResolvedValue([{ editorId: "e-1" }, { editorId: "e-2" }])
+    expect((await (await fila(req())).json()).aviso).toMatch(/mais de um editor/)
+    expect(db.demanda.findMany).not.toHaveBeenCalled()
+  })
+
+  it("lista só a empresa, o editor e o que não saiu da edição; brutos prefere a pasta", async () => {
+    sessaoValida()
+    db.editorOrganizacao.findMany.mockResolvedValue([{ editorId: "e-cut" }])
+    db.demanda.findMany.mockResolvedValue([
+      { id: "d-1", codigo: "D1", linkFolderBrutos: "https://drive.google.com/drive/folders/PASTA123456", linkBrutos: "https://we.tl/x" },
+      { id: "d-2", codigo: "D2", linkFolderBrutos: null, linkBrutos: "https://we.tl/y" },
+    ])
+    db.cutflowPuxada.findMany.mockResolvedValue([{ demandaId: "d-1", usuarioId: "u-2", sessaoId: "s-9", puxadaEm: new Date() }])
+    db.usuario.findMany.mockResolvedValue([{ id: "u-2", nome: "Ana" }])
+    const d = await (await fila(req())).json()
+    const where = db.demanda.findMany.mock.calls[0][0].where
+    expect(where).toMatchObject({ organizacaoId: "org-A", editorId: "e-cut" })
+    expect(where.statusInterno.notIn).toContain("edicao_finalizada")
+    expect(d.fila[0].brutos).toContain("drive.google.com")
+    expect(d.fila[1].brutos).toBe("https://we.tl/y")
+    expect(d.fila[0].puxada).toMatchObject({ por: "Ana", esteComputador: false })
+    expect(d.fila[1].puxada).toBeNull()
+  })
+})
+
+describe("puxar: trava contra edição dupla", () => {
+  beforeEach(() => {
+    sessaoValida()
+    db.editorOrganizacao.findMany.mockResolvedValue([{ editorId: "e-cut" }])
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1", codigo: "D1", statusInterno: "fila_edicao" })
+  })
+
+  it("card fora da fila (de outro editor, de outra empresa, já finalizado): 404", async () => {
+    db.demanda.findFirst.mockResolvedValue(null)
+    expect((await puxar(req(), params("d-x"))).status).toBe(404)
+    expect(db.cutflowPuxada.create).not.toHaveBeenCalled()
+  })
+
+  it("já puxado por outra pessoa: 409 com o nome; por mim em outro computador: 409 dizendo isso", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue({ usuarioId: "u-2", sessaoId: "s-9", puxadaEm: new Date() })
+    db.usuario.findUnique.mockResolvedValue({ nome: "Ana" })
+    let r = await puxar(req(), params("d-1"))
+    expect(r.status).toBe(409)
+    expect((await r.json()).emEdicaoPor).toBe("Ana")
+    db.cutflowPuxada.findUnique.mockResolvedValue({ usuarioId: "u-1", sessaoId: "s-9", puxadaEm: new Date() })
+    r = await puxar(req(), params("d-1"))
+    expect((await r.json()).emEdicaoPor).toBe("você, em outro computador")
+    expect(db.cutflowPuxada.create).not.toHaveBeenCalled()
+  })
+
+  it("puxar de novo do mesmo computador devolve o que já existe, sem outro histórico", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue({ usuarioId: "u-1", sessaoId: "s-1", puxadaEm: new Date() })
+    const r = await puxar(req(), params("d-1"))
+    expect(await r.json()).toMatchObject({ puxada: true, jaEra: true, status: { mudou: true } })
+    expect(db.historicoStatus.create).not.toHaveBeenCalled()
+    // Tenta o status de novo: a permissão de mover pode ter sido dada depois da primeira puxada.
+    expect(mudarStatus).toHaveBeenCalledOnce()
+  })
+
+  it("corrida perdida no banco (P2002) vira 409 com quem ganhou", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ usuarioId: "u-2", sessaoId: "s-9", puxadaEm: new Date() })
+    db.cutflowPuxada.create.mockRejectedValue({ code: "P2002" })
+    db.usuario.findUnique.mockResolvedValue({ nome: "Ana" })
+    expect((await puxar(req(), params("d-1"))).status).toBe(409)
+    expect(db.historicoStatus.create).not.toHaveBeenCalled()
+  })
+
+  it("puxar grava a trava e o evento no histórico, sem mudar o status", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue(null)
+    db.cutflowPuxada.create.mockResolvedValue({})
+    expect((await puxar(req(), params("d-1"))).status).toBe(200)
+    expect(db.cutflowPuxada.create.mock.calls[0][0].data).toEqual({ organizacaoId: "org-A", demandaId: "d-1", usuarioId: "u-1", sessaoId: "s-1" })
+    const h = db.historicoStatus.create.mock.calls[0][0].data
+    expect(h).toMatchObject({ demandaId: "d-1", statusAnterior: "fila_edicao", statusNovo: "cutflow_puxado", origem: "automacao" })
+    expect(h.observacao).toBe("Edição iniciada no Cutflow por Giovani (Mac do Giovani)")
+    // O card anda para "editando" pela MESMA função de status do quadro, como a pessoa do plugin.
+    expect(mudarStatus).toHaveBeenCalledWith({ user: { id: "u-1", organizacaoId: "org-A" } }, "d-1",
+      { statusInterno: "editando", origem: "automacao", observacao: "Edição iniciada no Cutflow" })
+  })
+
+  it("guarda de status recusou: a trava fica e o plugin recebe o motivo, sem status forçado", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue(null)
+    db.cutflowPuxada.create.mockResolvedValue({})
+    mudarStatus.mockResolvedValue(respostaStatus(false, "Você não tem permissão para mover demandas."))
+    const d = await (await puxar(req(), params("d-1"))).json()
+    expect(d).toMatchObject({ puxada: true, status: { mudou: false, aviso: "Você não tem permissão para mover demandas." } })
+  })
+
+  it("card já em edição não passa pela mudança de status de novo", async () => {
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1", codigo: "D1", statusInterno: "editando" })
+    db.cutflowPuxada.findUnique.mockResolvedValue(null)
+    db.cutflowPuxada.create.mockResolvedValue({})
+    await puxar(req(), params("d-1"))
+    expect(mudarStatus).not.toHaveBeenCalled()
+  })
+})
+
+describe("material bruto sem o Google Drive", () => {
+  // Desde 03/10/2026 o NuFlow não guarda token do Drive: o plugin recebe o link
+  // e o editor baixa com a própria conta Google.
+  beforeEach(() => {
+    sessaoValida()
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
+  })
+
+  it("sem puxar neste computador não mostra nem o link", async () => {
+    for (const p of [null, { sessaoId: "s-9" }]) {
+      db.cutflowPuxada.findUnique.mockResolvedValue(p)
+      expect((await arquivos(req(), params("d-1"))).status).toBe(409)
+    }
+  })
+
+  it("sem link: diz que o card não tem", async () => {
+    db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: null, linkBrutos: null })
+    expect((await (await arquivos(req(), params("d-1"))).json()).aviso).toMatch(/não tem link/)
+  })
+
+  it("pasta do Drive ou outro link: download manual pelo editor, sem token e sem ir à rede", async () => {
+    const rede = vi.fn()
+    vi.stubGlobal("fetch", rede)
+    for (const link of ["https://drive.google.com/drive/folders/PASTA123456", "https://we.tl/t-abc"]) {
+      db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: link, linkBrutos: null })
+      const d = await (await arquivos(req(), params("d-1"))).json()
+      expect(d).toMatchObject({ arquivos: [], manual: true, link })
+      expect(d.token).toBeUndefined()
+    }
+    expect(rede).not.toHaveBeenCalled()
+  })
+})
+
+describe("enviar para aprovação pelo plugin, desligado sem o Drive", () => {
+  beforeEach(() => {
+    sessaoValida()
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1" })
+  })
+
+  it("só o computador que puxou o card ouve a resposta", async () => {
+    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-9" })
+    expect((await abrirEnvio(req({ nome: "a.mp4", tamanho: 10, tipo: "video/mp4" }), params("d-1"))).status).toBe(409)
+  })
+
+  it("abrir e concluir respondem 410 com o caminho que funciona, e nada é registrado", async () => {
+    const aberto = await abrirEnvio(req({ nome: "DEM-1.mp4", tamanho: 5000, tipo: "video/mp4" }), params("d-1"))
+    expect(aberto.status).toBe(410)
+    expect(await aberto.json()).toMatchObject({ codigo: "drive_removido", error: L.ENVIO_INDISPONIVEL })
+    const recibo = L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 5000, nome: "DEM-1.mp4", sessaoId: "s-1" })
+    expect((await concluirEnvio(req({ envio: recibo }), params("d-1"))).status).toBe(410)
+    expect(criarArquivoFinal).not.toHaveBeenCalled()
+    expect(mudarStatus).not.toHaveBeenCalled()
+    expect(db.cutflowPuxada.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("o recibo de envio continua amarrado a card, computador e prazo, para o envio ao NuFlow", () => {
+    const valido = L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 5000, nome: "a.mp4", sessaoId: "s-1" })
+    expect(L.lerEnvio(valido)).toMatchObject({ demandaId: "d-1", sessaoId: "s-1", tamanho: 5000 })
+    const [b64, ass] = valido.split(".")
+    expect(L.lerEnvio(`${b64}.x${ass.slice(1)}`)).toBeNull()
+    expect(L.lerEnvio(L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 1, nome: "a", sessaoId: "s-1" }, Date.now() - L.VALIDADE_ENVIO_MS - 1))).toBeNull()
+  })
+})
+
+describe("a rota de status do quadro e o Cutflow usam a mesma função", () => {
+  it("PATCH /api/demandas/[id]/status só autentica e delega", async () => {
+    const { readFileSync } = await import("node:fs")
+    const rota = readFileSync("src/app/api/demandas/[id]/status/route.ts", "utf8")
+    expect(rota).toContain("return mudarStatus(session, id, await req.json())")
+    expect(rota).not.toContain("podeTransicionar")
+  })
+})
