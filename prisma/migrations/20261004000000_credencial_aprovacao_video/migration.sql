@@ -7,8 +7,10 @@
 -- `app_user`) mostrou exatamente isso: 200 com a conexão de dono, 404 com RLS.
 --
 -- A saída é a mesma das outras rotas públicas (20260901120000): a função
--- devolve só o id da empresa dona do token. O resto da função não muda; esta
--- migration acrescenta UM ramo, `aprovacao_video`.
+-- devolve só o id da empresa dona do token. O resto da função é idêntico ao de
+-- 20261002000000_cutflow_acesso_fila_org_por_credencial — CREATE OR REPLACE
+-- exige o corpo inteiro, e omitir um ramo o apagaria. Esta migration acrescenta
+-- UM ramo, `aprovacao_video`.
 --
 -- Aditiva: o código que está no ar não passa esse tipo, então o deploy pode vir
 -- depois sem janela nenhuma.
@@ -58,6 +60,18 @@ AS $$
       (SELECT d."organizacaoId" FROM arquivos a
          JOIN demandas d ON d.id = a."demandaId"
         WHERE a.url LIKE '%' || p_valor || '%' LIMIT 1)
+
+    -- Cutflow: o plugin esperando a autorização (só antes da entrega) e o
+    -- plugin já logado (revogada ou vencida não casa). Ver 20261002000000.
+    WHEN 'cutflow_dispositivo' THEN
+      (SELECT s."organizacaoId" FROM cutflow_sessoes s
+        WHERE s."dispositivoHash" = p_valor AND s."tokenHash" IS NULL
+          AND s."revogadaEm" IS NULL AND s."expiraEm" > now())
+
+    WHEN 'cutflow_sessao' THEN
+      (SELECT s."organizacaoId" FROM cutflow_sessoes s
+        WHERE s."tokenHash" = p_valor
+          AND s."revogadaEm" IS NULL AND s."expiraEm" > now())
 
     -- Aprovação de vídeo pelo cliente (/aprovar/[token]). Novo em 04/10/2026.
     WHEN 'aprovacao_video' THEN
