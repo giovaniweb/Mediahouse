@@ -1,14 +1,13 @@
-import { driveCopiaAtiva } from "@/lib/drive-copias"
-import { NextRequest, NextResponse, after } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { comToken, resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
+import { comToken } from "@/lib/midia"
+import { paraDownload } from "@/lib/midia-download"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
-import { criarSessaoUploadDrive } from "@/lib/google-drive"
 
 // A validade do token protege o link que vai ao CLIENTE por WhatsApp — não a
 // equipe. Como o botão "Abrir aprovação" do sistema reusa esse mesmo token, a
@@ -73,8 +72,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // a credencial dela é o token, e ele passa a valer para o ARQUIVO também.
   // Anexado aqui, no servidor, para a página não precisar mudar.
   // URL do acervo antigo (pública) passa intacta.
+  // Assiste-se à prévia convertida; baixa-se o original do mesmo arquivo, quando houver.
+  const original = aprovacao.demandaId
+    ? (await prisma.arquivo.findFirst({
+        where: { demandaId: aprovacao.demandaId, tipoArquivo: "final", url: aprovacao.urlVideo, originalUrl: { not: null } },
+        select: { originalUrl: true },
+      }))?.originalUrl ?? null
+    : null
+
   return NextResponse.json({
     aprovacao: { ...aprovacao, urlVideo: comToken(aprovacao.urlVideo, token) ?? aprovacao.urlVideo },
+    urlDownload: paraDownload(comToken(original ?? aprovacao.urlVideo, token) ?? aprovacao.urlVideo),
     expirado,
     versaoAnterior: versaoAnterior
       ? { ...versaoAnterior, urlVideo: comToken(versaoAnterior.urlVideo, token) ?? versaoAnterior.urlVideo }
@@ -149,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     data: { status: novoStatus, aprovadoPor, comentario },
   })
 
-  // Se aprovado → vai para "Para Postar" + transfere vídeo do Supabase para o Drive em background
+  // Se aprovado → vai para "Para Postar". O vídeo continua no armazenamento do NuFlow.
   if (acao === "aprovar") {
     await prisma.demanda.update({
       where: { id: aprovacao.demandaId },
@@ -166,95 +174,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         origem: "manual",
         observacao: `Vídeo aprovado pelo cliente${aprovadoPor ? ` (${aprovadoPor})` : ""} — aguardando postagem`,
       },
-    })
-
-    // Transfere vídeo do Supabase para o Google Drive em background (após retornar ao cliente)
-    // O nome do arquivo é construído a partir dos dados da demanda, não do nome original do arquivo.
-    const aprovacaoSnap = aprovacao
-    after(async () => {
-      try {
-        // No piloto, cópias são solicitadas pela fila em Configurações > Google Drive.
-        if (driveCopiaAtiva(demandaOrg.organizacaoId)) return
-        const urlVideo = aprovacaoSnap.urlVideo
-        // Só transfere vídeos hospedados no Supabase; URLs externas (YouTube, Drive, etc.) ficam como estão
-        if (!urlVideo || !urlVideo.includes("supabase")) return
-
-        // Busca dados da demanda para construir o nome do arquivo
-        const dem = await prisma.demanda.findUnique({
-          where: { id: aprovacaoSnap.demandaId },
-          include: { produtos: { select: { produto: { select: { nome: true } } } } },
-        })
-        if (!dem) return
-
-        // Busca o Arquivo correspondente a este vídeo para obter sequencia
-        const arq = await prisma.arquivo.findFirst({
-          where: { demandaId: dem.id, url: urlVideo, tipoArquivo: "final" },
-        })
-        const seq = arq?.sequencia ?? 1
-        const seqStr = String(seq).padStart(3, "0") // "001", "002", "003"...
-
-        // Constrói nome: [produto]_[titulo]_[codigo]_001.ext
-        const sanitize = (s: string) => s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
-        const parts: string[] = []
-        const prod = dem.produtos?.[0]?.produto?.nome
-        if (prod) parts.push(sanitize(prod).substring(0, 30))
-        parts.push(sanitize(dem.titulo).substring(0, 40))
-        parts.push(dem.codigo)
-        const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
-        const fileName = `${parts.join("_")}_${seqStr}.${ext}`
-
-        // Stream direto: Supabase → Drive (sem buffer intermediário — server-to-server, sem CORS)
-        // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
-        // o servidor não consegue buscá-la direto. Assina aqui, com validade de
-        // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
-        // não bastam para vídeo grande.
-        const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
-        const supaRes = await fetch(origem)
-        if (!supaRes.ok || !supaRes.body) {
-          console.error("[AprovacaoVideo] Falha ao buscar vídeo do Supabase:", supaRes.status)
-          return
-        }
-        const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
-        if (fileSize <= 0) {
-          console.error("[AprovacaoVideo] Content-Length ausente ou zero — não é possível iniciar sessão Drive")
-          return
-        }
-        const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
-
-        // Drive da organização dona da demanda (rota pública resolve org pelo registro)
-        const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, dem.organizacaoId)
-
-        // PUT streaming (sem carregar o arquivo inteiro na memória)
-        const driveRes = await fetch(sessionUri, {
-          method: "PUT",
-          headers: {
-            "Content-Type":   contentType,
-            "Content-Length": String(fileSize),
-            "Content-Range":  `bytes 0-${fileSize - 1}/${fileSize}`,
-          },
-          body: supaRes.body,
-          // @ts-ignore — duplex necessário no Node.js fetch para body streaming
-          duplex: "half",
-        })
-
-        if (driveRes.status === 200 || driveRes.status === 201) {
-          // Atualiza Arquivo.url para URL do Drive (para download/entrega ao cliente)
-          // NÃO atualiza linkFinal — mantém URL do Supabase para galeria/player
-          if (arq) {
-            await prisma.arquivo.update({
-              where: { id: arq.id },
-              data: { url: publicUrl },
-            })
-          }
-          console.info(`[AprovacaoVideo] Drive upload concluído (${seqStr}): ${publicUrl}`)
-        } else {
-          const errText = await driveRes.text().catch(() => "")
-          console.error(`[AprovacaoVideo] Drive retornou HTTP ${driveRes.status}:`, errText.slice(0, 300))
-        }
-      } catch (e) {
-        // Falha silenciosa — o vídeo continua acessível no Supabase; admin pode re-enviar manualmente
-        console.error("[AprovacaoVideo] Erro ao transferir para Drive:", e)
-      }
     })
   } else {
     // Solicita ajuste

@@ -18,6 +18,7 @@ import {
   DollarSign,
   UserCog,
   Building2,
+  Inbox,
   Home,
   Package,
   LogOut,
@@ -116,6 +117,7 @@ const sections = [
     superAdmin: true,
     items: [
       { href: "/admin/organizacoes", label: "Empresas do SaaS", icon: Building2 },
+      { href: "/admin/leads", label: "Interessados", icon: Inbox },
     ],
   },
   {

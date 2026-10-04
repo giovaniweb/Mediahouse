@@ -14,6 +14,7 @@ interface Video {
   departamento: string | null
   linkFinal: string
   thumbnailUrl: string | null
+  downloadUrl?: string | null  // original da entrega quando o vídeo exibido é a prévia convertida
   dataReferencia: string
   origemData: string
   dataEstimada: boolean
@@ -107,13 +108,6 @@ function parseVideoUrl(url: string): {
   return { tipo: "external", embedUrl: url, youtubeId: null, isYoutubeShorts: false }
 }
 
-function getDriveThumbnail(url: string): string | null {
-  const match = url.match(/\/file\/d\/([^/]+)/)
-  // Usa proxy server-side com service account — evita problema de autenticação do Drive
-  if (match) return urlComOrg(`/api/publico/drive-thumbnail?fileId=${match[1]}`)
-  return null
-}
-
 function getDownloadUrl(url: string): string {
   const match = url.match(/\/file\/d\/([^/]+)/)
   if (match) return `https://drive.google.com/uc?export=download&id=${match[1]}`
@@ -173,13 +167,13 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
   const isPortrait = PORTRAIT_TIPOS.has(video.tipoVideo) || isYoutubeShorts
   const gradient = getPlaceholderGradient(video.id)
 
-  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube mqdefault (16:9 real), 3) Drive thumbnail (via proxy)
+  // Prioridade: 1) Supabase JPEG salvo, 2) YouTube mqdefault (16:9 real). Link do Drive não tem
+  // capa: o NuFlow não guarda credencial do Drive, e o card cai no gradiente.
   // Para Supabase sem thumbnail salva: elemento <video preload="metadata"> mostra o 1º frame nativamente
   // (sem canvas — evita problema de CORS com toDataURL)
   // mqdefault.jpg (320x180) é genuinamente 16:9; hqdefault.jpg (480x360) tem barras pretas e parece quadrado
   const thumbnailUrl = video.thumbnailUrl
     ?? (youtubeId ? `https://i3.ytimg.com/vi/${youtubeId}/mqdefault.jpg` : null)
-    ?? (tipo === "drive" ? getDriveThumbnail(video.linkFinal) : null)
 
   // YouTube: esconde card se vídeo indisponível (404 ou placeholder cinza 120px)
   // Drive/outro: ao falhar, cai no gradiente (não esconde o card)
@@ -288,7 +282,7 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
             {/* Download button — topo direito (aparece no hover) */}
             {tipo !== "youtube" && (
               <a
-                href={getDownloadUrl(video.linkFinal)}
+                href={video.downloadUrl ?? getDownloadUrl(video.linkFinal)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

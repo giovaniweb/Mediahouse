@@ -1,4 +1,5 @@
 import { exigeArquivo } from "@/lib/acervo-regras"
+import { paraDownload } from "@/lib/midia-download"
 import { identidadeEntregavel } from "@/lib/metricas-entregaveis"
 import { paginarGaleria, type ItemGaleria } from "@/lib/galeria-indice"
 import { NextRequest, NextResponse } from "next/server"
@@ -53,7 +54,7 @@ export async function biblioteca(req: NextRequest, area: "audiovisual" | "design
       const demandas = await tx.demanda.findMany({ where: { AND: [where, { id: { in: pagina.itens.map(i => i.demandaId) } }] },
         select: { id: true, codigo: true, titulo: true, tipoVideo: true, departamento: true, linhaProjeto: true, linkFinal: true, thumbnailUrl: true, finalizadaEm: true, updatedAt: true,
           responsavel: { select: { nome: true } }, designer: { select: { nome: true } },
-          arquivos: { where: { id: { in: pagina.itens.filter(i => !i.legado).map(i => i.id) }, tipoArquivo: "final" }, select: { id: true, url: true, thumbnailUrl: true, sequencia: true, publicadoEm: true, revogadoEm: true, transcodeStatus: true, previewObjectKey: true, previewFonteVersao: true, fonteVersao: true, previewSha256: true, previewJobId: true } } } })
+          arquivos: { where: { id: { in: pagina.itens.filter(i => !i.legado).map(i => i.id) }, tipoArquivo: "final" }, select: { id: true, url: true, originalUrl: true, thumbnailUrl: true, sequencia: true, publicadoEm: true, revogadoEm: true, transcodeStatus: true, previewObjectKey: true, previewFonteVersao: true, fonteVersao: true, previewSha256: true, previewJobId: true } } } })
       return { pagina, demandas }
     }, { isolationLevel: "RepeatableRead" })
     const porId = new Map(demandas.map(d => [d.id,d]))
@@ -64,7 +65,7 @@ export async function biblioteca(req: NextRequest, area: "audiovisual" | "design
       if (!item.legado && !a) return []
       return [{ demandaId: d.id, codigo: d.codigo, titulo: d.titulo, tipoVideo: d.tipoVideo, departamento: d.departamento, linhaProjeto: d.linhaProjeto,
         responsavel: d.responsavel?.nome ?? d.designer?.nome ?? null, finalizadaEm: d.finalizadaEm, updatedAt: d.updatedAt,
-        id: item.id, linkFinal: a?.url ?? item.url, thumbnailUrl: a?.thumbnailUrl ?? (item.legado ? d.thumbnailUrl : null), sequencia: a?.sequencia ?? null,
+        id: item.id, linkFinal: a?.url ?? item.url, downloadUrl: paraDownload(a?.originalUrl ?? a?.url ?? item.url), thumbnailUrl: a?.thumbnailUrl ?? (item.legado ? d.thumbnailUrl : null), sequencia: a?.sequencia ?? null,
         estadoPrevia: a?.previewObjectKey && a.fonteVersao && a.previewFonteVersao === a.fonteVersao && a.previewSha256 && a.previewJobId ? "verificada" : a?.transcodeStatus === "failed" ? "falhou" : a?.transcodeStatus === "processing" ? "processando" : "nao_verificada",
         publicado: !!a?.publicadoEm && !a.revogadoEm, legado: item.legado, dataReferencia: item.dataReferencia, origemData: item.origemData, dataEstimada: item.dataEstimada }]
     })

@@ -2,14 +2,14 @@
 import { useState } from "react"
 import useSWR from "swr"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, ExternalLink, Film, Library, Search, ShieldCheck } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Film, Library, Search, ShieldCheck } from "lucide-react"
 import { useMe } from "@/hooks/usePermissoes"
 import { Header } from "@/components/layout/Header"
 import { PageIntro } from "@/components/layout/PageIntro"
 
 const campo = "rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
 
-type Entrega = { estadoPrevia: string; id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; thumbnailUrl: string | null; publicado: boolean; legado: boolean; dataReferencia: string; origemData: string; dataEstimada: boolean }
+type Entrega = { estadoPrevia: string; id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; downloadUrl?: string | null; thumbnailUrl: string | null; publicado: boolean; legado: boolean; dataReferencia: string; origemData: string; dataEstimada: boolean }
 const fetcher = async (url: string) => {
   const res = await fetch(url)
   const body = await res.json()
@@ -67,7 +67,7 @@ export default function Biblioteca({ areaInicial = "audiovisual", qualidadeInici
       <h2 className="font-medium text-zinc-100">{v.titulo}</h2>
       <p className="text-xs text-zinc-400">{new Date(v.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} · {v.dataEstimada ? "Data estimada" : v.origemData === "anexacao" ? "Anexado" : "Concluído"}</p>
       <p className="text-xs text-zinc-400">{v.estadoPrevia === "verificada" ? "Prévia verificada" : v.estadoPrevia === "processando" ? "Prévia em processamento" : v.estadoPrevia === "falhou" ? "Prévia não concluída; revise na demanda" : "Prévia não verificada; abra a referência ou revise na demanda"}</p>
-      <div className="mt-auto flex flex-wrap gap-2 text-sm"><a href={v.linkFinal} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:border-zinc-500">Abrir arquivo<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a><Link href={`/demandas/${v.demandaId}`} className="inline-flex items-center rounded-lg px-3 py-1.5 text-zinc-300 hover:text-zinc-100">Ver demanda</Link></div>
+      <div className="mt-auto flex flex-wrap gap-2 text-sm"><a href={v.linkFinal} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:border-zinc-500">Abrir arquivo<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>{v.downloadUrl && <a href={v.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:border-zinc-500">Baixar<Download className="h-3.5 w-3.5" aria-hidden="true" /></a>}<Link href={`/demandas/${v.demandaId}`} className="inline-flex items-center rounded-lg px-3 py-1.5 text-zinc-300 hover:text-zinc-100">Ver demanda</Link></div>
       {data.podePublicar && !v.legado && <button disabled={ocupado !== null} onClick={() => publicar(v)} className={v.publicado ? "rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 disabled:opacity-50" : "rounded-lg bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"}>{ocupado === v.id ? "Salvando…" : v.publicado ? "Retirar do portfólio público" : "Publicar para qualquer pessoa ver"}</button>}
       {v.legado && data.podePublicar && <p className="text-xs text-zinc-400">Link antigo: registre a entrega como arquivo final na demanda para publicar.</p>}
     </article>)}</div>

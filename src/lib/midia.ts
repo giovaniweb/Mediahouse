@@ -135,14 +135,17 @@ export const VALIDADE_MAQUINA_SEGUNDOS = 60 * 120
 /** URL assinada para LER. Curta por padrão: quem recebe já passou pela checagem. */
 export async function urlAssinadaDeLeitura(
   caminho: string,
-  segundos: number = VALIDADE_URL_SEGUNDOS
+  segundos: number = VALIDADE_URL_SEGUNDOS,
+  download = false
 ): Promise<string | null> {
   const sb = cliente()
   if (!sb) return null
   if (!caminhoMidiaValido(caminho)) return null
   const { data, error } = await sb.storage
     .from(BUCKET_PRIVADO)
-    .createSignedUrl(caminho, segundos)
+    // `download` faz o Storage responder como anexo: o navegador baixa em vez
+    // de abrir um vídeo de 2 GB numa aba.
+    .createSignedUrl(caminho, segundos, download ? { download: true } : undefined)
   if (error || !data?.signedUrl) {
     console.error("[midia] Falha ao assinar leitura:", error?.message)
     return null
@@ -173,10 +176,11 @@ export function comToken(url: string | null | undefined, token: string): string 
  */
 export async function resolverParaAssinada(
   url: string | null | undefined,
-  segundos: number = VALIDADE_URL_SEGUNDOS
+  segundos: number = VALIDADE_URL_SEGUNDOS,
+  download = false
 ): Promise<string | null> {
   if (!url) return null
   const caminho = caminhoDaUrl(url)
   if (!caminho) return url
-  return (await urlAssinadaDeLeitura(caminho, segundos)) ?? null
+  return (await urlAssinadaDeLeitura(caminho, segundos, download)) ?? null
 }

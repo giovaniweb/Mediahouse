@@ -5,6 +5,8 @@ import Link from "next/link"
 import { ArrowUpRight, Film, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { HojeEmFoco } from "./HojeEmFoco"
 import { AlertasIA } from "./AlertasIA"
+import { FluxoEtapas } from "./FluxoEtapas"
+import type { GargaloEtapa } from "@/lib/gargalos"
 import styles from "./DashboardPreview.module.css"
 
 type Metrics = {
@@ -15,6 +17,9 @@ type Data = {
   metricas?: Metrics;
   alertasAtivos?: ComponentProps<typeof AlertasIA>["alertas"];
   cargaEditores?: { id: string; nome: string; cargaAtual: number; cargaLimite: number; status: string }[];
+  // Onde as demandas esperam (PR #86): uma linha por etapa ativa, com dias médios.
+  gargalos?: GargaloEtapa[];
+  operacional?: { noPrazoPercentual: number | null; tempoMedioDias: number | null } | null;
 }
 type Distribution = { count?: number; percent?: number }
 type Props = {
@@ -74,6 +79,8 @@ export function DashboardPreview({ data, loading, b2c, ideias }: Props) {
         <p className={styles.note}>O alerta considera o peso dos trabalhos e o limite de carga cadastrado.</p>
       </section>
     </div>
+    {/* Complementa "Onde estão as entregas": aqui é há quanto tempo cada etapa segura as demandas. */}
+    <FluxoEtapas gargalos={data?.gargalos ?? []} operacional={data?.operacional} isLoading={loading} />
     <section className={styles.panel} aria-labelledby="decisions-title">
       <div className={styles.panelHeading}><div><h2 id="decisions-title">Decisões de hoje</h2><p>Atalhos para o trabalho que precisa avançar</p></div></div>
       <div className={styles.decisions}>

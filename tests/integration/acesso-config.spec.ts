@@ -53,8 +53,8 @@ describe("handler real com banco descartável", () => {
     expect((await post({ cnpj: "invadido" })).status).toBe(403)
     expect((await db.configEmpresa.findFirst({ where: { organizacaoId: orgB } }))?.cnpj).toBe("cnpj-sintetico-b")
   })
-  it("salvar pasta preserva CNPJ e token, sem devolvê-lo", async () => {
-    const res = await post({ googleDriveFolderId: "pasta-sintetica-123" }); expect(res.status).toBe(200)
+  it("salvar outro campo preserva CNPJ e token, sem devolvê-lo", async () => {
+    const res = await post({ observacoesNF: "observação sintética" }); expect(res.status).toBe(200)
     const body = await res.json(); expect(body.empresa.cnpj).toBe("cnpj-sintetico-a"); expect(body.empresa).not.toHaveProperty("googleRefreshToken")
     expect((await db.configEmpresa.findFirst({ where: { organizacaoId: orgA } }))?.googleRefreshToken).toBe("segredo-sintetico-a")
   })

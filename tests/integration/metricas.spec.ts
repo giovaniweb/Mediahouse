@@ -60,6 +60,8 @@ describe("mesmos indicadores em todos os consumidores", () => {
     const dash = await (await dashboard()).json()
     const exp = await computeRelatorioExecutivo(a,"2026-09","audiovisual")
     expect(prod.totalVideos).toBe(3); expect(dash.metricas.concluidasMes).toBe(3); expect(exp.nuflowVideos).toBe(3)
+    // "reaberta" está em Edição sem troca registrada: conta, mas sem data inventada.
+    expect(dash.gargalos.find((g: { etapa: string }) => g.etapa === "edicao")).toMatchObject({ demandas: 1, diasMedios: null, semHistorico: 1 })
     expect(exp.totalGeral).toBeNull()
   })
   it("Growth é design e não mistura empresa nem audiovisual", async () => {

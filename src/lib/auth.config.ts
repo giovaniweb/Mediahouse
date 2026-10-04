@@ -52,7 +52,7 @@ export const authConfig: NextAuthConfig = {
 
       // Rotas públicas — não precisam de autenticação
       const publicPaths = [
-        "/",              // root → redireciona para /sobre (landing page)
+        "/",              // landing do NuFlow (a página da produtora segue em /sobre)
         "/login",
         "/esqueci-senha",
         "/redefinir-senha",

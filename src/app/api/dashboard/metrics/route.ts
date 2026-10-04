@@ -1,5 +1,6 @@
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasOperacionais } from "@/lib/metricas-operacionais"
+import { gargalosPorEtapa } from "@/lib/gargalos"
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -23,6 +24,7 @@ export async function GET() {
     alertasAtivos,
     editores,
     operacional,
+    gargalos,
   ] = await Promise.all([
     prisma.demanda.count({
       where: {
@@ -59,6 +61,7 @@ export async function GET() {
       },
     }),
     metricasOperacionais(organizacaoId, recorteMetricas(new URLSearchParams({ periodo: "mes", area: "audiovisual" }))),
+    gargalosPorEtapa(organizacaoId),
   ])
   const concluidasMes = operacional.entregaveis
 
@@ -91,5 +94,6 @@ export async function GET() {
     },
     alertasAtivos,
     cargaEditores,
+    gargalos,
   })
 }

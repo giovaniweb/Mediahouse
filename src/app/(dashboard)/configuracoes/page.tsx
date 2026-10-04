@@ -5,7 +5,7 @@ import { AreaPublicaEmpresa } from "@/components/configuracoes/AreaPublicaEmpres
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, HardDrive, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -16,7 +16,7 @@ import { fetcher } from "@/lib/fetcher"
 import Link from "next/link"
 
 
-type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "drive" | "depoimentos"
+type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos"
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
@@ -1188,285 +1188,6 @@ function TabEmpresa() {
   )
 }
 
-// ─── Google Drive ─────────────────────────────────────────────────────────────
-
-function TabGoogleDrive() {
-  const { data, mutate } = useSWR("/api/config/empresa", fetcher)
-  const empresa = data?.empresa
-
-  const [folderInput, setFolderInput] = useState("")
-  const [loaded, setLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ enfileirados: number; existentes: number; ignorados: number } | null>(null)
-  const [syncCursor, setSyncCursor] = useState<string | null>(null)
-  const { data: syncStatus, error: syncStatusError, mutate: atualizarSync } = useSWR<{
-    ativo: boolean; ultimaCopiaEm: string | null; estados: Record<string, number>; recentes: { id: string; estado: string; erro: string | null; concluidoEm: string | null }[]
-  }>("/api/admin/sync-drive", fetcher, { refreshInterval: dados => (dados?.estados?.pendente || dados?.estados?.executando) ? 15000 : 0 })
-  if (empresa && !loaded) {
-    // Mostrar URL completa da pasta se tiver ID salvo
-    setFolderInput(
-      empresa.googleDriveFolderId
-        ? `https://drive.google.com/drive/folders/${empresa.googleDriveFolderId}`
-        : ""
-    )
-    setLoaded(true)
-  }
-
-  /** Extrai o folder ID de uma URL do Drive ou retorna o valor direto (se já for ID) */
-  function extrairFolderId(input: string): string {
-    const trimmed = input.trim()
-    const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{10,})/)
-    if (match) return match[1]
-    // Se não for URL, assume que é ID direto
-    if (/^[a-zA-Z0-9_-]{15,}$/.test(trimmed)) return trimmed
-    return trimmed
-  }
-
-  const salvarPasta = async () => {
-    const folderId = extrairFolderId(folderInput)
-    setSaving(true)
-    try {
-      const resposta = await fetch("/api/config/empresa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ googleDriveFolderId: folderId || null }),
-      })
-      if (!resposta.ok) throw new Error("Falha ao salvar")
-      setTestResult(null)
-      setSyncCursor(null)
-      setSyncResult(null)
-      toast.success("Pasta do Drive salva!")
-      mutate()
-    } catch {
-      toast.error("Erro ao salvar pasta")
-    } finally { setSaving(false) }
-  }
-
-  const folderId = empresa?.googleDriveFolderId
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h3 className="font-semibold text-zinc-200 flex items-center gap-2 mb-1">
-          <HardDrive className="w-4 h-4 text-blue-400" /> Google Drive
-        </h3>
-        <p className="text-xs text-zinc-500">
-          Conecte sua conta Google e configure a pasta onde os vídeos finais serão salvos.
-          Após configurado, os uploads vão direto para o Drive sem limite de tamanho.
-        </p>
-      </div>
-
-      {/* Status da conexão */}
-      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
-        <h4 className="text-sm font-semibold text-zinc-300">🔗 Conta Google</h4>
-
-        {empresa?.googleDriveEmail ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="inline-flex items-center gap-2 bg-emerald-900/50 text-emerald-400 border border-emerald-700/50 rounded-full px-4 py-2 text-sm font-medium">
-                <CheckCircle2 className="w-4 h-4" />
-                Conectado como {empresa.googleDriveEmail}
-              </span>
-            </div>
-            {empresa.googleDriveConnectedAt && (
-              <p className="text-xs text-zinc-600">
-                Conectado em{" "}
-                {new Date(empresa.googleDriveConnectedAt).toLocaleDateString("pt-BR", {
-                  day: "2-digit", month: "long", year: "numeric",
-                })}
-              </p>
-            )}
-            <div className="flex items-center gap-2 flex-wrap">
-              <a
-                href="/api/auth/setup-drive"
-                className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Reconectar / Trocar conta
-              </a>
-              <button
-                onClick={async () => {
-                  setTesting(true)
-                  setTestResult(null)
-                  try {
-                    const res = await fetch("/api/auth/setup-drive/test")
-                    const json = await res.json()
-                    if (res.ok && json.ok) {
-                      setTestResult({ ok: true, msg: `Pasta acessível em ${new Date(json.verificadoEm).toLocaleString("pt-BR")}. Nenhum arquivo criado.` })
-                    } else {
-                      setTestResult({ ok: false, msg: `❌ Erro: ${json.error ?? "Falha no teste"}` })
-                    }
-                  } catch {
-                    setTestResult({ ok: false, msg: "❌ Erro de rede ao testar conexão" })
-                  } finally {
-                    setTesting(false)
-                  }
-                }}
-                disabled={testing}
-                className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50"
-              >
-                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Verificar acesso à pasta
-              </button>
-            </div>
-            {testResult && (
-              <p className={`text-xs px-3 py-2 rounded-lg border ${testResult.ok ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-red-900/30 border-red-700/40 text-red-400"}`}>
-                {testResult.msg}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-zinc-400">Nenhuma conta conectada.</p>
-            <a
-              href="/api/auth/setup-drive"
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
-            >
-              <HardDrive className="w-4 h-4" /> Conectar Google Drive
-            </a>
-            <p className="text-xs text-zinc-600">
-              Você será redirecionado para o Google para autorizar o acesso.
-              Apenas leitura e escrita de arquivos — sem acesso a outros dados.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Pasta de destino */}
-      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
-        <h4 className="text-sm font-semibold text-zinc-300">📂 Pasta de Destino dos Vídeos</h4>
-        <p className="text-xs text-zinc-500">
-          Cole o link da pasta do Google Drive onde os vídeos finais serão salvos.
-          A pasta deve ser compartilhada com a conta conectada acima.
-        </p>
-
-        {folderId && (
-          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-3 py-2">
-            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Pasta configurada:</span>
-            <a
-              href={`https://drive.google.com/drive/folders/${folderId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-emerald-300 font-mono truncate max-w-[200px]"
-              title={folderId}
-            >
-              {folderId.slice(0, 20)}…
-            </a>
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={folderInput}
-            onChange={e => { setFolderInput(e.target.value); setTestResult(null) }}
-            placeholder="https://drive.google.com/drive/folders/1abc_ID_da_pasta"
-            className="flex-1 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-800 text-zinc-200 placeholder-zinc-500"
-          />
-          <button
-            onClick={salvarPasta}
-            disabled={saving || !folderInput.trim()}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-40 transition-colors whitespace-nowrap"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            Salvar Pasta
-          </button>
-        </div>
-        <p className="text-xs text-zinc-600">
-          💡 Dica: abra a pasta no Drive, copie a URL completa da barra de endereço e cole aqui.
-          O ID será extraído automaticamente.
-        </p>
-      </div>
-
-      {/* Status geral */}
-      {empresa?.googleDriveEmail && folderId ? (
-        <div className="flex items-start gap-3 bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-4">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-emerald-400">Conta e pasta configuradas</p>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Verifique o acesso à pasta. Configuração salva não confirma que os vídeos já foram copiados.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-start gap-3 bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
-          <AlertCircle className="w-5 h-5 text-zinc-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-zinc-400">
-              {!empresa?.googleDriveEmail && !folderId
-                ? "Conecte sua conta Google e configure a pasta para ativar os uploads via Drive."
-                : !empresa?.googleDriveEmail
-                ? "Falta conectar a conta Google."
-                : "Falta configurar a pasta de destino."}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Sincronização em lote de vídeos existentes */}
-      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
-        <div>
-          <h4 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-            <Upload className="w-4 h-4 text-purple-400" /> Sincronizar Vídeos Existentes com Drive
-          </h4>
-          <p className="text-xs text-zinc-500 mt-1">
-            Enfileira até 50 originais identificados por lote. A cópia segue as permissões da pasta de destino; o Flow não cria acesso público.
-            Original e prévia permanecem no Flow. Arquivos acima de 100 MiB precisam aguardar a ampliação do piloto.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={async () => {
-              setSyncing(true)
-              setSyncResult(null)
-              try {
-                const res = await fetch("/api/admin/sync-drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(syncCursor ? { cursor: syncCursor } : {}) })
-                const json = await res.json()
-                if (!res.ok) throw new Error(json.error ?? "Erro ao sincronizar")
-                setSyncResult({ enfileirados: json.enfileirados, existentes: json.existentes, ignorados: json.ignorados })
-                setSyncCursor(json.proximoCursor)
-                await atualizarSync()
-                toast.success(`${json.enfileirados} cópia(s) enfileirada(s). Acompanhe a conclusão abaixo.`)
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Erro ao sincronizar")
-              } finally {
-                setSyncing(false)
-              }
-            }}
-            disabled={syncing || !syncStatus?.ativo}
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {syncing ? "Enfileirando…" : syncCursor ? "Enfileirar próximo lote" : "Enfileirar cópias no Drive"}
-          </button>
-          {syncResult && (
-            <span className="text-xs text-zinc-300" role="status">
-              {syncResult.enfileirados} na fila · {syncResult.existentes} já registrados · {syncResult.ignorados} sem identidade elegível
-            </span>
-          )}
-        </div>
-        {syncStatusError && <p className="text-xs text-amber-400">Não foi possível consultar as cópias. Tente atualizar.</p>}
-        {syncStatus && (
-          <div className="text-xs text-zinc-400 space-y-2" aria-live="polite">
-            {!syncStatus.ativo && <p>Sincronização em homologação. A ativação desta empresa ainda está pendente.</p>}
-            <p>{syncStatus.estados?.concluido ?? 0} cópias verificadas · {syncStatus.estados?.pendente ?? 0} aguardando · {syncStatus.estados?.executando ?? 0} em andamento · {(syncStatus.estados?.falhou ?? 0) + (syncStatus.estados?.expirado ?? 0) + (syncStatus.estados?.cancelado ?? 0)} encerradas sem conclusão</p>
-            {syncStatus.ultimaCopiaEm && <p>Última cópia verificada: {new Date(syncStatus.ultimaCopiaEm).toLocaleString("pt-BR")}</p>}
-            {syncStatus.recentes?.some(c => c.erro) && <p className="text-amber-400">Há cópias que precisam de atenção. Detalhes abaixo.</p>}
-            {syncStatus.recentes?.filter(c => c.erro).map(c => <p key={c.id}>{c.erro === "reconectar_google" ? "Reconecte a conta Google." : c.erro === "permissao_google" || c.erro === "pasta_indisponivel" ? "Confira as permissões da pasta de destino." : c.erro === "original_acima_100_mib" ? "Original acima do limite de 100 MiB do piloto." : c.erro === "falha_temporaria" || c.erro === "google_http_429" ? "Falha temporária: nova tentativa conforme limite da fila." : "Cópia não concluída; revise a origem e a configuração do Drive."}</p>)}
-            <p>Enfileirar novamente não duplica cópias. Itens encerrados sem conclusão precisam de revisão antes de reprocessar.</p>
-          </div>
-        )}
-      </div>
-
-    </div>
-  )
-}
-
 // ─── Depoimentos ────────────────────────────────────────────────────────────
 
 interface DepoimentoAdmin {
@@ -1790,25 +1511,10 @@ function TabDepoimentos() {
 }
 
 /** Componente interno que usa useSearchParams — deve ficar dentro de <Suspense> */
-function DriveCallbackHandler({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
+function AbaPelaUrl({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   const searchParams = useSearchParams()
   useEffect(() => {
-    const driveStatus = searchParams?.get("drive")
-    const driveEmail = searchParams?.get("email")
-    const tabParam = searchParams?.get("tab")
-    if (tabParam === "empresa") onSetTab("empresa")
-    if (tabParam === "drive") onSetTab("drive")
-    if (driveStatus === "conectado") {
-      toast.success(driveEmail ? `Google Drive conectado como ${driveEmail}!` : "Google Drive conectado!")
-    } else if (driveStatus === "autorizacao_invalida") {
-      toast.error("A autorização expirou ou mudou de contexto. Inicie a conexão novamente.")
-    } else if (driveStatus === "recusado") {
-      toast.error("Autorização recusada. Tente novamente.")
-    } else if (driveStatus && driveStatus.startsWith("erro")) {
-      toast.error("Falha ao conectar Google Drive. Verifique as credenciais.")
-    } else if (driveStatus === "sem_credenciais") {
-      toast.error("GOOGLE_CLIENT_ID ou GOOGLE_CLIENT_SECRET não configurados.")
-    }
+    if (searchParams?.get("tab") === "empresa") onSetTab("empresa")
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return null
@@ -1821,7 +1527,6 @@ export default function ConfiguracoesPage() {
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "meu_perfil", label: "Atuação profissional", icon: Settings },
     { id: "empresa", label: "Dados da Empresa", icon: Building2 },
-    { id: "drive", label: "Google Drive", icon: HardDrive },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail de saída", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
@@ -1848,9 +1553,9 @@ export default function ConfiguracoesPage() {
   return (
     <>
       <Header title="Configurações" />
-      {/* Handler do callback OAuth2 do Google Drive (sem renderização visual) */}
+      {/* Abre a aba pedida em ?tab= (sem renderização visual) */}
       <Suspense fallback={null}>
-        <DriveCallbackHandler onSetTab={setTab} />
+        <AbaPelaUrl onSetTab={setTab} />
       </Suspense>
       <main className={cn("flex-1 p-6", preview.settings)}>
         <div className={preview.intro}><div><p className={preview.eyebrow}>SEU ESPAÇO DE TRABALHO</p><h1>Configurações</h1><p>Identidade da empresa, integrações e preferências em um só lugar.</p></div></div>
@@ -1899,7 +1604,6 @@ export default function ConfiguracoesPage() {
               {tab === "email" && <TabEmail />}
               {tab === "parametros" && <TabParametros />}
               {tab === "empresa" && <TabEmpresa />}
-              {tab === "drive" && <TabGoogleDrive />}
               {tab === "depoimentos" && <TabDepoimentos />}
             </section>
           </div>

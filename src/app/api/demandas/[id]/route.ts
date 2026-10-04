@@ -1,15 +1,12 @@
 import { emitirConvite, ConviteInvalido } from "@/lib/convites"
 import { requireAcesso } from "@/lib/acesso"
-import { driveCopiaAtiva } from "@/lib/drive-copias"
 import { marcadorConclusao } from "@/lib/job-transicoes"
-import { NextRequest, NextResponse, after } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { resolverParaAssinada, VALIDADE_MAQUINA_SEGUNDOS } from "@/lib/midia"
 import { registrarServicoPendente } from "@/lib/custo-servico"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
-import { criarSessaoUploadDrive } from "@/lib/google-drive"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
@@ -62,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
-        select: { id: true, tipoArquivo: true, url: true, nomeArquivo: true, sequencia: true, createdAt: true },
+        select: { id: true, tipoArquivo: true, url: true, originalUrl: true, nomeArquivo: true, sequencia: true, createdAt: true },
       },
       historicos: {
         include: { usuario: { select: { id: true, nome: true } } },
@@ -276,8 +273,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
       }
     }
 
-    // Quando mover para "Para Postar" → aprovar automaticamente todas as AprovacaoVideo pendentes
-    // e transferir cada vídeo do Supabase → Drive em background
+    // Quando mover para "Para Postar" → aprovar automaticamente todas as AprovacaoVideo pendentes.
+    // O vídeo fica no armazenamento do NuFlow; o download sai da galeria e da Biblioteca.
     if (body.statusVisivel === "para_postar") {
       try {
         const aprovacoesPendentes = await prisma.aprovacaoVideo.findMany({
@@ -302,98 +299,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
               severidade: "info",
             },
           }).catch(() => null)
-
-          // Para cada aprovação com vídeo no Supabase → transferir para o Drive em background
-          const demandaSnap = demandaAtual
-          const aprovacoesCopy = aprovacoesPendentes
-          const orgIdDrive = guard.organizacaoId
-          after(async () => {
-            for (const aprovacao of aprovacoesCopy) {
-              try {
-                // No piloto, cópias são solicitadas pela fila em Configurações > Google Drive.
-                if (driveCopiaAtiva(orgIdDrive)) continue
-                const urlVideo = aprovacao.urlVideo
-                if (!urlVideo || !urlVideo.includes("supabase")) continue
-
-                // Busca dados da demanda para construir o nome do arquivo
-                const dem = await prisma.demanda.findUnique({
-                  where: { id: aprovacao.demandaId },
-                  include: { produtos: { select: { produto: { select: { nome: true } } } } },
-                })
-                if (!dem) continue
-
-                // Busca o Arquivo correspondente para obter sequencia
-                const arq = await prisma.arquivo.findFirst({
-                  where: { demandaId: dem.id, url: urlVideo, tipoArquivo: "final" },
-                })
-                const seq = arq?.sequencia ?? 1
-                const seqStr = String(seq).padStart(3, "0")
-
-                // Constrói nome: [produto]_[titulo]_[codigo]_001.ext
-                const sanitize = (s: string) => s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
-                const parts: string[] = []
-                const prod = dem.produtos?.[0]?.produto?.nome
-                if (prod) parts.push(sanitize(prod).substring(0, 30))
-                parts.push(sanitize(dem.titulo).substring(0, 40))
-                parts.push(dem.codigo)
-                const ext = urlVideo.split(".").pop()?.split("?")[0] ?? "mp4"
-                const fileName = `${parts.join("_")}_${seqStr}.${ext}`
-
-                // Stream: Supabase → Drive (server-to-server)
-                // A mídia nova vive em bucket privado e a URL guardada é do nosso app:
-                // o servidor não consegue buscá-la direto. Assina aqui, com validade de
-                // máquina — a cópia para o Drive baixa o arquivo inteiro, e 10 minutos
-                // não bastam para vídeo grande.
-                const origem = (await resolverParaAssinada(urlVideo, VALIDADE_MAQUINA_SEGUNDOS)) ?? urlVideo
-                const supaRes = await fetch(origem)
-                if (!supaRes.ok || !supaRes.body) {
-                  console.error(`[ParaPostar] Falha ao buscar vídeo ${seqStr} do Supabase:`, supaRes.status)
-                  continue
-                }
-                const fileSize = parseInt(supaRes.headers.get("Content-Length") ?? "0")
-                if (fileSize <= 0) {
-                  console.error(`[ParaPostar] Content-Length ausente para vídeo ${seqStr}`)
-                  continue
-                }
-                const contentType = supaRes.headers.get("Content-Type") ?? "video/mp4"
-
-                const { sessionUri, publicUrl } = await criarSessaoUploadDrive({ fileName, fileSize, contentType }, orgIdDrive)
-
-                const driveRes = await fetch(sessionUri, {
-                  method: "PUT",
-                  headers: {
-                    "Content-Type": contentType,
-                    "Content-Length": String(fileSize),
-                    "Content-Range": `bytes 0-${fileSize - 1}/${fileSize}`,
-                  },
-                  body: supaRes.body,
-                  // @ts-ignore — duplex necessário no Node.js fetch para body streaming
-                  duplex: "half",
-                })
-
-                if (driveRes.status === 200 || driveRes.status === 201) {
-                  // Atualiza o Arquivo com a URL permanente do Drive
-                  if (arq) {
-                    await prisma.arquivo.update({
-                      where: { id: arq.id },
-                      data: { url: publicUrl },
-                    })
-                  }
-                  // Atualiza linkFinal com o Drive URL mais recente
-                  await prisma.demanda.update({
-                    where: { id: dem.id },
-                    data: { linkFinal: publicUrl },
-                  })
-                  console.info(`[ParaPostar] Drive upload concluído (${seqStr}): ${publicUrl}`)
-                } else {
-                  const errText = await driveRes.text().catch(() => "")
-                  console.error(`[ParaPostar] Drive retornou HTTP ${driveRes.status} para ${seqStr}:`, errText.slice(0, 300))
-                }
-              } catch (e) {
-                console.error(`[ParaPostar] Erro ao transferir vídeo para Drive:`, e)
-              }
-            }
-          })
         }
       } catch (e) {
         console.error("Erro ao auto-aprovar aprovações ao mover para Para Postar:", e)
