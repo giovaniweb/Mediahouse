@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { AlertasIA } from "@/components/dashboard/AlertasIA"
 import { CargaEquipe } from "@/components/dashboard/CargaEquipe"
+import { FluxoEtapas } from "@/components/dashboard/FluxoEtapas"
 import { HojeEmFoco } from "@/components/dashboard/HojeEmFoco"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
@@ -91,6 +92,8 @@ function InternalDashboard() {
           <MetricCard label="Concluídas Mês" value={isLoading ? "—" : m?.concluidasMes ?? 0}
             icon={<CheckCircle className="w-5 h-5" />} color="green" href="/demandas?statusVisivel=finalizado" />
         </div>
+
+        <FluxoEtapas gargalos={data?.gargalos ?? []} operacional={data?.operacional} isLoading={isLoading} />
 
         {/* Tendência semanal */}
         {tendencia.length > 0 && (
