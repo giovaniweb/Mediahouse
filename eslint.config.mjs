@@ -4,7 +4,8 @@ import nextTypescript from "eslint-config-next/typescript"
 export default [
   {
     ignores: [
-      ".next/**",
+      "**/.next/**",
+      ".claude/worktrees/**",
       "node_modules/**",
       "src/generated/**",
       "worker-transcode/**",
