@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
+import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 
 // GET /api/usuarios — Pessoas & Acessos da organização logada (admin/gestor).
 // ISOLADO por organização (via membership). Inclui categoria/função/áreas/papel.
@@ -107,20 +108,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Campos obrigatórios: nome, senha, tipo" }, { status: 400 })
   }
 
+  // E-mail e telefone são únicos na plataforma, não na empresa: a busca enxerga
+  // todas as empresas e devolve só o id (ver src/lib/criar-usuario.ts).
   const emailFinal = email?.trim() || null
-  if (emailFinal) {
-    const existe = await prisma.usuario.findUnique({ where: { email: emailFinal } })
-    if (existe) return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 })
+  if (emailFinal && await usuarioIdPorEmail(emailFinal)) {
+    return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 })
   }
 
   const telDigits = telefone?.replace(/\D/g, "") ?? ""
   if (telDigits.length >= 8) {
-    const existePorTel = await prisma.usuario.findFirst({
-      where: { telefone: { contains: telDigits.slice(-9) } },
-      select: { id: true, nome: true, email: true, telefone: true },
-    })
-    if (existePorTel) {
-      return NextResponse.json({ error: "Telefone já cadastrado", usuario: existePorTel }, { status: 409 })
+    const existenteId = await usuarioIdPorTelefone(telDigits.slice(-9))
+    if (existenteId) {
+      // Os dados da pessoa só voltam se ela já for desta empresa — a tela usa
+      // para oferecer completar o cadastro. Pessoa de outra empresa não é
+      // assunto desta: o conflito é informado sem nome nem contato.
+      const existePorTel = await prisma.usuario.findUnique({
+        where: { id: existenteId },
+        select: { id: true, nome: true, email: true, telefone: true },
+      })
+      return NextResponse.json(
+        existePorTel ? { error: "Telefone já cadastrado", usuario: existePorTel } : { error: "Telefone já cadastrado em outra conta" },
+        { status: 409 }
+      )
     }
   }
 
@@ -129,24 +138,22 @@ export async function POST(req: NextRequest) {
   }
 
   const senhaHash = await bcrypt.hash(senha, 12)
-  const usuario = await prisma.usuario.create({
-    data: { nome, email: emailFinal, senhaHash, tipo: tipo as TipoUsuario, telefone },
-    select: { id: true, nome: true, email: true, tipo: true, status: true },
-  })
 
-  // Membership na org logada (Pessoas & Acessos). Dimensões opcionais no body.
+  // Pessoa e membership na org logada (Pessoas & Acessos) nascem juntas — sob
+  // RLS a pessoa sem vínculo nem pode ser lida de volta. Dimensões opcionais no body.
   const areasValidas: AreaAtuacao[] = ["audiovisual", "growth", "eventos"]
   const areas = Array.isArray(body.areas) ? (body.areas as string[]).filter((a) => areasValidas.includes(a as AreaAtuacao)) as AreaAtuacao[] : []
-  await prisma.usuarioOrganizacao.create({
-    data: {
-      usuarioId: usuario.id,
-      organizacaoId,
+  const usuario = await criarUsuarioComVinculo(
+    organizacaoId,
+    { nome, email: emailFinal, senhaHash, tipo: tipo as TipoUsuario, telefone },
+    {
       papel: tipo as TipoUsuario,
       categoria: (body.categoria as CategoriaPessoa) ?? "interna",
       funcaoProfissional: (body.funcaoProfissional as string | undefined)?.trim() || tipo,
       areas,
     },
-  })
+    { id: true, nome: true, email: true, tipo: true, status: true }
+  )
 
   return NextResponse.json({ usuario }, { status: 201 })
 }

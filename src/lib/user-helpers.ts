@@ -8,6 +8,7 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { PRESETS } from "@/lib/permissoes"
 import { setPermissoes } from "@/lib/permissoes-server"
 import { dimensoesParaTipo } from "@/lib/pessoas"
+import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 
 /**
  * Gera senha padrão: nuflow + últimos 4 dígitos do telefone
@@ -19,6 +20,8 @@ export function gerarSenhaPadrao(telefone: string | null | undefined): string {
   return `nuflow${last4}`
 }
 
+const SELECT_PESSOA = { id: true, nome: true, email: true, telefone: true } as const
+
 interface CriarUsuarioParams {
   nome: string
   email?: string | null
@@ -27,14 +30,13 @@ interface CriarUsuarioParams {
   /** ID do videomaker, editor ou designer para vincular */
   referenciaId?: string
   /** Org que está cadastrando — cria a membership (UsuarioOrganizacao) explícita */
-  organizacaoId?: string | null
+  organizacaoId: string
 }
 
 // Garante a membership do usuário na org com papel + dimensões (categoria/função/áreas)
 // derivadas do tipo. Idempotente: ao já existir, só preenche campos vazios — não
 // sobrescreve edições manuais (categoria já definida ou áreas já preenchidas).
-async function garantirMembership(usuarioId: string, organizacaoId: string | null | undefined, papel: CriarUsuarioParams["tipo"]) {
-  if (!organizacaoId) return
+async function garantirMembership(usuarioId: string, organizacaoId: string, papel: CriarUsuarioParams["tipo"]) {
   const dim = dimensoesParaTipo(papel)
   const existente = await prisma.usuarioOrganizacao.findUnique({
     where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
@@ -65,21 +67,17 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
   // Email real se fornecido, senão null (login será feito pelo telefone)
   const emailLogin = email?.trim() || null
 
-  // Verificar se já existe por email (se tiver) ou por telefone
-  let existe = null
-  if (emailLogin) {
-    existe = await prisma.usuario.findUnique({ where: { email: emailLogin } })
-  } else if (telefone) {
-    const cleanDigits = telefone.replace(/\D/g, "")
-    existe = await prisma.usuario.findFirst({
-      where: {
-        telefone: { contains: cleanDigits },
-      },
-    })
-  }
-  if (existe) {
-    // Mesmo já existindo, garante a membership na org que está cadastrando.
-    await garantirMembership(existe.id, organizacaoId, tipo)
+  // Verificar se já existe por email (se tiver) ou por telefone. A busca vê a
+  // plataforma inteira: a pessoa pode ter sido cadastrada por outra empresa, e
+  // sob RLS o cliente normal não a encontraria (ver src/lib/criar-usuario.ts).
+  const existenteId = emailLogin
+    ? await usuarioIdPorEmail(emailLogin)
+    : telefone ? await usuarioIdPorTelefone(telefone.replace(/\D/g, "")) : null
+  if (existenteId) {
+    // Mesmo já existindo, garante a membership na org que está cadastrando —
+    // e é ela que torna a pessoa legível para esta empresa logo abaixo.
+    await garantirMembership(existenteId, organizacaoId, tipo)
+    const existe = await prisma.usuario.findUniqueOrThrow({ where: { id: existenteId }, select: SELECT_PESSOA })
     return { usuario: existe, jáExistia: true, senha: null }
   }
 
@@ -87,16 +85,15 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
   const senhaTexto = gerarSenhaPadrao(telefone)
   const senhaHash = await bcrypt.hash(senhaTexto, 12)
 
-  // Criar usuario (email pode ser null — login será pelo telefone)
-  const usuario = await prisma.usuario.create({
-    data: {
-      nome,
-      email: emailLogin,
-      telefone,
-      tipo,
-      senhaHash,
-    },
-  })
+  // Criar usuario (email pode ser null — login será pelo telefone), já com a
+  // membership explícita na org que está cadastrando (multiempresa).
+  const dim = dimensoesParaTipo(tipo)
+  const usuario = await criarUsuarioComVinculo(
+    organizacaoId,
+    { nome, email: emailLogin, telefone, tipo, senhaHash },
+    { papel: tipo, categoria: dim.categoria, funcaoProfissional: dim.funcaoProfissional, areas: dim.areas },
+    SELECT_PESSOA
+  )
 
   // Vincular ao videomaker/editor/designer
   if (referenciaId) {
@@ -109,15 +106,10 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
     }
   }
 
-  // Membership explícita na org que está cadastrando (multiempresa)
-  await garantirMembership(usuario.id, organizacaoId, tipo)
-
   // Permissões do preset, válidas NESTA empresa. Vem depois da membership de
   // propósito: a permissão pertence ao vínculo, não à pessoa — sem empresa não
   // há permissão a conceder.
-  if (organizacaoId) {
-    await setPermissoes(usuario.id, organizacaoId, PRESETS[tipo] ?? {})
-  }
+  await setPermissoes(usuario.id, organizacaoId, PRESETS[tipo] ?? {})
 
   return { usuario, jáExistia: false, senha: senhaTexto }
 }

@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
 
   // Auto-criar conta de acesso (Usuario) para o videomaker
   try {
+    // A conta nasce vinculada à empresa que cadastra; sem empresa ativa não há
+    // a quem vincular — e sob RLS a pessoa sem vínculo nem poderia ser gravada.
+    if (!organizacaoId) throw new Error("sem empresa ativa para vincular a conta")
     const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
       nome: body.nome,
       email: body.email,
