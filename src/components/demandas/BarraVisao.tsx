@@ -28,9 +28,13 @@ const ABAS: { id: AbaRapida; label: string }[] = [
 ]
 
 export function BarraVisao({
-  demandas, visao, onVisao, aba, onAba, total, filters, area = "audiovisual",
+  demandas, visao, onVisao, aba, onAba, total, filters, paginacao, aviso,
 }: {
   filters?: ReactNode
+  /** Paginação da fila e link do histórico, à direita da primeira linha. */
+  paginacao?: ReactNode
+  /** Aviso que precisa ser lido (ex.: concluídos antigos sem data). */
+  aviso?: ReactNode
   area?: "audiovisual" | "growth"
   demandas: DemandaLista[]
   visao: Visao
@@ -42,26 +46,31 @@ export function BarraVisao({
   const { presentation, setPresentation } = useDetailPresentation()
   const kpi = calcularKpis(demandas)
 
+  // Duas linhas, e não cinco: o título grande, os números, as abas, os filtros e
+  // os recortes empilhados deixavam ao quadro só o rodapé da tela. O nome da
+  // página já está na barra de cima.
   return <section className={styles.overview} aria-label="Controles do quadro">
-    <div className={styles.heading}>
-      <h1>{area === "growth" ? "Conteúdo que move." : "Produção em movimento."}</h1>
-      <p>{area === "growth" ? "Copy, criação e aprovação no mesmo fluxo." : "Do briefing à publicação, sem perder o contexto."}</p>
-    </div>
-    <div className={styles.counts} aria-label="Resumo das demandas filtradas">
-      <span><strong>{kpi.abertas}</strong> {contagem(kpi.abertas, "aberta", "abertas")}</span>
-      <span data-tone="late"><strong>{kpi.atrasadas}</strong> {contagem(kpi.atrasadas, "atrasada", "atrasadas")}</span>
-      <span data-tone="approval"><strong>{kpi.aprovacao}</strong> em aprovação</span>
-      <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> {contagem(kpi.concluidasHoje, "concluída", "concluídas")} hoje</span>
-    </div>
-    <div className={styles.viewRow}>
+    <div className={styles.topRow}>
       <div className={styles.tabs} aria-label="Visualização do quadro">
-        {VISOES.map(({id, label, icone: Icon}) => <button key={id} type="button" aria-label={`Ver como ${label.toLowerCase()}`} aria-pressed={visao === id} onClick={() => onVisao(id)}><Icon size={17} />{label}</button>)}
+        {VISOES.map(({id, label, icone: Icon}) => <button key={id} type="button" aria-label={`Ver como ${label.toLowerCase()}`} aria-pressed={visao === id} onClick={() => onVisao(id)}><Icon size={16} />{label}</button>)}
       </div>
-      <label className={styles.opening}>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+      <div className={styles.counts} aria-label="Resumo das demandas filtradas">
+        <span><strong>{kpi.abertas}</strong> {contagem(kpi.abertas, "aberta", "abertas")}</span>
+        <span data-tone="late"><strong>{kpi.atrasadas}</strong> {contagem(kpi.atrasadas, "atrasada", "atrasadas")}</span>
+        <span data-tone="approval"><strong>{kpi.aprovacao}</strong> em aprovação</span>
+        <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> {contagem(kpi.concluidasHoje, "concluída", "concluídas")} hoje</span>
+      </div>
+      <div className={styles.right}>
+        {paginacao}
+        <label className={styles.opening}><span>Abrir em</span><select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+      </div>
     </div>
-    <div className={styles.filters}>{filters}</div>
-    <div className={styles.scopes} aria-label="Recortes das demandas">
-      {ABAS.map(item => <button key={item.id} type="button" aria-pressed={aba === item.id} onClick={() => onAba(item.id)}>{item.label}{aba === item.id && <span>{total}</span>}</button>)}
+    <div className={styles.controlsRow}>
+      <div className={styles.scopes} aria-label="Recortes das demandas">
+        {ABAS.map(item => <button key={item.id} type="button" aria-pressed={aba === item.id} onClick={() => onAba(item.id)}>{item.label}{aba === item.id && <span>{total}</span>}</button>)}
+      </div>
+      <div className={styles.filters}>{filters}</div>
     </div>
+    {aviso && <div className={styles.aviso}>{aviso}</div>}
   </section>
 }
