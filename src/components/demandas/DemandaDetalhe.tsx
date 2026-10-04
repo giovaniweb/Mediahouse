@@ -11,6 +11,7 @@ import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 import { analisarVideoDoUpload } from "@/lib/video-compat"
+import { paraDownload } from "@/lib/midia-download"
 import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
@@ -153,7 +154,7 @@ function getDemandCopy(growth: boolean) {
       addFinalButton: "🚀 Enviar outro arquivo",
       sendApprovalButton: "🚀 Enviar Arte/Criativo para Aprovação",
       finalCountLabel: "arquivo(s)",
-      progressHint: "Upload → aprovação → Drive automático",
+      progressHint: "Upload → aprovação → download na Biblioteca",
       uploadModalTitle: "🚀 Enviar arte/criativo para aprovação",
       rawUploadModalTitle: "📁 Upload de Materiais",
       uploadModalDescription: "Envie o arquivo final e gere o link de aprovação para o cliente.",
@@ -186,13 +187,13 @@ function getDemandCopy(growth: boolean) {
     addFinalButton: "🚀 Enviar mais um vídeo",
     sendApprovalButton: "🚀 Enviar para Aprovação",
     finalCountLabel: "vídeo(s)",
-    progressHint: "Supabase → aprovação → Drive automático",
+    progressHint: "Upload → aprovação → download na galeria",
     uploadModalTitle: "🚀 Enviar para Aprovação",
     rawUploadModalTitle: "📁 Upload de Brutos",
     uploadModalDescription: "Envie o vídeo final e gere o link de aprovação para o cliente.",
     rawUploadModalDescription: "Faça upload do material bruto filmado ou informe o link.",
     fileAccept: "video/*,.zip",
-    uploadFormat: "mp4, mov, avi, webm · via Google Drive · sem limite de tamanho",
+    uploadFormat: "mp4, mov, avi, webm",
     contentTypeFallback: "video/mp4",
     approvalTitle: "Aprovação de Vídeo",
     dateCaptureLabel: "Captação",
@@ -202,7 +203,7 @@ function getDemandCopy(growth: boolean) {
 }
 
 interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
-interface ArquivoVideo { id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null; createdAt: string }
+interface ArquivoVideo { id: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo: string; sequencia: number | null; createdAt: string }
 
 /**
  * Avisa que o link de aprovação morreu — e oferece a renovação num clique.
@@ -277,7 +278,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [linkModalTab, setLinkModalTab] = useState<"upload" | "url">("upload")
   const [linkModalFile, setLinkModalFile] = useState<File | null>(null)
   const [linkModalTipo, setLinkModalTipo] = useState<"final" | "brutos">("final")
-  const [uploadProgress, setUploadProgress] = useState(0) // 0-100 durante upload Drive
   const fileRefLinkModal = useRef<HTMLInputElement>(null)
   const [playerUrl, setPlayerUrl] = useState<string | null>(null)
   const [copiado, setCopiado] = useState(false)
@@ -654,81 +654,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     else toast.error("Erro ao remover")
   }
 
-  // ── Upload via Google Drive (chunks via servidor — sem CORS) ──────────────
-  // O browser envia chunks para o nosso servidor, que os repassa ao Google.
-  // Evita o problema de CORS que ocorre com PUT direto do browser para googleapis.com
-  // usando sessões autenticadas com Service Account.
-  async function uploadParaDrive(file: File, tipo: "final" | "brutos"): Promise<string> {
-    setUploadProgress(0)
-
-    const CHUNK_SIZE = 4 * 1024 * 1024 // 4 MB por chunk (dentro do limite Vercel 4.5 MB)
-    const contentType = file.type || copy.contentTypeFallback
-    const ext = file.name.split(".").pop() ?? "mp4"
-
-    // Filename: [produto]_[titulo]_[codigo]
-    const sanitize = (s: string) =>
-      s.replace(/[/\\:*?"<>|]/g, "").trim().replace(/\s+/g, "_")
-    const produtoNome = (demanda as { produtos?: { produto?: { nome?: string } }[] })
-      ?.produtos?.[0]?.produto?.nome
-    const demandaTitulo = (demanda as { titulo?: string })?.titulo
-    const demandaCodigo = (demanda as { codigo?: string })?.codigo ?? id
-    const parts: string[] = []
-    if (produtoNome) parts.push(sanitize(produtoNome).substring(0, 30))
-    if (demandaTitulo) parts.push(sanitize(demandaTitulo).substring(0, 40))
-    if (demandaCodigo) parts.push(String(demandaCodigo))
-    const fileName = (parts.length > 0 ? parts.join("_") : `${isGrowth ? "arquivo" : "video"}_${tipo}`) + `.${ext}`
-
-    // 1. Criar sessão de upload resumável no Google Drive (server-side)
-    const params = new URLSearchParams({
-      fileName,
-      fileSize: String(file.size),
-      contentType,
-    })
-    const urlRes = await fetch(`/api/demandas/${id}/drive-upload-url?${params}`)
-    if (!urlRes.ok) {
-      const err = await urlRes.json().catch(() => ({ error: "Erro ao criar sessão Drive" }))
-      throw new Error((err as { error?: string }).error ?? "Erro ao criar sessão Drive")
-    }
-    const { sessionUri, publicUrl } = (await urlRes.json()) as { sessionUri: string; publicUrl: string }
-
-    // 2. Upload em chunks via servidor (server-to-server, sem CORS)
-    let offset = 0
-    while (offset < file.size) {
-      const end   = Math.min(offset + CHUNK_SIZE, file.size)
-      const chunk = file.slice(offset, end)
-
-      const res = await fetch(`/api/demandas/${id}/drive-upload-chunk`, {
-        method: "POST",
-        headers: {
-          "Content-Type":   "application/octet-stream",
-          "x-session-uri":  sessionUri,
-          "x-offset":       String(offset),
-          "x-total-size":   String(file.size),
-          "x-content-type": contentType,
-        },
-        body: chunk,
-      })
-
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({} as { error?: string }))
-        throw new Error(json.error ?? `Falha no upload (bytes ${offset}–${end})`)
-      }
-
-      offset = end
-      setUploadProgress(Math.round((offset / file.size) * 100))
-    }
-
-    // 3. Salva URL do Drive na demanda
-    const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: publicUrl, tipo }),
-    })
-    if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
-
-    return publicUrl
-  }
-
   // ── Atribuição rápida (sem entrar em edit mode) ───────────────────────────
   async function atribuirRapido(campo: "videomakerId" | "editorId", valor: string) {
     try {
@@ -784,8 +709,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       let videoUrl = urlVideoInput.trim()
 
       if (linkModalTab === "upload" && linkModalFile) {
-        // Vídeo final → Google Drive (sem limite de tamanho)
-        // Brutos → Supabase (arquivos menores, fluxo interno)
+        // Final e brutos vão para o armazenamento do NuFlow por URL assinada.
         if (linkModalTipo === "final") {
           videoUrl = await uploadPresigned(linkModalFile, "final")
           setLinkFinal(videoUrl)
@@ -1897,6 +1821,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                                       className="p-1 text-zinc-500 hover:text-purple-400 transition-colors">
                                       <Play className="w-3.5 h-3.5" />
                                     </button>
+                                    {/* Toca a prévia; baixa o original enviado, quando houve conversão */}
+                                    <a href={paraDownload(arq.originalUrl ?? arq.url) ?? arq.url} target="_blank" rel="noopener noreferrer"
+                                      title={arq.originalUrl ? "Baixar original" : "Baixar"}
+                                      className="p-1 text-zinc-500 hover:text-sky-400 transition-colors">
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
                                     <button onClick={() => {navigator.clipboard.writeText(arq.url); toast.success("Link copiado!")}}
                                       title="Copiar link" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
                                       <Copy className="w-3.5 h-3.5" />
@@ -2444,21 +2374,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     }
                   </button>
                 )}
-                {/* Barra de progresso do upload Drive */}
-                {gerandoLink && linkModalTipo === "final" && uploadProgress > 0 && uploadProgress < 100 && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-zinc-400">
-                      <span>Enviando para o Google Drive…</span>
-                      <span>{uploadProgress}%</span>
-                    </div>
-                    <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <button
                     onClick={gerarLinkAprovacao}
@@ -2466,13 +2381,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white text-sm py-2 rounded-xl hover:bg-purple-500 disabled:opacity-50 font-medium"
                   >
                     {gerandoLink
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {linkModalTipo === "final" && uploadProgress > 0 && uploadProgress < 100 ? `${uploadProgress}%…` : "Enviando…"}</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> "Enviando…"</>
                       : linkModalTipo === "brutos"
                         ? <><Upload className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Materiais" : "Enviar Brutos"}</>
                         : <><Send className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Criativo" : "Enviar para Aprovação"}</>
                     }
                   </button>
-                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final"); setUploadProgress(0) }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
                     Cancelar
                   </button>
                 </div>

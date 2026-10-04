@@ -2696,6 +2696,39 @@ model LoteAcervo {
   @@map("lotes_acervo")
 }
 
+/// Contato de quem quer conhecer o NuFlow (landing → /comecar). Global de
+/// propósito: ainda não é cliente de nenhuma empresa. A rota pública só insere
+/// (INSERT sem RETURNING); quem lê é o superadmin, pela conexão administrativa.
+model LeadComercial {
+  id              String   @id @default(cuid())
+  nome            String
+  email           String
+  telefone        String
+  empresa         String
+  mensagem        String?
+  origem          String?
+  campanha        String?
+  /// HMAC do IP com segredo do servidor — conta tentativas sem identificar ninguém.
+  ipHash          String?  @map("ip_hash")
+  consentimentoEm DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("leads_comerciais")
+}
+
+/// Tentativas por chave e janela dos formulários públicos. Só a função
+/// consumir_limite_publico (SECURITY DEFINER) toca nesta tabela; a aplicação
+/// não lê nem escreve direto.
+model LimitePublico {
+  chave        String   @id
+  janelaInicio DateTime
+  contagem     Int
+
+  @@index([janelaInicio])
+  @@map("limites_publicos")
+}
+
 // Custos complementares. Externos permanecem exclusivamente em CustoVideomaker.
 model LancamentoSetor {
   id String @id @default(cuid())

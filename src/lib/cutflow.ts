@@ -245,3 +245,7 @@ export function pastaDoDrive(url: string | null | undefined): string | null {
     return null
   }
 }
+
+/** Envio do vídeo final pelo plugin: desligado desde que o NuFlow deixou o
+ *  Google Drive (03/10/2026), até ir direto ao armazenamento do NuFlow. */
+export const ENVIO_INDISPONIVEL = "O envio pelo Cutflow está em revisão. Envie o vídeo final pela tela da demanda no NuFlow."

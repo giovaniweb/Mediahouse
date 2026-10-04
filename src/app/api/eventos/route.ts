@@ -7,8 +7,6 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
-import { criarPastaDrive } from "@/lib/google-drive"
-import { after } from "next/server"
 import type { Prioridade } from "@prisma/client"
 
 function gerarCodigoEvento(): string {
@@ -266,17 +264,6 @@ export async function POST(req: NextRequest) {
         detalhe: `Evento criado com ${demandasCriadas.length} demanda(s) audiovisual(is)${coberturaId ? " + cobertura" : ""}`,
       },
     }).catch(() => null)
-
-    // Pasta no Drive (best-effort, em background; não bloqueia a resposta)
-    const orgIdDrive = organizacaoId
-    after(async () => {
-      try {
-        const { folderUrl } = await criarPastaDrive(`${evento.codigo} — ${evento.nome}`, orgIdDrive)
-        await prisma.eventoGestao.update({ where: { id: evento.id }, data: { linkDrive: folderUrl } })
-      } catch (e) {
-        console.error("[Eventos] Drive não configurado ou falha ao criar pasta:", e instanceof Error ? e.message : e)
-      }
-    })
 
     return NextResponse.json({ evento: { id: evento.id }, demandasCriadas: demandasCriadas.length, coberturaId, ok: true }, { status: 201 })
   } catch (e) {

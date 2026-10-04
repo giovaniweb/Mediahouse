@@ -8,15 +8,14 @@ vi.mock("@/lib/midia", async () => {
   const real = await vi.importActual<typeof import("@/lib/midia")>("@/lib/midia")
   return { ...real, urlAssinadaDeLeitura: assinar, resolverParaAssinada: async (u: string | null) => u && real.caminhoDaUrl(u) ? assinar(real.caminhoDaUrl(u)!) : u }
 })
-vi.mock("@/lib/google-drive", () => ({ getAccessToken: vi.fn() }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as galeria } from "@/app/api/publico/galeria/route"
 import { GET as midia } from "@/app/api/midia/[...caminho]/route"
 import { POST as publicar } from "@/app/api/biblioteca/[id]/publicacao/route"
 import { GET as biblioteca } from "@/app/api/biblioteca/route"
-import { GET as thumbnail } from "@/app/api/publico/drive-thumbnail/route"
-import { getAccessToken } from "@/lib/google-drive"
+import { GET as aprovacaoGET } from "@/app/api/aprovacao-video/[token]/route"
+import { GET as acompanhamento } from "@/app/api/publico/demanda/[token]/route"
 const p = `media-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, admin = `${p}-admin`, leitor = `${p}-leitor`, vm = `${p}-vm`
 const d1 = `${p}-d1`, d2 = `${p}-d2`, d3 = `${p}-d3`, arq = `${p}-arq`, arq2 = `${p}-arq2`, arq3 = `${p}-arq3`
 const path = (org: string, d: string, tipo = "videos", nome = "1.mp4") => `org/${org}/${tipo}/${d}/${nome}`
@@ -39,8 +38,10 @@ beforeAll(async () => {
   await db.demandaCompartilhamento.create({ data: { id: `${p}-espelho`, demandaId: d1, organizacaoOrigemId: a, organizacaoDestinoId: b, nomeOrigem: "A", nomeDestino: "B", criadoPorId: admin } })
 })
 beforeEach(async () => {
-  estado.sessao = null; assinar.mockClear(); vi.mocked(getAccessToken).mockClear()
-  await db.arquivo.update({ where: { id: arq }, data: { publicadoEm: null, publicadoPor: null, revogadoEm: null, revogadoPor: null, publicacaoUrl: null, publicacaoThumbnailUrl: null, url: url(a,d1) } })
+  estado.sessao = null; assinar.mockClear()
+  await db.arquivo.update({ where: { id: arq }, data: { publicadoEm: null, publicadoPor: null, revogadoEm: null, revogadoPor: null, publicacaoUrl: null, publicacaoThumbnailUrl: null, url: url(a,d1), originalUrl: null } })
+  await db.arquivo.update({ where: { id: arq2 }, data: { url: url(a,d2), originalUrl: null } })
+  await db.aprovacaoVideo.update({ where: { token: `${p}-aprovacao` }, data: { urlVideo: url(a,d1) } })
 })
 afterAll(async () => {
   await db.organizacao.deleteMany({ where: { id: { in: [a,b] } } })
@@ -144,9 +145,61 @@ describe("publicação explícita e autorização por objeto", () => {
       expect((await ler(path(a,d1))).status).toBe(404)
     } finally { await db.demanda.update({ where: { id: d1 }, data: { area: "audiovisual" } }) }
   })
-  it("Drive privado não aciona o provedor de thumbnails", async () => {
-    await db.arquivo.update({ where: { id: arq }, data: { url: "https://drive.google.com/file/d/arquivoPrivado123/view" } })
-    expect((await thumbnail(new NextRequest(`http://localhost/api/publico/drive-thumbnail?org=${a}&fileId=arquivoPrivado123`))).status).toBe(404)
-    expect(getAccessToken).not.toHaveBeenCalled()
+})
+
+describe("download do original quando o vídeo exibido é a prévia convertida", () => {
+  // Depois da conversão, `url` é a prévia de 720p e o enviado fica em `originalUrl`.
+  const previa = url(a,d1,"videos","previa.mp4"), original = url(a,d1)
+  const converter = async () => {
+    await db.arquivo.update({ where: { id: arq }, data: { url: previa, originalUrl: original } })
+    await db.aprovacaoVideo.update({ where: { token: `${p}-aprovacao` }, data: { urlVideo: previa } })
+  }
+  const lerQ = (c: string, qs: string) => midia(new NextRequest(`http://localhost/api/midia/${c}?${qs}`), { params: Promise.resolve({ caminho: c.split("/") }) })
+
+  it("o token da aprovação lê o original do vídeo em avaliação e baixa como anexo", async () => {
+    await converter()
+    expect((await lerQ(path(a,d1), `token=${p}-aprovacao`)).status).toBe(302)
+    expect(assinar).toHaveBeenLastCalledWith(path(a,d1), undefined, false)
+    expect((await lerQ(path(a,d1), `token=${p}-aprovacao&download=1`)).status).toBe(302)
+    expect(assinar).toHaveBeenLastCalledWith(path(a,d1), undefined, true)
+    const r = await (await aprovacaoGET(new NextRequest("http://localhost/x"), { params: Promise.resolve({ token: `${p}-aprovacao` }) })).json()
+    expect(r.aprovacao.urlVideo).toBe(`${previa}?token=${p}-aprovacao`)
+    expect(r.urlDownload).toBe(`${original}?token=${p}-aprovacao&download=1`)
+  })
+  it("o token não alcança o original de outra entrega nem um original que não é deste arquivo", async () => {
+    await converter()
+    await db.arquivo.update({ where: { id: arq2 }, data: { url: url(a,d2,"videos","previa.mp4"), originalUrl: url(a,d2) } })
+    expect((await lerQ(path(a,d2), `token=${p}-aprovacao`)).status).toBe(404)
+    expect((await lerQ(path(a,d2), `token=${d1}-token`)).status).toBe(404)
+    expect((await lerQ(path(a,d1,"videos","outro.mp4"), `token=${p}-aprovacao`)).status).toBe(404)
+  })
+  it("sem conversão, o download da aprovação é o próprio vídeo", async () => {
+    const r = await (await aprovacaoGET(new NextRequest("http://localhost/x"), { params: Promise.resolve({ token: `${p}-aprovacao` }) })).json()
+    expect(r.urlDownload).toBe(`${original}?token=${p}-aprovacao&download=1`)
+  })
+  it("o link de acompanhamento entrega o original sem expor o campo bruto", async () => {
+    await converter()
+    expect((await lerQ(path(a,d1), `token=${d1}-token&download=1`)).status).toBe(302)
+    const r = await (await acompanhamento(new NextRequest("http://localhost/x"), { params: Promise.resolve({ token: `${d1}-token` }) })).json()
+    const final = r.demanda.arquivos[0]
+    expect(final.url).toBe(`${previa}?token=${d1}-token`)
+    expect(final.urlDownload).toBe(`${original}?token=${d1}-token&download=1`)
+    expect(final).not.toHaveProperty("originalUrl")
+  })
+  it("a galeria baixa o original da prévia publicada, e só a prévia continua no player", async () => {
+    await converter()
+    sessao(); expect((await publicarArq()).status).toBe(200); estado.sessao = null
+    const v = (await (await listar()).json()).videos[0]
+    expect(v.linkFinal).toBe(`https://storage.invalid/${path(a,d1,"videos","previa.mp4")}`)
+    expect(v.downloadUrl).toBe(`https://storage.invalid/${path(a,d1)}`)
+    // O original não vira público pela rota de mídia: a galeria assina no servidor.
+    expect((await ler(path(a,d1))).status).toBe(404)
+  })
+  it("empresa parceira e equipe baixam o original pela sessão", async () => {
+    await converter()
+    sessao(admin, b); expect((await ler(path(a,d1))).status).toBe(302)
+    sessao(leitor); expect((await ler(path(a,d1))).status).toBe(302)
+    const body = await (await biblioteca(new NextRequest("http://localhost/api/biblioteca"))).json()
+    expect(body.videos[0].downloadUrl).toBe(`${original}?download=1`)
   })
 })

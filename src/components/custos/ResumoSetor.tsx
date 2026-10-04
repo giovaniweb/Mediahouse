@@ -1,6 +1,4 @@
 "use client"
-import styles from "./ResumoSetor.module.css"
-import { Plus } from "lucide-react"
 import { useState } from "react"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
@@ -29,16 +27,15 @@ export function ResumoSetor() {
     try {const r=await fetch("/api/custos-setor",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});if(!r.ok)throw await erroDaResposta(r,"Não foi possível cancelar.");await mutate();toast.success("Lançamento cancelado. O registro foi preservado.")}
     catch(e){toast.error(mensagemDeErro(e,"Falha ao cancelar."))}finally{setSalvando(false)}
   }
-  return <section className={styles.resumo} aria-label="Custos do setor">
-    <div className={styles.toolbar}><label className="text-sm">Competência<input className={campo} type="month" min="2000-01" max="2099-12" value={mes} onChange={e=>{setMes(e.target.value);setAberto(false)}} /></label>
-    {data?.podeEditar&&<button className="px-4 py-2 rounded-lg bg-violet-600" aria-expanded={aberto} aria-controls="novo-custo-setor" onClick={()=>setAberto(!aberto)}><Plus size={16} aria-hidden="true"/>{aberto ? "Fechar lançamento" : "Registrar custo do mês"}</button>}</div>
+  return <section className="space-y-5" aria-label="Custos do setor">
+    <div className="flex flex-wrap items-end gap-4 justify-between"><label className="text-sm">Competência<input className={campo} type="month" min="2000-01" max="2099-12" value={mes} onChange={e=>{setMes(e.target.value);setAberto(false)}} /></label>
+    {data?.podeEditar&&<button className="px-4 py-2 rounded-lg bg-violet-600" onClick={()=>setAberto(!aberto)}>Registrar custo do mês</button>}</div>
     {error&&<p role="alert" className="text-red-300">Não foi possível carregar os custos. <button className="underline" onClick={()=>mutate()}>Tentar novamente</button></p>}
     {isLoading&&<p role="status">Carregando custos…</p>}
     {data&&<>
-      <div className={styles.total}><div><h2>Total conhecido do mês</h2><p className={styles.valor}>{fmt(data.totalConhecido)}</p><p>{data.aviso}</p></div><span className={styles.badge}>Fechamento parcial</span></div>
-      <div className={styles.categorias}>{Object.entries(data.categorias).map(([k,v])=><div key={k} className="border border-zinc-800 rounded-xl p-4"><p className="text-sm text-zinc-400">{nomes[k]}</p><p className="text-xl mt-2">{fmt(v)}</p><p className="text-xs text-zinc-500 mt-2">{data.cobertura[k as keyof typeof data.cobertura]} registro(s) · conferência pendente</p></div>)}</div>
-      {aberto&&<form id="novo-custo-setor" onSubmit={salvar} className={styles.form}>
-        <h2>Registrar custo</h2>
+      <div className="border border-zinc-700 rounded-xl p-5"><p className="text-sm text-zinc-400">Total conhecido · parcial</p><p className="text-3xl mt-2">{fmt(data.totalConhecido)}</p><p className="text-sm text-zinc-400 mt-3">{data.aviso}</p></div>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">{Object.entries(data.categorias).map(([k,v])=><div key={k} className="border border-zinc-800 rounded-xl p-4"><p className="text-sm text-zinc-400">{nomes[k]}</p><p className="text-xl mt-2">{fmt(v)}</p><p className="text-xs text-zinc-500 mt-2">{data.cobertura[k as keyof typeof data.cobertura]} registro(s) · cobertura não atestada</p></div>)}</div>
+      {aberto&&<form onSubmit={salvar} className="border border-zinc-700 p-4 rounded-xl space-y-3">
         <p className="text-sm">Lançamento de {mes}. Registre somente a parcela que pertence ao setor. Valores históricos não são preenchidos pelo salário atual. Externos usam a aba própria, evitando dupla contagem.</p>
         <label className="block text-sm">Categoria<select className={campo} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>{Object.entries(nomes).filter(([k])=>k!=="externo").map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
         <label className="block text-sm">Descrição<input required minLength={3} maxLength={200} className={campo} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})}/></label>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { comToken } from "@/lib/midia"
+import { paraDownload } from "@/lib/midia-download"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 
@@ -52,7 +53,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       arquivos: {
         where: { tipoArquivo: "final" },
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
-        select: { url: true, nomeArquivo: true, sequencia: true },
+        select: { url: true, originalUrl: true, nomeArquivo: true, sequencia: true },
       },
     },
   })
@@ -80,7 +81,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     demanda: {
       ...publico,
       linkFinal: comToken(publico.linkFinal, token),
-      arquivos: publico.arquivos.map(a => ({ ...a, url: comToken(a.url, token) })),
+      // Baixa-se o original; a prévia convertida é só para assistir.
+      arquivos: publico.arquivos.map(({ originalUrl, ...a }) => ({ ...a, url: comToken(a.url, token),
+        urlDownload: paraDownload(comToken(originalUrl ?? a.url, token)) })),
       thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
       organizacao,
     },

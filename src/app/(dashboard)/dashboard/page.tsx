@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { AlertasIA } from "@/components/dashboard/AlertasIA"
 import { CargaEquipe } from "@/components/dashboard/CargaEquipe"
+import { FluxoEtapas } from "@/components/dashboard/FluxoEtapas"
 import { HojeEmFoco } from "@/components/dashboard/HojeEmFoco"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
@@ -44,11 +45,24 @@ function TrendBadge({ delta }: { delta: number }) {
 function InternalDashboard() {
   // Módulos desta empresa — antes eram constantes iguais para todas.
   const { data: me } = useMe()
-  const { data, isLoading } = useSWR("/api/dashboard/metrics", fetcher, {
+  const { data, isLoading, error, mutate } = useSWR("/api/dashboard/metrics", fetcher, {
     refreshInterval: 30000,
   })
   const { data: kpiB2c } = useSWR("/api/kpi/b2c-b2b", fetcher, { refreshInterval: 60000 })
   const { data: kpiIdeias } = useSWR(me?.modulos?.ideias ? "/api/ideias/kpi" : null, fetcher, { refreshInterval: 60000 })
+
+  if (error) return (
+    <>
+      <Header title="Dashboard" />
+      <main className="flex-1 p-6">
+        <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-zinc-100">
+          <h2 className="font-semibold">Não foi possível carregar o dashboard</h2>
+          <p className="mt-2 text-sm text-zinc-400">Os indicadores estão indisponíveis. Tente novamente para consultar os dados da sua equipe.</p>
+          <button onClick={() => void mutate()} className="mt-4 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-900">Tentar novamente</button>
+        </div>
+      </main>
+    </>
+  )
 
   const m = data?.metricas
   const tendencia: Array<{ criadas: number; concluidas: number }> = data?.tendencia ?? []
@@ -78,6 +92,8 @@ function InternalDashboard() {
           <MetricCard label="Concluídas Mês" value={isLoading ? "—" : m?.concluidasMes ?? 0}
             icon={<CheckCircle className="w-5 h-5" />} color="green" href="/demandas?statusVisivel=finalizado" />
         </div>
+
+        <FluxoEtapas gargalos={data?.gargalos ?? []} operacional={data?.operacional} isLoading={isLoading} />
 
         {/* Tendência semanal */}
         {tendencia.length > 0 && (

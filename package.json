@@ -29,7 +29,6 @@
     "_comment_guarda_banco": "Comandos que escrevem no banco passam por scripts/guarda-banco.mjs. Produção exige PERMITIR_BANCO_PRODUCAO=sim — ver o cabeçalho do script.",
     "test:integration": "node scripts/teste-integracao.mjs",
     "test:integration:prepare": "node scripts/teste-integracao.mjs migrate",
-    "db:cifrar-drive": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' -r tsconfig-paths/register scripts/cifrar-drive.ts",
     "test:runtime": "node scripts/teste-runtime-rls.mjs",
     "verificar:runtime": "node scripts/verificar-runtime-rls.mjs",
     "test:inventario": "node --test tests/inventario/*.test.mjs",
@@ -78,7 +77,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "dotenv": "^17.3.1",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.5",
@@ -86,6 +85,6 @@
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

@@ -34,12 +34,6 @@ vi.mock("@/lib/permissoes-server", () => ({ permissoesEfetivas: (...a: unknown[]
 const sessaoNavegador = vi.fn()
 vi.mock("@/lib/auth", () => ({ auth: () => sessaoNavegador() }))
 vi.mock("@/lib/org", () => ({ getOrgId: async () => "org-A", semOrg: () => new Response(null, { status: 403 }) }))
-const getAccessToken = vi.fn()
-const criarSessaoUploadDrive = vi.fn()
-vi.mock("@/lib/google-drive", () => ({
-  getAccessToken: (...a: unknown[]) => getAccessToken(...a),
-  criarSessaoUploadDrive: (...a: unknown[]) => criarSessaoUploadDrive(...a),
-}))
 const mudarStatus = vi.fn()
 vi.mock("@/lib/mudar-status", () => ({ mudarStatus: (...a: unknown[]) => mudarStatus(...a) }))
 const criarArquivoFinal = vi.fn()
@@ -324,137 +318,68 @@ describe("puxar: trava contra edição dupla", () => {
   })
 })
 
-describe("arquivos do material bruto", () => {
-  const drive = (respostas: Record<string, { status: number; files?: unknown[] }>) =>
-    vi.stubGlobal("fetch", vi.fn(async (url: URL) => {
-      const pasta = /'([^']+)' in parents/.exec(url.searchParams.get("q")!)![1]
-      const r = respostas[pasta] ?? { status: 200, files: [] }
-      return { ok: r.status === 200, status: r.status, json: async () => ({ files: r.files }) }
-    }))
-
+describe("material bruto sem o Google Drive", () => {
+  // Desde 03/10/2026 o NuFlow não guarda token do Drive: o plugin recebe o link
+  // e o editor baixa com a própria conta Google.
   beforeEach(() => {
     sessaoValida()
     db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
-    getAccessToken.mockResolvedValue("drive-token")
   })
 
-  it("sem puxar neste computador não lista nada", async () => {
+  it("sem puxar neste computador não mostra nem o link", async () => {
     for (const p of [null, { sessaoId: "s-9" }]) {
       db.cutflowPuxada.findUnique.mockResolvedValue(p)
       expect((await arquivos(req(), params("d-1"))).status).toBe(409)
     }
-    expect(getAccessToken).not.toHaveBeenCalled()
   })
 
-  it("sem link, ou link que não é pasta do Drive: diz o que fazer, sem token", async () => {
+  it("sem link: diz que o card não tem", async () => {
     db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: null, linkBrutos: null })
     expect((await (await arquivos(req(), params("d-1"))).json()).aviso).toMatch(/não tem link/)
-    db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: null, linkBrutos: "https://we.tl/t-abc" })
-    const d = await (await arquivos(req(), params("d-1"))).json()
-    expect(d).toMatchObject({ manual: true, link: "https://we.tl/t-abc" })
-    expect(d.token).toBeUndefined()
   })
 
-  it("pasta que o NuFlow não enxerga: semAcesso com a instrução, nunca lista vazia calada", async () => {
-    db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: "https://drive.google.com/drive/folders/PASTA123456", linkBrutos: null })
-    drive({ PASTA123456: { status: 404 } })
-    const d = await (await arquivos(req(), params("d-1"))).json()
-    expect(d.semAcesso).toBe(true)
-    expect(d.aviso).toMatch(/compartilhar com a conta do Drive/)
-    expect(d.token).toBeUndefined()
-  })
-
-  it("lista os vídeos da pasta e de uma subpasta, ignora o resto, devolve token curto", async () => {
-    db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: "https://drive.google.com/drive/folders/PASTA123456", linkBrutos: null })
-    drive({
-      PASTA123456: { status: 200, files: [
-        { id: "v1", name: "C0169.MP4", size: "1000", mimeType: "video/mp4" },
-        { id: "sub", name: "Camera B", mimeType: "application/vnd.google-apps.folder" },
-        { id: "doc", name: "roteiro.pdf", mimeType: "application/pdf" },
-      ] },
-      sub: { status: 200, files: [{ id: "v2", name: "B001.MOV", size: "2000", mimeType: "video/quicktime" }] },
-    })
-    const d = await (await arquivos(req(), params("d-1"))).json()
-    expect(d.arquivos.map((a: { id: string }) => a.id)).toEqual(["v1", "v2"])
-    expect(d.arquivos[1].subpasta).toBe("Camera B")
-    expect(d.ignorados).toBe(1)
-    expect(d.token).toBe("drive-token")
-    expect(new Date(d.tokenExpiraEm).getTime() - Date.now()).toBeLessThanOrEqual(45 * 60_000)
-    expect(getAccessToken).toHaveBeenCalledWith("org-A")
+  it("pasta do Drive ou outro link: download manual pelo editor, sem token e sem ir à rede", async () => {
+    const rede = vi.fn()
+    vi.stubGlobal("fetch", rede)
+    for (const link of ["https://drive.google.com/drive/folders/PASTA123456", "https://we.tl/t-abc"]) {
+      db.demanda.findFirst.mockResolvedValue({ linkFolderBrutos: link, linkBrutos: null })
+      const d = await (await arquivos(req(), params("d-1"))).json()
+      expect(d).toMatchObject({ arquivos: [], manual: true, link })
+      expect(d.token).toBeUndefined()
+    }
+    expect(rede).not.toHaveBeenCalled()
   })
 })
 
-describe("enviar para aprovação", () => {
-  const PASTA = "https://drive.google.com/drive/folders/PRONTO1234567"
-  const envioValido = (extra: Partial<Parameters<typeof L.assinarEnvio>[0]> = {}) =>
-    L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: "PRONTO1234567", tamanho: 5000, nome: "DEM-1.mp4", sessaoId: "s-1", ...extra })
-  const drive = (meta: Record<string, unknown>, status = 200) =>
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: status === 200, status, json: async () => meta })))
-
+describe("enviar para aprovação pelo plugin, desligado sem o Drive", () => {
   beforeEach(() => {
     sessaoValida()
     db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
-    db.demanda.findFirst.mockResolvedValue({ id: "d-1", linkFolderFinal: PASTA })
-    getAccessToken.mockResolvedValue("drive-token")
-    criarSessaoUploadDrive.mockResolvedValue({ sessionUri: "https://upload.google/x", fileId: "f-1", publicUrl: "u" })
+    db.demanda.findFirst.mockResolvedValue({ id: "d-1" })
   })
 
-  it("só o computador que puxou abre o envio, e só MP4/MOV com tamanho", async () => {
+  it("só o computador que puxou o card ouve a resposta", async () => {
     db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-9" })
     expect((await abrirEnvio(req({ nome: "a.mp4", tamanho: 10, tipo: "video/mp4" }), params("d-1"))).status).toBe(409)
-    db.cutflowPuxada.findUnique.mockResolvedValue({ sessaoId: "s-1" })
-    for (const ruim of [{ nome: "a.mp4", tamanho: 0, tipo: "video/mp4" }, { nome: "a.mp4", tamanho: 10, tipo: "text/html" }, { nome: "", tamanho: 10, tipo: "video/mp4" }]) {
-      expect((await abrirEnvio(req(ruim), params("d-1"))).status).toBe(400)
-    }
-    expect(criarSessaoUploadDrive).not.toHaveBeenCalled()
   })
 
-  it("abre a sessão na pasta Material pronto do card e devolve recibo que amarra tudo", async () => {
-    const d = await (await abrirEnvio(req({ nome: "DEM-1.mp4", tamanho: 5000, tipo: "video/mp4" }), params("d-1"))).json()
-    expect(criarSessaoUploadDrive).toHaveBeenCalledWith({ fileName: "DEM-1.mp4", fileSize: 5000, contentType: "video/mp4", pastaId: "PRONTO1234567" }, "org-A")
-    expect(d.sessionUri).toBe("https://upload.google/x")
-    expect(L.lerEnvio(d.envio)).toMatchObject({ demandaId: "d-1", fileId: "f-1", pastaId: "PRONTO1234567", tamanho: 5000, sessaoId: "s-1" })
-  })
-
-  it("recibo adulterado, de outro card ou de outro computador: 400 sem tocar no Drive", async () => {
-    const [b64, ass] = envioValido().split(".")
-    for (const ruim of [`${b64}.x${ass.slice(1)}`, envioValido({ demandaId: "d-2" }), envioValido({ sessaoId: "s-9" }),
-      L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 1, nome: "a", sessaoId: "s-1" }, Date.now() - L.VALIDADE_ENVIO_MS - 1)]) {
-      expect((await concluirEnvio(req({ envio: ruim }), params("d-1"))).status).toBe(400)
-    }
-    expect(getAccessToken).not.toHaveBeenCalled()
-  })
-
-  it("nunca 'enviado' sem conferir: tamanho diferente, lixeira ou fora da pasta = 409 e nada registrado", async () => {
-    for (const meta of [{ size: "4999", parents: ["PRONTO1234567"] }, { size: "5000", parents: ["PRONTO1234567"], trashed: true }, { size: "5000", parents: ["OUTRA"] }]) {
-      drive(meta)
-      expect((await concluirEnvio(req({ envio: envioValido() }), params("d-1"))).status).toBe(409)
-    }
-    drive({}, 404)
-    expect((await concluirEnvio(req({ envio: envioValido() }), params("d-1"))).status).toBe(409)
+  it("abrir e concluir respondem 410 com o caminho que funciona, e nada é registrado", async () => {
+    const aberto = await abrirEnvio(req({ nome: "DEM-1.mp4", tamanho: 5000, tipo: "video/mp4" }), params("d-1"))
+    expect(aberto.status).toBe(410)
+    expect(await aberto.json()).toMatchObject({ codigo: "drive_removido", error: L.ENVIO_INDISPONIVEL })
+    const recibo = L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 5000, nome: "DEM-1.mp4", sessaoId: "s-1" })
+    expect((await concluirEnvio(req({ envio: recibo }), params("d-1"))).status).toBe(410)
     expect(criarArquivoFinal).not.toHaveBeenCalled()
     expect(mudarStatus).not.toHaveBeenCalled()
-  })
-
-  it("conferido: registra a versão, muda para edição finalizada pela função do quadro e solta a trava", async () => {
-    drive({ size: "5000", parents: ["PRONTO1234567"] })
-    const r = await concluirEnvio(req({ envio: envioValido() }), params("d-1"))
-    expect(await r.json()).toMatchObject({ enviado: true, statusMudou: true, linkFinal: "https://drive.google.com/file/d/f-1/view?usp=sharing" })
-    expect(criarArquivoFinal).toHaveBeenCalledWith("org-A", "d-1", "https://drive.google.com/file/d/f-1/view?usp=sharing", undefined, "DEM-1.mp4")
-    expect(mudarStatus).toHaveBeenCalledWith({ user: { id: "u-1", organizacaoId: "org-A" } }, "d-1", {
-      statusInterno: "edicao_finalizada", linkFinal: "https://drive.google.com/file/d/f-1/view?usp=sharing",
-      origem: "automacao", observacao: "Enviado para aprovação pelo Cutflow",
-    })
-    expect(db.cutflowPuxada.deleteMany).toHaveBeenCalledWith({ where: { demandaId: "d-1", organizacaoId: "org-A" } })
-  })
-
-  it("vídeo registrado mas status recusado: diz isso (207), não finge, e a trava fica", async () => {
-    drive({ size: "5000", parents: ["PRONTO1234567"] })
-    mudarStatus.mockResolvedValue(respostaStatus(false, "Link do vídeo final obrigatório."))
-    const r = await concluirEnvio(req({ envio: envioValido() }), params("d-1"))
-    expect(r.status).toBe(207)
-    expect(await r.json()).toMatchObject({ enviado: true, statusMudou: false, aviso: "Link do vídeo final obrigatório." })
     expect(db.cutflowPuxada.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("o recibo de envio continua amarrado a card, computador e prazo, para o envio ao NuFlow", () => {
+    const valido = L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 5000, nome: "a.mp4", sessaoId: "s-1" })
+    expect(L.lerEnvio(valido)).toMatchObject({ demandaId: "d-1", sessaoId: "s-1", tamanho: 5000 })
+    const [b64, ass] = valido.split(".")
+    expect(L.lerEnvio(`${b64}.x${ass.slice(1)}`)).toBeNull()
+    expect(L.lerEnvio(L.assinarEnvio({ demandaId: "d-1", fileId: "f-1", pastaId: null, tamanho: 1, nome: "a", sessaoId: "s-1" }, Date.now() - L.VALIDADE_ENVIO_MS - 1))).toBeNull()
   })
 })
 
