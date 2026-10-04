@@ -11,10 +11,10 @@ import { naoEnviadoAoCliente } from "@/lib/growth-kanban"
 import { TagEspelho, type EspelhoDoCard } from "./TagEspelho"
 
 const prioridadeConfig = {
-  urgente: { label: "URGENTE", class: "bg-red-500/15 text-red-400 border-red-500/30" },
-  alta: { label: "ALTA", class: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
-  normal: { label: "NORMAL", class: "bg-zinc-700/50 text-zinc-400 border-zinc-600" },
-  baixa: { label: "BAIXA", class: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  urgente: { label: "Urgente", class: "bg-red-500/15 text-red-300 border-red-500/30" },
+  alta: { label: "Alta", class: "bg-orange-500/15 text-orange-300 border-orange-500/30" },
+  normal: { label: "Normal", class: "bg-zinc-700/50 text-zinc-400 border-zinc-600" },
+  baixa: { label: "Baixa", class: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
 }
 
 const deptColors: Record<string, string> = {
@@ -126,9 +126,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
         <div className={cn("flex items-start justify-between gap-2 mb-2", styles.top)}>
           <span className="text-[11px] font-mono text-zinc-500">{demanda.codigo}</span>
           <div className="flex items-center gap-1">
-            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", prio.class)}>
+            {/* "Normal" é o caso comum: sem selo, o card não repete a mesma palavra em toda a coluna. */}
+            {demanda.prioridade !== "normal" && <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", prio.class)}>
               {prio.label}
-            </span>
+            </span>}
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/demandas/${demanda.id}?edit=true`) }}
               className="p-0.5 rounded hover:bg-zinc-600/40 text-zinc-600 hover:text-zinc-300 transition-colors opacity-0 group-hover:opacity-100"
@@ -172,7 +173,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           {isOverdue && (
             <span className="tag-atrasada flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              {diasAtraso ? `ATRASADA — ${diasAtraso}d` : "ATRASADA"}
+              {diasAtraso ? `Atrasada · ${diasAtraso}d` : "Atrasada"}
             </span>
           )}
           <TagEspelho espelho={demanda.espelho} />

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { Plus, Search, XCircle, UserCheck, ChevronLeft, ChevronRight } from "lucide-react"
 import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
@@ -131,19 +131,20 @@ export default function GrowthKanbanPage() {
     <div className="flex flex-col h-full">
       <Header title="Growth · Demandas" actions={<button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>} />
 
-      {/* Paginação da fila: discreta, porque só aparece de verdade acima de 100 demandas. */}
-      <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm text-zinc-400">
-        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button>}
-        <span>{(data?.total ?? 0) > 100 ? `Página ${paginaFila} · ` : ""}{data?.total ?? 0} {(data?.total ?? 0) === 1 ? "demanda" : "demandas"} na fila</span>
-        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button>}
-        <a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
-        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="w-full text-xs text-amber-400">Há concluídos antigos sem data nesta página; continuam visíveis até a revisão.</p>}
-      </nav>
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
 
 
       <div className="px-4 pt-1 pb-3">
         <BarraVisao
+          paginacao={(
+            <nav aria-label="Páginas da fila" className="flex items-center gap-2 text-[12.5px] text-zinc-400">
+              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Página anterior" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila === 1} onClick={() => mudarPagina(paginaFila - 1)}><ChevronLeft className="h-4 w-4" /></button>}
+              <span className="whitespace-nowrap">{(data?.total ?? 0) > 100 ? `Página ${paginaFila} de ${Math.ceil((data?.total ?? 0) / 100)} · ` : ""}{data?.total ?? 0} na fila</span>
+              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Próxima página" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila * 100 >= (data?.total ?? 0)} onClick={() => mudarPagina(paginaFila + 1)}><ChevronRight className="h-4 w-4" /></button>}
+              <a href="/historico" className="whitespace-nowrap text-purple-300 hover:underline">Histórico</a>
+            </nav>
+          )}
+          aviso={demandas.some((d: {statusVisivel: string; finalizadaEm?: string | null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) ? "Há concluídos antigos sem data nesta página. Eles continuam visíveis até a revisão; nenhuma data foi inventada." : undefined}
           area="growth"
           filters={(
       <BoardFilters>
@@ -193,7 +194,6 @@ export default function GrowthKanbanPage() {
             <XCircle className="w-3.5 h-3.5" /> Limpar filtros
           </button>
         )}
-        <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
       </BoardFilters>
@@ -209,7 +209,7 @@ export default function GrowthKanbanPage() {
 
       <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       {visao === "kanban" ? (
-        <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
+        <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
           <KanbanBoard
             demandas={demandas}
             onMove={handleMove}
