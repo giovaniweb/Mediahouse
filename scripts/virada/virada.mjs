@@ -22,7 +22,7 @@
 // usuários gravarem mora só no banco novo — voltar atrás a partir daí custa
 // esses registros. É por isso que `apontar` é o único passo que exige
 // confirmação digitada.
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { join } from "node:path"
 import {
@@ -767,6 +767,19 @@ async function provarCredenciaisRls() {
   await provarConexao("volta (dono)", urls.DATABASE_URL_DONO, "dono")
   await provarConexao("aplicação", urls.DATABASE_URL_APP_USER, "app_user")
   await provarConexao("autenticação", urls.AUTH_DATABASE_URL, "app_auth")
+
+  // O código do RLS conta com a credencial `aprovacao_video` (20261004000000) e
+  // com tudo o que veio antes. Migration pendente aqui é link de cliente em 404
+  // depois da troca — melhor parar antes dela.
+  const locais = readdirSync("prisma/migrations", { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+  const aplicadas = new Set((await consultar(urls.DATABASE_URL_DONO,
+    `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`)).map((r) => r.migration_name))
+  const pendentes = locais.filter((m) => !aplicadas.has(m))
+  if (pendentes.length) {
+    abortar(`Migrations pendentes no banco: ${pendentes.join(", ")}`, "Nenhuma variável foi alterada. Rode o \"Release — migrations\" e repita.")
+  }
+  ok(`todas as ${locais.length} migrations deste código estão aplicadas`)
+
   const prova = rodar(process.execPath, ["scripts/verificar-runtime-rls.mjs"], {
     silencioso: true,
     env: { RLS_ATIVO: "sim", DATABASE_URL: urls.DATABASE_URL_APP_USER, AUTH_DATABASE_URL: urls.AUTH_DATABASE_URL },
