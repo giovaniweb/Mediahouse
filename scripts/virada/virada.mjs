@@ -14,6 +14,7 @@
 //   node scripts/virada/virada.mjs verificar      mede o resultado do lado de fora
 //   node scripts/virada/virada.mjs executar       a sequência inteira
 //   node scripts/virada/virada.mjs reverter       desfaz a virada
+//   node scripts/virada/virada.mjs provar-rls     prova as credenciais do RLS, não toca em nada
 //   node scripts/virada/virada.mjs ligar-rls      a segunda virada, dias depois
 //   node scripts/virada/virada.mjs desligar-rls   desfaz a segunda
 //
@@ -576,7 +577,7 @@ function trocarEnv(nome, valor) {
     r = vercel(["env", "add", nome, "production"], { entrada: valor })
   }
   if (r.codigo !== 0) abortar(`Não consegui gravar ${nome} em Production:\n${r.saida}`)
-  ok(`${nome} → ${mascarar(valor)}`)
+  ok(`${nome} → ${/^postgres/.test(valor) ? mascarar(valor) : valor}`)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -687,33 +688,140 @@ async function reverter() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ligar-rls / desligar-rls — a SEGUNDA virada, dias depois da primeira. Não
-// move dado, não pede janela, não congela nada: troca credencial e redeploya.
-// Reversível em um comando, que é o que a torna segura (§1 do plano de voo).
+// move dado, não congela nada: troca credencial e redeploya. Reversível em um
+// comando, que é o que a torna segura (§1 do plano de voo).
+//
+// O ensaio de 04/10/2026 achou dois buracos na versão anterior, os dois na VOLTA:
+//
+// 1. A Vercel não devolve o valor de variável sensível. O backup de 07/09
+//    (producao-antes.env) tem DATABASE_URL e DIRECT_URL VAZIAS. A volta usava a
+//    URL de dono guardada em 06–07/09 sem conferir se ela ainda abria conexão —
+//    e a senha do postgres estava marcada para rotação (PLANO-VIRADA §11). Com
+//    a senha trocada, `desligar-rls` derrubaria a produção em vez de salvá-la.
+// 2. A volta só mexia em DATABASE_URL e RLS_ATIVO. AUTH_DATABASE_URL seguia no
+//    app_auth, e o login usa essa variável mesmo sem RLS (banco-conexao.ts): se
+//    o problema fosse a credencial de autenticação, desligar não salvaria o login.
+//
+// Agora toda URL é PROVADA (conecta, e é o papel esperado) antes de qualquer
+// variável mudar, nos dois sentidos; e a volta remove o que a ida criou.
 // ─────────────────────────────────────────────────────────────────────────────
-async function ligarRls() {
+const VARS_RLS = ["DATABASE_URL", "AUTH_DATABASE_URL", "ADMIN_DATABASE_URL", "RLS_ATIVO"]
+
+/** Abre a conexão e confere quem ela é. A URL nunca é impressa inteira. */
+async function provarConexao(rotulo, url, esperado) {
+  if (!url) abortar(`${rotulo}: URL ausente em ${ARQ_URLS}.`, "Nenhuma variável foi alterada.")
+  let r
+  try {
+    ;[r] = await consultar(url, `SELECT current_user AS papel, (rolbypassrls OR rolsuper) AS ignora_rls
+      FROM pg_roles WHERE rolname = current_user`)
+  } catch (e) {
+    abortar(
+      `${rotulo} (${mascarar(url)}) não conecta: ${e.message}`,
+      `Nenhuma variável foi alterada. Confira a senha no painel do Supabase e atualize ${ARQ_URLS}.`
+    )
+  }
+  const certo = esperado === "dono" ? r.ignora_rls : !r.ignora_rls && r.papel === esperado
+  if (!certo) {
+    abortar(`${rotulo} conecta como "${r.papel}" (ignora RLS: ${r.ignora_rls}); esperava ${esperado}.`, "Nenhuma variável foi alterada.")
+  }
+  ok(`${rotulo}: conecta como ${r.papel}${r.ignora_rls ? " (dono, ignora RLS)" : " (sem bypass)"}`)
+}
+
+function existentesEmProducao() {
+  const r = vercel(["env", "ls", "production"])
+  if (r.codigo !== 0) abortar(`Não consegui listar as variáveis de Production:\n${r.saida}`)
+  return VARS_RLS.filter((n) => new RegExp(`^\\s*${n}\\s`, "m").test(r.saida))
+}
+
+/**
+ * /api/publico/parametros resolve a empresa pelo app_auth (orgPublica) e lê os
+ * parâmetros pelo app_user com a empresa declarada: um 200 com itens prova as
+ * duas credenciais e a declaração de empresa numa chamada só, sem login.
+ */
+async function sondarPapeis() {
+  try {
+    const r = await fetch(`${DOMINIO}/api/publico/parametros?org=contourline`, { cache: "no-store" })
+    const j = await r.json()
+    const n = Array.isArray(j?.parametros) ? j.parametros.length : 0
+    return { ok: r.status === 200 && n > 0, status: r.status, n }
+  } catch (e) {
+    return { ok: false, status: String(e?.message ?? e), n: 0 }
+  }
+}
+
+function redeployProducao() {
+  const dep = deployProducaoAtual()
+  if (!dep) abortar("Não achei o deploy de produção atual para redeployar.")
+  const r = rodar("vercel", ["redeploy", dep, "--target", "production"], { silencioso: true })
+  if (r.codigo !== 0) abortar(`O redeploy falhou:\n${r.saida.slice(-2000)}`)
+  ok("redeploy feito")
+}
+
+/** As três credenciais, provadas por conexão. Só lê; aborta antes de qualquer troca. */
+async function provarCredenciaisRls() {
   exigirFase("verificar", "verificar")
   const urls = lerUrlsGuardadas()
-  if (!urls?.DATABASE_URL_APP_USER) abortar(`Sem as URLs de ${ARQ_URLS}.`)
+  if (!urls) abortar(`Sem ${ARQ_URLS}.`)
+
+  titulo("Credenciais provadas antes de tocar na Vercel")
+  await provarConexao("volta (dono)", urls.DATABASE_URL_DONO, "dono")
+  await provarConexao("aplicação", urls.DATABASE_URL_APP_USER, "app_user")
+  await provarConexao("autenticação", urls.AUTH_DATABASE_URL, "app_auth")
+  const prova = rodar(process.execPath, ["scripts/verificar-runtime-rls.mjs"], {
+    silencioso: true,
+    env: { RLS_ATIVO: "sim", DATABASE_URL: urls.DATABASE_URL_APP_USER, AUTH_DATABASE_URL: urls.AUTH_DATABASE_URL },
+  })
+  if (prova.codigo !== 0) {
+    abortar(`verificar-runtime-rls reprovou as credenciais:\n${prova.saida.slice(-2000)}`, "Nenhuma variável foi alterada.")
+  }
+  ok("verificar-runtime-rls: aplicação e autenticação aprovadas (sem bypass, sem dono, GRANTs certos)")
+  return urls
+}
+
+// Roda dias antes da janela: uma senha vencida aparece aqui, e não dentro dela.
+async function provarRls() {
+  await provarCredenciaisRls()
+  titulo("O que existe hoje em Production")
+  nota(existentesEmProducao().join(", "))
+  console.log("\n✅ Nada foi alterado. As três credenciais abrem conexão e são quem dizem ser.\n")
+}
+
+async function ligarRls() {
+  const urls = await provarCredenciaisRls()
+
+  titulo("O que já existe em Production")
+  // O retrato de "antes" é tirado UMA vez por ida. Uma segunda tentativa de
+  // ligar, sem desligar no meio, enxergaria as variáveis criadas pela primeira
+  // como se fossem de antes — e a volta deixaria o login no app_auth.
+  const estado = lerEstado()
+  const retrato = estado["ligar-rls-antes"]
+  const voltouDepois = retrato && estado["desligar-rls"]?.em > retrato.em
+  const existiam = retrato && !voltouDepois ? retrato.existiam : existentesEmProducao()
+  if (!existiam.includes("DATABASE_URL")) abortar("DATABASE_URL não aparece em Production — o projeto não é o esperado.")
+  nota(`já existiam antes da ida: ${existiam.join(", ")}`)
+  if (!retrato || voltouDepois) gravarEstado("ligar-rls-antes", { ok: true, existiam })
 
   titulo("Trocando a credencial da aplicação para o role sem BYPASSRLS")
-  trocarEnv("DATABASE_URL", urls.DATABASE_URL_APP_USER)
+  // ADMIN é a MESMA conexão de dono, pelo pooler em modo transação, que a
+  // produção usa hoje — e não a DIRECT_URL, que é modo sessão: teto de 15
+  // clientes sob serverless, já derrubou um preview (plano de voo §4).
+  trocarEnv("ADMIN_DATABASE_URL", urls.DATABASE_URL_DONO)
   trocarEnv("AUTH_DATABASE_URL", urls.AUTH_DATABASE_URL)
-  trocarEnv("ADMIN_DATABASE_URL", urls.DIRECT_URL)
+  trocarEnv("DATABASE_URL", urls.DATABASE_URL_APP_USER)
   trocarEnv("RLS_ATIVO", "sim")
-
-  const dep = deployProducaoAtual()
-  rodar("vercel", ["redeploy", dep, "--target", "production"], { silencioso: true })
-  ok("redeploy feito")
+  redeployProducao()
 
   const s = await medirSaude(8)
-  if (!s.ok) {
+  const p = await sondarPapeis()
+  if (!s.ok || !p.ok) {
     abortar(
-      `health respondeu ${s.banco} — algo na credencial nova não está de pé.`,
-      "Reverta agora:  node scripts/virada/virada.mjs desligar-rls"
+      `health: ${s.banco} · parâmetros públicos: ${p.status} (${p.n} itens) — a credencial nova não está de pé.`,
+      "Volte agora:  node scripts/virada/virada.mjs desligar-rls"
     )
   }
   ok(`banco: ok · mediana ${s.mediana} ms com RLS ligada`)
-  gravarEstado("ligar-rls", { ok: true, latencia: s.mediana })
+  ok(`parâmetros públicos: ${p.n} itens — app_auth resolve a empresa, app_user lê com ela declarada`)
+  gravarEstado("ligar-rls", { ok: true, latencia: s.mediana, existiam })
   console.log(`
 ✅ RLS no ar. Agora o banco recusa sozinho o que o código esquecer de filtrar.
 
@@ -726,18 +834,32 @@ async function ligarRls() {
 }
 
 async function desligarRls() {
-  const antes = existsSync(ARQ_ENV_ANTES)
-    ? Object.fromEntries(readFileSync(ARQ_ENV_ANTES, "utf8").split("\n").filter((l) => l.includes("="))
-        .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^"|"$/g, "")]))
-    : {}
   const urls = lerUrlsGuardadas()
+  const antes = lerEstado()["ligar-rls-antes"]
+
+  titulo("Provando a conexão de dono antes de voltar")
+  await provarConexao("volta (dono)", urls?.DATABASE_URL_DONO, "dono")
+
   titulo("Voltando a aplicação para a conexão de dono")
-  trocarEnv("DATABASE_URL", urls?.DATABASE_URL_DONO ?? antes.DATABASE_URL)
+  trocarEnv("DATABASE_URL", urls.DATABASE_URL_DONO)
   trocarEnv("RLS_ATIVO", "nao")
-  const dep = deployProducaoAtual()
-  rodar("vercel", ["redeploy", dep, "--target", "production"], { silencioso: true })
-  ok("redeploy feito — o dono ignora RLS por definição, tudo volta a aparecer")
-  gravarEstado("desligar-rls", { ok: true })
+  // O que a ida criou, a volta remove: AUTH_DATABASE_URL vale também sem RLS,
+  // e o login seguiria no app_auth. O que já existia antes da ida fica.
+  for (const nome of ["AUTH_DATABASE_URL", "ADMIN_DATABASE_URL"]) {
+    if (antes?.existiam?.includes(nome)) {
+      aviso(`${nome} já existia antes do ligar-rls — fica como está`)
+      continue
+    }
+    const r = vercel(["env", "rm", nome, "production", "--yes"])
+    if (r.codigo === 0) ok(`${nome} removida`)
+    else aviso(`${nome} não foi removida: ${r.saida.trim().split("\n").pop()}`)
+  }
+  redeployProducao()
+
+  const s = await medirSaude(8)
+  if (!s.ok) abortar(`health respondeu ${s.banco} depois da volta.`, "Confira DATABASE_URL no painel da Vercel e no Supabase.")
+  ok(`banco: ok · mediana ${s.mediana} ms — o dono ignora RLS por definição, tudo volta a aparecer`)
+  gravarEstado("desligar-rls", { ok: true, latencia: s.mediana })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -767,7 +889,7 @@ async function executar() {
 
 const COMANDOS = {
   preflight, congelar, descongelar, dump, restaurar, conferir, apontar, verificar,
-  executar, reverter, "ligar-rls": ligarRls, "desligar-rls": desligarRls,
+  executar, reverter, "provar-rls": provarRls, "ligar-rls": ligarRls, "desligar-rls": desligarRls,
 }
 
 if (!COMANDOS[comando]) {
