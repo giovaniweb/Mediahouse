@@ -1,5 +1,7 @@
 # RLS — plano de voo
 
+> **04/10/2026:** ensaio com o dump de 07/09 e os logins restritos, correções e roteiro da ligação em produção na [seção 8](#8-o-ensaio-de-04102026-e-o-roteiro-da-ligação).
+>
 > Atualização de execução (S07, 28/09/2026): para a próxima implantação, seguir [S07-RUNTIME-RLS.md](docs/execucao-flow/2026-09-26/S07-RUNTIME-RLS.md). O roteiro atual exige conexões explícitas, prova com logins restritos e migração da recuperação por token. As decisões históricas abaixo não comprovam a configuração do ambiente publicado.
 
 Como ligar a tranca do banco sem derrubar a produção.
@@ -639,3 +641,137 @@ Ordem:
    `gru1`), nunca do laptop — a máquina de casa não tem a mesma rota.
 5. ~~Comparar.~~ **Feito — ver a tabela em 7.3.** O preview de US-West pode ser
    apagado: o baseline está registrado e não precisa mais existir para ser citado.
+
+---
+
+## 8. O ensaio de 04/10/2026 e o roteiro da ligação
+
+Item 6.2 do plano de execução. O Passo 3 (01/09) passeou pelas telas com o
+`app_user`, mas o código mudou muito desde então: as ondas A–D, o site, o
+Cutflow e o visual v8 entraram depois. Este ensaio refez o passeio com o código
+de hoje.
+
+### Como foi feito
+
+- Dump de 07/09 (`nuflow-public-20260907105224.dump`, SHA conferido)
+  restaurado num Postgres 17 descartável, com as migrations da `main` por cima.
+- **Dois servidores do mesmo build, lado a lado.** A: `RLS_ATIVO=sim`,
+  `DATABASE_URL` = `app_user`, `AUTH_DATABASE_URL` = `app_auth`,
+  `ADMIN_DATABASE_URL` = dono. B: conexão de dono, como a produção roda hoje.
+  Cada um com o próprio banco, e rede externa bloqueada (WhatsApp, e-mail e
+  Storage não saem).
+- **Leitura:** 14 pessoas reais em 15 combinações de empresa e papel (um papel
+  de cada, nas três empresas). Cada combinação passou por 43 telas e 88 rotas
+  de API, nos dois servidores. Além delas, 32 páginas e rotas públicas, cada
+  uma chamada com um token real.
+- **Escrita e caminhos sem sessão:** 54 casos. Criar, comentar, mover, editar
+  e duplicar demanda; aprovar pelo link do cliente; convite, NF, fornecedor;
+  formulário público; cadastro de pessoa, editor e videomaker; avaliação por
+  QR; recuperação de senha; parceria com espelhamento entre empresas; os 7
+  agentes do cron e o da fila do WhatsApp; o webhook do WhatsApp. Cada caso
+  compara o status HTTP e quantas linhas mudaram em CADA tabela.
+
+### O que quebrava com RLS ligado
+
+| onde | sintoma | causa |
+|---|---|---|
+| **Cron dos agentes e da fila do WhatsApp** | respondia `ok` e não processava **nenhuma** empresa: sem alertas, prazos, briefing, vistoria, cobrança, lembretes nem envio | listava as empresas sem empresa declarada → zero |
+| Link de aprovação do cliente (`/aprovar`) | "Link de aprovação não encontrado" | o token não era credencial reconhecida |
+| Pessoas & Acessos → nova pessoa | 500 | `INSERT ... RETURNING` de alguém ainda sem vínculo |
+| Formulário público de demanda | 500 | idem, e a busca do solicitante rodava antes de declarar a empresa |
+| Cadastro de editor/videomaker com acesso | criava o profissional **sem login**, em silêncio | idem |
+| Seletor de empresa | mostrava só a ativa; trocar dava 404 | vínculos lidos pelo cliente com RLS |
+| Relatório executivo por token e MCP | 404 / 401 | token resolvido pelo cliente com RLS |
+| Esqueci minha senha | 500 | `app_auth` não tem DELETE nos tokens |
+| Avaliação por QR | gravava a nota e respondia 500 | média calculada na rota, sem empresa |
+
+A correção é o PR da branch `rls/ensaio-producao`: uma migration aditiva
+(`20261004000000`, credencial `aprovacao_video`) e o resto em código. Depois da
+correção: **54 de 54 casos iguais** entre A e B, e nenhuma tela quebrada. O
+código novo foi testado também SEM a migration, no servidor B: com RLS
+desligado, o deploy pode chegar antes dela.
+
+### O que muda de comportamento, e está certo
+
+Quatro números da "rede" passam a contar só a empresa ativa: as demandas no
+perfil global do videomaker e do editor, "minhas demandas" de quem é
+videomaker em mais de uma empresa, e os vínculos de uma pessoa. Hoje eles somam
+demandas de **outras empresas**. A tela do editor na empresa `giovani` lista 20
+demandas, 17 delas de outras empresas. O RLS fecha esse vazamento.
+
+### Limitações conhecidas (não bloqueiam a ligação)
+
+- **Painel de campo** (`/campo`): foi desenhado para mostrar, junto, o trabalho
+  do videomaker em todas as empresas que o contrataram. Com RLS, mostra só a
+  empresa ativa. Hoje só uma pessoa está em duas empresas, o próprio Giovani.
+  Antes do piloto com a segunda empresa, isso precisa de uma função que liste
+  as empresas do videomaker e de uma consulta por empresa.
+- **Excluir de vez uma pessoa que está em várias empresas** (só o super admin
+  pode): a contagem de vínculos vê só a empresa ativa. As chaves estrangeiras
+  impedem apagar quem tem registro, então o erro vira 500, sem perda de dado.
+- **Fora do RLS, mas achado aqui:** o código da demanda é sorteado
+  (`VOP-26-` + 4 dígitos) e colide com um existente em ~3% das criações. É 500
+  em produção HOJE. Corrigir à parte.
+
+### O script de ligação tinha dois buracos na volta, e os dois foram fechados
+
+1. A Vercel não devolve o valor de variável sensível. O backup de 07/09 tem
+   `DATABASE_URL` **vazia**, e o `desligar-rls` usava a URL de dono guardada em
+   setembro sem conferir se ela ainda conecta. Com a senha do `postgres`
+   rotacionada (§11 do plano da virada pedia isso), a volta derrubaria a
+   produção.
+2. A volta não removia `AUTH_DATABASE_URL`, que o login usa mesmo sem RLS.
+
+Agora `provar-rls`, `ligar-rls` e `desligar-rls` provam cada URL por conexão
+(e pelo `verificar-runtime-rls`) antes de qualquer troca. O `provar-rls` e o
+`ligar-rls` também param se faltar migration no banco. A volta remove o que a
+ida criou. Tudo foi ensaiado contra uma Vercel falsa: ida, nova tentativa, volta,
+credencial quebrada na ida e URL de dono vencida na volta.
+
+### Roteiro da ligação em produção
+
+**Antes da janela (qualquer dia, nada muda em produção):**
+
+1. Mesclar o PR. O deploy é seguro com RLS desligado.
+2. Rodar o "Release — migrations" na `main`, que aplica a `20261004000000` (e
+   a do Cutflow, se ainda faltar).
+3. `node scripts/virada/virada.mjs provar-rls`. Só lê: prova a conexão de dono,
+   a do `app_user` e a do `app_auth`, roda o `verificar-runtime-rls` e confere
+   as migrations. Se a de dono falhar, a senha do `postgres` mudou desde 07/09:
+   é preciso a URL atual do pooler (modo transação, 6543) no
+   `~/nuflow-virada/urls-destino.env`. Se `app_user`/`app_auth` falharem, as
+   senhas deles precisam ser refeitas, e isso é uma escrita em produção que pede
+   um sim.
+4. Dump novo (o último é de 07/09) ou conferir o backup diário do Supabase. O
+   RLS não move dado, mas a rede vale o minuto.
+5. Avisar a equipe do horário.
+
+**A janela — 45 minutos, numa noite de dia útil (sugestão: 20h às 20h45, horário de Brasília).**
+Fora do expediente e longe dos agentes da manhã (7h, 8h e 9h). A fila do
+WhatsApp (a cada 5 min) e os lembretes (a cada 10 min) rodam durante a janela,
+e isso é bom: servem de sonda viva.
+
+| quando | o quê | quem |
+|---|---|---|
+| T−10 | `provar-rls` de novo | eu |
+| T0 | `node scripts/virada/virada.mjs ligar-rls`: troca 4 variáveis, redeploy, `/api/health` e uma rota pública que exercita `app_auth` e `app_user` | eu, com o seu sim |
+| T+5 | login do admin, de um gestor e de um videomaker (pelo telefone) | 👤 |
+| T+10 | Kanban audiovisual e Growth; abrir uma demanda; comentar; mover um status; Pessoas & Acessos; trocar de empresa e voltar | 👤 + eu |
+| T+20 | um link de aprovação de teste; o relatório executivo; a fila do WhatsApp rodou (Avisos não entregues → saúde) | eu |
+| T+25 | logs da Vercel sem `row-level security` nem `permission denied` | eu |
+| T+45 | fecha a janela, ou volta | — |
+
+**Critério de volta:** login recusado, tela vazia que não deveria estar vazia,
+500 num fluxo principal, `row-level security` ou `permission denied` no log, ou
+`/api/health` diferente de ok.
+
+**A volta:** `node scripts/virada/virada.mjs desligar-rls`, uns 3 minutos.
+Prova a conexão de dono, devolve `DATABASE_URL`, põe `RLS_ATIVO=nao`, remove
+`AUTH_DATABASE_URL` e `ADMIN_DATABASE_URL` (se a ida as criou), redeploya e
+mede. **Não se perde nada:** o RLS não move dado, e o que foi gravado durante a
+janela continua no mesmo banco.
+
+**Na manhã seguinte:** os agentes das 7h às 9h precisam criar alertas como no
+dia anterior. Se criarem zero, o cron voltou a não enxergar as empresas, e a
+volta é a mesma. O Passo 6 (`FORCE ROW LEVEL SECURITY`) fica para semanas
+depois, como já estava.

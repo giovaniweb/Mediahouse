@@ -197,6 +197,11 @@ redeploya e descongela o banco antigo.
 
 ## 7. A Virada B — RLS, dias depois
 
+> **04/10/2026:** antes de rodar, ver o roteiro atualizado em
+> `RLS-PLANO-DE-VOO.md` §8. O ensaio achou quebras que só aparecem com o login
+> restrito, e o `desligar-rls` desta seção tinha dois buracos na volta, já
+> fechados. Agora existe `provar-rls`, que só lê e roda antes da janela.
+
 Sem janela, sem congelamento, sem mover dado:
 
 ```bash
