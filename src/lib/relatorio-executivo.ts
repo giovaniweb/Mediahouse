@@ -1,6 +1,10 @@
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasOperacionais } from "@/lib/metricas-operacionais"
-import { prisma } from "@/lib/prisma"
+// O token resolve a empresa ANTES de haver empresa declarada — o mesmo problema
+// de ordem do login. Sob RLS, `organizacoes` lida pelo cliente normal só mostra
+// a empresa declarada, ou seja, nenhuma: o link externo e o MCP respondiam 404.
+// `prismaAuth` enxerga `organizacoes` (e só ela, além de usuários e vínculos).
+import { prismaAuth } from "@/lib/prisma-auth"
 
 export const VALOR_POR_VIDEO = 200
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -22,7 +26,7 @@ export function mesesDisponiveis(): { value: string; label: string }[] {
 // organização está inativa — o chamador responde 401/404, nunca agrega tudo.
 export async function orgPorRelatorioToken(token: string | null | undefined): Promise<string | null> {
   if (!token || token.length < 16) return null
-  const org = await prisma.organizacao.findUnique({
+  const org = await prismaAuth.organizacao.findUnique({
     where: { relatorioToken: token },
     select: { id: true, ativo: true },
   })

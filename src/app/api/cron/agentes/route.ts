@@ -3,7 +3,10 @@ import { acompanharConsumidor } from "@/lib/automacoes-saude"
 import { timingSafeEqual } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { comOrg } from "@/lib/org-contexto"
-import { prisma } from "@/lib/prisma"
+// Listar as empresas acontece ANTES de haver empresa declarada: sob RLS o
+// cliente normal devolvia zero, e o cron respondia ok sem fazer nada. Cada
+// empresa é processada depois dentro do próprio comOrg.
+import { prismaAuth } from "@/lib/prisma-auth"
 import { executarRotina, ROTINAS, type Rotina } from "@/lib/automacoes-regras"
 import { processarInbox, limparConteudoInbox } from "@/lib/whatsapp-inbox"
 import { processarSaidas } from "@/lib/whatsapp-outbox"
@@ -19,7 +22,7 @@ export async function GET(req:NextRequest) {
   const agente=req.nextUrl.searchParams.get("agente")??"alertas"
   if(!ROTINAS.includes(agente as Rotina)) return NextResponse.json({error:"rotina_invalida"},{status:400})
   const cursor=req.nextUrl.searchParams.get("cursor")?.slice(0,128)
-  const orgs=await prisma.organizacao.findMany({where:{ativo:true,ambienteTeste:false,...(cursor?{id:{gt:cursor}}:{})},select:{id:true},orderBy:{id:"asc"},take:11})
+  const orgs=await prismaAuth.organizacao.findMany({where:{ativo:true,ambienteTeste:false,...(cursor?{id:{gt:cursor}}:{})},select:{id:true},orderBy:{id:"asc"},take:11})
   const resultados=[],inicio=Date.now()
   for(const org of orgs.slice(0,10)) {
     if(Date.now()-inicio>240_000) break

@@ -47,8 +47,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Usuário sem e-mail cadastrado. Entre em contato com o administrador." }, { status: 400 })
     }
 
-    // Invalida tokens anteriores
-    await prisma.passwordResetToken.deleteMany({ where: { email: usuario.email } })
+    // Invalida tokens anteriores marcando-os como usados. Apagar não serve: o
+    // role de autenticação tem SELECT/INSERT/UPDATE nesta tabela e nada de
+    // DELETE, e sob RLS o pedido inteiro caía em 500. O efeito é o mesmo — a
+    // troca de senha recusa token com `usedAt` — e o histórico fica.
+    await prisma.passwordResetToken.updateMany({
+      where: { email: usuario.email, usedAt: null },
+      data: { usedAt: new Date() },
+    })
 
     const token = crypto.randomBytes(32).toString("hex")
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
