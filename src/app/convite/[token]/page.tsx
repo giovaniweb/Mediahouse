@@ -6,6 +6,9 @@ import { Check, X, Loader2, Calendar, MapPin, Film, AlertTriangle, Clock, Dollar
 import { formatarData } from "@/lib/datas"
 
 interface ConviteData {
+  versao: number
+  tarifaDiaria: string | null
+  condicoes: string | null
   id: string
   status: string
   expiresAt: string
@@ -59,7 +62,7 @@ export default function ConvitePage() {
       const r = await fetch(`/api/convites/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao }),
+        body: JSON.stringify({ acao, versao: convite?.versao }),
       })
       if (!r.ok) {
         const data = await r.json()
@@ -96,7 +99,7 @@ export default function ConvitePage() {
                 <Check className="w-8 h-8 text-green-400" />
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mb-2">Você já aceitou esta demanda! ✅</h1>
-              <p className="text-zinc-400">Fique de olho no WhatsApp para os próximos passos. Boa captação! 🎬</p>
+              <p className="text-zinc-400">Consulte a equipe para os próximos passos.</p>
             </>
           )}
           {isRecusado && (
@@ -105,7 +108,7 @@ export default function ConvitePage() {
                 <X className="w-8 h-8 text-zinc-400" />
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite já recusado</h1>
-              <p className="text-zinc-400">Você já recusou esta demanda anteriormente. O gestor foi notificado.</p>
+              <p className="text-zinc-400">Você já recusou esta demanda anteriormente. Sua resposta foi registrada.</p>
             </>
           )}
           {isExpirado && (
@@ -144,7 +147,7 @@ export default function ConvitePage() {
                 <Check className="w-8 h-8 text-green-400" />
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Aceito! ✅</h1>
-              <p className="text-zinc-400">Você foi confirmado nesta demanda. Aguarde os próximos passos via WhatsApp. Boa captação! 🎬</p>
+              <p className="text-zinc-400">Você foi confirmado nesta demanda. Consulte a equipe para os próximos passos.</p>
             </>
           ) : (
             <>
@@ -152,7 +155,7 @@ export default function ConvitePage() {
                 <X className="w-8 h-8 text-red-400" />
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mb-2">Convite Recusado</h1>
-              <p className="text-zinc-400">Tudo bem! O gestor será notificado e buscará outro profissional.</p>
+              <p className="text-zinc-400">Recusa registrada. A equipe poderá acompanhar a resposta no Flow.</p>
             </>
           )}
         </div>
@@ -233,9 +236,9 @@ export default function ConvitePage() {
               <p className="text-sm text-amber-300 font-medium">Pagamento</p>
             </div>
             <p className="text-sm text-zinc-300">
-              Realizado em até <strong className="text-white">15 dias</strong> após o envio da nota fiscal.
+              {convite?.tarifaDiaria ? `Diária de referência: ${Number(convite.tarifaDiaria).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "Valor a confirmar com a equipe."}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">A nota fiscal deverá ser enviada assim que os brutos forem entregues.</p>
+            <p className="text-xs text-zinc-500 mt-1">{convite?.condicoes || "Convite antigo sem condição registrada. Confirme valor e prazo com a equipe antes do serviço."}</p>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-zinc-600">

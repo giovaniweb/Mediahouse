@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { quemRecebeTudo } from "@/lib/notificados"
-import { emSegundoPlano } from "@/lib/notificar"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
-import { STATUS_PARA_COLUNA } from "@/lib/status"
-import { declararOrg } from "@/lib/org-contexto"
+import { z, ZodError } from "zod"
+import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { comOrg, declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+
+const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
 
 // GET /api/convites/[token] — buscar dados do convite (página pública)
 export async function GET(
@@ -23,7 +23,7 @@ export async function GET(
   // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
   // um oráculo.
   const organizacaoId = await orgPorCredencial("convite", token)
-  if (!organizacaoId) return NextResponse.json({ error: "Convite não encontrado" }, { status: 404 })
+  if (!organizacaoId) return resposta({ error: "Convite não encontrado" }, 404)
   declararOrg(organizacaoId)
 
   const convite = await prisma.conviteVideomaker.findUnique({
@@ -49,135 +49,32 @@ export async function GET(
   })
 
   if (!convite) {
-    return NextResponse.json({ error: "Convite não encontrado" }, { status: 404 })
+    return resposta({ error: "Convite não encontrado" }, 404)
   }
 
   if (convite.status !== "pendente") {
-    return NextResponse.json({ error: "Convite já foi respondido", status: convite.status }, { status: 400 })
+    return resposta({ error: "Convite já foi respondido", status: convite.status }, 400)
   }
 
   if (new Date() > convite.expiresAt) {
-    await prisma.conviteVideomaker.update({ where: { token }, data: { status: "expirado" } })
-    return NextResponse.json({ error: "Convite expirado" }, { status: 410 })
+    return resposta({ error: "Convite expirado" }, 410)
   }
 
-  return NextResponse.json(convite)
+  return resposta(convite)
 }
 
-// POST /api/convites/[token] — aceitar ou recusar
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-
-  // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
-  // empresa precisa ser declarada ANTES da primeira consulta — senão o banco
-  // devolve vazio e a página some. `orgPorCredencial` resolve por uma função no
-  // banco que devolve só o id da empresa, sem abrir a tabela.
-  //
-  // O 404 aqui responde igual para credencial inválida e para credencial de
-  // outra empresa: a diferença entre "não existe" e "existe e não é sua" seria
-  // um oráculo.
   const organizacaoId = await orgPorCredencial("convite", token)
-  if (!organizacaoId) return NextResponse.json({ error: "Convite não encontrado" }, { status: 404 })
-  declararOrg(organizacaoId)
-  const { acao } = await req.json() // "aceitar" | "recusar"
-
-  if (!["aceitar", "recusar"].includes(acao)) {
-    return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
-  }
-
-  const convite = await prisma.conviteVideomaker.findUnique({
-    where: { token },
-    // `videomaker: true` trazia diária, CPF e PIX do perfil global para dentro
-    // de uma rota PÚBLICA por token. Só o que o convite precisa mostrar.
-    include: { demanda: true, videomaker: { select: { id: true, nome: true, telefone: true, email: true } } },
-  })
-
-  if (!convite) return NextResponse.json({ error: "Convite não encontrado" }, { status: 404 })
-  if (convite.status !== "pendente") return NextResponse.json({ error: "Já respondido" }, { status: 400 })
-  if (new Date() > convite.expiresAt) return NextResponse.json({ error: "Expirado" }, { status: 410 })
-
-  const novoStatus = acao === "aceitar" ? "aceito" : "recusado"
-
-  // Atualizar convite (CORRIGIDO: atualiza status tanto para aceitar quanto recusar)
-  await prisma.conviteVideomaker.update({
-    where: { token },
-    data: { status: novoStatus, respondidoEm: new Date() },
-  })
-
-  if (acao === "aceitar") {
-    // Atribuir videomaker à demanda e avançar status
-    await prisma.demanda.update({
-      where: { id: convite.demandaId },
-      data: {
-        videomakerId: convite.videomakerId,
-        statusInterno: "videomaker_aceitou",
-        // A coluna do kanban precisa acompanhar o status: gravar só o
-        // statusInterno deixava o card parado numa coluna que não corresponde
-        // mais ao estado real da demanda.
-        statusVisivel: STATUS_PARA_COLUNA["videomaker_aceitou"],
-      },
-    })
-
-    await prisma.historicoStatus.create({
-      data: {
-        demandaId: convite.demandaId,
-        statusAnterior: convite.demanda.statusInterno,
-        statusNovo: "videomaker_aceitou",
-        origem: "automacao",
-        observacao: `Videomaker ${convite.videomaker.nome} aceitou o convite`,
-      },
-    })
-
-    // NOVO: Notifica admin/gestor via WhatsApp
-    emSegundoPlano(() => notificarGestores(
-      `✅ *Videomaker Aceitou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} aceitou a captação.\n\nPróximo passo: agendar data de captação.`,
-      convite.demanda.organizacaoId
-    ), "gestores-convite")
-  } else {
-    // Recusou → atualizar demanda + registrar histórico
-    await prisma.demanda.update({
-      where: { id: convite.demandaId },
-      data: {
-        videomakerId: null,               // libera o slot para outro VM
-        statusInterno: "videomaker_recusou",
-        statusVisivel: STATUS_PARA_COLUNA["videomaker_recusou"],
-      },
-    })
-
-    await prisma.historicoStatus.create({
-      data: {
-        demandaId: convite.demandaId,
-        statusAnterior: convite.demanda.statusInterno,
-        statusNovo: "videomaker_recusou",
-        origem: "automacao",
-        observacao: `Videomaker ${convite.videomaker.nome} recusou o convite`,
-      },
-    })
-
-    emSegundoPlano(() => notificarGestores(
-      `❌ *Videomaker Recusou!*\n\n📋 *${convite.demanda.codigo}* — ${convite.demanda.titulo}\n👤 ${convite.videomaker.nome} recusou a captação.\n\n⚠️ Precisa escalar outro profissional.`,
-      convite.demanda.organizacaoId
-    ), "gestores-convite")
-  }
-
-  return NextResponse.json({ status: novoStatus })
-}
-
-/**
- * Envia notificação WhatsApp para todos os gestores/admins ativos
- */
-async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
+  if (!organizacaoId) return resposta({ error: "Convite não encontrado" }, 404)
   try {
-    const gestores = await quemRecebeTudo(organizacaoId)
-    for (const g of gestores) {
-      if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
-      }
-    }
+    const e = z.object({ acao: z.enum(["aceitar", "recusar"]), versao: z.number().int().positive().optional() }).strict().parse(await req.json())
+    return resposta(await comOrg(organizacaoId, () => prisma.$transaction(tx => responderConvite(tx, {
+      organizacaoId, token, ...e, origem: "automacao",
+    }))))
   } catch (e) {
-    console.error("[Convite] Falha ao notificar gestores:", e)
+    if (e instanceof ConviteInvalido) return resposta({ error: e.message }, e.status)
+    if (e instanceof ZodError || e instanceof SyntaxError) return resposta({ error: "Ação inválida" }, 400)
+    throw e
   }
 }

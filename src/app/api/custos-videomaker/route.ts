@@ -1,3 +1,7 @@
+import { Prisma } from "@prisma/client"
+import { pagamentoCusto } from "@/lib/custos-setor"
+import { randomUUID } from "node:crypto"
+import { registrarAuditoria } from "@/lib/auditoria"
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { z } from "zod"
 import { requireAcesso } from "@/lib/acesso"
@@ -50,13 +54,17 @@ export async function GET(req: NextRequest) {
   })
 
   // Calcular totais
-  const totalGasto = custos.reduce((sum, c) => sum + c.valor, 0)
-  const totalPago = custos.filter((c) => c.pago).reduce((sum, c) => sum + c.valor, 0)
-  const totalPendente = custos.filter((c) => !c.pago).reduce((sum, c) => sum + c.valor, 0)
+  const validos = custos.filter(c => Number.isFinite(c.valor) && c.valor >= 0 && (c.valor > 0 || c.valorConfirmadoEm !== null))
+  const somar = (lista: typeof custos) => lista.reduce((s,c) => s.plus(new Prisma.Decimal(c.valor.toString()).toDecimalPlaces(2)), new Prisma.Decimal(0)).toNumber()
+  const totalGasto = somar(validos)
+  const totalPago = somar(validos.filter(c => pagamentoCusto(c.pago,c.statusPagamento) === "pago"))
+  const totalPendente = somar(validos.filter(c => pagamentoCusto(c.pago,c.statusPagamento) === "pendente"))
+  const conflitosPagamento = custos.filter(c => pagamentoCusto(c.pago,c.statusPagamento) === "conflito").length
+  const valoresSemConfirmacao = custos.filter(c => !Number.isFinite(c.valor) || c.valor < 0 || (c.valor === 0 && !c.valorConfirmadoEm)).length
 
   // Agrupar por videomaker
   const porVideomaker: Record<string, { nome: string; total: number; count: number }> = {}
-  for (const c of custos) {
+  for (const c of validos) {
     const vid = c.videomaker
     if (!porVideomaker[vid.id]) {
       porVideomaker[vid.id] = { nome: vid.nome, total: 0, count: 0 }
@@ -79,6 +87,8 @@ export async function GET(req: NextRequest) {
       const f = fiscais.get(c.videomakerId)
       return {
         ...c,
+        pagamentoEmConflito: pagamentoCusto(c.pago,c.statusPagamento) === "conflito",
+        valorPendenteConfirmacao: !Number.isFinite(c.valor) || c.valor < 0 || (c.valor === 0 && !c.valorConfirmadoEm),
         videomaker: {
           ...c.videomaker,
           valorDiaria: diarias.get(c.videomakerId) ?? null,
@@ -88,6 +98,7 @@ export async function GET(req: NextRequest) {
       }
     }),
     resumo: { totalGasto, totalPago, totalPendente },
+    qualidade: { conflitosPagamento, valoresSemConfirmacao, aviso: "Estados divergentes não entram nos totais pago/pendente. Valores desconhecidos exigem conferência." },
     porVideomaker: Object.entries(porVideomaker)
       .map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => b.total - a.total),
@@ -129,17 +140,37 @@ export async function POST(req: NextRequest) {
     if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
   }
 
-  const custo = await prisma.custoVideomaker.create({
+  if (demandaId && pago===true) return NextResponse.json({error:"Registre o custo do job, envie a NF e aprove antes de marcar o pagamento."},{status:409})
+  if (pago !== undefined && typeof pago !== "boolean") return erroDeCampo("pago", "Informe um estado de pagamento válido.")
+  if (tipo !== undefined && !["diaria", "mensalidade", "projeto", "bonus", "despesa", "equipamento"].includes(tipo)) return erroDeCampo("tipo", "Selecione um tipo de custo válido.")
+  for (const [campo, valorData] of [["dataPagamento",dataPagamento],["dataVencimento",dataVencimento]]) {
+    if (valorData && (typeof valorData !== "string" || !z.union([z.iso.date(),z.iso.datetime({offset:true})]).safeParse(valorData).success)) return erroDeCampo(campo, "Informe uma data válida.")
+  }
+  const fatoOrigem = req.headers.get("Idempotency-Key")
+  if (fatoOrigem !== null && !/^[a-zA-Z0-9_-]{8,128}$/.test(fatoOrigem)) return erroDeCampo("origem", "Identificação de origem inválida.")
+  const custo = await prisma.$transaction(async tx => {
+  if (fatoOrigem) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${organizacaoId}:custo-externo:${fatoOrigem}`}, 0))`
+    const anterior = await tx.custoVideomaker.findUnique({ where: { organizacaoId_fatoOrigem: { organizacaoId, fatoOrigem } } })
+    if (anterior) {
+      if (anterior.videomakerId !== videomakerId || anterior.demandaId !== (demandaId || null) || anterior.tipo !== (tipo ?? "diaria") || anterior.valor !== valorLido.valor || anterior.dataReferencia.getTime() !== instanteReferencia.getTime() || anterior.descricao !== (descricao ?? null) || anterior.pago !== (pago ?? false) || anterior.comprovante !== (comprovante ?? null) || anterior.dataPagamento?.toISOString() !== (dataPagamento ? new Date(dataPagamento).toISOString() : undefined) || anterior.dataVencimento?.toISOString() !== (dataVencimento ? new Date(dataVencimento).toISOString() : undefined)) return null
+      return anterior
+    }
+  }
+  const criado = await tx.custoVideomaker.create({
     data: {
       organizacaoId,
+      fatoOrigem,
       videomakerId,
       demandaId: demandaId || null,
       tipo: tipo ?? "diaria",
-      valor: valorLido.valor,
+      valor: valorLido.valor!,
+      valorConfirmadoEm: new Date(),
       descricao,
       dataReferencia: instanteReferencia,
       dataVencimento: dataVencimento ? new Date(dataVencimento) : null,
       pago: pago ?? false,
+      statusPagamento: pago === true ? "pago" : "pendente_nf",
       dataPagamento: dataPagamento ? new Date(dataPagamento) : null,
       comprovante,
     },
@@ -149,5 +180,9 @@ export async function POST(req: NextRequest) {
     },
   })
 
+    await registrarAuditoria(tx, acesso, { acao: "manutencao.custos", recurso: "custo", recursoId: criado.id, correlationId: randomUUID(), depois: { operacao: "criar", alterados: 1 } })
+    return criado
+  })
+  if (!custo) return NextResponse.json({ error: "Esta origem já foi usada com outros dados. Confira o lançamento antes de repetir." }, { status: 409 })
   return NextResponse.json({ custo }, { status: 201 })
 }

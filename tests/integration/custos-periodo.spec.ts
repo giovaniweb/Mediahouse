@@ -22,7 +22,7 @@ beforeAll(async () => {
     ["dentro","2026-09-15T15:00:00.000Z",20,false],
     ["fim","2026-10-01T02:59:59.999Z",30,false],
     ["depois","2026-10-01T03:00:00.000Z",100,false],
-  ] as const) await db.custoVideomaker.create({ data: { id: `${p}-${s}`, organizacaoId: a, videomakerId: vm, dataReferencia: new Date(iso), valor, pago } })
+  ] as const) await db.custoVideomaker.create({ data: { id: `${p}-${s}`, organizacaoId: a, videomakerId: vm, dataReferencia: new Date(iso), valor, pago, statusPagamento: pago ? "pago" : "pendente_nf" } })
   await db.custoVideomaker.create({ data: { id: `${p}-b-custo`, organizacaoId: b, videomakerId: vm, dataReferencia: new Date("2026-09-15T12:00:00Z"), valor: 999 } })
 })
 beforeEach(() => { estado.sessao = { user: { id: u, organizacaoId: a, tipo: "admin" } } })

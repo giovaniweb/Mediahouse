@@ -81,7 +81,7 @@ describe("auditoria de operações reais", () => {
     const body = await r.json(); expect(body.eventos).toHaveLength(1); expect(body.eventos[0].organizacaoId).toBe(a); expect(body.eventos[0].depois).toBeNull()
   })
   it("backfill legado não cria arquivos sem lote revisado", async () => {
-    await expect(backfillAuditado("arquivos",ator)).rejects.toThrow("lote simulado")
+    await expect(backfillAuditado("arquivos")).rejects.toThrow("lote simulado")
   })
   it("retenção técnica remove só payload vencido e preserva envelope", async () => {
     await registrarAuditoria(db,ator,{ acao: "configuracao.alterada", recurso: "config_empresa", recursoId: a, correlationId: correlacaoAuditoria(), depois: { ativo: true } })

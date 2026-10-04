@@ -1,50 +1,21 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { z, ZodError } from "zod"
+import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
-
-// POST /api/me/nf-token
-// Retorna (ou cria) um token de upload de NF para a demanda indicada.
-// O videomaker logado deve estar vinculado à demanda.
-export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-  const body = await req.json()
-  const { demandaId } = body as { demandaId?: string }
-  if (!demandaId) return NextResponse.json({ error: "demandaId obrigatório" }, { status: 400 })
-
-  // Busca o videomaker vinculado ao usuário
-  const videomaker = await prisma.videomaker.findFirst({
-    where: { usuarioId: session.user.id },
-    select: { id: true },
-  })
-  if (!videomaker) return NextResponse.json({ error: "Perfil de videomaker não encontrado" }, { status: 404 })
-
-  // Valida que a demanda pertence ao videomaker
-  const demanda = await prisma.demanda.findFirst({
-    where: { id: demandaId, videomakerId: videomaker.id },
-    select: { id: true, codigo: true },
-  })
-  if (!demanda) return NextResponse.json({ error: "Demanda não encontrada ou não pertence a você" }, { status: 404 })
-
-  // Busca NF existente ou cria nova
-  const existing = await prisma.notaFiscalUpload.findFirst({
-    where: { demandaId, videomakerId: videomaker.id },
-    orderBy: { createdAt: "desc" },
-  })
-
-  if (existing) {
-    return NextResponse.json({ token: existing.token, status: existing.status })
-  }
-
-  // Cria nova entrada de NF
-  const nova = await prisma.notaFiscalUpload.create({
-    data: {
-      demandaId,
-      videomakerId: videomaker.id,
-      status: "pendente",
-    },
-  })
-
-  return NextResponse.json({ token: nova.token, status: nova.status })
+import { comOrg } from "@/lib/org-contexto"
+export async function POST(req:Request) {
+  const acesso=await requireAcesso();if(acesso instanceof NextResponse)return acesso
+  try {
+    const {demandaId}=z.object({demandaId:z.string().min(1).max(128)}).strict().parse(await req.json())
+    return await comOrg(acesso.organizacaoId,()=>prisma.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM demandas WHERE id=${demandaId} AND "organizacaoId"=${acesso.organizacaoId} FOR UPDATE`
+      const d=await tx.demanda.findFirst({where:{id:demandaId,organizacaoId:acesso.organizacaoId,videomaker:{usuarioId:acesso.usuarioId,vinculos:{some:{organizacaoId:acesso.organizacaoId,status:{in:["ativo","preferencial"]},emListaNegra:false}}}},select:{id:true,videomakerId:true}})
+      if(!d?.videomakerId)return NextResponse.json({error:"Job não encontrado ou não pertence a você"},{status:404})
+      const existente=await tx.notaFiscalUpload.findFirst({where:{demandaId,videomakerId:d.videomakerId},orderBy:[{createdAt:"desc"},{id:"asc"}]})
+      const contestado=existente?.status!=="pendente" && await tx.custoVideomaker.findFirst({where:{organizacaoId:acesso.organizacaoId,demandaId,videomakerId:d.videomakerId,statusPagamento:"contestado",pago:false},select:{id:true}})
+      // Nova submissão preserva o arquivo e o token da revisão anterior.
+      const nf=(!contestado && existente) || await tx.notaFiscalUpload.create({data:{demandaId,videomakerId:d.videomakerId}})
+      return NextResponse.json({token:nf.token,status:nf.status},{headers:{"Cache-Control":"private, no-store"}})
+    }))
+  }catch(e){if(e instanceof ZodError || e instanceof SyntaxError)return NextResponse.json({error:"Job inválido"},{status:400});throw e}
 }

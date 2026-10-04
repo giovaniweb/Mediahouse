@@ -56,6 +56,7 @@ describe("mesmos indicadores em todos os consumidores", () => {
     expect(r.operacional).toMatchObject({ criadas: 3, concluidas: 2, entregaveis: 3, finalizadasSemData: 1, publicacoes: null, manual: { total: 12, totalCombinado: null } })
     expect(r.tendencia.reduce((n: number,v: {concluidas: number}) => n+v.concluidas,0)).toBe(2)
     const prod = await (await producao(request("/api/producao?mes=2026-09"))).json()
+    expect(prod).not.toHaveProperty("valorPorDemanda"); expect(prod).not.toHaveProperty("porEditor"); expect(r.producao).not.toHaveProperty("producaoMes")
     const dash = await (await dashboard()).json()
     const exp = await computeRelatorioExecutivo(a,"2026-09","audiovisual")
     expect(prod.totalVideos).toBe(3); expect(dash.metricas.concluidasMes).toBe(3); expect(exp.nuflowVideos).toBe(3)

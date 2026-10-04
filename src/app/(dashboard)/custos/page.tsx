@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { ResumoSetor } from "@/components/custos/ResumoSetor"
+import { useRef, useState } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import {
@@ -15,9 +16,6 @@ import {
   TrendingUp,
   AlertCircle,
   BarChart2,
-  Clapperboard,
-  CalendarDays,
-  Printer,
 } from "lucide-react"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
@@ -42,6 +40,9 @@ interface Custo {
   dataReferencia: string
   dataVencimento: string | null
   pago: boolean
+  statusPagamento: string
+  valorPendenteConfirmacao: boolean
+  pagamentoEmConflito: boolean
   dataPagamento: string | null
   videomaker: { id: string; nome: string; valorDiaria: number | null }
   demanda: { id: string; codigo: string; titulo: string } | null
@@ -50,42 +51,8 @@ interface Custo {
 interface RespostaCustos {
   custos: Custo[]
   resumo: { totalGasto: number; totalPago: number; totalPendente: number }
+  qualidade?: { conflitosPagamento: number; valoresSemConfirmacao: number; aviso: string }
   porVideomaker: { id: string; nome: string; total: number; count: number }[]
-}
-
-interface MesProducao {
-  mes: string
-  label: string
-  demandas: number
-  videos?: number
-  valor: number
-}
-
-interface PessoaProducao {
-  id: string
-  nome: string
-  demandas: number
-  valor: number
-  percentual: number
-  // Editor interno
-  salario?: number | null
-  saldo?: number | null
-  sePagou?: boolean | null
-  percSalario?: number | null
-  // Videomaker externo
-  valorDiaria?: number | null
-  custoTotal?: number | null
-}
-
-interface RespostaProducao {
-  valorPorDemanda: number
-  totalDemandas: number
-  totalVideos?: number
-  valorTotal: number
-  mesAtual: MesProducao
-  porMes: MesProducao[]
-  porEditor: PessoaProducao[]
-  porVideomaker: PessoaProducao[]
 }
 
 const TIPOS_CUSTO = [
@@ -110,17 +77,19 @@ const fmt = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 })
 
 export default function CustosPage() {
-  const [aba, setAba] = useState<"custos" | "producao">("custos")
-  const [modoProducao, setModoProducao] = useState<"mes" | "ano">("mes")
-  const [mesSelecionado, setMesSelecionado] = useState(() => new Date().toISOString().slice(0, 7))
+  const [aba, setAba] = useState<"custos" | "setor">("setor")
   const [filtroDe, setFiltroDe] = useState("")
   const [filtroAte, setFiltroAte] = useState("")
   const [filtroVm, setFiltroVm] = useState("")
   const [filtroPago, setFiltroPago] = useState<"" | "true" | "false">("")
+  const origemCusto = useRef<string | null>(null)
   const [modal, setModal] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [marcandoPago, setMarcandoPago] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
+  const [confirmandoValor, setConfirmandoValor] = useState<string | null>(null)
+  const [valorTotal, setValorTotal] = useState("")
+  const [gravandoValor, setGravandoValor] = useState(false)
 
   const params = new URLSearchParams()
   if (filtroDe) params.set("de", filtroDe)
@@ -129,23 +98,12 @@ export default function CustosPage() {
   if (filtroPago) params.set("pago", filtroPago)
 
   const { data, mutate, isLoading, error: erroCustos } = useSWR<RespostaCustos>(
-    `/api/custos-videomaker?${params.toString()}`,
+    aba === "custos" ? `/api/custos-videomaker?${params.toString()}` : null,
     fetcher
   )
 
   const { data: videomakersList } = useSWR<{ videomakers: Videomaker[] }>(
-    "/api/videomakers?status=ativo",
-    fetcher
-  )
-
-  const producaoUrl = aba === "producao"
-    ? modoProducao === "mes"
-      ? `/api/producao?mes=${mesSelecionado}`
-      : "/api/producao"
-    : null
-
-  const { data: producaoData, isLoading: loadingProducao } = useSWR<RespostaProducao>(
-    producaoUrl,
+    aba === "custos" ? "/api/videomakers?status=ativo" : null,
     fetcher
   )
 
@@ -165,14 +123,16 @@ export default function CustosPage() {
     if (!form.videomakerId || !form.valor || !form.dataReferencia) return
     setSalvando(true)
     try {
+      origemCusto.current ??= crypto.randomUUID()
       const res = await fetch("/api/custos-videomaker", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": origemCusto.current },
         body: JSON.stringify(form),
       })
       // Sem esta checagem o modal fechava e o formulário se limpava mesmo quando
       // a API recusava — o custo simplesmente não existia e ninguém era avisado.
       if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar o custo.")
+      origemCusto.current = null
       setModal(false)
       setForm({
         videomakerId: "", demandaId: "", tipo: "diaria", valor: "",
@@ -187,15 +147,33 @@ export default function CustosPage() {
     }
   }
 
+  const confirmarValor = async (id: string) => {
+    const valor = valorTotal.trim().replace(",", ".")
+    if (!/^\d{1,12}(\.\d{1,2})?$/.test(valor)) { toast.error("Informe o total do serviço com até duas casas decimais."); return }
+    setGravandoValor(true)
+    try {
+      const r = await fetch(`/api/custos-videomaker/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valor }) })
+      const resultado = await r.json()
+      if (!r.ok) throw new Error(resultado.error || "Não foi possível confirmar o valor")
+      setConfirmandoValor(null); setValorTotal(""); await mutate()
+      toast.success("Total confirmado. Confira a nota fiscal antes de aprovar o pagamento.")
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao confirmar valor") }
+    finally { setGravandoValor(false) }
+  }
+
   const marcarPago = async (id: string) => {
     setMarcandoPago(id)
     try {
-      await fetch(`/api/custos-videomaker/${id}`, {
+      const resposta = await fetch(`/api/custos-videomaker/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pago: true, dataPagamento: new Date().toISOString() }),
       })
+      const resultado = await resposta.json()
+      if (!resposta.ok) throw new Error(resultado.error || "Não foi possível registrar o pagamento")
       await mutate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao registrar pagamento")
     } finally {
       setMarcandoPago(null)
     }
@@ -242,303 +220,37 @@ export default function CustosPage() {
             }`}
           >
             <DollarSign className="w-3.5 h-3.5" />
-            Custos
+            Externos e pagamentos
           </button>
           <button
-            onClick={() => setAba("producao")}
+            onClick={() => setAba("setor")}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-              aba === "producao"
+              aba === "setor"
                 ? "border-emerald-500 text-white bg-zinc-800/50"
                 : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
             <BarChart2 className="w-3.5 h-3.5" />
-            Produção
+            Visão do setor
           </button>
         </div>
       </div>
 
       <main className="flex-1 p-6 space-y-6">
 
-        {/* ── ABA: PRODUÇÃO ──────────────────────────────────────────── */}
-        {aba === "producao" && (
-          <div className="space-y-6">
-
-            {/* Controles: modo + seletor de mês + imprimir */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
-                <button
-                  onClick={() => setModoProducao("mes")}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    modoProducao === "mes" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Mês específico
-                </button>
-                <button
-                  onClick={() => setModoProducao("ano")}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    modoProducao === "ano" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Últimos 12 meses
-                </button>
-              </div>
-
-              {modoProducao === "mes" && (
-                <input
-                  type="month"
-                  value={mesSelecionado}
-                  onChange={(e) => setMesSelecionado(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm px-3 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500"
-                />
-              )}
-
-              <div className="flex-1" />
-
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Imprimir
-              </button>
-            </div>
-
-            {loadingProducao ? (
-              <div className="text-center py-16 text-zinc-500">Carregando métricas...</div>
-            ) : producaoData ? (
-              <>
-                {/* Cards KPI */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <BarChart2 className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs text-emerald-400 font-medium uppercase tracking-wide">
-                        {modoProducao === "mes" ? "Produção no Mês" : "Produção Acumulada"}
-                      </span>
-                    </div>
-                    <div className="text-2xl font-bold text-emerald-400">{fmt(producaoData.valorTotal)}</div>
-                    <div className="text-xs text-zinc-500 mt-1">
-                      {producaoData.totalVideos ?? producaoData.totalDemandas} vídeos · {fmt(producaoData.valorPorDemanda)}/vídeo
-                    </div>
-                  </div>
-
-                  {modoProducao === "ano" ? (
-                    <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CalendarDays className="w-4 h-4 text-blue-400" />
-                        <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Mês Atual</span>
-                      </div>
-                      <div className="text-2xl font-bold text-blue-400">{fmt(producaoData.mesAtual.valor)}</div>
-                      <div className="text-xs text-zinc-500 mt-1">
-                        {(producaoData.mesAtual.videos ?? producaoData.mesAtual.demandas)} vídeo{(producaoData.mesAtual.videos ?? producaoData.mesAtual.demandas) !== 1 ? "s" : ""} · {producaoData.mesAtual.label}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-blue-950/30 border border-blue-800/30 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CalendarDays className="w-4 h-4 text-blue-400" />
-                        <span className="text-xs text-blue-400 font-medium uppercase tracking-wide">Período</span>
-                      </div>
-                      <div className="text-2xl font-bold text-blue-400 capitalize">
-                        {producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? mesSelecionado}
-                      </div>
-                      <div className="text-xs text-zinc-500 mt-1">{producaoData.totalVideos ?? producaoData.totalDemandas} vídeos entregues</div>
-                    </div>
-                  )}
-
-                  <div className="bg-purple-950/30 border border-purple-800/30 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Film className="w-4 h-4 text-purple-400" />
-                      <span className="text-xs text-purple-400 font-medium uppercase tracking-wide">Vídeos Entregues</span>
-                    </div>
-                    <div className="text-2xl font-bold text-purple-400">{producaoData.totalVideos ?? producaoData.totalDemandas}</div>
-                    <div className="text-xs text-zinc-500 mt-1">
-                      {modoProducao === "ano" ? "últimos 12 meses" : (producaoData.porMes.find(m => m.mes === mesSelecionado)?.label ?? "neste mês")}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabela por mês (só no modo 12 meses) */}
-                {modoProducao === "ano" && (
-                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <CalendarDays className="w-4 h-4 text-zinc-400" />
-                      <h3 className="text-sm font-semibold text-white">Produção por Mês</h3>
-                    </div>
-                    {producaoData.porMes.filter(m => (m.videos ?? m.demandas) > 0).length === 0 ? (
-                      <p className="text-sm text-zinc-600 text-center py-6">Nenhum vídeo entregue no período</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {(() => {
-                          const maxVideos = Math.max(...producaoData.porMes.map(m => m.videos ?? m.demandas), 1)
-                          return producaoData.porMes.map(m => {
-                            const vids = m.videos ?? m.demandas
-                            return (
-                              <div key={m.mes}>
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className={`font-medium w-24 capitalize ${vids > 0 ? "text-zinc-200" : "text-zinc-600"}`}>
-                                    {m.label}
-                                  </span>
-                                  <div className="flex items-center gap-4 text-zinc-500">
-                                    <span className={vids > 0 ? "text-zinc-300" : "text-zinc-700"}>
-                                      {vids} vídeo{vids !== 1 ? "s" : ""}
-                                    </span>
-                                    <span className={`font-semibold w-28 text-right ${vids > 0 ? "text-emerald-400" : "text-zinc-700"}`}>
-                                      {fmt(m.valor)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="h-1.5 bg-zinc-700/60 rounded-full">
-                                  <div
-                                    className="h-full bg-emerald-500 rounded-full transition-all"
-                                    style={{ width: `${(vids / maxVideos) * 100}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          })
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Videomaker Interno — comparativo produção vs salário ── */}
-                {producaoData.porEditor.length > 0 && (
-                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700">
-                      <Clapperboard className="w-4 h-4 text-zinc-400" />
-                      <h3 className="text-sm font-semibold text-white">Videomaker Interno</h3>
-                      <span className="text-xs text-zinc-500 ml-1">— produção vs salário</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-zinc-700/60 bg-zinc-800/60">
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Nome</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Demandas</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Produção</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Salário</th>
-                          <th className="text-center px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Resultado</th>
-                          <th className="px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-36">Cobertura</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {producaoData.porEditor.map(e => (
-                          <tr key={e.id} className="border-b border-zinc-700/30 hover:bg-zinc-800/20 transition-colors">
-                            <td className="px-4 py-3 font-medium text-zinc-200">{e.nome}</td>
-                            <td className="px-4 py-3 text-right text-zinc-400">{e.demandas}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-emerald-400">{fmt(e.valor)}</td>
-                            <td className="px-4 py-3 text-right text-zinc-400">
-                              {e.salario != null ? fmt(e.salario) : <span className="text-zinc-600 text-xs">—</span>}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {e.sePagou === true ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                                  ✅ Se pagou
-                                </span>
-                              ) : e.sePagou === false ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 bg-red-500/15 border border-red-500/30 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                                  🔴 {e.saldo != null ? fmt(e.saldo) : "Déficit"}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-zinc-600">Sem salário</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {e.percSalario != null ? (
-                                <div>
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className={`text-[10px] font-semibold ${e.sePagou ? "text-emerald-400" : "text-red-400"}`}>
-                                      {e.percSalario}%
-                                    </span>
-                                  </div>
-                                  <div className="h-2 bg-zinc-700/60 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all ${e.sePagou ? "bg-emerald-500" : "bg-red-500"}`}
-                                      style={{ width: `${Math.min(e.percSalario, 100)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="h-2 bg-zinc-700/30 rounded-full" />
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* ── Videomaker Externo — produção vs custo pago ── */}
-                {producaoData.porVideomaker.length > 0 && (
-                  <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700">
-                      <Users className="w-4 h-4 text-zinc-400" />
-                      <h3 className="text-sm font-semibold text-white">Videomaker Externo</h3>
-                      <span className="text-xs text-zinc-500 ml-1">— produção vs custo pago</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-zinc-700/60 bg-zinc-800/60">
-                          <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Nome</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Demandas</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Produção</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Custo Pago</th>
-                          <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Saldo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {producaoData.porVideomaker.map(v => {
-                          const saldo = v.custoTotal != null ? v.valor - v.custoTotal : null
-                          return (
-                            <tr key={v.id} className="border-b border-zinc-700/30 hover:bg-zinc-800/20 transition-colors">
-                              <td className="px-4 py-3 font-medium text-zinc-200">{v.nome}</td>
-                              <td className="px-4 py-3 text-right text-zinc-400">{v.demandas}</td>
-                              <td className="px-4 py-3 text-right font-semibold text-emerald-400">{fmt(v.valor)}</td>
-                              <td className="px-4 py-3 text-right text-zinc-400">
-                                {v.custoTotal != null ? fmt(v.custoTotal) : <span className="text-zinc-600 text-xs">Sem registro</span>}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {saldo != null ? (
-                                  <span className={`font-semibold ${saldo >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {saldo >= 0 ? "+" : ""}{fmt(saldo)}
-                                  </span>
-                                ) : (
-                                  <span className="text-zinc-600 text-xs">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {producaoData.totalDemandas === 0 && (
-                  <div className="text-center py-16 text-zinc-500">
-                    <Film className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm">Nenhuma demanda finalizada no período</p>
-                    <p className="text-xs mt-1 text-zinc-600">Os dados aparecerão conforme as demandas forem concluídas</p>
-                  </div>
-                )}
-              </>
-            ) : null}
-          </div>
-        )}
+        {aba === "setor" && <ResumoSetor />}
 
         {/* ── ABA: CUSTOS (conteúdo original) ───────────────────────── */}
         {aba === "custos" && <>
+        {data?.qualidade && (data.qualidade.conflitosPagamento > 0 || data.qualidade.valoresSemConfirmacao > 0) && <p role="status" className="text-sm text-amber-300 border border-amber-800 rounded-lg p-4">{data.qualidade.conflitosPagamento} conflito(s) de pagamento · {data.qualidade.valoresSemConfirmacao} valor(es) sem confirmação. {data.qualidade.aviso}</p>}
+
 
         {/* ── Resumo ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-4 h-4 text-zinc-400" />
-              <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Total Gasto</span>
+              <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Total conhecido</span>
             </div>
             <div className="text-2xl font-bold text-white"><MoneyDisplay value={resumo?.totalGasto ?? 0} size="lg" /></div>
             <div className="text-xs text-zinc-500 mt-1">{custos.length} registros</div>
@@ -583,7 +295,7 @@ export default function CustosPage() {
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-purple-400" />
-              <h3 className="text-sm font-semibold text-white">Gasto por Videomaker</h3>
+              <h3 className="text-sm font-semibold text-white">Gasto conhecido por profissional</h3>
             </div>
             <div className="space-y-2">
               {porVm.map((v) => {
@@ -720,11 +432,11 @@ export default function CustosPage() {
                       {new Date(c.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-white">
-                      {fmt(c.valor)}
+                      {c.valorPendenteConfirmacao ? "A confirmar" : fmt(c.valor)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        {c.pago ? (
+                        {c.pagamentoEmConflito ? <span className="text-xs text-amber-400">Em conferência</span> : c.pago ? (
                           <span className="inline-flex items-center gap-1 text-[11px] text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded">
                             <CheckCircle2 className="w-3 h-3" /> Pago
                           </span>
@@ -737,14 +449,22 @@ export default function CustosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {!c.pago && (
-                        <button
+                      {c.pagamentoEmConflito ? <span className="text-xs text-amber-400">Conferir pagamento</span> : !c.pago && (
+                        c.valorPendenteConfirmacao ? (
+                          confirmandoValor === c.id ? <form className="space-y-2 max-w-60" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); confirmarValor(c.id) }}>
+                            <label className="block text-xs" htmlFor={`total-${c.id}`}>Total do serviço (R$)</label>
+                            <input id={`total-${c.id}`} inputMode="decimal" value={valorTotal} onChange={e => setValorTotal(e.target.value)} className="w-full rounded bg-zinc-900 border border-zinc-600 p-2 text-sm" required />
+                            <p className="text-xs text-zinc-400">Confira o combinado e a NF. Zero confirma gratuidade.</p>
+                            <button type="submit" disabled={gravandoValor} className="text-xs text-green-400 p-2">{gravandoValor ? "Salvando..." : "Confirmar total"}</button>
+                            <button type="button" disabled={gravandoValor} onClick={() => setConfirmandoValor(null)} className="text-xs p-2">Cancelar</button>
+                          </form> : <button onClick={e => { e.stopPropagation(); setConfirmandoValor(c.id); setValorTotal("") }} className="text-xs text-amber-400 p-2">Informar valor</button>
+                        ) : c.demandaId && c.statusPagamento !== "aguardando_pagamento" ? (
+                          <a href="/aprovacoes" onClick={e => e.stopPropagation()} className="text-xs text-amber-400 underline">Conferir NF e aprovação</a>
+                        ) : <button
                           onClick={(e) => { e.stopPropagation(); marcarPago(c.id) }}
                           disabled={marcandoPago === c.id}
                           className="text-[11px] text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                        >
-                          {marcandoPago === c.id ? "..." : "Marcar Pago"}
-                        </button>
+                        >{marcandoPago === c.id ? "..." : "Marcar Pago"}</button>
                       )}
                     </td>
                   </tr>

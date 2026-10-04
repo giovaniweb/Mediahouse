@@ -33,6 +33,9 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
       has_table_privilege(current_user,'public.inbox_whatsapp','DELETE') AS apaga_inbox,
       (SELECT relrowsecurity FROM pg_class WHERE oid='public.inbox_whatsapp'::regclass) AS rls_inbox,
       has_function_privilege(current_user,'public.whatsapp_instancia_org(text)','EXECUTE') AS resolve_instancia,
+      has_table_privilege(current_user,'public.lancamentos_setor','SELECT,INSERT,UPDATE') AS usa_custos_setor,
+      has_table_privilege(current_user,'public.lancamentos_setor','DELETE') AS apaga_custos_setor,
+      (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.lancamentos_setor'::regclass) AS rls_custos_setor,
       has_table_privilege(current_user,'public.lotes_acervo','SELECT,INSERT,UPDATE') AS usa_lotes_acervo,
       has_table_privilege(current_user,'public.lotes_acervo','DELETE') AS apaga_lotes_acervo,
       (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.lotes_acervo'::regclass) AS rls_lotes_acervo,
@@ -73,7 +76,8 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
     // Formulário de interesse: a aplicação só insere lead e só chega aos limites pela função.
     const leadsOk = r.rls_leads_limites && !r.le_leads && !r.altera_leads && !r.usa_limites &&
       (tipo === "app" ? r.insere_leads && r.consome_limite : !r.insere_leads && !r.consome_limite)
-    const ok = leadsOk && acervoOk && driveOk && iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
+    const custosOk = r.rls_custos_setor && !r.apaga_custos_setor && (tipo === "app" ? r.usa_custos_setor : !r.usa_custos_setor)
+    const ok = leadsOk && custosOk && acervoOk && driveOk && iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))
     if (!ok) falhou = true

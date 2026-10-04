@@ -1,14 +1,8 @@
-// Tipos e regras compartilhados pelas três visões do quadro (Kanban, Lista e
-// Tabela).
-//
-// Por que três: o time trabalha de três jeitos e o sistema só oferecia um. Quem
-// se organiza em planilha por semana precisa de tabela; quem vem de Trello/ClickUp
-// prefere lista agrupada; quem já se acostumou com o quadro fica no kanban. É a
-// mesma consulta e o mesmo conjunto de dados — muda só o desenho.
+// Regras compartilhadas por Kanban e Lista.
 
 import { estaAtrasada, diasDeAtraso, venceHoje } from "@/lib/status"
 
-export type Visao = "kanban" | "lista" | "tabela"
+export type Visao = "kanban" | "lista"
 export type AbaRapida = "todos" | "minhas" | "criadas" | "atrasadas"
 
 export interface DemandaLista {
@@ -102,3 +96,6 @@ export function calcularKpis(demandas: DemandaLista[]) {
 }
 
 export { estaAtrasada, diasDeAtraso, venceHoje }
+
+/** Preferências antigas de Tabela migram para o quadro. */
+export function normalizarVisao(valor: unknown): Visao { return valor === "lista" ? "lista" : "kanban" }
