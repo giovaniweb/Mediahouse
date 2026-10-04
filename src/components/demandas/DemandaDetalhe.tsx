@@ -11,6 +11,7 @@ import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 import { analisarVideoDoUpload } from "@/lib/video-compat"
+import { paraDownload } from "@/lib/midia-download"
 import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
@@ -202,7 +203,7 @@ function getDemandCopy(growth: boolean) {
 }
 
 interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
-interface ArquivoVideo { id: string; tipoArquivo: string; url: string; nomeArquivo: string; sequencia: number | null; createdAt: string }
+interface ArquivoVideo { id: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo: string; sequencia: number | null; createdAt: string }
 
 /**
  * Avisa que o link de aprovação morreu — e oferece a renovação num clique.
@@ -1820,6 +1821,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                                       className="p-1 text-zinc-500 hover:text-purple-400 transition-colors">
                                       <Play className="w-3.5 h-3.5" />
                                     </button>
+                                    {/* Toca a prévia; baixa o original enviado, quando houve conversão */}
+                                    <a href={paraDownload(arq.originalUrl ?? arq.url) ?? arq.url} target="_blank" rel="noopener noreferrer"
+                                      title={arq.originalUrl ? "Baixar original" : "Baixar"}
+                                      className="p-1 text-zinc-500 hover:text-sky-400 transition-colors">
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
                                     <button onClick={() => {navigator.clipboard.writeText(arq.url); toast.success("Link copiado!")}}
                                       title="Copiar link" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
                                       <Copy className="w-3.5 h-3.5" />

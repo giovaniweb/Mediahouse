@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { comToken } from "@/lib/midia"
+import { paraDownload } from "@/lib/midia-download"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -71,8 +72,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // a credencial dela é o token, e ele passa a valer para o ARQUIVO também.
   // Anexado aqui, no servidor, para a página não precisar mudar.
   // URL do acervo antigo (pública) passa intacta.
+  // Assiste-se à prévia convertida; baixa-se o original do mesmo arquivo, quando houver.
+  const original = aprovacao.demandaId
+    ? (await prisma.arquivo.findFirst({
+        where: { demandaId: aprovacao.demandaId, tipoArquivo: "final", url: aprovacao.urlVideo, originalUrl: { not: null } },
+        select: { originalUrl: true },
+      }))?.originalUrl ?? null
+    : null
+
   return NextResponse.json({
     aprovacao: { ...aprovacao, urlVideo: comToken(aprovacao.urlVideo, token) ?? aprovacao.urlVideo },
+    urlDownload: paraDownload(comToken(original ?? aprovacao.urlVideo, token) ?? aprovacao.urlVideo),
     expirado,
     versaoAnterior: versaoAnterior
       ? { ...versaoAnterior, urlVideo: comToken(versaoAnterior.urlVideo, token) ?? versaoAnterior.urlVideo }

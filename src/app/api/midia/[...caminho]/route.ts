@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ cami
   if (!caminhoMidiaValido(caminho) || !await podeLerMidia(caminho, req.nextUrl.searchParams.get("token"))) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404, headers: SEM_CACHE_MIDIA })
   }
-  const assinada = await urlAssinadaDeLeitura(caminho)
+  const assinada = await urlAssinadaDeLeitura(caminho, undefined, req.nextUrl.searchParams.get("download") === "1")
   if (!assinada) return NextResponse.json({ error: "Arquivo indisponível" }, { status: 502, headers: SEM_CACHE_MIDIA })
   return NextResponse.redirect(assinada, { status: 302, headers: SEM_CACHE_MIDIA })
 }

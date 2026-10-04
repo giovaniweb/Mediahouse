@@ -20,13 +20,16 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
     if (["videos", "thumbnails"].includes(tipo)) {
       const d = await prisma.demanda.findFirst({ where: { organizacaoId: org, publicToken: token, publicTokenAtivo: true,
         AND: [{ OR: [{ publicTokenExpiraEm: null }, { publicTokenExpiraEm: { gt: new Date() } }] },
-          { OR: [{ linkFinal: url }, { thumbnailUrl: url }, { arquivos: { some: { tipoArquivo: "final", OR: [{ url }, { thumbnailUrl: url }] } } }] }] }, select: { id: true } })
+          { OR: [{ linkFinal: url }, { thumbnailUrl: url }, { arquivos: { some: { tipoArquivo: "final", OR: [{ url }, { thumbnailUrl: url }, { originalUrl: url }] } } }] }] }, select: { id: true } })
       if (d && urlPublicavel(url, org, d.id, tipo === "thumbnails")) return true
       const a = await prisma.aprovacaoVideo.findFirst({ where: { token, demanda: { organizacaoId: org }, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, select: { demandaId: true, urlVideo: true, createdAt: true } })
       if (a && urlPublicavel(url, org, a.demandaId)) {
         if (a.urlVideo === url) return true
         const anterior = await prisma.aprovacaoVideo.findFirst({ where: { demandaId: a.demandaId, createdAt: { lt: a.createdAt } }, orderBy: { createdAt: "desc" }, select: { urlVideo: true } })
         if (anterior?.urlVideo === url) return true
+        // Depois da conversão, o vídeo em avaliação é a prévia; o original do mesmo arquivo é o que se baixa.
+        const videos = [a.urlVideo, anterior?.urlVideo].filter((v): v is string => !!v)
+        if (await prisma.arquivo.findFirst({ where: { demandaId: a.demandaId, tipoArquivo: "final", originalUrl: url, url: { in: videos } }, select: { id: true } })) return true
       }
     }
     if (tipo === "nf") {
@@ -73,7 +76,7 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
     if (!parceria) return false
     const d = await prisma.demanda.findFirst({ where: { organizacaoId: org,
       compartilhamentos: { some: { organizacaoDestinoId: acesso.organizacaoId, revogadoEm: null } },
-      OR: [{ linkFinal: url }, { thumbnailUrl: url }, { arquivos: { some: { tipoArquivo: { in: ["final", "bruto", "referencia"] }, OR: [{ url }, { thumbnailUrl: url }] } } }],
+      OR: [{ linkFinal: url }, { thumbnailUrl: url }, { arquivos: { some: { tipoArquivo: { in: ["final", "bruto", "referencia"] }, OR: [{ url }, { thumbnailUrl: url }, { originalUrl: url }] } } }],
     }, select: { id: true, area: true } })
     return !!d && caminho.split("/")[3] === d.id && (d.area === "design" ? p.verDesign : p.verDemandas)
   })
