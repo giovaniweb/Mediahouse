@@ -29,6 +29,7 @@ export type TipoCredencial =
   | "fornecedor"
   | "arquivo"
   | "arquivo_por_url"
+  | "aprovacao_video"
 
 /** Id da empresa dona da credencial, ou null se ela não vale nada. */
 export async function orgPorCredencial(
