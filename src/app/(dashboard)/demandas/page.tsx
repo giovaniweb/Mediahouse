@@ -283,13 +283,6 @@ function DemandasKanban() {
 
   return (
     <>
-      <div className="flex items-center gap-3 px-6 py-2 text-sm">
-        <button disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p-1)}>Anterior</button>
-        <span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span>
-        <button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p+1)}>Próxima</button>
-        <a href="/historico" className="underline">Histórico completo</a>
-      </div>
-      {demandas.some((d: {statusVisivel:string;finalizadaEm?:string|null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) && <p className="px-6 text-xs text-amber-400">Há concluídos legados sem data nesta página. Eles continuam visíveis até revisão; nenhuma data foi inventada.</p>}
       <Header
         title="Demandas"
         actions={
@@ -303,6 +296,16 @@ function DemandasKanban() {
           </div>
         }
       />
+
+      {/* Paginação da fila (onda D): vinha acima do cabeçalho, sem estilo. Os botões
+          só aparecem quando há mais de uma página (100 por página). */}
+      <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-6 pt-3 text-sm text-zinc-400">
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p-1)}>Anterior</button>}
+        <span>{(data?.total ?? 0) > 100 ? `Página ${paginaFila} · ` : ""}{data?.total ?? 0} {(data?.total ?? 0) === 1 ? "demanda" : "demandas"} na fila</span>
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p+1)}>Próxima</button>}
+        <a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
+        {demandas.some((d: {statusVisivel:string;finalizadaEm?:string|null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) && <p className="w-full text-xs text-amber-400">Há concluídos antigos sem data nesta página. Eles continuam visíveis até a revisão; nenhuma data foi inventada.</p>}
+      </nav>
 
       {/* Toast de feedback */}
       {toast && (

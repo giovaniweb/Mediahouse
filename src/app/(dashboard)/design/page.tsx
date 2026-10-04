@@ -133,8 +133,11 @@ export default function GrowthKanbanPage() {
 
       {/* Paginação da fila: discreta, porque só aparece de verdade acima de 100 demandas. */}
       <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm text-zinc-400">
-        <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button><span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span><button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button><a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
-        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="text-xs text-amber-400">Há concluídos legados sem data nesta página; continuam visíveis até revisão.</p>}
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button>}
+        <span>{(data?.total ?? 0) > 100 ? `Página ${paginaFila} · ` : ""}{data?.total ?? 0} {(data?.total ?? 0) === 1 ? "demanda" : "demandas"} na fila</span>
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button>}
+        <a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
+        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="w-full text-xs text-amber-400">Há concluídos antigos sem data nesta página; continuam visíveis até a revisão.</p>}
       </nav>
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
 
