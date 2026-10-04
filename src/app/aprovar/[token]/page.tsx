@@ -154,6 +154,7 @@ export default function AprovarVideoPage() {
   // Corte anterior do mesmo vídeo, quando existe. "O que mudou?" é a pergunta
   // que quem aprova faz toda vez, e sem isso a resposta dependia da memória.
   const [versaoAnterior, setVersaoAnterior] = useState<VersaoAnterior | null>(null)
+  const [urlDownload, setUrlDownload] = useState<string | null>(null)
   const [comparando, setComparando] = useState(false)
   // Referência ao <video> para ler o instante em que a pessoa está — é o que
   // permite ancorar o comentário no timecode em vez de "lá pelo meio".
@@ -171,6 +172,7 @@ export default function AprovarVideoPage() {
         const json = await res.json()
         setAprovacao(json.aprovacao)
         setVersaoAnterior(json.versaoAnterior ?? null)
+        setUrlDownload(json.urlDownload ?? null)
 
         // Se já respondido, mostra o resultado
         if (json.aprovacao.status !== "pendente") {
@@ -228,7 +230,9 @@ export default function AprovarVideoPage() {
   // `principal` marca o vídeo que está sendo avaliado — só ele recebe a ref,
   // para o botão de marcar momento ler o tempo do corte certo quando os dois
   // estão lado a lado na comparação.
-  function renderPlayer(url: string, principal = false) {
+  // O player toca a prévia; o botão de baixar entrega o original (`download`),
+  // que só existe para o vídeo em avaliação.
+  function renderPlayer(url: string, principal = false, download?: string | null) {
     const isYoutube = url.includes("youtube.com") || url.includes("youtu.be")
     const isVimeo = url.includes("vimeo.com")
     const isDrive = url.includes("drive.google.com")
@@ -324,14 +328,14 @@ export default function AprovarVideoPage() {
           </p>
         )}
         <a
-          href={url}
+          href={download ?? url}
           target="_blank"
           rel="noreferrer"
           download
           className="flex items-center justify-center gap-2 w-full border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800/60 font-medium py-3 rounded-xl transition-colors text-sm"
         >
           <Film className="w-4 h-4" />
-          Abrir / baixar vídeo
+          {!download ? "Abrir / baixar vídeo" : download.split("?")[0] !== url.split("?")[0] ? "Baixar vídeo original" : "Baixar vídeo"}
         </a>
       </div>
     )
@@ -580,11 +584,11 @@ export default function AprovarVideoPage() {
                 <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wide mb-2 px-1">
                   Versão nova · para aprovar
                 </p>
-                {renderPlayer(aprovacao.urlVideo, true)}
+                {renderPlayer(aprovacao.urlVideo, true, urlDownload)}
               </div>
             </div>
           ) : (
-            renderPlayer(aprovacao.urlVideo, true)
+            renderPlayer(aprovacao.urlVideo, true, urlDownload)
           )}
         </div>
 

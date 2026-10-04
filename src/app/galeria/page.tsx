@@ -13,6 +13,7 @@ interface Video {
   departamento: string | null
   linkFinal: string
   thumbnailUrl: string | null
+  downloadUrl?: string | null  // original da entrega quando o vídeo exibido é a prévia convertida
   dataReferencia: string
   origemData: string
   dataEstimada: boolean
@@ -280,7 +281,7 @@ function VideoCard({ video, onHide }: { video: Video; onHide: (id: string) => vo
             {/* Download button — topo direito (aparece no hover) */}
             {tipo !== "youtube" && (
               <a
-                href={getDownloadUrl(video.linkFinal)}
+                href={video.downloadUrl ?? getDownloadUrl(video.linkFinal)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

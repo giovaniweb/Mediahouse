@@ -9,7 +9,7 @@ import { formatarData } from "@/lib/datas"
 // Acompanhamento público de uma demanda (somente leitura). Quem abre não tem
 // conta no sistema — vê o andamento e o material final, nada além disso.
 
-type Arquivo = { url: string; nomeArquivo: string | null; sequencia: number | null }
+type Arquivo = { url: string; urlDownload?: string | null; nomeArquivo: string | null; sequencia: number | null }
 type Demanda = {
   codigo: string
   titulo: string
@@ -73,7 +73,8 @@ export default function DemandaPublicaPage() {
   const d = data.demanda
   const etapaAtual = Math.max(0, ETAPAS.findIndex((e) => e.id === d.statusVisivel))
   const entregue = d.statusVisivel === "finalizado" || d.statusVisivel === "para_postar"
-  const finais = d.arquivos.length > 0 ? d.arquivos.map((a) => a.url) : d.linkFinal ? [d.linkFinal] : []
+  // O botão baixa o original; sem conversão, original e link são o mesmo arquivo.
+  const finais = d.arquivos.length > 0 ? d.arquivos.map((a) => a.urlDownload ?? a.url) : d.linkFinal ? [d.linkFinal] : []
   const Icone = d.area === "design" ? Sparkles : Film
 
   const etapaLabel = ETAPAS[etapaAtual]?.label ?? "Em andamento"

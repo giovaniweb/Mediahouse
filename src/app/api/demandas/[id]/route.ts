@@ -59,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
-        select: { id: true, tipoArquivo: true, url: true, nomeArquivo: true, sequencia: true, createdAt: true },
+        select: { id: true, tipoArquivo: true, url: true, originalUrl: true, nomeArquivo: true, sequencia: true, createdAt: true },
       },
       historicos: {
         include: { usuario: { select: { id: true, nome: true } } },

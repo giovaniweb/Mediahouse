@@ -4,7 +4,7 @@ import useSWR from "swr"
 import Link from "next/link"
 import { useMe } from "@/hooks/usePermissoes"
 
-type Entrega = { estadoPrevia: string; id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; thumbnailUrl: string | null; publicado: boolean; legado: boolean; dataReferencia: string; origemData: string; dataEstimada: boolean }
+type Entrega = { estadoPrevia: string; id: string; demandaId: string; codigo: string; titulo: string; linkFinal: string; downloadUrl?: string | null; thumbnailUrl: string | null; publicado: boolean; legado: boolean; dataReferencia: string; origemData: string; dataEstimada: boolean }
 const fetcher = async (url: string) => {
   const res = await fetch(url)
   const body = await res.json()
@@ -53,7 +53,7 @@ export default function Biblioteca({ areaInicial = "audiovisual", qualidadeInici
       <h2 className="font-medium">{v.titulo}</h2>
       <p className="text-xs text-muted-foreground">{new Date(v.dataReferencia).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} · {v.dataEstimada ? "Data estimada" : v.origemData === "anexacao" ? "Anexado" : "Concluído"}</p>
       <p className="text-xs text-muted-foreground">{v.estadoPrevia === "verificada" ? "Prévia verificada" : v.estadoPrevia === "processando" ? "Prévia em processamento" : v.estadoPrevia === "falhou" ? "Prévia não concluída; revise na demanda" : "Prévia não verificada; abra a referência ou revise na demanda"}</p>
-      <div className="flex flex-wrap gap-3 text-sm"><a href={v.linkFinal} target="_blank" rel="noopener noreferrer" className="underline">Abrir arquivo</a><Link href={`/demandas/${v.demandaId}`} className="underline">Ver demanda</Link></div>
+      <div className="flex flex-wrap gap-3 text-sm"><a href={v.linkFinal} target="_blank" rel="noopener noreferrer" className="underline">Abrir arquivo</a>{v.downloadUrl && <a href={v.downloadUrl} target="_blank" rel="noopener noreferrer" className="underline">Baixar</a>}<Link href={`/demandas/${v.demandaId}`} className="underline">Ver demanda</Link></div>
       {data.podePublicar && !v.legado && <button disabled={ocupado !== null} onClick={() => publicar(v)} className="rounded border px-3 py-2 text-sm disabled:opacity-50">{ocupado === v.id ? "Salvando…" : v.publicado ? "Retirar do portfólio público" : "Publicar para qualquer pessoa ver"}</button>}
       {v.legado && data.podePublicar && <p className="text-xs text-muted-foreground">Link antigo: registre a entrega como arquivo final na demanda para publicar.</p>}
     </article>)}</div>
