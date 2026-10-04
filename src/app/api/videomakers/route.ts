@@ -30,7 +30,9 @@ export async function GET(req: NextRequest) {
       OR: [{ status: { not: "pendente" } }, { vinculos: { some: { organizacaoId } } }],
     },
     include: {
-      _count: { select: { demandas: true } },
+      // As estrelas do cartão só aparecem com avaliação registrada; sem a
+      // contagem, não apareciam nunca. Mesmo recorte do detalhe de avaliações.
+      _count: { select: { demandas: true, avaliacoes: { where: { OR: [{ organizacaoId }, { organizacaoId: null }] } } } },
     },
     orderBy: [{ status: "asc" }, { nome: "asc" }],
   })

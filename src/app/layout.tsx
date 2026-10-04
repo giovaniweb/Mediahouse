@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import "@/components/layout/Montserrat.css"
 
-// Fonte via stack CSS (globals.css) — sem next/font/google, p/ o build NÃO depender
-// de rede externa (Google Fonts). Mantém aparência próxima ao Inter.
+// Fontes locais: o build e a interface não dependem de Google Fonts.
 
 export const metadata: Metadata = {
   title: "NuFlow",

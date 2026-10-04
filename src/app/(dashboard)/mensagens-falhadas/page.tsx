@@ -3,6 +3,7 @@ import {SaudeAutomacoes} from "@/components/automacoes/SaudeAutomacoes"
 import {useState} from "react"
 import useSWR from "swr"
 import {Header} from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import {fetcher} from "@/lib/fetcher"
 import {toast} from "sonner"
 
@@ -33,10 +34,9 @@ export default function MensagensFalhadasPage() {
   }
   return <>
     <Header title="Saídas do WhatsApp"/>
-    <main className="flex-1 overflow-y-auto p-6 space-y-4">
+    <PageIntro eyebrow="ANALYTICS / AVISOS" title="Saídas do WhatsApp." description="O que foi enviado, entregue e lido. Aceitação pelo provedor, entrega e leitura são etapas diferentes." />
+    <main className="flex-1 overflow-y-auto p-6 pt-0 space-y-4">
       <SaudeAutomacoes/>
-      <h1 className="text-xl font-semibold">Saídas do WhatsApp</h1>
-      <p className="text-sm text-muted-foreground">Aceitação pelo provedor, entrega e leitura são etapas diferentes.</p>
       {error ? <div role="alert">Não foi possível carregar. <button onClick={()=>mutate()} className="underline">Tentar novamente</button></div>
         : isLoading ? <p>Carregando…</p> : <>
           <p>{data?.total ?? 0} intenções · {data?.tentativas ?? 0} tentativas</p>

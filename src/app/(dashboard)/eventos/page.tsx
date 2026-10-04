@@ -91,6 +91,7 @@ function MiniCard({ icon, label, value, alert }: { icon: React.ReactNode; label:
 const fmtData = (s: string) => new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
+
 export default function EventosPage() {
   const router = useRouter()
   const [search, setSearch] = useState("")

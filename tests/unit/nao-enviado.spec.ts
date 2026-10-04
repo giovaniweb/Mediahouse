@@ -46,7 +46,9 @@ describe("naoEnviadoAoCliente", () => {
 describe("a rota de status não exige mais a arte para mover", () => {
   it("não há recusa por falta de arte final", async () => {
     const { readFileSync } = await import("node:fs")
-    const rota = readFileSync("src/app/api/demandas/[id]/status/route.ts", "utf8")
+    // A lógica saiu da rota para lib/mudar-status.ts (30/09/2026); lê as duas.
+    const rota = readFileSync("src/app/api/demandas/[id]/status/route.ts", "utf8") +
+      readFileSync("src/lib/mudar-status.ts", "utf8")
     expect(rota).not.toContain("arteFinal")
     expect(rota).not.toContain("entregaPecaVisual")
   })

@@ -5,7 +5,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { fetchMicrosoftMessages, refreshMicrosoftAccessToken } from "@/lib/microsoft-mail"
 import { htmlToPlainText, parseInboundEmail, type EmailParseResult } from "@/lib/email-inbox-parser"
-import { notificarLideresAudiovisual } from "@/app/api/demandas/route"
+import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
 import { comOrg } from "@/lib/org-contexto"
 import { prismaAuth } from "@/lib/prisma-auth"
 

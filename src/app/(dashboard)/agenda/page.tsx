@@ -1,17 +1,22 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useDetailPresentation } from "@/components/demandas/useDetailPresentation"
+import { useDialogFocus } from "@/components/layout/useDialogFocus"
+import styles from "@/components/agenda/AgendaPreview.module.css"
+import surface from "@/components/demandas/DemandSurface.module.css"
+import { useState, useMemo, useRef } from "react"
+import Link from "next/link"
 import { Header } from "@/components/layout/Header"
 import {
   ChevronLeft, ChevronRight, Plus, X, Building2, Briefcase,
-  User, Film, Calendar, Clock, MapPin, AlertTriangle, Sparkles,
+  User, Film, Calendar, Clock, MapPin, AlertTriangle,
   Download, ExternalLink, ChevronDown,
 } from "lucide-react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek,
-  isToday, parseISO, differenceInDays } from "date-fns"
+  isToday, parseISO, addWeeks, startOfDay, addDays } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
@@ -109,6 +114,11 @@ function ExportButton() {
 }
 
 export default function AgendaPage() {
+  const { presentation, setPresentation } = useDetailPresentation()
+  const [view, setView] = useState<"month" | "week" | "list">("month")
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const [actionError, setActionError] = useState("")
   const { data: session } = useSession()
   const isAdmin = session?.user?.tipo === "admin"
 
@@ -120,14 +130,18 @@ export default function AgendaPage() {
 
   const inicioMes = startOfMonth(mesAtual)
   const fimMes = endOfMonth(mesAtual)
-  const inicioGrid = startOfWeek(inicioMes, { locale: ptBR })
-  const fimGrid = endOfWeek(fimMes, { locale: ptBR })
+  const semana = view === "week"
+  const inicioGrid = startOfWeek(semana ? mesAtual : inicioMes, { locale: ptBR })
+  const fimGrid = endOfWeek(semana ? mesAtual : fimMes, { locale: ptBR })
   const diasGrid = eachDayOfInterval({ start: inicioGrid, end: fimGrid })
 
-  const qsInicio = format(inicioGrid, "yyyy-MM-dd")
-  const qsFim = format(fimGrid, "yyyy-MM-dd")
+  const qsInicio = encodeURIComponent(inicioGrid.toISOString())
+  const qsFim = encodeURIComponent(fimGrid.toISOString())
 
-  const { data, mutate } = useSWR<{ eventos: Evento[] }>(
+  const detailRef = useDialogFocus(!!eventoSelec, () => { if (!busyRef.current) setEventoSelec(null) })
+  const formRef = useDialogFocus(showForm, () => { if (!busyRef.current) setShowForm(false) })
+
+  const { data, mutate, error, isLoading } = useSWR<{ eventos: Evento[] }>(
     `/api/agenda?inicio=${qsInicio}&fim=${qsFim}`,
     fetcher
   )
@@ -139,24 +153,17 @@ export default function AgendaPage() {
   }, [data, filtroCtx])
 
   const eventosNoDia = (dia: Date) =>
-    eventos.filter(e => isSameDay(parseISO(e.inicio), dia))
+    eventos.filter(e => parseISO(e.inicio) < addDays(startOfDay(dia), 1) && parseISO(e.fim) > startOfDay(dia))
 
   const eventosDoSelecionado = diaSelec ? eventosNoDia(diaSelec) : []
 
-  // Detecta conflitos (eventos sobrepostos em dias com contourline + freelance)
-  const conflitos = useMemo(() => {
-    const porDia = new Map<string, Evento[]>()
-    eventos.forEach(e => {
-      const key = format(parseISO(e.inicio), "yyyy-MM-dd")
-      porDia.set(key, [...(porDia.get(key) ?? []), e])
-    })
-    const dias: string[] = []
-    porDia.forEach((evts, dia) => {
-      const ctxs = new Set(evts.map(e => e.contexto))
-      if (ctxs.has("contourline") && ctxs.has("freelance")) dias.push(dia)
-    })
-    return dias
-  }, [eventos])
+  // Conflito exige sobreposição de horários, inclusive em dias de continuação.
+  const conflitos = diasGrid.filter(dia => {
+    const doDia = eventosNoDia(dia).filter(e => !["cancelado", "concluido"].includes(e.status))
+    return doDia.some(a => a.contexto === "contourline" && doDia.some(b =>
+      b.contexto === "freelance" && Math.max(+parseISO(a.inicio), +parseISO(b.inicio), +startOfDay(dia)) <
+        Math.min(+parseISO(a.fim), +parseISO(b.fim), +addDays(startOfDay(dia), 1))))
+  }).map(dia => format(dia, "yyyy-MM-dd"))
 
   // Form
   const [form, setForm] = useState({
@@ -177,22 +184,36 @@ export default function AgendaPage() {
       tipo: "reuniao", contexto: "contourline", privado: false, local: "",
       lembreteMinutos: 60,
     })
+    setActionError("")
     setShowForm(true)
   }
 
   async function criarEvento() {
-    const res = await fetch("/api/agenda", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, cor: COR_DEFAULTS[form.contexto] }),
-    })
-    if (res.ok) { mutate(); setShowForm(false) }
+    if (busyRef.current) return
+    if (!form.titulo.trim() || !form.inicio || !form.fim || new Date(form.fim) <= new Date(form.inicio)) {
+      setActionError("Informe título e horários válidos. O fim deve ser depois do início."); return
+    }
+    busyRef.current = true; setBusy(true); setActionError("")
+    try {
+      const res = await fetch("/api/agenda", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, cor: COR_DEFAULTS[form.contexto] }),
+      })
+      if (!res.ok) throw new Error("Não foi possível criar o evento. Confira os dados e tente novamente.")
+      void mutate(); setShowForm(false)
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Falha de conexão. Tente novamente.") }
+    finally { busyRef.current = false; setBusy(false) }
   }
 
   async function deletarEvento(id: string) {
-    await fetch(`/api/agenda/${id}`, { method: "DELETE" })
-    mutate()
-    setEventoSelec(null)
+    if (busyRef.current) return
+    busyRef.current = true; setBusy(true); setActionError("")
+    try {
+      const res = await fetch(`/api/agenda/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error("Não foi possível excluir o evento. Tente novamente.")
+      void mutate(); setEventoSelec(null)
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Falha de conexão. Tente novamente.") }
+    finally { busyRef.current = false; setBusy(false) }
   }
 
   return (
@@ -208,34 +229,41 @@ export default function AgendaPage() {
           </div>
         }
       />
-      <main className="flex-1 p-4 flex gap-4 overflow-hidden">
+      <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Seu tempo de criar.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>
+      <div className={styles.viewBar}>
+        <div>{([["month", "Mês"], ["week", "Semana"], ["list", "Lista"]] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
+        <label>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
+      </div>
+      {error && <div role="alert" className={styles.error}>Não foi possível atualizar a agenda. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
+      {isLoading && <p role="status" className={styles.error}>Carregando agenda…</p>}
+      <main className={cn("flex-1 p-4 flex gap-4 overflow-hidden", styles.agenda)}>
         {/* COLUNA ESQUERDA — Calendário */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Controles */}
-          <div className="flex items-center justify-between mb-4">
+          <div className={cn("flex items-center justify-between mb-4", styles.toolbar)}>
             <div className="flex items-center gap-2">
-              <button onClick={() => setMesAtual(m => subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
+              <button aria-label={semana ? "Semana anterior" : "Mês anterior"} onClick={() => setMesAtual(m => semana ? addWeeks(m, -1) : subMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <h2 className="text-sm font-semibold text-zinc-200 capitalize min-w-36 text-center">
-                {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
+                {semana ? `${format(inicioGrid, "dd MMM", {locale:ptBR})} – ${format(fimGrid, "dd MMM yyyy", {locale:ptBR})}` : format(mesAtual, "MMMM yyyy", { locale: ptBR })}
               </h2>
-              <button onClick={() => setMesAtual(m => addMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
+              <button aria-label={semana ? "Próxima semana" : "Próximo mês"} onClick={() => setMesAtual(m => semana ? addWeeks(m, 1) : addMonths(m, 1))} className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400">
                 <ChevronRight className="w-4 h-4" />
               </button>
-              <button onClick={() => setMesAtual(new Date())} className="text-xs text-zinc-400 hover:text-zinc-200 ml-2 border border-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-800">Hoje</button>
+              <button onClick={() => { const hoje = new Date(); setMesAtual(hoje); setDiaSelec(hoje) }} className="text-xs text-zinc-400 hover:text-zinc-200 ml-2 border border-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-800">Hoje</button>
             </div>
 
             {/* Filtros de contexto */}
             <div className="flex items-center gap-1.5">
-              <button onClick={() => setFiltroCtx("todas")} className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
+              <button aria-pressed={filtroCtx === "todas"} onClick={() => setFiltroCtx("todas")} className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
                 filtroCtx === "todas" ? "bg-zinc-700 text-white border-zinc-600" : "border-zinc-700 text-zinc-400 hover:border-zinc-500")}>
                 Todos
               </button>
               {Object.entries(CONTEXTO_CONFIG).map(([key, cfg]) => {
                 const Icon = cfg.icon
                 return (
-                  <button key={key} onClick={() => setFiltroCtx(key)}
+                  <button key={key} aria-pressed={filtroCtx === key} onClick={() => setFiltroCtx(key)}
                     className={cn("flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors",
                       filtroCtx === key ? `${cfg.cor} text-white border-transparent` : "border-zinc-700 text-zinc-400 hover:border-zinc-500")}>
                     <Icon className="w-3 h-3" />{cfg.label}
@@ -257,7 +285,14 @@ export default function AgendaPage() {
           )}
 
           {/* Grid */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1">
+          {view === "list" ? <section className={styles.eventList} aria-label="Compromissos do mês">
+            {eventos.filter(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes).sort((a,b) => a.inicio.localeCompare(b.inicio)).map(evento => <button key={evento.id} type="button" onClick={() => {setActionError(""); setEventoSelec(evento)}}>
+              <span>{format(parseISO(evento.inicio), "dd MMM", {locale:ptBR})}<small>{evento.diaTodo ? "Dia todo" : format(parseISO(evento.inicio), "HH:mm")}</small></span>
+              <div><strong>{evento.titulo}</strong><p>{evento.local || TIPO_OPTS.find(tipo => tipo.value === evento.tipo)?.label || evento.tipo}</p></div>
+              <ChevronRight size={18} />
+            </button>)}
+            {!isLoading && !eventos.some(evento => parseISO(evento.inicio) <= fimMes && parseISO(evento.fim) > inicioMes) && <p>Nenhum compromisso neste mês com os filtros selecionados.</p>}
+          </section> : <div className={cn("bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden flex-1", styles.calendar, semana && styles.week)}>
             {/* Cabeçalho dias da semana */}
             <div className="grid grid-cols-7 border-b border-zinc-800">
               {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
@@ -286,38 +321,37 @@ export default function AgendaPage() {
                     )}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className={cn("text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+                      <button aria-label={format(dia, "dd/MM/yyyy")} aria-pressed={!!isSelec} onClick={() => setDiaSelec(dia)} className={cn("text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
                         isToday(dia) ? "bg-blue-500 text-white" :
                         isSelec ? "text-blue-400 font-bold" :
                         !isMes ? "text-zinc-600" : "text-zinc-300"
                       )}>
                         {format(dia, "d")}
-                      </span>
+                      </button>
                       {temConflito && <AlertTriangle className="w-3 h-3 text-orange-500" />}
                     </div>
 
                     <div className="space-y-0.5">
-                      {evts.slice(0, 3).map(e => {
-                        const cfg = CONTEXTO_CONFIG[e.contexto]
+                      {(semana ? evts : evts.slice(0, 3)).map(e => {
                         return (
-                          <div key={e.id}
-                            onClick={(ev) => { ev.stopPropagation(); setEventoSelec(e) }}
+                          <button aria-label={`Abrir evento: ${e.titulo}`} key={e.id}
+                            onClick={(ev) => { ev.stopPropagation(); setActionError(""); setEventoSelec(e) }}
                             style={{ backgroundColor: e.cor ?? "#71717a" }}
-                            className="text-white text-[10px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80">
-                            {e.titulo}
-                          </div>
+                            className="block w-full text-left text-white text-[10px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80">
+                            {semana && <span className={styles.eventTime}>{e.diaTodo ? "Dia todo" : isSameDay(parseISO(e.inicio), dia) ? format(parseISO(e.inicio), "HH:mm") : isSameDay(parseISO(e.fim), dia) ? `Até ${format(parseISO(e.fim), "HH:mm")}` : "Em andamento"}</span>}{e.titulo}
+                          </button>
                         )
                       })}
-                      {evts.length > 3 && <div className="text-[10px] text-zinc-400 pl-1">+{evts.length - 3}</div>}
+                      {!semana && evts.length > 3 && <div className="text-[10px] text-zinc-400 pl-1">+{evts.length - 3}</div>}
                     </div>
                   </div>
                 )
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Legenda */}
-          <div className="flex items-center gap-4 mt-3">
+          <div className="flex items-center gap-4 mt-3 flex-wrap">
             {Object.entries(CONTEXTO_CONFIG).map(([key, cfg]) => {
               const Icon = cfg.icon
               return (
@@ -332,14 +366,14 @@ export default function AgendaPage() {
         </div>
 
         {/* COLUNA DIREITA — Eventos do dia selecionado */}
-        <div className="w-72 shrink-0 flex flex-col gap-3">
+        <div className={cn("w-72 shrink-0 flex flex-col gap-3", styles.dayPanel)}>
           {diaSelec && (
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-zinc-200 text-sm">
                   {format(diaSelec, "EEEE, d 'de' MMMM", { locale: ptBR })}
                 </h3>
-                <button onClick={() => abrirForm(diaSelec)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200">
+                <button aria-label="Adicionar evento neste dia" onClick={() => abrirForm(diaSelec)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200">
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -358,10 +392,10 @@ export default function AgendaPage() {
                     const cfg = CONTEXTO_CONFIG[e.contexto]
                     const Icon = cfg?.icon ?? Film
                     return (
-                      <div key={e.id}
-                        onClick={() => setEventoSelec(e)}
+                      <button aria-label={`Abrir evento: ${e.titulo}`} key={e.id}
+                        onClick={() => { setActionError(""); setEventoSelec(e) }}
                         style={{ borderLeftColor: e.cor ?? "#71717a" }}
-                        className="border-l-4 pl-3 py-2 cursor-pointer hover:bg-zinc-800/50 rounded-r-lg transition-colors">
+                        className="w-full text-left border-l-4 pl-3 py-2 cursor-pointer hover:bg-zinc-800/50 rounded-r-lg transition-colors">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <Icon className="w-3 h-3 text-zinc-400" />
                           <span className={cn("text-[10px] font-semibold uppercase tracking-wide", cfg?.textCor ?? "text-zinc-500")}>
@@ -376,7 +410,7 @@ export default function AgendaPage() {
                           </p>
                         )}
                         {e.local && <p className="text-[10px] text-zinc-400">📍 {e.local}</p>}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -405,11 +439,10 @@ export default function AgendaPage() {
 
       {/* Modal detalhe evento */}
       {eventoSelec && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", surface.overlay, presentation === "drawer" && styles.drawerOverlay)}>
+          <div ref={detailRef} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl max-h-[90dvh] overflow-y-auto", surface.surface, styles.detail, presentation === "drawer" && styles.drawer)}>
             {(() => {
               const cfg = CONTEXTO_CONFIG[eventoSelec.contexto]
-              const Icon = cfg?.icon ?? Film
               return (
                 <>
                   <div className="flex items-start justify-between mb-4">
@@ -418,19 +451,20 @@ export default function AgendaPage() {
                         <div style={{ backgroundColor: eventoSelec.cor ?? "#71717a" }} className="w-3 h-3 rounded-full" />
                         <span className={cn("text-xs font-semibold uppercase", cfg?.textCor ?? "text-zinc-500")}>{cfg?.label}</span>
                       </div>
-                      <h3 className="font-bold text-zinc-200">{eventoSelec.titulo}</h3>
+                      <h3 id="event-detail-title" className="font-bold text-zinc-200">{eventoSelec.titulo}</h3>
                     </div>
-                    <button onClick={() => setEventoSelec(null)} className="text-zinc-500 hover:text-zinc-300">
+                    <button aria-label="Fechar" disabled={busy} onClick={() => setEventoSelec(null)} className="text-zinc-500 hover:text-zinc-300">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
+                  <button type="button" className={styles.expand} onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>
                   <div className="space-y-2 text-sm text-zinc-400 mb-4">
                     <div className="flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
                       {eventoSelec.diaTodo
                         ? format(parseISO(eventoSelec.inicio), "dd/MM/yyyy", { locale: ptBR })
-                        : `${format(parseISO(eventoSelec.inicio), "dd/MM HH:mm")} — ${format(parseISO(eventoSelec.fim), "HH:mm")}`
+                        : `${format(parseISO(eventoSelec.inicio), "dd/MM HH:mm")} — ${format(parseISO(eventoSelec.fim), "dd/MM HH:mm")}`
                       }
                     </div>
                     {eventoSelec.local && (
@@ -448,8 +482,15 @@ export default function AgendaPage() {
                     )}
                   </div>
 
+                  <div className={styles.metadata}>
+                    <div><span>Tipo</span><strong>{TIPO_OPTS.find(t => t.value === eventoSelec.tipo)?.label ?? eventoSelec.tipo}</strong></div>
+                    <div><span>Visibilidade</span><strong>{eventoSelec.privado ? "Privado" : "Conforme acesso à agenda"}</strong></div>
+                    {eventoSelec.videomaker && <div><span>Videomaker</span><strong>{eventoSelec.videomaker.nome}</strong></div>}
+                    {eventoSelec.demanda && <Link href={`/demandas/${eventoSelec.demanda.id}`}>Abrir demanda vinculada →</Link>}
+                  </div>
+                  {actionError && <p role="alert" className={styles.error}>{actionError}</p>}
                   {isAdmin && (
-                    <button onClick={() => deletarEvento(eventoSelec.id)}
+                    <button disabled={busy} onClick={() => deletarEvento(eventoSelec.id)}
                       className="w-full border border-red-500/30 text-red-400 text-sm py-2 rounded-xl hover:bg-red-500/10">
                       Excluir evento
                     </button>
@@ -463,32 +504,33 @@ export default function AgendaPage() {
 
       {/* Modal criar evento */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-zinc-200">Novo Evento</h3>
-              <button onClick={() => setShowForm(false)}><X className="w-4 h-4 text-zinc-500" /></button>
+        <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4", surface.overlay)}>
+          <div ref={formRef} role="dialog" aria-modal="true" aria-labelledby="event-form-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]", surface.surface, styles.form)}>
+            <div className={cn("flex items-center justify-between mb-4", styles.toolbar)}>
+              <h3 id="event-form-title" className="font-semibold text-zinc-200">Novo Evento</h3>
+              <button aria-label="Fechar" disabled={busy} onClick={() => setShowForm(false)}><X className="w-4 h-4 text-zinc-500" /></button>
             </div>
 
+            {actionError && <p role="alert" className={styles.error}>{actionError}</p>}
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Título *</label>
                 <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-600"
-                  value={form.titulo} onChange={e => setF("titulo", e.target.value)} placeholder="Nome do evento" />
+                  aria-label="Título" value={form.titulo} onChange={e => setF("titulo", e.target.value)} placeholder="Nome do evento" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1">Tipo</label>
                   <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
-                    value={form.tipo} onChange={e => setF("tipo", e.target.value)}>
+                    aria-label="Tipo" value={form.tipo} onChange={e => setF("tipo", e.target.value)}>
                     {TIPO_OPTS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1">Contexto</label>
                   <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
-                    value={form.contexto} onChange={e => setF("contexto", e.target.value)}>
+                    aria-label="Contexto" value={form.contexto} onChange={e => setF("contexto", e.target.value)}>
                     {CONTEXTO_OPTS
                       .filter(c => isAdmin || c.value !== "pessoal")
                       .map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -513,32 +555,32 @@ export default function AgendaPage() {
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1">Início *</label>
                   <input type="datetime-local" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
-                    value={form.inicio} onChange={e => setF("inicio", e.target.value)} />
+                    aria-label="Início" value={form.inicio} onChange={e => setF("inicio", e.target.value)} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1">Fim *</label>
                   <input type="datetime-local" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
-                    value={form.fim} onChange={e => setF("fim", e.target.value)} />
+                    aria-label="Fim" value={form.fim} onChange={e => setF("fim", e.target.value)} />
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Local</label>
                 <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500"
-                  value={form.local} onChange={e => setF("local", e.target.value)} placeholder="Endereço ou local virtual" />
+                  aria-label="Local" value={form.local} onChange={e => setF("local", e.target.value)} placeholder="Endereço ou local virtual" />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Descrição</label>
                 <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 resize-none"
-                  rows={2} value={form.descricao} onChange={e => setF("descricao", e.target.value)} />
+                  rows={2} aria-label="Descrição" value={form.descricao} onChange={e => setF("descricao", e.target.value)} />
               </div>
 
               {/* TDAH: Lembrete via WhatsApp */}
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">⏰ Lembrete WhatsApp</label>
                 <select className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200"
-                  value={form.lembreteMinutos} onChange={e => setF("lembreteMinutos", Number(e.target.value))}>
+                  aria-label="Lembrete WhatsApp" value={form.lembreteMinutos} onChange={e => setF("lembreteMinutos", Number(e.target.value))}>
                   <option value={0}>Sem lembrete</option>
                   <option value={15}>15 minutos antes</option>
                   <option value={30}>30 minutos antes</option>
@@ -557,11 +599,11 @@ export default function AgendaPage() {
               )}
 
               <div className="flex gap-2 mt-2">
-                <button onClick={criarEvento} disabled={!form.titulo || !form.inicio || !form.fim}
+                <button onClick={criarEvento} disabled={busy || !form.titulo || !form.inicio || !form.fim}
                   className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-xl hover:bg-blue-500 disabled:opacity-50">
                   Criar Evento
                 </button>
-                <button onClick={() => setShowForm(false)} className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800">
+                <button disabled={busy} onClick={() => setShowForm(false)} className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2.5 rounded-xl hover:bg-zinc-800">
                   Cancelar
                 </button>
               </div>

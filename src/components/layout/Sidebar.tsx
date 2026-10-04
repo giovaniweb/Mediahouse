@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -36,6 +37,7 @@ import {
   Layers,
   ScrollText,
   X,
+  ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -50,7 +52,9 @@ const sections = [
   {
     label: "Geral",
     items: [
+      { href: "/hoje", label: "Hoje", icon: Home },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/meu-trabalho", label: "Meu trabalho", icon: ClipboardCheck },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
@@ -112,7 +116,7 @@ const sections = [
     label: "Plataforma",
     superAdmin: true,
     items: [
-      { href: "/admin/organizacoes", label: "Organizações", icon: Building2 },
+      { href: "/admin/organizacoes", label: "Empresas do SaaS", icon: Building2 },
       { href: "/admin/leads", label: "Interessados", icon: Inbox },
     ],
   },
@@ -126,13 +130,26 @@ const sections = [
       { href: "/configuracoes", label: "Configurações", icon: Settings },
       // Terceirizar execução para outra empresa começa aqui: sem parceria
       // aceita pelos dois lados, o botão de terceirizar nem aparece no card.
-      { href: "/parcerias", label: "Parcerias", icon: Handshake },
+      { href: "/parcerias", label: "Compartilhamento", icon: Handshake },
     ],
   },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [expanded, setExpanded] = useState<{ path: string; label: string | null } | null>(null)
+  const activeHref = sections.flatMap(section => section.items).filter(item => pathname === item.href || pathname.startsWith(item.href + "/")).sort((a, b) => b.href.length - a.href.length)[0]?.href
+  const isItemActive = (href: string) => activeHref === href
+  const navigation = sections.map(section => {
+    if (section.label === "Geral") return { ...section, items: section.items.filter(item => item.href !== "/produtos") }
+    if (section.label === "Growth") return { ...section, items: section.items.filter(item => item.href !== "/configuracoes/linhas-projetos") }
+    return section
+  }).flatMap(section => section.label === "Geral" ? [section, {
+    label: "Produtos",
+    items: sections.flatMap(group => group.items).filter(item => ["/produtos", "/configuracoes/linhas-projetos"].includes(item.href)),
+  }] : [section])
+  const currentSection = navigation.find(section => section.items.some(item => isItemActive(item.href)))?.label ?? "Geral"
+  const expandedLabel = expanded?.path === pathname ? expanded.label : currentSection
   const { data: me } = useMe()
   const { aberta, fechar } = useNavegacaoMovel()
 
@@ -233,9 +250,10 @@ export function Sidebar() {
                   { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
                 ].map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                  const isActive = isItemActive(item.href)
                   return (
                     <Link key={item.href} href={item.href}
+                        aria-current={isItemActive(item.href) ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
                         isActive ? "bg-white text-zinc-900 font-medium" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -249,7 +267,7 @@ export function Sidebar() {
             </div>
           )}
 
-          {me?.tipo !== "videomaker" && sections.map((section) => {
+          {me?.tipo !== "videomaker" && navigation.map((section) => {
             // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
             if (section.label === "Growth" && mods && !mods.growth) return null
             if (section.label === "Eventos" && mods && !mods.eventos) return null
@@ -261,20 +279,26 @@ export function Sidebar() {
 
             return (
               <div key={section.label}>
-                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
-                  {section.label}
-                </p>
-                <div className="space-y-0.5">
-                  {visibleItems.map((item) => {
+                <button type="button" aria-expanded={expandedLabel === section.label}
+                    aria-controls={`menu-${section.label.replaceAll(" ", "-")}`}
+                    onClick={() => setExpanded({ path: pathname, label: expandedLabel === section.label ? null : section.label })}
+                    className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-zinc-300 rounded-lg hover:bg-white/5">
+                    {section.label}<ChevronDown className={cn("w-4 h-4 transition-transform", expandedLabel === section.label && "rotate-180")} />
+                  </button>
+                <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={expandedLabel !== section.label} className="space-y-0.5">
+                  {(() => {
+                    const teamHrefs = ["/videomakers", "/equipe", "/custos"]
+                    const teamItems = section.label === "Audiovisual" ? visibleItems.filter(item => teamHrefs.includes(item.href)) : []
+                    const mainItems = visibleItems.filter(item => !teamItems.includes(item))
+                    const renderItem = (item: typeof visibleItems[number]) => {
                     const Icon = item.icon
-                    const isActive =
-                      pathname === item.href ||
-                      (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                    const isActive = isItemActive(item.href)
 
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
+                        aria-current={isItemActive(item.href) ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
                           isActive
@@ -286,7 +310,20 @@ export function Sidebar() {
                         {item.label}
                       </Link>
                     )
-                  })}
+                    }
+                    return <>
+                      {mainItems.map(renderItem)}
+                      {teamItems.length > 0 && <details open={teamItems.some(item => isItemActive(item.href))} className="group/team">
+                        <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-md px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white focus-visible:outline-2 focus-visible:outline-violet-400">
+                          <Users className="h-4 w-4 shrink-0" />
+                          <span className="flex-1">Equipe audiovisual</span>
+                          <ChevronDown className="h-4 w-4 group-open/team:rotate-180" />
+                        </summary>
+                        <div className="ml-5 border-l border-zinc-700 pl-2 space-y-0.5">{teamItems.map(renderItem)}</div>
+                      </details>}
+                    </>
+                  })()}
+
                 </div>
               </div>
             )

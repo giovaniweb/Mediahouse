@@ -1,0 +1,25 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+const context=await browser.newContext({viewport:{width:1440,height:960}});
+await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+const page=await context.newPage();
+await page.goto('http://127.0.0.1:3108/login');
+await page.locator('[name=login]').fill('admin-a@nuflow.test');
+await page.locator('[name=password]').fill('NuFlow-Local-2026!');
+await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.waitForURL('**/dashboard');
+const loaded=page.waitForResponse(r=>r.url().endsWith('/api/editores')&&r.status()===200);
+await page.goto('http://127.0.0.1:3108/equipe?visual=novo');await loaded;
+await page.getByRole('heading',{name:'Pessoas, talento e capacidade.'}).waitFor();
+await page.getByRole('button',{name:'Cadastrar',exact:true}).click();
+const dialog=page.getByRole('dialog',{name:'Cadastrar videomaker interno'});
+await dialog.waitFor();
+await dialog.getByLabel('Nome *',{exact:true}).fill('Teste de interface');
+await page.setViewportSize({width:390,height:844});
+const box=await dialog.boundingBox();assert(box.x>=0 && box.x+box.width<=390 && box.height<=844);
+await page.screenshot({path:'/tmp/nuflow-team-form-mobile.png'});
+await page.keyboard.press('Escape');
+assert.equal(await page.getByRole('dialog').count(),0);
+assert(await page.getByRole('button',{name:'Cadastrar',exact:true}).evaluate(e=>e===document.activeElement));
+console.log('PASS: formulário nomeado, campos associados, mobile contido, Escape e foco restaurado; sem salvar');
+}finally{await browser.close()}})().catch(e=>{console.error(e);process.exit(1)});

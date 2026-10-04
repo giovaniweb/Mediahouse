@@ -1,5 +1,6 @@
 "use client"
 
+import styles from "@/components/layout/TeamSurface.module.css"
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
@@ -37,9 +38,11 @@ const HABILIDADES_SUGESTOES = [
 export default function VideomakerDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { data, mutate } = useSWR(`/api/videomakers/${id}`, fetcher)
+  const { data, error, isValidating, mutate } = useSWR(`/api/videomakers/${id}`, fetcher)
   const vm = data?.videomaker
 
+  const [aprovando, setAprovando] = useState(false)
+  const [erroAprovacao, setErroAprovacao] = useState("")
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Record<string, unknown>>({})
@@ -49,7 +52,7 @@ export default function VideomakerDetalhePage() {
   const [nota, setNota] = useState(0)
   const [comentarioAvaliacao, setComentarioAvaliacao] = useState("")
   const [enviandoAvaliacao, setEnviandoAvaliacao] = useState(false)
-  const { data: dataAvaliacoes, mutate: mutateAvaliacoes } = useSWR(
+  const { data: dataAvaliacoes, error: erroAvaliacoes, mutate: mutateAvaliacoes } = useSWR(
     id ? `/api/videomakers/${id}/avaliar` : null, fetcher
   )
 
@@ -133,15 +136,18 @@ export default function VideomakerDetalhePage() {
   }
 
   async function handleAprovar() {
-    if (!confirm(`Aprovar "${vm.nome}"? Isso criará uma conta de acesso e enviará as credenciais via WhatsApp.`)) return
-    const res = await fetch(`/api/videomakers/${id}/aprovar`, { method: "POST" })
-    const json = await res.json()
-    if (res.ok) {
+    if (aprovando) return
+    if (!confirm(`Aprovar "${vm.nome}"? Se necessário, será criada uma conta e o envio das credenciais pelo WhatsApp será tentado.`)) return
+    setAprovando(true); setErroAprovacao("")
+    try {
+      const res = await fetch(`/api/videomakers/${id}/aprovar`, { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) { setErroAprovacao(json.error || "Não foi possível aprovar o cadastro."); return }
       toast.success(json.mensagem || "Videomaker aprovado!")
-      mutate()
-    } else {
-      toast.error(json.error || "Erro ao aprovar")
-    }
+      await mutate()
+    } catch {
+      setErroAprovacao("Não foi possível confirmar a aprovação. Confira a conexão e atualize o perfil antes de tentar novamente.")
+    } finally { setAprovando(false) }
   }
 
   async function handleTogglePodeEditar() {
@@ -197,7 +203,7 @@ export default function VideomakerDetalhePage() {
       <>
         <Header title="Videomaker" />
         <main className="flex-1 p-6 flex items-center justify-center text-zinc-400">
-          <div className="animate-pulse">Carregando...</div>
+          {error ? <div role="alert"><p>Não foi possível abrir este perfil.</p><button disabled={isValidating} onClick={() => mutate()} className="mt-4 border rounded-lg px-4 py-3">{isValidating ? "Tentando novamente…" : "Tentar novamente"}</button><Link href="/videomakers" className="block mt-4">Voltar para a equipe externa</Link></div> : <p role="status">Carregando perfil…</p>}
         </main>
       </>
     )
@@ -213,7 +219,7 @@ export default function VideomakerDetalhePage() {
       <Header
         title={vm.nome}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => router.back()}
               className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg px-3 py-2"
@@ -262,28 +268,36 @@ export default function VideomakerDetalhePage() {
         }
       />
 
-      <main className="flex-1 p-6 max-w-4xl space-y-6">
+      <main className={`${styles.page} space-y-6`}>
+        <div>
+          <p className={styles.eyebrow}>AUDIOVISUAL / EQUIPE EXTERNA</p>
+          <h1 className={styles.title}>{vm.nome}</h1>
+          <p className={styles.subtitle}>Perfil profissional, trabalhos e informações da sua equipe externa.</p>
+        </div>
         {/* Banner Pendente */}
         {vm.status === "pendente" && (
-          <div className="bg-yellow-900/20 border border-yellow-700 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-yellow-900/20 border border-yellow-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-yellow-300 font-semibold text-sm">Cadastro Pendente de Aprovação</p>
                 <p className="text-yellow-400/70 text-xs mt-0.5">
-                  Este videomaker se cadastrou pelo formulário público e aguarda revisão. Ao aprovar, uma conta de acesso será criada e as credenciais enviadas via WhatsApp.
+                  Revise os dados antes de aprovar. Se ainda não houver conta, o sistema criará o acesso e tentará enviar as credenciais pelo WhatsApp configurado.
                 </p>
               </div>
             </div>
             <button
               onClick={handleAprovar}
+              disabled={aprovando} aria-busy={aprovando}
               className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-sm font-medium shrink-0 transition-colors"
             >
               <CheckCircle className="w-4 h-4" />
-              Aprovar & Criar Acesso
+              {aprovando ? "Aprovando…" : "Aprovar & Criar Acesso"}
             </button>
           </div>
         )}
+
+        {erroAprovacao && <div role="alert" className="border border-rose-800 bg-rose-900/10 text-rose-200 rounded-xl p-4 text-sm"><p>{erroAprovacao}</p><button disabled={isValidating} onClick={async () => { await mutate(); setErroAprovacao("") }} className="mt-3 min-h-11 px-4 border border-rose-700 rounded-lg">Atualizar perfil</button></div>}
 
         {/* Performance */}
         <VideomakerPerformance videomakerId={vm.id} />
@@ -309,33 +323,38 @@ export default function VideomakerDetalhePage() {
 
         {/* Perfil */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-purple-900/50 border border-purple-800 flex items-center justify-center text-2xl font-bold text-purple-400">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4 min-w-0 w-full">
+              <div className="w-14 h-14 shrink-0 rounded-full bg-purple-900/50 border border-purple-800 flex items-center justify-center text-2xl font-bold text-purple-400">
                 {vm.nome?.charAt(0)}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 {editing ? (
-                  <input
+                  <input aria-label="Nome"
                     value={form.nome as string}
                     onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                    className="text-xl font-bold border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-white"
+                    className="w-full min-w-0 text-xl font-bold border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-white"
                   />
                 ) : (
-                  <h2 className="text-xl font-bold text-white">{vm.nome}</h2>
+                  <h2 className="text-xl font-bold text-white break-words">{vm.nome}</h2>
                 )}
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex flex-wrap items-center gap-1 mt-1">
+                  {erroAvaliacoes ? <span className="text-xs text-zinc-400">Avaliações indisponíveis</span>
+                    : !dataAvaliacoes ? <span className="text-xs text-zinc-400">Carregando avaliações…</span>
+                    : avaliacoes.length === 0 ? <span className="text-xs text-zinc-400">Sem avaliações registradas</span>
+                    : <>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <Star key={n} className={cn("w-4 h-4", n <= Math.round(vm.avaliacao ?? 0) ? "text-yellow-400 fill-yellow-400" : "text-zinc-700")} />
                   ))}
                   <span className="text-sm text-zinc-500 ml-1">{(vm.avaliacao ?? 0).toFixed(1)}</span>
                   <span className="text-xs text-zinc-600 ml-1">({avaliacoes.length} aval.)</span>
+                    </>}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {editing ? (
-                <select
+                <select aria-label="Status"
                   value={form.status as string}
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
                   className="text-sm border border-zinc-700 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-200"
@@ -362,13 +381,13 @@ export default function VideomakerDetalhePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2 text-zinc-400">
               <MapPin className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
                 <div className="flex gap-2 flex-1">
-                  <input placeholder="Cidade" value={form.cidade as string} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
-                  <input placeholder="UF" maxLength={2} value={form.estado as string} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={`${inp} w-16`} />
+                  <input aria-label="Cidade" placeholder="Cidade" value={form.cidade as string} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
+                  <input aria-label="UF" placeholder="UF" maxLength={2} value={form.estado as string} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={`${inp} w-16`} />
                 </div>
               ) : (
                 <span>{[vm.cidade, vm.estado].filter(Boolean).join(", ") || "—"}</span>
@@ -378,7 +397,7 @@ export default function VideomakerDetalhePage() {
             <div className="flex items-center gap-2 text-zinc-400">
               <Phone className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
-                <input value={form.telefone as string} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={`${inp} flex-1`} />
+                <input aria-label="Telefone" value={form.telefone as string} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={`${inp} flex-1`} />
               ) : (
                 <span>{vm.telefone || "—"}</span>
               )}
@@ -387,7 +406,7 @@ export default function VideomakerDetalhePage() {
             <div className="flex items-center gap-2 text-zinc-400">
               <Mail className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
-                <input type="email" value={form.email as string} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`${inp} flex-1`} />
+                <input aria-label="E-mail" type="email" value={form.email as string} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`${inp} flex-1`} />
               ) : (
                 <span>{vm.email || "—"}</span>
               )}
@@ -396,7 +415,7 @@ export default function VideomakerDetalhePage() {
             <div className="flex items-center gap-2 text-zinc-400">
               <DollarSign className="w-4 h-4 text-zinc-600 shrink-0" />
               {editing ? (
-                <input type="number" value={form.valorDiaria as string} onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })} className={`${inp} flex-1`} />
+                <input aria-label="Valor da diária" type="number" value={form.valorDiaria as string} onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })} className={`${inp} flex-1`} />
               ) : (
                 <MoneyDisplay value={vm.valorDiaria} suffix="/dia" className="font-semibold text-zinc-200" />
               )}
@@ -406,7 +425,7 @@ export default function VideomakerDetalhePage() {
               <div className="flex items-center gap-2 text-zinc-400">
                 <span className="text-zinc-600 text-xs font-medium w-4">ID</span>
                 {editing ? (
-                  <input placeholder="CPF/CNPJ" value={form.cpfCnpj as string} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={`${inp} flex-1`} />
+                  <input aria-label="CPF/CNPJ" placeholder="CPF/CNPJ" value={form.cpfCnpj as string} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={`${inp} flex-1`} />
                 ) : (
                   <span className="font-mono text-xs">{vm.cpfCnpj}</span>
                 )}
@@ -417,7 +436,7 @@ export default function VideomakerDetalhePage() {
               <div className="flex items-center gap-2 text-zinc-400">
                 <span className="text-zinc-600 text-xs font-medium">PIX</span>
                 {editing ? (
-                  <input placeholder="Chave PIX" value={form.chavePix as string} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={`${inp} flex-1`} />
+                  <input aria-label="Chave PIX" placeholder="Chave PIX" value={form.chavePix as string} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={`${inp} flex-1`} />
                 ) : (
                   <div className="flex items-center gap-1">
                     <span className="font-mono text-xs truncate max-w-32">{vm.chavePix}</span>
@@ -488,11 +507,11 @@ export default function VideomakerDetalhePage() {
             <div className="mt-5 grid grid-cols-1 gap-3">
               <div>
                 <label className="text-xs text-zinc-500 mb-1 block">Portfolio (URL)</label>
-                <input value={form.portfolio as string} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} placeholder="https://..." />
+                <input aria-label="Portfólio" value={form.portfolio as string} onChange={(e) => setForm({ ...form, portfolio: e.target.value })} className={inp} placeholder="https://..." />
               </div>
               <div>
                 <label className="text-xs text-zinc-500 mb-1 block">Observações</label>
-                <textarea value={form.observacoes as string} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2}
+                <textarea aria-label="Observações" value={form.observacoes as string} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2}
                   className={`${inp} resize-none`} />
               </div>
             </div>

@@ -3,6 +3,7 @@ import {useState} from "react"
 import useSWR from "swr"
 import Link from "next/link"
 import {Header} from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import {fetcher} from "@/lib/fetcher"
 import {toast} from "sonner"
 import {useMe} from "@/hooks/usePermissoes"
@@ -35,12 +36,10 @@ export default function AlertasPage() {
     } catch(e){toast.error(e instanceof Error?e.message:"Falha ao alterar")}
     finally{setOcupado(null)}
   }
-  return <><Header title="Alertas"/><main className="flex-1 p-6 max-w-4xl space-y-4">
-    <div className="flex items-center justify-between gap-3 flex-wrap">
-      <h1 className="text-xl font-semibold">O que precisa de atenção</h1>
+  return <><Header title="Alertas"/><PageIntro eyebrow="ANALYTICS / ALERTAS" title="O que precisa de atenção." description="Prazos e pendências verificados por regras, sem consumo de IA." /><main className="flex-1 p-6 pt-0 max-w-4xl space-y-4">
+    <div className="flex items-center justify-end gap-3 flex-wrap">
       {me?.permissoes.gerenciarConfig && me?.permissoes.verAlertas && <button disabled={verificando} className="border rounded-lg px-3 py-2 text-sm disabled:opacity-50" onClick={verificar}>{verificando?"Verificando…":"Verificar pendências"}</button>}
     </div>
-    <p className="text-sm text-muted-foreground">Prazos e pendências são verificados por regras, sem consumo de IA.</p>
     <div className="flex gap-3 flex-wrap">
       <label>Tipo <select className="border rounded p-2 bg-background" value={tipo} onChange={e=>{setTipo(e.target.value);setCursor("")}}><option value="">Todos</option>{data?.tipos.map(t=><option key={t} value={t}>{t.replace(/^regra_/,"").replaceAll("_"," ")}</option>)}</select></label>
       <label>Responsável <select className="border rounded p-2 bg-background" value={responsavel} onChange={e=>{setResponsavel(e.target.value);setCursor("")}}><option value="">Todos</option>{data?.responsaveis.map(r=><option key={r.id} value={r.id}>{r.nome}</option>)}</select></label>

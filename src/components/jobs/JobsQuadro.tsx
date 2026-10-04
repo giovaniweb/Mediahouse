@@ -1,5 +1,6 @@
 "use client"
 
+import styles from "./JobsPreview.module.css"
 import { useRef } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -38,7 +39,7 @@ export function JobsQuadro({
   onAbrir: (id: string) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const rolar = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: "smooth" })
+  const rolar = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })
 
   // Atrasados no topo, depois urgentes, depois o mais antigo primeiro. Mesma
   // ordenação do quadro atual — quem abre o quadro precisa ver o que queima.
@@ -56,7 +57,7 @@ export function JobsQuadro({
       })
 
   return (
-    <div className="relative h-full flex flex-col">
+    <div className={cn("relative h-full flex flex-col", styles.board)}>
       <button
         onClick={() => rolar(-320)}
         className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
@@ -82,9 +83,10 @@ export function JobsQuadro({
           return (
             <section
               key={coluna}
+              aria-label={ROTULOS[coluna]}
               className={cn(
                 "flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
-                CORES[coluna]
+                CORES[coluna], styles.column
               )}
             >
               <header className="px-3 py-2.5 flex items-center justify-between border-b border-zinc-800">

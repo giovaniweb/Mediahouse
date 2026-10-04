@@ -18,13 +18,14 @@
 // O ligado/desligado POR EMPRESA vive no banco (ModuloOrganizacao) e é lido por
 // src/lib/modulos-org.ts. Aqui não há estado de cliente.
 
-export type Modulo = "growth" | "eventos" | "ideias" | "mensagens"
+export type Modulo = "growth" | "eventos" | "ideias" | "mensagens" | "cutflow"
 
 export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "growth", nome: "Growth / Conteúdos", descricao: "Área de design, kanban próprio e galeria de criativos." },
   { chave: "eventos", nome: "Eventos", descricao: "Coberturas, portal de campo, fornecedores e produtos de evento." },
   { chave: "ideias", nome: "Banco de Ideias", descricao: "Registro de ideias que viram demanda." },
   { chave: "mensagens", nome: "Mensagens", descricao: "Central de mensagens do WhatsApp." },
+  { chave: "cutflow", nome: "Cutflow", descricao: "Plugin do Premiere que edita os cards atribuídos ao editor Cutflow." },
 ]
 
 /**
@@ -42,6 +43,7 @@ export const DISPONIVEL_NA_PLATAFORMA: Record<Modulo, boolean> = {
   eventos: false,
   ideias: false,
   mensagens: false,
+  cutflow: true,
 }
 
 /** O que uma empresa recebe quando ninguém decidiu nada para ela. */
@@ -50,6 +52,9 @@ export const PADRAO_MODULOS: Record<Modulo, boolean> = {
   eventos: false,
   ideias: false,
   mensagens: false,
+  // Cutflow (30/09/2026): começa desligado. Por ora é do time e de pessoas de
+  // confiança; liga por empresa quando a assinatura incluir o plugin.
+  cutflow: false,
 }
 
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e
@@ -72,6 +77,9 @@ export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
   ideias: ["/ideias", "/api/ideias"],
   // Só a página; NÃO bloquear /api/whatsapp, usado pelas notificações automáticas.
   mensagens: ["/mensagens"],
+  // As rotas do plugin conferem o módulo por empresa na própria rota (a sessão do
+  // plugin é Bearer, não cookie). A página de autorização também.
+  cutflow: ["/cutflow", "/api/cutflow"],
 }
 
 /** A que módulo um caminho pertence, se pertencer a algum. */

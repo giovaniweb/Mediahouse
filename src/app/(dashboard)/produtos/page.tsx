@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import {
   Package, Plus, Pencil, Power, PowerOff, Search, X, Loader2,
   ArrowUpDown, ChevronUp, ChevronDown, AlertTriangle, Check, BarChart3
@@ -159,6 +160,7 @@ export default function ProdutosPage() {
           ) : undefined
         }
       />
+      <PageIntro eyebrow="PRODUTOS / CATÁLOGO" title="O que a equipe produz, e o que está sem vídeo." description="O catálogo da empresa e a prioridade de conteúdo de cada produto." />
       <main className="flex-1 p-6 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4">

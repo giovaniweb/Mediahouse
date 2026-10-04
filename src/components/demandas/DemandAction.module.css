@@ -1,0 +1,13 @@
+.newDemand {
+ display:inline-flex; align-items:center; justify-content:center; gap:9px;
+ min-height:40px; padding:9px 17px; border:1px solid #c4b5fd55; border-radius:12px;
+ background:linear-gradient(125deg,#7650ca,#5143a8); color:#fff;
+ font-size:13px; font-weight:650; white-space:nowrap;
+ box-shadow:inset 0 1px 0 #ffffff20,0 3px 12px #36235428;
+ transition:background .18s,box-shadow .18s;
+}
+.newDemand:hover { background:linear-gradient(125deg,#865fdb,#6253bd); box-shadow:inset 0 1px 0 #ffffff30,0 4px 14px #36235440; }
+.newDemand:focus-visible { outline:2px solid #c4b5fd; outline-offset:3px; }
+.newDemand:active { box-shadow:inset 0 2px 4px #0003; }
+@media(max-width:640px) { .newDemand { min-height:44px; padding:10px 13px; } }
+@media(prefers-reduced-motion:reduce) { .newDemand { transition:none; } }

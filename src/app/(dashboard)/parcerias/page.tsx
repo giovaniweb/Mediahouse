@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import { fetcher } from "@/lib/fetcher"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 
 type Parceria = {
   parceriaId: string
@@ -64,7 +65,7 @@ export default function ParceriasPage() {
 
   async function responder(p: Parceria, acao: "aceitar" | "recusar" | "encerrar") {
     if (acao === "encerrar" && !confirm(
-      `Encerrar a parceria com ${p.nome}?\n\nOs cards já terceirizados continuam em execução — encerrar a relação não para um job no meio. Revogue card a card se for isso que você quer.`
+      `Encerrar a parceria com ${p.nome}?\n\nOs cards já compartilhados continuam em execução — encerrar a relação não para um job no meio. Revogue card a card se for isso que você quer.`
     )) return
     setOcupado(true)
     try {
@@ -98,10 +99,11 @@ export default function ParceriasPage() {
 
   return (
     <>
-      <Header title="Parcerias" />
+      <Header title="Compartilhamento entre empresas" />
+      <PageIntro eyebrow="SISTEMA / COMPARTILHAMENTO" title="Trabalho junto com outras empresas." description="Conecte empresas parceiras do NuFlow para dividir a execução de cards, sem que o card mude de dono." />
       <div className="p-4 md:p-6 space-y-5 max-w-3xl">
         <p className="text-sm text-zinc-400">
-          Uma parceria permite terceirizar a execução de demandas para outra empresa do NuFlow —
+          Uma conexão permite compartilhar a execução de cards com outra empresa do NuFlow —
           sem que o card mude de dono. Ela precisa ser aceita pelos dois lados antes do primeiro job.
         </p>
 
@@ -152,7 +154,7 @@ export default function ParceriasPage() {
         )}
 
         <section className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
-          <h2 className="font-semibold text-zinc-300 px-4 pt-3 pb-2">Parcerias ativas</h2>
+          <h2 className="font-semibold text-zinc-300 px-4 pt-3 pb-2">Empresas conectadas</h2>
           {isLoading ? (
             <p className="px-4 pb-4 text-sm text-zinc-500">Carregando…</p>
           ) : ativas.length === 0 ? (

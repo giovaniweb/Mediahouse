@@ -15,6 +15,10 @@ export default [
   ...coreWebVitals,
   ...nextTypescript,
   {
+    // Os mesmos arquivos que a configuração do Next cobre. Sem `files`, este bloco
+    // valia também para os .cjs de scripts/qa, onde o plugin "react" não existe —
+    // e o `eslint .` inteiro parava com "could not find plugin react".
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     // O código já traz comentários eslint-disable de antes desta configuração.
     // Sem isto, `--fix` os apaga como "diretiva não usada" e desfaz supressões
     // que ainda importam para as regras que voltarem a "error".
@@ -35,5 +39,11 @@ export default [
       "react-hooks/purity": "warn",
       "react-hooks/immutability": "warn",
     },
+  },
+  {
+    // .cjs é CommonJS por definição: `require` é a única forma de importar ali
+    // (scripts/qa e scripts/local, que rodam direto no node).
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
 ]

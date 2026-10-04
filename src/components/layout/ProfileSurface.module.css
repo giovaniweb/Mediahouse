@@ -1,0 +1,26 @@
+.page {padding:32px;overflow:auto;color:#eeeef5;background:#101115;flex:1;min-height:0;font-family:Montserrat,sans-serif;}
+.surface {max-width:1200px;margin:0 auto;}
+.eyebrow {font-size:11px;letter-spacing:.18em;color:#a5a7bb;margin-bottom:14px;}
+.title {font-size:34px;font-weight:500;letter-spacing:-.04em;}
+.subtitle {color:#a5a7bb;margin:10px 0 28px;font-size:15px;}
+.hero {display:flex;align-items:center;gap:24px;padding:28px;border:1px solid #303342;background:#191b23;border-radius:18px;margin-bottom:28px;}
+.hero h2 {font-size:24px;font-weight:500;overflow-wrap:anywhere;}
+.hero p {color:#a5a7bb;font-size:13px;margin:6px 0 12px;overflow-wrap:anywhere;}
+.initials {display:grid;place-items:center;flex-shrink:0;width:72px;height:72px;border-radius:50%;background:#413959;color:#c6acff;font-size:26px;font-weight:600;}
+.badge {background:#ab86ff20;color:#bca2fa;border:1px solid #ab86ff30;border-radius:6px;padding:4px 9px;text-transform:capitalize;font-size:12px;}
+.tabs {display:flex;gap:24px;border-bottom:1px solid #303342;overflow-x:auto;margin-bottom:24px;}
+.tabs button {flex:none;justify-content:flex-start;font-size:14px;white-space:nowrap;min-height:48px;color:#a5a7bb;}
+.tabs button[aria-pressed=true] {border-color:#ad87ff;color:#bd9dff;}
+.body {display:grid;gap:18px;padding:28px;border:1px solid #303342;background:#191b23;border-radius:18px;}
+.body input,.body textarea {background:#11131a;border-color:#3a3d4e;min-height:44px;}
+.body button:disabled {opacity:.5;}
+.overview h2 {font-size:23px;font-weight:500;margin-bottom:12px;}
+.overview h3 {font-size:16px;margin:26px 0 12px;}
+.overview p {color:#a5a7bb;font-size:14px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;}
+.overview dl {display:grid;grid-template-columns:1fr 1fr;gap:24px;border-block:1px solid #303342;padding:24px 0;margin-top:24px;}
+.overview dt {font-size:12px;color:#a5a7bb;margin-bottom:8px;}
+.overview dd {font-size:14px;overflow-wrap:anywhere;}
+.links {display:flex;gap:16px;flex-wrap:wrap;color:#bd9dff;font-size:14px;}
+.edit {margin-top:26px;background:#8455d2;padding:12px 20px;border:1px solid #a481e4;border-radius:10px;font-size:13px;}
+.page :is(a,button,input,textarea):focus-visible {outline:2px solid #b99bff;outline-offset:3px;}
+@media(max-width:640px){.page{padding:24px 16px;}.title{font-size:28px;}.hero,.body{padding:20px;}.hero{gap:16px;}.hero h2{font-size:20px;}.initials{width:52px;height:52px;font-size:21px;}.tabs{gap:18px;}.overview dl{grid-template-columns:1fr;}}

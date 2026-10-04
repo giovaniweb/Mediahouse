@@ -1,6 +1,7 @@
 "use client"
 
-import { AlertTriangle, Calendar, Trash2, User, Video, Pencil, Copy } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Pencil, Copy, MessageCircle, Paperclip } from "lucide-react"
+import styles from "./DemandCardModern.module.css"
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
@@ -37,6 +38,11 @@ interface DemandaCardProps {
     prioridade: "urgente" | "alta" | "normal" | "baixa"
     statusInterno: string
     statusVisivel?: string
+    area?: string | null
+    thumbnailUrl?: string | null
+    classificacao?: string | null
+    _count?: { comentarios?: number; arquivos?: number }
+    videomaker?: { nome: string } | null
     linkFinal?: string | null
     linkCliente?: string | null
     dataLimite?: string | null
@@ -60,6 +66,13 @@ interface DemandaCardProps {
 
 export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, onOpen, onMarkPosted }: DemandaCardProps) {
   const router = useRouter()
+  const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
+  const thumbnail = demanda.thumbnailUrl && (/^https?:\/\//i.test(demanda.thumbnailUrl) || /^\/(?!\/)/.test(demanda.thumbnailUrl)) ? demanda.thumbnailUrl : null
+  const people = [...new Set([
+    ...(demanda.responsaveis ?? []).map(p => p.usuario.nome),
+    demanda.responsavel?.nome, demanda.designer?.nome, demanda.videomaker?.nome, demanda.editor?.nome,
+  ].filter((name): name is string => Boolean(name)))]
+  const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase()
   const [showPostagemForm, setShowPostagemForm] = useState(false)
   const [postagemTipo, setPostagemTipo] = useState("feed")
   const [postagemLink, setPostagemLink] = useState("")
@@ -90,8 +103,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   return (
     <div onClick={handleClick}>
       <div
+        data-card-surface
         className={cn(
           "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-750 transition-all",
+          styles.card,
           // Prioridade (só aplica se não houver status especial)
           demanda.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
           demanda.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
@@ -108,7 +123,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
         )}
         {...dragHandleProps}
       >
-        <div className="flex items-start justify-between gap-2 mb-2">
+        <div className={cn("flex items-start justify-between gap-2 mb-2", styles.top)}>
           <span className="text-[11px] font-mono text-zinc-500">{demanda.codigo}</span>
           <div className="flex items-center gap-1">
             <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", prio.class)}>
@@ -142,11 +157,18 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           </div>
         </div>
 
-        <p className="text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2">
+        {thumbnail && failedThumbnail !== thumbnail && <div className={styles.cover}>
+          {/* A prévia vem do registro real; nunca substituímos por arte de demonstração. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img draggable={false} src={thumbnail} alt={`Prévia de ${demanda.titulo}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedThumbnail(thumbnail)} />
+        </div>}
+        <button type="button" onClick={(event) => { event.stopPropagation(); handleClick() }}
+          className={cn("block w-full text-left text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2 focus-visible:outline-2 focus-visible:outline-violet-400 focus-visible:outline-offset-2 rounded", styles.title)}
+          aria-label={`Abrir demanda: ${demanda.titulo}`}>
           {demanda.titulo}
-        </p>
+        </button>
 
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className={cn("flex flex-wrap gap-1 mb-2", styles.tags)}>
           {isOverdue && (
             <span className="tag-atrasada flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
               <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -154,6 +176,7 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
             </span>
           )}
           <TagEspelho espelho={demanda.espelho} />
+          {demanda.classificacao && <span className={styles.classification}>{demanda.classificacao.toUpperCase()}</span>}
           <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", deptColor)}>
             {demanda.departamento}
           </span>
@@ -199,33 +222,20 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           )}
         </div>
 
-        <div className="flex items-center justify-between text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700/30">
-          <div className="flex items-center gap-1">
-            {demanda.statusVisivel === "finalizado" ? (
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 font-medium">✅ Concluído</span>
-            ) : ((demanda.responsaveis?.length ?? 0) > 0 || demanda.responsavel || demanda.designer || demanda.editor) ? (
-              <><User className="w-3 h-3" /><span className="text-zinc-400">
-                {(demanda.responsaveis?.[0]?.usuario.nome ?? demanda.responsavel?.nome ?? demanda.designer?.nome ?? demanda.editor?.nome ?? "").split(" ")[0]}
-                {(demanda.responsaveis?.length ?? 0) > 1 ? ` +${demanda.responsaveis!.length - 1}` : ""}
-              </span></>
-            ) : (
-              <><Video className="w-3 h-3 text-zinc-600" /><span className="text-zinc-600">sem responsável</span></>
-            )}
+        <div className={styles.footer}>
+          <div className={styles.people} aria-label={people.length ? `Responsáveis: ${people.join(", ")}` : "Sem responsável"}>
+            {people.slice(0, 3).map((name, index) => <span key={name} title={name} data-tone={index % 3}>{initials(name)}</span>)}
+            {people.length > 3 && <span title={people.slice(3).join(", ")}>+{people.length - 3}</span>}
+            {!people.length && <span title="Sem responsável"><User size={14} /></span>}
           </div>
-          {demanda.dataLimite && demanda.statusVisivel !== "finalizado" && (
-            <div className={cn("flex items-center gap-1",
-              isOverdue && "text-red-400 font-semibold",
-              isNearDeadline && "text-amber-400"
-            )}>
-              {isOverdue ? <AlertTriangle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-              <span>{formatarDataCurta(demanda.dataLimite)}</span>
-            </div>
-          )}
+          {demanda.dataLimite && <span className={cn(styles.date, isOverdue && styles.late, isNearDeadline && styles.soon)} title={isOverdue ? "Prazo vencido" : isNearDeadline ? "Vence em até 3 dias" : undefined}><Calendar size={14} />{formatarDataCurta(demanda.dataLimite)}</span>}
+          {demanda._count?.comentarios != null && <span title="Comentários" aria-label={`${demanda._count.comentarios} comentários`}><MessageCircle size={14} />{demanda._count.comentarios}</span>}
+          {!!demanda._count?.arquivos && <span title="Arquivos" aria-label={`${demanda._count.arquivos} arquivos`}><Paperclip size={14} />{demanda._count.arquivos}</span>}
         </div>
 
         {/* ── Botão "Marcar como Postado" (só para coluna Para Postar) ─ */}
         {demanda.statusVisivel === "para_postar" && onMarkPosted && (
-          <div className="mt-3 border-t border-zinc-700/50 pt-3" onClick={e => e.stopPropagation()}>
+          <div className={cn("mt-3 border-t border-zinc-700/50 pt-3", styles.posting)} onClick={e => e.stopPropagation()}>
             {!showPostagemForm ? (
               <button
                 onClick={() => setShowPostagemForm(true)}

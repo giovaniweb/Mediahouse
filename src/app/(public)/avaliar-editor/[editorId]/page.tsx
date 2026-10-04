@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Star, CheckCircle2, Smile, ThumbsUp, Send, Loader2 } from "lucide-react"
 import Image from "next/image"
+import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 
 interface Editor {
   id: string
@@ -76,13 +77,9 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
     </div>
   )
 
-  if (erro && !editor) return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
-      <div className="text-center">
-        <p className="text-red-400 text-lg">{erro}</p>
-      </div>
-    </div>
-  )
+  if (erro && !editor) return erro === "Editor não encontrado"
+    ? <LinkIndisponivel titulo="Link de avaliação indisponível" texto="Este link não corresponde a nenhum editor. Peça um novo link a quem enviou." />
+    : <LinkIndisponivel titulo="Não foi possível abrir a avaliação" texto="Confira sua conexão e recarregue a página." />
 
   if (enviado) return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">

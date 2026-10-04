@@ -1,0 +1,26 @@
+/* Área pública da empresa: a identidade dela primeiro, o NuFlow discreto no rodapé. */
+.portal { min-height:100dvh; background:radial-gradient(ellipse at 90% 0%,#6a46c033,transparent 55%),radial-gradient(ellipse at 0% 100%,#2f5fa82b,transparent 55%),#101116; color:#f0eef8; font-family:"Montserrat",ui-sans-serif,system-ui,sans-serif; display:flex; flex-direction:column; padding-inline:clamp(16px,5vw,64px); }
+.topo { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:24px; }
+.marca { display:inline-flex; align-items:center; gap:12px; min-width:0; }
+.logo { width:44px; height:44px; flex:none; border-radius:12px; overflow:hidden; display:grid; place-items:center; background:#2a2541; border:1px solid #ffffff22; font-weight:700; font-size:15px; color:#e4dbff; }
+.logo img { width:100%; height:100%; object-fit:cover; }
+.marca strong { font-size:18px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.entrar { flex:none; display:inline-flex; align-items:center; gap:8px; min-height:42px; padding:0 16px; border-radius:999px; border:1px solid #ffffff33; color:#f0eef8; text-decoration:none; font-size:14px; font-weight:600; }
+.entrar:hover { background:#ffffff0f; }
+.hero { max-width:760px; padding-block:clamp(32px,8vh,88px) 32px; }
+.eyebrow { font-size:12px; letter-spacing:.18em; font-weight:600; color:#c2abff; text-transform:uppercase; }
+.hero h1 { margin:16px 0 0; font-size:clamp(36px,6vw,64px); line-height:1.05; font-weight:300; letter-spacing:-.04em; text-wrap:balance; }
+.hero h1 strong { display:block; font-weight:700; color:#dccfff; }
+.hero p { margin:20px 0 0; max-width:56ch; font-size:16px; line-height:1.7; color:#b9b6cc; }
+.caminhos { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; max-width:960px; padding-bottom:48px; }
+@media (max-width:720px) { .caminhos { grid-template-columns:minmax(0,1fr); } }
+.caminho { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:16px; padding:22px; border-radius:18px; background:#191b23; border:1px solid #303342; color:inherit; text-decoration:none; transition:border-color .15s, background .15s; }
+.caminho:hover { border-color:#8e74e080; background:#1d1f2a; }
+.caminho:focus-visible, .entrar:focus-visible { outline:2px solid #c8b4ff; outline-offset:4px; }
+.caminho.principal { background:linear-gradient(140deg,#2b2350,#1b1d2b 70%); border-color:#8e74e066; }
+.icone { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:#c2abff1a; color:#d8c9ff; }
+.caminho strong { display:block; font-size:18px; font-weight:600; }
+.caminho span { display:block; margin-top:6px; font-size:14px; line-height:1.6; color:#aeabc4; }
+.seta { color:#c2abff; margin-top:2px; }
+.rodape { margin-top:auto; padding-block:24px 32px; border-top:1px solid #ffffff12; font-size:13px; color:#9c99b3; display:flex; flex-wrap:wrap; gap:8px 16px; justify-content:space-between; }
+@media (prefers-reduced-motion: reduce) { .caminho { transition:none; } }

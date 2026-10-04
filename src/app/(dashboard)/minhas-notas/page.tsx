@@ -6,6 +6,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { FileText, ExternalLink, CheckCircle2, Clock, Upload, Loader2 } from "lucide-react"
 import { Header } from "@/components/layout/Header"
+import { PageIntro } from "@/components/layout/PageIntro"
 import { cn } from "@/lib/utils"
 import { NFUploadModal } from "@/components/demandas/NFUploadModal"
 import { fetcher } from "@/lib/fetcher"
@@ -164,6 +165,7 @@ export default function MinhasNotasPage() {
         />
       )}
       <Header title="Minhas Notas Fiscais" />
+      <PageIntro eyebrow="FINANCEIRO / NOTAS FISCAIS" title="Suas notas e seus pagamentos." description="Envie a nota fiscal de cada trabalho e acompanhe o que já foi conferido e pago." />
       <main className="flex-1 p-6 max-w-4xl mx-auto space-y-6">
 
         {/* Resumo */}

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import styles from "@/components/layout/TeamSurface.module.css"
+import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
 import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, CheckCircle } from "lucide-react"
@@ -9,7 +10,7 @@ import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
-import { mensagemDeErro } from "@/lib/erro-cliente"
+import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
 
 
@@ -34,6 +35,7 @@ interface Videomaker {
   telefone: string; email: string; valorDiaria: number
   avaliacao: number; status: keyof typeof statusConfig
   areasAtuacao: string[]; habilidades: string[]
+  _count?: { avaliacoes: number }
   emListaNegra: boolean
 }
 
@@ -41,7 +43,7 @@ export default function VideomakersPage() {
   const [showForm, setShowForm] = useState(false)
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
   const [busca, setBusca] = useState("")
-  const { data, mutate } = useSWR("/api/videomakers", fetcher)
+  const { data, error, isLoading, isValidating, mutate } = useSWR("/api/videomakers", fetcher)
   const videomakers: Videomaker[] = data?.videomakers ?? []
 
   const lista = videomakers.filter((vm) => {
@@ -68,12 +70,13 @@ export default function VideomakersPage() {
 
   async function handleDelete(id: string, nome: string) {
     if (!confirm(`Remover "${nome}"? Esta ação é irreversível.`)) return
-    const res = await fetch(`/api/videomakers/${id}`, { method: "DELETE" })
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/videomakers/${id}`, { method: "DELETE" })
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível remover o profissional.")
       toast.success("Videomaker removido")
-      mutate()
-    } else {
-      toast.error("Erro ao remover")
+      await mutate()
+    } catch (err) {
+      toast.error(mensagemDeErro(err, "Não foi possível remover o profissional."))
     }
   }
 
@@ -102,12 +105,21 @@ export default function VideomakersPage() {
           </button>
         }
       />
-      <main className="flex-1 p-6">
+      <main className={styles.page}>
+        <p className={styles.eyebrow}>AUDIOVISUAL / EQUIPE EXTERNA</p>
+        <h1 className={styles.title}>Talentos para cada produção.</h1>
+        <p className={styles.subtitle}>Encontre profissionais, acompanhe cadastros e organize sua rede de produção.</p>
+        {error ? <div role="alert" className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
+          <p>Não foi possível carregar a equipe externa.</p>
+          <button disabled={isValidating} onClick={() => mutate()} className="mt-3 px-4 border rounded-lg">{isValidating ? "Tentando novamente…" : "Tentar novamente"}</button>
+        </div> : isLoading ? <p role="status">Carregando equipe externa…</p> : <>
+
         {/* Filtros */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Filter className="h-4 w-4 text-zinc-500" />
           {(["todos", "pendente", "ativo", "preferencial", "inativo", "lista_negra"] as FiltroStatus[]).map((f) => (
             <button
+              aria-pressed={filtro === f}
               key={f}
               onClick={() => setFiltro(f)}
               className={cn(
@@ -167,14 +179,14 @@ export default function VideomakersPage() {
         {/* Busca */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
+          <input aria-label="Buscar na equipe externa"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome, cidade, estado..."
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-zinc-700"
           />
           {busca && (
-            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">&#x2715;</button>
+            <button aria-label="Limpar busca" onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-sm">&#x2715;</button>
           )}
         </div>
 
@@ -211,7 +223,7 @@ export default function VideomakersPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 mb-3">
+                    {(vm._count?.avaliacoes ?? 0) > 0 ? <div className="flex items-center gap-1 mb-3">
                       {[1, 2, 3, 4, 5].map((n) => (
                         <Star
                           key={n}
@@ -219,7 +231,7 @@ export default function VideomakersPage() {
                         />
                       ))}
                       <span className="text-xs text-zinc-500 ml-1">{(vm.avaliacao ?? 0).toFixed(1)}</span>
-                    </div>
+                    </div> : <p className="text-xs text-zinc-500 mb-3">Sem avaliações registradas</p>}
 
                     {/* Habilidades */}
                     {vm.habilidades?.length > 0 && (
@@ -254,7 +266,8 @@ export default function VideomakersPage() {
                       <div className="flex items-center gap-2">
                         <MoneyDisplay value={vm.valorDiaria} suffix="/dia" className="font-semibold text-zinc-300 text-xs" />
                         <button
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(vm.id, vm.nome) }}
+                          aria-label={`Remover ${vm.nome}`}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(vm.id, vm.nome) }}
                           className="p-1 text-zinc-600 hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -276,6 +289,7 @@ export default function VideomakersPage() {
             </p>
           </div>
         )}
+        </>}
       </main>
 
       {showForm && <VideomakerForm onClose={() => { setShowForm(false); mutate() }} />}
@@ -284,6 +298,13 @@ export default function VideomakersPage() {
 }
 
 function VideomakerForm({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previous = document.activeElement as HTMLElement | null
+    dialog?.showModal()
+    return () => { dialog?.close(); previous?.focus() }
+  }, [])
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     nome: "", cidade: "", estado: "", telefone: "", email: "",
@@ -326,41 +347,40 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+    <dialog ref={dialogRef} onCancel={onClose} aria-labelledby="external-form-title" className={styles.formPanel}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
-          <h2 className="font-semibold text-white">Cadastrar Videomaker</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none">&times;</button>
+          <h2 id="external-form-title" className="font-medium text-xl text-white">Cadastrar videomaker externo</h2>
+          <button aria-label="Fechar cadastro" onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none">&times;</button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-400 mb-1">Nome *</label>
-              <input required placeholder="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inp} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label htmlFor="external-nome" className="block text-xs text-zinc-400 mb-1">Nome *</label>
+              <input id="external-nome" required placeholder="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Telefone</label>
-              <input placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={inp} />
+              <label htmlFor="external-telefone" className="block text-xs text-zinc-400 mb-1">Telefone</label>
+              <input id="external-telefone" placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">E-mail</label>
-              <input type="email" placeholder="email@exemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inp} />
+              <label htmlFor="external-email" className="block text-xs text-zinc-400 mb-1">E-mail</label>
+              <input id="external-email" type="email" placeholder="email@exemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Cidade</label>
-              <input placeholder="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
+              <label htmlFor="external-cidade" className="block text-xs text-zinc-400 mb-1">Cidade</label>
+              <input id="external-cidade" placeholder="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">UF</label>
-              <input placeholder="SP" maxLength={2} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={inp} />
+              <label htmlFor="external-estado" className="block text-xs text-zinc-400 mb-1">UF</label>
+              <input id="external-estado" placeholder="SP" maxLength={2} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Valor/dia (R$)</label>
-              <input type="number" placeholder="0,00" value={form.valorDiaria} onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })} className={inp} />
+              <label htmlFor="external-valorDiaria" className="block text-xs text-zinc-400 mb-1">Valor/dia (R$)</label>
+              <input id="external-valorDiaria" type="number" placeholder="0,00" value={form.valorDiaria} onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inp}>
+              <label htmlFor="external-status" className="block text-xs text-zinc-400 mb-1">Status</label>
+              <select id="external-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inp}>
                 <option value="ativo">Ativo</option>
                 <option value="preferencial">Preferencial</option>
                 <option value="inativo">Inativo</option>
@@ -368,12 +388,12 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">CPF/CNPJ</label>
-              <input placeholder="000.000.000-00" value={form.cpfCnpj} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={inp} />
+              <label htmlFor="external-cpfCnpj" className="block text-xs text-zinc-400 mb-1">CPF/CNPJ</label>
+              <input id="external-cpfCnpj" placeholder="000.000.000-00" value={form.cpfCnpj} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Chave PIX</label>
-              <input placeholder="CPF, e-mail, telefone ou chave" value={form.chavePix} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={inp} />
+              <label htmlFor="external-chavePix" className="block text-xs text-zinc-400 mb-1">Chave PIX</label>
+              <input id="external-chavePix" placeholder="CPF, e-mail, telefone ou chave" value={form.chavePix} onChange={(e) => setForm({ ...form, chavePix: e.target.value })} className={inp} />
             </div>
           </div>
 
@@ -410,8 +430,7 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </dialog>
   )
 }
 

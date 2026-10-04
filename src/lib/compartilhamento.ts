@@ -16,7 +16,6 @@
 // PLANO-ESPELHAMENTO-CROSS-TENANT.md §2.1 para a tabela do que abre e do que não.
 import { NextResponse } from "next/server"
 import type { Prisma, EscopoCompartilhamento } from "@prisma/client"
-import type { Session } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 
@@ -117,7 +116,9 @@ const naoEncontrado = () => NextResponse.json({ error: "Não encontrado" }, { st
  *                         chamado de suporte.
  */
 export async function requireDemandaAcesso(
-  session: Session | null,
+  // Só a empresa sai da sessão (getOrgId). O Cutflow chega com a sessão do
+  // plugin no mesmo formato mínimo que getOrgId já aceita (30/09/2026).
+  session: Parameters<typeof getOrgId>[0],
   demandaId: string,
   minimo: EscopoCompartilhamento
 ): Promise<AcessoDemanda | NextResponse> {

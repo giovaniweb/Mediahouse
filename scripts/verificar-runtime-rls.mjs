@@ -73,10 +73,10 @@ for (const [tipo, chave] of [["app", "DATABASE_URL"], ["auth", "AUTH_DATABASE_UR
     const iaOk = r.rls_ia && !r.apaga_consumo_ia && !r.apaga_politica_ia && (tipo === "app" ? r.usa_consumo_ia && r.usa_politica_ia : !r.usa_consumo_ia && !r.usa_politica_ia)
     const driveOk = r.rls_copias_drive && !r.apaga_copias_drive && (tipo === "app" ? r.usa_copias_drive : !r.usa_copias_drive)
     const acervoOk = r.rls_lotes_acervo && !r.apaga_lotes_acervo && (tipo === "app" ? r.usa_lotes_acervo : !r.usa_lotes_acervo)
+    const custosOk = r.rls_custos_setor && !r.apaga_custos_setor && (tipo === "app" ? r.usa_custos_setor : !r.usa_custos_setor)
     // Formulário de interesse: a aplicação só insere lead e só chega aos limites pela função.
     const leadsOk = r.rls_leads_limites && !r.le_leads && !r.altera_leads && !r.usa_limites &&
       (tipo === "app" ? r.insere_leads && r.consome_limite : !r.insere_leads && !r.consome_limite)
-    const custosOk = r.rls_custos_setor && !r.apaga_custos_setor && (tipo === "app" ? r.usa_custos_setor : !r.usa_custos_setor)
     const ok = leadsOk && custosOk && acervoOk && driveOk && iaOk && saidasOk && inboxOk && filaOk && r.login_direto && !r.privilegio_elevado && !r.dono &&
       (tipo === "app" ? r.le_demandas && r.rls_demandas && r.rls_oauth && r.rls_auditoria && r.le_auditoria && r.insere_auditoria && !r.altera_auditoria : r.le_identidade && !r.le_demandas && !r.edita_usuarios && r.troca_por_token && !r.le_auditoria && !r.insere_auditoria && !r.altera_auditoria)
     console.log(JSON.stringify({ tipo, aprovado: !!ok, ...r }))

@@ -3,18 +3,21 @@
 import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Sparkles, Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { Plus, Search, SlidersHorizontal, XCircle, UserCheck } from "lucide-react"
+import { BoardFilters } from "@/components/kanban/BoardFilters"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO } from "@/lib/growth-conteudo"
 import { toast } from "sonner"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
+import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandasLista } from "@/components/demandas/DemandasLista"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { normalizarVisao } from "@/components/demandas/tipos-visao"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
+import { Header } from "@/components/layout/Header"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
@@ -22,7 +25,6 @@ const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-no
 // Growth (gestão de conteúdos). Reutiliza a Demanda (area="design" internamente),
 // mas com kanban próprio de 8 colunas e SEM qualquer dependência de Eventos.
 export default function GrowthKanbanPage() {
-  const router = useRouter()
   const { data: session } = useSession()
   const [showNova, setShowNova] = useState(false)
 
@@ -37,6 +39,7 @@ export default function GrowthKanbanPage() {
 
   // Mesmas duas visões do audiovisual, com preferência guardada em separado:
   // quem cuida de Growth pode querer lista e quem cuida de vídeo, kanban.
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>("todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-growth"
@@ -92,21 +95,28 @@ export default function GrowthKanbanPage() {
   const handleMove = useCallback(async (demandaId: string, novaColuna: string) => {
     const statusInterno = GROWTH_COLUNA_PARA_STATUS[novaColuna as GrowthColunaId]
     if (!statusInterno) return
-    mutate((prev: { demandas: Array<{ id: string; statusInterno: string }> }) => ({
+    const anterior = data?.demandas?.find((d: { id: string }) => d.id === demandaId)?.statusInterno
+    const atualizar = (status: string) => mutate((prev: { demandas: Array<{ id: string; statusInterno: string }> } | undefined) => prev ? ({
       ...prev,
-      demandas: prev.demandas.map((d) => d.id === demandaId ? { ...d, statusInterno } : d),
-    }), false)
-    const res = await fetch(`/api/demandas/${demandaId}/status`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ statusInterno, origem: "kanban" }),
-    })
-    if (!res.ok) {
-      // Desfaz o movimento otimista e mostra a mensagem que a API mandou —
-      // "Erro ao mover" escondia a instrução e fazia parecer falta de permissão.
-      mutate()
-      toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
-    } else mutate()
-  }, [mutate])
+      demandas: prev.demandas.map(d => d.id === demandaId ? { ...d, statusInterno: status } : d),
+    }) : prev, false)
+    await atualizar(statusInterno)
+    try {
+      const res = await fetch(`/api/demandas/${demandaId}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno, origem: "kanban" }),
+      })
+      if (!res.ok) {
+        if (anterior) await atualizar(anterior)
+        toast.error(mensagemDeErro(await erroDaResposta(res), "Não foi possível mover o card."))
+      }
+      void mutate()
+    } catch {
+      if (anterior) await atualizar(anterior)
+      void mutate()
+      toast.error("Erro de conexão. Não foi possível confirmar o movimento do card.")
+    }
+  }, [mutate, data])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm("Excluir esta demanda?")) return
@@ -119,16 +129,24 @@ export default function GrowthKanbanPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-        <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-400" /> Growth · Demandas</h1>
-        <button onClick={() => setShowNova(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><Plus className="w-4 h-4" /> Nova Demanda</button>
-      </div>
+      <Header title="Growth · Demandas" actions={<button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>} />
 
-      <div className="flex flex-wrap gap-3 px-4 py-2 text-sm">
-        <button disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button><span>Página {paginaFila} · {data?.total ?? 0} demandas na fila</span><button disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button><a href="/historico" className="underline">Histórico completo</a>
-        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="text-xs text-amber-400">Há concluídos legados sem data nesta página; continuam visíveis até revisão.</p>}
-      </div>
+      {/* Paginação da fila: discreta, porque só aparece de verdade acima de 100 demandas. */}
+      <nav aria-label="Páginas da fila" className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm text-zinc-400">
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila===1} onClick={()=>mudarPagina(paginaFila-1)}>Anterior</button>}
+        <span>{(data?.total ?? 0) > 100 ? `Página ${paginaFila} · ` : ""}{data?.total ?? 0} {(data?.total ?? 0) === 1 ? "demanda" : "demandas"} na fila</span>
+        {(data?.total ?? 0) > 100 && <button className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila*100 >= (data?.total ?? 0)} onClick={()=>mudarPagina(paginaFila+1)}>Próxima</button>}
+        <a href="/historico" className="ml-auto text-purple-300 hover:underline">Histórico completo</a>
+        {demandas.some((d:{statusVisivel:string;finalizadaEm?:string|null})=>d.statusVisivel==="finalizado" && !d.finalizadaEm) && <p className="w-full text-xs text-amber-400">Há concluídos antigos sem data nesta página; continuam visíveis até a revisão.</p>}
+      </nav>
       {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
+
+
+      <div className="px-4 pt-1 pb-3">
+        <BarraVisao
+          area="growth"
+          filters={(
+      <BoardFilters>
       <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -178,9 +196,8 @@ export default function GrowthKanbanPage() {
         <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
         <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
       </div>
-
-      <div className="px-4 pt-1 pb-3">
-        <BarraVisao
+      </BoardFilters>
+          )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
@@ -190,8 +207,9 @@ export default function GrowthKanbanPage() {
         />
       </div>
 
+      <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       {visao === "kanban" ? (
-        <div className="flex-1 min-h-0 p-4 overflow-hidden">
+        <div data-kanban-container className="flex-1 min-h-0 p-4 overflow-hidden">
           <KanbanBoard
             demandas={demandas}
             onMove={handleMove}
@@ -205,10 +223,9 @@ export default function GrowthKanbanPage() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <DemandasLista demandas={demandas} onAbrir={(id) => router.push(`/demandas/${id}`)} />
+          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
         </div>
       )}
-
 
       <NovaDemandaGrowthModal
         open={showNova}

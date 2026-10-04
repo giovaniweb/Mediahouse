@@ -66,19 +66,43 @@ describe("organização padrão das rotas públicas", () => {
   })
 })
 
-describe("sufixoOrg — propaga a empresa dona do link", () => {
-  it("fora do navegador devolve vazio, sem quebrar render no servidor", async () => {
-    const { sufixoOrg } = await import("@/lib/org-publica-cliente")
-    expect(sufixoOrg()).toBe("")
+describe("urlComOrg — propaga a empresa dona do link", () => {
+  it("fora do navegador devolve o caminho intacto, sem quebrar render no servidor", async () => {
+    const { urlComOrg } = await import("@/lib/org-publica-cliente")
+    expect(urlComOrg("/api/publico/demanda")).toBe("/api/publico/demanda")
   })
 
-  it("monta ?org= e &org= conforme o separador, escapando o valor", async () => {
-    const { sufixoOrg } = await import("@/lib/org-publica-cliente")
-    vi.stubGlobal("window", { location: { search: "?org=meu nuflow" } })
-    expect(sufixoOrg()).toBe("?org=meu%20nuflow")
-    expect(sufixoOrg("&")).toBe("&org=meu%20nuflow")
-    vi.stubGlobal("window", { location: { search: "" } })
-    expect(sufixoOrg()).toBe("")
+  it("escolhe ? ou & pelo próprio caminho, escapando o valor", async () => {
+    const { urlComOrg } = await import("@/lib/org-publica-cliente")
+    vi.stubGlobal("window", { location: { pathname: "/cadastrar-demanda", search: "?org=meu nuflow" } })
+    expect(urlComOrg("/api/publico/demanda")).toBe("/api/publico/demanda?org=meu%20nuflow")
+    // O defeito que existia: "?grupo=tipos_video?org=..." fazia a API ler um grupo inexistente.
+    expect(urlComOrg("/api/publico/parametros?grupo=tipos_video")).toBe("/api/publico/parametros?grupo=tipos_video&org=meu%20nuflow")
+    vi.stubGlobal("window", { location: { pathname: "/cadastrar-demanda", search: "" } })
+    expect(urlComOrg("/api/publico/demanda")).toBe("/api/publico/demanda")
     vi.unstubAllGlobals()
+  })
+
+  it("na área da empresa, o slug vem do caminho e vence o ?org=", async () => {
+    const { urlComOrg } = await import("@/lib/org-publica-cliente")
+    vi.stubGlobal("window", { location: { pathname: "/c/clinica-b/pedido", search: "?org=outra" } })
+    expect(urlComOrg("/api/publico/demanda")).toBe("/api/publico/demanda?org=clinica-b")
+    vi.unstubAllGlobals()
+  })
+})
+
+describe("slugDoCaminho — reconhece a área /c/<slug>", () => {
+  it("lê o slug da área e de suas páginas", async () => {
+    const { slugDoCaminho } = await import("@/lib/org-publica-cliente")
+    expect(slugDoCaminho("/c/contourline")).toBe("contourline")
+    expect(slugDoCaminho("/c/clinica-b/pedido")).toBe("clinica-b")
+    expect(slugDoCaminho("/c/Clinica-B/entrar")).toBe("clinica-b")
+  })
+
+  it("recusa o que não é área nem slug válido", async () => {
+    const { slugDoCaminho } = await import("@/lib/org-publica-cliente")
+    for (const caminho of ["/cadastrar-demanda", "/c/", "/c", "/contourline", "/c/-x", "/c/a_b", "/c/%E0%A4%A", "/c/a b", "/c/x-"]) {
+      expect(slugDoCaminho(caminho), caminho).toBeNull()
+    }
   })
 })

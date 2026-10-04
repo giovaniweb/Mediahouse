@@ -1,0 +1,396 @@
+import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { requireDemandaAcesso } from "@/lib/compartilhamento"
+import { comOrg } from "@/lib/org-contexto"
+import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
+import { emSegundoPlano } from "@/lib/notificar"
+import { resolverAlertas } from "@/lib/alertas"
+import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
+import { registrarServicoPendente } from "@/lib/custo-servico"
+import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
+import { permissoesEfetivas } from "@/lib/permissoes-server"
+import type { StatusInterno } from "@prisma/client"
+
+// Mudança de status de uma demanda (30/09/2026: corpo movido, sem alteração, de
+// app/api/demandas/[id]/status/route.ts). Saiu da rota para o Cutflow — o plugin
+// do Premiere, que entra por sessão própria (Bearer) — passar pela MESMA guarda
+// de transição, o mesmo histórico e os mesmos avisos de quem move pelo quadro.
+// Um caminho paralelo deixaria os aprovadores sem aviso quando o plugin entrega.
+export type SessaoParaStatus = { user: { id: string; organizacaoId?: string | null } }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function mudarStatus(session: SessaoParaStatus, id: string, body: any): Promise<NextResponse> {
+  // Aceita a empresa DONA e a que executa por espelhamento. Quem só acompanha
+  // recebe 403; quem não tem aresta nenhuma recebe 404 — ver lib/compartilhamento.ts.
+  const acesso = await requireDemandaAcesso(session, id, "executar")
+  if (acesso instanceof NextResponse) return acesso
+  const { papel: papelNoCard, nomeContraparte } = acesso
+
+  // A empresa DONA do card. Igual à empresa ativa quando não há espelho, e é
+  // por isso que substituir `organizacaoId` por ela aqui não muda nada para
+  // quem não usa o recurso.
+  //
+  // Tudo o que esta rota dispara pertence ao CARD, não a quem apertou o botão:
+  // a nota fiscal, o custo, o alerta, o aviso de WhatsApp. Se esses efeitos
+  // saíssem na empresa da executora, a dona pararia de receber os próprios
+  // avisos e a NF de um videomaker nasceria na empresa errada.
+  const organizacaoId = acesso.donaId
+  const { statusInterno, observacao } = body
+  // Sanitiza origem para valores válidos do enum OrigemHistorico
+  const ORIGENS_VALIDAS = ["manual", "automacao", "ia", "whatsapp", "kanban"]
+  const origemRaw = (body.origem as string) || "manual"
+  const origem = (ORIGENS_VALIDAS.includes(origemRaw) ? origemRaw : "manual") as import("@prisma/client").OrigemHistorico
+
+  if (!statusInterno) {
+    return NextResponse.json({ error: "statusInterno obrigatório" }, { status: 400 })
+  }
+
+  const demandaAtual = await prisma.demanda.findUnique({
+    where: { id },
+    include: {
+      videomaker: { select: { nome: true, telefone: true } },
+      solicitante: { select: { nome: true, telefone: true } },
+      editor: { select: { nome: true, telefone: true, whatsapp: true } },
+      // Executores do Growth. Faltavam aqui, e por isso quem ia fazer o
+      // trabalho era a única pessoa que não recebia aviso nenhum.
+      responsavel: { select: { telefone: true } },
+      responsaveis: { select: { usuario: { select: { telefone: true } } } },
+      designer: { select: { telefone: true, whatsapp: true } },
+    },
+  })
+  // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
+  if (!demandaAtual) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+
+  // ── GUARDA DE TRANSIÇÃO ────────────────────────────────────────────────────
+  // Antes daqui a rota aceitava qualquer StatusInterno de qualquer pessoa
+  // autenticada da empresa: `requireDemandaOrg` confere a EMPRESA, não o papel.
+  // As precondições de negócio (brutos, link final, impedimento) moram agora
+  // dentro da guarda, com o mesmo texto e o mesmo 400 de antes.
+  //
+  // Ver src/lib/job-transicoes.ts para por que a sequência é REGISTRADA e não
+  // recusada: `TRANSICOES_VALIDAS` bloquearia 84,5% da operação real.
+  const [vinculo, perfilVideomaker] = await Promise.all([
+    // Permissão EFETIVA: registro explícito vence; sem registro, preset do
+    // papel na empresa; sem como determinar, `null` — e `null` nega.
+    // Devolve também o papel LIDO DO BANCO: a sessão não serve como autoridade
+    // aqui, porque `auth.ts` faz `papel ?? usuario.tipo` ao emitir o token.
+    // O vínculo é na empresa ATIVA da pessoa — ela não é membro da empresa dona
+    // quando está executando por espelhamento, e perguntar pela dona devolveria
+    // null, que a guarda trata como "não determinável" e NEGA.
+    permissoesEfetivas(session.user.id, acesso.organizacaoId),
+    prisma.videomaker.findFirst({ where: { usuarioId: session.user.id }, select: { id: true } }).catch(() => null),
+  ])
+
+  const veredito = podeTransicionar({
+    statusAtual: demandaAtual.statusInterno,
+    novoStatus: statusInterno,
+    usuario: {
+      id: session.user.id,
+      papel: vinculo?.papel ?? null,
+      permissoes: vinculo?.permissoes ?? null,
+      videomakerId: perfilVideomaker?.id ?? null,
+      origem: papelNoCard,
+    },
+    demanda: {
+      videomakerId: demandaAtual.videomakerId,
+      editorId: demandaAtual.editorId,
+      linkBrutos: demandaAtual.linkBrutos,
+      linkFolderBrutos: demandaAtual.linkFolderBrutos,
+      linkFinal: demandaAtual.linkFinal,
+      motivoImpedimento: demandaAtual.motivoImpedimento,
+    },
+    entrada: { linkBrutos: body.linkBrutos, linkFinal: body.linkFinal, observacao },
+  })
+
+  if (!veredito.ok) {
+    // Precondição continua 400 (é dado que falta); autoridade é 403.
+    const http = veredito.codigo === "precondicao" || veredito.codigo === "status_inexistente" ? 400 : 403
+    return NextResponse.json({ error: veredito.motivo }, { status: http })
+  }
+
+  // Quando há convite formal, a ação do job usa o mesmo aceite do link e WhatsApp.
+  if (["videomaker_aceitou", "videomaker_recusou"].includes(statusInterno) && demandaAtual.videomakerId && !veredito.noop) {
+    try {
+      const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
+        const convites = await tx.conviteVideomaker.findMany({where:{demandaId:id,videomakerId:demandaAtual.videomakerId!,status:"pendente",demanda:{organizacaoId}},take:2})
+        if (!convites.length) {
+          if(await tx.conviteVideomaker.count({where:{demandaId:id,videomakerId:demandaAtual.videomakerId!,demanda:{organizacaoId}}})) throw new ConviteInvalido("Nenhum convite pendente. Solicite um novo convite à equipe.")
+          return null // Legados sem convite: transição operacional abaixo.
+        }
+        if (convites.length!==1) throw new ConviteInvalido("Há mais de um convite. Responda pelo link do convite correto.")
+        await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:demandaAtual.videomakerId!,
+          usuarioId:session.user.id,acao:statusInterno==="videomaker_aceitou" ? "aceitar" : "recusar",origem:"manual"})
+        return tx.demanda.findUniqueOrThrow({where:{id,organizacaoId}})
+      }))
+      if(resultado) return NextResponse.json(resultado)
+    } catch(e) {
+      if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
+      throw e
+    }
+  }
+
+  // Telemetria da sequência: é assim que se descobre qual é a matriz verdadeira
+  // antes de um dia ligá-la como porta.
+  for (const aviso of veredito.avisos) {
+    console.info(`[Transicao] ${demandaAtual.codigo} ${demandaAtual.statusInterno}->${statusInterno} ${aviso} (autor ${session.user.id})`)
+  }
+
+  // Pedir o que já vale não é erro, mas também não pode disparar histórico novo
+  // nem repetir notificação (§53). Antes, `revisao_pendente -> revisao_pendente`
+  // mandava WhatsApp de novo — são 46 casos desses na base.
+  if (veredito.noop) {
+    // Mesma forma que o caminho normal devolve (a demanda, sem as relações que
+    // o `include` acima carregou para as notificações) — duas formas na mesma
+    // rota é armadilha para quem um dia ler este corpo.
+    const { videomaker: _v, solicitante: _s, editor: _e, responsavel: _r,
+            responsaveis: _rs, designer: _d, ...semRelacoes } = demandaAtual
+    return NextResponse.json(semRelacoes)
+  }
+  // Growth: NÃO se exige a arte para mover para "Para aprovação".
+  //
+  // A regra existiu de 16 a 25/08/2026 e foi retirada depois de duas medições.
+  // A primeira: o cliente nunca esteve em risco — /api/aprovacao-video exige o
+  // arquivo para criar o link, então link vazio é impossível por construção. O
+  // que a trava protegia era a leitura interna do quadro, não o cliente.
+  //
+  // A segunda: ela caía sobre o caminho normal, não sobre a exceção. Dos 10
+  // cards em "Fazendo", 10 estavam sem arte. Uma trava na maioria dos
+  // movimentos é vivida como sistema quebrado, e vira contorno — foi o que
+  // aconteceu com as tarefas de CRM criadas como "post".
+  //
+  // O que ficou no lugar: o card diz a verdade. Quem está em "Para aprovação"
+  // sem link do cliente aparece marcado no kanban (ver naoEnviadoAoCliente em
+  // lib/growth-kanban.ts). A coluna para de mentir porque o card fala, não
+  // porque o sistema recusa.
+
+  const novoStatusVisivel = STATUS_PARA_COLUNA[statusInterno as StatusInterno]
+  if (!novoStatusVisivel) {
+    return NextResponse.json({ error: `Status "${statusInterno}" inválido` }, { status: 400 })
+  }
+
+  try {
+    const [demanda] = await prisma.$transaction([
+      prisma.demanda.update({
+        where: { id, statusInterno: demandaAtual.statusInterno, updatedAt: demandaAtual.updatedAt },
+        data: {
+          statusInterno: statusInterno as StatusInterno,
+          statusVisivel: novoStatusVisivel,
+          // Marcar data de finalização ao chegar em "finalizado"
+          ...marcadorConclusao(demandaAtual, novoStatusVisivel),
+          ...(body.linkBrutos && { linkBrutos: body.linkBrutos }),
+          ...(body.linkFinal && { linkFinal: body.linkFinal }),
+          ...(body.linkPostagem && { linkPostagem: body.linkPostagem }),
+          ...(body.postagemTipo && { postagemTipo: body.postagemTipo }),
+          // Auto-setar dataPostagem ao marcar como postado
+          ...(statusInterno === "postado" ? { dataPostagem: new Date() } : {}),
+          ...(observacao && statusInterno === "impedimento" && { motivoImpedimento: observacao }),
+        },
+      }),
+      prisma.historicoStatus.create({
+        data: {
+          demandaId: id,
+          statusAnterior: demandaAtual.statusInterno,
+          statusNovo: statusInterno,
+          usuarioId: session.user.id,
+          origem,
+          observacao,
+        },
+      }),
+    ])
+
+    // ── Auto-aprovar AprovacaoVideo quando vai para Para Postar ───────────────
+    if (novoStatusVisivel === "para_postar") {
+      try {
+        const aprovacoesPendentes = await prisma.aprovacaoVideo.findMany({
+          where: { demandaId: id, status: "pendente" },
+          select: { id: true, urlVideo: true, demandaId: true },
+        })
+        if (aprovacoesPendentes.length > 0) {
+          // Marcar como aprovadas (síncrono, antes da resposta)
+          await prisma.aprovacaoVideo.updateMany({
+            where: { demandaId: id, status: "pendente" },
+            data: { status: "aprovado", aprovadoPor: "Sistema (Para Postar)" },
+          })
+          await prisma.alertaIA.create({
+            data: {
+              organizacaoId,
+              demandaId: id,
+              tipoAlerta: "video_aprovado",
+              mensagem: `✅ ${aprovacoesPendentes.length} vídeo(s) aprovado(s) automaticamente ao mover para Para Postar`,
+              severidade: "info",
+            },
+          }).catch(() => null)
+        }
+      } catch (e) {
+        console.error("[Status] Erro auto-aprovação para_postar:", e)
+      }
+    }
+
+    // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
+    if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {
+      // `brutos_enviados` é o único destes blocos que o espelho alcança — os
+      // outros dependem de `para_postar`/`finalizado`, que estão fora da lista
+      // do executor. Por isso ele roda declarando a empresa da dona: a NF e o
+      // WhatsApp que ela dispara são dela.
+      emSegundoPlano(() => comOrg(organizacaoId, async () => {
+        try {
+          const nfExistente = await prisma.notaFiscalUpload.findFirst({
+            where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+          })
+          const nf = nfExistente ?? await prisma.notaFiscalUpload.create({
+            data: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+          })
+          // Enviar link da NF para o videomaker via WhatsApp
+          if (demandaAtual.videomaker?.telefone) {
+            const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
+            const nfLink = `${baseUrl}/nf-upload/${nf.token}`
+            const msg =
+              `🧾 *NuFlow — Brutos Recebidos!*\n\n` +
+              `📋 *${demandaAtual.codigo}* — ${demandaAtual.titulo}\n\n` +
+              `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
+              `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +
+              `_O pagamento é processado em até 15 dias após o recebimento da NF._`
+            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId)
+          }
+        } catch (e) {
+          console.error("[Status] Erro ao criar NF/enviar WA:", e)
+        }
+      }), "nf-upload-brutos")
+    }
+
+    // ── Atualizar ultimoConteudo nos produtos ao finalizar ────────────────────
+    if (novoStatusVisivel === "finalizado") {
+      emSegundoPlano(async () => {
+        try {
+          const produtosVinculados = await prisma.demandaProduto.findMany({
+            where: { demandaId: id },
+            select: { produtoId: true },
+          })
+          if (produtosVinculados.length > 0) {
+            await prisma.produto.updateMany({
+              where: { id: { in: produtosVinculados.map((p) => p.produtoId) } },
+              data: { ultimoConteudo: new Date() },
+            })
+          }
+        } catch (e) {
+          console.error("[Status] Erro ao atualizar ultimoConteudo:", e)
+        }
+      }, "atualizar-produtos")
+    }
+
+    // ── Auto-criar CustoVideomaker ao finalizar ───────────────────────────────
+    if (novoStatusVisivel === "finalizado" && demandaAtual.videomakerId) {
+      await registrarServicoPendente(prisma, organizacaoId, id, demandaAtual.videomakerId)
+    }
+
+    // ── Notificações WhatsApp: rodam DEPOIS da resposta, mas com a função viva.
+    // Antes eram `void` solto e a instância congelava antes do envio sair.
+    // Quem mexeu no card: usado para não mandar o aviso de volta para ele e para
+    // decidir se a gestão precisa saber (executor mexendo é notícia; gestor
+    // mexendo não precisa ser anunciado para os outros gestores).
+    const autor = await prisma.usuario.findUnique({
+      where: { id: session.user.id },
+      select: { nome: true, telefone: true, tipo: true },
+    }).catch(() => null)
+
+    // A demanda mudou de estado — o que estava pendente por causa do estado
+    // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
+    emSegundoPlano(() => comOrg(organizacaoId, () => resolverAlertas(organizacaoId, id)), "resolver-alertas")
+
+    // O movimento do espelho tem que chegar na dona — é o ponto do recurso.
+    // Sem isto, a executora avisa a si mesma e a Contourline não fica sabendo.
+    if (papelNoCard === "espelho") {
+      emSegundoPlano(
+        () => avisarOrigemDoEspelho({
+          demandaId: id,
+          codigo: demandaAtual.codigo,
+          titulo: demandaAtual.titulo,
+          donaId: organizacaoId,
+          nomeExecutora: nomeContraparte ?? "Empresa parceira",
+          statusNovo: statusInterno,
+        }),
+        "aviso-espelho-origem"
+      )
+    }
+
+    emSegundoPlano(() => notificarMudancaKanban({
+      statusNovo: statusInterno,
+      codigo: demandaAtual.codigo,
+      titulo: demandaAtual.titulo,
+      demandaId: id,
+      organizacaoId,
+      telefoneVideomaker: demandaAtual.videomaker?.telefone ?? null,
+      telefoneEditor: demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
+      telefonesExecutores: [
+        ...demandaAtual.responsaveis.map((r) => r.usuario.telefone),
+        demandaAtual.responsavel?.telefone ?? null,
+        demandaAtual.designer?.whatsapp ?? demandaAtual.designer?.telefone ?? null,
+      ].filter((t): t is string => !!t),
+      telefoneSolicitanteSistema: demandaAtual.solicitante?.telefone ?? null,
+      telefoneSolicitanteWhatsapp: demandaAtual.telefoneSolicitante ?? null,
+      autorTelefone: autor?.telefone ?? null,
+      autorNome: (autor?.nome ?? "Alguém").split(" ")[0],
+      autorEhGestor: autor?.tipo === "admin" || autor?.tipo === "gestor",
+      // `extra` vira observação OU link final — nessa ordem: um motivo de
+      // impedimento escrito à mão é mais útil que um link que a mensagem
+      // do papel já carrega quando precisa.
+      extra: observacao ?? demandaAtual.motivoImpedimento ?? body.linkFinal ?? demandaAtual.linkFinal,
+      // Growth muda o substantivo do aviso: quem pediu uma arte recebia
+      // "Seu vídeo está pronto".
+      isGrowth: demandaAtual.area === "design",
+      // O que o solicitante abre. A página de aprovação primeiro; o arquivo
+      // final como reserva. Sem nenhum dos dois, o aviso de "pronto para
+      // revisão" não é enviado — ver revisao_pendente em lib/kanban-avisos.ts.
+      linkAprovacao: demandaAtual.linkCliente ?? body.linkFinal ?? demandaAtual.linkFinal ?? null,
+    }), "mudanca-kanban")
+
+    return NextResponse.json(demanda)
+  } catch (e) {
+    console.error("[Status PATCH] Erro na transação:", e)
+    const msg = e instanceof Error ? e.message : "Erro ao atualizar status"
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+/**
+ * Busca os telefones que dependem do banco e delega a decisão de quem recebe o
+ * quê para @/lib/kanban-avisos (função pura, coberta por testes).
+ */
+async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGestores" | "telefonesSocial"> & {
+  demandaId: string
+  organizacaoId: string
+}) {
+  const { demandaId, organizacaoId, ...dados } = aviso
+  try {
+    const gestores = await prisma.usuario.findMany({
+      where: {
+        tipo: { in: ["admin", "gestor"] as import("@prisma/client").TipoUsuario[] },
+        status: "ativo",
+        organizacoes: { some: { organizacaoId } },
+      },
+      select: { telefone: true },
+    })
+
+    const social = dados.statusNovo === "postagem_pendente"
+      ? await prisma.usuario.findMany({
+          where: { tipo: "social" as import("@prisma/client").TipoUsuario, status: "ativo", organizacoes: { some: { organizacaoId } } },
+          select: { telefone: true },
+        })
+      : []
+
+    const destinatarios = destinatariosDoAviso({
+      ...dados,
+      telefonesGestores: gestores.map((g) => g.telefone).filter((t): t is string => !!t),
+      telefonesSocial: social.map((s) => s.telefone).filter((t): t is string => !!t),
+    })
+
+    await Promise.allSettled(
+      destinatarios.map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId))
+    )
+  } catch (e) {
+    console.error("[Kanban Notify]", e)
+  }
+}

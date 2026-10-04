@@ -8,8 +8,9 @@
 // O texto do "tem certeza?" fica com quem chama, porque varia (o audiovisual
 // precisa avisar sobre os anexos que não voltam).
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useId } from "react"
 import { X, Plus } from "lucide-react"
+import styles from "./DemandSurface.module.css"
 import { cn } from "@/lib/utils"
 
 interface ModalFormularioProps {
@@ -30,6 +31,8 @@ export function ModalFormulario({
   aberto, titulo, icone: Icone = Plus, aoTentarFechar, aoConfirmar,
   rotuloConfirmar, ocupado, children, className,
 }: ModalFormularioProps) {
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   // O gesto de clique começou no fundo? (ver comentário do backdrop, mais abaixo)
   const pressionouNoFundo = useRef(false)
@@ -57,6 +60,24 @@ export function ModalFormulario({
     return () => window.removeEventListener("keydown", handler)
   }, [aberto])
 
+  useEffect(() => {
+    if (!aberto) return
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = dialogRef.current
+    const controls = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? []).filter(element => element.getClientRects().length > 0)
+    controls()[0]?.focus()
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return
+      const elements = controls()
+      const first = elements[0], last = elements[elements.length - 1]
+      if (!first) { event.preventDefault(); dialog?.focus(); return }
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus() }
+    }
+    dialog?.addEventListener("keydown", trap)
+    return () => { dialog?.removeEventListener("keydown", trap); previous?.focus() }
+  }, [aberto])
+
   if (!aberto) return null
 
   // O evento `click` tem como alvo o ancestral comum do mousedown e do mouseup:
@@ -66,21 +87,22 @@ export function ModalFormulario({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm", styles.overlay)}
       onMouseDown={e => { pressionouNoFundo.current = e.target === overlayRef.current }}
       onClick={e => {
         if (e.target === overlayRef.current && pressionouNoFundo.current) aoTentarFechar()
         pressionouNoFundo.current = false
       }}
     >
-      <div className={cn(
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={cn(
         "flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/60",
+        styles.surface,
         className
       )}>
 
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/80 px-7 py-5">
-          <h2 className="flex items-center gap-2.5 text-lg font-semibold text-zinc-50">
+          <h2 id={titleId} className="flex items-center gap-2.5 text-lg font-semibold text-zinc-50">
             <Icone className="h-5 w-5 text-purple-400" />
             {titulo}
           </h2>

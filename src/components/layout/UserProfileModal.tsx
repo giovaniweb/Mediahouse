@@ -1,23 +1,25 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { X, User, Lock, Trash2, Save, Eye, EyeOff, Camera, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { iniciais } from "@/lib/pessoas-ui"
 import Image from "next/image"
+import styles from "./ProfileSurface.module.css"
 
 interface Props {
-  onClose: () => void
+  onClose?: () => void
+  mode?: "modal" | "page"
 }
 
-type Tab = "perfil" | "senha" | "conta"
+type Tab = "resumo" | "perfil" | "senha" | "conta"
 
-export function UserProfileModal({ onClose }: Props) {
+export function UserProfileModal({ onClose, mode = "modal" }: Props) {
   const { data: session, update } = useSession()
   const user = session?.user
 
-  const [tab, setTab] = useState<Tab>("perfil")
+  const [tab, setTab] = useState<Tab>(mode === "page" ? "resumo" : "perfil")
   const [loading, setLoading] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
@@ -27,6 +29,22 @@ export function UserProfileModal({ onClose }: Props) {
   const [nome, setNome] = useState(user?.name ?? "")
   const [telefone, setTelefone] = useState("")
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.image ?? null)
+
+  const [social, setSocial] = useState({ instagramUrl: "", linkedinUrl: "", portfolioUrl: "", bio: "" })
+  const [profileReady, setProfileReady] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [reload, setReload] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch("/api/usuarios/me", { signal: controller.signal }).then(async res => {
+      if (!res.ok) throw new Error("Falha ao carregar perfil")
+      const { usuario } = await res.json()
+      setNome(usuario.nome); setTelefone(usuario.telefone ?? ""); setAvatarPreview(usuario.avatarUrl ?? null)
+      setSocial({ instagramUrl: usuario.instagramUrl ?? "", linkedinUrl: usuario.linkedinUrl ?? "", portfolioUrl: usuario.portfolioUrl ?? "", bio: usuario.bio ?? "" })
+      setProfileReady(true); setLoadError(false)
+    }).catch(() => { if (!controller.signal.aborted) setLoadError(true) })
+    return () => controller.abort()
+  }, [reload])
 
   // Senha
   const [senhaAtual, setSenhaAtual] = useState("")
@@ -81,7 +99,7 @@ export function UserProfileModal({ onClose }: Props) {
       const res = await fetch("/api/usuarios/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, telefone }),
+        body: JSON.stringify({ nome, telefone, ...social }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       await update({ name: nome })
@@ -116,31 +134,35 @@ export function UserProfileModal({ onClose }: Props) {
   const letras = iniciais(nome || user?.name || "")
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: "perfil", label: "Meu Perfil", icon: User },
-    { id: "senha", label: "Alterar Senha", icon: Lock },
+    ...(mode === "page" ? [{ id: "resumo" as const, label: "Visão geral", icon: User }] : []),
+    { id: "perfil", label: "Dados pessoais", icon: User },
+    { id: "senha", label: "Segurança", icon: Lock },
     { id: "conta", label: "Conta", icon: Trash2 },
   ]
 
   const inputCls = "w-full border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-zinc-800 text-zinc-200 placeholder-zinc-500"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+    <div role={mode === "modal" ? "dialog" : undefined} aria-modal={mode === "modal" ? true : undefined} aria-label="Minha conta" className={mode === "page" ? styles.page : "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"}>
+      <div className={mode === "page" ? styles.surface : "bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90dvh]"}>
+        {mode === "page" && <><p className={styles.eyebrow}>SEU ESPAÇO NO NUFLOW</p><h1 className={styles.title}>Meu perfil</h1><p className={styles.subtitle}>Seu trabalho, suas conexões e suas preferências.</p><section className={styles.hero}>{avatarPreview ? <Image src={avatarPreview} alt="Foto de perfil" width={72} height={72} unoptimized className={styles.initials}/> : <span className={styles.initials}>{letras}</span>}<div><h2>{profileReady ? nome : user?.name}</h2><p>{user?.email}</p><span className={styles.badge}>{user?.tipo}</span></div></section></>}
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 className="font-semibold text-zinc-100">Configurações da Conta</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-200">
+        {mode === "modal" && <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <h2 className="font-semibold text-zinc-100">Minha conta</h2>
+          <button aria-label="Fechar minha conta" onClick={onClose} className="text-zinc-400 hover:text-zinc-200">
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        }
         {/* Tabs */}
-        <div className="flex border-b border-zinc-800">
+        <div className={mode === "page" ? styles.tabs : "flex border-b border-zinc-800"}>
           {tabs.map((t) => {
             const Icon = t.icon
             return (
               <button
                 key={t.id}
+                aria-pressed={tab === t.id}
                 onClick={() => { setTab(t.id); setMsg(null) }}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors border-b-2",
@@ -156,10 +178,10 @@ export function UserProfileModal({ onClose }: Props) {
           })}
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className={mode === "page" ? styles.body : "p-6 space-y-4"}>
           {/* Flash message */}
           {msg && (
-            <div className={cn(
+            <div role={msg.type === "err" ? "alert" : "status"} className={cn(
               "text-sm px-3 py-2 rounded-lg border",
               msg.type === "ok"
                 ? "bg-green-900/30 text-green-400 border-green-800"
@@ -169,8 +191,11 @@ export function UserProfileModal({ onClose }: Props) {
             </div>
           )}
 
+          {loadError && <div role="alert" className="text-sm text-amber-300">Não foi possível carregar seu perfil. <button onClick={() => setReload(v => v + 1)} className="underline">Tentar novamente</button></div>}
+          {!profileReady && !loadError && <p role="status">Carregando seu perfil…</p>}
+          {tab === "resumo" && profileReady && <section className={styles.overview}><h2>Sobre você</h2><p>{social.bio || "Adicione sua apresentação profissional em Dados pessoais."}</p><dl><div><dt>E-mail</dt><dd>{user?.email || "Não informado"}</dd></div><div><dt>WhatsApp</dt><dd>{telefone || "Não informado"}</dd></div></dl><h3>Onde encontrar seu trabalho</h3>{!social.instagramUrl && !social.linkedinUrl && !social.portfolioUrl && <p>Seus links profissionais aparecerão aqui quando você os cadastrar.</p>}<div className={styles.links}>{([["Instagram", social.instagramUrl], ["LinkedIn", social.linkedinUrl], ["Portfólio", social.portfolioUrl]]).filter(([, url]) => /^https?:\/\//i.test(url)).map(([label, url]) => <a key={label} href={url} target="_blank" rel="noopener noreferrer">{label} ↗</a>)}</div><button className={styles.edit} onClick={() => setTab("perfil")}>Editar dados pessoais</button></section>}
           {/* ─── Perfil ─── */}
-          {tab === "perfil" && (
+          {tab === "perfil" && profileReady && (
             <div className="space-y-4">
               {/* Avatar com upload */}
               <div className="flex items-center gap-4">
@@ -193,8 +218,8 @@ export function UserProfileModal({ onClose }: Props) {
                     type="button"
                     onClick={() => fileRef.current?.click()}
                     disabled={uploadingFoto}
-                    className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                    title="Alterar foto"
+                    className="absolute inset-0 rounded-full bg-black/60 opacity-70 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity flex items-center justify-center"
+                    aria-label="Alterar foto" title="Alterar foto"
                   >
                     {uploadingFoto ? (
                       <Loader2 className="w-5 h-5 text-white animate-spin" />
@@ -216,28 +241,38 @@ export function UserProfileModal({ onClose }: Props) {
                   <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full capitalize mt-1 inline-block">
                     {user?.tipo}
                   </span>
-                  <p className="text-[11px] text-zinc-500 mt-1">Passe o mouse para trocar a foto</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">Toque na foto para alterá-la</p>
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Nome</label>
-                <input className={inputCls} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" />
+                <input aria-label="Nome" autoComplete="name" className={inputCls} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Telefone / WhatsApp</label>
-                <input className={inputCls} value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="+55 11 99999-9999" />
+                <input aria-label="Telefone / WhatsApp" autoComplete="tel" className={inputCls} value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="+55 11 99999-9999" />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">E-mail</label>
                 <input
-                  className="w-full border border-zinc-800 rounded-lg px-3 py-2 text-sm bg-zinc-900 text-zinc-500 cursor-not-allowed"
+                  aria-label="E-mail" className="w-full border border-zinc-800 rounded-lg px-3 py-2 text-sm bg-zinc-900 text-zinc-500 cursor-not-allowed"
                   value={user?.email ?? ""}
                   disabled
                 />
                 <p className="text-[11px] text-zinc-500 mt-1">Para alterar o e-mail, contate o administrador.</p>
+              </div>
+
+              <div className="border-t border-zinc-700 pt-5 space-y-4">
+                <div><h3 className="font-semibold text-zinc-100">Sobre você</h3><p className="text-xs text-zinc-400 mt-1">Sua apresentação profissional e onde encontrar seu trabalho. Campos opcionais.</p></div>
+                <label className="block text-xs text-zinc-400">Apresentação
+                  <textarea aria-label="Apresentação" maxLength={500} rows={3} className={inputCls + " mt-1"} value={social.bio} onChange={e => setSocial(v => ({ ...v, bio: e.target.value }))} placeholder="Conte um pouco sobre seu trabalho e especialidades" />
+                </label>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {([['instagramUrl','Instagram'],['linkedinUrl','LinkedIn'],['portfolioUrl','Site / Portfólio']] as const).map(([key,label]) => <label key={key} className="block text-xs text-zinc-400">{label}<input type="url" aria-label={label} className={inputCls + " mt-1"} placeholder="https://" value={social[key]} onChange={e => setSocial(v => ({ ...v, [key]: e.target.value }))} /></label>)}
+                </div>
               </div>
 
               <button
@@ -258,13 +293,13 @@ export function UserProfileModal({ onClose }: Props) {
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Senha Atual</label>
                 <div className="relative">
                   <input
-                    type={showSenha ? "text" : "password"}
+                    aria-label="Senha atual" autoComplete="current-password" type={showSenha ? "text" : "password"}
                     className={inputCls + " pr-10"}
                     value={senhaAtual}
                     onChange={(e) => setSenhaAtual(e.target.value)}
                     placeholder="••••••••"
                   />
-                  <button type="button" onClick={() => setShowSenha((v) => !v)} className="absolute right-3 top-2.5 text-zinc-400">
+                  <button aria-label={showSenha ? "Ocultar senha atual" : "Mostrar senha atual"} type="button" onClick={() => setShowSenha((v) => !v)} className="absolute right-3 top-2.5 text-zinc-400">
                     {showSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
@@ -272,12 +307,12 @@ export function UserProfileModal({ onClose }: Props) {
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Nova Senha</label>
-                <input type="password" className={inputCls} value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                <input aria-label="Nova senha" autoComplete="new-password" type="password" className={inputCls} value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-zinc-400 block mb-1">Confirmar Nova Senha</label>
-                <input type="password" className={inputCls} value={confirma} onChange={(e) => setConfirma(e.target.value)} placeholder="Repita a nova senha" />
+                <input aria-label="Confirmar nova senha" autoComplete="new-password" type="password" className={inputCls} value={confirma} onChange={(e) => setConfirma(e.target.value)} placeholder="Repita a nova senha" />
               </div>
 
               <button
@@ -300,8 +335,7 @@ export function UserProfileModal({ onClose }: Props) {
                   <div>
                     <p className="text-sm font-semibold text-red-300">Excluir Conta</p>
                     <p className="text-xs text-red-400 mt-1">
-                      Esta ação irá desativar permanentemente sua conta. Seus dados serão preservados para auditoria.
-                      Para exclusão completa, contate o administrador do sistema.
+                      A exclusão não é realizada nesta tela. Converse com o administrador da sua empresa sobre desativação e tratamento dos seus dados.
                     </p>
                   </div>
                 </div>
@@ -316,10 +350,7 @@ export function UserProfileModal({ onClose }: Props) {
               </div>
 
               <p className="text-xs text-zinc-500 text-center">
-                Para excluir sua conta, entre em contato com{" "}
-                <a href="mailto:admin@nuflow.com.br" className="text-blue-400 hover:underline">
-                  admin@nuflow.com.br
-                </a>
+                Para solicitar a desativação, procure o administrador da sua empresa.
               </p>
             </div>
           )}
