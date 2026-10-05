@@ -18,6 +18,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!["normal", "alta", "urgente"].includes(body.prioridade)) {
     return NextResponse.json({ error: "Prioridade inválida" }, { status: 400 })
   }
-  await prisma.demanda.update({ where: { id }, data: { prioridade: body.prioridade } })
+  await prisma.demanda.update({ where: { id, organizacaoId: escopo.organizacaoId }, data: { prioridade: body.prioridade } })
   return NextResponse.json({ ok: true, prioridade: body.prioridade })
 }
