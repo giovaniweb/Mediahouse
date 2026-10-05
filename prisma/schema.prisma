@@ -159,6 +159,7 @@ enum StatusIdeia {
 enum OrigemIdeia {
   whatsapp
   manual
+  publico // formulário sem login da área da empresa (/c/<slug>/ideia)
   instagram
   tiktok
   youtube
@@ -579,6 +580,11 @@ model Demanda {
   // Nota fiscal
   notaFiscalUrl  String?
   notaFiscalNome String?
+
+  // "Cobrar" do quadro da social: quantas vezes ela cobrou e quando foi a
+  // última. Uma por dia por pedido — a trava é `cobradoEm` ser de hoje.
+  cobrancas Int       @default(0)
+  cobradoEm DateTime?
 
   posicaoKanban Int? // posição dentro da coluna (para reordenação)
   trelloCardId  String? @unique // Trello card ID to prevent re-import
@@ -1421,6 +1427,18 @@ model IdeiaVideo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Quadro da social media (/social). A ideia já nasce na linha de quem a
+  // anotou (ou da linha escolhida por quem mandou); a área diz se vira pedido
+  // de vídeo (audiovisual) ou de arte (design); a data de postagem é o que a
+  // põe "No plano" — dia de calendário, sem hora. `formulario` é o formulário
+  // de demanda da área como ela deixou ao "Salvar como ideia": é o mesmo
+  // formulário que envia o pedido, e reabre igual.
+  area           AreaDemanda?
+  dataPostagem   DateTime?     @db.Date
+  formulario     Json?
+  linhaProjetoId String?
+  linhaProjeto   LinhaProjeto? @relation(fields: [linhaProjetoId], references: [id], onDelete: SetNull)
+
   usuario Usuario? @relation(fields: [usuarioId], references: [id])
   produto Produto? @relation(fields: [produtoId], references: [id])
   demanda Demanda? @relation(fields: [demandaId], references: [id])
@@ -1428,6 +1446,7 @@ model IdeiaVideo {
   organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
+  @@index([organizacaoId, linhaProjetoId])
   @@map("ideias_video")
 }
 
@@ -1490,6 +1509,8 @@ model PermissaoUsuario {
   gerenciarFornecedores Boolean @default(false)
   verDesign             Boolean @default(false)
   gerenciarDesigners    Boolean @default(false)
+  // Área Social Media (05/10/2026): Planejamento, Aprovações e Equipe da social.
+  verSocial             Boolean @default(false)
   // Cutflow (plugin do Premiere, 30/09/2026): quem pode entrar no plugin com o
   // login do NuFlow. Além disto a empresa precisa do módulo `cutflow`.
   usarCutflow           Boolean @default(false)
@@ -2194,6 +2215,7 @@ model Organizacao {
   configEmailEntrada ConfigEmailEntrada?
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
+  socialLinhas       SocialLinha[]
   videomakerVinculos VideomakerOrganizacao[]
   editorVinculos     EditorOrganizacao[]
   editorFiscais      EditorDadosFiscais[]
@@ -2405,10 +2427,33 @@ model LinhaProjeto {
 
   organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
   demandas    Demanda[]
+  ideias      IdeiaVideo[]
+  socials     SocialLinha[]
 
   @@unique([organizacaoId, nome])
   @@index([organizacaoId])
   @@map("linhas_projeto")
+}
+
+// Quem é a social media de cada linha. Ela vê e mexe no quadro /social só das
+// linhas em que está aqui; gestor e admin veem todas. Pendura no VÍNCULO com a
+// empresa (UsuarioOrganizacao), não no usuário: quem sai da empresa sai da
+// linha junto, pelo cascade, sem ninguém precisar lembrar.
+model SocialLinha {
+  id                   String   @id @default(cuid())
+  organizacaoId        String
+  usuarioOrganizacaoId String
+  linhaProjetoId       String
+  createdAt            DateTime @default(now())
+
+  organizacao Organizacao        @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  vinculo     UsuarioOrganizacao @relation(fields: [usuarioOrganizacaoId], references: [id], onDelete: Cascade)
+  linha       LinhaProjeto       @relation(fields: [linhaProjetoId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioOrganizacaoId, linhaProjetoId])
+  @@index([organizacaoId])
+  @@index([linhaProjetoId])
+  @@map("social_linhas")
 }
 
 model UsuarioOrganizacao {
@@ -2432,8 +2477,9 @@ model UsuarioOrganizacao {
   focoDesde          DateTime?
   createdAt          DateTime        @default(now())
 
-  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario      Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacao  Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  linhasSocial SocialLinha[]
 
   @@unique([usuarioId, organizacaoId])
   @@index([organizacaoId])

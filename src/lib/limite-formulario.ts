@@ -15,6 +15,9 @@ import { consumirLimitePublico, hashDoIp } from "@/lib/limite-publico"
 export const LIMITES_FORMULARIO = {
   demanda: { max: 20, janelaSeg: 60 * 60 },
   videomaker: { max: 5, janelaSeg: 60 * 60 },
+  // Ideia/solicitação para a social (/c/<slug>/ideia): não avisa ninguém, mas
+  // enche a coluna Ideias — mesmo teto do pedido.
+  ideia: { max: 20, janelaSeg: 60 * 60 },
 } as const
 
 export const MSG_EXCESSO = "Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo — o que você preencheu continua aqui."

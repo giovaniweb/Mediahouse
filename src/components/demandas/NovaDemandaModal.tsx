@@ -14,6 +14,7 @@ import { hojeEmSaoPaulo } from "@/lib/datas"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
 import { useRascunho } from "@/lib/use-rascunho"
+import { salvarIdeiaSocial, useMudouDesdeAbrir, valoresDaIdeia, type OrigemSocial } from "@/components/social/ideiaNoFormulario"
 import {
   Secao, Campo, Seta, Chip,
   inputClass, selectClass, erroClass, MOTIVOS_URGENCIA, COR_PRIORIDADE,
@@ -35,6 +36,8 @@ interface NovaDemandaModalProps {
    * os mesmos valores que /api/equipe-disponivel devolve.
    */
   prefill?: { videomakerId?: string; editorId?: string }
+  /** Aberto pelo quadro da social: o mesmo formulário salva ideia ou envia o pedido. */
+  social?: OrigemSocial
 }
 
 type TipoDemanda = "video" | "cobertura"
@@ -68,7 +71,7 @@ interface RascunhoAudiovisual {
   clienteEmail: string
 }
 
-export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalProps) {
+export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemandaModalProps) {
   const router = useRouter()
 
   // ── Tipo de demanda ──────────────────────────────────────────────────────
@@ -160,9 +163,44 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
     clienteNome.trim() || clienteTelefone.trim() || clienteEmail.trim()
   )
 
+  function restaurar(salvo: Partial<RascunhoAudiovisual>) {
+    setTipo(salvo.tipo ?? "video")
+    setTitulo(salvo.titulo ?? "")
+    setDescricao(salvo.descricao ?? "")
+    setPrioridade(salvo.prioridade ?? "normal")
+    setMotivoUrgencia(salvo.motivoUrgencia ?? "")
+    setDataLimite(salvo.dataLimite ?? "")
+    setProdutoIds(salvo.produtoIds ?? [])
+    setClassificacao(salvo.classificacao ?? "")
+    // Filtra vazios: o rascunho da versão anterior guardava `referencias: [""]`
+    // (o campo começava com uma linha em branco). Restaurado cru, cada string
+    // vazia virava um chip só com o "×", sem texto — lixo visual que o usuário
+    // não sabe de onde veio.
+    setReferencias(
+      Array.isArray(salvo.referencias)
+        ? salvo.referencias.filter((r) => typeof r === "string" && r.trim() !== "")
+        : []
+    )
+    setNovaReferencia(salvo.novaReferencia ?? "")
+    setTipoVideo(salvo.tipoVideo ?? "")
+    setFormato(salvo.formato ?? "9:16")
+    setCidade(salvo.cidade ?? "")
+    setLocalEvento(salvo.localEvento ?? "")
+    setDataEvento(salvo.dataEvento ?? "")
+    setHoraEvento(salvo.horaEvento ?? "")
+    setLinkBrutos(salvo.linkBrutos ?? "")
+    setVideomakerId(salvo.videomakerId ?? "")
+    setEditorId(salvo.editorId ?? "")
+    setClienteNome(salvo.clienteNome ?? "")
+    setClienteTelefone(salvo.clienteTelefone ?? "")
+    setClienteEmail(salvo.clienteEmail ?? "")
+    setAnexos([])
+    setErrors({})
+  }
+
   const { rascunhoRecuperado, limpar: limparRascunho, descartar } = useRascunho<RascunhoAudiovisual>({
     chave: RASCUNHO_KEY,
-    aberto: open,
+    aberto: open && !social,
     temConteudo,
     // Anexos ficam de fora: File não sobrevive ao localStorage — por isso o texto
     // do aviso de fechamento não promete os arquivos.
@@ -172,41 +210,18 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
       dataEvento, horaEvento, linkBrutos, videomakerId, editorId,
       clienteNome, clienteTelefone, clienteEmail,
     },
-    aoRestaurar: (salvo) => {
-      setTipo(salvo.tipo ?? "video")
-      setTitulo(salvo.titulo ?? "")
-      setDescricao(salvo.descricao ?? "")
-      setPrioridade(salvo.prioridade ?? "normal")
-      setMotivoUrgencia(salvo.motivoUrgencia ?? "")
-      setDataLimite(salvo.dataLimite ?? "")
-      setProdutoIds(salvo.produtoIds ?? [])
-      setClassificacao(salvo.classificacao ?? "")
-      // Filtra vazios: o rascunho da versão anterior guardava `referencias: [""]`
-      // (o campo começava com uma linha em branco). Restaurado cru, cada string
-      // vazia virava um chip só com o "×", sem texto — lixo visual que o usuário
-      // não sabe de onde veio.
-      setReferencias(
-        Array.isArray(salvo.referencias)
-          ? salvo.referencias.filter((r) => typeof r === "string" && r.trim() !== "")
-          : []
-      )
-      setNovaReferencia(salvo.novaReferencia ?? "")
-      setTipoVideo(salvo.tipoVideo ?? "")
-      setFormato(salvo.formato ?? "9:16")
-      setCidade(salvo.cidade ?? "")
-      setLocalEvento(salvo.localEvento ?? "")
-      setDataEvento(salvo.dataEvento ?? "")
-      setHoraEvento(salvo.horaEvento ?? "")
-      setLinkBrutos(salvo.linkBrutos ?? "")
-      setVideomakerId(salvo.videomakerId ?? "")
-      setEditorId(salvo.editorId ?? "")
-      setClienteNome(salvo.clienteNome ?? "")
-      setClienteTelefone(salvo.clienteTelefone ?? "")
-      setClienteEmail(salvo.clienteEmail ?? "")
-      setAnexos([])
-      setErrors({})
-    },
+    aoRestaurar: restaurar,
   })
+
+  // Pelo quadro da social o rascunho é a própria ideia: o formulário abre com o
+  // que ela guardou, e o navegador não guarda nada por cima.
+  const [ideiaId, setIdeiaId] = useState(social?.ideiaId)
+  const [ideiaCarregada, setIdeiaCarregada] = useState(false)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega a ideia ao abrir, como o rascunho
+    if (open && social) { restaurar(valoresDaIdeia<RascunhoAudiovisual>(social, "dataLimite")); setIdeiaCarregada(true) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const mudou = useMudouDesdeAbrir(ideiaCarregada, { titulo, descricao, prioridade, dataLimite, tipo, tipoVideo, formato, produtoIds, classificacao, referencias, novaReferencia, anexos: anexos.length })
 
   function tentarFechar() {
     // O aviso não pode prometer os anexos: File não sobrevive ao localStorage,
@@ -214,6 +229,10 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
     const avisoAnexos = anexos.length > 0
       ? ` Os ${anexos.length} arquivo(s) selecionado(s) precisarão ser anexados de novo.`
       : ""
+    if (social) {
+      if (!social.somenteLeitura && mudou && !confirm("Fechar sem salvar? O que você mudou agora se perde.")) return
+      return onClose()
+    }
     if (temConteudo && !confirm(`Fechar sem criar a demanda? O texto fica guardado e volta na próxima vez que abrir.${avisoAnexos}`)) {
       return
     }
@@ -269,6 +288,44 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
     return Object.keys(errs).length === 0
   }
 
+  // ── Quadro da social: a ideia ─────────────────────────────────────────────
+  // Leva o formulário inteiro (menos os anexos, que só existem depois do
+  // pedido), para reabrir igual. A data do formulário é a data da postagem.
+  async function gravarIdeia(): Promise<string> {
+    const id = await salvarIdeiaSocial(social!, ideiaId, {
+      titulo: titulo.trim(),
+      descricao: descricao.trim(),
+      linkReferencia: referencias[0] ?? (novaReferencia.trim() || null),
+      area: "audiovisual",
+      dataPostagem: dataLimite || null,
+      formulario: {
+        tipo, titulo, descricao, prioridade, motivoUrgencia, dataLimite, produtoIds,
+        classificacao, referencias, novaReferencia, tipoVideo, formato, cidade, localEvento,
+        dataEvento, horaEvento, linkBrutos, videomakerId, editorId,
+        clienteNome, clienteTelefone, clienteEmail,
+      },
+    })
+    setIdeiaId(id)
+    return id
+  }
+
+  async function salvarComoIdeia() {
+    if (titulo.trim().length < 3) {
+      setErrors({ titulo: "Mínimo 3 caracteres" })
+      return toast.error("Dê um título à ideia.")
+    }
+    setSaving(true)
+    try {
+      await gravarIdeia()
+      toast.success(dataLimite ? "Ideia salva no plano." : "Ideia salva.")
+      social!.aoTerminar({ tipo: "ideia" })
+    } catch (e) {
+      toast.error(mensagemDeErro(e, "Não foi possível salvar a ideia."))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ── Submit ───────────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!validate()) {
@@ -277,6 +334,8 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
     }
     setSaving(true)
     try {
+      // Pela social, a ideia é gravada antes: se o pedido falhar, nada se perde.
+      const ideiaDoPedido = social ? await gravarIdeia() : undefined
       const referencia = juntarReferencias(referencias, novaReferencia)
       const departamento = tipo === "cobertura" ? "eventos" : "growth"
       const tipoVideoFinal = tipo === "cobertura" ? "cobertura_evento" : tipoVideo
@@ -308,6 +367,7 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
         ...(videomakerId ? { videomakerId } : {}),
         ...(editorId ? { editorId } : {}),
+        ...(ideiaDoPedido ? { ideiaId: ideiaDoPedido } : {}),
       }
 
       const res = await fetch("/api/demandas", {
@@ -325,8 +385,8 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
       // cast mentia para o TypeScript. O usuário via "[object Object]".
       if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a demanda.")
 
-      toast.success(`Demanda ${json.codigo ?? ""} criada!`)
-      limparRascunho()
+      toast.success(social ? `Pedido ${json.codigo ?? ""} enviado ao Audiovisual.` : `Demanda ${json.codigo ?? ""} criada!`)
+      if (!social) limparRascunho()
 
       // Anexos vão depois da criação — a demanda precisa existir para receber o
       // upload. Falha de anexo não desfaz a demanda: avisamos e seguimos, já que
@@ -339,6 +399,10 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
         else toast.success(`${anexos.length} anexo(s) enviado(s)`)
       }
 
+      if (social) {
+        social.aoTerminar({ tipo: "pedido", codigo: typeof json.codigo === "string" ? json.codigo : undefined })
+        return
+      }
       onClose()
       router.push(`/demandas/${json.id}`)
     } catch (e) {
@@ -356,19 +420,29 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
   return (
     <ModalFormulario
       aberto={open}
-      titulo="Nova Demanda"
+      titulo={social ? `Vídeo · ${social.linhaNome}` : "Nova Demanda"}
       icone={Plus}
       aoTentarFechar={tentarFechar}
       aoConfirmar={handleSubmit}
       ocupado={ocupado}
+      acaoSecundaria={social ? { rotulo: "Salvar como ideia", aoClicar: salvarComoIdeia } : undefined}
+      semConfirmar={social?.somenteLeitura}
       rotuloConfirmar={
         enviandoAnexos
           ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando anexos...</>
           : saving
-          ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando...</>
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> {social ? "Salvando..." : "Criando..."}</>
+          : social
+          ? <>Enviar para a equipe <span aria-hidden>→</span></>
           : <>Criar Demanda <span aria-hidden>→</span></>
       }
     >
+      {social && !social.somenteLeitura && (
+        <p className="mb-6 rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3 text-sm text-zinc-300">
+          <b className="text-zinc-100">Salvar como ideia</b> guarda no seu quadro, sem mandar para ninguém.{" "}
+          <b className="text-zinc-100">Enviar para a equipe</b> vira pedido na Entrada do Audiovisual, com a data da postagem como prazo.
+        </p>
+      )}
       {rascunhoRecuperado && <BannerRascunho aoDescartar={descartar} />}
 
       {/* ── Bloco 1: o pedido ───────────────────────────────────────
@@ -591,7 +665,7 @@ export function NovaDemandaModal({ open, onClose, prefill }: NovaDemandaModalPro
                 </div>
               </Campo>
 
-              <Campo label="Prazo de entrega" obrigatorio erro={errors.dataLimite}>
+              <Campo label={social ? "Data da postagem" : "Prazo de entrega"} obrigatorio erro={errors.dataLimite}>
                 <div className="relative">
                   <Calendar className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <input
