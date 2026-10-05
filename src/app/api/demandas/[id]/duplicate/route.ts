@@ -4,15 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { requireDemandaOrg } from "@/lib/org"
+import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import type { Prioridade } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
-
-function gerarCodigo(): string {
-  const ano = new Date().getFullYear().toString().slice(-2)
-  const rand = Math.floor(Math.random() * 9000 + 1000)
-  return `VOP-${ano}-${rand}`
-}
 
 // POST /api/demandas/[id]/duplicate
 // Cria uma cópia da demanda com novo código, status inicial e "(Cópia)" no título
@@ -46,10 +41,10 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(original.tipoVideo, original.prioridade as Prioridade)
 
-  const nova = await prisma.demanda.create({
+  const nova = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
-      codigo: gerarCodigo(),
+      codigo,
       titulo: `${original.titulo} (Cópia)`,
       descricao: original.descricao,
       departamento: original.departamento,
@@ -90,7 +85,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       linkFolderFinal: original.linkFolderFinal ?? undefined,
       // linkFinal/linkBrutos/linkPostagem/linkCliente NÃO copiados — são outputs de produção
     },
-  })
+  }))
 
   // Copiar TODOS os produtos vinculados
   if (original.produtos.length > 0) {
