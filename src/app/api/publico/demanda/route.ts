@@ -12,6 +12,7 @@ import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
+import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -44,12 +45,6 @@ const schema = z.object({
   objetivo: z.string().optional(),
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
 })
-
-function gerarCodigo(): string {
-  const ano = new Date().getFullYear().toString().slice(-2)
-  const rand = Math.floor(Math.random() * 9000 + 1000)
-  return `VOP-EXT-${ano}-${rand}`
-}
 
 export async function POST(req: NextRequest) {
   // Corpo que não é JSON vira 400 de validação, não 500.
@@ -135,10 +130,10 @@ export async function POST(req: NextRequest) {
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
 
-  const demanda = await prisma.demanda.create({
+  const demanda = await criarComCodigoUnico("VOP-EXT", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
-      codigo: gerarCodigo(),
+      codigo,
       titulo: data.titulo,
       descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : ""),
       departamento,
@@ -162,7 +157,7 @@ export async function POST(req: NextRequest) {
       clienteFinalTelefone: data.clienteFinalTelefone,
       clienteFinalEmail: data.clienteFinalEmail,
     },
-  })
+  }))
 
   await prisma.historicoStatus.create({
     data: {
