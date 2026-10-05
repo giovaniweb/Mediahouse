@@ -47,6 +47,7 @@ import { moduloDaRota } from "@/lib/modulos"
 import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 const sections = [
   {
@@ -225,8 +226,7 @@ export function Sidebar() {
         {/* Logo + WhatsApp Status */}
         <div className="px-4 py-5 border-b border-zinc-800 space-y-3">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-md shrink-0" />
-            <span className="text-white font-semibold tracking-tight">NuFlow</span>
+            <LogoNuFlow className="text-white text-lg" />
             <button
               type="button"
               onClick={fechar}

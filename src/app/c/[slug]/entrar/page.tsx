@@ -6,6 +6,7 @@ import { empresaDoPortal } from "@/lib/portal"
 import { linksDaAreaNoServidor } from "@/lib/area-servidor"
 import { FormularioLogin } from "@/components/auth/FormularioLogin"
 import styles from "@/components/auth/AuthSurface.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 // Login com a cara da empresa. Depois de entrar, /c/<slug>/painel escolhe esta
 // empresa como ativa (se a conta for dela) e leva ao painel.
@@ -38,7 +39,7 @@ export default async function EntrarNaEmpresa({ params }: Props) {
           {empresa.nome}
         </Link>
         <div><h2>Seu trabalho com {empresa.nome}.<strong>Tudo em um só lugar.</strong></h2><p>Pedidos, prazos, aprovações e entregas. Entre com a conta que a equipe cadastrou para você.</p></div>
-        <footer>Feito com NuFlow</footer>
+        <footer>Feito com <LogoNuFlow /></footer>
       </aside>
       <div className={styles.content}>
         <Suspense>

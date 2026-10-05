@@ -11,6 +11,7 @@ import Link from "next/link"
 import { slugDaPagina, urlComOrg } from "@/lib/org-publica-cliente"
 import { linksDaArea, type LinksDaArea } from "@/lib/subdominio"
 import styles from "./EmpresaDestino.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 export type EmpresaPublica = { nome: string; slug: string; logoUrl: string | null }
 // `inicio` é para onde o "Voltar" leva; `area`, os links de dentro da área
@@ -59,7 +60,7 @@ export function MarcaEmpresa({ destino }: { destino: DestinoDoFormulario }) {
       </span>
       <span className={styles.nome}>
         <strong>{empresa?.nome ?? (destino.estado === "carregando" ? "Carregando…" : "NuFlow")}</strong>
-        <small>via NuFlow</small>
+        <small>via <LogoNuFlow /></small>
       </span>
     </Link>
   )

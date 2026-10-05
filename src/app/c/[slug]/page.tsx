@@ -7,6 +7,7 @@ import { linksDaAreaNoServidor } from "@/lib/area-servidor"
 import { linkNaArea } from "@/lib/subdominio"
 import "@/components/layout/Montserrat.css"
 import styles from "@/components/publico/Portal.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 // A área pública da empresa: nuflow.space/c/<slug>.
 // É o endereço que a empresa divulga para clientes e videomakers. Tudo o que
@@ -103,7 +104,7 @@ export default async function AreaDaEmpresa({ params }: Props) {
 
       <footer className={styles.rodape}>
         <span>Os dados enviados aqui ficam com {empresa.nome}.</span>
-        <span>Feito com NuFlow</span>
+        <span>Feito com <LogoNuFlow /></span>
       </footer>
     </main>
   )
