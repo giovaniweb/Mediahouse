@@ -10,6 +10,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { slugDaPagina, urlComOrg } from "@/lib/org-publica-cliente"
 import styles from "./EmpresaDestino.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 export type EmpresaPublica = { nome: string; slug: string; logoUrl: string | null }
 export type DestinoDoFormulario =
@@ -53,7 +54,7 @@ export function MarcaEmpresa({ destino }: { destino: DestinoDoFormulario }) {
       </span>
       <span className={styles.nome}>
         <strong>{empresa?.nome ?? (destino.estado === "carregando" ? "Carregando…" : "NuFlow")}</strong>
-        <small>via NuFlow</small>
+        <small>via <LogoNuFlow /></small>
       </span>
     </Link>
   )

@@ -9,6 +9,7 @@ import { ArrowDown, ArrowRight, ArrowUpRight, Building2, Clapperboard, Images, M
 import { iniciarMotionDoHero } from "./heroMotion"
 import { AgendaDemo, AprovacoesDemo, AvisosDemo, EquipeDemo, FluxoDemo } from "./demos"
 import s from "./Landing.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 /** Sem número de vendas configurado, "Conversar" leva direto ao formulário de interesse. */
 function Conversar({ contactUrl, className, children }: { contactUrl: string | null; className: string; children: React.ReactNode }) {
@@ -93,7 +94,7 @@ export default function Landing({ contactUrl }: { contactUrl: string | null }) {
       <a href="#conteudo" className={s.pular}>Pular para o conteúdo</a>
       <header className={s.topo}>
         <div className={s.topoInterno}>
-          <Link href="/" className={s.marca} aria-label="NuFlow, início">NuFlow<i>.</i></Link>
+          <Link href="/" className={s.marca} aria-label="NuFlow, início"><LogoNuFlow /></Link>
           <nav className={s.nav} aria-label="Seções">
             <a href="#fluxo">Como funciona</a>
             <a href="#recursos">Recursos</a>
@@ -192,7 +193,7 @@ export default function Landing({ contactUrl }: { contactUrl: string | null }) {
 
       <footer className={s.rodape}>
         <div className={s.rodapeInterno}>
-          <span className={s.marca}>NuFlow<i>.</i></span>
+          <LogoNuFlow className={s.marca} />
           <span>Gestão de operações criativas</span>
           <span className={s.rodapeNota}>As animações usam dados demonstrativos. Nenhum pedido ou mensagem é enviado.</span>
         </div>

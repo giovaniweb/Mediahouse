@@ -326,6 +326,9 @@
   .finalInterno { padding: 40px 22px; border-radius: 22px; }
   .rodapeNota { margin-left: 0; }
   .heroLegendaNota { display: none; }
+  /* Com o símbolo, a logo ficou mais larga: no celular de 375px o "Conversar" vazava a margem. */
+  .topoInterno > .marca { font-size: 19px; }
+  .topoAcoes .botaoFantasma { padding: 0 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .surge { animation: none; }
