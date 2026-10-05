@@ -27,6 +27,7 @@ export type PermissaoKey =
   | "gerenciarFornecedores"
   | "verDesign"
   | "gerenciarDesigners"
+  | "verSocial"
   | "usarCutflow"
   | "criarDemanda"
   | "editarDemanda"
@@ -59,6 +60,7 @@ export const PERMISSAO_LABELS: Record<PermissaoKey, string> = {
   gerenciarFornecedores: "Gerenciar Fornecedores",
   verDesign: "Ver Growth / Conteúdos",
   gerenciarDesigners: "Gerenciar equipe criativa",
+  verSocial: "Ver Social Media (planejamento e aprovações)",
   usarCutflow: "Usar o Cutflow (plugin do Premiere)",
   criarDemanda: "Criar Demanda",
   editarDemanda: "Editar Demanda",
@@ -97,6 +99,11 @@ export const PERMISSAO_GRUPOS = [
       "verDesign",
       "gerenciarDesigners",
     ] as PermissaoKey[],
+  },
+  {
+    // Área própria desde 05/10/2026, no mesmo molde de Growth.
+    label: "Social Media",
+    keys: ["verSocial"] as PermissaoKey[],
   },
   {
     // Cutflow (30/09/2026): o plugin do Premiere entra com o login do NuFlow.
@@ -155,6 +162,7 @@ export const BASE_FALSE: PresetPerms = {
   gerenciarFornecedores: false,
   verDesign: false,
   gerenciarDesigners: false,
+  verSocial: false,
   usarCutflow: false,
   criarDemanda: false,
   editarDemanda: false,
@@ -212,6 +220,7 @@ export const PRESETS: Record<string, PresetPerms> = {
   // Social Media (Growth) — conteúdo: demandas, artes, ideias
   social: {
     ...BASE_FALSE,
+    verSocial: true,
     verDashboard: true,
     verDemandas: true,
     verAgenda: true,
@@ -361,6 +370,9 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/galeria-artes": "verDesign",
   "/growth/equipe": "gerenciarDesigners",
   "/configuracoes/linhas-projetos": "gerenciarDesigners",
+  "/social": "verSocial",
+  "/social/aprovacoes": "verSocial",
+  "/social/equipe": "verSocial",
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

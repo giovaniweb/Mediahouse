@@ -23,13 +23,17 @@ interface ModalFormularioProps {
   /** Conteúdo do botão principal — muda de rótulo enquanto salva/envia anexos. */
   rotuloConfirmar: React.ReactNode
   ocupado?: boolean
+  /** Botão ao lado do principal. O quadro da social usa para "Salvar como ideia". */
+  acaoSecundaria?: { rotulo: React.ReactNode; aoClicar: () => void }
+  /** Só leitura (gestor olhando a ideia da social): sem o botão principal. */
+  semConfirmar?: boolean
   children: React.ReactNode
   className?: string
 }
 
 export function ModalFormulario({
   aberto, titulo, icone: Icone = Plus, aoTentarFechar, aoConfirmar,
-  rotuloConfirmar, ocupado, children, className,
+  rotuloConfirmar, ocupado, acaoSecundaria, semConfirmar, children, className,
 }: ModalFormularioProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -124,15 +128,24 @@ export function ModalFormulario({
             onClick={aoTentarFechar}
             className="rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-900"
           >
-            Cancelar
+            {semConfirmar ? "Fechar" : "Cancelar"}
           </button>
-          <button
+          {acaoSecundaria && !semConfirmar && (
+            <button
+              onClick={acaoSecundaria.aoClicar}
+              disabled={ocupado}
+              className="rounded-xl border border-purple-500/50 px-5 py-2.5 text-sm font-semibold text-purple-200 transition-colors hover:bg-purple-500/10 disabled:opacity-60"
+            >
+              {acaoSecundaria.rotulo}
+            </button>
+          )}
+          {!semConfirmar && <button
             onClick={aoConfirmar}
             disabled={ocupado}
             className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-900/30 transition-colors hover:bg-purple-500 disabled:opacity-60"
           >
             {rotuloConfirmar}
-          </button>
+          </button>}
         </div>
 
       </div>

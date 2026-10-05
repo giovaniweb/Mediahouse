@@ -24,6 +24,7 @@ import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartil
 import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -86,6 +87,8 @@ const criarDemandaSchema = z.object({
   classificacao: z.enum(["b2c", "b2b"]).optional(),
   // Campos condicionais por tipo de entrega (Growth)
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
+  // Pedido feito pelo quadro da social (/social): a ideia que vira esta demanda.
+  ideiaId: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -408,6 +411,18 @@ export async function POST(req: NextRequest) {
     linhaProjetoTexto = linha.nome
   }
 
+  // Pedido do quadro da social: a ideia precisa ser dela e ainda não ter virado
+  // pedido. A linha da demanda passa a ser a da ideia, e `socialId` marca o
+  // pedido como dela — é o selo "Social" no card da equipe.
+  let socialId: string | undefined
+  if (data.ideiaId) {
+    const r = await ideiaParaPedido(data.ideiaId, organizacaoId, session.user.id)
+    if ("erro" in r) return NextResponse.json({ error: r.erro }, { status: r.status })
+    linhaProjetoId = r.linha.id
+    linhaProjetoTexto = r.linha.nome
+    socialId = session.user.id
+  }
+
   if (!(await departamentoValido(data.departamento, organizacaoId))) {
     return NextResponse.json(
       { error: "Departamento inválido — cadastre-o em Configurações → Parâmetros" },
@@ -452,6 +467,7 @@ export async function POST(req: NextRequest) {
       responsavelId: responsavelId || undefined,
       linhaProjeto: linhaProjetoTexto,
       linhaProjetoId: linhaProjetoId || undefined,
+      socialId,
       eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
@@ -460,6 +476,8 @@ export async function POST(req: NextRequest) {
       detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
     },
   }))
+
+  if (data.ideiaId) await ligarIdeiaAoPedido(data.ideiaId, demanda)
 
   // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
   const produtoIds = Array.from(new Set([
