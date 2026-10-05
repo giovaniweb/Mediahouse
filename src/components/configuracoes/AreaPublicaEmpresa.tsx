@@ -17,13 +17,14 @@ type Org = { id: string; nome: string; slug: string; ativa: boolean }
 type LinkPublico = { caminho: string; titulo: string; texto: string }
 
 const PARA_CLIENTES: LinkPublico[] = [
-  { caminho: "/pedido", titulo: "Pedir um vídeo ou conteúdo", texto: "Formulário de pedido: vídeo, post, criativo. Entra em Aprovações." },
-  { caminho: "/pedido?tipo=cobertura", titulo: "Agendar gravação (videomaker no local)", texto: "O mesmo pedido, já como cobertura: data, local e quem recebe a equipe. Aprovado, vira Job." },
+  { caminho: "/pedido?tipo=video", titulo: "Quero um vídeo", texto: "Pedido de vídeo, já sem a tela de escolher o tipo. Entra em Aprovações." },
+  { caminho: "/pedido?tipo=conteudo", titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo. Entra em Aprovações." },
+  { caminho: "/gravacao", titulo: "Quero um videomaker", texto: "Gravação numa tela só: cliente, endereço, data e horário. Aprovado, vira Job." },
 ]
 const OUTROS: LinkPublico[] = [
-  { caminho: "/videomaker", titulo: "Cadastro de videomaker", texto: "Para quem quer trabalhar com a equipe." },
+  { caminho: "/videomaker", titulo: "Quero ser videomaker", texto: "Cadastro para quem quer trabalhar com a equipe." },
   { caminho: "/galeria", titulo: "Galeria", texto: "Os vídeos publicados pela empresa." },
-  { caminho: "/entrar", titulo: "Entrar", texto: "Login que já abre esta empresa." },
+  { caminho: "/entrar", titulo: "Entrar no sistema", texto: "Login que já abre esta empresa." },
 ]
 
 function Acoes({ url, titulo, copiado, copiar }: { url: string; titulo: string; copiado: string | null; copiar: (url: string) => void }) {
@@ -80,7 +81,7 @@ export function AreaPublicaEmpresa() {
         <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Link para seus clientes</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-[1_1_16rem]">
-            <p className="text-sm text-zinc-300">A página de entrada: pedir vídeo, agendar gravação, cadastro de videomaker, galeria e login.</p>
+            <p className="text-sm text-zinc-300">A página de entrada, com as seis opções: vídeo, arte, videomaker, ser videomaker, galeria e entrar.</p>
             <code className="mt-1 block break-all text-sm font-semibold text-violet-100">{base}</code>
           </div>
           <Acoes url={base} titulo="Área da empresa" copiado={copiado} copiar={copiar} />

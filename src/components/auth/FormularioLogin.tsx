@@ -60,7 +60,7 @@ export function FormularioLogin({
       <button className={styles.primary} disabled={loading} type="submit">{loading?"Entrando…":"Entrar"}<ArrowRight size={16}/></button>
     </form><div className={styles.links}><Link href="/esqueci-senha">Esqueci minha senha</Link>{linkExtra && <Link href={linkExtra.href}>{linkExtra.texto}</Link>}</div>
     {areaCliente && <Link href={areaCliente} className={styles.cliente}>
-      <div><strong>Sou cliente — fazer um pedido</strong><span>Pedir um vídeo ou agendar uma gravação. Não precisa de conta.</span></div>
+      <div><strong>Sou cliente — fazer um pedido</strong><span>Vídeo, arte ou videomaker para gravar. Não precisa de conta.</span></div>
       <ArrowRight size={18} aria-hidden="true"/>
     </Link>}
   </section>

@@ -53,9 +53,11 @@ function Field({ label, children, error, hint, required }: {
 const DRAFT_KEY = "nuflow-demanda-draft"
 // Um rascunho por empresa: com a chave única, o pedido começado para uma empresa
 // reaparecia no formulário de outra. O link sem slug mantém a chave antiga.
-function chaveRascunho() {
+// E um por porta: o rascunho de uma arte não reaparece em "Quero um vídeo".
+function chaveRascunho(tipoFixo?: TipoPedido) {
   const slug = slugDaPagina()
-  return slug ? `${DRAFT_KEY}:${slug}` : DRAFT_KEY
+  const base = slug ? `${DRAFT_KEY}:${slug}` : DRAFT_KEY
+  return tipoFixo ? `${base}:${tipoFixo}` : base
 }
 
 function formatDraftDate(iso: string): string {
@@ -72,7 +74,15 @@ function formatDraftDate(iso: string): string {
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════════ */
 
-export default function FormularioPedido() {
+/** O tipo que já vem escolhido pela porta da área ("Quero um vídeo", "Quero uma arte"). */
+export type TipoPedido = "video" | "conteudo"
+
+// Etapas internas: 0 dados, 1 tipo, 2 detalhes, 3 resumo. Quem chega por uma
+// porta da área já escolheu o tipo, então a etapa 1 some.
+const ETAPAS_COMPLETAS = [0, 1, 2, 3]
+const ETAPAS_SEM_TIPO = [0, 2, 3]
+
+export default function FormularioPedido({ tipoFixo }: { tipoFixo?: TipoPedido } = {}) {
   const destino = useEmpresaDestino()
   const [loading, setLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
@@ -84,10 +94,9 @@ export default function FormularioPedido() {
   const [nomeCliente, setNomeCliente] = useState("")
   const [email, setEmail] = useState("")
   const [telefone, setTelefone] = useState("")
-  const [empresa, setEmpresa] = useState("")
 
   // ── Tipo ──────────────────────────────────────────────────────────
-  const [tipo, setTipo] = useState<"video" | "conteudo" | "cobertura" | null>(null)
+  const [tipo, setTipo] = useState<"video" | "conteudo" | "cobertura" | null>(tipoFixo ?? null)
   const [tipoConteudo, setTipoConteudo] = useState("post")
   const [objetivo, setObjetivo] = useState("")
 
@@ -121,13 +130,13 @@ export default function FormularioPedido() {
   const [draftDismissed, setDraftDismissed] = useState(false)
 
   function resetForm() {
-    setNomeCliente(""); setEmail(""); setTelefone(""); setEmpresa("")
-    setTipo(null); setTitulo(""); setDescricao(""); setCidade("")
+    setNomeCliente(""); setEmail(""); setTelefone("")
+    setTipo(tipoFixo ?? null); setTitulo(""); setDescricao(""); setCidade("")
     setDataLimite(""); setReferencia(""); setTipoVideo("")
     setLocalEvento(""); setDataEvento(""); setHoraEvento("")
     setClienteNome(""); setClienteTelefone(""); setClienteEmail("")
     setStep(0); setErrors({}); setDraftInfo(null); setDraftDismissed(false)
-    if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho())
+    if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho(tipoFixo))
   }
 
   // Vocabulário de tipos — o mesmo que a equipe gerencia em Configurações →
@@ -143,22 +152,18 @@ export default function FormularioPedido() {
       .then(r => r.json()).then(d => setTiposCriativo(d.parametros ?? [])).catch(() => {})
   }, [])
 
-  // Restaura rascunho salvo ao montar (apenas uma vez). Antes dele, o `?tipo=`
-  // do link — "Agendar gravação" da área da empresa chega com a cobertura já
-  // escolhida; um rascunho salvo continua mandando.
+  // Restaura rascunho salvo ao montar (apenas uma vez). O tipo da porta
+  // (tipoFixo) não é sobrescrito pelo rascunho.
   useEffect(() => {
     if (typeof window === "undefined") return
     try {
-      const tipoDoLink = new URLSearchParams(window.location.search).get("tipo")
-      if (tipoDoLink === "video" || tipoDoLink === "conteudo" || tipoDoLink === "cobertura") setTipo(tipoDoLink)
-      const raw = localStorage.getItem(chaveRascunho())
+      const raw = localStorage.getItem(chaveRascunho(tipoFixo))
       if (!raw) return
       const saved = JSON.parse(raw)
       if (saved.nomeCliente) setNomeCliente(saved.nomeCliente)
       if (saved.email) setEmail(saved.email)
       if (saved.telefone) setTelefone(saved.telefone)
-      if (saved.empresa) setEmpresa(saved.empresa)
-      if (saved.tipo) setTipo(saved.tipo)
+      if (saved.tipo && !tipoFixo) setTipo(saved.tipo)
       if (saved.titulo) setTitulo(saved.titulo)
       if (saved.descricao) setDescricao(saved.descricao)
       if (saved.cidade) setCidade(saved.cidade)
@@ -171,7 +176,7 @@ export default function FormularioPedido() {
       if (saved.clienteNome) setClienteNome(saved.clienteNome)
       if (saved.clienteTelefone) setClienteTelefone(saved.clienteTelefone)
       if (saved.clienteEmail) setClienteEmail(saved.clienteEmail)
-      if (saved.step) setStep(saved.step)
+      if (saved.step && !(tipoFixo && saved.step === 1)) setStep(saved.step)
       if (saved._savedAt) setDraftInfo({ savedAt: saved._savedAt })
     } catch { /* ignora JSON malformado */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +190,7 @@ export default function FormularioPedido() {
     if (typeof window === "undefined") return
     const savedAt = new Date().toISOString()
     const draft = {
-      nomeCliente, email, telefone, empresa, tipo,
+      nomeCliente, email, telefone, tipo,
       titulo, descricao, cidade, dataLimite, referencia, tipoVideo,
       localEvento, dataEvento, horaEvento,
       clienteNome, clienteTelefone, clienteEmail,
@@ -195,19 +200,22 @@ export default function FormularioPedido() {
     // Sem setDraftInfo aqui: o aviso "Rascunho restaurado" é só para o que veio
     // de uma visita anterior. Antes ele aparecia na primeira letra digitada.
     try {
-      localStorage.setItem(chaveRascunho(), JSON.stringify(draft))
+      localStorage.setItem(chaveRascunho(tipoFixo), JSON.stringify(draft))
     } catch { /* ignora erros de quota */ }
   }, [
-    enviado, nomeCliente, email, telefone, empresa, tipo,
+    tipoFixo, enviado, nomeCliente, email, telefone, tipo,
     titulo, descricao, cidade, dataLimite, referencia, tipoVideo,
     localEvento, dataEvento, horaEvento,
     clienteNome, clienteTelefone, clienteEmail, step,
   ])
 
   // ── Steps ─────────────────────────────────────────────────────────
-  const steps = tipo === "cobertura"
-    ? ["Seus Dados", "Tipo", "Evento", "Resumo"]
-    : ["Seus Dados", "Tipo", "Detalhes", "Resumo"]
+  const nomes = ["Seus dados", "Tipo", tipo === "cobertura" ? "Evento" : "Detalhes", "Resumo"]
+  const etapas = tipoFixo ? ETAPAS_SEM_TIPO : ETAPAS_COMPLETAS
+  const steps = etapas.map(e => nomes[e])
+  const posicao = Math.max(0, etapas.indexOf(step))
+  const avancar = () => setStep(etapas[Math.min(posicao + 1, etapas.length - 1)])
+  const recuar = () => setStep(etapas[Math.max(posicao - 1, 0)])
 
   const canAdvance = () => {
     if (step === 0) {
@@ -254,7 +262,6 @@ export default function FormularioPedido() {
         nomeCliente,
         email,
         telefone,
-        empresa: empresa || undefined,
         titulo,
         descricao,
         tipoSolicitacao: tipo ?? undefined,
@@ -263,7 +270,8 @@ export default function FormularioPedido() {
         ...(tipo === "conteudo" && objetivo ? { detalhesEntrega: { "Objetivo": objetivo } } : {}),
         cidade: cidade || "N/A",
         dataLimite: dataLimite || undefined,
-        dataEvento: dataEvento ? `${dataEvento}T${horaEvento || "09:00"}` : undefined,
+        // Horário de Brasília explícito: sem fuso, o servidor em UTC atrasava 3 h.
+        dataEvento: dataEvento ? `${dataEvento}T${horaEvento || "09:00"}:00-03:00` : undefined,
         localEvento: localEvento || undefined,
         referencia: referencia || undefined,
         // Cobertura extras
@@ -302,7 +310,7 @@ export default function FormularioPedido() {
         }
       }
 
-      if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho())
+      if (typeof window !== "undefined") localStorage.removeItem(chaveRascunho(tipoFixo))
       setEnviado(true)
     } catch (err: unknown) {
       setErro(erroDeEnvio(err))
@@ -360,7 +368,7 @@ export default function FormularioPedido() {
       <div className="max-w-2xl mx-auto px-6 py-10">
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">{tipo === "cobertura" ? "Agendar gravação ou entrega" : "Pedir um vídeo ou conteúdo"}</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">{tipo === "cobertura" ? "Agendar gravação ou entrega" : tipoFixo === "video" ? "Quero um vídeo" : tipoFixo === "conteudo" ? "Quero uma arte" : "Pedir um vídeo ou uma arte"}</h1>
           <p className="text-zinc-400 text-sm">{destino.estado === "pronto" ? `Preencha os dados abaixo. O pedido vai direto para ${destino.empresa.nome}.` : "Preencha os dados abaixo e a equipe entra em contato."}</p>
         </div>
         <AvisoDestino destino={destino} />
@@ -371,19 +379,19 @@ export default function FormularioPedido() {
             <div key={s} className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => i < step && setStep(i)}
+                onClick={() => i < posicao && setStep(etapas[i])}
                 className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
-                  i < step
+                  i < posicao
                     ? "bg-green-600 text-white cursor-pointer hover:bg-green-500"
-                    : i === step
+                    : i === posicao
                     ? "bg-purple-600 text-white"
                     : "bg-zinc-800 text-zinc-500 border border-zinc-700"
                 )}
               >
-                {i < step ? <Check className="w-4 h-4" /> : i + 1}
+                {i < posicao ? <Check className="w-4 h-4" /> : i + 1}
               </button>
-              <span className={cn("text-sm hidden sm:inline", i === step ? "font-semibold text-zinc-100" : "text-zinc-500")}>
+              <span className={cn("text-sm hidden sm:inline", i === posicao ? "font-semibold text-zinc-100" : "text-zinc-500")}>
                 {s}
               </span>
               {i < steps.length - 1 && <div className="w-6 h-px bg-zinc-700" />}
@@ -427,14 +435,10 @@ export default function FormularioPedido() {
             <h2 className="font-semibold text-white flex items-center gap-2">
               <User className="w-4 h-4 text-zinc-400" /> Seus dados
             </h2>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Nome Completo" required error={errors.nomeCliente}>
-                <input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} placeholder="João da Silva" className={inputClass} />
-              </Field>
-              <Field label="Empresa">
-                <input value={empresa} onChange={e => setEmpresa(e.target.value)} placeholder="Nome da empresa (opcional)" className={inputClass} />
-              </Field>
-            </div>
+            {/* Sem "Empresa": o link da área já diz para quem vai o pedido. */}
+            <Field label="Nome completo" required error={errors.nomeCliente}>
+              <input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} placeholder="João da Silva" autoComplete="name" className={inputClass} />
+            </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="E-mail" required error={errors.email}>
                 <div className="relative">
@@ -497,33 +501,25 @@ export default function FormularioPedido() {
                 )}>
                   <Sparkles className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-1">Conteúdo</h3>
+                <h3 className="text-base font-semibold text-white mb-1">Arte</h3>
                 <p className="text-sm text-zinc-400">
                   Post, story, reels, carrossel, e-mail, criativo de tráfego, arte gráfica...
                 </p>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setTipo("cobertura")}
-                className={cn(
-                  "p-6 rounded-2xl border-2 text-left transition-all group",
-                  tipo === "cobertura"
-                    ? "border-orange-500 bg-orange-500/10"
-                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
-                )}
+              {/* Gravação com videomaker tem formulário próprio, curto. */}
+              <Link
+                href={`${destino.inicio}/gravacao`}
+                className="p-6 rounded-2xl border-2 text-left transition-all group border-zinc-700 bg-zinc-900 hover:border-zinc-500"
               >
-                <div className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
-                  tipo === "cobertura" ? "bg-orange-500/20 text-orange-400" : "bg-zinc-800 text-zinc-400"
-                )}>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors bg-zinc-800 text-zinc-400">
                   <Camera className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-1">Cobertura / Entrega</h3>
+                <h3 className="text-base font-semibold text-white mb-1">Videomaker</h3>
                 <p className="text-sm text-zinc-400">
-                  Entrega de equipamento, evento, filmagem em clínica com videomaker local.
+                  Gravação em clínica ou evento, com videomaker no local.
                 </p>
-              </button>
+              </Link>
             </div>
           </div>
         )}
@@ -717,7 +713,6 @@ export default function FormularioPedido() {
                 <div><span className="text-zinc-500">Nome:</span> <span className="text-white">{nomeCliente}</span></div>
                 <div><span className="text-zinc-500">E-mail:</span> <span className="text-white">{email}</span></div>
                 <div><span className="text-zinc-500">WhatsApp:</span> <span className="text-white">{telefone}</span></div>
-                {empresa && <div><span className="text-zinc-500">Empresa:</span> <span className="text-white">{empresa}</span></div>}
               </div>
             </div>
 
@@ -768,10 +763,10 @@ export default function FormularioPedido() {
            NAVEGAÇÃO
            ═══════════════════════════════════════════════════════════ */}
         <div className="flex justify-between pt-6 mt-6">
-          {step > 0 ? (
+          {posicao > 0 ? (
             <button
               type="button"
-              onClick={() => setStep(s => s - 1)}
+              onClick={recuar}
               className="flex items-center gap-1.5 px-4 py-2.5 text-sm border border-zinc-700 rounded-xl hover:bg-zinc-800 text-zinc-300 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" /> Voltar
@@ -782,10 +777,10 @@ export default function FormularioPedido() {
             </Link>
           )}
 
-          {step < steps.length - 1 ? (
+          {posicao < steps.length - 1 ? (
             <button
               type="button"
-              onClick={() => canAdvance() && setStep(s => s + 1)}
+              onClick={() => canAdvance() && avancar()}
               disabled={!canAdvance()}
               className={cn(
                 "flex items-center gap-1.5 px-5 py-2.5 text-sm rounded-xl transition-all",
