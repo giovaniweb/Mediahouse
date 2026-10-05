@@ -509,7 +509,7 @@ export default function FormularioPedido({ tipoFixo }: { tipoFixo?: TipoPedido }
 
               {/* Gravação com videomaker tem formulário próprio, curto. */}
               <Link
-                href={`${destino.inicio}/gravacao`}
+                href={`${destino.area?.base ?? ""}/gravacao`}
                 className="p-6 rounded-2xl border-2 text-left transition-all group border-zinc-700 bg-zinc-900 hover:border-zinc-500"
               >
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors bg-zinc-800 text-zinc-400">

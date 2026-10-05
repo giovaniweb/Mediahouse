@@ -47,6 +47,7 @@ import { moduloDaRota } from "@/lib/modulos"
 import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 const sections = [
   {
@@ -57,7 +58,9 @@ const sections = [
       { href: "/meu-trabalho", label: "Meu trabalho", icon: ClipboardCheck },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
-      { href: "/ideias", label: "Banco de Ideias", icon: Lightbulb },
+      // "Mandar ideia" ocupa o lugar do Banco de Ideias (módulo fora da
+      // plataforma desde 09/09): o mesmo banco, agora com a social decidindo.
+      { href: "/social/enviar", label: "Mandar ideia", icon: Lightbulb },
       { href: "/mensagens", label: "Mensagens", icon: MessageSquare },
     ],
   },
@@ -86,6 +89,15 @@ const sections = [
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
       { href: "/growth/equipe", label: "Equipe Growth", icon: Users },
       { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
+    ],
+  },
+  {
+    // Área própria desde 05/10/2026, no mesmo molde de Audiovisual e Growth.
+    label: "Social Media",
+    items: [
+      { href: "/social", label: "Planejamento", icon: CalendarRange },
+      { href: "/social/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
+      { href: "/social/equipe", label: "Equipe", icon: Users },
     ],
   },
   {
@@ -158,6 +170,9 @@ export function Sidebar() {
   const atuaEmGrowth = me?.membership?.areas?.includes("growth") ?? false
   const podeVerGrowth = atuaEmGrowth || !!me?.permissoes?.verDesign
   const podeGerenciarGrowth = atuaEmGrowth || !!me?.permissoes?.gerenciarDesigners
+  // Como no Growth: o cargo abre a área mesmo com permissões gravadas antes de
+  // a chave verSocial existir.
+  const podeVerSocial = me?.membership?.papel === "social" || !!me?.permissoes?.verSocial
 
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
@@ -176,6 +191,7 @@ export function Sidebar() {
     if (isAdmin) return true
     if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
     if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
+    if (href.startsWith("/social") && href !== "/social/enviar") return podeVerSocial
     const key = PERMISSAO_HREF_MAP[href]
     if (!key) return true
     return !!me.permissoes[key]
@@ -210,8 +226,7 @@ export function Sidebar() {
         {/* Logo + WhatsApp Status */}
         <div className="px-4 py-5 border-b border-zinc-800 space-y-3">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="NuFlow" className="w-7 h-7 rounded-md shrink-0" />
-            <span className="text-white font-semibold tracking-tight">NuFlow</span>
+            <LogoNuFlow className="text-white text-lg" />
             <button
               type="button"
               onClick={fechar}

@@ -2,10 +2,12 @@
 // Passagem depois do login pela área da empresa: deixa esta empresa ativa e vai
 // ao painel. Quem decide se a pessoa pode é /api/me/organizacoes, que confere o
 // vínculo no banco antes de gravar a escolha — aqui só se pede.
+// Como o login, mora no domínio principal (o proxy manda o subdomínio para cá).
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import SystemState from "@/components/system/SystemState"
+import { linksDaArea } from "@/lib/subdominio"
 
 type Empresa = { id: string; nome: string; slug: string }
 
@@ -42,7 +44,7 @@ export default function PainelDaEmpresa() {
 
   if (semVinculo) {
     return <SystemState label="ACESSO À EMPRESA" title={`Sua conta não faz parte de ${semVinculo}.`} description="Você entrou, mas esta conta não tem acesso a esta empresa. Peça acesso a quem administra a equipe, ou siga para os espaços em que você já está.">
-      <a href="/dashboard">Ir para o meu painel</a><a href={`/c/${slug}`}>Voltar à área da empresa</a>
+      <a href="/dashboard">Ir para o meu painel</a><a href={linksDaArea(slug, window.location.host, window.location.protocol).inicio}>Voltar à área da empresa</a>
     </SystemState>
   }
   if (falhou) {

@@ -9,6 +9,7 @@
 
 import { Menu } from "lucide-react"
 import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 export function BarraMovel() {
   const { aberta, abrir, refGatilho } = useNavegacaoMovel()
@@ -29,8 +30,7 @@ export function BarraMovel() {
         <Menu className="w-5 h-5" />
       </button>
       <div className="flex items-center gap-2">
-        <img src="/logo.png" alt="" className="w-6 h-6 rounded-md" />
-        <span className="text-white font-semibold tracking-tight text-sm">NuFlow</span>
+        <LogoNuFlow className="text-white text-base" />
       </div>
     </div>
   )

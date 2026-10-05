@@ -1,0 +1,9 @@
+/* A logo acompanha o texto em volta: o tamanho sai do font-size de quem usa. */
+.logo {
+  display: inline-flex; align-items: center; gap: .38em;
+  vertical-align: middle;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700; letter-spacing: -.03em; line-height: 1; white-space: nowrap;
+}
+.logo i { font-style: normal; color: #b9a2ff; }
+.simbolo { width: 1.3em; height: 1.3em; flex-shrink: 0; }

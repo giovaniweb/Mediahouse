@@ -56,6 +56,9 @@ interface DemandaCardProps {
     produtos?: { produto?: { nome: string } | null }[]
     /** Vem pronto do servidor — a tela não sabe o que é uma aresta. */
     espelho?: EspelhoDoCard | null
+    /** Pedido feito pelo quadro da social (selo "Social") e quantas vezes ela cobrou. */
+    socialId?: string | null
+    cobrancas?: number
   }
   dragHandleProps?: Record<string, unknown>
   onDelete?: (id: string) => void
@@ -177,6 +180,10 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
             </span>
           )}
           <TagEspelho espelho={demanda.espelho} />
+          {/* Os sinais que vêm da social são três: este selo, a prioridade (no
+              topo, como em qualquer card) e quantas vezes ela cobrou. */}
+          {demanda.socialId && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap bg-purple-500/15 text-purple-200 border-purple-500/30" title="Pedido do quadro da social media">Social</span>}
+          {!!demanda.cobrancas && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap bg-amber-500/15 text-amber-300 border-amber-500/30" title="Vezes que a social cobrou este pedido">Cobrado {demanda.cobrancas}x</span>}
           {demanda.classificacao && <span className={styles.classification}>{demanda.classificacao.toUpperCase()}</span>}
           <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", deptColor)}>
             {demanda.departamento}

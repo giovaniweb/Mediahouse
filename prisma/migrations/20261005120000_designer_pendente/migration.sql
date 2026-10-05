@@ -1,0 +1,11 @@
+-- Cadastro de designer pela área pública da empresa.
+--
+-- O designer que se cadastra sozinho entra na empresa como "pendente" até
+-- alguém da equipe aprovar, como já acontece com o videomaker. O vínculo
+-- (designer_organizacao) usa StatusUsuario, que só tinha ativo/inativo; o valor
+-- novo é a única mudança. Aditiva: o código antigo nunca grava nem filtra por
+-- 'pendente', então pode rodar antes do deploy.
+--
+-- ALTER TYPE ... ADD VALUE com IF NOT EXISTS, sozinho na migration, como em
+-- 20260813000000_ideia_rascunho.
+ALTER TYPE "StatusUsuario" ADD VALUE IF NOT EXISTS 'pendente';
