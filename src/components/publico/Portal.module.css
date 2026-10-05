@@ -1,26 +1,100 @@
 /* Área pública da empresa: a identidade dela primeiro, o NuFlow discreto no rodapé. */
 .portal { min-height:100dvh; background:radial-gradient(ellipse at 90% 0%,#6a46c033,transparent 55%),radial-gradient(ellipse at 0% 100%,#2f5fa82b,transparent 55%),#101116; color:#f0eef8; font-family:"Montserrat",ui-sans-serif,system-ui,sans-serif; display:flex; flex-direction:column; padding-inline:clamp(16px,5vw,64px); }
+.portal > * { width:100%; max-width:1120px; margin-inline:auto; }
 .topo { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:24px; }
 .marca { display:inline-flex; align-items:center; gap:12px; min-width:0; }
 .logo { width:44px; height:44px; flex:none; border-radius:12px; overflow:hidden; display:grid; place-items:center; background:#2a2541; border:1px solid #ffffff22; font-weight:700; font-size:15px; color:#e4dbff; }
 .logo img { width:100%; height:100%; object-fit:cover; }
 .marca strong { font-size:18px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.entrar { flex:none; display:inline-flex; align-items:center; gap:8px; min-height:42px; padding:0 16px; border-radius:999px; border:1px solid #ffffff33; color:#f0eef8; text-decoration:none; font-size:14px; font-weight:600; }
-.entrar:hover { background:#ffffff0f; }
-.hero { max-width:760px; padding-block:clamp(32px,8vh,88px) 32px; }
-.eyebrow { font-size:12px; letter-spacing:.18em; font-weight:600; color:#c2abff; text-transform:uppercase; }
-.hero h1 { margin:16px 0 0; font-size:clamp(36px,6vw,64px); line-height:1.05; font-weight:300; letter-spacing:-.04em; text-wrap:balance; }
+/* Topo: Galeria como item de menu; Entrar é o botão cheio, o único do topo. */
+.menu { flex:none; display:flex; align-items:center; gap:6px; }
+.itemMenu { display:inline-flex; align-items:center; min-height:42px; padding:0 14px; border-radius:999px; color:#d6d2ea; text-decoration:none; font-size:14px; font-weight:600; }
+.itemMenu:hover { color:#fff; background:#ffffff0f; }
+.entrar { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 20px; border-radius:999px; background:#8b5cf6; color:#fff; text-decoration:none; font-size:15px; font-weight:700; box-shadow:0 6px 24px -8px #8b5cf6cc; transition:background .15s, transform .15s; }
+.entrar:hover { background:#9b72ff; transform:translateY(-1px); }
+.hero { padding-block:clamp(24px,6vh,64px) 8px; }
+.hero > * { max-width:760px; }
+.eyebrow { margin:0; font-size:12px; letter-spacing:.18em; font-weight:600; color:#c2abff; text-transform:uppercase; }
+.hero h1 { margin:14px 0 0; font-size:clamp(34px,5.5vw,58px); line-height:1.05; font-weight:300; letter-spacing:-.04em; text-wrap:balance; }
 .hero h1 strong { display:block; font-weight:700; color:#dccfff; }
-.hero p { margin:20px 0 0; max-width:56ch; font-size:16px; line-height:1.7; color:#b9b6cc; }
-.caminhos { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; max-width:960px; padding-bottom:48px; }
-@media (max-width:720px) { .caminhos { grid-template-columns:minmax(0,1fr); } }
-.caminho { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:16px; padding:22px; border-radius:18px; background:#191b23; border:1px solid #303342; color:inherit; text-decoration:none; transition:border-color .15s, background .15s; }
-.caminho:hover { border-color:#8e74e080; background:#1d1f2a; }
-.caminho:focus-visible, .entrar:focus-visible { outline:2px solid #c8b4ff; outline-offset:4px; }
-.caminho.principal { background:linear-gradient(140deg,#2b2350,#1b1d2b 70%); border-color:#8e74e066; }
+.hero p { margin:18px 0 0; max-width:56ch; font-size:16px; line-height:1.7; color:#b9b6cc; }
+
+/* Título de seção: "Fazer um pedido", "Trabalhe com a gente". */
+.secao { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin:40px 0 14px; }
+.secao h2 { margin:0; font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#9c99b3; font-weight:600; }
+
+.portas { list-style:none; margin:0; padding:0; display:grid; gap:14px; }
+.portas { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.portas li { display:flex; }
+.porta { position:relative; overflow:hidden; flex:1; display:grid; align-content:start; gap:10px; padding:22px; border-radius:18px; background:#191b23; border:1px solid #303342; color:inherit; text-decoration:none; transition:border-color .2s, background .2s, transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+.porta:hover { border-color:#8e74e0aa; background:#1f2130; transform:translateY(-4px); box-shadow:0 18px 40px -20px #8b5cf6aa; }
+.porta.principal { background:linear-gradient(140deg,#2b2350,#1b1d2b 70%); border-color:#8e74e066; }
 .icone { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:#c2abff1a; color:#d8c9ff; }
-.caminho strong { display:block; font-size:18px; font-weight:600; }
-.caminho span { display:block; margin-top:6px; font-size:14px; line-height:1.6; color:#aeabc4; }
-.seta { color:#c2abff; margin-top:2px; }
+.area { font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+.video { color:#8fb8ff; }
+.arte { color:#f5a8d4; }
+.porta strong { font-size:18px; font-weight:600; }
+.texto { font-size:14px; line-height:1.55; color:#aeabc4; }
+.seta { position:absolute; top:22px; right:22px; color:#c2abff; transition:transform .25s cubic-bezier(.2,.8,.2,1); }
+.porta:hover .seta { transform:translateX(4px); }
+.porta:hover .icone { transform:scale(1.08) rotate(-4deg); }
+.icone { transition:transform .25s cubic-bezier(.2,.8,.2,1); }
+
+/* Motion: as portas sobem em sequência ao abrir, e um brilho passa pela
+   principal. Só transform/opacity (sem layout), CSS puro, sem JS. */
+.portas li { animation:subir .6s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--ordem, 0) * 90ms + 120ms); }
+.principal::after { content:""; position:absolute; inset:0; background:linear-gradient(110deg,transparent 30%,#ffffff14 50%,transparent 70%); transform:translateX(-100%); animation:brilho 1.4s .8s ease-out both; pointer-events:none; }
+@keyframes subir { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+@keyframes brilho { to { transform:translateX(100%); } }
+
+
+.trabalhe { margin-bottom:48px; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:20px; align-items:center; padding:26px; border-radius:20px; background:#191b23; border:1px solid #303342; }
+.trabalhe h3 { margin:0; font-size:22px; font-weight:600; letter-spacing:-.02em; }
+.trabalhe p { margin:8px 0 0; color:#aeabc4; line-height:1.6; }
+.botoes { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+
+/* Ideia para a social: uma linha, abaixo dos pedidos, sem competir com eles. */
+.ideia { margin-top:14px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px 18px; border-radius:14px; border:1px dashed #3d4052; color:inherit; text-decoration:none; transition:border-color .15s, background .15s; }
+.ideia:hover { border-color:#c2abff88; background:#ffffff08; }
+.ideia strong { display:block; font-size:15px; font-weight:600; }
+.ideia span span { display:block; margin-top:2px; font-size:13px; color:#aeabc4; }
+.iconeIdeia { width:36px; height:36px; border-radius:10px; display:grid; place-items:center; background:#f3c5651a; color:#f3c565; }
+.setaIdeia { color:#9c99b3; }
+
+.convite { display:inline-flex; align-items:center; min-height:44px; padding:0 18px; border-radius:999px; border:1px solid #ffffff33; color:#f0eef8; text-decoration:none; font-size:14px; font-weight:600; }
+.convite:hover { background:#ffffff0f; border-color:#c2abff88; }
+
+.porta:focus-visible, .ideia:focus-visible, .entrar:focus-visible, .itemMenu:focus-visible, .convite:focus-visible { outline:2px solid #c8b4ff; outline-offset:4px; }
 .rodape { margin-top:auto; padding-block:24px 32px; border-top:1px solid #ffffff12; font-size:13px; color:#9c99b3; display:flex; flex-wrap:wrap; gap:8px 16px; justify-content:space-between; }
-@media (prefers-reduced-motion: reduce) { .caminho { transition:none; } }
+
+@media (max-width:860px) {
+  .portas { grid-template-columns:minmax(0,1fr); }
+  .trabalhe { grid-template-columns:minmax(0,1fr); }
+  .botoes { justify-content:flex-start; }
+}
+/* Celular: portas em linha (ícone ao lado do texto), para as três caberem
+   perto da dobra; topo e hero mais enxutos. */
+@media (max-width:600px) {
+  .topo { padding-block:16px; }
+  .hero { padding-block:20px 0; }
+  .hero h1 { font-size:34px; }
+  .hero p { margin-top:12px; font-size:15px; line-height:1.6; }
+  .secao { margin-top:28px; }
+  .portas { gap:10px; }
+  .porta { grid-template-columns:auto minmax(0,1fr); grid-template-areas:"icone area" "icone titulo" "icone texto"; column-gap:14px; row-gap:4px; padding:16px 40px 16px 16px; }
+  .porta .icone { grid-area:icone; }
+  .porta .area { grid-area:area; }
+  .porta strong { grid-area:titulo; font-size:17px; }
+  .porta .texto { grid-area:texto; font-size:13px; }
+  .seta { top:50%; right:16px; margin-top:-9px; }
+  .trabalhe { padding:20px; }
+  .botoes { flex-direction:column; align-items:stretch; }
+  .convite { justify-content:center; }
+}
+@media (max-width:420px) { .itemMenu { padding:0 10px; } .entrar { padding:0 16px; } }
+@media (prefers-reduced-motion: reduce) {
+  .porta, .seta, .icone, .entrar { transition:none; }
+  .porta:hover, .entrar:hover, .porta:hover .seta, .porta:hover .icone { transform:none; }
+  .portas li, .principal::after { animation:none; }
+  .principal::after { display:none; }
+}
