@@ -138,6 +138,12 @@ export const templates = {
     `${prazo ? `\n\nPrazo: ${prazo}` : ""}` +
     `\n\nOs detalhes estão no sistema.`,
 
+  // "Cobrar" do quadro da social: vai ao responsável e ao gestor da área.
+  pedidoCobrado: (quem: string, codigo: string, titulo: string, etapa: string, postagem?: string | null) =>
+    `⏰ ${quem} está cobrando ${titulo} (${codigo}).` +
+    `\n\nEstá em: ${etapa}${postagem ? `. Posta em ${postagem}` : ""}.` +
+    `\n\nSe algo travou, responda no sistema.`,
+
   // ── Lembretes ────────────────────────────────────────────────────────────
 
   lembreteEvento: (titulo: string, minutosRestantes: number, local?: string | null) =>

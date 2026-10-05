@@ -1,10 +1,12 @@
 import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
+import { linksDaAreaNoServidor } from "@/lib/area-servidor"
 import FormularioPedido, { type TipoPedido } from "@/components/publico/FormularioPedido"
 
 // O formulário de pedido, dentro da área da empresa: o slug
-// vem do caminho (/c/<slug>/...), e o formulário o repassa à API sozinho.
+// vem do endereço (<slug>.nuflow.space ou /c/<slug>/...), e o formulário o
+// repassa à API sozinho.
 // O `?tipo=` vem da porta escolhida na área ("Quero um vídeo", "Quero uma
 // arte") e pula a tela de escolher o tipo.
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
@@ -28,6 +30,6 @@ export default async function Pagina({ params, searchParams }: Props) {
   const busca = await searchParams
   // Pedido de gravação tem formulário próprio, curto. O link antigo
   // (?tipo=cobertura, inclusive vindo de /cadastrar-demanda) vai para ele.
-  if ((Array.isArray(busca.tipo) ? busca.tipo[0] : busca.tipo) === "cobertura") redirect(`/c/${empresa.slug}/gravacao`)
+  if ((Array.isArray(busca.tipo) ? busca.tipo[0] : busca.tipo) === "cobertura") redirect(`${(await linksDaAreaNoServidor(empresa.slug)).base}/gravacao`)
   return <FormularioPedido tipoFixo={tipoDaBusca(busca.tipo)} />
 }

@@ -1,7 +1,8 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Aperture, Check, X, Loader2 } from "lucide-react"
+import { Check, X, Loader2 } from "lucide-react"
+import { LogoNuFlow } from "@/components/marca/Marca"
 import { formatarData } from "@/lib/datas"
 import SystemState from "@/components/system/SystemState"
 import styles from "./Convite.module.css"
@@ -95,7 +96,7 @@ export default function ConvitePage() {
   const data = d.dataEvento || d.dataCaptacao
   return <main className={styles.page}>
     <div className={styles.wrapper}>
-      <a href="/" className={styles.brand}><Aperture aria-hidden="true"/>NuFlow.</a>
+      <a href="/" className={styles.brand} aria-label="NuFlow, início"><LogoNuFlow /></a>
       <header className={styles.header}><p className={styles.eyebrow}>CONVITE DE PRODUÇÃO · {d.codigo}</p><h1>{d.titulo}</h1><p>Olá, {convite.videomaker.nome}. Veja os detalhes e confirme sua disponibilidade para este job.</p></header>
       <section className={styles.card} aria-label="Detalhes da produção">
         <dl className={styles.details}>

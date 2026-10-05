@@ -9,28 +9,35 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { slugDaPagina, urlComOrg } from "@/lib/org-publica-cliente"
+import { linksDaArea, type LinksDaArea } from "@/lib/subdominio"
 import styles from "./EmpresaDestino.module.css"
+import { LogoNuFlow } from "@/components/marca/Marca"
 
 export type EmpresaPublica = { nome: string; slug: string; logoUrl: string | null }
+// `inicio` é para onde o "Voltar" leva; `area`, os links de dentro da área
+// (null fora dela, como no /galeria antigo). Não monte `${inicio}/pedido`: no
+// subdomínio o início é "/", e "//pedido" seria outro site.
+type Comum = { inicio: string; area: LinksDaArea | null }
 export type DestinoDoFormulario =
-  | { estado: "carregando"; inicio: string }
-  | { estado: "pronto"; empresa: EmpresaPublica; inicio: string }
-  | { estado: "inexistente" | "falha"; inicio: string }
+  | ({ estado: "carregando" } & Comum)
+  | ({ estado: "pronto"; empresa: EmpresaPublica } & Comum)
+  | ({ estado: "inexistente" | "falha" } & Comum)
 
 export function useEmpresaDestino(): DestinoDoFormulario {
-  const [destino, setDestino] = useState<DestinoDoFormulario>({ estado: "carregando", inicio: "/sobre" })
+  const [destino, setDestino] = useState<DestinoDoFormulario>({ estado: "carregando", inicio: "/sobre", area: null })
   useEffect(() => {
     const controle = new AbortController()
     const slug = slugDaPagina()
-    const inicio = slug ? `/c/${slug}` : "/sobre"
+    const area = slug ? linksDaArea(slug, window.location.host, window.location.protocol) : null
+    const comum = { inicio: area?.inicio ?? "/sobre", area }
     fetch(urlComOrg("/api/publico/empresa"), { signal: controle.signal })
       .then(async r => {
-        if (r.status === 404) return setDestino({ estado: "inexistente", inicio })
-        if (!r.ok) return setDestino({ estado: "falha", inicio })
+        if (r.status === 404) return setDestino({ estado: "inexistente", ...comum })
+        if (!r.ok) return setDestino({ estado: "falha", ...comum })
         const { empresa } = await r.json()
-        setDestino({ estado: "pronto", empresa, inicio })
+        setDestino({ estado: "pronto", empresa, ...comum })
       })
-      .catch(e => { if ((e as Error).name !== "AbortError") setDestino({ estado: "falha", inicio }) })
+      .catch(e => { if ((e as Error).name !== "AbortError") setDestino({ estado: "falha", ...comum }) })
     return () => controle.abort()
   }, [])
   return destino
@@ -53,7 +60,7 @@ export function MarcaEmpresa({ destino }: { destino: DestinoDoFormulario }) {
       </span>
       <span className={styles.nome}>
         <strong>{empresa?.nome ?? (destino.estado === "carregando" ? "Carregando…" : "NuFlow")}</strong>
-        <small>via NuFlow</small>
+        <small>via <LogoNuFlow /></small>
       </span>
     </Link>
   )

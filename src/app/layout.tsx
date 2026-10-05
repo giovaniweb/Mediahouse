@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
     ],
@@ -23,9 +24,11 @@ export const metadata: Metadata = {
     siteName: "NuFlow",
     type: "website",
     url: "https://nuflow.space",
-    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "NuFlow" }],
+    locale: "pt_BR",
   },
-  twitter: { card: "summary", title: "NuFlow", description: "Jobs, prazos e aprovações em um só lugar.", images: ["/icon-512.png"] },
+  // A arte de 1200x630 sai de opengraph-image.tsx e twitter-image.tsx (mesma
+  // pasta); "summary_large_image" é o que faz a prévia aparecer grande.
+  twitter: { card: "summary_large_image", title: "NuFlow", description: "Operação Audiovisual In-House" },
 }
 
 export default function RootLayout({

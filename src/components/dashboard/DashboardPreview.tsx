@@ -1,6 +1,6 @@
 "use client"
 
-import type { ComponentProps } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import Link from "next/link"
 import { ArrowUpRight, Film, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { HojeEmFoco } from "./HojeEmFoco"
@@ -24,11 +24,13 @@ type Data = {
 type Distribution = { count?: number; percent?: number }
 type Props = {
   data?: Data; loading: boolean;
+  /** Escolha de departamento (Audiovisual / Growth / Social Media), no cabeçalho. */
+  seletor?: ReactNode;
   b2c?: { b2c?: Distribution; b2b?: Distribution; sem_classificacao?: Distribution; alerta?: boolean; meta?: { b2c_target?: number } };
   ideias?: { totalIdeias: number; novas: number; emAnalise: number; realizadas: number; taxaConversao: number; ideiasEsteMes: number };
 }
 
-export function DashboardPreview({ data, loading, b2c, ideias }: Props) {
+export function DashboardPreview({ data, loading, b2c, ideias, seletor }: Props) {
   const classifications = [{label:"B2C", data:b2c?.b2c}, {label:"B2B", data:b2c?.b2b}, {label:"Sem classificação", data:b2c?.sem_classificacao}]
   const m = data?.metricas
   const value = (n: number | undefined) => loading || n == null ? "—" : n
@@ -46,7 +48,7 @@ export function DashboardPreview({ data, loading, b2c, ideias }: Props) {
   ]
   return <main className={styles.dashboard} aria-busy={loading}>
     <div className={styles.heading}>
-      <div><p className={styles.eyebrow}>VISÃO DA OPERAÇÃO · AUDIOVISUAL</p><h1>Sua operação, em perspectiva.</h1><p>Entregas, prazos e capacidade para decidir o próximo passo.</p></div>
+      <div><p className={styles.eyebrow}>VISÃO DA OPERAÇÃO · AUDIOVISUAL</p><h1>Sua operação, em perspectiva.</h1><p>Entregas, prazos e capacidade para decidir o próximo passo.</p>{seletor}</div>
       <Link className={styles.action} href="/demandas/nova">Nova demanda <ArrowUpRight size={16} /></Link>
     </div>
     {loading && <p role="status" className={styles.muted}>Carregando indicadores…</p>}

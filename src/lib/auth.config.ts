@@ -46,9 +46,11 @@ export const authConfig: NextAuthConfig = {
       const { pathname } = request.nextUrl
 
       // Identidade pública: sem isto, a prévia de um link compartilhado no
-      // WhatsApp pedia login para buscar o logo e saía sem imagem.
-      if (["/logo.png", "/favicon-16.png", "/favicon-32.png", "/apple-touch-icon.png",
-        "/icon-192.png", "/icon-512.png", "/manifest.json"].includes(pathname)) return true
+      // WhatsApp pedia login para buscar o logo e saía sem imagem. A arte de
+      // compartilhamento da área de cada empresa já passa por "/c".
+      if (["/logo.png", "/icon.svg", "/favicon-16.png", "/favicon-32.png", "/apple-touch-icon.png",
+        "/icon-192.png", "/icon-512.png", "/manifest.json",
+        "/opengraph-image", "/twitter-image"].includes(pathname)) return true
 
       // Rotas públicas — não precisam de autenticação
       const publicPaths = [

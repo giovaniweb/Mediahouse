@@ -47,3 +47,17 @@
 .decisions p {font-size:12px;line-height:1.6;color:#a0a4b8;margin-top:6px;}
 .decisions svg {flex-shrink:0;color:#b398ff;}
 @media(max-width:800px) {.decisions {grid-template-columns:1fr;gap:8px;} .decisions a + a {border-top:1px solid #303342;padding-top:16px;}}
+
+/* Escolha de departamento no cabeçalho (Audiovisual / Growth / Social Media). */
+.departamentos { display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:16px; padding:4px; border-radius:12px; background:#161822; border:1px solid #303341; }
+.departamentos button { min-height:34px; padding:6px 14px; border-radius:9px; color:#a0a4b8; font-size:13px; }
+.departamentos button:hover { color:#f1f0f8; }
+.departamentos button[aria-pressed="true"] { background:#b39aff26; color:#ede6ff; }
+.departamentos button:focus-visible { outline:2px solid #b39aff; outline-offset:2px; }
+.alerta { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #303341; min-width:0; }
+.alerta:hover strong { color:#fff; }
+.alerta > div { flex:1; min-width:0; }
+.alerta strong { font-weight:500; font-size:13px; display:block; overflow-wrap:anywhere; color:#eeedf5; }
+.alerta small { display:block; font-size:12px; color:#a0a4b8; margin-top:4px; }
+.alerta .badge { white-space:nowrap; }
+@media(max-width:600px) { .departamentos { display:flex; width:100%; } .departamentos button { flex:1; min-height:40px; padding:6px 8px; } }

@@ -17,13 +17,14 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
-import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
+import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -86,6 +87,8 @@ const criarDemandaSchema = z.object({
   classificacao: z.enum(["b2c", "b2b"]).optional(),
   // Campos condicionais por tipo de entrega (Growth)
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
+  // Pedido feito pelo quadro da social (/social): a ideia que vira esta demanda.
+  ideiaId: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -197,6 +200,28 @@ export async function GET(req: NextRequest) {
     }
     and.push({ finalizadaEm: faixa })
   }
+
+  // ?prazoDe/?prazoAte — o critério "Prazo" do "Filtrar por…" dos quadros. Na
+  // fila o que importa é quando vence, não quando terminou. O prazo é gravado
+  // como meia-noite UTC (inicioDoDia), então o dia é UTC, e não o de Brasília
+  // que vale para finalizadaEm: com o fuso, "prazo 01/10" não achava nada.
+  const prazoDe = searchParams.get("prazoDe")
+  const prazoAte = searchParams.get("prazoAte")
+  if (prazoDe || prazoAte) {
+    try { intervaloCalendario(prazoDe, prazoAte) } // só valida formato e ordem
+    catch (e) {
+      if (e instanceof RecorteInvalido) return erroDeCampo(e.campo === "ate" ? "prazoAte" : "prazoDe", e.message)
+      throw e
+    }
+    and.push({ dataLimite: {
+      ...(prazoDe ? { gte: inicioDoDia(prazoDe) } : {}),
+      ...(prazoAte ? { lt: inicioDoDia(somarDias(prazoAte, 1)) } : {}),
+    } })
+  }
+
+  // ?social=1 — só os pedidos que nasceram no quadro da social media (vídeo ou
+  // arte). É o departamento "Social Media" do histórico e do dashboard.
+  if (searchParams.get("social") === "1") and.push({ socialId: { not: null } })
 
   // ?atrasadas=1 — prazo vencido, exceto onde o prazo fica suspenso porque a bola
   // está com o cliente ou com quem posta. Mesma regra de estaAtrasada() no card;
@@ -408,6 +433,18 @@ export async function POST(req: NextRequest) {
     linhaProjetoTexto = linha.nome
   }
 
+  // Pedido do quadro da social: a ideia precisa ser dela e ainda não ter virado
+  // pedido. A linha da demanda passa a ser a da ideia, e `socialId` marca o
+  // pedido como dela — é o selo "Social" no card da equipe.
+  let socialId: string | undefined
+  if (data.ideiaId) {
+    const r = await ideiaParaPedido(data.ideiaId, organizacaoId, session.user.id)
+    if ("erro" in r) return NextResponse.json({ error: r.erro }, { status: r.status })
+    linhaProjetoId = r.linha.id
+    linhaProjetoTexto = r.linha.nome
+    socialId = session.user.id
+  }
+
   if (!(await departamentoValido(data.departamento, organizacaoId))) {
     return NextResponse.json(
       { error: "Departamento inválido — cadastre-o em Configurações → Parâmetros" },
@@ -452,6 +489,7 @@ export async function POST(req: NextRequest) {
       responsavelId: responsavelId || undefined,
       linhaProjeto: linhaProjetoTexto,
       linhaProjetoId: linhaProjetoId || undefined,
+      socialId,
       eventoGestaoId: data.eventoGestaoId || undefined,
       telefoneSolicitante: data.telefoneSolicitante || undefined,
       classificacao: data.classificacao || undefined,
@@ -460,6 +498,8 @@ export async function POST(req: NextRequest) {
       detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
     },
   }))
+
+  if (data.ideiaId) await ligarIdeiaAoPedido(data.ideiaId, demanda)
 
   // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
   const produtoIds = Array.from(new Set([

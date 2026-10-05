@@ -20,6 +20,7 @@ import {
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, RefreshCw, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
   CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft, ArrowRight,
+  Maximize2, Minimize2,
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -2520,7 +2521,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <StatusBadge status={demanda.statusInterno} isGrowth={isGrowth} />
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200" aria-label={presentation === "drawer" ? "Abrir em janela ampliada" : "Abrir em painel lateral"}>{presentation === "drawer" ? "Ampliar" : "Painel lateral"}</button>
+                <button type="button" onClick={() => setPresentation(presentation === "drawer" ? "modal" : "drawer")} className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800" title={presentation === "drawer" ? "Ver em tela grande" : "Voltar ao painel lateral"}>{presentation === "drawer" ? <><Maximize2 className="w-3.5 h-3.5" aria-hidden /> Ampliar</> : <><Minimize2 className="w-3.5 h-3.5" aria-hidden /> Reduzir</>}</button>
                 {acoes}
                 <button onClick={() => onClose?.()} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar">
                   <X className="w-4 h-4" />
