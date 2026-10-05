@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Landing from "@/components/landing/Landing"
 import "@/components/layout/Montserrat.css"
+import { SLUG_ORG_PADRAO } from "@/lib/org"
 
 export const metadata: Metadata = {
   title: "NuFlow — Mais tempo para criar",
@@ -20,5 +21,6 @@ export default function RootPage() {
   const contactUrl = /^\d{10,15}$/.test(phone)
     ? `https://wa.me/${phone}?text=${encodeURIComponent("Olá! Quero conhecer o NuFlow.")}`
     : null
-  return <Landing contactUrl={contactUrl} />
+  // "Sou cliente": quem veio pedir um vídeo vai para a área da empresa padrão.
+  return <Landing contactUrl={contactUrl} areaCliente={`/c/${SLUG_ORG_PADRAO}`} />
 }

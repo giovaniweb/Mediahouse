@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { Clapperboard, CalendarCheck, Camera, Images, LogIn, ArrowRight } from "lucide-react"
+import { Clapperboard, Palette, CalendarCheck, Camera, Images, LogIn, ArrowRight } from "lucide-react"
 import { empresaDoPortal } from "@/lib/portal"
 import "@/components/layout/Montserrat.css"
 import styles from "@/components/publico/Portal.module.css"
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const empresa = await empresaDoPortal((await params).slug)
   if (!empresa) return { title: "Área não encontrada · NuFlow", robots: { index: false } }
   // Fora dos buscadores: cada empresa decide para quem manda o próprio link.
-  return { title: `${empresa.nome} · NuFlow`, description: `Pedidos de vídeo, agendamento de gravação, cadastro de videomakers e acesso à conta — ${empresa.nome}.`, robots: { index: false, follow: false } }
+  return { title: `${empresa.nome} · NuFlow`, description: `Pedidos de vídeo e arte, gravação com videomaker, cadastro de videomakers e acesso à conta — ${empresa.nome}.`, robots: { index: false, follow: false } }
 }
 
 function iniciais(nome: string) {
@@ -28,13 +28,16 @@ export default async function AreaDaEmpresa({ params }: Props) {
   const empresa = await empresaDoPortal(slug)
   if (!empresa) notFound()
   const base = `/c/${empresa.slug}`
+  // Seis portas, na língua de quem chega: cada uma abre o formulário já no
+  // ponto certo, sem tela de "o que você precisa?" no meio.
   const caminhos = [
-    { href: `${base}/pedido`, icone: Clapperboard, titulo: "Pedir um vídeo ou conteúdo", texto: "Conte o que você precisa: tipo, prazo e referências.", principal: true },
-    // Job é a cobertura aprovada: o pedido entra em Aprovações e, aprovado, vai para Jobs.
-    { href: `${base}/pedido?tipo=cobertura`, icone: CalendarCheck, titulo: "Agendar gravação de evento", texto: "Clínica, congresso ou evento: data, local e quem recebe a equipe. A equipe confirma o Job." },
-    { href: `${base}/videomaker`, icone: Camera, titulo: "Trabalhar como videomaker", texto: "Mande seus dados e seu portfólio para a equipe conhecer seu trabalho." },
-    { href: `${base}/galeria`, icone: Images, titulo: "Ver a galeria", texto: "Os vídeos que a equipe já publicou." },
-    { href: `${base}/entrar`, icone: LogIn, titulo: "Entrar na conta", texto: "Para quem faz parte da equipe ou acompanha os próprios pedidos." },
+    { href: `${base}/pedido?tipo=video`, icone: Clapperboard, titulo: "Quero um vídeo", texto: "Reels, institucional, treinamento, apresentação de equipamento.", principal: true },
+    { href: `${base}/pedido?tipo=conteudo`, icone: Palette, titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo de tráfego, arte gráfica." },
+    // Pedido de gravação: entra em Aprovações e, aprovado, vira Job.
+    { href: `${base}/gravacao`, icone: CalendarCheck, titulo: "Quero um videomaker", texto: "Gravação em clínica ou evento: cliente, endereço, data e horário." },
+    { href: `${base}/videomaker`, icone: Camera, titulo: "Quero ser videomaker", texto: "Mande seus dados e seu portfólio para a equipe." },
+    { href: `${base}/galeria`, icone: Images, titulo: "Quero ver a galeria", texto: "Os vídeos que a equipe já publicou." },
+    { href: `${base}/entrar`, icone: LogIn, titulo: "Quero entrar no sistema", texto: "Para quem faz parte da equipe ou acompanha os próprios pedidos." },
   ]
   return (
     <main className={styles.portal}>

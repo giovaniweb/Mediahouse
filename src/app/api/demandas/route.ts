@@ -23,6 +23,7 @@ import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
+import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -86,12 +87,6 @@ const criarDemandaSchema = z.object({
   // Campos condicionais por tipo de entrega (Growth)
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
 })
-
-function gerarCodigo(): string {
-  const ano = new Date().getFullYear().toString().slice(-2)
-  const rand = Math.floor(Math.random() * 9000 + 1000)
-  return `VOP-${ano}-${rand}`
-}
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -420,10 +415,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const demanda = await prisma.demanda.create({
+  const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
-      codigo: gerarCodigo(),
+      codigo,
       titulo: data.titulo,
       descricao: data.descricao,
       departamento: data.departamento,
@@ -464,7 +459,7 @@ export async function POST(req: NextRequest) {
       linkBrutos: data.linkBrutos || undefined,
       detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
     },
-  })
+  }))
 
   // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
   const produtoIds = Array.from(new Set([

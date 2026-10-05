@@ -8,13 +8,13 @@ import { Header } from "@/components/layout/Header"
 import { JobsQuadro } from "@/components/jobs/JobsQuadro"
 import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
-import { cn } from "@/lib/utils"
 import { ehHoje } from "@/lib/datas"
 import { estaAtrasada } from "@/lib/status"
 import { TIPO_COBERTURA, ehJob, proximaAcao, responsavelAtual } from "@/lib/job-fase"
 import { BoardFilters } from "@/components/kanban/BoardFilters"
 import styles from "@/components/jobs/JobsPreview.module.css"
-import { Search, Columns3, List, ChevronRight } from "lucide-react"
+import topo from "@/components/demandas/BoardOverview.module.css"
+import { Search, LayoutGrid, List, ChevronRight } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
@@ -117,85 +117,94 @@ function Quadro() {
   const abrir = (id: string) => router.push(`/jobs/${id}`)
 
   const selectClass =
-    "bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600"
+    "border border-zinc-800 rounded-lg px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600"
+
+  const captacoesHoje = jobs.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao)).length
+  const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
 
   return (
-    <div className={cn("flex flex-col h-screen", styles.page)}>
+    <>
       <Header title="Jobs" />
-      <div className={styles.intro}><div><p>OPERAÇÃO AUDIOVISUAL</p><h1>Seu próximo job. À vista.</h1></div><span>Captação, responsável e próximo passo em um só lugar.</span></div>
 
-      <div className={styles.summary} aria-label="Resumo dos jobs filtrados"><span><strong>{jobs.length}</strong> jobs</span><span><strong>{atrasados}</strong> atrasados</span><span><strong>{jobs.filter(j => j.dataCaptacao && ehHoje(j.dataCaptacao)).length}</strong> captações hoje</span></div>
-      <div className={styles.views} aria-label="Visualização de Jobs"><button aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><Columns3 size={16}/>Kanban</button><button aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16}/>Lista</button></div>
-      <div className={cn("px-4 pt-3 pb-2 space-y-2.5", styles.controls)}>
-        {/* Recortes principais (§35) */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {ABAS.map((a) => (
-            <button
-              key={a.id}
-              aria-pressed={aba === a.id}
-              onClick={() => setAba(a.id)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                aba === a.id
-                  ? "bg-zinc-100 text-zinc-900"
-                  : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200"
-              )}
-            >
-              {a.label}
-            </button>
-          ))}
-
-          <div className="ml-auto flex items-center gap-3 text-xs text-zinc-500">
-            <span className="tabular-nums">{jobs.length} jobs</span>
-            {atrasados > 0 && (
-              <span className="text-red-400 tabular-nums">{atrasados} atrasados</span>
-            )}
+      {/* Topo do quadro no mesmo desenho do de Demandas (BarraVisao): duas
+          linhas — visão e números; recortes e filtros. O nome da página já
+          está na barra de cima, e o quadro precisa da altura da tela. */}
+      <div className="px-4 pt-1 pb-3">
+        <section className={topo.overview} aria-label="Controles do quadro">
+          <div className={topo.topRow}>
+            <div className={topo.tabs} aria-label="Visualização de Jobs">
+              <button type="button" aria-label="Ver como kanban" aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><LayoutGrid size={16} />Kanban</button>
+              <button type="button" aria-label="Ver como lista" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16} />Lista</button>
+            </div>
+            <div className={topo.counts} aria-label="Resumo dos jobs filtrados">
+              <span><strong>{jobs.length}</strong> {contagem(jobs.length, "job", "jobs")}</span>
+              <span data-tone="late"><strong>{atrasados}</strong> {contagem(atrasados, "atrasado", "atrasados")}</span>
+              <span data-tone="approval"><strong>{captacoesHoje}</strong> {contagem(captacoesHoje, "captação", "captações")} hoje</span>
+            </div>
           </div>
-        </div>
+          <div className={topo.controlsRow}>
+            {/* Recortes principais (§35) */}
+            <div className={topo.scopes} aria-label="Recortes dos jobs">
+              {ABAS.map((a) => (
+                <button key={a.id} type="button" aria-pressed={aba === a.id} onClick={() => setAba(a.id)}>
+                  {a.label}{aba === a.id && <span>{jobs.length}</span>}
+                </button>
+              ))}
+            </div>
 
-        {/* Busca e recortes secundários */}
-        <BoardFilters>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              aria-label="Buscar jobs por código ou título"
-              placeholder="Buscar por código, título…"
-              className="bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 w-56 focus:outline-none focus:border-zinc-600"
-            />
+            {/* Busca e recortes secundários */}
+            <div className={topo.filters}>
+              <BoardFilters>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative w-full md:w-auto">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      aria-label="Buscar jobs por código ou título"
+                      placeholder="Buscar por código, título…"
+                      className="border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600"
+                    />
+                  </div>
+
+                  <select aria-label="Videomaker" value={videomakerId} onChange={(e) => setVideomakerId(e.target.value)} className={selectClass}>
+                    <option value="">Todos os videomakers</option>
+                    {vms.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  </select>
+
+                  <select aria-label="Editor" value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
+                    <option value="">Todos os editores</option>
+                    {editores.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                  </select>
+
+                  <select aria-label="Região" value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>
+                    <option value="">Todas as regiões</option>
+                    {regioes.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </BoardFilters>
+            </div>
           </div>
-
-          <select aria-label="Videomaker" value={videomakerId} onChange={(e) => setVideomakerId(e.target.value)} className={selectClass}>
-            <option value="">Videomaker</option>
-            {vms.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-          </select>
-
-          <select aria-label="Editor" value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
-            <option value="">Editor</option>
-            {editores.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </select>
-
-          <select aria-label="Região" value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>
-            <option value="">Região</option>
-            {regioes.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        </BoardFilters>
+        </section>
       </div>
 
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar os jobs. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
-      <div className={cn("flex-1 min-h-0 pb-4", styles.boardSpace)}>
-        {isLoading && todos.length === 0 ? (
-          <p className="text-sm text-zinc-500 px-10 py-8">Carregando…</p>
-        ) : error && !data ? null : (
-          view === "list" ? <section className={styles.list} aria-label="Lista de Jobs">
+      {/* Kanban com altura ancorada na viewport, como em Demandas: a barra de
+          rolagem horizontal fica no rodapé. A lista rola com a página. */}
+      {isLoading && todos.length === 0 ? (
+        <p className="text-sm text-zinc-500 px-6 py-8">Carregando…</p>
+      ) : error && !data ? null : view === "list" ? (
+        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
+          <section className={styles.list} aria-label="Lista de Jobs">
             {jobs.map(job => <Link key={job.id} href={`/jobs/${job.id}`}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></Link>)}
             {jobs.length === 0 && <p>Nenhum job com os filtros selecionados.</p>}
-          </section> : <JobsQuadro jobs={jobs} onAbrir={abrir} />
-        )}
-      </div>
-    </div>
+          </section>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
+          <JobsQuadro jobs={jobs} onAbrir={abrir} />
+        </div>
+      )}
+    </>
   )
 }

@@ -11,6 +11,7 @@ import { contextoRegraValido, type ContextoRegra } from "@/lib/regras-operaciona
 
 type Tx=Prisma.TransactionClient
 const TIPO="whatsapp.saida"
+const LOTE_ENVIOS=10,ORCAMENTO_MS=20_000,INTERVALO_ENVIOS_MS=1_000
 export const hashTelefone=(telefone:string)=>createHash("sha256").update(telefone).digest("hex")
 export async function destinoAutorizado(tx:Tx,organizacaoId:string,telefone:string) {
   const i=await identidadeWhatsApp(organizacaoId,telefone,tx)
@@ -76,9 +77,13 @@ export async function registrarRecibos(tx:Tx,organizacaoId:string,instanceId:str
     const e=objeto(valor)
     const mapa:Record<string,string>={SERVER_ACK:"aceito",DELIVERY_ACK:"entregue",READ:"lido",PLAYED:"lido"}
     const estado=typeof e.status==="string" ? mapa[e.status] : undefined
-    const telefone=jidRecebidoVerificado(e.remoteJid,undefined)?.telefone
-    if(e.fromMe!==true || !estado || !telefone || typeof e.keyId!=="string" || !e.keyId || e.keyId.length>128) continue
-    const telefoneHash=hashTelefone(telefone)
+    if(e.fromMe!==true || !estado || typeof e.keyId!=="string" || !e.keyId || e.keyId.length>128) continue
+    const telefone=jidRecebidoVerificado(e.remoteJid,e.remoteJidAlt)?.telefone
+    // A Evolution v2 manda o recibo com o LID do contato, não com o telefone. Aí a
+    // prova é o ID que o próprio provedor devolveu ao nosso envio nesta instância.
+    const telefoneHash=telefone ? hashTelefone(telefone) : typeof e.remoteJid==="string" && /^\d+@lid$/.test(e.remoteJid) ?
+      (await tx.saidaWhatsapp.findFirst({where:{organizacaoId,instanceId,providerMessageId:e.keyId},select:{telefoneHash:true}}))?.telefoneHash : undefined
+    if(!telefoneHash) continue
     const chave=createHash("sha256").update(JSON.stringify([instanceId,e.keyId,estado,ocorridoEm.toISOString(),telefoneHash])).digest("hex")
     const r=await tx.reciboWhatsapp.createMany({data:{organizacaoId,instanceId,providerMessageId:e.keyId,telefoneHash,chave,estado,ocorridoEm},skipDuplicates:true})
     registrados+=r.count
@@ -119,9 +124,16 @@ export async function processarSaidas(organizacaoId:string) {
     // Retenção da cópia de saída: sete dias, conservando chave/tentativas/recibos.
     await prisma.saidaWhatsapp.updateMany({where:{organizacaoId,conteudoExpiraEm:{lte:new Date()}},data:{telefoneCifrado:null,conteudoCifrado:null}})
   })
-  const fila=criarFila(prisma),jobs=await fila.reivindicar(organizacaoId,1,[TIPO])
-  const resumo={reivindicados:jobs.length,aceitos:0,falhos:0,desconhecidos:0,semEnvio:0}
-  for(const job of jobs) {
+  const fila=criarFila(prisma),inicio=Date.now()
+  const resumo={reivindicados:0,aceitos:0,falhos:0,desconhecidos:0,semEnvio:0}
+  // Drena em série, um envio por vez e com intervalo, até o lote ou o tempo acabar.
+  // Um por chamada deixava a fila 15 min atrás e a demanda editada nesse meio
+  // tempo cancelava o aviso (objeto_alterado).
+  for(let n=0;n<LOTE_ENVIOS && Date.now()-inicio<ORCAMENTO_MS;n++) {
+    const [job]=await fila.reivindicar(organizacaoId,1,[TIPO])
+    if(!job) break
+    resumo.reivindicados++
+    if(n>0) await new Promise(r=>setTimeout(r,INTERVALO_ENVIOS_MS))
     const lease={id:job.id,organizacaoId,leaseToken:job.leaseToken!}
     let envioIniciado=false
     try {
