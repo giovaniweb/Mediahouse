@@ -55,7 +55,9 @@ const sections = [
     items: [
       { href: "/hoje", label: "Hoje", icon: Home },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/meu-trabalho", label: "Meu trabalho", icon: ClipboardCheck },
+      // "Meu trabalho" (/meu-trabalho, a lista completa) saiu do menu em 05/10/2026:
+      // ficava ao lado de "Hoje" parecendo a mesma coisa. Continua no ar, pelo
+      // "Ver meu trabalho →" no fim de Hoje.
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       // "Mandar ideia" ocupa o lugar do Banco de Ideias (módulo fora da
