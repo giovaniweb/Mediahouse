@@ -98,6 +98,19 @@ describe("conversão", () => {
     expect((await db.historicoStatus.findFirstOrThrow({ where: { demandaId: pendente.id } })).statusNovo).toBe(EVENTO_EDICAO)
   })
 
+  it("caixa de Aprovações: converter em Demanda pela rota antiga, com confirmação, mantém o portão", async () => {
+    const d = await job({ statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })
+    const conv = (body: unknown) => CONVERTER(
+      new NextRequest("http://localhost/api/jobs/x/converter", { method: "POST", body: JSON.stringify(body) }), ctx(d.id))
+    // Sem `confirmar` a rota recusa — o que a tela de Aprovações mandava antes.
+    expect((await conv({ para: "demanda" })).status).toBe(400)
+    const r = await conv({ para: "demanda", confirmar: true })
+    expect(r.status).toBe(200)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id: d.id } })).toMatchObject({
+      departamento: "audiovisual", tipoVideo: "outro", statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada",
+    })
+  })
+
   it("exige confirmação explícita", async () => {
     const d = await job()
     const r = await transferir(d.id, { tipoVideo: "outro" })

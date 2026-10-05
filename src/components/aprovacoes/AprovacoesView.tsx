@@ -137,7 +137,11 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
         const conv = await fetch(`/api/jobs/${id}/converter`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ para: fluxo }),
+          // Para Demanda, a rota exige confirmação explícita (a mesma regra da
+          // "Transferir para Demandas" do Job). Aqui o clique no destino JÁ é a
+          // decisão de quem aprova; bloqueios (videomaker, convite aceito,
+          // custo) e permissão continuam valendo e voltam como erro.
+          body: JSON.stringify(fluxo === "demanda" ? { para: fluxo, confirmar: true } : { para: fluxo }),
         })
         if (!conv.ok) throw new Error((await conv.json()).error)
       }
