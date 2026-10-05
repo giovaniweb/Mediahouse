@@ -45,9 +45,9 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Link Home */}
+          {/* Início do sistema (o mesmo destino do login), não a página da produtora */}
           <Link
-            href="/sobre"
+            href="/dashboard"
             className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1.5 rounded-lg hover:bg-zinc-800"
             title="Página Inicial"
           >
