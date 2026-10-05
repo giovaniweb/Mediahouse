@@ -226,9 +226,10 @@ export function Sidebar() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-          {/* Link Página Inicial */}
+          {/* Início do sistema, e não do site: desde 03/10 "/" é a landing do
+              NuFlow e "/sobre" é a página da produtora. É o mesmo destino do login. */}
           <Link
-            href="/sobre"
+            href="/dashboard"
             className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
           >
             <Home className="w-4 h-4 flex-shrink-0" />
