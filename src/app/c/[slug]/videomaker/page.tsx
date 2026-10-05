@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
-import CadastroVideomaker from "@/app/(public)/cadastrar-videomaker/page"
+import CadastroVideomaker from "@/components/publico/CadastroVideomaker"
 
-// Mesma tela de cadastrar-videomaker, dentro da área da empresa: o slug
+// O cadastro de videomaker, dentro da área da empresa: o slug
 // vem do caminho (/c/<slug>/...), e o formulário o repassa à API sozinho.
 type Props = { params: Promise<{ slug: string }> }
 

@@ -16,6 +16,8 @@ type Props = {
   descricao?: string
   /** Segundo link abaixo do formulário; null esconde. */
   linkExtra?: { href: string; texto: string } | null
+  /** Área da empresa para quem só quer fazer um pedido (sem conta). */
+  areaCliente?: string
 }
 
 export function FormularioLogin({
@@ -24,6 +26,7 @@ export function FormularioLogin({
   titulo = "Entre no seu flow.",
   descricao = "Seus jobs, sua equipe e o próximo passo estão aqui.",
   linkExtra = { href: "/comecar", texto: "Quero usar o NuFlow" },
+  areaCliente,
 }: Props) {
   const [error,setError]=useState("")
   const [loading,setLoading]=useState(false)
@@ -56,5 +59,9 @@ export function FormularioLogin({
       {error&&<p role="alert" className={styles.error}>{error}</p>}
       <button className={styles.primary} disabled={loading} type="submit">{loading?"Entrando…":"Entrar"}<ArrowRight size={16}/></button>
     </form><div className={styles.links}><Link href="/esqueci-senha">Esqueci minha senha</Link>{linkExtra && <Link href={linkExtra.href}>{linkExtra.texto}</Link>}</div>
+    {areaCliente && <Link href={areaCliente} className={styles.cliente}>
+      <div><strong>Sou cliente — fazer um pedido</strong><span>Pedir um vídeo ou agendar uma gravação. Não precisa de conta.</span></div>
+      <ArrowRight size={18} aria-hidden="true"/>
+    </Link>}
   </section>
 }

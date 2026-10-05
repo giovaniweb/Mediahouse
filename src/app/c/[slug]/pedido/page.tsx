@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
-import FormularioPedido from "@/app/(public)/cadastrar-demanda/page"
+import FormularioPedido from "@/components/publico/FormularioPedido"
 
-// Mesma tela de cadastrar-demanda, dentro da área da empresa: o slug
+// O formulário de pedido, dentro da área da empresa: o slug
 // vem do caminho (/c/<slug>/...), e o formulário o repassa à API sozinho.
 type Props = { params: Promise<{ slug: string }> }
 

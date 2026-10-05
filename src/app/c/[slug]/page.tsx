@@ -31,7 +31,7 @@ export default async function AreaDaEmpresa({ params }: Props) {
   const caminhos = [
     { href: `${base}/pedido`, icone: Clapperboard, titulo: "Pedir um vídeo ou conteúdo", texto: "Conte o que você precisa: tipo, prazo e referências.", principal: true },
     // Job é a cobertura aprovada: o pedido entra em Aprovações e, aprovado, vai para Jobs.
-    { href: `${base}/pedido?tipo=cobertura`, icone: CalendarCheck, titulo: "Agendar gravação de evento", texto: "Clínica, congresso ou evento: data, local e quem recebe a equipe. A equipe confirma o Job." },
+    { href: `${base}/pedido?tipo=cobertura`, icone: CalendarCheck, titulo: "Agendar gravação de evento", texto: "Precisa de videomaker no local? Clínica, congresso ou evento: data, local e quem recebe a equipe. A equipe confirma o Job." },
     { href: `${base}/videomaker`, icone: Camera, titulo: "Trabalhar como videomaker", texto: "Mande seus dados e seu portfólio para a equipe conhecer seu trabalho." },
     { href: `${base}/galeria`, icone: Images, titulo: "Ver a galeria", texto: "Os vídeos que a equipe já publicou." },
     { href: `${base}/entrar`, icone: LogIn, titulo: "Entrar na conta", texto: "Para quem faz parte da equipe ou acompanha os próprios pedidos." },

@@ -1,11 +1,11 @@
 // Propaga a empresa dona do link nas páginas PÚBLICAS.
 //
-// O formulário público não tem sessão, então a empresa vem da própria URL, de
-// um de dois jeitos:
-//   /c/contourline/pedido              — a área da empresa (o jeito atual)
-//   /cadastrar-demanda?org=contourline — o link antigo, que continua valendo
-// Sem nenhum dos dois, a API cai na ORG_PUBLICA_PADRAO — o que mantém de pé os
-// links que já circulam sem slug.
+// O formulário público não tem sessão, então a empresa vem da própria URL:
+//   /c/contourline/pedido — a área da empresa
+// O link antigo (/cadastrar-demanda, com ou sem ?org=) redireciona para a área,
+// então o formulário quase sempre tem o slug no caminho. O `?org=` e o padrão da
+// API (ORG_PUBLICA_PADRAO) ficam para as telas públicas que ainda não estão na
+// área, como /galeria.
 //
 // É isto que permite a segunda empresa ter formulário próprio sem herdar o
 // tráfego da primeira: basta o link carregar o slug dela.
