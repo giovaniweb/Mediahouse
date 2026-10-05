@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
-import { Plus, Search, XCircle, UserCheck, ChevronLeft, ChevronRight } from "lucide-react"
-import { BoardFilters } from "@/components/kanban/BoardFilters"
+import { Plus } from "lucide-react"
+import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO } from "@/lib/growth-conteudo"
@@ -20,28 +21,34 @@ import { fetcher } from "@/lib/fetcher"
 import { Header } from "@/components/layout/Header"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
-const selCls = "text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-300"
-
 // Growth (gestão de conteúdos). Reutiliza a Demanda (area="design" internamente),
 // mas com kanban próprio de 8 colunas e SEM qualquer dependência de Eventos.
+// useSearchParams pede um limite de Suspense para o build pré-renderizar a rota.
 export default function GrowthKanbanPage() {
+  return <Suspense fallback={null}><GrowthKanban /></Suspense>
+}
+
+function GrowthKanban() {
   const { data: session } = useSession()
+  // O card "Atrasadas" do dashboard do Growth chega com ?atrasadas=1 e abre já
+  // no recorte, como no Audiovisual.
+  const atrasadasUrl = useSearchParams().get("atrasadas") === "1"
   const [showNova, setShowNova] = useState(false)
 
   // Filtros — adaptados às peculiaridades do Growth (pessoas/responsável,
   // linha/projeto, tipo de conteúdo, produto) em vez de videomaker/editor.
   const [search, setSearch] = useState("")
   const [filtroResp, setFiltroResp] = useState("")
+  const [filtroPrazo, setFiltroPrazo] = useState("")
   const [filtroLinha, setFiltroLinha] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
-  const [soMinhas, setSoMinhas] = useState(false)
 
   // Mesmas duas visões do audiovisual, com preferência guardada em separado:
   // quem cuida de Growth pode querer lista e quem cuida de vídeo, kanban.
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
-  const [aba, setAba] = useState<AbaRapida>("todos")
+  const [aba, setAba] = useState<AbaRapida>(atrasadasUrl ? "atrasadas" : "todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-growth"
 
   useEffect(() => {
@@ -65,20 +72,18 @@ export default function GrowthKanbanPage() {
   const { data: pData } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos?limit=200", fetcher)
   const produtos = pData?.produtos ?? []
 
-  const temFiltrosAtivos = !!(filtroResp || filtroLinha || filtroTipo || filtroProduto || soMinhas)
-  function limparFiltros() {
-    setFiltroResp(""); setFiltroLinha(""); setFiltroTipo(""); setFiltroProduto(""); setSoMinhas(false)
-  }
-
   const [navegacaoFila,setNavegacaoFila] = useState({filtro:"",pagina:1})
   const params = new URLSearchParams()
   params.set("filaTrabalho","1")
   params.set("area", "design")
   if (search) params.set("search", search)
-  if (soMinhas || aba === "minhas") params.set("mine", "1")
+  if (aba === "minhas") params.set("mine", "1")
   if (aba === "criadas") params.set("criadasPorMim", "1")
   if (aba === "atrasadas") params.set("atrasadas", "1")
   if (filtroResp) params.set("responsavelId", filtroResp)
+  const prazo = lerPeriodo(filtroPrazo)
+  if (prazo.de) params.set("prazoDe", prazo.de)
+  if (prazo.ate) params.set("prazoAte", prazo.ate)
   if (filtroLinha) params.set("linhaProjetoId", filtroLinha)
   if (filtroTipo) params.set("tipoVideo", filtroTipo)
   if (filtroProduto) params.set("produtoId", filtroProduto)
@@ -88,6 +93,11 @@ export default function GrowthKanbanPage() {
   const mudarPagina = (pagina:number) => setNavegacaoFila({filtro:chaveFiltro,pagina})
   params.set("limit","100"); params.set("offset",String((paginaFila-1)*100))
   const { data, mutate } = useSWR(`/api/demandas?${params}`, fetcher, { refreshInterval: 15000 })
+
+  // Tamanho da fila sem recorte nem filtro, para o topo dizer "18 de 240 na
+  // fila" em vez de chamar o recorte de fila. Uma linha só: interessa o total.
+  const recortado = chaveFiltro !== "filaTrabalho=1&area=design"
+  const { data: dataFila } = useSWR<{ total: number }>(recortado ? "/api/demandas?filaTrabalho=1&area=design&limit=1" : null, fetcher, { refreshInterval: 30000 })
   const demandasAll = data?.demandas ?? []
 
   const demandas = demandasAll
@@ -131,79 +141,35 @@ export default function GrowthKanbanPage() {
     <div className="flex flex-col h-full">
       <Header title="Growth · Demandas" actions={<button onClick={() => setShowNova(true)} className={actionStyles.newDemand}><Plus className="w-4 h-4" /> Nova Demanda</button>} />
 
-      {/* Filtros — pessoas/responsável, linha/projeto, tipo de conteúdo e produto */}
-
-
       <div className="px-4 pt-1 pb-3">
         <BarraVisao
-          paginacao={(
-            <nav aria-label="Páginas da fila" className="flex items-center gap-2 text-[12.5px] text-zinc-400">
-              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Página anterior" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila === 1} onClick={() => mudarPagina(paginaFila - 1)}><ChevronLeft className="h-4 w-4" /></button>}
-              <span className="whitespace-nowrap">{(data?.total ?? 0) > 100 ? `Página ${paginaFila} de ${Math.ceil((data?.total ?? 0) / 100)} · ` : ""}{data?.total ?? 0} na fila</span>
-              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Próxima página" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila * 100 >= (data?.total ?? 0)} onClick={() => mudarPagina(paginaFila + 1)}><ChevronRight className="h-4 w-4" /></button>}
-              <a href="/historico" className="whitespace-nowrap text-purple-300 hover:underline">Histórico</a>
-            </nav>
-          )}
           aviso={demandas.some((d: {statusVisivel: string; finalizadaEm?: string | null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) ? "Há concluídos antigos sem data nesta página. Eles continuam visíveis até a revisão; nenhuma data foi inventada." : undefined}
           area="growth"
           filters={(
-      <BoardFilters>
-      <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Buscar demanda..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-1.5 text-sm border border-zinc-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-zinc-800 text-zinc-200 placeholder:text-zinc-500 w-56"
-          />
-        </div>
-        <select value={filtroResp} onChange={(e) => setFiltroResp(e.target.value)} className={selCls}>
-          <option value="">Todos responsáveis</option>
-          {responsaveis.map((r) => (<option key={r.id} value={r.id}>{r.label ?? r.nome}</option>))}
-        </select>
-        <select value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} className={selCls}>
-          <option value="">Todas linhas/projetos</option>
-          {linhas.map((l) => (<option key={l.id} value={l.id}>{l.nome}</option>))}
-        </select>
-        <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className={selCls}>
-          <option value="">Todos os tipos</option>
-          {TIPOS_CONTEUDO.map((t) => (<option key={t.key} value={t.key}>{t.label}</option>))}
-        </select>
-        <select value={filtroProduto} onChange={(e) => setFiltroProduto(e.target.value)} className={selCls}>
-          <option value="">Todos produtos</option>
-          {produtos.map((p) => (<option key={p.id} value={p.id}>{p.nome}</option>))}
-        </select>
-        <button
-          type="button"
-          onClick={() => { setSoMinhas(v => !v); if (!soMinhas) setFiltroResp("") }}
-          aria-pressed={soMinhas}
-          title="Só as demandas em que eu sou responsável, designer, social, gestor ou solicitante"
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-            soMinhas
-              ? "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40"
-              : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" /> Só minhas
-        </button>
-        {temFiltrosAtivos && (
-          <button onClick={limparFiltros}
-            className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
-            <XCircle className="w-3.5 h-3.5" /> Limpar filtros
-          </button>
-        )}
-        <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
-      </div>
-      </BoardFilters>
+            <FiltrosQuadro
+              busca={search}
+              onBusca={setSearch}
+              placeholder="Buscar demanda…"
+              filtros={[
+                { id: "prazo", rotulo: "Prazo", tipo: "periodo", valor: filtroPrazo, onChange: setFiltroPrazo },
+                // No Growth quem pega o card é sempre alguém da casa (responsável),
+                // então "Pessoa" é a lista de responsáveis, sem prefixo de papel.
+                { id: "pessoa", rotulo: "Pessoa", valor: filtroResp, onChange: setFiltroResp, opcoes: responsaveis.map(r => ({ valor: r.id, rotulo: r.label ?? r.nome })) },
+                { id: "linha", rotulo: "Linha de produto", valor: filtroLinha, onChange: setFiltroLinha, opcoes: linhas.map(l => ({ valor: l.id, rotulo: l.nome })) },
+                { id: "tipo", rotulo: "Tipo de conteúdo", valor: filtroTipo, onChange: setFiltroTipo, opcoes: TIPOS_CONTEUDO.map(t => ({ valor: t.key, rotulo: t.label })) },
+                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
+              ]}
+            />
           )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
           aba={aba}
           onAba={setAba}
-          total={demandas.length}
+          total={data?.total}
+          totalFila={recortado ? dataFila?.total : data?.total}
+          pagina={paginaFila}
+          onPagina={mudarPagina}
         />
       </div>
 
@@ -219,6 +185,7 @@ export default function GrowthKanbanPage() {
             colunas={GROWTH_COLUNAS}
             getColuna={(d) => growthColunaDe(d.statusInterno)}
             openMode="modal"
+            historico="/historico/growth"
           />
         </div>
       ) : (

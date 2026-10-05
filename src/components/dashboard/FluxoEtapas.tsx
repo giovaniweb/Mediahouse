@@ -12,13 +12,17 @@ interface FluxoEtapasProps {
   gargalos: GargaloEtapa[]
   operacional?: Operacional | null
   isLoading: boolean
+  /** Para onde cada etapa leva. Padrão: o quadro do Audiovisual já recortado. */
+  hrefEtapa?: (etapa: string) => string
 }
 
 const numero = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })
 const demandas = (n: number) => `${n} ${n === 1 ? "demanda" : "demandas"}`
 const dias = (n: number) => `${numero(n)} ${n === 1 ? "dia" : "dias"}`
 
-export function FluxoEtapas({ gargalos, operacional, isLoading }: FluxoEtapasProps) {
+const quadroAudiovisual = (etapa: string) => `/demandas?statusVisivel=${etapa}`
+
+export function FluxoEtapas({ gargalos, operacional, isLoading, hrefEtapa = quadroAudiovisual }: FluxoEtapasProps) {
   // O gargalo é a etapa com a maior espera média entre as que têm demanda.
   // Comparar entre etapas diz mais do que um limite fixo de dias, que ninguém
   // definiu e que não vale igual para captação e para postagem.
@@ -67,7 +71,7 @@ export function FluxoEtapas({ gargalos, operacional, isLoading }: FluxoEtapasPro
             const destaque = g.etapa === gargalo
             const largura = g.diasMedios && maiorEspera ? Math.max((g.diasMedios / maiorEspera) * 100, 4) : 0
             return (
-              <Link key={g.etapa} href={`/demandas?statusVisivel=${g.etapa}`} className="block group">
+              <Link key={g.etapa} href={hrefEtapa(g.etapa)} className="block group">
                 <div className="flex items-baseline justify-between gap-3 mb-1.5">
                   <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">
                     {g.label}

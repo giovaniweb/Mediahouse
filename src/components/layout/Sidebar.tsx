@@ -55,7 +55,9 @@ const sections = [
     items: [
       { href: "/hoje", label: "Hoje", icon: Home },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/meu-trabalho", label: "Meu trabalho", icon: ClipboardCheck },
+      // "Meu trabalho" (/meu-trabalho, a lista completa) saiu do menu em 05/10/2026:
+      // ficava ao lado de "Hoje" parecendo a mesma coisa. Continua no ar, pelo
+      // "Ver meu trabalho →" no fim de Hoje.
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/produtos", label: "Produtos", icon: Package },
       // "Mandar ideia" ocupa o lugar do Banco de Ideias (módulo fora da
@@ -78,7 +80,7 @@ const sections = [
       { href: "/videomakers", label: "Videomakers Externos", icon: Camera },
       { href: "/equipe", label: "Videomakers Internos", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
-      { href: "/historico", label: "Histórico", icon: Archive },
+      { href: "/historico/audiovisual", label: "Histórico", icon: Archive },
     ],
   },
   {
@@ -87,6 +89,7 @@ const sections = [
       { href: "/design", label: "Demandas", icon: Sparkles },
       { href: "/aprovacoes/growth", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
+      { href: "/historico/growth", label: "Histórico", icon: Archive },
       { href: "/growth/equipe", label: "Equipe Growth", icon: Users },
       { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
     ],
@@ -98,6 +101,7 @@ const sections = [
       { href: "/social", label: "Planejamento", icon: CalendarRange },
       { href: "/social/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/social/equipe", label: "Equipe", icon: Users },
+      { href: "/historico/social", label: "Histórico", icon: Archive },
     ],
   },
   {
@@ -189,9 +193,9 @@ export function Sidebar() {
     if (modulo && mods && !mods[modulo]) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
-    if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
+    if ((href === "/design" || href === "/galeria-artes" || href === "/historico/growth") && podeVerGrowth) return true
     if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
-    if (href.startsWith("/social") && href !== "/social/enviar") return podeVerSocial
+    if ((href.startsWith("/social") && href !== "/social/enviar") || href === "/historico/social") return podeVerSocial
     const key = PERMISSAO_HREF_MAP[href]
     if (!key) return true
     return !!me.permissoes[key]

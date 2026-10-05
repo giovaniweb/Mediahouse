@@ -9,6 +9,9 @@ import { ANO_MAXIMO, dataEmSaoPaulo, hojeEmSaoPaulo } from "@/lib/datas"
 /** Marca, em IdeiaVideo.tags, o que chegou como pedido ("Solicitação") e não como ideia. */
 export const TAG_SOLICITACAO = "solicitacao"
 
+/** Pedido com a equipe sem mudança registrada há este tanto de dias está parado. */
+export const DIAS_PARADO = 3
+
 export type ColunaSocial = "ideia" | "plano" | "equipe" | "pronto"
 
 export const COLUNAS_SOCIAL: { id: ColunaSocial; nome: string; dica: string }[] = [

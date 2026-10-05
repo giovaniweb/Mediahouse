@@ -1,7 +1,7 @@
 "use client"
 
 import { DashboardPreview } from "@/components/dashboard/DashboardPreview"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
@@ -10,16 +10,39 @@ import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
+import { DashboardGrowth, DashboardSocial, SeletorDepartamento } from "@/components/dashboard/DashboardDepartamento"
+import { departamentosVisiveis, lerDepartamento, type Departamento } from "@/lib/painel-departamento"
+
+// O último departamento escolhido volta na próxima visita. Preferência de quem
+// olha, por isso no navegador e não no banco.
+const CHAVE_DEPARTAMENTO = "nuflow:dashboard-departamento"
 
 // Dashboard interno (equipe, admin, gestor, etc.)
 function InternalDashboard() {
   // Módulos desta empresa — antes eram constantes iguais para todas.
   const { data: me } = useMe()
-  const { data, isLoading, error, mutate } = useSWR("/api/dashboard/metrics", fetcher, {
+  const opcoes = departamentosVisiveis(me)
+  const [escolhido, setEscolhido] = useState<Departamento | null>(null)
+  useEffect(() => {
+    try { setEscolhido(lerDepartamento(localStorage.getItem(CHAVE_DEPARTAMENTO))) } catch { /* Sem preferência: Audiovisual. */ }
+  }, [])
+  // Escolha que esta pessoa não vê mais (perdeu a área) cai no primeiro que ela vê.
+  const departamento = escolhido && opcoes.includes(escolhido) ? escolhido : opcoes[0]
+  function escolher(d: Departamento) {
+    setEscolhido(d)
+    try { localStorage.setItem(CHAVE_DEPARTAMENTO, d) } catch { /* Continua sem lembrar. */ }
+  }
+
+  const { data, isLoading, error, mutate } = useSWR(me ? `/api/dashboard/metrics?departamento=${departamento}` : null, fetcher, {
     refreshInterval: 30000,
   })
-  const { data: kpiB2c } = useSWR("/api/kpi/b2c-b2b", fetcher, { refreshInterval: 60000 })
-  const { data: kpiIdeias } = useSWR(me?.modulos?.ideias ? "/api/ideias/kpi" : null, fetcher, { refreshInterval: 60000 })
+  const audiovisual = departamento === "audiovisual"
+  const { data: kpiB2c } = useSWR(audiovisual ? "/api/kpi/b2c-b2b" : null, fetcher, { refreshInterval: 60000 })
+  const { data: kpiIdeias } = useSWR(audiovisual && me?.modulos?.ideias ? "/api/ideias/kpi" : null, fetcher, { refreshInterval: 60000 })
+  // A resposta é do departamento pedido; enquanto o novo carrega, nada do anterior aparece.
+  const dados = data?.departamento === departamento ? data : undefined
+  const carregando = isLoading || !dados
+  const seletor = <SeletorDepartamento opcoes={opcoes} valor={departamento} onChange={escolher} />
 
   if (error) return (
     <>
@@ -36,7 +59,9 @@ function InternalDashboard() {
 
   return <>
     <Header title="Dashboard" />
-    <DashboardPreview data={data} loading={isLoading} b2c={kpiB2c} ideias={me?.modulos?.ideias ? kpiIdeias : undefined} />
+    {departamento === "growth" ? <DashboardGrowth data={dados} loading={carregando} seletor={seletor} />
+      : departamento === "social" ? <DashboardSocial data={dados} loading={carregando} seletor={seletor} />
+      : <DashboardPreview data={dados} loading={carregando} b2c={kpiB2c} ideias={me?.modulos?.ideias ? kpiIdeias : undefined} seletor={seletor} />}
   </>
 }
 

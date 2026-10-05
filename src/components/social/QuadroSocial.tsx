@@ -14,9 +14,10 @@ import { fetcher } from "@/lib/fetcher"
 import { cn } from "@/lib/utils"
 import { diasEntre, hojeEmSaoPaulo, somarDias, somarMeses } from "@/lib/datas"
 import {
-  COLUNAS_SOCIAL, ETAPA_NOME, ETAPA_PASSO, colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje,
+  COLUNAS_SOCIAL, DIAS_PARADO, ETAPA_NOME, ETAPA_PASSO, colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje,
   type ColunaSocial,
 } from "@/lib/social-quadro"
+import { FiltrosQuadro } from "@/components/kanban/FiltrosQuadro"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
@@ -27,7 +28,6 @@ type Filtro = "tudo" | "audiovisual" | "design"
 type Visao = "quadro" | "calendario"
 type Periodo = "semana" | "quinzena" | "mes"
 
-const DIAS_PARADO = 3
 const SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 
 const dataCurta = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`
@@ -129,23 +129,25 @@ export function QuadroSocial() {
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Meu planejamento</h1>
             <p className="mt-1 text-sm text-zinc-400">Ideias viram plano, plano vira pedido, e você vê onde cada pedido está.</p>
-            {linhas.length > 1 && (
-              <div className="mt-3"><Segmento
-                rotulo="Linha de produto"
-                valor={linhaAtual}
-                aoMudar={(v) => { setLinhaSel(v); setDeslocamento(0) }}
-                opcoes={[
-                  ...linhas.map((l) => ({ valor: l.id, texto: l.socials.length ? `${l.nome} · ${l.socials.map((n) => n.split(" ")[0]).join(", ")}` : l.nome })),
-                  { valor: "todas", texto: data?.veTodas ? "Todas (gestão)" : "Todas" },
-                ]}
-              /></div>
-            )}
+            {/* Mesmo "Filtrar por…" dos quadros de Demandas, Growth e Jobs. Sem
+                filtro de linha, valem todas as que esta pessoa vê; linha só entra
+                no menu quando há mais de uma. */}
+            <div className="mt-3"><FiltrosQuadro filtros={[
+              ...(linhas.length > 1 ? [{
+                id: "linha", rotulo: "Linha de produto", valor: linhaSel,
+                onChange: (v: string) => { setLinhaSel(v); setDeslocamento(0) },
+                opcoes: linhas.map((l) => ({ valor: l.id, rotulo: l.socials.length ? `${l.nome} · ${l.socials.map((n) => n.split(" ")[0]).join(", ")}` : l.nome })),
+              }] : []),
+              {
+                id: "tipo", rotulo: "Tipo", valor: filtro === "tudo" ? "" : filtro,
+                onChange: (v: string) => setFiltro((v || "tudo") as Filtro),
+                opcoes: [{ valor: "audiovisual", rotulo: "Vídeo" }, { valor: "design", rotulo: "Arte" }],
+              },
+            ]} /></div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Segmento rotulo="Visão" valor={visao} aoMudar={(v) => setVisao(v as Visao)}
               opcoes={[{ valor: "quadro", texto: "Quadro" }, { valor: "calendario", texto: "Calendário" }]} />
-            <Segmento rotulo="Tipo" valor={filtro} aoMudar={(v) => setFiltro(v as Filtro)}
-              opcoes={[{ valor: "tudo", texto: "Tudo" }, { valor: "audiovisual", texto: "Vídeo" }, { valor: "design", texto: "Arte" }]} />
             {podeCriar && (
               <button type="button" onClick={() => setEscolhendo(true)}
                 className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500">

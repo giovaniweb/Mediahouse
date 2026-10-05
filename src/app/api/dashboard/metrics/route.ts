@@ -1,19 +1,39 @@
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasOperacionais } from "@/lib/metricas-operacionais"
 import { gargalosPorEtapa } from "@/lib/gargalos"
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { calcularCargaTotal, avaliarSobrecarga } from "@/lib/peso-demanda"
 import { getOrgId, semOrg } from "@/lib/org"
 import { inicioDoDia } from "@/lib/datas"
+import { STATUS_PRAZO_PAUSADO } from "@/lib/status"
+import { painelGrowth, painelSocial } from "@/lib/dashboard-departamento"
+import { lerDepartamento } from "@/lib/painel-departamento"
 
-export async function GET() {
+// GET /api/dashboard/metrics?departamento=audiovisual|growth|social
+// Sem o parâmetro, Audiovisual: era o único que o dashboard mostrava.
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+
+  const departamento = lerDepartamento(req.nextUrl.searchParams.get("departamento"))
+  if (!departamento) return NextResponse.json({ error: "Departamento inválido" }, { status: 400 })
+
+  if (departamento === "growth") {
+    const [growth, operacional, gargalos] = await Promise.all([
+      painelGrowth(organizacaoId),
+      metricasOperacionais(organizacaoId, recorteMetricas(new URLSearchParams({ periodo: "mes", area: "design" }))),
+      gargalosPorEtapa(organizacaoId, new Date(), "growth"),
+    ])
+    return NextResponse.json({ departamento, growth, operacional, gargalos })
+  }
+  if (departamento === "social") {
+    return NextResponse.json({ departamento, social: await painelSocial(organizacaoId) })
+  }
 
   const [
     urgentesAtivas,
@@ -36,11 +56,14 @@ export async function GET() {
     prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "edicao" } }),
     prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "aprovacao" } }),
     prisma.demanda.count({ where: { area: "audiovisual", organizacaoId, statusVisivel: "para_postar" } }),
+    // A mesma regra de ?atrasadas=1, para onde o card leva: prazo suspenso na
+    // aprovação e na postagem. Antes contava essas também, e o card dizia um
+    // número e o quadro mostrava outro.
     prisma.demanda.count({
       where: {
         area: "audiovisual", organizacaoId,
         dataLimite: { lt: inicioDoDia() },
-        statusVisivel: { not: "finalizado" },
+        statusVisivel: { notIn: STATUS_PRAZO_PAUSADO as never[] },
       },
     }),
     prisma.alertaIA.findMany({
@@ -81,6 +104,7 @@ export async function GET() {
   })
 
   return NextResponse.json({
+    departamento,
     operacional,
     metricas: {
       demandasAtivas: operacional.ativas,
