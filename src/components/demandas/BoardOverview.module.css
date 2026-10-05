@@ -1,5 +1,5 @@
 /* Topo do quadro em duas linhas: (1) visão, números, paginação e modo de abrir;
-   (2) recortes e filtros. O quadro precisa da altura da tela. */
+   (2) recortes, busca e o botão de filtros. O quadro precisa da altura da tela. */
 .overview { color:#f1f0f8; padding:12px 8px 0; display:flex; flex-direction:column; gap:10px; }
 .topRow { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; padding-bottom:10px; border-bottom:1px solid #262a39; }
 .tabs { display:flex; gap:4px; padding:3px; border-radius:10px; background:#161822; border:1px solid #262a39; }
@@ -20,12 +20,12 @@
 .scopes button[aria-pressed="true"] { background:#b398ff20; border-color:#b398ff60; color:#d3c6ff; }
 .scopes span { font-variant-numeric:tabular-nums; }
 .filters { flex:1; min-width:0; }
-/* O bloco de filtros vem de cada página (BoardFilters): aqui ele perde a faixa
-   própria e vira uma linha compacta. */
-.filters > div > div > div { padding:0; background:transparent; border:0; gap:8px; }
-.filters input, .filters select { background:#161822; border-color:#303342; min-height:34px; font-size:12.5px; }
-.filters input { width:200px; }
-.filters select { max-width:190px; text-overflow:ellipsis; }
+.fila { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#9b9fb4; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.fila button { display:grid; place-items:center; width:32px; height:32px; border-radius:8px; border:1px solid #303342; }
+.fila button:hover:not(:disabled) { background:#ffffff0d; }
+.fila button:disabled { opacity:.4; }
+.fila a { color:#c9b8ff; }
+.fila a:hover { text-decoration:underline; }
 .aviso { font-size:12px; color:#f0c27a; }
 .overview button:focus-visible, .overview select:focus-visible { outline:2px solid #b398ff; outline-offset:3px; }
 @media (max-width:767px) {
@@ -35,6 +35,4 @@
   .opening select { min-height:40px; }
   .tabs button, .scopes button { min-height:40px; }
   .filters { flex-basis:100%; }
-  .filters input { width:100%; }
-  .filters select { max-width:none; }
 }

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { BoardFilters } from "@/components/kanban/BoardFilters"
+import { FiltrosQuadro } from "@/components/kanban/FiltrosQuadro"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
@@ -14,7 +14,7 @@ import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { normalizarVisao } from "@/components/demandas/tipos-visao"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
-import { Plus, Search, XCircle, UserCheck, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, XCircle } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
 
@@ -46,7 +46,6 @@ function DemandasKanban() {
   const [filtroProduto, setFiltroProduto] = useState("")
   const [filtroEvento, setFiltroEvento] = useState("")
   const [filtroResp, setFiltroResp] = useState("")
-  const [soMinhas, setSoMinhas] = useState(false)
 
   // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
   // prefere uma lista abre direto na Lista na próxima vez, sem reconfigurar.
@@ -114,18 +113,6 @@ function DemandasKanban() {
   const eventos = dataEventos?.eventos ?? []
   const responsaveis = dataResp?.responsaveis ?? []
 
-  const temFiltrosAtivos = !!(filtroDepto || filtroVM || filtroEditor || filtroProduto || filtroEvento || filtroResp || soMinhas)
-
-  function limparFiltros() {
-    setFiltroDepto("")
-    setFiltroVM("")
-    setFiltroEditor("")
-    setFiltroProduto("")
-    setFiltroEvento("")
-    setFiltroResp("")
-    setSoMinhas(false)
-  }
-
   const [navegacaoFila, setNavegacaoFila] = useState({ filtro: "", pagina: 1 })
   const params = new URLSearchParams()
   params.set("filaTrabalho", "1")
@@ -143,7 +130,7 @@ function DemandasKanban() {
   if (filtroResp) params.set("responsavelId", filtroResp)
   // As abas rápidas são recortes do MESMO conjunto — por isso viram parâmetro da
   // consulta, e não uma filtragem no cliente: as três visões precisam concordar.
-  if (soMinhas || aba === "minhas") params.set("mine", "1")
+  if (aba === "minhas") params.set("mine", "1")
   if (aba === "criadas") params.set("criadasPorMim", "1")
   if (aba === "atrasadas") params.set("atrasadas", "1")
   if (soAtrasadas) params.set("atrasadas", "1")
@@ -157,6 +144,12 @@ function DemandasKanban() {
   const url = `/api/demandas?${params}`
 
   const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
+
+  // Tamanho da fila sem recorte nem filtro, para o topo dizer "18 de 240 na
+  // fila" em vez de chamar o recorte de fila. Uma linha só: interessa o total.
+  const fila = new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", semCobertura: "1", limit: "1" })
+  const recortado = chaveFiltro !== new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", semCobertura: "1" }).toString()
+  const { data: dataFila } = useSWR<{ total: number }>(recortado ? `/api/demandas?${fila}` : null, fetcher, { refreshInterval: 30000 })
   const demandasAll = data?.demandas ?? []
 
   const demandas = demandasAll
@@ -309,110 +302,48 @@ function DemandasKanban() {
         </div>
       )}
 
-      {/* Filtros */}
-
-
-      {/* Números + recortes + seletor de visão */}
+      {/* Números, recortes, busca e filtros */}
       <div className="px-4 pt-1 pb-3">
         <BarraVisao
-          paginacao={(
-            <nav aria-label="Páginas da fila" className="flex items-center gap-2 text-[12.5px] text-zinc-400">
-              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Página anterior" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila === 1} onClick={() => setPaginaFila(p => p - 1)}><ChevronLeft className="h-4 w-4" /></button>}
-              <span className="whitespace-nowrap">{(data?.total ?? 0) > 100 ? `Página ${paginaFila} de ${Math.ceil((data?.total ?? 0) / 100)} · ` : ""}{data?.total ?? 0} na fila</span>
-              {(data?.total ?? 0) > 100 && <button type="button" aria-label="Próxima página" className="grid h-8 w-8 place-items-center rounded-lg border border-zinc-700 hover:bg-white/5 disabled:opacity-40" disabled={paginaFila * 100 >= (data?.total ?? 0)} onClick={() => setPaginaFila(p => p + 1)}><ChevronRight className="h-4 w-4" /></button>}
-              <a href="/historico" className="whitespace-nowrap text-purple-300 hover:underline">Histórico</a>
-            </nav>
-          )}
           aviso={demandas.some((d: {statusVisivel: string; finalizadaEm?: string | null}) => d.statusVisivel === "finalizado" && !d.finalizadaEm) ? "Há concluídos antigos sem data nesta página. Eles continuam visíveis até a revisão; nenhuma data foi inventada." : undefined}
           area="audiovisual"
           filters={(
-      <BoardFilters>
-      <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center gap-3 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Buscar demanda..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-1.5 text-sm border border-zinc-700 rounded-lg outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-200 placeholder:text-zinc-500 w-56"
-          />
-        </div>
-        <select value={filtroDepto} onChange={(e) => setFiltroDepto(e.target.value)}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          {/* Lista vem de Configurações → Parâmetros. Antes era fixa aqui e já
-              divergia do banco: oferecia "Comercial" e "Social Media", que nem
-              existiam como departamento, e omitia "Audiovisual", que existia. */}
-          <option value="">Todos os departamentos</option>
-          {departamentos.map((d) => (
-            <option key={d.valor} value={d.valor}>{d.label}</option>
-          ))}
-        </select>
-        <select value={filtroVM} onChange={(e) => setFiltroVM(e.target.value)}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          <option value="">Todos videomakers</option>
-          {videomakers.map(v => (<option key={v.id} value={v.id}>{v.nome}</option>))}
-        </select>
-        <select value={filtroEditor} onChange={(e) => setFiltroEditor(e.target.value)}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          <option value="">Todos editores</option>
-          {editores.map(e => (<option key={e.id} value={e.id}>{e.nome}</option>))}
-        </select>
-        <select value={filtroProduto} onChange={(e) => setFiltroProduto(e.target.value)}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          <option value="">Todos produtos</option>
-          {produtos.map(p => (<option key={p.id} value={p.id}>{p.nome}</option>))}
-        </select>
-        <select value={filtroResp} onChange={(e) => { setFiltroResp(e.target.value); if (e.target.value) setSoMinhas(false) }}
-          className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-          <option value="">Todos responsáveis</option>
-          {responsaveis.map(r => (<option key={r.id} value={r.id}>{r.label}</option>))}
-        </select>
-        {me?.modulos?.eventos && (
-          <select value={filtroEvento} onChange={(e) => setFiltroEvento(e.target.value)}
-            className="text-sm border border-zinc-700 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-purple-500 bg-zinc-800 text-zinc-300">
-            <option value="">Todos eventos</option>
-            {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
-          </select>
-        )}
-        <button
-          type="button"
-          onClick={() => { setSoMinhas(v => !v); if (!soMinhas) setFiltroResp("") }}
-          aria-pressed={soMinhas}
-          title="Só as demandas em que eu sou responsável, videomaker, editor, gestor ou solicitante"
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-            soMinhas
-              ? "bg-purple-500/15 text-purple-300 border-purple-500/40"
-              : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" /> Só minhas
-        </button>
-        {temFiltrosAtivos && (
-          <button onClick={limparFiltros}
-            className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
-            <XCircle className="w-3.5 h-3.5" /> Limpar filtros
-          </button>
-        )}
-        {/* Recorte que veio de um card do dashboard. Sem este aviso o quadro
-            aparece parcial e parece que sumiram demandas. */}
-        {(soAtrasadas || prioridadeUrl || statusUrl) && (
-          <a href="/demandas"
-            className="flex items-center gap-1 text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 rounded-lg hover:bg-amber-500/20 transition-colors">
-            <XCircle className="w-3.5 h-3.5" />
-            {soAtrasadas ? "Só atrasadas" : prioridadeUrl ? `Só ${prioridadeUrl}` : "Recorte ativo"} — ver tudo
-          </a>
-        )}
-        <span className="text-xs text-zinc-500 ml-auto">{demandas.length} demandas</span>
-      </div>
-      </BoardFilters>
+            <FiltrosQuadro
+              busca={search}
+              onBusca={setSearch}
+              placeholder="Buscar demanda…"
+              filtros={[
+                // Departamentos vêm de Configurações → Parâmetros. Antes eram fixos
+                // aqui e já divergiam do banco ("Comercial" e "Social Media" não
+                // existiam; "Audiovisual" faltava).
+                { id: "departamento", rotulo: "Departamento", valor: filtroDepto, onChange: setFiltroDepto, todos: "Todos os departamentos", opcoes: departamentos.map(d => ({ valor: d.valor, rotulo: d.label })) },
+                { id: "videomaker", rotulo: "Videomaker", valor: filtroVM, onChange: setFiltroVM, todos: "Todos os videomakers", opcoes: videomakers.map(v => ({ valor: v.id, rotulo: v.nome })) },
+                { id: "editor", rotulo: "Editor", valor: filtroEditor, onChange: setFiltroEditor, todos: "Todos os editores", opcoes: editores.map(e => ({ valor: e.id, rotulo: e.nome })) },
+                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, todos: "Todos os produtos", opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
+                { id: "responsavel", rotulo: "Responsável", valor: filtroResp, onChange: setFiltroResp, todos: "Todos os responsáveis", opcoes: responsaveis.map(r => ({ valor: r.id, rotulo: r.label })) },
+                ...(me?.modulos?.eventos ? [{ id: "evento", rotulo: "Evento", valor: filtroEvento, onChange: setFiltroEvento, todos: "Todos os eventos", opcoes: eventos.map(ev => ({ valor: ev.id, rotulo: ev.nome })) }] : []),
+              ]}
+            >
+              {/* Recorte que veio de um card do dashboard. Sem este aviso o quadro
+                  aparece parcial e parece que sumiram demandas. */}
+              {(soAtrasadas || prioridadeUrl || statusUrl) && (
+                <a href="/demandas"
+                  className="flex min-h-[34px] items-center gap-1 whitespace-nowrap text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 rounded-lg hover:bg-amber-500/20 transition-colors">
+                  <XCircle className="w-3.5 h-3.5" />
+                  {soAtrasadas ? "Só atrasadas" : prioridadeUrl ? `Só ${prioridadeUrl}` : "Recorte ativo"} — ver tudo
+                </a>
+              )}
+            </FiltrosQuadro>
           )}
           demandas={demandas}
           visao={visao}
           onVisao={trocarVisao}
           aba={aba}
           onAba={setAba}
-          total={demandas.length}
+          total={data?.total}
+          totalFila={recortado ? dataFila?.total : data?.total}
+          pagina={paginaFila}
+          onPagina={p => setPaginaFila(() => p)}
         />
       </div>
 

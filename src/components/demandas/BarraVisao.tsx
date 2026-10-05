@@ -2,9 +2,8 @@
 
 import type { ReactNode } from "react"
 import styles from "./BoardOverview.module.css"
-import { LayoutGrid, List } from "lucide-react"
+import { LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react"
 import { useDetailPresentation } from "./useDetailPresentation"
-import { cn } from "@/lib/utils"
 import type { Visao, AbaRapida, DemandaLista } from "./tipos-visao"
 import { calcularKpis } from "./tipos-visao"
 
@@ -27,12 +26,18 @@ const ABAS: { id: AbaRapida; label: string }[] = [
   { id: "atrasadas", label: "Atrasadas" },
 ]
 
+// "Minhas" é o único jeito de ver só as próprias: o botão "Só minhas" da faixa de
+// filtros fazia o mesmo (?mine=1) e os dois podiam ficar ligados juntos.
+const PAPEIS_MINHAS = {
+  audiovisual: "responsável, videomaker, editor, gestor ou solicitante",
+  growth: "responsável, designer, social, gestor ou solicitante",
+}
+
 export function BarraVisao({
-  demandas, visao, onVisao, aba, onAba, total, filters, paginacao, aviso,
+  demandas, visao, onVisao, aba, onAba, area = "audiovisual", total, totalFila, pagina, onPagina, porPagina = 100, filters, aviso,
 }: {
+  /** Busca e filtros da página (FiltrosQuadro), na segunda linha. */
   filters?: ReactNode
-  /** Paginação da fila e link do histórico, à direita da primeira linha. */
-  paginacao?: ReactNode
   /** Aviso que precisa ser lido (ex.: concluídos antigos sem data). */
   aviso?: ReactNode
   area?: "audiovisual" | "growth"
@@ -41,10 +46,21 @@ export function BarraVisao({
   onVisao: (v: Visao) => void
   aba: AbaRapida
   onAba: (a: AbaRapida) => void
-  total: number
+  /** Total do recorte atual, devolvido pela API (não o tamanho da página carregada). */
+  total?: number
+  /** Total da fila sem recorte, aba nem filtro. Só quando difere de `total`. */
+  totalFila?: number
+  pagina: number
+  onPagina: (p: number) => void
+  porPagina?: number
 }) {
   const { presentation, setPresentation } = useDetailPresentation()
   const kpi = calcularKpis(demandas)
+  const paginas = Math.ceil((total ?? 0) / porPagina)
+  // A paginação anda sobre o recorte; o "na fila" fala da fila inteira. Com
+  // "Atrasadas" ligado o topo dizia "18 na fila" — o número do recorte com o
+  // nome da fila toda.
+  const recortado = total !== undefined && totalFila !== undefined && totalFila !== total
 
   // Duas linhas, e não cinco: o título grande, os números, as abas, os filtros e
   // os recortes empilhados deixavam ao quadro só o rodapé da tela. O nome da
@@ -61,13 +77,21 @@ export function BarraVisao({
         <span data-tone="done"><strong>{kpi.concluidasHoje}</strong> {contagem(kpi.concluidasHoje, "concluída", "concluídas")} hoje</span>
       </div>
       <div className={styles.right}>
-        {paginacao}
+        <nav aria-label="Páginas da fila" className={styles.fila}>
+          {paginas > 1 && <button type="button" aria-label="Página anterior" disabled={pagina <= 1} onClick={() => onPagina(pagina - 1)}><ChevronLeft size={16} /></button>}
+          <span>
+            {paginas > 1 && `Página ${pagina} de ${paginas} · `}
+            {total === undefined ? "…" : recortado ? `${total} de ${totalFila} na fila` : `${total} na fila`}
+          </span>
+          {paginas > 1 && <button type="button" aria-label="Próxima página" disabled={pagina >= paginas} onClick={() => onPagina(pagina + 1)}><ChevronRight size={16} /></button>}
+          <a href="/historico">Histórico</a>
+        </nav>
         <label className={styles.opening}><span>Abrir em</span><select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
       </div>
     </div>
     <div className={styles.controlsRow}>
       <div className={styles.scopes} aria-label="Recortes das demandas">
-        {ABAS.map(item => <button key={item.id} type="button" aria-pressed={aba === item.id} onClick={() => onAba(item.id)}>{item.label}{aba === item.id && <span>{total}</span>}</button>)}
+        {ABAS.map(item => <button key={item.id} type="button" aria-pressed={aba === item.id} title={item.id === "minhas" ? `Em que eu sou ${PAPEIS_MINHAS[area]}` : undefined} onClick={() => onAba(item.id)}>{item.label}{aba === item.id && total !== undefined && <span>{total}</span>}</button>)}
       </div>
       <div className={styles.filters}>{filters}</div>
     </div>
