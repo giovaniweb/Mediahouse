@@ -8,13 +8,19 @@
 // Os seis links ficavam numa lista só, todos com o mesmo peso. O que o cliente
 // usa (a área, o pedido e o agendamento de gravação) vem agora destacado; o
 // cadastro de videomaker, a galeria e o login vêm depois.
+//
+// Endereço: <slug>.nuflow.space quando a chave AREA_POR_SUBDOMINIO está ligada
+// (ver lib/subdominio.ts); até lá, nuflow.space/c/<slug>, com o endereço novo
+// avisado como "em ativação" para ninguém divulgar um link que ainda não abre.
+// O login fica sempre no domínio principal: o cookie da sessão é por host.
 import { useState } from "react"
 import useSWR from "swr"
 import { Check, Copy, ExternalLink } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
+import { AREA_POR_SUBDOMINIO, ehDominioPrincipal, origemDaArea } from "@/lib/subdominio"
 
 type Org = { id: string; nome: string; slug: string; ativa: boolean }
-type LinkPublico = { caminho: string; titulo: string; texto: string }
+type LinkPublico = { caminho: string; titulo: string; texto: string; noPrincipal?: boolean }
 
 const PARA_CLIENTES: LinkPublico[] = [
   { caminho: "/pedido?tipo=video", titulo: "Quero um vídeo", texto: "Pedido de vídeo, já sem a tela de escolher o tipo. Entra em Aprovações." },
@@ -24,7 +30,7 @@ const PARA_CLIENTES: LinkPublico[] = [
 const OUTROS: LinkPublico[] = [
   { caminho: "/videomaker", titulo: "Quero ser videomaker", texto: "Cadastro para quem quer trabalhar com a equipe." },
   { caminho: "/galeria", titulo: "Galeria", texto: "Os vídeos publicados pela empresa." },
-  { caminho: "/entrar", titulo: "Entrar no sistema", texto: "Login que já abre esta empresa." },
+  { caminho: "/entrar", titulo: "Entrar no sistema", texto: "Login que já abre esta empresa.", noPrincipal: true },
 ]
 
 function Acoes({ url, titulo, copiado, copiar }: { url: string; titulo: string; copiado: string | null; copiar: (url: string) => void }) {
@@ -54,10 +60,14 @@ export function AreaPublicaEmpresa() {
   if (error) return <p role="alert" className="text-sm text-amber-300">Não foi possível carregar os links da área pública.</p>
   if (!ativa) return <p role="status" className="text-sm text-zinc-400">Carregando os links da área pública…</p>
   // Só chega aqui no navegador: os dados vêm do SWR, que não roda no servidor.
-  const base = `${window.location.origin}/c/${ativa.slug}`
+  const antigo = `${window.location.origin}/c/${ativa.slug}`
+  // Fora do domínio principal (preview da Vercel, 127.0.0.1) a porta e o http daqui não valem lá.
+  const aqui = ehDominioPrincipal(window.location.host)
+  const proprio = origemDaArea(ativa.slug, aqui ? window.location.protocol : "https:", aqui ? window.location.port : "")
+  const base = AREA_POR_SUBDOMINIO ? proprio : antigo
 
   const linha = (l: LinkPublico) => {
-    const url = `${base}${l.caminho}`
+    const url = `${l.noPrincipal ? antigo : base}${l.caminho}`
     return (
       <li key={l.caminho} className="flex flex-wrap items-center gap-3 py-3">
         <div className="min-w-0 flex-[1_1_16rem]">
@@ -86,6 +96,11 @@ export function AreaPublicaEmpresa() {
           </div>
           <Acoes url={base} titulo="Área da empresa" copiado={copiado} copiar={copiar} />
         </div>
+        {!AREA_POR_SUBDOMINIO && (
+          <p className="mt-3 border-t border-white/10 pt-3 text-sm text-zinc-400">
+            Endereço próprio, em ativação: <code className="break-all text-violet-200">{proprio}</code>. Quando ele estiver no ar, os links acima passam a usá-lo, e quem abrir o endereço de hoje é levado para ele.
+          </p>
+        )}
       </div>
 
       <div>

@@ -3,6 +3,8 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Clapperboard, Palette, CalendarCheck, LogIn, ArrowRight, Lightbulb } from "lucide-react"
 import { empresaDoPortal } from "@/lib/portal"
+import { linksDaAreaNoServidor } from "@/lib/area-servidor"
+import { linkNaArea } from "@/lib/subdominio"
 import "@/components/layout/Montserrat.css"
 import styles from "@/components/publico/Portal.module.css"
 
@@ -29,7 +31,8 @@ export default async function AreaDaEmpresa({ params }: Props) {
   if (!empresa) notFound()
   // Todo link da área passa por aqui. Quando a área morar em <slug>.nuflow.space,
   // basta trocar esta linha pelo helper de link do subdomínio.
-  const na = (caminho: string) => `/c/${empresa.slug}${caminho}`
+  const area = await linksDaAreaNoServidor(empresa.slug)
+  const na = (caminho: string) => linkNaArea(area, caminho)
   // Três portas de pedido, na língua de quem chega: cada uma abre o formulário
   // já no ponto certo, sem tela de "o que você precisa?" no meio.
   const pedidos = [

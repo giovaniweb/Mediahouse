@@ -4,7 +4,8 @@ import { empresaDoPortal } from "@/lib/portal"
 import Galeria from "@/app/galeria/page"
 
 // Mesma tela de galeria, dentro da área da empresa: o slug
-// vem do caminho (/c/<slug>/...), e o formulário o repassa à API sozinho.
+// vem do endereço (<slug>.nuflow.space ou /c/<slug>/...), e o formulário o
+// repassa à API sozinho.
 type Props = { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
