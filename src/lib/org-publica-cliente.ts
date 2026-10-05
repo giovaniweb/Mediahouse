@@ -1,7 +1,8 @@
 // Propaga a empresa dona do link nas páginas PÚBLICAS.
 //
 // O formulário público não tem sessão, então a empresa vem da própria URL:
-//   /c/contourline/pedido — a área da empresa
+//   contourline.nuflow.space/pedido — a área no subdomínio (ver lib/subdominio)
+//   /c/contourline/pedido — a área no endereço antigo
 // O link antigo (/cadastrar-demanda, com ou sem ?org=) redireciona para a área,
 // então o formulário quase sempre tem o slug no caminho. O `?org=` e o padrão da
 // API (ORG_PUBLICA_PADRAO) ficam para as telas públicas que ainda não estão na
@@ -10,8 +11,9 @@
 // É isto que permite a segunda empresa ter formulário próprio sem herdar o
 // tráfego da primeira: basta o link carregar o slug dela.
 
-/** Mesmo formato que o cadastro de empresa aceita: minúsculas, números e hífen. */
-export const SLUG_PUBLICO = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+import { SLUG_PUBLICO, slugDoHost } from "@/lib/subdominio"
+
+export { SLUG_PUBLICO }
 
 /** Slug da área `/c/<slug>/...`, ou null quando o caminho não é de uma área. */
 export function slugDoCaminho(caminho: string): string | null {
@@ -22,9 +24,11 @@ export function slugDoCaminho(caminho: string): string | null {
   return SLUG_PUBLICO.test(slug) ? slug : null
 }
 
-/** A empresa da página: primeiro o caminho da área, depois o `?org=` antigo. */
+/** A empresa da página: o subdomínio, o caminho da área e, por último, o `?org=` antigo. */
 export function slugDaPagina(): string | null {
   if (typeof window === "undefined") return null
+  const doHost = slugDoHost(window.location.host)
+  if (doHost) return doHost
   const doCaminho = slugDoCaminho(window.location.pathname)
   if (doCaminho) return doCaminho
   return new URLSearchParams(window.location.search).get("org")?.trim() || null

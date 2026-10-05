@@ -3,11 +3,15 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
+import { linksDaAreaNoServidor } from "@/lib/area-servidor"
 import { FormularioLogin } from "@/components/auth/FormularioLogin"
 import styles from "@/components/auth/AuthSurface.module.css"
 
 // Login com a cara da empresa. Depois de entrar, /c/<slug>/painel escolhe esta
 // empresa como ativa (se a conta for dela) e leva ao painel.
+// Mora sempre no domínio principal: o cookie da sessão é por host, e um login
+// feito em <slug>.nuflow.space deixaria a pessoa deslogada no painel. O proxy
+// manda <slug>.nuflow.space/entrar para cá.
 type Props = { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -22,11 +26,11 @@ function iniciais(nome: string) {
 export default async function EntrarNaEmpresa({ params }: Props) {
   const empresa = await empresaDoPortal((await params).slug)
   if (!empresa) notFound()
-  const base = `/c/${empresa.slug}`
+  const { inicio } = await linksDaAreaNoServidor(empresa.slug)
   return (
     <main className={styles.shell}>
       <aside className={styles.story}>
-        <Link href={base} className={styles.brand}>
+        <Link href={inicio} className={styles.brand}>
           {empresa.logoUrl
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src={empresa.logoUrl} alt="" />
@@ -39,11 +43,11 @@ export default async function EntrarNaEmpresa({ params }: Props) {
       <div className={styles.content}>
         <Suspense>
           <FormularioLogin
-            destinoFixo={`${base}/painel`}
+            destinoFixo={`/c/${empresa.slug}/painel`}
             eyebrow={empresa.nome.toUpperCase()}
             titulo="Entre na sua conta."
             descricao={`Depois de entrar, você vai direto para o espaço de ${empresa.nome}.`}
-            linkExtra={{ href: base, texto: "Voltar à área da empresa" }}
+            linkExtra={{ href: inicio, texto: "Voltar à área da empresa" }}
           />
         </Suspense>
       </div>
