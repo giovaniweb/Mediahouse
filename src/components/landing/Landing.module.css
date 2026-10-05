@@ -73,6 +73,10 @@
 .hero h1 { font-size: clamp(40px, 5vw, 64px); line-height: 1.06; }
 .heroSub { margin-top: 24px !important; max-width: 540px; font-size: 18px; line-height: 1.65; color: var(--suave); }
 .acoes { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+/* Quem chega aqui para pedir um vídeo (cliente de uma empresa que usa o NuFlow). */
+.cliente { margin-top: 20px !important; font-size: 14px; color: var(--suave); }
+.cliente a { color: var(--lilas); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.rodapeCliente { color: var(--lilas); text-decoration: underline; text-underline-offset: 3px; }
 .selos { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 36px !important; }
 .selos li { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--linha); background: #ffffff05; font-size: 13px; color: var(--suave); }
 
