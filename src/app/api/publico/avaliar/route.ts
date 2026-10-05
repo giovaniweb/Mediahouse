@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 
 // POST /api/publico/avaliar — avaliação pública via QR code (sem autenticação)
 export async function POST(req: NextRequest) {
@@ -39,17 +40,11 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // Recalcular média
-  const todas = await prisma.avaliacaoVideomaker.findMany({
-    where: { videomakerId },
-    select: { nota: true },
-  })
-  const media = todas.reduce((s, a) => s + a.nota, 0) / todas.length
-
-  await prisma.videomaker.update({
-    where: { id: videomakerId },
-    data: { avaliacao: Math.round(media * 10) / 10 },
-  })
+  // A média é global e entra pela função do banco, igual à avaliação de editor
+  // por QR. Calculada aqui, ela só enxergaria as avaliações sem dono — sob RLS,
+  // sem empresa declarada — e o UPDATE no perfil nem passaria: a rota gravava a
+  // avaliação e respondia 500. Ver src/lib/avaliacao.ts.
+  await recalcularMediaVideomaker(videomakerId)
 
   return NextResponse.json({ ok: true, nomeVideomaker: vm.nome })
 }

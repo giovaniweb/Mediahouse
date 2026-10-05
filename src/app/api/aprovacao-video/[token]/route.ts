@@ -8,6 +8,23 @@ import { getOrgId } from "@/lib/org"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { declararOrg } from "@/lib/org-contexto"
+
+// Sob RLS, ler a aprovação pelo token já exige a empresa declarada — sem ela o
+// banco devolve vazio e o cliente lê "link não encontrado". O token diz de qual
+// empresa ele é, e cada handler declara antes da primeira consulta.
+//
+// A declaração fica no corpo do handler, não numa função auxiliar: `declararOrg`
+// usa `enterWith`, que vale para o contexto assíncrono corrente — chamada depois
+// de um `await` dentro de um helper, ela vale só para o resto do helper e o
+// handler segue sem empresa. O ensaio pegou exatamente isso.
+//
+// Token sem empresa não interrompe de propósito: segue para a busca, que sob
+// RLS volta vazia (o mesmo 404 de token inválido) e sem RLS segue como sempre.
+// É o que deixa o deploy indiferente à ordem da migration 20261004000000, que é
+// quem ensina o tipo `aprovacao_video` à função.
+const empresaDoToken = (token: string) => orgPorCredencial("aprovacao_video", token)
 
 // A validade do token protege o link que vai ao CLIENTE por WhatsApp — não a
 // equipe. Como o botão "Abrir aprovação" do sistema reusa esse mesmo token, a
@@ -24,6 +41,8 @@ async function ehAcessoInterno(organizacaoId: string | null | undefined): Promis
 // GET /api/aprovacao-video/[token] — busca info da aprovação (público, sem auth)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  const empresa = await empresaDoToken(token)
+  if (empresa) declararOrg(empresa)
 
   const aprovacao = await prisma.aprovacaoVideo.findUnique({
     where: { token },
@@ -95,6 +114,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 // dias sem recriar a aprovação (preserva token, histórico e comentários).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  const empresa = await empresaDoToken(token)
+  if (empresa) declararOrg(empresa)
 
   const aprovacao = await prisma.aprovacaoVideo.findUnique({
     where: { token },
@@ -125,6 +146,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (!["aprovar", "feedback"].includes(acao)) {
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
   }
+  const empresa = await empresaDoToken(token)
+  if (empresa) declararOrg(empresa)
 
   const aprovacao = await prisma.aprovacaoVideo.findUnique({ where: { token } })
   if (!aprovacao) return NextResponse.json({ error: "Link não encontrado" }, { status: 404 })

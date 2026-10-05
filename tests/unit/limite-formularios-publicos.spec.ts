@@ -36,6 +36,16 @@ vi.mock("@/lib/prisma", () => ({
   }),
 }))
 
+// A busca do solicitante vai pela identidade da plataforma (src/lib/criar-usuario.ts),
+// não pelo `prisma` acima: o toque conta igual.
+vi.mock("@/lib/criar-usuario", () => {
+  const tocar = (nome: string) => async () => {
+    tocouNoBanco.push(`usuario.${nome}`)
+    throw new Error(`${nome} chamado — o limite tinha de vir antes`)
+  }
+  return { usuarioIdPorTelefone: tocar("idPorTelefone"), usuarioIdPorEmail: tocar("idPorEmail"), criarUsuarioComVinculo: tocar("criarComVinculo") }
+})
+
 const { POST: postDemanda } = await import("@/app/api/publico/demanda/route")
 const { POST: postVideomaker } = await import("@/app/api/publico/videomaker/route")
 const { barrarExcesso, LIMITES_FORMULARIO, MSG_EXCESSO, MSG_INDISPONIVEL } = await import("@/lib/limite-formulario")

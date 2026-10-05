@@ -11,6 +11,7 @@ import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
+import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -73,46 +74,55 @@ export async function POST(req: NextRequest) {
   const barrado = await barrarExcesso(req.headers, "demanda", organizacaoId)
   if (barrado) return barrado
 
+  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
+  // onde deduzi-la, e sem declaração o banco devolve vazio. Vem antes da busca
+  // do solicitante — antes, a busca rodava sem empresa e nunca achava ninguém.
+  declararOrg(organizacaoId)
+
   // Busca ou cria usuário solicitante externo
-  // Prioridade: telefone (evita duplicatas), depois email
+  // Prioridade: telefone (evita duplicatas), depois email. A busca enxerga a
+  // plataforma inteira: o cliente pode já ter conta por outra empresa, e o
+  // e-mail é único na plataforma (ver src/lib/criar-usuario.ts).
   const telDigits = data.telefone.replace(/\D/g, "")
-  let solicitante = null
+  let solicitanteId = telDigits.length >= 8 ? await usuarioIdPorTelefone(telDigits.slice(-9)) : null
+  if (!solicitanteId) solicitanteId = await usuarioIdPorEmail(data.email)
 
-  // 1. Buscar por telefone primeiro (previne duplicatas)
-  if (telDigits.length >= 8) {
-    solicitante = await prisma.usuario.findFirst({
-      where: { telefone: { contains: telDigits.slice(-9) } },
-    })
-  }
-
-  // 2. Se não achou por telefone, buscar por email
-  if (!solicitante) {
-    solicitante = await prisma.usuario.findUnique({ where: { email: data.email } })
-  }
-
-  if (!solicitante) {
+  let solicitante: { id: string }
+  if (!solicitanteId) {
     const { randomBytes } = await import("crypto")
     const bcrypt = (await import("bcryptjs")).default
     const tempSenha = randomBytes(16).toString("hex")
     const senhaHash = await bcrypt.hash(tempSenha, 10)
 
-    solicitante = await prisma.usuario.create({
-      data: {
-        nome: data.nomeCliente,
-        email: data.email,
-        telefone: data.telefone,
-        tipo: "solicitante",
-        senhaHash,
-      },
-    })
+    // Nasce já com a membership de solicitante: sem ela a pessoa não apareceria
+    // em Pessoas & Acessos — e, sob RLS, nem poderia ser lida de volta.
+    solicitante = await criarUsuarioComVinculo(
+      organizacaoId,
+      { nome: data.nomeCliente, email: data.email, telefone: data.telefone, tipo: "solicitante", senhaHash },
+      { papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
+      { id: true }
+    )
   } else {
+    // Garante a membership do solicitante na organização (categoria=solicitante).
+    // Vem antes de ler e atualizar a pessoa: é o vínculo que a torna visível
+    // para esta empresa.
+    await prisma.usuarioOrganizacao.upsert({
+      where: { usuarioId_organizacaoId: { usuarioId: solicitanteId, organizacaoId } },
+      update: {},
+      create: { usuarioId: solicitanteId, organizacaoId, papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
+    })
+    const existente = await prisma.usuario.findUniqueOrThrow({
+      where: { id: solicitanteId },
+      select: { id: true, telefone: true, email: true },
+    })
     // Atualiza dados faltantes no cadastro existente
     const updates: Record<string, string> = {}
-    if (!solicitante.telefone && data.telefone) updates.telefone = data.telefone
-    if (!solicitante.email && data.email) updates.email = data.email
+    if (!existente.telefone && data.telefone) updates.telefone = data.telefone
+    if (!existente.email && data.email) updates.email = data.email
     if (Object.keys(updates).length > 0) {
-      await prisma.usuario.update({ where: { id: solicitante.id }, data: updates })
+      await prisma.usuario.update({ where: { id: existente.id }, data: updates })
     }
+    solicitante = existente
   }
 
   // Roteia a área/departamento conforme o que o cliente escolheu ("O que você precisa?")
@@ -124,18 +134,6 @@ export async function POST(req: NextRequest) {
 
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
-
-  // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
-  // onde deduzi-la, e sem declaração o banco devolve vazio.
-  declararOrg(organizacaoId)
-
-  // Garante a membership do solicitante na organização (categoria=solicitante).
-  // Sem isso, a pessoa nasceria sem vínculo org e não apareceria em Pessoas & Acessos.
-  await prisma.usuarioOrganizacao.upsert({
-    where: { usuarioId_organizacaoId: { usuarioId: solicitante.id, organizacaoId } },
-    update: {},
-    create: { usuarioId: solicitante.id, organizacaoId, papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
-  })
 
   const demanda = await prisma.demanda.create({
     data: {

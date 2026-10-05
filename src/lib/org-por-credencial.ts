@@ -32,6 +32,8 @@ export type TipoCredencial =
   // Cutflow (30/09/2026): o plugin esperando autorização e o plugin já logado.
   | "cutflow_dispositivo"
   | "cutflow_sessao"
+  // Link de aprovação de vídeo do cliente (04/10/2026, ensaio do RLS).
+  | "aprovacao_video"
 
 /** Id da empresa dona da credencial, ou null se ela não vale nada. */
 export async function orgPorCredencial(

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+// Os vínculos da pessoa com OUTRAS empresas são identidade, não dado da empresa
+// ativa: sob RLS o cliente normal só enxerga o vínculo da empresa declarada, e o
+// seletor mostrava uma empresa só — e recusava a troca com 404. Mesmo motivo e
+// mesmo cliente de `identidade-admin.ts`.
+import { prismaAuth } from "@/lib/prisma-auth"
 import { getOrgId, COOKIE_ORG_ATIVA } from "@/lib/org"
 
 // GET /api/me/organizacoes — empresas em que a pessoa é membro, e qual está ativa.
@@ -13,7 +17,7 @@ export async function GET() {
   const usuarioId = (session.user as { id?: string }).id
   if (!usuarioId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  const vinculos = await prisma.usuarioOrganizacao.findMany({
+  const vinculos = await prismaAuth.usuarioOrganizacao.findMany({
     where: { usuarioId, organizacao: { ativo: true } },
     select: {
       papel: true,
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "organizacaoId obrigatório" }, { status: 400 })
   }
 
-  const vinculo = await prisma.usuarioOrganizacao.findUnique({
+  const vinculo = await prismaAuth.usuarioOrganizacao.findUnique({
     where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
     select: { papel: true, organizacao: { select: { id: true, nome: true, slug: true, ativo: true } } },
   })
