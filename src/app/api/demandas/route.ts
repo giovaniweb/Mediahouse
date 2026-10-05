@@ -433,16 +433,16 @@ export async function POST(req: NextRequest) {
     linhaProjetoTexto = linha.nome
   }
 
-  // Pedido do quadro da social: a ideia precisa ser dela e ainda não ter virado
-  // pedido. A linha da demanda passa a ser a da ideia, e `socialId` marca o
+  // Pedido do quadro da social: a ideia precisa ser dela (ou o pedido vir de
+  // gestor/admin) e ainda não ter virado pedido. A linha da demanda passa a ser a da ideia, e `socialId` marca o
   // pedido como dela — é o selo "Social" no card da equipe.
   let socialId: string | undefined
   if (data.ideiaId) {
-    const r = await ideiaParaPedido(data.ideiaId, organizacaoId, session.user.id)
+    const r = await ideiaParaPedido(data.ideiaId, organizacaoId, session.user.id, ehGestor(session))
     if ("erro" in r) return NextResponse.json({ error: r.erro }, { status: r.status })
     linhaProjetoId = r.linha.id
     linhaProjetoTexto = r.linha.nome
-    socialId = session.user.id
+    socialId = r.socialId
   }
 
   if (!(await departamentoValido(data.departamento, organizacaoId))) {

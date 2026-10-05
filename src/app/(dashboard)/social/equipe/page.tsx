@@ -45,7 +45,9 @@ export default function SocialEquipePage() {
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Equipe de social media</h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
           Cada social media cuida de uma ou mais linhas de produto e só vê o planejamento delas. As linhas são as de Produtos → Linhas / Projetos.
-          {data && !data.podeEditar && " Só gestor ou admin muda quem cuida de qual linha."}
+          {data && (data.podeEditar
+            ? " Clique na linha para ligar ou desligar a pessoa; a linha marcada em roxo é dela."
+            : " Só gestor ou admin muda quem cuida de qual linha.")}
         </p>
         {error && <p role="alert" className="mt-6 text-sm text-red-400">Não foi possível carregar. Recarregue a página.</p>}
         {isLoading && <p className="mt-6 text-sm text-zinc-500">Carregando…</p>}

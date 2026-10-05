@@ -2,10 +2,12 @@
 //
 // Quem vê o quê:
 //   - a social media vê e mexe só nas linhas em que está (SocialLinha);
-//   - gestor e admin veem todas as linhas, sem mexer: priorizar, pedir, cobrar e
-//     aprovar são da social (decisão do Giovani, 05/10/2026). Quem é gestor E
-//     está ligado a uma linha mexe nela, porque ali ele é a social. Quem ganhou
-//     "Ver Social Media" nas permissões sem ser social também vê todas, só ver.
+//   - gestor e admin veem todas as linhas e também anotam ideias e abrem pedidos
+//     em qualquer uma (05/10, à tarde: o quadro vazio não servia para quem
+//     configura). Priorizar, cobrar e aprovar continuam só da social que pediu.
+//     Quem é gestor E está ligado a uma linha mexe nela por inteiro, porque ali
+//     ele é a social. Quem ganhou "Ver Social Media" nas permissões sem ser
+//     social também vê todas, só ver.
 import { NextResponse } from "next/server"
 import type { Session } from "next-auth"
 import type { AreaDemanda } from "@prisma/client"
@@ -21,6 +23,8 @@ export type EscopoSocial = {
   organizacaoId: string
   usuarioId: string
   veTodas: boolean
+  /** Gestor ou admin: anota ideia e abre pedido em qualquer linha. */
+  gestor: boolean
   /** Linhas que aparecem para esta pessoa. */
   linhas: LinhaSocial[]
   /** Linhas em que ela é a social — onde pode mexer. */
@@ -64,7 +68,13 @@ export async function escopoSocial(session: Session | null): Promise<EscopoSocia
   if (!veTodas && minhas.size === 0 && papel !== "social") {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  return { organizacaoId, usuarioId, veTodas, linhas, minhas }
+  return { organizacaoId, usuarioId, veTodas, gestor: ehGestor(session), linhas, minhas }
+}
+
+/** Pode anotar, editar e pedir ideias desta linha: a social dela, ou gestor/admin. */
+export function podeEditarLinha(escopo: EscopoSocial, linhaId: string | null | undefined): boolean {
+  if (!linhaId) return false
+  return escopo.minhas.has(linhaId) || (escopo.gestor && escopo.linhas.some((l) => l.id === linhaId))
 }
 
 export function semLinha() {
@@ -74,18 +84,25 @@ export function semLinha() {
   )
 }
 
-/** Pedido que nasceu no quadro de uma linha desta social. */
+/**
+ * Pedido em que esta pessoa age como a social: o que ela pediu (pelo quadro ou
+ * direto no Audiovisual/Growth, antes de o quadro existir) ou o que saiu do
+ * quadro de uma linha dela. Priorizar e cobrar só valem aqui.
+ */
 export async function pedidoDaSocial(escopo: EscopoSocial, id: string) {
   const d = await prisma.demanda.findFirst({
-    where: { id, organizacaoId: escopo.organizacaoId, socialId: { not: null } },
+    where: { id, organizacaoId: escopo.organizacaoId },
     select: {
       id: true, codigo: true, titulo: true, area: true, linhaProjetoId: true,
       statusVisivel: true, cobrancas: true, cobradoEm: true, dataLimite: true,
+      socialId: true, solicitanteId: true,
       ideia: { select: { dataPostagem: true } },
     },
   })
   if (!d) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 })
-  if (!d.linhaProjetoId || !escopo.minhas.has(d.linhaProjetoId)) return semLinha()
+  const eDela = escopo.minhas.size > 0 && (d.socialId === escopo.usuarioId || d.solicitanteId === escopo.usuarioId)
+  const daLinhaDela = !!d.socialId && !!d.linhaProjetoId && escopo.minhas.has(d.linhaProjetoId)
+  if (!eDela && !daLinhaDela) return semLinha()
   return d
 }
 
@@ -172,19 +189,30 @@ export function inicioDeHojeEmBrasilia(hoje: string): Date {
 // virou pedido; a linha da demanda passa a ser a da ideia, e `socialId` marca
 // o pedido como dela (o selo "Social" no card da equipe).
 
-export async function ideiaParaPedido(ideiaId: string, organizacaoId: string, usuarioId: string) {
+export async function ideiaParaPedido(ideiaId: string, organizacaoId: string, usuarioId: string, gestor: boolean) {
   const ideia = await prisma.ideiaVideo.findFirst({
     where: { id: ideiaId, organizacaoId },
-    select: { id: true, demandaId: true, linhaProjeto: { select: { id: true, nome: true } } },
+    select: {
+      id: true, demandaId: true,
+      linhaProjeto: {
+        select: {
+          id: true, nome: true,
+          socials: { where: { vinculo: { usuario: { status: "ativo" } } }, select: { vinculo: { select: { usuarioId: true } } } },
+        },
+      },
+    },
   })
   if (!ideia) return { erro: "Ideia não encontrada.", status: 404 } as const
   if (ideia.demandaId) return { erro: "Esta ideia já virou pedido.", status: 409 } as const
   if (!ideia.linhaProjeto) return { erro: "A ideia está sem linha de produto.", status: 400 } as const
-  const minha = await prisma.socialLinha.count({
-    where: { linhaProjetoId: ideia.linhaProjeto.id, vinculo: { usuarioId, organizacaoId } },
-  })
-  if (minha === 0) return { erro: "Só a social media desta linha pode pedir esta ideia.", status: 403 } as const
-  return { linha: ideia.linhaProjeto } as const
+  const socials = ideia.linhaProjeto.socials.map((s) => s.vinculo.usuarioId)
+  if (!socials.includes(usuarioId) && !gestor) {
+    return { erro: "Só a social media desta linha pode pedir esta ideia.", status: 403 } as const
+  }
+  // O pedido é da social da linha mesmo quando o gestor envia: é ela quem
+  // prioriza, cobra e aprova. Linha ainda sem social fica com quem enviou.
+  const socialId = socials.includes(usuarioId) ? usuarioId : socials[0] ?? usuarioId
+  return { linha: { id: ideia.linhaProjeto.id, nome: ideia.linhaProjeto.nome }, socialId } as const
 }
 
 /** Liga a ideia à demanda recém-criada. `demandaId: null` no filtro segura dois envios simultâneos. */
