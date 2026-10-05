@@ -1,6 +1,7 @@
 "use client"
 
-import { AlertTriangle, Ban, Clock, MapPin, User } from "lucide-react"
+import { AlertTriangle, Ban, Calendar, Clock, MapPin, User } from "lucide-react"
+import card from "@/components/demandas/DemandCardModern.module.css"
 import styles from "./JobsPreview.module.css"
 import { cn } from "@/lib/utils"
 import { formatarDataCurta } from "@/lib/datas"
@@ -17,9 +18,10 @@ import {
 // Card do Job — §34: "Mostrar somente dados essenciais. Evitar cards gigantes.
 // Informações detalhadas pertencem à página do Job."
 //
-// Sete linhas de informação, nesta ordem de leitura: identificação, cliente,
-// quando/onde, de quem é a bola, o que falta fazer, e o alerta quando há.
-// Sem botão de ação: o card leva ao Job, e é lá que se age.
+// Mesmo desenho do card de Demandas (DemandCardModern.module.css): título,
+// código e prioridade, etiquetas, rodapé com pessoas e prazo. O que muda é o
+// conteúdo, que é o do Job: quando e onde é a captação, o que falta fazer e de
+// quem é a vez. Sem botão de ação: o card leva ao Job, e é lá que se age.
 export type JobDoQuadro = JobParaLeitura & {
   id: string
   codigo: string
@@ -35,24 +37,25 @@ export type JobDoQuadro = JobParaLeitura & {
   departamento?: string | null
 }
 
-/** Data + hora da captação, ou o prazo quando ainda não há captação marcada. */
-function quando(job: JobDoQuadro): { texto: string; ehPrazo: boolean } | null {
-  if (job.dataCaptacao) {
-    const d = new Date(job.dataCaptacao)
-    const hora = d.getHours() || d.getMinutes()
-      ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-      : null
-    return { texto: hora ? `${formatarDataCurta(d)} · ${hora}` : formatarDataCurta(d), ehPrazo: false }
-  }
-  if (job.dataLimite) return { texto: `Prazo ${formatarDataCurta(job.dataLimite)}`, ehPrazo: true }
-  return null
+/** Data + hora da captação. O prazo vai no rodapé, como no card de Demandas. */
+function captacao(job: JobDoQuadro): string | null {
+  if (!job.dataCaptacao) return null
+  const d = new Date(job.dataCaptacao)
+  const hora = d.getHours() || d.getMinutes()
+    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null
+  return hora ? `${formatarDataCurta(d)} · ${hora}` : formatarDataCurta(d)
 }
 
-const riscoEstilo = {
-  overdue:   "border-l-red-500",
-  attention: "border-l-amber-500",
-  on_time:   "border-l-transparent",
-} as const
+// Os mesmos selos do card de Demandas. "Normal" não ganha selo.
+const PRIORIDADE: Record<string, { label: string; classe: string }> = {
+  urgente: { label: "Urgente", classe: "bg-red-500/15 text-red-300 border-red-500/30" },
+  alta:    { label: "Alta",    classe: "bg-orange-500/15 text-orange-300 border-orange-500/30" },
+  baixa:   { label: "Baixa",   classe: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+}
+
+const iniciais = (nome: string) =>
+  nome.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()
 
 export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: string) => void }) {
   const risco = nivelDeRisco(job)
@@ -61,93 +64,110 @@ export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: stri
   const bloqueado = ehBloqueado(job.statusInterno)
   const cancelado = ehCancelado(job)
   const atraso = diasDeAtraso(job)
-  const momento = quando(job)
+  const quando = captacao(job)
   const cliente = job.clienteFinalNome?.trim() || null
+  const prio = job.prioridade ? PRIORIDADE[job.prioridade] : undefined
+
+  // De quem é a vez vem primeiro; a equipe do Job completa a fila de avatares.
+  const pessoas = [...new Set(
+    [responsavel.nome, job.videomaker?.nome, job.editor?.nome].filter((n): n is string => Boolean(n))
+  )]
+
+  const abrir = () => onAbrir(job.id)
 
   return (
-    <button
-      type="button"
-      onClick={() => onAbrir(job.id)}
+    <div
+      data-card-surface
+      onClick={abrir}
       className={cn(
-        "w-full text-left bg-zinc-900 border border-zinc-800 border-l-2 rounded-lg p-3",
-        "hover:border-zinc-700 hover:bg-zinc-800/60 transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500",
-        riscoEstilo[risco], styles.card
+        "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 transition-all",
+        card.card,
+        job.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
+        job.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
+        job.statusVisivel === "finalizado" && "border-l-[3px] border-l-emerald-500 opacity-80",
+        risco === "attention" && "border-l-[3px] border-l-amber-400",
+        // Atraso vence os demais realces, como no card de Demandas.
+        risco === "overdue" && "border-l-[3px] border-l-red-500",
       )}
     >
-      {/* Identificação */}
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-mono text-zinc-500">{job.codigo}</span>
-        {job.prioridade === "urgente" && (
-          <span className="text-[10px] font-semibold text-red-400 tracking-wide">URGENTE</span>
+      {/* Cliente em destaque; o título do Job é o subtítulo. §34 põe a clínica
+          antes. O botão é o alvo do teclado: o card inteiro também abre. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); abrir() }}
+        aria-label={`Abrir job: ${cliente ?? job.titulo}`}
+        className={cn("block w-full text-left line-clamp-2 rounded", card.title)}
+      >
+        {cliente ?? job.titulo}
+      </button>
+      {cliente && <p className={styles.subtitulo} title={job.titulo}>{job.titulo}</p>}
+
+      <div className={cn("flex items-start justify-between gap-2", card.top)}>
+        <span>{job.codigo}</span>
+        {prio && (
+          <div className="flex items-center gap-1">
+            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", prio.classe)}>{prio.label}</span>
+          </div>
         )}
       </div>
 
-      {/* Cliente em destaque; o título é o subtítulo. §34 põe a clínica antes. */}
-      <p className="mt-1 text-sm font-medium text-zinc-100 leading-snug line-clamp-2">
-        {cliente ?? job.titulo}
-      </p>
-      {cliente && (
-        <p className="text-xs text-zinc-500 leading-snug line-clamp-1">{job.titulo}</p>
-      )}
-
-      {/* Quando e onde */}
-      {(momento || job.cidade) && (
-        <div className="mt-2 flex items-center gap-3 text-xs text-zinc-400">
-          {momento && (
-            <span className="inline-flex items-center gap-1">
-              <Clock className="w-3 h-3 shrink-0" />
-              {momento.texto}
-            </span>
-          )}
-          {job.cidade && (
-            <span className="inline-flex items-center gap-1 min-w-0">
-              <MapPin className="w-3 h-3 shrink-0" />
-              <span className="truncate">{job.cidade}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* De quem é a bola (§2) */}
-      <div className="mt-2 flex items-center gap-1 text-xs text-zinc-400">
-        <User className="w-3 h-3 shrink-0" />
-        <span className="truncate">
-          {responsavel.nome ?? <span className="text-zinc-500">{responsavel.papel}</span>}
-          {responsavel.nome && (
-            <span className="text-zinc-600"> · {responsavel.papel}</span>
-          )}
-        </span>
+      <div className={cn("flex flex-wrap", card.tags)}>
+        {/* Atraso: dias quando dá para confiar no número, senão só o aviso.
+            A base tem datas corrompidas que renderizariam "atrasado há 700 mil
+            dias" — diasDeAtraso devolve null nesses casos. */}
+        {risco === "overdue" && (
+          <span className="tag-atrasada flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap bg-red-500/20 text-red-300 border border-red-500/40">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            {atraso ? `Atrasado · ${atraso}d` : "Atrasado"}
+          </span>
+        )}
+        {risco === "attention" && (
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/15 text-amber-400 border-amber-500/30">
+            Vence hoje
+          </span>
+        )}
+        {quando && (
+          <span className={styles.etiqueta} title="Captação">
+            <Clock className="w-3 h-3 shrink-0" />{quando}
+          </span>
+        )}
+        {job.cidade && (
+          <span className={cn(styles.etiqueta, "max-w-[150px]")} title={job.cidade}>
+            <MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{job.cidade}</span>
+          </span>
+        )}
       </div>
 
       {/* Próxima ação — §32 pede texto, não só cor */}
-      <div className="mt-2 pt-2 border-t border-zinc-800/80 flex items-center gap-1.5">
-        {bloqueado && <Ban className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-        {cancelado && <Ban className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
-        {risco === "overdue" && !bloqueado && (
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-        )}
-        <span
-          className={cn(
-            "text-xs truncate",
-            bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300"
-          )}
-        >
-          {cancelado ? "Encerrado sem entrega" : acao}
-        </span>
-      </div>
+      <p className={cn(styles.acao, bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300")}>
+        {(bloqueado || cancelado) && <Ban className={cn("w-3.5 h-3.5 shrink-0", bloqueado ? "text-rose-400" : "text-zinc-500")} />}
+        {risco === "overdue" && !bloqueado && !cancelado && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+        <span className="truncate">{cancelado ? "Encerrado sem entrega" : acao}</span>
+      </p>
 
-      {/* Atraso: dias quando dá para confiar no número, senão só o aviso.
-          A base tem datas corrompidas que renderizariam "atrasada há 700 mil
-          dias" — diasDeAtraso devolve null nesses casos. */}
-      {risco === "overdue" && (
-        <p className="mt-1 text-[11px] text-red-400">
-          {atraso ? `Atrasado há ${atraso} ${atraso === 1 ? "dia" : "dias"}` : "Atrasado"}
-        </p>
-      )}
-      {risco === "attention" && (
-        <p className="mt-1 text-[11px] text-amber-400">Vence hoje</p>
-      )}
-    </button>
+      <div className={card.footer}>
+        {/* De quem é a bola (§2): o papel fica escrito, não só no avatar. */}
+        <div className={styles.vez}>
+          <div
+            className={card.people}
+            aria-label={responsavel.nome ? `Vez de ${responsavel.nome} (${responsavel.papel})` : `Vez de: ${responsavel.papel}`}
+          >
+            {pessoas.slice(0, 3).map((nome, i) => <span key={nome} title={nome} data-tone={i % 3}>{iniciais(nome)}</span>)}
+            {!responsavel.nome && pessoas.length === 0 && <span title={responsavel.papel}><User size={14} /></span>}
+          </div>
+          <span className={styles.papel} title={responsavel.nome ? `${responsavel.nome} · ${responsavel.papel}` : responsavel.papel}>
+            {responsavel.papel}
+          </span>
+        </div>
+        {job.dataLimite && (
+          <span
+            className={cn(card.date, risco === "overdue" && card.late, risco === "attention" && card.soon)}
+            title={risco === "overdue" ? "Prazo vencido" : "Prazo"}
+          >
+            <Calendar size={14} />{formatarDataCurta(job.dataLimite)}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }

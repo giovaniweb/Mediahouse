@@ -88,7 +88,7 @@ const DUVIDAS = [
   ["Meus dados ficam separados de outras empresas?", "Sim. Cada empresa tem o próprio espaço, e os dados de uma não aparecem para outra."],
 ]
 
-export default function Landing({ contactUrl }: { contactUrl: string | null }) {
+export default function Landing({ contactUrl, areaCliente }: { contactUrl: string | null; areaCliente: string }) {
   return (
     <div className={s.pagina}>
       <a href="#conteudo" className={s.pular}>Pular para o conteúdo</a>
@@ -117,6 +117,7 @@ export default function Landing({ contactUrl }: { contactUrl: string | null }) {
               <Conversar contactUrl={contactUrl} className={s.botaoPrimario}>Conversar com especialista<ArrowUpRight size={18} aria-hidden="true" /></Conversar>
               <a href="#fluxo" className={s.botaoContorno}>Ver como funciona<ArrowDown size={18} aria-hidden="true" /></a>
             </div>
+            <p className={s.cliente}>Veio pedir um vídeo ou uma gravação? <Link href={areaCliente}>Sou cliente — fazer um pedido</Link></p>
             <ul className={s.selos} aria-label="Para quem é">
               <li>Audiovisual</li><li>Growth</li><li>Videomakers internos e externos</li>
             </ul>
@@ -195,6 +196,7 @@ export default function Landing({ contactUrl }: { contactUrl: string | null }) {
         <div className={s.rodapeInterno}>
           <LogoNuFlow className={s.marca} />
           <span>Gestão de operações criativas</span>
+          <Link href={areaCliente} className={s.rodapeCliente}>Sou cliente — fazer um pedido</Link>
           <span className={s.rodapeNota}>As animações usam dados demonstrativos. Nenhum pedido ou mensagem é enviado.</span>
         </div>
       </footer>
