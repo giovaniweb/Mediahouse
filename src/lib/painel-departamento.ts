@@ -2,6 +2,7 @@
 // e as regras sem banco do painel da social — servem à rota e à tela.
 import { estaAtrasada } from "@/lib/status"
 import { dataCalendario, dataEmSaoPaulo, diasEntre, hojeEmSaoPaulo } from "@/lib/datas"
+import { DIAS_PARADO, ETAPA_NOME, etapaDoPedido } from "@/lib/social-quadro"
 
 export const DEPARTAMENTOS = ["audiovisual", "growth", "social"] as const
 export type Departamento = (typeof DEPARTAMENTOS)[number]
@@ -45,31 +46,21 @@ export type PessoaComCarga = { id: string; nome: string; abertas: number }
 // ── Social Media ────────────────────────────────────────────────────────────
 //
 // Os pedidos da social são demandas com `socialId` (vídeo ou arte), e ela os vê
-// em quatro palavras. As regras são as do quadro dela (lib/social-quadro, na
-// área Social Media): a etapa sai do statusVisivel, o recusado na entrada fica
-// de fora, e "parado" é a última mudança registrada no histórico há 3 dias ou mais.
+// em quatro palavras. As regras são as do quadro dela (lib/social-quadro): a
+// etapa é a de etapaDoPedido e "parado" é DIAS_PARADO sem mudança no histórico.
+// Aqui só entra o trabalho em andamento: recusado e finalizado ficam de fora.
 
 export type EtapaSocial = "recebido" | "produzindo" | "revisar" | "pronto"
 
-export const ETAPAS_SOCIAL: { id: EtapaSocial; label: string }[] = [
-  { id: "recebido", label: "Recebido" },
-  { id: "produzindo", label: "Produzindo" },
-  { id: "revisar", label: "Revisar" },
-  { id: "pronto", label: "Pronto" },
-]
+export const ETAPAS_SOCIAL: { id: EtapaSocial; label: string }[] =
+  (["recebido", "produzindo", "revisar", "pronto"] as const).map((id) => ({ id, label: ETAPA_NOME[id] }))
 
-export const DIAS_PARADO = 3
+export { DIAS_PARADO }
 
 export function etapaSocial(statusVisivel: string, statusInterno?: string | null): EtapaSocial | null {
-  if (statusInterno === "encerrado" && statusVisivel === "entrada") return null // recusado
-  switch (statusVisivel) {
-    case "entrada": return "recebido"
-    case "producao":
-    case "edicao": return "produzindo"
-    case "aprovacao": return "revisar"
-    case "para_postar": return "pronto"
-    default: return null // finalizado: já saiu do trabalho em andamento
-  }
+  if (statusVisivel === "finalizado") return null
+  const etapa = etapaDoPedido(statusVisivel, statusInterno)
+  return etapa === "recusado" ? null : etapa
 }
 
 export type PedidoSocial = {

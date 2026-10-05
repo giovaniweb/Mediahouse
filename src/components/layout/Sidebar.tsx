@@ -101,6 +101,7 @@ const sections = [
       { href: "/social", label: "Planejamento", icon: CalendarRange },
       { href: "/social/aprovacoes", label: "Aprovações", icon: ClipboardCheck },
       { href: "/social/equipe", label: "Equipe", icon: Users },
+      { href: "/historico/social", label: "Histórico", icon: Archive },
     ],
   },
   {
@@ -194,7 +195,7 @@ export function Sidebar() {
     if (isAdmin) return true
     if ((href === "/design" || href === "/galeria-artes" || href === "/historico/growth") && podeVerGrowth) return true
     if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
-    if (href.startsWith("/social") && href !== "/social/enviar") return podeVerSocial
+    if ((href.startsWith("/social") && href !== "/social/enviar") || href === "/historico/social") return podeVerSocial
     const key = PERMISSAO_HREF_MAP[href]
     if (!key) return true
     return !!me.permissoes[key]

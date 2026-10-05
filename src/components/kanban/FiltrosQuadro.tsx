@@ -50,8 +50,9 @@ function textoDoValor(f: FiltroQuadro): string {
 const OPCOES_COM_BUSCA = 8
 
 export function FiltrosQuadro({ busca, onBusca, placeholder = "Buscar…", filtros: todos, children }: {
-  busca: string
-  onBusca: (valor: string) => void
+  /** Sem `onBusca` não há campo de busca (o quadro da social não tem). */
+  busca?: string
+  onBusca?: (valor: string) => void
   placeholder?: string
   filtros: FiltroQuadro[]
   /** Avisos ao lado dos chips (ex.: recorte que veio por link do dashboard). */
@@ -91,11 +92,11 @@ export function FiltrosQuadro({ busca, onBusca, placeholder = "Buscar…", filtr
   const escolher = (f: FiltroQuadro, valor: string) => { f.onChange(valor); setAberto(null) }
 
   return <div className={styles.filtros}>
-    <label className={styles.busca}>
+    {onBusca && <label className={styles.busca}>
       <Search size={15} aria-hidden />
-      <input type="search" aria-label={placeholder} placeholder={placeholder} value={busca} onChange={e => onBusca(e.target.value)} />
+      <input type="search" aria-label={placeholder} placeholder={placeholder} value={busca ?? ""} onChange={e => onBusca(e.target.value)} />
       {busca && <button type="button" aria-label="Limpar busca" onClick={() => onBusca("")}><X size={14} /></button>}
-    </label>
+    </label>}
 
     {ativos.map(f => <span key={f.id} className={styles.chip}>
       <button type="button" title={`Trocar ${f.rotulo.toLowerCase()}`} onClick={() => setAberto(f.id)}>
