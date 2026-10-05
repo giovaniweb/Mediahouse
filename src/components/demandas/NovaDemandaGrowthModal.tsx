@@ -7,7 +7,7 @@
 // um recurso do audiovisual, é do formulário. O que muda é o miolo: o bloco do
 // meio se monta a partir do catálogo de tipos do Growth.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import useSWR from "swr"
 import { toast } from "sonner"
 import {
@@ -20,6 +20,7 @@ import { hojeEmSaoPaulo } from "@/lib/datas"
 import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import { enviarAnexos } from "@/lib/upload-documento"
 import { useRascunho } from "@/lib/use-rascunho"
+import { salvarIdeiaSocial, useMudouDesdeAbrir, valoresDaIdeia, type OrigemSocial } from "@/components/social/ideiaNoFormulario"
 import {
   TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel, campoDescricaoDe, CHAVE_DESCRICAO,
   type CampoCondicional, type IconeVisual,
@@ -61,10 +62,12 @@ const PADRAO: RascunhoGrowth = {
   detalhes: {}, referencias: [], novaReferencia: "", linkBrutos: "",
 }
 
-export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
+export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
   open: boolean
   onClose: () => void
   onCreated: () => void
+  /** Aberto pelo quadro da social: o mesmo formulário salva ideia ou envia o pedido. */
+  social?: OrigemSocial
 }) {
   const [titulo, setTitulo] = useState(PADRAO.titulo)
   const [tipoVideo, setTipoVideo] = useState(PADRAO.tipoVideo)
@@ -110,42 +113,100 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
     motivoUrgencia || Object.values(detalhes).some((v) => v.trim())
   )
 
+  function restaurar(s: Partial<RascunhoGrowth>) {
+    setTitulo(s.titulo ?? PADRAO.titulo)
+    setTipoVideo(s.tipoVideo ?? PADRAO.tipoVideo)
+    setPrioridade(s.prioridade ?? PADRAO.prioridade)
+    setMotivoUrgencia(s.motivoUrgencia ?? PADRAO.motivoUrgencia)
+    setDataLimite(s.dataLimite ?? PADRAO.dataLimite)
+    setClassificacao(s.classificacao ?? PADRAO.classificacao)
+    setLinhaProjetoId(s.linhaProjetoId ?? PADRAO.linhaProjetoId)
+    setResponsavelIds(s.responsavelIds ?? [])
+    setProdutoIds(s.produtoIds ?? [])
+    setDetalhes(s.detalhes ?? {})
+    setReferencias(s.referencias ?? [])
+    setNovaReferencia(s.novaReferencia ?? PADRAO.novaReferencia)
+    setLinkBrutos(s.linkBrutos ?? PADRAO.linkBrutos)
+    setAnexos([])
+    setErrors({})
+  }
+
   const { rascunhoRecuperado, limpar, descartar } = useRascunho<RascunhoGrowth>({
     chave: "nuflow:rascunho-nova-demanda-growth",
-    aberto: open,
+    aberto: open && !social,
     temConteudo,
     valores: {
       titulo, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
       linhaProjetoId, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, linkBrutos,
     },
-    aoRestaurar: (s) => {
-      setTitulo(s.titulo ?? PADRAO.titulo)
-      setTipoVideo(s.tipoVideo ?? PADRAO.tipoVideo)
-      setPrioridade(s.prioridade ?? PADRAO.prioridade)
-      setMotivoUrgencia(s.motivoUrgencia ?? PADRAO.motivoUrgencia)
-      setDataLimite(s.dataLimite ?? PADRAO.dataLimite)
-      setClassificacao(s.classificacao ?? PADRAO.classificacao)
-      setLinhaProjetoId(s.linhaProjetoId ?? PADRAO.linhaProjetoId)
-      setResponsavelIds(s.responsavelIds ?? [])
-      setProdutoIds(s.produtoIds ?? [])
-      setDetalhes(s.detalhes ?? {})
-      setReferencias(s.referencias ?? [])
-      setNovaReferencia(s.novaReferencia ?? PADRAO.novaReferencia)
-      setLinkBrutos(s.linkBrutos ?? PADRAO.linkBrutos)
-      setAnexos([])
-      setErrors({})
-    },
+    aoRestaurar: restaurar,
   })
+
+  // Pelo quadro da social o rascunho é a própria ideia (ver NovaDemandaModal).
+  // A linha é a da ideia: a social pede para a linha dela.
+  const [ideiaId, setIdeiaId] = useState(social?.ideiaId)
+  const [ideiaCarregada, setIdeiaCarregada] = useState(false)
+  useEffect(() => {
+    if (!open || !social) return
+    const v = valoresDaIdeia<RascunhoGrowth & { descricao?: string }>(social, "dataLimite")
+    const detalhesIdeia = v.detalhes ?? {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega a ideia ao abrir, como o rascunho
+    restaurar({
+      ...v,
+      linhaProjetoId: social.linhaProjetoId,
+      detalhes: detalhesIdeia[CHAVE_DESCRICAO] || !v.descricao ? detalhesIdeia : { ...detalhesIdeia, [CHAVE_DESCRICAO]: v.descricao },
+    })
+    setIdeiaCarregada(true)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const mudou = useMudouDesdeAbrir(ideiaCarregada, { titulo, tipoVideo, prioridade, dataLimite, classificacao, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, anexos: anexos.length })
 
   function tentarFechar() {
     // O aviso não pode prometer os anexos: File não sobrevive ao localStorage.
     const avisoAnexos = anexos.length > 0
       ? ` Os ${anexos.length} arquivo(s) selecionado(s) precisarão ser anexados de novo.`
       : ""
+    if (social) {
+      if (!social.somenteLeitura && mudou && !confirm("Fechar sem salvar? O que você mudou agora se perde.")) return
+      return onClose()
+    }
     if (temConteudo && !confirm(`Fechar sem criar a demanda? O texto fica guardado e volta na próxima vez que abrir.${avisoAnexos}`)) {
       return
     }
     onClose()
+  }
+
+  // ── Quadro da social: a ideia ─────────────────────────────────────────────
+  async function gravarIdeia(): Promise<string> {
+    const id = await salvarIdeiaSocial(social!, ideiaId, {
+      titulo: titulo.trim(),
+      descricao: descricao.trim(),
+      linkReferencia: referencias[0] ?? (novaReferencia.trim() || null),
+      area: "design",
+      dataPostagem: dataLimite || null,
+      formulario: {
+        titulo, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
+        linhaProjetoId, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, linkBrutos,
+      },
+    })
+    setIdeiaId(id)
+    return id
+  }
+
+  async function salvarComoIdeia() {
+    if (titulo.trim().length < 3) {
+      setErrors({ titulo: "Mínimo 3 caracteres" })
+      return toast.error("Dê um título à ideia.")
+    }
+    setSaving(true)
+    try {
+      await gravarIdeia()
+      toast.success(dataLimite ? "Ideia salva no plano." : "Ideia salva.")
+      social!.aoTerminar({ tipo: "ideia" })
+    } catch (e) {
+      toast.error(mensagemDeErro(e, "Não foi possível salvar a ideia."))
+    } finally {
+      setSaving(false)
+    }
   }
 
   function limparCampo(campo: string) {
@@ -162,6 +223,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
     // este campo a demanda nem chega ao servidor.
     if (descricao.trim().length < 10) errs.descricao = "Mínimo 10 caracteres"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Informe o motivo"
+    // Pela social, a data da postagem é o prazo — e é o que põe o pedido no calendário dela.
+    if (social && !dataLimite) errs.dataLimite = "Informe a data da postagem"
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -173,6 +236,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
     }
     setSaving(true)
     try {
+      // Pela social, a ideia é gravada antes: se o pedido falhar, nada se perde.
+      const ideiaDoPedido = social ? await gravarIdeia() : undefined
       // detalhesEntrega é chaveado pelo label amigável (é assim que a tela de
       // detalhe exibe). Só entram os campos visíveis e preenchidos.
       const detalhesEntrega: Record<string, string> = {}
@@ -208,6 +273,7 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
         ...(Object.keys(detalhesEntrega).length ? { detalhesEntrega } : {}),
         ...(referencia && { referencia }),
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
+        ...(ideiaDoPedido ? { ideiaId: ideiaDoPedido } : {}),
       }
 
       const res = await fetch("/api/demandas", {
@@ -222,8 +288,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
 
       if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a demanda.")
 
-      toast.success(`Demanda ${json.codigo ?? ""} criada!`)
-      limpar()
+      toast.success(social ? `Pedido ${json.codigo ?? ""} enviado ao Growth.` : `Demanda ${json.codigo ?? ""} criada!`)
+      if (!social) limpar()
 
       if (anexos.length > 0 && typeof json.id === "string") {
         setEnviandoAnexos(true)
@@ -235,7 +301,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
 
       // Fica no kanban: quem abre demanda do Growth costuma abrir várias
       // seguidas, e ser jogado para a tela de detalhe quebra o ritmo.
-      onCreated()
+      if (social) social.aoTerminar({ tipo: "pedido", codigo: typeof json.codigo === "string" ? json.codigo : undefined })
+      else onCreated()
     } catch (e) {
       if (e instanceof ErroApi && e.temCampos()) setErrors(e.campos)
       toast.error(mensagemDeErro(e, "Não foi possível criar a demanda."))
@@ -249,19 +316,29 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
   return (
     <ModalFormulario
       aberto={open}
-      titulo="Nova Demanda"
+      titulo={social ? `Arte · ${social.linhaNome}` : "Nova Demanda"}
       icone={Sparkles}
       aoTentarFechar={tentarFechar}
       aoConfirmar={handleSubmit}
       ocupado={ocupado}
+      acaoSecundaria={social ? { rotulo: "Salvar como ideia", aoClicar: salvarComoIdeia } : undefined}
+      semConfirmar={social?.somenteLeitura}
       rotuloConfirmar={
         enviandoAnexos
           ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando anexos...</>
           : saving
-          ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando...</>
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> {social ? "Salvando..." : "Criando..."}</>
+          : social
+          ? <>Enviar para a equipe <span aria-hidden>→</span></>
           : <>Criar Demanda <span aria-hidden>→</span></>
       }
     >
+      {social && !social.somenteLeitura && (
+        <p className="mb-6 rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3 text-sm text-zinc-300">
+          <b className="text-zinc-100">Salvar como ideia</b> guarda no seu quadro, sem mandar para ninguém.{" "}
+          <b className="text-zinc-100">Enviar para a equipe</b> vira pedido na Entrada do Growth, com a data da postagem como prazo.
+        </p>
+      )}
       {rascunhoRecuperado && <BannerRascunho aoDescartar={descartar} />}
 
       {/* ── Bloco 1: o pedido ───────────────────────────────────────────
@@ -324,7 +401,7 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
               </div>
             </Campo>
 
-            <Campo label="Prazo de entrega" opcional erro={errors.dataLimite}>
+            <Campo label={social ? "Data da postagem" : "Prazo de entrega"} opcional={!social} obrigatorio={!!social} erro={errors.dataLimite}>
               <div className="relative">
                 <Calendar className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
@@ -408,12 +485,13 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated }: {
             </div>
           </Campo>
 
-          <Campo label="Linha / Projeto" opcional>
+          <Campo label="Linha / Projeto" opcional={!social}>
             <div className="relative">
               <select
                 value={linhaProjetoId}
                 onChange={(e) => setLinhaProjetoId(e.target.value)}
-                className={selectClass}
+                disabled={!!social}
+                className={cn(selectClass, social && "opacity-70")}
               >
                 <option value="">— Sem linha/projeto —</option>
                 {linhas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
