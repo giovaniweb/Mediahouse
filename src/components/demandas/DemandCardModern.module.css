@@ -21,5 +21,12 @@
 /* Vence em até 3 dias: o mesmo aviso âmbar que o card antigo dava. */
 .soon {color:#f0c27a;}
 .posting {order:5;}
-.card button:focus-visible {outline:2px solid #b398ff;outline-offset:3px;opacity:1;}
+.card button:focus-visible, .card a:focus-visible {outline:2px solid #b398ff;outline-offset:3px;opacity:1;}
 @media(hover:none) {.top button {opacity:1;min-width:32px;min-height:32px;display:grid;place-items:center;}}
+/* Título + alça de arrastar. A alça é o lugar óbvio para pegar o card; o card
+   inteiro continua arrastável com o mouse (depois de 5 px) e com toque longo. */
+.titleRow {order:1;display:flex;align-items:flex-start;gap:6px;}
+.alca {order:2;flex-shrink:0;display:grid;place-items:center;width:32px;height:32px;margin:-6px -8px -6px 0;border-radius:8px;color:#8d8ca3;cursor:grab;touch-action:none;}
+.alca:hover {color:#d8d6e6;background:#ffffff0f;}
+:global([data-rfd-drag-handle-context-id]):active .alca {cursor:grabbing;}
+@media(pointer:coarse) {.alca {width:44px;height:44px;margin:-10px -12px -10px 0;color:#a2a5b9;}}

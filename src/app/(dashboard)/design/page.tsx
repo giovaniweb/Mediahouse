@@ -102,7 +102,7 @@ function GrowthKanban() {
 
   const demandas = demandasAll
 
-  const handleMove = useCallback(async (demandaId: string, novaColuna: string) => {
+  const handleMove = useCallback(async (demandaId: string, novaColuna: string, extra?: { observacao: string }) => {
     const statusInterno = GROWTH_COLUNA_PARA_STATUS[novaColuna as GrowthColunaId]
     if (!statusInterno) return
     const anterior = data?.demandas?.find((d: { id: string }) => d.id === demandaId)?.statusInterno
@@ -114,7 +114,7 @@ function GrowthKanban() {
     try {
       const res = await fetch(`/api/demandas/${demandaId}/status`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statusInterno, origem: "kanban" }),
+        body: JSON.stringify({ statusInterno, origem: "kanban", ...extra }),
       })
       if (!res.ok) {
         if (anterior) await atualizar(anterior)
@@ -184,6 +184,7 @@ function GrowthKanban() {
             userTipo={session?.user?.tipo}
             colunas={GROWTH_COLUNAS}
             getColuna={(d) => growthColunaDe(d.statusInterno)}
+            colunaParaStatus={GROWTH_COLUNA_PARA_STATUS}
             openMode="modal"
             historico="/historico/growth"
           />

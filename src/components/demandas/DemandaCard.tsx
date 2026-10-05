@@ -1,14 +1,19 @@
 "use client"
 
-import { AlertTriangle, Calendar, Trash2, User, Pencil, Copy, MessageCircle, Paperclip } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Pencil, Copy, MessageCircle, Paperclip, GripVertical } from "lucide-react"
 import styles from "./DemandCardModern.module.css"
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { formatarDataCurta } from "@/lib/datas"
 import { naoEnviadoAoCliente } from "@/lib/growth-kanban"
 import { TagEspelho, type EspelhoDoCard } from "./TagEspelho"
+import { ATRIBUTO_ALCA } from "@/components/kanban/sensorAlca"
+
+// Quanto o ponteiro pode andar entre apertar e soltar para ainda contar como
+// clique. É o mesmo limite com que o quadro começa a arrastar (5 px).
+const LIMITE_CLIQUE = 5
 
 const prioridadeConfig = {
   urgente: { label: "Urgente", class: "bg-red-500/15 text-red-300 border-red-500/30" },
@@ -61,13 +66,15 @@ interface DemandaCardProps {
     cobrancas?: number
   }
   dragHandleProps?: Record<string, unknown>
+  /** Mostra a alça de arrastar (o card está dentro de um quadro que move). */
+  arrastavel?: boolean
   onDelete?: (id: string) => void
   onDuplicate?: (id: string) => void
   onOpen?: (id: string) => void
   onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
 }
 
-export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, onOpen, onMarkPosted }: DemandaCardProps) {
+export function DemandaCard({ demanda, dragHandleProps, arrastavel = false, onDelete, onDuplicate, onOpen, onMarkPosted }: DemandaCardProps) {
   const router = useRouter()
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
   const thumbnail = demanda.thumbnailUrl && (/^https?:\/\//i.test(demanda.thumbnailUrl) || /^\/(?!\/)/.test(demanda.thumbnailUrl)) ? demanda.thumbnailUrl : null
@@ -98,13 +105,26 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
   // é este sinal que substitui a trava que exigia a arte para mover.
   const semEnvioAoCliente = naoEnviadoAoCliente(demanda)
 
-  const handleClick = () => {
+  const abrir = () => {
     if (onOpen) onOpen(demanda.id)
     else router.push(`/demandas/${demanda.id}`)
   }
 
+  // Clique e arrasto não brigam. Arrastar o card terminava abrindo o detalhe:
+  // depois do arrasto o quadro só marca o clique (preventDefault), e este
+  // onClick não olhava a marca. Agora o clique abre só quando o ponteiro quase
+  // não andou, não houve arrasto e não foi na alça.
+  const inicio = useRef<{ x: number; y: number } | null>(null)
+  const foiClique = (e: React.MouseEvent) => {
+    const de = inicio.current
+    inicio.current = null
+    if (e.defaultPrevented) return false
+    if ((e.target as Element).closest?.(`[${ATRIBUTO_ALCA}]`)) return false
+    return !de || Math.hypot(e.clientX - de.x, e.clientY - de.y) <= LIMITE_CLIQUE
+  }
+
   return (
-    <div onClick={handleClick}>
+    <div onClick={(e) => { if (foiClique(e)) abrir() }} onPointerDown={(e) => { inicio.current = { x: e.clientX, y: e.clientY } }}>
       <div
         data-card-surface
         className={cn(
@@ -166,11 +186,28 @@ export function DemandaCard({ demanda, dragHandleProps, onDelete, onDuplicate, o
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img draggable={false} src={thumbnail} alt={`Prévia de ${demanda.titulo}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedThumbnail(thumbnail)} />
         </div>}
-        <button type="button" onClick={(event) => { event.stopPropagation(); handleClick() }}
-          className={cn("block w-full text-left text-sm font-medium text-zinc-200 leading-tight mb-2 line-clamp-2 focus-visible:outline-2 focus-visible:outline-violet-400 focus-visible:outline-offset-2 rounded", styles.title)}
-          aria-label={`Abrir demanda: ${demanda.titulo}`}>
-          {demanda.titulo}
-        </button>
+        <div className={styles.titleRow}>
+          {/* Link, não botão: o quadro não deixa arrastar a partir de um botão, e o
+              título ocupa a largura toda do card — era ele que encolhia a área de
+              arrasto. Enter no link abre; Ctrl/⌘+clique abre em outra aba. */}
+          <a href={`/demandas/${demanda.id}`} draggable={false}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (e.metaKey || e.ctrlKey || e.shiftKey) return
+              const clique = foiClique(e)
+              e.preventDefault()
+              if (clique) abrir()
+            }}
+            className={cn("block flex-1 min-w-0 text-left text-sm font-medium text-zinc-200 leading-tight line-clamp-2 rounded", styles.title)}
+            aria-label={`Abrir demanda: ${demanda.titulo}`}>
+            {demanda.titulo}
+          </a>
+          {arrastavel && (
+            <span {...{ [ATRIBUTO_ALCA]: "" }} className={styles.alca} title="Arraste para mudar de etapa" aria-hidden="true">
+              <GripVertical size={18} />
+            </span>
+          )}
+        </div>
 
         <div className={cn("flex flex-wrap gap-1 mb-2", styles.tags)}>
           {isOverdue && (

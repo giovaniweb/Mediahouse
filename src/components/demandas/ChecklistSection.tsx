@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { CheckSquare, Square, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
+import surface from "./DemandSurface.module.css"
 
 
 interface ChecklistItemData {
@@ -103,18 +104,19 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
   if (total === 0 && !showAddForm) {
     return (
       <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-zinc-300 flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-purple-400" /> Checklist
+        <div className={surface.sectionHead}>
+          <h2 className={surface.sectionTitle}>
+            <CheckSquare aria-hidden /> Checklist
           </h2>
           <button
+            type="button"
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1.5 rounded-lg"
+            className={surface.btn}
           >
-            <Plus className="w-3 h-3" /> Adicionar
+            <Plus className="w-4 h-4" aria-hidden /> Adicionar
           </button>
         </div>
-        <p className="text-xs text-zinc-500">Nenhum item no checklist. Adicione itens ou aplique um template.</p>
+        <p className={surface.empty}>Nenhum item no checklist. Adicione itens ou aplique um template.</p>
       </div>
     )
   }
@@ -122,18 +124,19 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
   return (
     <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
       {/* Header com progresso */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-semibold text-zinc-300 flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-purple-400" /> Checklist
-          <span className="text-xs font-normal text-zinc-500">
+      <div className={surface.sectionHead}>
+        <h2 className={surface.sectionTitle}>
+          <CheckSquare aria-hidden /> Checklist
+          <span className={surface.count}>
             {concluidos}/{total}
           </span>
         </h2>
         <button
+          type="button"
           onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+          className={surface.btn}
         >
-          <Plus className="w-3 h-3" /> Adicionar
+          <Plus className="w-4 h-4" aria-hidden /> Adicionar
         </button>
       </div>
 
@@ -231,9 +234,9 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
           <button
             onClick={addItem}
             disabled={adding || !novoTexto.trim()}
-            className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            className={surface.btnPrimary}
           >
-            {adding ? "..." : "Adicionar"}
+            {adding ? "Adicionando…" : "Adicionar"}
           </button>
         </div>
       )}

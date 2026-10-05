@@ -37,3 +37,22 @@ describe("extrairCopy", () => {
     expect(extrairCopy({ "Copy": 42, "Legenda": "a que vale" })).toBe("a que vale")
   })
 })
+
+describe("copy no detalhe da demanda", () => {
+  // O detalhe chama sem a descrição como reserva: a caixa "Copy / legenda"
+  // repetia o briefing inteiro quando a demanda não tinha copy.
+  it("sem copy gravada não há o que mostrar", () => {
+    expect(extrairCopy({ "Formato": "1:1" }, null)).toBe("")
+    expect(extrairCopy(null, null)).toBe("")
+    expect(extrairCopy({ "Copy / legenda": "Texto do post" }, null)).toBe("Texto do post")
+  })
+
+  it("a orientação para o copywriter não é a copy", () => {
+    const carrossel = {
+      "Status da Copy": "Precisa criar",
+      "Briefing / Direcionamento para o Copywriter": "Tom direto, CTA para o WhatsApp",
+    }
+    expect(extrairCopy(carrossel, null)).toBe("")
+    expect(extrairCopy(carrossel, "Objetivo do carrossel")).toBe("Objetivo do carrossel")
+  })
+})

@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { Handshake, Lock } from "lucide-react"
 
 /**
  * A marca de que este card é executado por outra empresa.
@@ -50,8 +51,8 @@ export function TagEspelho({ espelho, className }: { espelho?: EspelhoDoCard | n
         className
       )}
     >
-      <span aria-hidden>🤝</span>
-      {soAcompanha && <span aria-hidden>🔒</span>}
+      <Handshake className="w-3 h-3 shrink-0" aria-hidden />
+      {soAcompanha && <Lock className="w-3 h-3 shrink-0" aria-hidden />}
       <span className="truncate">{texto}</span>
     </span>
   )
@@ -85,7 +86,7 @@ export function FaixaEspelho({ espelho }: { espelho?: EspelhoDoCard | null }) {
   return (
     <div className="rounded-lg border border-dashed border-zinc-600 bg-zinc-900/60 px-3.5 py-2.5 mb-4">
       <p className="text-sm font-medium text-zinc-200 flex items-center gap-1.5">
-        <span aria-hidden>🤝</span> {titulo}
+        <Handshake className="w-4 h-4 shrink-0 text-[#b398ff]" aria-hidden /> {titulo}
       </p>
       <p className="text-xs text-zinc-400 mt-0.5">{explicacao}</p>
     </div>

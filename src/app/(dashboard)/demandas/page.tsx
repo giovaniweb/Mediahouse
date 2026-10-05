@@ -17,6 +17,7 @@ import { normalizarVisao } from "@/components/demandas/tipos-visao"
 import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, XCircle } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
+import { AUDIOVISUAL_COLUNA_PARA_STATUS } from "@/lib/kanban-movimento"
 import { useMe } from "@/hooks/usePermissoes"
 
 
@@ -165,15 +166,6 @@ function DemandasKanban() {
 
   const demandas = demandasAll
 
-  // Mapeamento coluna → statusInterno representativo (dispara notificações WhatsApp)
-  const COLUNA_PARA_STATUS: Record<string, string> = {
-    entrada: "aguardando_triagem",
-    producao: "planejamento",
-    edicao: "editando",
-    aprovacao: "revisao_pendente",
-    para_postar: "postagem_pendente",
-    finalizado: "entregue_cliente",
-  }
 
   function showToast(msg: string, tipo: "ok" | "erro") {
     setToast({ msg, tipo })
@@ -181,8 +173,9 @@ function DemandasKanban() {
   }
 
   const handleMove = useCallback(
-    async (demandaId: string, novoStatusVisivel: string) => {
-      const statusInterno = COLUNA_PARA_STATUS[novoStatusVisivel]
+    async (demandaId: string, novoStatusVisivel: string, extra?: { observacao: string }) => {
+      // Coluna → statusInterno representativo (dispara notificações WhatsApp)
+      const statusInterno = AUDIOVISUAL_COLUNA_PARA_STATUS[novoStatusVisivel]
       if (!statusInterno) return
 
       // Salvar estado anterior para rollback
@@ -203,7 +196,7 @@ function DemandasKanban() {
         const res = await fetch(`/api/demandas/${demandaId}/status`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ statusInterno, origem: "kanban" }),
+          body: JSON.stringify({ statusInterno, origem: "kanban", ...extra }),
         })
 
         if (!res.ok) {
