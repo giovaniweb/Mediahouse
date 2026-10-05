@@ -130,6 +130,23 @@ describe("outbox e recibos WhatsApp",()=>{
     await recibo("PROV-2","DELIVERY_ACK")
     expect((await ler(s.id)).estado).toBe("entregue")
   })
+  it("recibo com LID confirma pelo ID do provedor na mesma instância; ID alheio é ignorado",async()=>{
+    http.mockResolvedValueOnce(Response.json({key:{id:"PROV-LID"}}))
+    const s=await criar();await processarSaidas(a)
+    const lid=(id:string,inst=instance)=>receberEntrada({instance:inst,event:"messages.update",date_time:"2026-09-28T12:00:00Z",
+      data:{keyId:id,remoteJid:"123456789012345@lid",fromMe:true,status:"DELIVERY_ACK"}},"segredo")
+    await lid("PROV-LID",`${instance}-b`);await lid("PROV-OUTRO")
+    expect((await ler(s.id)).estado).toBe("aceito")
+    await lid("PROV-LID")
+    expect((await ler(s.id)).estado).toBe("entregue")
+  })
+  it("uma rodada drena várias saídas pendentes, uma por vez",async()=>{
+    http.mockImplementation(async()=>Response.json({key:{id:randomUUID()}}))
+    const ss=[await criar(),await criar(),await criar()]
+    const r=await processarSaidas(a)
+    expect(r.aceitos).toBe(3);expect(http).toHaveBeenCalledTimes(3)
+    for(const s of ss) expect((await ler(s.id)).estado).toBe("aceito")
+  })
   it("destinatário alterado e empresa pausada não disparam rede",async()=>{
     const s=await criar()
     await db.usuario.update({where:{id:u},data:{telefone:"5511988880000"}})
