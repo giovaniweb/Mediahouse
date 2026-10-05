@@ -460,7 +460,7 @@ export function nivelDeRisco(job: {
  * Marca de solicitação de cobertura.
  *
  * O formulário público grava as duas coisas juntas quando a pessoa escolhe
- * "cobertura" (`cadastrar-demanda/page.tsx:245` e `publico/demanda/route.ts:108`):
+ * "cobertura" (`components/publico/FormularioPedido.tsx:261` e `publico/demanda/route.ts:108`):
  * `tipoVideo = "cobertura_evento"` e `departamento = "eventos"`. Na base as duas
  * marcas coincidem exatamente — 28 demandas por qualquer um dos critérios.
  *

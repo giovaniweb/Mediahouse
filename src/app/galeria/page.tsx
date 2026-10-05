@@ -445,8 +445,8 @@ export default function GaleriaPage() {
 
           {/* Nav links */}
           <div className="flex items-center gap-6 text-sm text-zinc-400">
-            <a href={naArea ? `${destino.inicio}/videomaker` : "/sobre#seja-parceiro"} className="hover:text-white transition-colors hidden md:block">Seja parceiro</a>
-            <a href={naArea ? `${destino.inicio}/pedido` : (destino.estado === "pronto" ? `/cadastrar-demanda?org=${destino.empresa.slug}` : "/cadastrar-demanda")} className="hover:text-white transition-colors hidden md:block">Pedir um vídeo</a>
+            <a href={naArea ? `${destino.inicio}/videomaker` : (destino.estado === "pronto" ? `/c/${destino.empresa.slug}/videomaker` : "/sobre#seja-parceiro")} className="hover:text-white transition-colors hidden md:block">Seja parceiro</a>
+            <a href={naArea ? `${destino.inicio}/pedido` : (destino.estado === "pronto" ? `/c/${destino.empresa.slug}/pedido` : "/cadastrar-demanda")} className="hover:text-white transition-colors hidden md:block">Pedir um vídeo</a>
             <a
               href={naArea ? `${destino.inicio}/entrar` : "/login"}
               className="bg-white text-zinc-900 text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 transition-colors"

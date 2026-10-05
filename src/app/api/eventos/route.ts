@@ -7,13 +7,8 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
+import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import type { Prioridade } from "@prisma/client"
-
-function gerarCodigoEvento(): string {
-  const ano = new Date().getFullYear().toString().slice(-2)
-  const rand = Math.floor(Math.random() * 9000 + 1000)
-  return `VOP-EVT-${ano}-${rand}`
-}
 
 function gerarSlug(titulo: string): string {
   return (
@@ -119,10 +114,10 @@ export async function POST(req: NextRequest) {
     const inicio = new Date(dataInicio)
     const fim = dataFim ? new Date(dataFim) : inicio
 
-    const evento = await prisma.eventoGestao.create({
+    const evento = await criarComCodigoUnico("VOP-EVT", (codigo) => prisma.eventoGestao.create({
       data: {
         organizacaoId,
-        codigo: gerarCodigoEvento(),
+        codigo,
         nome: nome.trim(),
         tipo: tipo ?? "outro",
         status: "planejamento",
@@ -139,7 +134,7 @@ export async function POST(req: NextRequest) {
         orcamentoPrevisto: orcamentoPrevisto == null || orcamentoPrevisto === "" ? null : Number(orcamentoPrevisto),
         createdById: acesso.usuarioId,
       },
-    })
+    }))
 
     // Checklist automático conforme o tipo do evento
     try {
@@ -189,10 +184,10 @@ export async function POST(req: NextRequest) {
 
       try {
         const peso = calcularPeso(peca.tipoVideo, "normal" as Prioridade)
-        const dem = await prisma.demanda.create({
+        const dem = await criarComCodigoUnico("VOP-DEM", (codigo) => prisma.demanda.create({
           data: {
             organizacaoId,
-            codigo: gerarCodigoEvento().replace("EVT", "DEM"),
+            codigo,
             titulo: `${nome.trim()} — ${peca.label}`,
             descricao: peca.descricao,
             departamento: "eventos",
@@ -209,7 +204,7 @@ export async function POST(req: NextRequest) {
             eventoGestaoId: evento.id,
             ...(peca.criaCobertura && coberturaId ? { coberturaId } : {}),
           },
-        })
+        }))
         demandasCriadas.push(dem.id)
       } catch (e) {
         console.error(`[Eventos] Erro ao criar demanda da peça ${key}:`, e)
@@ -222,10 +217,10 @@ export async function POST(req: NextRequest) {
       const peca = getPecaDesign(key)
       if (!peca) continue
       try {
-        const dem = await prisma.demanda.create({
+        const dem = await criarComCodigoUnico("VOP-ART", (codigo) => prisma.demanda.create({
           data: {
             organizacaoId,
-            codigo: gerarCodigoEvento().replace("EVT", "ART"),
+            codigo,
             titulo: `${nome.trim()} — ${peca.label}`,
             descricao: peca.descricao,
             departamento: "eventos",
@@ -241,7 +236,7 @@ export async function POST(req: NextRequest) {
             localEvento: local ?? null,
             eventoGestaoId: evento.id,
           },
-        })
+        }))
         demandasCriadas.push(dem.id)
       } catch (e) {
         console.error(`[Eventos] Erro ao criar demanda de design ${key}:`, e)

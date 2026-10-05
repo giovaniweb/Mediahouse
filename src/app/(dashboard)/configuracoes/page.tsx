@@ -1526,7 +1526,7 @@ export default function ConfiguracoesPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "meu_perfil", label: "Atuação profissional", icon: Settings },
-    { id: "empresa", label: "Dados da Empresa", icon: Building2 },
+    { id: "empresa", label: "Empresa e links públicos", icon: Building2 },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail de saída", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
