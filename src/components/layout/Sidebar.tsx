@@ -78,7 +78,7 @@ const sections = [
       { href: "/videomakers", label: "Videomakers Externos", icon: Camera },
       { href: "/equipe", label: "Videomakers Internos", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
-      { href: "/historico", label: "Histórico", icon: Archive },
+      { href: "/historico/audiovisual", label: "Histórico", icon: Archive },
     ],
   },
   {
@@ -87,6 +87,7 @@ const sections = [
       { href: "/design", label: "Demandas", icon: Sparkles },
       { href: "/aprovacoes/growth", label: "Aprovações", icon: ClipboardCheck },
       { href: "/galeria-artes", label: "Galeria Criativos", icon: ImageIcon },
+      { href: "/historico/growth", label: "Histórico", icon: Archive },
       { href: "/growth/equipe", label: "Equipe Growth", icon: Users },
       { href: "/configuracoes/linhas-projetos", label: "Linhas / Projetos", icon: Layers },
     ],
@@ -189,7 +190,7 @@ export function Sidebar() {
     if (modulo && mods && !mods[modulo]) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
-    if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
+    if ((href === "/design" || href === "/galeria-artes" || href === "/historico/growth") && podeVerGrowth) return true
     if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
     if (href.startsWith("/social") && href !== "/social/enviar") return podeVerSocial
     const key = PERMISSAO_HREF_MAP[href]

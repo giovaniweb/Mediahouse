@@ -57,6 +57,8 @@ interface KanbanBoardProps {
   getColuna?: (demanda: Demanda) => string
   /** Como abrir o card. Default: modal. Growth usa página completa. */
   openMode?: "modal" | "page"
+  /** "Ver todos" do Finalizado: o histórico do departamento deste quadro. */
+  historico?: string
 }
 
 // Colunas que videomakers externos NÃO podem mover cards para lá (audiovisual)
@@ -70,7 +72,7 @@ const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 // deixou o drag-and-drop livre por tanto tempo — ver AUDITORIA-JOB-WORKFLOW §2.1.
 const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal" }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal", historico = "/historico/audiovisual" }: KanbanBoardProps) {
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const savingOrder = useRef(false)
@@ -276,7 +278,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                 {col.id === "finalizado" && (
                   <div className="ml-auto flex items-center gap-1.5">
                     <Link
-                      href="/historico"
+                      href={historico}
                       className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors"
                     >
                       Ver todos →

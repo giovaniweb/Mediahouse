@@ -12,8 +12,6 @@
 .counts [data-tone="approval"] { color:#edc27b; }
 .counts [data-tone="done"] { color:#69bca7; }
 .right { margin-left:auto; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
-.opening { display:flex; align-items:center; gap:8px; color:#9b9fb4; font-size:12.5px; }
-.opening select { background:#161822; border:1px solid #303342; color:#e7e6ef; padding:6px 10px; border-radius:8px; min-height:34px; font-size:12.5px; }
 .controlsRow { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
 .scopes { display:flex; flex-wrap:wrap; gap:6px; }
 .scopes button { background:#161822; border:1px solid #303342; color:#9b9fb4; border-radius:999px; padding:6px 12px; font-size:12.5px; display:flex; align-items:center; gap:6px; min-height:34px; white-space:nowrap; }
@@ -32,7 +30,6 @@
   .overview { padding:10px 0 0; }
   .topRow { gap:10px 16px; }
   .right { margin-left:0; width:100%; justify-content:space-between; }
-  .opening select { min-height:40px; }
   .tabs button, .scopes button { min-height:40px; }
   .filters { flex-basis:100%; }
 }

@@ -232,7 +232,6 @@ export default function AgendaPage() {
       <div className={styles.heading}><p>AGENDA · SEU TEMPO À VISTA</p><h1>Seu tempo de criar.</h1><span>Captações, reuniões e prazos reunidos no seu calendário.</span></div>
       <div className={styles.viewBar}>
         <div>{([["month", "Mês"], ["week", "Semana"], ["list", "Lista"]] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
-        <label>Abrir detalhes<select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
       </div>
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar a agenda. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {isLoading && <p role="status" className={styles.error}>Carregando agenda…</p>}

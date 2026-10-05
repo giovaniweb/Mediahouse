@@ -3,7 +3,6 @@
 import type { ReactNode } from "react"
 import styles from "./BoardOverview.module.css"
 import { LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react"
-import { useDetailPresentation } from "./useDetailPresentation"
 import type { Visao, AbaRapida, DemandaLista } from "./tipos-visao"
 import { calcularKpis } from "./tipos-visao"
 
@@ -54,7 +53,6 @@ export function BarraVisao({
   onPagina: (p: number) => void
   porPagina?: number
 }) {
-  const { presentation, setPresentation } = useDetailPresentation()
   const kpi = calcularKpis(demandas)
   const paginas = Math.ceil((total ?? 0) / porPagina)
   // A paginação anda sobre o recorte; o "na fila" fala da fila inteira. Com
@@ -84,9 +82,8 @@ export function BarraVisao({
             {total === undefined ? "…" : recortado ? `${total} de ${totalFila} na fila` : `${total} na fila`}
           </span>
           {paginas > 1 && <button type="button" aria-label="Próxima página" disabled={pagina >= paginas} onClick={() => onPagina(pagina + 1)}><ChevronRight size={16} /></button>}
-          <a href="/historico">Histórico</a>
+          <a href={`/historico/${area}`}>Histórico</a>
         </nav>
-        <label className={styles.opening}><span>Abrir em</span><select aria-label="Abrir detalhes" value={presentation} onChange={e => setPresentation(e.target.value as "drawer" | "modal")}><option value="drawer">Painel lateral</option><option value="modal">Janela ampliada</option></select></label>
       </div>
     </div>
     <div className={styles.controlsRow}>

@@ -17,7 +17,7 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { getPermissoes } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
-import { formatarDataCurta, inicioDoDia, validarPrazo } from "@/lib/datas"
+import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
@@ -200,6 +200,28 @@ export async function GET(req: NextRequest) {
     }
     and.push({ finalizadaEm: faixa })
   }
+
+  // ?prazoDe/?prazoAte — o critério "Prazo" do "Filtrar por…" dos quadros. Na
+  // fila o que importa é quando vence, não quando terminou. O prazo é gravado
+  // como meia-noite UTC (inicioDoDia), então o dia é UTC, e não o de Brasília
+  // que vale para finalizadaEm: com o fuso, "prazo 01/10" não achava nada.
+  const prazoDe = searchParams.get("prazoDe")
+  const prazoAte = searchParams.get("prazoAte")
+  if (prazoDe || prazoAte) {
+    try { intervaloCalendario(prazoDe, prazoAte) } // só valida formato e ordem
+    catch (e) {
+      if (e instanceof RecorteInvalido) return erroDeCampo(e.campo === "ate" ? "prazoAte" : "prazoDe", e.message)
+      throw e
+    }
+    and.push({ dataLimite: {
+      ...(prazoDe ? { gte: inicioDoDia(prazoDe) } : {}),
+      ...(prazoAte ? { lt: inicioDoDia(somarDias(prazoAte, 1)) } : {}),
+    } })
+  }
+
+  // ?social=1 — só os pedidos que nasceram no quadro da social media (vídeo ou
+  // arte). É o departamento "Social Media" do histórico e do dashboard.
+  if (searchParams.get("social") === "1") and.push({ socialId: { not: null } })
 
   // ?atrasadas=1 — prazo vencido, exceto onde o prazo fica suspenso porque a bola
   // está com o cliente ou com quem posta. Mesma regra de estaAtrasada() no card;

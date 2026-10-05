@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { Plus } from "lucide-react"
-import { FiltrosQuadro } from "@/components/kanban/FiltrosQuadro"
+import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { GROWTH_COLUNAS, GROWTH_COLUNA_PARA_STATUS, growthColunaDe, type GrowthColunaId } from "@/lib/growth-kanban"
 import { TIPOS_CONTEUDO } from "@/lib/growth-conteudo"
@@ -22,14 +23,23 @@ import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 
 // Growth (gestão de conteúdos). Reutiliza a Demanda (area="design" internamente),
 // mas com kanban próprio de 8 colunas e SEM qualquer dependência de Eventos.
+// useSearchParams pede um limite de Suspense para o build pré-renderizar a rota.
 export default function GrowthKanbanPage() {
+  return <Suspense fallback={null}><GrowthKanban /></Suspense>
+}
+
+function GrowthKanban() {
   const { data: session } = useSession()
+  // O card "Atrasadas" do dashboard do Growth chega com ?atrasadas=1 e abre já
+  // no recorte, como no Audiovisual.
+  const atrasadasUrl = useSearchParams().get("atrasadas") === "1"
   const [showNova, setShowNova] = useState(false)
 
   // Filtros — adaptados às peculiaridades do Growth (pessoas/responsável,
   // linha/projeto, tipo de conteúdo, produto) em vez de videomaker/editor.
   const [search, setSearch] = useState("")
   const [filtroResp, setFiltroResp] = useState("")
+  const [filtroPrazo, setFiltroPrazo] = useState("")
   const [filtroLinha, setFiltroLinha] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
@@ -38,7 +48,7 @@ export default function GrowthKanbanPage() {
   // quem cuida de Growth pode querer lista e quem cuida de vídeo, kanban.
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [visao, setVisao] = useState<Visao>("kanban")
-  const [aba, setAba] = useState<AbaRapida>("todos")
+  const [aba, setAba] = useState<AbaRapida>(atrasadasUrl ? "atrasadas" : "todos")
   const CHAVE_VISAO = "nuflow:visao-demandas-growth"
 
   useEffect(() => {
@@ -71,6 +81,9 @@ export default function GrowthKanbanPage() {
   if (aba === "criadas") params.set("criadasPorMim", "1")
   if (aba === "atrasadas") params.set("atrasadas", "1")
   if (filtroResp) params.set("responsavelId", filtroResp)
+  const prazo = lerPeriodo(filtroPrazo)
+  if (prazo.de) params.set("prazoDe", prazo.de)
+  if (prazo.ate) params.set("prazoAte", prazo.ate)
   if (filtroLinha) params.set("linhaProjetoId", filtroLinha)
   if (filtroTipo) params.set("tipoVideo", filtroTipo)
   if (filtroProduto) params.set("produtoId", filtroProduto)
@@ -138,10 +151,13 @@ export default function GrowthKanbanPage() {
               onBusca={setSearch}
               placeholder="Buscar demanda…"
               filtros={[
-                { id: "responsavel", rotulo: "Responsável", valor: filtroResp, onChange: setFiltroResp, todos: "Todos os responsáveis", opcoes: responsaveis.map(r => ({ valor: r.id, rotulo: r.label ?? r.nome })) },
-                { id: "linha", rotulo: "Linha / projeto", valor: filtroLinha, onChange: setFiltroLinha, todos: "Todas as linhas e projetos", opcoes: linhas.map(l => ({ valor: l.id, rotulo: l.nome })) },
-                { id: "tipo", rotulo: "Tipo de conteúdo", valor: filtroTipo, onChange: setFiltroTipo, todos: "Todos os tipos", opcoes: TIPOS_CONTEUDO.map(t => ({ valor: t.key, rotulo: t.label })) },
-                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, todos: "Todos os produtos", opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
+                { id: "prazo", rotulo: "Prazo", tipo: "periodo", valor: filtroPrazo, onChange: setFiltroPrazo },
+                // No Growth quem pega o card é sempre alguém da casa (responsável),
+                // então "Pessoa" é a lista de responsáveis, sem prefixo de papel.
+                { id: "pessoa", rotulo: "Pessoa", valor: filtroResp, onChange: setFiltroResp, opcoes: responsaveis.map(r => ({ valor: r.id, rotulo: r.label ?? r.nome })) },
+                { id: "linha", rotulo: "Linha de produto", valor: filtroLinha, onChange: setFiltroLinha, opcoes: linhas.map(l => ({ valor: l.id, rotulo: l.nome })) },
+                { id: "tipo", rotulo: "Tipo de conteúdo", valor: filtroTipo, onChange: setFiltroTipo, opcoes: TIPOS_CONTEUDO.map(t => ({ valor: t.key, rotulo: t.label })) },
+                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
               ]}
             />
           )}
@@ -169,6 +185,7 @@ export default function GrowthKanbanPage() {
             colunas={GROWTH_COLUNAS}
             getColuna={(d) => growthColunaDe(d.statusInterno)}
             openMode="modal"
+            historico="/historico/growth"
           />
         </div>
       ) : (

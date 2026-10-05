@@ -60,7 +60,7 @@ export const PADRAO_MODULOS: Record<Modulo, boolean> = {
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e
 // tudo abaixo dele.
 export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
-  growth: ["/design", "/galeria-artes"],
+  growth: ["/design", "/galeria-artes", "/historico/growth"],
   // Coberturas e o portal de campo entraram aqui em 09/09/2026. O módulo já
   // estava indisponível e a descrição já dizia "Coberturas" — só faltava a rota
   // na lista, então `/coberturas` seguiu no ar enquanto `/eventos` sumia. O

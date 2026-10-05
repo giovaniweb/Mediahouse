@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect, Suspense } from "react"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { FiltrosQuadro } from "@/components/kanban/FiltrosQuadro"
+import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
+import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
@@ -22,7 +23,7 @@ import { useMe } from "@/hooks/usePermissoes"
 interface Videomaker { id: string; nome: string }
 interface Editor { id: string; nome: string }
 interface Produto { id: string; nome: string }
-interface Responsavel { id: string; nome: string; label: string }
+interface Responsavel { id: string; nome: string; tipo: string }
 
 // useSearchParams obriga um limite de Suspense para o Next conseguir
 // pré-renderizar a rota — sem ele o build falha em /demandas.
@@ -41,11 +42,11 @@ function DemandasKanban() {
   const router = useRouter()
   const [search, setSearch] = useState("")
   const [filtroDepto, setFiltroDepto] = useState("")
-  const [filtroVM, setFiltroVM] = useState("")
-  const [filtroEditor, setFiltroEditor] = useState("")
+  const [filtroPessoa, setFiltroPessoa] = useState("")
+  const [filtroPrazo, setFiltroPrazo] = useState("")
+  const [filtroLinha, setFiltroLinha] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
   const [filtroEvento, setFiltroEvento] = useState("")
-  const [filtroResp, setFiltroResp] = useState("")
 
   // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
   // prefere uma lista abre direto na Lista na próxima vez, sem reconfigurar.
@@ -102,6 +103,7 @@ function DemandasKanban() {
   const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>("/api/produtos?limit=200", fetcher)
   const { data: dataEventos } = useSWR<{ eventos: { id: string; nome: string }[] }>(me?.modulos?.eventos ? "/api/eventos" : null, fetcher)
   const { data: dataResp } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis?area=audiovisual", fetcher)
+  const { data: dataLinhas } = useSWR<{ linhas: { id: string; nome: string }[] }>("/api/growth/linhas-projetos", fetcher)
   const { data: dataDeptos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
     "/api/configuracoes/parametros?grupo=departamentos", fetcher
   )
@@ -112,6 +114,12 @@ function DemandasKanban() {
   const produtos = dataProdutos?.produtos ?? []
   const eventos = dataEventos?.eventos ?? []
   const responsaveis = dataResp?.responsaveis ?? []
+  const linhas = dataLinhas?.linhas ?? []
+  const pessoas = opcoesDePessoa([
+    ...videomakers.map(v => ({ papel: "vm" as const, id: v.id, nome: v.nome, funcao: "Videomaker" })),
+    ...editores.map(e => ({ papel: "ed" as const, id: e.id, nome: e.nome, funcao: "Editor" })),
+    ...responsaveis.map(r => ({ papel: "us" as const, id: r.id, nome: r.nome, funcao: r.tipo })),
+  ])
 
   const [navegacaoFila, setNavegacaoFila] = useState({ filtro: "", pagina: 1 })
   const params = new URLSearchParams()
@@ -123,11 +131,14 @@ function DemandasKanban() {
   params.set("semCobertura", "1")
   if (search) params.set("search", search)
   if (filtroDepto) params.set("departamento", filtroDepto)
-  if (filtroVM) params.set("videomakerId", filtroVM)
-  if (filtroEditor) params.set("editorId", filtroEditor)
+  const pessoa = parametroDaPessoa(filtroPessoa)
+  if (pessoa) params.set(...pessoa)
+  const prazo = lerPeriodo(filtroPrazo)
+  if (prazo.de) params.set("prazoDe", prazo.de)
+  if (prazo.ate) params.set("prazoAte", prazo.ate)
+  if (filtroLinha) params.set("linhaProjetoId", filtroLinha)
   if (filtroProduto) params.set("produtoId", filtroProduto)
   if (filtroEvento) params.set("eventoGestaoId", filtroEvento)
-  if (filtroResp) params.set("responsavelId", filtroResp)
   // As abas rápidas são recortes do MESMO conjunto — por isso viram parâmetro da
   // consulta, e não uma filtragem no cliente: as três visões precisam concordar.
   if (aba === "minhas") params.set("mine", "1")
@@ -313,15 +324,15 @@ function DemandasKanban() {
               onBusca={setSearch}
               placeholder="Buscar demanda…"
               filtros={[
+                { id: "prazo", rotulo: "Prazo", tipo: "periodo", valor: filtroPrazo, onChange: setFiltroPrazo },
+                { id: "pessoa", rotulo: "Pessoa", valor: filtroPessoa, onChange: setFiltroPessoa, opcoes: pessoas },
+                { id: "linha", rotulo: "Linha de produto", valor: filtroLinha, onChange: setFiltroLinha, opcoes: linhas.map(l => ({ valor: l.id, rotulo: l.nome })) },
                 // Departamentos vêm de Configurações → Parâmetros. Antes eram fixos
                 // aqui e já divergiam do banco ("Comercial" e "Social Media" não
                 // existiam; "Audiovisual" faltava).
-                { id: "departamento", rotulo: "Departamento", valor: filtroDepto, onChange: setFiltroDepto, todos: "Todos os departamentos", opcoes: departamentos.map(d => ({ valor: d.valor, rotulo: d.label })) },
-                { id: "videomaker", rotulo: "Videomaker", valor: filtroVM, onChange: setFiltroVM, todos: "Todos os videomakers", opcoes: videomakers.map(v => ({ valor: v.id, rotulo: v.nome })) },
-                { id: "editor", rotulo: "Editor", valor: filtroEditor, onChange: setFiltroEditor, todos: "Todos os editores", opcoes: editores.map(e => ({ valor: e.id, rotulo: e.nome })) },
-                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, todos: "Todos os produtos", opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
-                { id: "responsavel", rotulo: "Responsável", valor: filtroResp, onChange: setFiltroResp, todos: "Todos os responsáveis", opcoes: responsaveis.map(r => ({ valor: r.id, rotulo: r.label })) },
-                ...(me?.modulos?.eventos ? [{ id: "evento", rotulo: "Evento", valor: filtroEvento, onChange: setFiltroEvento, todos: "Todos os eventos", opcoes: eventos.map(ev => ({ valor: ev.id, rotulo: ev.nome })) }] : []),
+                { id: "departamento", rotulo: "Departamento", valor: filtroDepto, onChange: setFiltroDepto, opcoes: departamentos.map(d => ({ valor: d.valor, rotulo: d.label })) },
+                { id: "produto", rotulo: "Produto", valor: filtroProduto, onChange: setFiltroProduto, opcoes: produtos.map(p => ({ valor: p.id, rotulo: p.nome })) },
+                ...(me?.modulos?.eventos ? [{ id: "evento", rotulo: "Evento", valor: filtroEvento, onChange: setFiltroEvento, opcoes: eventos.map(ev => ({ valor: ev.id, rotulo: ev.nome })) }] : []),
               ]}
             >
               {/* Recorte que veio de um card do dashboard. Sem este aviso o quadro

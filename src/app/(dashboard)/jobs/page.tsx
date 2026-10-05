@@ -8,13 +8,14 @@ import { Header } from "@/components/layout/Header"
 import { JobsQuadro } from "@/components/jobs/JobsQuadro"
 import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
-import { ehHoje } from "@/lib/datas"
+import { dataCalendario, ehHoje } from "@/lib/datas"
 import { estaAtrasada } from "@/lib/status"
 import { TIPO_COBERTURA, ehJob, proximaAcao, responsavelAtual } from "@/lib/job-fase"
-import { BoardFilters } from "@/components/kanban/BoardFilters"
+import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
+import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { Search, LayoutGrid, List, ChevronRight } from "lucide-react"
+import { LayoutGrid, List, ChevronRight } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
@@ -60,22 +61,22 @@ function Quadro() {
   const [view, setView] = useState<"kanban" | "list">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
-  const [videomakerId, setVideomakerId] = useState("")
-  const [editorId, setEditorId] = useState("")
+  const [pessoa, setPessoa] = useState("")
   const [regiao, setRegiao] = useState("")
+  const [captacao, setCaptacao] = useState("")
 
   // A origem é fixa: este quadro não é o das demandas gerais.
   const params = new URLSearchParams({ area: "audiovisual", tipoVideo: TIPO_COBERTURA })
   if (aba === "meus") params.set("mine", "1")
   if (aba === "atrasados") params.set("atrasadas", "1")
   if (busca.trim()) params.set("search", busca.trim())
-  if (videomakerId) params.set("videomakerId", videomakerId)
-  if (editorId) params.set("editorId", editorId)
-  // Tipo e região NÃO vão para a API de propósito: as opções dos dois selects
-  // são derivadas da lista carregada, e filtrar no servidor faria a lista de
-  // opções encolher para o próprio valor escolhido — sem como trocar de tipo
-  // sem antes limpar o filtro. Videomaker e editor podem ir, porque as opções
-  // deles vêm de endpoints próprios e não dependem desta lista.
+  const filtroPessoa = parametroDaPessoa(pessoa)
+  if (filtroPessoa) params.set(...filtroPessoa)
+  // Região NÃO vai para a API de propósito: as opções saem da lista carregada,
+  // e filtrar no servidor faria a lista de opções encolher para o próprio valor
+  // escolhido — sem como trocar de região sem antes limpar o filtro. A data da
+  // captação fica no cliente pelo mesmo caminho (a API só filtra por prazo e
+  // conclusão). Pessoa pode ir: as opções vêm de endpoints próprios.
 
   const { data, isLoading, error, mutate } = useSWR<{ demandas: JobDoQuadro[] }>(
     `/api/demandas?${params}`,
@@ -107,8 +108,14 @@ function Quadro() {
     // "o que vence hoje". Quem quer prazo usa Atrasados.
     if (aba === "hoje") lista = lista.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao))
     if (regiao) lista = lista.filter((j) => j.cidade === regiao)
+    const { de, ate } = lerPeriodo(captacao)
+    if (de || ate) lista = lista.filter((j) => {
+      // Mesmo dia de calendário que a aba "Hoje" usa (ehHoje).
+      const dia = j.dataCaptacao ? dataCalendario(j.dataCaptacao) : null
+      return !!dia && (!de || dia >= de) && (!ate || dia <= ate)
+    })
     return lista
-  }, [todos, aba, regiao])
+  }, [todos, aba, regiao, captacao])
 
   const atrasados = jobs.filter(estaAtrasada).length
 
@@ -116,8 +123,10 @@ function Quadro() {
   // oferece a próxima ação. A tela de Demandas continua existindo para a gestão.
   const abrir = (id: string) => router.push(`/jobs/${id}`)
 
-  const selectClass =
-    "border border-zinc-800 rounded-lg px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600"
+  const pessoas = opcoesDePessoa([
+    ...vms.map((v) => ({ papel: "vm" as const, id: v.id, nome: v.nome, funcao: "Videomaker" })),
+    ...editores.map((e) => ({ papel: "ed" as const, id: e.id, nome: e.nome, funcao: "Editor" })),
+  ])
 
   const captacoesHoje = jobs.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao)).length
   const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
@@ -154,35 +163,16 @@ function Quadro() {
 
             {/* Busca e recortes secundários */}
             <div className={topo.filters}>
-              <BoardFilters>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="relative w-full md:w-auto">
-                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      value={busca}
-                      onChange={(e) => setBusca(e.target.value)}
-                      aria-label="Buscar jobs por código ou título"
-                      placeholder="Buscar por código, título…"
-                      className="border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600"
-                    />
-                  </div>
-
-                  <select aria-label="Videomaker" value={videomakerId} onChange={(e) => setVideomakerId(e.target.value)} className={selectClass}>
-                    <option value="">Todos os videomakers</option>
-                    {vms.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-                  </select>
-
-                  <select aria-label="Editor" value={editorId} onChange={(e) => setEditorId(e.target.value)} className={selectClass}>
-                    <option value="">Todos os editores</option>
-                    {editores.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                  </select>
-
-                  <select aria-label="Região" value={regiao} onChange={(e) => setRegiao(e.target.value)} className={selectClass}>
-                    <option value="">Todas as regiões</option>
-                    {regioes.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-              </BoardFilters>
+              <FiltrosQuadro
+                busca={busca}
+                onBusca={setBusca}
+                placeholder="Buscar por código, título…"
+                filtros={[
+                  { id: "captacao", rotulo: "Data da captação", tipo: "periodo", valor: captacao, onChange: setCaptacao },
+                  { id: "pessoa", rotulo: "Pessoa", valor: pessoa, onChange: setPessoa, opcoes: pessoas },
+                  { id: "regiao", rotulo: "Região", valor: regiao, onChange: setRegiao, opcoes: regioes.map((r) => ({ valor: r, rotulo: r })) },
+                ]}
+              />
             </div>
           </div>
         </section>

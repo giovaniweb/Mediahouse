@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { calcularGargalos, entradaNaEtapa, type DemandaNaEtapa, type TrocaDeStatus } from "@/lib/gargalos"
+import { calcularGargalos, entradaNaEtapa, FLUXO_GROWTH, type DemandaNaEtapa, type TrocaDeStatus } from "@/lib/gargalos"
 
 const dia = (n: number) => new Date(Date.UTC(2026, 9, n, 12))
-const job = (id: string, statusVisivel: DemandaNaEtapa["statusVisivel"], criado = dia(1)): DemandaNaEtapa =>
-  ({ id, codigo: id.toUpperCase(), statusVisivel, createdAt: criado })
+const job = (id: string, etapa: string, criado = dia(1)): DemandaNaEtapa =>
+  ({ id, codigo: id.toUpperCase(), etapa, createdAt: criado })
 const troca = (demandaId: string, statusAnterior: string | null, statusNovo: string, em: Date): TrocaDeStatus =>
   ({ demandaId, statusAnterior, statusNovo, createdAt: em })
 
@@ -77,5 +77,20 @@ describe("calcularGargalos", () => {
     ]
     const aprovacao = calcularGargalos([job("a", "aprovacao")], trocas, dia(10)).find((g) => g.etapa === "aprovacao")
     expect(aprovacao?.diasMedios).toBe(2.5)
+  })
+
+  it("Growth: colunas próprias, agrupando o statusInterno do histórico", () => {
+    const r = calcularGargalos([], [], dia(10), FLUXO_GROWTH)
+    expect(r.map((g) => g.label)).toEqual(["Backlog", "Briefing", "Para fazer", "Fazendo", "Para aprovação", "Programado", "Impedimento"])
+    // editando e ajuste_solicitado são a mesma coluna "Fazendo": a volta do
+    // ajuste não reinicia a contagem.
+    const trocas = [
+      troca("a", "fila_edicao", "editando", dia(3)),
+      troca("a", "editando", "ajuste_solicitado", dia(6)),
+    ]
+    const fazendo = calcularGargalos([job("a", "fazendo")], trocas, dia(10), FLUXO_GROWTH).find((g) => g.etapa === "fazendo")
+    expect(fazendo).toMatchObject({ demandas: 1, diasMedios: 7, semHistorico: 0 })
+    // Backlog sem troca nenhuma: nasceu lá.
+    expect(entradaNaEtapa(job("b", "backlog", dia(4)), [], FLUXO_GROWTH)).toEqual(dia(4))
   })
 })
