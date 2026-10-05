@@ -48,6 +48,7 @@ vi.mock("@/lib/criar-usuario", () => {
 
 const { POST: postDemanda } = await import("@/app/api/publico/demanda/route")
 const { POST: postVideomaker } = await import("@/app/api/publico/videomaker/route")
+const { POST: postDesigner } = await import("@/app/api/publico/designer/route")
 const { barrarExcesso, LIMITES_FORMULARIO, MSG_EXCESSO, MSG_INDISPONIVEL } = await import("@/lib/limite-formulario")
 
 const pedido = {
@@ -58,6 +59,8 @@ const videomaker = {
   nome: "Video Maker", cpfCnpj: "12345678901", email: "vm@estudio.test", telefone: "31977776666",
   cidade: "Belo Horizonte", estado: "MG",
 }
+// O cadastro de designer usa o mesmo formulário (e o mesmo corpo) do videomaker.
+const designer = { ...videomaker, nome: "Designer Teste", email: "ds@estudio.test" }
 const req = (rota: string, corpo: unknown, org = "clinica-b") =>
   new NextRequest(`http://localhost/api/publico/${rota}?org=${org}`, {
     method: "POST", body: typeof corpo === "string" ? corpo : JSON.stringify(corpo),
@@ -83,6 +86,7 @@ describe("barrarExcesso", () => {
   it("tetos combinados: 20 pedidos e 5 cadastros por hora", () => {
     expect(LIMITES_FORMULARIO.demanda).toEqual({ max: 20, janelaSeg: 3600 })
     expect(LIMITES_FORMULARIO.videomaker).toEqual({ max: 5, janelaSeg: 3600 })
+    expect(LIMITES_FORMULARIO.designer).toEqual({ max: 5, janelaSeg: 3600 })
   })
 })
 
@@ -147,5 +151,40 @@ describe("POST /api/publico/videomaker", () => {
     consumir.mockResolvedValue(true)
     await postVideomaker(req("videomaker", videomaker)).catch(() => null)
     expect(tocouNoBanco[0]).toMatch(/^(videomaker|videomakerDadosFiscais)\.findFirst$/)
+  })
+})
+
+describe("POST /api/publico/designer", () => {
+  it("passou do teto: 429 antes da checagem de duplicidade", async () => {
+    consumir.mockResolvedValue(false)
+    const r = await postDesigner(req("designer", designer))
+    expect(r.status).toBe(429)
+    expect((await r.json()).error).toBe(MSG_EXCESSO)
+    expect(tocouNoBanco).toEqual([])
+    expect(consumir).toHaveBeenCalledWith("designer:org-B:ip-hash-teste", 5, 3600)
+  })
+
+  it("contagem fora do ar: 503, sem gravar nada", async () => {
+    consumir.mockRejectedValue(new Error("timeout"))
+    const r = await postDesigner(req("designer", designer))
+    expect(r.status).toBe(503)
+    expect(tocouNoBanco).toEqual([])
+  })
+
+  it("sem CPF/CNPJ é 400 e não consome limite", async () => {
+    const r = await postDesigner(req("designer", { ...designer, cpfCnpj: "" }))
+    expect(r.status).toBe(400)
+    expect(consumir).not.toHaveBeenCalled()
+  })
+
+  it("portfólio javascript: é recusado", async () => {
+    const r = await postDesigner(req("designer", { ...designer, portfolio: "javascript:alert(1)" }))
+    expect(r.status).toBe(400)
+  })
+
+  it("dentro do teto, a primeira coisa no banco é a duplicidade NESTA empresa", async () => {
+    consumir.mockResolvedValue(true)
+    await postDesigner(req("designer", designer)).catch(() => null)
+    expect(tocouNoBanco[0]).toMatch(/^(designerOrganizacao|designerDadosFiscais)\.findFirst$/)
   })
 })

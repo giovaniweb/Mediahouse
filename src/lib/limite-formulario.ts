@@ -1,4 +1,4 @@
-// Limite dos formulários públicos de pedido e de cadastro de videomaker.
+// Limite dos formulários públicos de pedido e de cadastro de videomaker e designer.
 //
 // As duas rotas não tinham limite nenhum, e cada pedido público dispara aviso
 // de WhatsApp para os gestores da empresa. A chave é por EMPRESA e por IP (HMAC):
@@ -15,6 +15,7 @@ import { consumirLimitePublico, hashDoIp } from "@/lib/limite-publico"
 export const LIMITES_FORMULARIO = {
   demanda: { max: 20, janelaSeg: 60 * 60 },
   videomaker: { max: 5, janelaSeg: 60 * 60 },
+  designer: { max: 5, janelaSeg: 60 * 60 },
 } as const
 
 export const MSG_EXCESSO = "Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo — o que você preencheu continua aqui."

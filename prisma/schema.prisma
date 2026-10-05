@@ -29,6 +29,7 @@ enum TipoUsuario {
 enum StatusUsuario {
   ativo
   inativo
+  pendente // só designer: cadastro pela área pública, aguardando a equipe
 }
 
 // Pessoas & Acessos (SaaS): dimensões separadas do `tipo` legado, por organização

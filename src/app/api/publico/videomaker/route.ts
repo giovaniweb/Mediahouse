@@ -19,6 +19,7 @@ const schema = z.object({
   estado: z.string().min(2, "Estado é obrigatório"),
   endereco: z.string().optional(),
   chavePix: z.string().optional(),
+  dadosBancarios: z.string().max(300).optional(),
   valorDiaria: z.number().positive().optional(),
   redesSociais: z.array(z.string()).default([]),
   portfolio: z.string().url("URL do portfólio inválida").optional().or(z.literal("")),
@@ -105,6 +106,7 @@ export async function POST(req: NextRequest) {
       representante: data.representante,
       endereco: data.endereco,
       chavePix: data.chavePix,
+      dadosBancarios: data.dadosBancarios,
     },
   })
   if (!gravou) {

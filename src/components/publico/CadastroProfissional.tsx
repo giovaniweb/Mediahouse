@@ -1,5 +1,8 @@
 "use client"
-
+// "Quer ser um videomaker?" / "Quer ser um designer?": o mesmo cadastro em três
+// passos (Empresa/PJ → Contato → Portfólio), com CPF/CNPJ, PIX e dados
+// bancários. Os dados fiscais vão cifrados para a empresa (VideomakerDadosFiscais
+// ou DesignerDadosFiscais), e o cadastro entra pendente até a equipe aprovar.
 import styles from "@/components/public/Recruitment.module.css"
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
@@ -8,11 +11,16 @@ import { cn } from "@/lib/utils"
 import { urlComOrg } from "@/lib/org-publica-cliente"
 import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
 import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
+import { AREAS_ATUACAO, linkDePortfolio, type Papel } from "@/lib/cadastro-profissional"
 
-const AREAS = ["Casamento", "Eventos Corporativos", "Clipes Musicais", "Documentário", "Publicidade", "Redes Sociais / Reels", "Institucional", "Esportes", "Gastronomia", "Moda & Beauty", "Imóveis", "Jornalismo"]
+const TEXTO: Record<Papel, { titulo: string; extras: string }> = {
+  videomaker: { titulo: "Seu olhar. Novas possibilidades.", extras: "Equipamentos, experiências, certificações, etc." },
+  designer: { titulo: "Seu traço. Novas possibilidades.", extras: "Ferramentas, experiências, marcas que já atendeu, etc." },
+}
 
-export default function CadastroVideomaker() {
+export default function CadastroProfissional({ papel }: { papel: Papel }) {
   const destino = useEmpresaDestino()
+  const AREAS = AREAS_ATUACAO[papel]
   const [passo, setPasso] = useState(1)
   const etapaRef = useRef<HTMLDivElement>(null)
   // O foco vai para o título só quando a etapa MUDA. Com uma flag de "primeira
@@ -51,6 +59,7 @@ export default function CadastroVideomaker() {
     endereco: "",
     // Passo 3 — Financeiro & Portfólio
     chavePix: "",
+    dadosBancarios: "",
     valorDiaria: "",
     redesSociais: [""],
     portfolio: "",
@@ -76,11 +85,14 @@ export default function CadastroVideomaker() {
     setLoading(true)
     setErro(null)
     try {
-      const res = await fetch(urlComOrg("/api/publico/videomaker"), {
+      // Portfólio digitado sem "https://" (instagram.com/fulano) vira link.
+      const portfolio = form.portfolio.trim() ? (linkDePortfolio(form.portfolio) ?? form.portfolio.trim()) : ""
+      const res = await fetch(urlComOrg(`/api/publico/${papel}`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          portfolio,
           valorDiaria: form.valorDiaria ? parseFloat(form.valorDiaria) : undefined,
           redesSociais: form.redesSociais.filter(Boolean),
         }),
@@ -127,7 +139,8 @@ export default function CadastroVideomaker() {
 
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Seu olhar. Novas possibilidades.</h1>
+          <p className="text-xs font-semibold tracking-[.18em] uppercase text-[#c2abff] mb-3">{papel === "videomaker" ? "Quer ser um videomaker?" : "Quer ser um designer?"}</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{TEXTO[papel].titulo}</h1>
           <p className="text-zinc-400">{destino.estado === "pronto" ? `Apresente seu trabalho para ${destino.empresa.nome}. A equipe vai analisar seu perfil e entrar em contato se houver uma oportunidade.` : "Apresente seu trabalho. A empresa responsável pelo link vai analisar seu perfil e entrar em contato se houver uma oportunidade."}</p>
         </div>
         <AvisoDestino destino={destino} />
@@ -252,9 +265,14 @@ export default function CadastroVideomaker() {
                     aria-label="Valor da diária" value={form.valorDiaria} onChange={e => { e.target.setCustomValidity(""); set("valorDiaria", e.target.value) }} placeholder="800" />
                 </div>
                 <div className="col-span-2">
+                  <label className="text-xs font-medium text-zinc-400 block mb-1.5">Dados bancários (opcional)</label>
+                  <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
+                    aria-label="Dados bancários" maxLength={300} value={form.dadosBancarios} onChange={e => { e.target.setCustomValidity(""); set("dadosBancarios", e.target.value) }} placeholder="Banco, agência e conta" />
+                </div>
+                <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Link do Portfólio</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    aria-label="Portfólio" value={form.portfolio} onChange={e => { e.target.setCustomValidity(""); set("portfolio", e.target.value) }} placeholder="https://meusite.com ou Vimeo/YouTube" />
+                    aria-label="Portfólio" value={form.portfolio} onChange={e => { e.target.setCustomValidity(""); set("portfolio", e.target.value) }} placeholder={papel === "videomaker" ? "https://meusite.com ou Vimeo/YouTube" : "Behance, Instagram ou seu site"} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-2">Redes Sociais</label>
@@ -296,7 +314,7 @@ export default function CadastroVideomaker() {
                 <label className="text-xs font-medium text-zinc-400 block mb-1.5">Observações adicionais</label>
                 <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10 resize-none"
                   rows={3} aria-label="Observações" value={form.observacoes} onChange={e => { e.target.setCustomValidity(""); set("observacoes", e.target.value) }}
-                  placeholder="Equipamentos, experiências, certificações, etc." />
+                  placeholder={TEXTO[papel].extras} />
               </div>
 
               <div className="flex gap-3 mt-2">

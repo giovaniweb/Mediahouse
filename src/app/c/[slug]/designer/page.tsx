@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
 import CadastroProfissional from "@/components/publico/CadastroProfissional"
 
-// "Sou videomaker", dentro da área da empresa: o slug vem do caminho
+// "Sou designer", dentro da área da empresa: o slug vem do caminho
 // (/c/<slug>/...), e o formulário o repassa à API sozinho.
 type Props = { params: Promise<{ slug: string }> }
 
@@ -14,5 +14,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function Pagina({ params }: Props) {
   if (!await empresaDoPortal((await params).slug)) notFound()
-  return <CadastroProfissional papel="videomaker" />
+  return <CadastroProfissional papel="designer" />
 }
