@@ -79,6 +79,7 @@ Estas rodam sozinhas e não dependem de alguém lembrar:
 | Auditor de tenancy | `scripts/auditar-tenancy.mjs` | consulta ao banco sem escopo de organização; função que recebe `organizacaoId` e não usa |
 | Testes de isolamento e IDOR | `tests/` | acesso a dado de outra empresa por id direto |
 | Allowlist de dívida | `scripts/tenancy-allowlist.json` | **só pode encolher** — entrada nova exige justificativa |
+| Fronteira da API do Supabase | `scripts/verificar-rls.mjs` (CI) | função SECURITY DEFINER de `public` chamável por PUBLIC, `anon`, `authenticated` ou `service_role`; no Supabase, também tabela ou privilégio padrão de `public` aberto para esses papéis (ver `20261005140000_public_fora_da_api_supabase`) |
 
 O auditor decide por arquivo: se o arquivo cita organização em algum lugar,
 confia na revisão humana. Foi por essa fresta que `buscarVideomakers` passou
