@@ -5,6 +5,7 @@ import { requireDemandaOrg } from "@/lib/org"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { EVENTO_EDICAO } from "@/lib/status"
 import { conversaoDeFluxo, descricaoDaConversao, fluxoAtual, type FluxoDoRegistro } from "@/lib/job-fase"
+import { responderTransferencia } from "@/lib/transferir-para-demandas"
 
 // POST /api/jobs/[id]/converter — move o registro entre o fluxo de Demandas e o
 // de Jobs (cobertura).
@@ -34,6 +35,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (para !== "job" && para !== "demanda") {
     return NextResponse.json({ error: 'Destino inválido: use "job" ou "demanda".' }, { status: 400 })
   }
+
+  // Job → Demanda tem regra própria (status, bloqueios, convites, auditoria,
+  // só gestão) em /api/jobs/[id]/transferir. Este ramo passa pela MESMA regra:
+  // a conversão antiga não pode virar o atalho que pula o bloqueio.
+  if (para === "demanda") return responderTransferencia(session, id, body)
 
   const [vinculo, demanda] = await Promise.all([
     permissoesEfetivas(session.user.id, organizacaoId),

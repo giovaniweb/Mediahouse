@@ -35,7 +35,7 @@ import {
 } from "@/lib/job-fase"
 import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
-import { ConverterEmDemanda } from "@/components/jobs/ConverterEmDemanda"
+import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -1271,11 +1271,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               )}
 
-              {/* O caminho de volta: Job → Demanda. Veio da tela antiga de
-                  /jobs/[id] e mudou para cá quando ela passou a ser esta tela.
-                  Reclassificar é raro e de gestão, por isso fica discreto e no
-                  fim; o componente some sozinho para quem não pode converter. */}
-              <ConverterEmDemanda jobId={demanda.id} codigo={demanda.codigo} />
+              {/* O caminho de volta: Job criado por engano → Demandas
+                  (audiovisual). Reclassificar é raro e de gestão, por isso fica
+                  discreto e no fim; o componente some para quem não é admin ou
+                  gestor e mostra o bloqueio (videomaker, convite aceito, custo)
+                  antes do clique. */}
+              <TransferirParaDemandas jobId={demanda.id} codigo={demanda.codigo} />
             </section>
           )}
 
