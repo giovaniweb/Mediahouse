@@ -110,6 +110,20 @@ export function linksDaArea(
   return { base, inicio, entrar: `${base}/entrar`, noSubdominio: false }
 }
 
+/**
+ * Um link de dentro da área: `linkNaArea(area, "/pedido?tipo=video")`. É o `na()`
+ * da página da empresa. Login e painel saem para o domínio principal; o resto
+ * fica no endereço em que a pessoa está.
+ */
+export function linkNaArea(area: LinksDaArea, caminho = ""): string {
+  if (caminho === "/entrar") return area.entrar
+  if (caminho === "" || caminho === "/") return area.inicio
+  if (area.noSubdominio && SO_NO_PRINCIPAL.some(t => caminho === t || caminho.startsWith(`${t}/`) || caminho.startsWith(`${t}?`))) {
+    return area.entrar.replace(/\/entrar$/, caminho)
+  }
+  return `${area.base}${caminho}`
+}
+
 /** Arquivo estático (tem extensão no último trecho): não passa pela área. */
 function ehArquivo(caminho: string) {
   return /\.[a-z0-9]+$/i.test(caminho.slice(caminho.lastIndexOf("/") + 1))

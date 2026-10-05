@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { desvioDoSubdominio, linksDaArea, slugDoHost } from "@/lib/subdominio"
+import { desvioDoSubdominio, linkNaArea, linksDaArea, slugDoHost } from "@/lib/subdominio"
 
 const raiz = "nuflow.space"
 const pedido = (host: string, caminho: string, busca = "") => ({ host, caminho, busca, protocolo: "https:" })
@@ -82,5 +82,22 @@ describe("links da área", () => {
   })
   it("subdomínio de outra empresa não vale como este", () => {
     expect(linksDaArea("contourline", "outra.nuflow.space", "https:", desligado).base).toBe("/c/contourline")
+  })
+})
+
+describe("link na área (o na() da página da empresa)", () => {
+  const sub = linksDaArea("contourline", "contourline.nuflow.space", "https:", desligado)
+  const antigo = linksDaArea("contourline", "nuflow.space", "https:", desligado)
+  it("no subdomínio: caminho curto, login e painel no principal", () => {
+    expect(linkNaArea(sub, "/pedido?tipo=video")).toBe("/pedido?tipo=video")
+    expect(linkNaArea(sub, "/designer")).toBe("/designer")
+    expect(linkNaArea(sub, "/entrar")).toBe("https://nuflow.space/c/contourline/entrar")
+    expect(linkNaArea(sub, "/painel")).toBe("https://nuflow.space/c/contourline/painel")
+    expect(linkNaArea(sub)).toBe("/")
+  })
+  it("no endereço antigo: /c/<slug> na frente", () => {
+    expect(linkNaArea(antigo, "/galeria")).toBe("/c/contourline/galeria")
+    expect(linkNaArea(antigo, "/entrar")).toBe("/c/contourline/entrar")
+    expect(linkNaArea(antigo)).toBe("/c/contourline")
   })
 })

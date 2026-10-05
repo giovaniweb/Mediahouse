@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { Clapperboard, Palette, CalendarCheck, Camera, Images, LogIn, ArrowRight } from "lucide-react"
 import { empresaDoPortal } from "@/lib/portal"
 import { linksDaAreaNoServidor } from "@/lib/area-servidor"
+import { linkNaArea } from "@/lib/subdominio"
 import "@/components/layout/Montserrat.css"
 import styles from "@/components/publico/Portal.module.css"
 
@@ -28,17 +29,19 @@ export default async function AreaDaEmpresa({ params }: Props) {
   const { slug } = await params
   const empresa = await empresaDoPortal(slug)
   if (!empresa) notFound()
-  const { base, entrar } = await linksDaAreaNoServidor(empresa.slug)
+  // Todo link da área passa por na(): o mesmo nos dois endereços (ver lib/subdominio).
+  const area = await linksDaAreaNoServidor(empresa.slug)
+  const na = (caminho: string) => linkNaArea(area, caminho)
   // Seis portas, na língua de quem chega: cada uma abre o formulário já no
   // ponto certo, sem tela de "o que você precisa?" no meio.
   const caminhos = [
-    { href: `${base}/pedido?tipo=video`, icone: Clapperboard, titulo: "Quero um vídeo", texto: "Reels, institucional, treinamento, apresentação de equipamento.", principal: true },
-    { href: `${base}/pedido?tipo=conteudo`, icone: Palette, titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo de tráfego, arte gráfica." },
+    { href: na("/pedido?tipo=video"), icone: Clapperboard, titulo: "Quero um vídeo", texto: "Reels, institucional, treinamento, apresentação de equipamento.", principal: true },
+    { href: na("/pedido?tipo=conteudo"), icone: Palette, titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo de tráfego, arte gráfica." },
     // Pedido de gravação: entra em Aprovações e, aprovado, vira Job.
-    { href: `${base}/gravacao`, icone: CalendarCheck, titulo: "Quero um videomaker", texto: "Gravação em clínica ou evento: cliente, endereço, data e horário." },
-    { href: `${base}/videomaker`, icone: Camera, titulo: "Quero ser videomaker", texto: "Mande seus dados e seu portfólio para a equipe." },
-    { href: `${base}/galeria`, icone: Images, titulo: "Quero ver a galeria", texto: "Os vídeos que a equipe já publicou." },
-    { href: entrar, icone: LogIn, titulo: "Quero entrar no sistema", texto: "Para quem faz parte da equipe ou acompanha os próprios pedidos." },
+    { href: na("/gravacao"), icone: CalendarCheck, titulo: "Quero um videomaker", texto: "Gravação em clínica ou evento: cliente, endereço, data e horário." },
+    { href: na("/videomaker"), icone: Camera, titulo: "Quero ser videomaker", texto: "Mande seus dados e seu portfólio para a equipe." },
+    { href: na("/galeria"), icone: Images, titulo: "Quero ver a galeria", texto: "Os vídeos que a equipe já publicou." },
+    { href: na("/entrar"), icone: LogIn, titulo: "Quero entrar no sistema", texto: "Para quem faz parte da equipe ou acompanha os próprios pedidos." },
   ]
   return (
     <main className={styles.portal}>
@@ -50,7 +53,7 @@ export default async function AreaDaEmpresa({ params }: Props) {
           </span>
           <strong>{empresa.nome}</strong>
         </div>
-        <Link href={entrar} className={styles.entrar}><LogIn size={16} aria-hidden="true" />Entrar</Link>
+        <Link href={na("/entrar")} className={styles.entrar}><LogIn size={16} aria-hidden="true" />Entrar</Link>
       </header>
       <section className={styles.hero} aria-labelledby="titulo-area">
         <p className={styles.eyebrow}>Pedidos, cadastro e acesso</p>
