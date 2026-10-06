@@ -20,7 +20,7 @@ import {
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
   AlertTriangle, RefreshCw, UserCheck, Clapperboard, Film, Trash2, Package, Upload, Loader2, Play, FolderOpen,
   CalendarRange, ArrowUpRight, FileText, Download, Eye, ArrowRightLeft, ArrowRight,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, Inbox, MapPin,
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
-import { BriefingResumido } from "@/components/demandas/BriefingResumido"
+import { Briefing } from "@/components/demandas/Briefing"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -49,6 +49,7 @@ import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { extrairCopy } from "@/lib/copy-criativo"
 import { formatarData, prazoVencido } from "@/lib/datas"
+import { ehImagem, extensaoDe, nomeParaMostrar } from "@/lib/nome-arquivo"
 
 const STATUS_LABELS: Record<string, string> = {
   pedido_criado: "Pedido Criado",
@@ -144,24 +145,24 @@ function getDemandCopy(growth: boolean) {
     return {
       teamTitle: "Equipe Growth",
       responsibleLabel: "Responsável",
-      productionTitle: "Arquivos e Aprovação",
-      rawLabel: "📁 Materiais / Referências (Drive)",
+      productionTitle: "Arquivos e aprovação",
+      rawLabel: "Materiais e referências",
       addRaw: "Adicionar link de materiais",
       rawSaved: "Link de materiais salvo!",
       rawRemoveConfirm: "link de materiais",
-      rawUploaded: "✅ Materiais enviados com sucesso!",
+      rawUploaded: "Materiais enviados.",
       finalLabel: "Arquivos Finais",
       finalSingleLabel: "Arquivo Final",
-      finalEditLabel: "🎨 Arquivo final (arte/criativo)",
+      finalEditLabel: "Arquivo final (arte ou criativo)",
       finalRemoveConfirm: "este arquivo final",
       finalRemoved: "Arquivo removido!",
       finalRemoveError: "Erro ao remover arquivo",
-      addFinalButton: "🚀 Enviar outro arquivo",
-      sendApprovalButton: "🚀 Enviar Arte/Criativo para Aprovação",
+      addFinalButton: "Enviar outro arquivo",
+      sendApprovalButton: "Enviar arte para aprovação",
       finalCountLabel: "arquivo(s)",
       progressHint: "Upload → aprovação → download na Biblioteca",
-      uploadModalTitle: "🚀 Enviar arte/criativo para aprovação",
-      rawUploadModalTitle: "📁 Upload de Materiais",
+      uploadModalTitle: "Enviar arte para aprovação",
+      rawUploadModalTitle: "Enviar materiais",
       uploadModalDescription: "Envie o arquivo final e gere o link de aprovação para o cliente.",
       rawUploadModalDescription: "Faça upload dos materiais/referências ou informe o link.",
       fileAccept: "image/*,.pdf,.zip,.psd,.ai,.fig,.svg,.webp,.png,.jpg,.jpeg,.mp4,.mov",
@@ -177,24 +178,24 @@ function getDemandCopy(growth: boolean) {
   return {
     teamTitle: "Equipe da Demanda",
     responsibleLabel: "Responsável",
-    productionTitle: "Links da Produção",
-    rawLabel: "📁 Brutos (URL do Google Drive)",
+    productionTitle: "Material da produção",
+    rawLabel: "Brutos",
     addRaw: "Adicionar link de brutos",
     rawSaved: "Link de brutos salvo!",
     rawRemoveConfirm: "link de brutos",
-    rawUploaded: "✅ Brutos enviados com sucesso!",
+    rawUploaded: "Brutos enviados.",
     finalLabel: "Vídeos Finais",
     finalSingleLabel: "Vídeo Final",
-    finalEditLabel: "🎬 Arquivo Final (vídeo editado)",
+    finalEditLabel: "Vídeo final (editado)",
     finalRemoveConfirm: "este vídeo final",
     finalRemoved: "Vídeo removido!",
     finalRemoveError: "Erro ao remover vídeo",
-    addFinalButton: "🚀 Enviar mais um vídeo",
-    sendApprovalButton: "🚀 Enviar para Aprovação",
+    addFinalButton: "Enviar mais um vídeo",
+    sendApprovalButton: "Enviar para aprovação",
     finalCountLabel: "vídeo(s)",
     progressHint: "Upload → aprovação → download na galeria",
-    uploadModalTitle: "🚀 Enviar para Aprovação",
-    rawUploadModalTitle: "📁 Upload de Brutos",
+    uploadModalTitle: "Enviar para aprovação",
+    rawUploadModalTitle: "Enviar brutos",
     uploadModalDescription: "Envie o vídeo final e gere o link de aprovação para o cliente.",
     rawUploadModalDescription: "Faça upload do material bruto filmado ou informe o link.",
     fileAccept: "video/*,.zip",
@@ -444,7 +445,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           // Título e descrição NÃO entram: este formulário não tem campo para
-          // eles (quem edita é o InlineEdit, sempre disponível). Mandá-los daqui
+          // eles (o título tem InlineEdit e o briefing, o Editar dele). Mandá-los daqui
           // só criava a chance de reenviar um valor velho — ou vazio.
           cidade,
           dataLimite: dataLimite || null,
@@ -463,8 +464,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       setEditMode(false)
       mutate()
     } catch (e) {
-      // Título, descrição e prazo são editados pelo InlineEdit, que mostra o
-      // erro no próprio campo. Aqui o toast já carrega a mensagem específica da
+      // Título e prazo (InlineEdit) e briefing (Briefing) mostram o erro no
+      // próprio campo. Aqui o toast já carrega a mensagem específica da
       // API, não um "erro ao salvar" genérico.
       toast.error(mensagemDeErro(e, "Não foi possível salvar a demanda."))
     } finally {
@@ -647,7 +648,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     setDocUploadProgress(0)
     try {
       await enviarDocumento(id, file, setDocUploadProgress)
-      toast.success("📄 Documento anexado!")
+      toast.success("Documento anexado.")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao anexar documento")
@@ -872,7 +873,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       const res = await fetch(`/api/demandas/${id}/converter-evento`, { method: "POST" })
       const json = await res.json().catch(() => ({} as { cobertura?: { id: string }; error?: string }))
       if (!res.ok) throw new Error(json.error ?? "Erro ao converter")
-      toast.success("✅ Evento criado! Redirecionando...")
+      toast.success("Evento criado. Abrindo o evento…")
       mutate()
       setTimeout(() => router.push(`/coberturas/${json.cobertura.id}`), 1200)
     } catch (e) {
@@ -1110,15 +1111,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     .filter((a) => a.tipoArquivo === "final")
     .sort((a, b) => (a.sequencia ?? 0) - (b.sequencia ?? 0))
     .map((a) => a.url)
+  // Sem a descrição como reserva. A caixa "Copy / legenda" repetia o briefing
+  // inteiro quando a demanda não tinha copy gravada — o briefing já está em
+  // Pedido, e aqui ele se passava pelo texto que vai no ar.
   const copyPrevia = extrairCopy(
     demanda.detalhesEntrega as Record<string, unknown> | null | undefined,
-    demanda.descricao
+    null
   )
 
   // Mesma prévia e ações, uma única instância: Entrega no v8, topo no clássico.
   const entregaGrowth = isGrowth ? (
               <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", surface.growthDelivery)}>
-                <h2 className="text-lg font-medium mb-5">Entrega · prévia do criativo</h2>
+                <div className={surface.sectionHead}><h2 className={surface.sectionTitle}>Entrega · prévia do criativo</h2></div>
                 <div className={surface.growthDeliveryGrid}>
                   <ArteViewer artes={artesPrevia} />
                   <div className="space-y-3">
@@ -1146,22 +1150,22 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     </div>
 
                     {copyPrevia && (
-                      <div className="bg-zinc-950/40 border border-zinc-800 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Copy / legenda</p>
-                          <button onClick={() => { navigator.clipboard.writeText(copyPrevia); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }} className="text-[11px] text-zinc-400 hover:text-white inline-flex items-center gap-1">
-                            {copiado ? <><Check className="w-3 h-3 text-emerald-400" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar</>}
+                      <div className={surface.copyBox}>
+                        <div>
+                          <p className={surface.subTitle} style={{ marginBottom: 0 }}>Copy / legenda</p>
+                          <button type="button" onClick={() => { navigator.clipboard.writeText(copyPrevia); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }} className={surface.btnGhost}>
+                            {copiado ? <><Check className="w-4 h-4" aria-hidden /> Copiado</> : <><Copy className="w-4 h-4" aria-hidden /> Copiar</>}
                           </button>
                         </div>
-                        <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">{copyPrevia}</p>
+                        <p>{copyPrevia}</p>
                       </div>
                     )}
 
                     {/* Ação de aprovação — única e clara */}
                     {artesPrevia.length === 0 ? (
-                      <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                        Anexe a arte final (seção <b>Arquivos e Aprovação</b> abaixo) para poder enviar ao cliente.
-                      </div>
+                      <p className={surface.hint}>
+                        Anexe a arte final em <b>Arquivos e aprovação</b>, logo abaixo, para enviar ao cliente.
+                      </p>
                     ) : demanda.linkCliente ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
@@ -1176,16 +1180,16 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                           expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
                           onRenovado={() => mutate()}
                         />
-                        <button onClick={() => setAprovacaoAberta(true)} className="w-full flex items-center justify-center gap-1.5 text-sm bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-2.5 rounded-xl">
-                          <Eye className="w-4 h-4" /> Abrir aprovação
+                        <button type="button" onClick={() => setAprovacaoAberta(true)} className={cn(surface.btnPrimary, surface.btnWide)}>
+                          <Eye className="w-4 h-4" aria-hidden /> Abrir aprovação
                         </button>
-                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300">
-                          <ExternalLink className="w-3 h-3" /> abrir em nova aba
+                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className={cn(surface.linkBtn, "w-full justify-center")}>
+                          <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir em nova aba
                         </a>
                       </div>
                     ) : (
-                      <button onClick={() => abrirModalUpload("final")} className="w-full flex items-center justify-center gap-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-3 rounded-xl text-sm">
-                        <Send className="w-4 h-4" /> Enviar para aprovação
+                      <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
+                        <Send className="w-4 h-4" aria-hidden /> Enviar para aprovação
                       </button>
                     )}
                   </div>
@@ -1218,6 +1222,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
         <section className={surface.nextAction}>
           <strong>Próxima ação: {proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
+          {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
+            <p className={surface.motivo}><b>Motivo do impedimento:</b> {demanda.motivoImpedimento}</p>
+          )}
           {abaDaAcao && detailTab !== abaDaAcao && (
             <button type="button" className={surface.nextActionGo} onClick={() => setDetailTab(abaDaAcao)}>
               Ir para {ABA_LABEL[abaDaAcao]} <ArrowRight size={15} aria-hidden="true" />
@@ -1283,33 +1290,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {isGrowth ? (
             <>
 
-              {/* Briefing */}
               <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-                <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-2">Briefing</p>
-                <InlineEdit
-                  value={demanda.descricao ?? ""}
-                  canEdit={podeEditar}
-                  tipo="textarea"
-                  placeholder="Adicionar briefing…"
-                  onSave={(v) => salvarCampo({ descricao: v })}
-                  display={<BriefingResumido texto={demanda.descricao ?? ""} vazio={<span className="italic text-zinc-600 text-sm">Adicionar briefing…</span>} />}
-                />
+                <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
               </div>
             </>
           ) : (
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-4">
-            <h2 className="text-lg font-medium">Briefing</h2>
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-5">
+            <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
 
-            <InlineEdit
-              value={demanda.descricao ?? ""}
-              canEdit={podeEditar}
-              tipo="textarea"
-              placeholder="Adicionar descrição / briefing…"
-              onSave={(v) => salvarCampo({ descricao: v })}
-              display={<BriefingResumido texto={demanda.descricao ?? ""} vazio={<span className="italic text-zinc-600 text-sm">Adicionar descrição / briefing…</span>} />}
-            />
-
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm border-t border-zinc-800 pt-4">
               <div className="flex items-center gap-2 text-zinc-400">
                 <Video className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-500">Tipo:</span>
@@ -1333,7 +1322,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <span className="font-medium text-zinc-200 capitalize">{demanda.departamento}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-zinc-500" />
+                <MapPin className="w-4 h-4 text-zinc-500" />
                 <span className="text-zinc-500">Cidade:</span>
                 <InlineEdit
                   value={demanda.cidade ?? ""}
@@ -1346,7 +1335,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
               {editMode && (
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-zinc-500" />
+                  <MapPin className="w-4 h-4 text-zinc-500" />
                   <span className="text-zinc-500">Local de gravação:</span>
                   <input value={localGravacao} onChange={e => setLocalGravacao(e.target.value)}
                     className="flex-1 bg-transparent border-b border-zinc-600 focus:outline-none focus:border-purple-500 text-sm px-1 text-zinc-200" />
@@ -1358,18 +1347,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-              <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-sky-400" /> Detalhes do Criativo
-              </h2>
+              <div className={surface.sectionHead}>
+                <h2 className={surface.sectionTitle}><FileText aria-hidden /> Detalhes do criativo</h2>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {Object.entries(demanda.detalhesEntrega)
                   .filter(([, value]) => value !== null && value !== undefined && value !== "")
                   .map(([key, value]) => (
-                    <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                    <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-950/30 px-3.5 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                         {formatDetailLabel(key)}
                       </p>
-                      <p className="mt-1 text-sm text-zinc-300 whitespace-pre-wrap break-words">
+                      <p className="mt-1.5 text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap break-words select-text">
                         {formatDetailValue(value)}
                       </p>
                     </div>
@@ -1380,9 +1369,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* ── Banner: Demanda externa aguardando aprovação interna ─────── */}
           {demanda.statusInterno === "aguardando_aprovacao_interna" && !editMode && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
-              <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
-                <span className="text-lg">📥</span>
+            <div className={surface.notice}>
+              <p>
+                <Inbox aria-hidden />
                 Demanda externa aguardando aprovação
               </p>
               <p className="text-xs text-zinc-400 leading-relaxed">
@@ -1398,38 +1387,42 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   onChange={e => setMotivoRecusa(e.target.value)}
                   placeholder="Motivo da recusa (será comunicado ao solicitante via WhatsApp)"
                   rows={2}
-                  className="w-full text-xs bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:ring-1 focus:ring-red-500"
+                  className={cn(surface.input, "resize-none")}
                 />
               )}
               <div className="flex gap-2 flex-wrap">
                 {!recusando ? (
                   <>
                     <button
+                      type="button"
                       onClick={aprovarDemanda}
                       disabled={aprovandoDemanda}
-                      className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                      className={surface.btnPrimary}
                     >
-                      <CheckCircle2 className="w-4 h-4" /> Aprovar demanda
+                      <CheckCircle2 className="w-4 h-4" aria-hidden /> Aprovar demanda
                     </button>
                     <button
+                      type="button"
                       onClick={() => setRecusando(true)}
-                      className="flex items-center gap-1.5 border border-red-500/50 text-red-400 hover:bg-red-900/20 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                      className={surface.btnDanger}
                     >
-                      <X className="w-4 h-4" /> Recusar
+                      <X className="w-4 h-4" aria-hidden /> Recusar
                     </button>
                   </>
                 ) : (
                   <>
                     <button
+                      type="button"
                       onClick={recusarDemanda}
                       disabled={aprovandoDemanda || !motivoRecusa.trim()}
-                      className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                      className={surface.btnDanger}
                     >
-                      <XCircle className="w-4 h-4" /> Confirmar Recusa
+                      <XCircle className="w-4 h-4" aria-hidden /> Confirmar recusa
                     </button>
                     <button
+                      type="button"
                       onClick={() => { setRecusando(false); setMotivoRecusa("") }}
-                      className="text-sm text-zinc-500 hover:text-zinc-300 px-2 transition-colors"
+                      className={surface.btnGhost}
                     >
                       Cancelar
                     </button>
@@ -1443,9 +1436,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-              <Package className="w-4 h-4 text-purple-400" /> Produto & Classificação
-            </h2>
+            <div className={surface.sectionHead}>
+              <h2 className={surface.sectionTitle}><Package aria-hidden /> Produto e classificação</h2>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Produto */}
               <div>
@@ -1541,9 +1534,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* ── Atribuição de equipe ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-purple-400" /> {copy.teamTitle}
-            </h2>
+            <div className={surface.sectionHead}>
+              <h2 className={surface.sectionTitle}><UserCheck aria-hidden /> {copy.teamTitle}</h2>
+            </div>
             {isGrowth ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1634,7 +1627,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").length > 0 && (
                     <optgroup label="Internos / Social">
                       {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " 📱" : o.origem === "ed" ? " ✂️" : ""}</option>
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " (usuário)" : o.origem === "ed" ? " (editor)" : ""}</option>
                       ))}
                     </optgroup>
                   )}
@@ -1676,14 +1669,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   {opcoesEdicao.filter(o => o.tipoContrato === "interno").length > 0 && (
                     <optgroup label="Internos (equipe)">
                       {opcoesEdicao.filter(o => o.tipoContrato === "interno").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " 📱" : ""}</option>
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " (usuário)" : ""}</option>
                       ))}
                     </optgroup>
                   )}
                   {opcoesEdicao.filter(o => o.tipoContrato !== "interno").length > 0 && (
                     <optgroup label="Externos (freelance)">
                       {opcoesEdicao.filter(o => o.tipoContrato !== "interno").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "vm" ? " 📷" : ""}</option>
+                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "vm" ? " (videomaker)" : ""}</option>
                       ))}
                     </optgroup>
                   )}
@@ -1709,26 +1702,28 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
           {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
-              <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
-                <span className="text-lg">⏳</span>
-                Aguardando confirmação de <strong>{demanda.videomaker.nome}</strong> via WhatsApp
+            <div className={surface.notice}>
+              <p>
+                <Clock aria-hidden />
+                <span>Aguardando confirmação de <strong>{demanda.videomaker.nome}</strong> pelo WhatsApp</span>
               </p>
               <p className="text-xs text-zinc-400">A mensagem foi enviada com local, data e condições de pagamento. Confirme aqui quando o videomaker responder.</p>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => confirmarVideomaker(true)}
                   disabled={confirmandoVM}
-                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                  className={surface.btnPrimary}
                 >
-                  <CheckCircle2 className="w-4 h-4" /> Confirmou (SIM)
+                  <CheckCircle2 className="w-4 h-4" aria-hidden /> Confirmou
                 </button>
                 <button
+                  type="button"
                   onClick={() => confirmarVideomaker(false)}
                   disabled={confirmandoVM}
-                  className="flex items-center gap-1.5 bg-red-600/80 hover:bg-red-600 text-white text-sm font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+                  className={surface.btnDanger}
                 >
-                  <X className="w-4 h-4" /> Recusou (NÃO)
+                  <X className="w-4 h-4" aria-hidden /> Recusou
                 </button>
               </div>
             </div>
@@ -1737,13 +1732,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
           {entregaGrowth}
-          {/* ── Links ────────────────────────────────────────────────────── */}
+          {/* ── Arquivos da produção ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-purple-400" /> {copy.productionTitle}
-            </h2>
-            <div className="space-y-3">
-              {/* Brutos — apenas URL (Drive), sem upload de arquivo */}
+            <div className={surface.sectionHead}>
+              <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
+            </div>
+            <div className="space-y-6">
+              {/* Brutos / materiais: só link, sem upload de arquivo */}
               <div>
                 <LinkField
                   label={copy.rawLabel}
@@ -1752,49 +1747,42 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   onChange={setLinkBrutos}
                 />
                 {!editMode && demanda.linkBrutos && (
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <button
-                      onClick={() => deleteVideoLink("brutos")}
-                      className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" /> Remover
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => deleteVideoLink("brutos")} className={cn(surface.linkBtn, "mt-2")} data-perigo>
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover link
+                  </button>
                 )}
-                {/* Quick Brutos — botão rápido sem entrar em editMode */}
+                {/* Atalho para colar o link sem entrar no modo de edição */}
                 {!editMode && !demanda.linkBrutos && (
-                  <div className="mt-1.5">
+                  <div className="mt-2">
                     {!showQuickBrutos ? (
-                      <button
-                        onClick={() => setShowQuickBrutos(true)}
-                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors"
-                      >
-                        <Upload className="w-3 h-3" /> {copy.addRaw}
+                      <button type="button" onClick={() => setShowQuickBrutos(true)} className={surface.linkBtn}>
+                        <Upload className="w-3.5 h-3.5" aria-hidden /> {copy.addRaw}
                       </button>
                     ) : (
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2">
                         <input
                           type="url"
                           value={quickBrutosInput}
                           onChange={e => setQuickBrutosInput(e.target.value)}
                           onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
-                          placeholder="https://drive.google.com/..."
-                          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                          placeholder="Cole o link da pasta ou do arquivo"
+                          aria-label={copy.addRaw}
+                          className={surface.input}
                           autoFocus
                         />
-                        <button onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()}
-                          className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded-lg disabled:opacity-50">
-                          {savingBrutos ? "..." : "Salvar"}
+                        <button type="button" onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()} className={surface.btnPrimary}>
+                          {savingBrutos ? "Salvando…" : "Salvar"}
                         </button>
-                        <button onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }}
-                          className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" />
+                        <button type="button" onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }} className={surface.iconBtn} aria-label="Cancelar">
+                          <X aria-hidden />
                         </button>
                       </div>
                     )}
                   </div>
                 )}
               </div>
-              {/* Vídeos Finais — lista multi-vídeo */}
+
+              {/* Finais — lista de arquivos enviados para aprovação */}
               <div>
                 {editMode ? (
                   <LinkField
@@ -1803,192 +1791,155 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     editMode={true}
                     onChange={setLinkFinal}
                   />
-                ) : (
-                  <div>
-                    {/* Header com contador */}
-                    {(() => {
-                      const videosFinais: ArquivoVideo[] = (demanda.arquivos ?? []).filter(
-                        (a: ArquivoVideo) => a.tipoArquivo === "final"
-                      )
-                      // Fallback: demandas antigas com linkFinal mas sem registros Arquivo
-                      const temArquivos = videosFinais.length > 0
-                      const temLinkLegado = !temArquivos && !!demanda.linkFinal
+                ) : (() => {
+                  const videosFinais: ArquivoVideo[] = (demanda.arquivos ?? []).filter(
+                    (a: ArquivoVideo) => a.tipoArquivo === "final"
+                  )
+                  // Fallback: demandas antigas com linkFinal mas sem registros Arquivo
+                  const temArquivos = videosFinais.length > 0
+                  const temLinkLegado = !temArquivos && !!demanda.linkFinal
 
-                      return (
-                        <>
-                          <p className="text-xs font-medium text-zinc-400 mb-2 flex items-center gap-2">
-                            {isGrowth ? "🎨" : "🎬"} {copy.finalLabel}
-                            {videosFinais.length > 0 && (
-                              <span className="bg-purple-600/20 text-purple-300 border border-purple-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                                {videosFinais.length}
-                              </span>
-                            )}
-                          </p>
+                  return (
+                    <>
+                      <p className={surface.subTitle}>
+                        {copy.finalLabel}
+                        {videosFinais.length > 0 && <span className={surface.count}>{videosFinais.length}</span>}
+                      </p>
 
-                          {/* Lista de vídeos */}
-                          {temArquivos && (
-                            <div className="space-y-1.5 mb-2">
-                              {videosFinais.map((arq: ArquivoVideo) => (
-                                <div key={arq.id} className="flex items-center gap-2 bg-zinc-800/60 rounded-lg px-2.5 py-2 border border-zinc-700/40">
-                                  <span className="text-[10px] font-mono font-bold text-purple-400 bg-purple-600/10 border border-purple-600/20 rounded px-1.5 py-0.5 shrink-0">
-                                    {String(arq.sequencia ?? 0).padStart(3, "0")}
-                                  </span>
-                                  <span className={cn(
-                                    "text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded-full border",
-                                    arq.url.includes("drive.google.com")
-                                      ? "bg-blue-900/40 text-blue-300 border-blue-700/40"
-                                      : "bg-zinc-700/60 text-zinc-400 border-zinc-600/40"
-                                  )}>
-                                    {arq.url.includes("drive.google.com") ? "☁️ Drive" : "🗄 Supabase"}
-                                  </span>
-                                  <span className="text-xs text-zinc-400 truncate flex-1 min-w-0" title={arq.url}>
-                                    {arq.url.includes("drive.google.com") ? "Google Drive" : arq.nomeArquivo}
-                                  </span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <button onClick={() => setPlayerUrl(arq.url)} title={copy.viewAction}
-                                      className="p-1 text-zinc-500 hover:text-purple-400 transition-colors">
-                                      <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                    {/* Toca a prévia; baixa o original enviado, quando houve conversão */}
-                                    <a href={paraDownload(arq.originalUrl ?? arq.url) ?? arq.url} target="_blank" rel="noopener noreferrer"
-                                      title={arq.originalUrl ? "Baixar original" : "Baixar"}
-                                      className="p-1 text-zinc-500 hover:text-sky-400 transition-colors">
-                                      <Download className="w-3.5 h-3.5" />
-                                    </a>
-                                    <button onClick={() => {navigator.clipboard.writeText(arq.url); toast.success("Link copiado!")}}
-                                      title="Copiar link" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={() => deleteVideoLink("final", arq.id)} title="Remover"
-                                      className="p-1 text-zinc-600 hover:text-red-400 transition-colors">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                      {temArquivos && (
+                        <div className={cn(surface.fileList, "mb-3")}>
+                          {videosFinais.map((arq: ArquivoVideo, i: number) => {
+                            const externo = !arq.url.startsWith("/") && !arq.url.includes("supabase")
+                            const nome = externo ? "Link externo" : nomeParaMostrar(arq.nomeArquivo, i + 1)
+                            return (
+                              <div key={arq.id} className={surface.fileRow}>
+                                <span className={surface.fileBadge}>{String(arq.sequencia ?? 0).padStart(3, "0")}</span>
+                                <span className={surface.fileName}>
+                                  <span title={arq.url}>{nome}</span>
+                                  {externo && <span>{arq.url.replace(/^https?:\/\//, "")}</span>}
+                                </span>
+                                <span className={surface.fileActions}>
+                                  <button type="button" onClick={() => setPlayerUrl(arq.url)} title={copy.viewAction} aria-label={copy.viewAction} className={surface.iconBtn}>
+                                    <Play aria-hidden />
+                                  </button>
+                                  {/* Toca a prévia; baixa o original enviado, quando houve conversão */}
+                                  <a href={paraDownload(arq.originalUrl ?? arq.url) ?? arq.url} target="_blank" rel="noopener noreferrer"
+                                    title={arq.originalUrl ? "Baixar original" : "Baixar"} aria-label={arq.originalUrl ? "Baixar original" : "Baixar"} className={surface.iconBtn}>
+                                    <Download aria-hidden />
+                                  </a>
+                                  <button type="button" onClick={() => { navigator.clipboard.writeText(arq.url); toast.success("Link copiado!") }}
+                                    title="Copiar link" aria-label="Copiar link" className={surface.iconBtn}>
+                                    <Copy aria-hidden />
+                                  </button>
+                                  <button type="button" onClick={() => deleteVideoLink("final", arq.id)} title="Remover" aria-label="Remover" className={surface.iconBtn} data-perigo>
+                                    <Trash2 aria-hidden />
+                                  </button>
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
 
-                          {/* Fallback legado: linkFinal sem registro Arquivo */}
-                          {temLinkLegado && (
-                            <div className="flex items-center gap-2 mb-2">
-                              <button onClick={() => setPlayerUrl(demanda.linkFinal!)}
-                                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-400 transition-colors">
-                                <Play className="w-3 h-3" /> {copy.viewAction}
-                              </button>
-                              <button onClick={() => deleteVideoLink("final")}
-                                className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-400 transition-colors">
-                                <Trash2 className="w-3 h-3" /> Remover
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Botão de enviar (sempre visível) */}
-                          <button
-                            onClick={() => abrirModalUpload("final")}
-                            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors w-full justify-center"
-                          >
-                            <Send className="w-4 h-4" />
-                            {videosFinais.length > 0 ? copy.addFinalButton : copy.sendApprovalButton}
+                      {/* Fallback legado: linkFinal sem registro Arquivo */}
+                      {temLinkLegado && (
+                        <div className="flex items-center gap-4 mb-3">
+                          <button type="button" onClick={() => setPlayerUrl(demanda.linkFinal!)} className={surface.linkBtn}>
+                            <Play className="w-3.5 h-3.5" aria-hidden /> {copy.viewAction}
                           </button>
-                          <p className="text-[11px] text-zinc-600 text-center mt-1">
-                            {videosFinais.length > 0
-                              ? `${videosFinais.length} ${copy.finalCountLabel} → aprovação gera link individual`
-                              : copy.progressHint}
-                          </p>
-                        </>
-                      )
-                    })()}
-                  </div>
-                )}
+                          <button type="button" onClick={() => deleteVideoLink("final")} className={surface.linkBtn} data-perigo>
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Botão de enviar (sempre visível) */}
+                      <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
+                        <Send className="w-4 h-4" aria-hidden />
+                        {videosFinais.length > 0 ? copy.addFinalButton : copy.sendApprovalButton}
+                      </button>
+                      <p className={cn(surface.hint, "text-center mt-2")}>
+                        {videosFinais.length > 0
+                          ? `${videosFinais.length} ${copy.finalCountLabel} · cada aprovação gera um link próprio`
+                          : copy.progressHint}
+                      </p>
+                    </>
+                  )
+                })()}
               </div>
-              {demanda.referencia && demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500 w-36 shrink-0">{i === 0 ? "📌 Referência" : ""}</span>
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:underline flex items-center gap-1 truncate">
-                    <ExternalLink className="w-3.5 h-3.5 shrink-0" /> {url}
-                  </a>
+
+              {demanda.referencia && (
+                <div>
+                  <p className={surface.subTitle}>Referências</p>
+                  <div className="space-y-1.5">
+                    {demanda.referencia.split("\n").filter(Boolean).map((url: string, i: number) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={cn(surface.linkBtn, "max-w-full")}>
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden /> <span className="truncate">{url}</span>
+                      </a>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
-          {/* ── Documentos Anexados ─────────────────────────────────────── */}
+          {/* ── Documentos anexados ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-zinc-300 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-sky-400" /> Documentos
-                {(() => {
-                  const docs = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
-                  return docs.length > 0 ? (
-                    <span className="bg-sky-600/20 text-sky-300 border border-sky-600/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                      {docs.length}
-                    </span>
-                  ) : null
-                })()}
-              </h2>
-              <button
-                onClick={() => fileRefDoc.current?.click()}
-                disabled={uploadingDoc}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-600/30 font-medium transition-colors disabled:opacity-50"
-              >
-                {uploadingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {uploadingDoc ? `${docUploadProgress}%` : "Anexar"}
-              </button>
-              <input
-                ref={fileRefDoc}
-                type="file"
-                className="hidden"
-                accept={ACCEPT_DOCUMENTOS}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
-              />
-            </div>
             {(() => {
               const docs: ArquivoVideo[] = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
-              if (docs.length === 0) {
-                return (
-                  <p className="text-xs text-zinc-600 text-center py-3">
-                    Nenhum anexo. Clique em &quot;Anexar&quot; para adicionar PDF, Word, Excel ou imagem (PNG, JPEG) — até 25 MB cada.
-                  </p>
-                )
-              }
               return (
-                <div className="space-y-2">
-                  {docs.map((arq: ArquivoVideo) => {
-                    const ext = arq.nomeArquivo.split(".").pop()?.toUpperCase() ?? "?"
-                    const extColor: Record<string, string> = {
-                      PDF: "text-red-400 bg-red-900/30 border-red-700/40",
-                      DOC: "text-blue-400 bg-blue-900/30 border-blue-700/40",
-                      DOCX: "text-blue-400 bg-blue-900/30 border-blue-700/40",
-                      XLS: "text-green-400 bg-green-900/30 border-green-700/40",
-                      XLSX: "text-green-400 bg-green-900/30 border-green-700/40",
-                      PPT: "text-orange-400 bg-orange-900/30 border-orange-700/40",
-                      PPTX: "text-orange-400 bg-orange-900/30 border-orange-700/40",
-                    }
-                    const colorClass = extColor[ext] ?? "text-zinc-400 bg-zinc-800/60 border-zinc-600/40"
-                    return (
-                      <div key={arq.id} className="flex items-center gap-2.5 bg-zinc-800/50 rounded-lg px-3 py-2.5 border border-zinc-700/40">
-                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0", colorClass)}>
-                          {ext}
-                        </span>
-                        <span className="text-sm text-zinc-300 truncate flex-1 min-w-0" title={arq.nomeArquivo}>
-                          {arq.nomeArquivo}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar"
-                            className="p-1 text-zinc-500 hover:text-sky-400 transition-colors">
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
-                          <button onClick={() => deletarDocumento(arq.id)} title="Remover"
-                            className="p-1 text-zinc-600 hover:text-red-400 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                <>
+                  <div className={surface.sectionHead}>
+                    <h2 className={surface.sectionTitle}>
+                      <FileText aria-hidden /> Documentos
+                      {docs.length > 0 && <span className={surface.count}>{docs.length}</span>}
+                    </h2>
+                    <button type="button" onClick={() => fileRefDoc.current?.click()} disabled={uploadingDoc} className={surface.btn}>
+                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />}
+                      {uploadingDoc ? `${docUploadProgress}%` : "Anexar"}
+                    </button>
+                    <input
+                      ref={fileRefDoc}
+                      type="file"
+                      className="hidden"
+                      accept={ACCEPT_DOCUMENTOS}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
+                    />
+                  </div>
+                  {docs.length === 0 ? (
+                    <p className={surface.empty}>
+                      Nenhum anexo. Use &quot;Anexar&quot; para PDF, Word, Excel ou imagem (PNG, JPEG), até 25 MB cada.
+                    </p>
+                  ) : (
+                    <div className={surface.fileList}>
+                      {docs.map((arq: ArquivoVideo, i: number) => {
+                        const ext = extensaoDe(arq.nomeArquivo || arq.url.split("?")[0]).toUpperCase() || "?"
+                        const nome = nomeParaMostrar(arq.nomeArquivo, i + 1)
+                        const imagem = extensaoDe(arq.nomeArquivo) ? ehImagem(arq.nomeArquivo) : isImageUrl(arq.url)
+                        return (
+                          <div key={arq.id} className={surface.fileRow}>
+                            {imagem
+                              // eslint-disable-next-line @next/next/no-img-element
+                              ? <img src={arq.url} alt="" className={surface.fileThumb} loading="lazy" />
+                              : <span className={surface.fileBadge}>{ext}</span>}
+                            <span className={surface.fileName}>
+                              <a href={arq.url} target="_blank" rel="noopener noreferrer" title={arq.nomeArquivo}>{nome}</a>
+                              <span>{ext}{arq.createdAt ? ` · ${formatarData(arq.createdAt)}` : ""}</span>
+                            </span>
+                            <span className={surface.fileActions}>
+                              <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar" aria-label={`Baixar ${nome}`} className={surface.iconBtn}>
+                                <Download aria-hidden />
+                              </a>
+                              <button type="button" onClick={() => deletarDocumento(arq.id)} title="Remover" aria-label={`Remover ${nome}`} className={surface.iconBtn} data-perigo>
+                                <Trash2 aria-hidden />
+                              </button>
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
               )
             })()}
           </div>
@@ -1996,43 +1947,43 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {/* ── Pastas de Cobertura ──────────────────────────────────────── */}
           {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-              <h2 className="font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-amber-400" /> Pastas de Cobertura
-              </h2>
+              <div className={surface.sectionHead}>
+                <h2 className={surface.sectionTitle}><FolderOpen aria-hidden /> Pastas da cobertura</h2>
+              </div>
               <div className="space-y-3">
                 {/* Material Bruto */}
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1">📁 Material Bruto (Google Drive)</p>
+                  <p className={surface.subTitle}>Material bruto</p>
                   {demanda.linkFolderBrutos && editingFolder !== "brutos" ? (
                     <div className="flex items-center gap-2">
-                      <a href={demanda.linkFolderBrutos} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 truncate">
-                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" /> Abrir pasta
+                      <a href={demanda.linkFolderBrutos} target="_blank" rel="noopener noreferrer" className={surface.linkBtn}>
+                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" aria-hidden /> Abrir pasta
                       </a>
                       <button onClick={() => { setFolderBrutosInput(demanda.linkFolderBrutos ?? ""); setEditingFolder("brutos") }}
-                        className="p-0.5 text-zinc-600 hover:text-zinc-300">
-                        <Pencil className="w-3 h-3" />
+                        className={surface.iconBtn} aria-label="Trocar link da pasta" title="Trocar link da pasta">
+                        <Pencil aria-hidden />
                       </button>
                     </div>
                   ) : editingFolder === "brutos" ? (
                     <div className="flex items-center gap-2">
                       <input value={folderBrutosInput} onChange={e => setFolderBrutosInput(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") salvarFolder("linkFolderBrutos"); if (e.key === "Escape") setEditingFolder(null) }}
-                        placeholder="https://drive.google.com/..."
-                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="Cole o link da pasta"
+                        aria-label="Link da pasta"
+                        className={surface.input}
                         autoFocus
                       />
                       <button onClick={() => salvarFolder("linkFolderBrutos")} disabled={savingFolder || !folderBrutosInput.trim()}
-                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1.5 rounded disabled:opacity-50">
-                        {savingFolder ? "..." : "Salvar"}
+                        className={surface.btnPrimary}>
+                        {savingFolder ? "Salvando…" : "Salvar"}
                       </button>
-                      <button onClick={() => setEditingFolder(null)} className="text-zinc-500 hover:text-zinc-300">
-                        <X className="w-3.5 h-3.5" />
+                      <button onClick={() => setEditingFolder(null)} className={surface.iconBtn} aria-label="Cancelar">
+                        <X aria-hidden />
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => { setFolderBrutosInput(""); setEditingFolder("brutos") }}
-                      className="text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                      className={surface.linkBtn}>
                       + Adicionar link da pasta
                     </button>
                   )}
@@ -2040,37 +1991,37 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
                 {/* Material Pronto */}
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1">📁 Material Pronto (Google Drive)</p>
+                  <p className={surface.subTitle}>Material pronto</p>
                   {demanda.linkFolderFinal && editingFolder !== "final" ? (
                     <div className="flex items-center gap-2">
-                      <a href={demanda.linkFolderFinal} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 truncate">
-                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" /> Abrir pasta
+                      <a href={demanda.linkFolderFinal} target="_blank" rel="noopener noreferrer" className={surface.linkBtn}>
+                        <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" aria-hidden /> Abrir pasta
                       </a>
                       <button onClick={() => { setFolderFinalInput(demanda.linkFolderFinal ?? ""); setEditingFolder("final") }}
-                        className="p-0.5 text-zinc-600 hover:text-zinc-300">
-                        <Pencil className="w-3 h-3" />
+                        className={surface.iconBtn} aria-label="Trocar link da pasta" title="Trocar link da pasta">
+                        <Pencil aria-hidden />
                       </button>
                     </div>
                   ) : editingFolder === "final" ? (
                     <div className="flex items-center gap-2">
                       <input value={folderFinalInput} onChange={e => setFolderFinalInput(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") salvarFolder("linkFolderFinal"); if (e.key === "Escape") setEditingFolder(null) }}
-                        placeholder="https://drive.google.com/..."
-                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="Cole o link da pasta"
+                        aria-label="Link da pasta"
+                        className={surface.input}
                         autoFocus
                       />
                       <button onClick={() => salvarFolder("linkFolderFinal")} disabled={savingFolder || !folderFinalInput.trim()}
-                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1.5 rounded disabled:opacity-50">
-                        {savingFolder ? "..." : "Salvar"}
+                        className={surface.btnPrimary}>
+                        {savingFolder ? "Salvando…" : "Salvar"}
                       </button>
-                      <button onClick={() => setEditingFolder(null)} className="text-zinc-500 hover:text-zinc-300">
-                        <X className="w-3.5 h-3.5" />
+                      <button onClick={() => setEditingFolder(null)} className={surface.iconBtn} aria-label="Cancelar">
+                        <X aria-hidden />
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => { setFolderFinalInput(""); setEditingFolder("final") }}
-                      className="text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                      className={surface.linkBtn}>
                       + Adicionar link da pasta
                     </button>
                   )}
@@ -2084,9 +2035,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-              <h2 className="font-semibold text-zinc-300 mb-3 flex items-center gap-2">
-                <CalendarRange className="w-4 h-4 text-purple-400" /> Evento de Cobertura
-              </h2>
+              <div className={surface.sectionHead}>
+                <h2 className={surface.sectionTitle}><CalendarRange aria-hidden /> Evento de cobertura</h2>
+              </div>
               {demanda.coberturaId ? (
                 /* Já vinculado */
                 <div className="flex items-center justify-between bg-purple-600/10 border border-purple-600/20 rounded-lg px-3 py-2.5">
@@ -2104,17 +2055,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               ) : (
                 /* Ainda não convertida */
                 <div>
-                  <p className="text-xs text-zinc-500 mb-3">
-                    Converta esta demanda em um Evento de Cobertura para gerenciar uploads por dia, checklist de equipamentos e relatório de produção.
+                  <p className={cn(surface.hint, "mb-3")}>
+                    Converta esta demanda em um evento de cobertura para gerenciar uploads por dia, checklist de equipamentos e relatório de produção.
                   </p>
                   <button
+                    type="button"
                     onClick={converterEmEvento}
                     disabled={convertendoEvento}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                    className={surface.btnPrimary}
                   >
                     {convertendoEvento
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Criando evento...</>
-                      : <><CalendarRange className="w-3.5 h-3.5" /> Converter em Evento</>
+                      ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Criando evento…</>
+                      : <><CalendarRange className="w-4 h-4" aria-hidden /> Converter em evento</>
                     }
                   </button>
                 </div>
@@ -2150,7 +2102,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* Solicitante */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <h2 className="font-semibold text-zinc-300 mb-3">Solicitante</h2>
+            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><User aria-hidden /> Solicitante</h2></div>
             {demanda.nomeSolicitante ? (
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 font-bold text-sm">
@@ -2180,7 +2132,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <QuickWhatsapp
                   telefone={demanda.telefoneSolicitante}
                   nome={demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "Solicitante"}
-                  label="📱 WhatsApp do solicitante"
+                  label="WhatsApp do solicitante"
                 />
               </div>
             )}
@@ -2188,7 +2140,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* Datas */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <h2 className="font-semibold text-zinc-300 mb-3">Datas</h2>
+            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Calendar aria-hidden /> Datas</h2></div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Criado</span>
@@ -2230,7 +2182,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {/* Aprovação — Growth usa a prévia compartilhada em Entrega (topo no clássico). */}
           {!isGrowth && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <h2 className="font-semibold text-zinc-300 mb-3">{copy.approvalTitle}</h2>
+            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
             {demanda.linkCliente ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
@@ -2250,18 +2202,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
                 {demanda.linkFinal && (
                   <button
+                    type="button"
                     onClick={() => setPlayerUrl(demanda.linkFinal!)}
-                    className="w-full flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 text-sm font-medium py-2.5 rounded-lg transition-colors"
+                    className={cn(surface.btn, surface.btnWide)}
                   >
-                    <Play className="w-4 h-4" /> Ver o vídeo enviado
+                    <Play className="w-4 h-4" aria-hidden /> Ver o vídeo enviado
                   </button>
                 )}
-                <Link href={demanda.linkCliente} target="_blank" className="flex items-center gap-1 text-xs text-blue-400 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Abrir a página que o cliente vê
+                <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir a página que o cliente vê
                 </Link>
               </div>
             ) : (
-              <p className="text-xs text-zinc-500">Nenhum link gerado ainda.</p>
+              <p className={surface.empty}>Nenhum link gerado ainda.</p>
             )}
           </div>
           )}
@@ -2269,7 +2222,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {/* Postagem */}
           {demanda.postagemTipo && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-              <h2 className="font-semibold text-zinc-300 mb-3">Postagem</h2>
+              <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Send aria-hidden /> Postagem</h2></div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-400">Plataforma:</span>
@@ -2284,8 +2237,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 )}
                 {demanda.linkPostagem && (
                   <a href={demanda.linkPostagem} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-blue-400 hover:underline">
-                    <ExternalLink className="w-3 h-3" /> Ver postagem
+                    className={surface.linkBtn}>
+                    <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Ver postagem
                   </a>
                 )}
               </div>
@@ -2296,9 +2249,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
-            <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-zinc-500" />
-              <h2 className="font-semibold text-zinc-300">Histórico</h2>
+            <div className="px-4 py-3 border-b border-zinc-800">
+              <h2 className={surface.sectionTitle}><Clock aria-hidden /> Histórico</h2>
             </div>
             <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
               {demanda.historicos?.map((h: { id: string; statusNovo: string; createdAt: string; origem: string; observacao?: string | null; usuario?: { nome: string } }) => {
@@ -2338,30 +2290,24 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
       {/* Modal gerar link de aprovação (upload ou URL) */}
       {showLinkModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-semibold text-zinc-200 mb-1">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={surface.dialog} role="dialog" aria-modal="true" aria-label={linkModalTipo === "brutos" ? copy.rawUploadModalTitle : copy.uploadModalTitle}>
+            <h3>
               {linkModalTipo === "brutos" ? copy.rawUploadModalTitle : copy.uploadModalTitle}
             </h3>
-            <p className="text-xs text-zinc-500 mb-4">
+            <p className={surface.hint}>
               {linkModalTipo === "brutos"
                 ? copy.rawUploadModalDescription
                 : copy.uploadModalDescription}
             </p>
 
             {/* Abas */}
-            <div className="flex gap-1 bg-zinc-800 rounded-xl p-1 mb-4">
-              <button
-                onClick={() => setLinkModalTab("upload")}
-                className={cn("flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium", linkModalTab === "upload" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-              >
-                📁 Fazer Upload
+            <div className={surface.segmented}>
+              <button type="button" aria-pressed={linkModalTab === "upload"} onClick={() => setLinkModalTab("upload")}>
+                Enviar arquivo
               </button>
-              <button
-                onClick={() => setLinkModalTab("url")}
-                className={cn("flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium", linkModalTab === "url" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200")}
-              >
-                🔗 URL Externa
+              <button type="button" aria-pressed={linkModalTab === "url"} onClick={() => setLinkModalTab("url")}>
+                Colar link
               </button>
             </div>
 
@@ -2369,7 +2315,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               /* Link gerado com sucesso */
               <div className="space-y-3">
                 <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
-                  <p className="text-xs text-green-400 font-medium mb-1">✅ Link gerado! WhatsApp enviado ao solicitante.</p>
+                  <p className="text-xs text-green-300 font-medium mb-1 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> Link gerado. O solicitante recebeu pelo WhatsApp.</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-green-300 truncate flex-1">{linkGerado}</span>
                     <button onClick={() => { navigator.clipboard.writeText(linkGerado); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}>
@@ -2378,8 +2324,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => { setShowLinkModal(false); setLinkGerado(""); setUrlVideoInput(""); setLinkModalFile(null); setLinkModalTipo("final") }}
-                  className="w-full border border-zinc-700 text-zinc-300 text-sm py-2 rounded-xl hover:bg-zinc-800"
+                  className={cn(surface.btn, surface.btnWide)}
                 >
                   Fechar
                 </button>
@@ -2395,40 +2342,41 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   onChange={e => setLinkModalFile(e.target.files?.[0] ?? null)}
                 />
                 {linkModalFile ? (
-                  <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2">
-                    {isGrowth ? <FileText className="w-4 h-4 text-purple-400 shrink-0" /> : <Film className="w-4 h-4 text-purple-400 shrink-0" />}
-                    <span className="text-xs text-zinc-200 truncate flex-1">{linkModalFile.name}</span>
-                    <button onClick={() => setLinkModalFile(null)} className="text-zinc-500 hover:text-red-400">
-                      <X className="w-3.5 h-3.5" />
+                  <div className={surface.fileRow}>
+                    <span className={surface.fileBadge}>{isGrowth ? <FileText className="w-4 h-4" aria-hidden /> : <Film className="w-4 h-4" aria-hidden />}</span>
+                    <span className={surface.fileName}><span>{linkModalFile.name}</span></span>
+                    <button type="button" onClick={() => setLinkModalFile(null)} className={surface.iconBtn} data-perigo aria-label="Tirar arquivo">
+                      <X aria-hidden />
                     </button>
                   </div>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => fileRefLinkModal.current?.click()}
-                    className="w-full flex flex-col items-center gap-2 border-2 border-dashed border-zinc-700 rounded-xl py-6 hover:border-purple-500/50 hover:bg-purple-500/5 transition-colors"
+                    className={surface.dropzone}
                   >
-                    <Upload className="w-5 h-5 text-zinc-500" />
-                    <span className="text-xs text-zinc-400">Clique para escolher arquivo</span>
-                    {linkModalTipo === "final"
-                      ? <span className="text-[11px] text-emerald-600">{copy.uploadFormat}</span>
-                      : <span className="text-[11px] text-zinc-600">{isGrowth ? copy.uploadFormat : "mp4, mov, avi, webm · máx 49 MB"}</span>
-                    }
+                    <Upload className="w-5 h-5" aria-hidden />
+                    <span>Escolher arquivo</span>
+                    <span className={surface.hint}>
+                      {linkModalTipo === "final" || isGrowth ? copy.uploadFormat : "mp4, mov, avi, webm · máx 49 MB"}
+                    </span>
                   </button>
                 )}
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={gerarLinkAprovacao}
                     disabled={gerandoLink || !linkModalFile}
-                    className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white text-sm py-2 rounded-xl hover:bg-purple-500 disabled:opacity-50 font-medium"
+                    className={cn(surface.btnPrimary, "flex-1")}
                   >
                     {gerandoLink
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> "Enviando…"</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando…</>
                       : linkModalTipo === "brutos"
                         ? <><Upload className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Materiais" : "Enviar Brutos"}</>
                         : <><Send className="w-3.5 h-3.5" /> {isGrowth ? "Enviar Criativo" : "Enviar para Aprovação"}</>
                     }
                   </button>
-                  <button onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                  <button type="button" onClick={() => { setShowLinkModal(false); setLinkModalFile(null); setLinkModalTipo("final") }} className={surface.btn}>
                     Cancelar
                   </button>
                 </div>
@@ -2437,25 +2385,27 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               /* Aba URL */
               <div className="space-y-3">
                 <input
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600 text-zinc-200 placeholder:text-zinc-500"
-                  placeholder="https://drive.google.com/... ou YouTube/Vimeo"
+                  className={surface.input}
+                  aria-label="Link"
+                  placeholder={isGrowth ? "Cole o link do arquivo" : "Cole o link do vídeo (YouTube, Vimeo ou outro)"}
                   value={urlVideoInput}
                   onChange={e => setUrlVideoInput(e.target.value)}
                 />
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={gerarLinkAprovacao}
                     disabled={gerandoLink || !urlVideoInput.trim()}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white text-sm py-2 rounded-xl hover:bg-blue-500 disabled:opacity-50 font-medium"
+                    className={cn(surface.btnPrimary, "flex-1")}
                   >
                     {gerandoLink
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando…</>
                       : linkModalTipo === "brutos"
                         ? <><Upload className="w-3.5 h-3.5" /> {isGrowth ? "Salvar URL dos materiais" : "Salvar URL Brutos"}</>
-                        : <><Link2 className="w-3.5 h-3.5" /> Gerar Link</>
+                        : <><Link2 className="w-3.5 h-3.5" /> Gerar link</>
                     }
                   </button>
-                  <button onClick={() => { setShowLinkModal(false); setUrlVideoInput("") }} className="px-3 border border-zinc-700 text-zinc-400 text-sm rounded-xl hover:bg-zinc-800">
+                  <button type="button" onClick={() => { setShowLinkModal(false); setUrlVideoInput("") }} className={surface.btn}>
                     Cancelar
                   </button>
                 </div>
@@ -2565,23 +2515,23 @@ function LinkField({ label, value, editMode, onChange }: {
   label: string; value: string; editMode: boolean; onChange: (v: string) => void
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-zinc-500 w-44 shrink-0">{label}</span>
+    <div>
+      <p className={surface.subTitle}>{label}</p>
       {editMode ? (
         <input
           value={value}
           onChange={e => onChange(e.target.value)}
-          placeholder="https://..."
-          className="flex-1 text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 placeholder:text-zinc-500"
+          placeholder="Cole o link"
+          aria-label={label}
+          className={surface.input}
         />
       ) : value ? (
-        <a href={value} target="_blank" rel="noopener noreferrer"
-          className="text-sm text-blue-400 hover:underline flex items-center gap-1 truncate max-w-[200px]">
-          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+        <a href={value} target="_blank" rel="noopener noreferrer" className={cn(surface.linkBtn, "max-w-full")}>
+          <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden />
           <span className="truncate">{value}</span>
         </a>
       ) : (
-        <span className="text-sm text-zinc-600 italic">Não preenchido</span>
+        <span className={surface.empty}>Nenhum link ainda.</span>
       )}
     </div>
   )

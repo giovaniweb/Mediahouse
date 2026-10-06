@@ -9,9 +9,13 @@
 // Regra: a chave precisa parecer copy E não parecer pergunta/status sobre a
 // copy. Demandas antigas com "Copy pronta?" caem no fallback da descrição, que
 // é honesto — elas nunca tiveram copy gravada.
+//
+// Também não é copy a orientação PARA quem vai escrever: o carrossel com
+// "Precisa criar" grava "Briefing / Direcionamento para o Copywriter", que
+// casava com /copy/ e aparecia como "Copy / legenda" (05/10/2026).
 
 const PARECE_COPY = /copy|legenda|caption/i
-const PARECE_STATUS = /status|pronta|precisa|\?$/i
+const PARECE_STATUS = /status|pronta|precisa|briefing|direcionamento|copywriter|\?$/i
 
 export function extrairCopy(
   detalhes?: Record<string, unknown> | null,

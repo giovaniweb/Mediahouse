@@ -7,6 +7,7 @@ import { ptBR } from "date-fns/locale"
 import { MessageCircle, Send, Loader2, AtSign } from "lucide-react"
 import { iniciais } from "@/lib/pessoas-ui"
 import { fetcher } from "@/lib/fetcher"
+import surface from "./DemandSurface.module.css"
 
 
 // Menção guardada como @[Nome](userId): o id evita casar por nome (dois "Gabriel",
@@ -170,7 +171,8 @@ export function Comentarios({ demandaId, comentarios, onEnviado }: {
           <button
             onClick={enviar}
             disabled={enviando || !texto.trim()}
-            className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 shrink-0"
+            className={surface.btnPrimary}
+            style={{ paddingInline: 12 }}
             aria-label="Enviar comentário"
           >
             {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

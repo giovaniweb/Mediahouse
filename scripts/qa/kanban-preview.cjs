@@ -82,7 +82,7 @@ const fs = require('node:fs');
  await page.getByPlaceholder('Buscar demanda...').fill('Filme');
  await page.getByRole('button',{name:'Buscar e filtrar'}).click();
  await page.screenshot({path:`${output}/mobile.png`});
- const cardBox=await page.getByRole('button',{name:'Abrir demanda: Filme de lançamento'}).first().boundingBox();
+ const cardBox=await page.getByRole('link',{name:'Abrir demanda: Filme de lançamento'}).first().boundingBox();
  assert.ok(cardBox && cardBox.y < 844,'Card precisa aparecer na primeira tela mobile');
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
  assert.equal(overflow,false,'Página não deve transbordar horizontalmente');

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState, useCallback } from "react"
-import { DragDropContext, Draggable, DropResult } from "@hello-pangea/dnd"
+import { DragDropContext, Draggable, DropResult, useKeyboardSensor, useMouseSensor, useTouchSensor } from "@hello-pangea/dnd"
 import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
@@ -12,6 +12,12 @@ import Link from "next/link"
 import { salvarOrdem } from "@/lib/kanban-order"
 import styles from "./KanbanPreview.module.css"
 import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
+import { AUDIOVISUAL_COLUNA_PARA_STATUS, PEDE_TEXTO } from "@/lib/kanban-movimento"
+import { PedidoMotivo } from "./PedidoMotivo"
+import { useSensorAlca } from "./sensorAlca"
+
+// A alça vem antes dos sensores padrão: ela precisa ver o toque primeiro (sensorAlca.ts).
+const SENSORES = [useSensorAlca, useMouseSensor, useKeyboardSensor, useTouchSensor]
 
 export type ColunaDef = { id: string; label: string; color: string; dot: string }
 
@@ -44,7 +50,8 @@ interface Demanda {
 
 interface KanbanBoardProps {
   demandas: Demanda[]
-  onMove: (demandaId: string, novoStatus: string) => void
+  /** `extra.observacao` vem do pedido de motivo (ex.: Impedimento). */
+  onMove: (demandaId: string, novaColuna: string, extra?: { observacao: string }) => void
   onDelete?: (demandaId: string) => void
   onDuplicate?: (demandaId: string) => void
   onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
@@ -55,6 +62,8 @@ interface KanbanBoardProps {
   colunas?: ColunaDef[]
   /** Mapeia uma demanda → id da coluna. Default: por statusVisivel (audiovisual). */
   getColuna?: (demanda: Demanda) => string
+  /** Status aplicado ao soltar em cada coluna; diz quais pedem um texto antes. Default: audiovisual. */
+  colunaParaStatus?: Record<string, string>
   /** Como abrir o card. Default: modal. Growth usa página completa. */
   openMode?: "modal" | "page"
   /** "Ver todos" do Finalizado: o histórico do departamento deste quadro. */
@@ -72,7 +81,7 @@ const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 // deixou o drag-and-drop livre por tanto tempo — ver AUDITORIA-JOB-WORKFLOW §2.1.
 const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, openMode = "modal", historico = "/historico/audiovisual" }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, colunaParaStatus = AUDIOVISUAL_COLUNA_PARA_STATUS, openMode = "modal", historico = "/historico/audiovisual" }: KanbanBoardProps) {
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const savingOrder = useRef(false)
@@ -88,6 +97,9 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   // cabia em 1440 px e a coluna que sobrava para fora era a de trabalho em
   // andamento. Recolhida, ela continua recebendo card arrastado.
   const [concluidoAberto, setConcluidoAberto] = useState(false)
+  // Movimento que espera o motivo. O card fica onde estava até o "Mover".
+  const [aguardandoMotivo, setAguardandoMotivo] = useState<{ demandaId: string; coluna: string } | null>(null)
+  const pedidoAberto = aguardandoMotivo ? PEDE_TEXTO[colunaParaStatus[aguardandoMotivo.coluna] as keyof typeof PEDE_TEXTO] : undefined
 
   const scrollBy = useCallback((amount: number) => {
     scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
@@ -162,13 +174,23 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
       return
     }
 
+    // A guarda do servidor recusa estas colunas sem um texto (ex.: motivo do
+    // impedimento). Pergunta antes, em vez de mover e mostrar o erro depois.
+    if (PEDE_TEXTO[colunaParaStatus[destinoCol] as keyof typeof PEDE_TEXTO]) {
+      setAguardandoMotivo({ demandaId: result.draggableId, coluna: destinoCol })
+      return
+    }
+    moverParaColuna(result.draggableId, destinoCol)
+  }
+
+  function moverParaColuna(demandaId: string, destinoCol: string, extra?: { observacao: string }) {
     // Move to different column — reset local order for destination
     setLocalOrder(prev => {
       const next = { ...prev }
       delete next[destinoCol]
       return next
     })
-    onMove(result.draggableId, destinoCol)
+    onMove(demandaId, destinoCol, extra)
   }
 
   const byCol = (colId: string) => {
@@ -219,7 +241,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
         <ChevronRight className="w-5 h-5" />
       </button>
 
-    <DragDropContext onDragEnd={handleDragEnd}>
+    <DragDropContext onDragEnd={handleDragEnd} sensors={SENSORES} enableDefaultSensors={false}>
       <div
         ref={scrollRef}
         className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging", styles.scroll)}
@@ -327,6 +349,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
                               onDuplicate={onDuplicate}
                               onOpen={openMode === "modal" ? setModalDemandaId : undefined}
                               onMarkPosted={onMarkPosted}
+                              arrastavel={orderStatus === "idle"}
                             />
                           </div>
                         )}
@@ -346,6 +369,18 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
 
     {openMode === "modal" && (
       <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />
+    )}
+
+    {aguardandoMotivo && pedidoAberto && (
+      <PedidoMotivo
+        pedido={pedidoAberto}
+        tituloCard={demandas.find((d) => d.id === aguardandoMotivo.demandaId)?.titulo ?? ""}
+        onCancelar={() => setAguardandoMotivo(null)}
+        onConfirmar={(observacao) => {
+          moverParaColuna(aguardandoMotivo.demandaId, aguardandoMotivo.coluna, { observacao })
+          setAguardandoMotivo(null)
+        }}
+      />
     )}
     </>
   )

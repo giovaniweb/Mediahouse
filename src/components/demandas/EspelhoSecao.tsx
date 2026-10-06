@@ -4,6 +4,8 @@ import { useState } from "react"
 import useSWR from "swr"
 import { toast } from "sonner"
 import { fetcher } from "@/lib/fetcher"
+import { Handshake } from "lucide-react"
+import surface from "./DemandSurface.module.css"
 
 type Aresta = {
   id: string
@@ -82,9 +84,9 @@ export function EspelhoSecao({ demandaId }: { demandaId: string }) {
 
   return (
     <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-      <h2 className="font-semibold text-zinc-300 mb-3 flex items-center gap-2">
-        <span aria-hidden>🤝</span> Execução compartilhada
-      </h2>
+      <div className={surface.sectionHead}>
+        <h2 className={surface.sectionTitle}><Handshake aria-hidden /> Execução compartilhada</h2>
+      </div>
 
       {ativos.length > 0 && (
         <ul className="space-y-2 mb-3">

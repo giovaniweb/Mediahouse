@@ -56,8 +56,8 @@
   border-color:#303342;
   box-shadow:none;
 }
-.card p, .card button[aria-label^="Abrir demanda"] { line-height: 1.5; }
-.card button:focus-visible, .toolbar button:focus-visible { outline: 2px solid #c7b6f5; outline-offset: 3px; opacity: 1; }
+.card p, .card a[aria-label^="Abrir demanda"] { line-height: 1.5; }
+.card button:focus-visible, .card a:focus-visible, .toolbar button:focus-visible { outline: 2px solid #c7b6f5; outline-offset: 3px; opacity: 1; }
 .card:focus-within button { opacity: 1; }
 @media (hover: none) { .card button { opacity: 1; } }
 @media (max-width: 640px) {
@@ -67,6 +67,13 @@
   .toolbar button { padding: 10px; }
   .scroll { padding-inline: 12px; gap: 12px; }
   .column { flex: 0 0 auto; width: min(82vw, 320px); max-width: none; }
+  /* No celular cabe uma coluna. Com rolagem dentro de cada coluna e outra no
+     quadro, o arrasto não empurrava o quadro para o lado (a biblioteca só rola
+     um nível) e o card só alcançava a coluna vizinha. Aqui só o quadro rola,
+     nos dois sentidos, e arrastar até a borda leva às outras colunas. */
+  .board .scroll { overflow-y: auto; align-items: flex-start; }
+  .column { min-height: 100%; }
+  .column :global(.kanban-scroll) { overflow-y: visible; }
 }
 @media (prefers-reduced-motion: reduce) {
   .board *, .board *::before, .board *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
