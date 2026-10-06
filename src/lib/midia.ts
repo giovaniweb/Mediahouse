@@ -125,6 +125,21 @@ export async function subirArquivo(
   return urlDaMidia(caminho)
 }
 
+/** Copia um objeto do bucket privado para outro caminho (ex.: o anexo da ideia
+ *  passa a ser também da demanda que ela virou). Devolve a URL nova ou null. */
+export async function copiarMidia(de: string, para: string): Promise<string | null> {
+  if (!caminhoMidiaValido(de) || !caminhoMidiaValido(para)) return null
+  if (!(await garantirBucket())) return null
+  const sb = cliente()
+  if (!sb) return null
+  const { error } = await sb.storage.from(BUCKET_PRIVADO).copy(de, para)
+  if (error) {
+    console.error("[midia] Falha ao copiar:", error.message)
+    return null
+  }
+  return urlDaMidia(para)
+}
+
 /**
  * Validade longa, para consumidor que é MÁQUINA: worker de transcode, cópia
  * para o Drive, montagem de ZIP. Dez minutos bastam para um navegador começar a

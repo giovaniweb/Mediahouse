@@ -181,3 +181,24 @@ export function lerSugestao(body: Record<string, unknown>): { ok: true; dados: S
     },
   }
 }
+
+// ── Arquivo de referência guardado na ideia ────────────────────────────────
+//
+// A ideia não tem tabela de arquivos: o anexo mora no Json `formulario`
+// (`anexosIdeia`), num caminho do bucket privado que é da IDEIA —
+// org/{org}/docs/{ideiaId}/… —, e quando ela vira pedido ele é copiado para o
+// caminho da demanda e registrado como Arquivo dela.
+
+export type AnexoIdeia = { url: string; nome: string }
+
+/** Só os anexos que de fato são desta ideia, nesta empresa. Lixo é descartado. */
+export function anexosDaIdeia(formulario: unknown, organizacaoId: string, ideiaId: string): AnexoIdeia[] {
+  const lista = (formulario as { anexosIdeia?: unknown } | null)?.anexosIdeia
+  if (!Array.isArray(lista)) return []
+  const prefixo = `/api/midia/org/${organizacaoId}/docs/${ideiaId}/`
+  return lista.flatMap((a) => {
+    const url = (a as { url?: unknown })?.url, nome = (a as { nome?: unknown })?.nome
+    if (typeof url !== "string" || !url.startsWith(prefixo) || !/^[a-zA-Z0-9_.-]+$/.test(url.slice(prefixo.length))) return []
+    return [{ url, nome: typeof nome === "string" && nome.trim() ? nome.trim().slice(0, 200) : "arquivo" }]
+  }).slice(0, 20)
+}

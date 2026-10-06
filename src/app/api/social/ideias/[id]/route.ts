@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
-import type { Session } from "next-auth"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { escopoSocial, podeEditarLinha, semLinha } from "@/lib/social"
-import { diaDaPostagem, lerIdeiaSocial } from "@/lib/social-quadro"
+import { ideiaEditavel } from "@/lib/social"
+import { anexosDaIdeia, diaDaPostagem, lerIdeiaSocial } from "@/lib/social-quadro"
 
 type Params = { params: Promise<{ id: string }> }
-
-// A ideia que ainda não virou pedido é dela para mudar. Depois do pedido, quem
-// manda é a demanda — mexer na ideia mudaria o quadro sem mudar o que a equipe vê.
-async function ideiaEditavel(session: Session | null, id: string) {
-  const escopo = await escopoSocial(session)
-  if (escopo instanceof NextResponse) return escopo
-  const ideia = await prisma.ideiaVideo.findFirst({
-    where: { id, organizacaoId: escopo.organizacaoId },
-    select: { id: true, linhaProjetoId: true, demandaId: true, dataPostagem: true },
-  })
-  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
-  if (!podeEditarLinha(escopo, ideia.linhaProjetoId)) return semLinha()
-  if (ideia.demandaId) return NextResponse.json({ error: "Esta ideia já virou pedido." }, { status: 409 })
-  return { escopo, ideia }
-}
 
 // PATCH /api/social/ideias/[id] — "Salvar como ideia" de uma ideia que já existe.
 export async function PATCH(req: NextRequest, { params }: Params) {
@@ -33,9 +17,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const lido = lerIdeiaSocial(body, { dataAtual: diaDaPostagem(r.ideia.dataPostagem) })
   if (!lido.ok) return NextResponse.json({ error: lido.motivo }, { status: 400 })
 
+  // O anexo só vale se for desta ideia, desta empresa (ver anexosDaIdeia).
+  const formulario = lido.dados.formulario
+    ? { ...lido.dados.formulario, anexosIdeia: anexosDaIdeia(lido.dados.formulario, r.escopo.organizacaoId, id) }
+    : undefined
   await prisma.ideiaVideo.update({
     where: { id },
-    data: { ...lido.dados, formulario: lido.dados.formulario as Prisma.InputJsonValue | undefined },
+    data: { ...lido.dados, formulario: formulario as Prisma.InputJsonValue | undefined },
   })
   return NextResponse.json({ ok: true, id })
 }

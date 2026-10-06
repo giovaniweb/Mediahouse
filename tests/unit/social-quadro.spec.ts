@@ -111,3 +111,29 @@ describe("área Social Media no menu", () => {
     expect(PERMISSAO_HREF_MAP["/social/enviar"]).toBeUndefined()
   })
 })
+
+describe("arquivo de referência guardado na ideia", () => {
+  const ok = "/api/midia/org/org1/docs/ide1/1759700000000.pdf"
+  it("só fica o que é desta ideia, desta empresa", async () => {
+    const { anexosDaIdeia } = await import("@/lib/social-quadro")
+    const formulario = { anexosIdeia: [
+      { url: ok, nome: "briefing.pdf" },
+      { url: "/api/midia/org/OUTRA/docs/ide1/1.pdf", nome: "de outra empresa" },
+      { url: "/api/midia/org/org1/docs/OUTRA/1.pdf", nome: "de outra ideia" },
+      { url: "/api/midia/org/org1/docs/ide1/../x.pdf", nome: "travessia" },
+      { url: "https://site.com/x.pdf", nome: "externo" },
+      "lixo",
+    ] }
+    expect(anexosDaIdeia(formulario, "org1", "ide1")).toEqual([{ url: ok, nome: "briefing.pdf" }])
+    expect(anexosDaIdeia(null, "org1", "ide1")).toEqual([])
+  })
+})
+
+describe("salvar como ideia pede título ou descrição", () => {
+  it("sem título, vale a primeira linha da descrição", async () => {
+    const { tituloDaIdeia } = await import("@/components/social/ideiaNoFormulario")
+    expect(tituloDaIdeia("", "Vídeo do showroom novo\ncom a equipe toda")).toBe("Vídeo do showroom novo")
+    expect(tituloDaIdeia("  Título  ", "descrição")).toBe("Título")
+    expect(tituloDaIdeia("", "")).toBe("")
+  })
+})

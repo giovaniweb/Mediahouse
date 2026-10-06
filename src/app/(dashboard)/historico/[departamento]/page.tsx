@@ -49,14 +49,19 @@ const PAGE_SIZE = 50
 export default function HistoricoPage() {
   const router = useRouter()
   const { data: me } = useMe()
+  // Lista vazia: /api/me ainda não respondeu. Até lá vale o da URL — trocar de
+  // área com o perfil pela metade era o que jogava todo mundo no Audiovisual.
   const opcoes = departamentosVisiveis(me)
+  const carregou = opcoes.length > 0
   const daUrl = lerDepartamento(useParams<{ departamento: string }>().departamento)
-  const departamento: Departamento = daUrl && opcoes.includes(daUrl) ? daUrl : opcoes[0]
+  const departamento: Departamento = !carregou ? daUrl ?? "audiovisual"
+    : daUrl && opcoes.includes(daUrl) ? daUrl : opcoes[0]
   // Departamento que a pessoa não vê (ou inexistente) vira o primeiro que ela vê,
-  // também na URL, para o menu acompanhar.
+  // também na URL, para o menu acompanhar. A regra é a do menu: o que ele
+  // mostra, a página aceita.
   useEffect(() => {
-    if (me && daUrl !== departamento) router.replace(`/historico/${departamento}`)
-  }, [me, daUrl, departamento, router])
+    if (carregou && daUrl !== departamento) router.replace(`/historico/${departamento}`)
+  }, [carregou, daUrl, departamento, router])
   const [search, setSearch] = useState("")
   const [tipoVideo, setTipoVideo] = useState("")
   const [concluida, setConcluida] = useState("")
@@ -82,7 +87,7 @@ export default function HistoricoPage() {
   if (ateDate) params.set("ate", ateDate)
 
   const url = `/api/demandas?${params}`
-  const { data, error, isLoading, isValidating, mutate } = useSWR(!me ? null : url, fetcher, { keepPreviousData: true })
+  const { data, error, isLoading, isValidating, mutate } = useSWR(!carregou ? null : url, fetcher, { keepPreviousData: true })
 
   // Rótulos dos tipos vêm de Configurações → Parâmetros, para o filtro e a
   // tabela falarem a mesma língua do resto do sistema.

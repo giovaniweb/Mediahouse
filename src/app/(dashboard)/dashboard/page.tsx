@@ -26,14 +26,18 @@ function InternalDashboard() {
   useEffect(() => {
     try { setEscolhido(lerDepartamento(localStorage.getItem(CHAVE_DEPARTAMENTO))) } catch { /* Sem preferência: Audiovisual. */ }
   }, [])
-  // Escolha que esta pessoa não vê mais (perdeu a área) cai no primeiro que ela vê.
-  const departamento = escolhido && opcoes.includes(escolhido) ? escolhido : opcoes[0]
+  // Escolha que esta pessoa não vê mais (perdeu a área) cai no primeiro que ela
+  // vê. Lista vazia = perfil ainda carregando: nada é decidido nem buscado.
+  const carregou = opcoes.length > 0
+  const departamento: Departamento = carregou
+    ? escolhido && opcoes.includes(escolhido) ? escolhido : opcoes[0]
+    : escolhido ?? "audiovisual"
   function escolher(d: Departamento) {
     setEscolhido(d)
     try { localStorage.setItem(CHAVE_DEPARTAMENTO, d) } catch { /* Continua sem lembrar. */ }
   }
 
-  const { data, isLoading, error, mutate } = useSWR(me ? `/api/dashboard/metrics?departamento=${departamento}` : null, fetcher, {
+  const { data, isLoading, error, mutate } = useSWR(carregou ? `/api/dashboard/metrics?departamento=${departamento}` : null, fetcher, {
     refreshInterval: 30000,
   })
   const audiovisual = departamento === "audiovisual"
@@ -42,7 +46,7 @@ function InternalDashboard() {
   // A resposta é do departamento pedido; enquanto o novo carrega, nada do anterior aparece.
   const dados = data?.departamento === departamento ? data : undefined
   const carregando = isLoading || !dados
-  const seletor = <SeletorDepartamento opcoes={opcoes} valor={departamento} onChange={escolher} />
+  const seletor = <SeletorDepartamento opcoes={carregou ? opcoes : [departamento]} valor={departamento} onChange={escolher} />
 
   if (error) return (
     <>

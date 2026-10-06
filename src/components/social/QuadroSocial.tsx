@@ -19,6 +19,7 @@ import {
   type ColunaSocial, type EtapaSocial,
 } from "@/lib/social-quadro"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
+import { TrilhoQuadro, estiloQuadro } from "@/components/kanban/TrilhoQuadro"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
@@ -33,6 +34,13 @@ const SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 
 const dataCurta = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`
 const SEM_LINHA = "_sem"
+// Cor do topo e do ponto de cada coluna, no mesmo código de /demandas.
+const COR_COLUNA: Record<ColunaSocial, { borda: string; ponto: string }> = {
+  ideia: { borda: "border-t-zinc-500", ponto: "bg-zinc-400" },
+  plano: { borda: "border-t-blue-500", ponto: "bg-blue-500" },
+  equipe: { borda: "border-t-purple-500", ponto: "bg-purple-500" },
+  pronto: { borda: "border-t-emerald-500", ponto: "bg-emerald-500" },
+}
 const etapaDoCard = (c: CardSocial): EtapaSocial | null =>
   c.demanda ? etapaDoPedido(c.demanda.statusVisivel, c.demanda.statusInterno) : null
 const diasParado = (c: CardSocial, hoje: string) =>
@@ -150,7 +158,7 @@ export function QuadroSocial() {
   return (
     <div className="flex h-full flex-col">
       <Header title="Social Media · Planejamento" />
-      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-5 md:px-6">
+      <div className="shrink-0 px-4 pt-5 md:px-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Meu planejamento</h1>
@@ -238,38 +246,49 @@ export function QuadroSocial() {
         </div>
 
         {isLoading && <p className="mt-8 text-sm text-zinc-500">Carregando…</p>}
+      </div>
 
-        {data && visao === "quadro" && (
-          <div className="mt-5 overflow-x-auto pb-2">
-            <div className="grid min-w-[1040px] grid-cols-4 gap-3.5">
-              {COLUNAS_SOCIAL.map((col) => {
-                const lista = visiveis.filter((c) => colunaDoCard(c) === col.id)
-                return (
-                  <section key={col.id} aria-label={col.nome} className="flex min-w-0 flex-col gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3">
-                    <h2 className="mx-1 mt-0.5 flex items-baseline justify-between text-sm font-bold text-zinc-100">
-                      {col.nome}<span className="font-semibold tabular-nums text-zinc-500">{lista.length}</span>
-                    </h2>
-                    <p className="mx-1 -mt-1 mb-1 text-xs text-zinc-500">{col.dica}</p>
+      {/* O mesmo trilho de /demandas e /design: altura fixa, cada coluna rola
+          sozinha, barra horizontal no rodapé e setas nas laterais. */}
+      {data && visao === "quadro" && (
+        <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
+          <TrilhoQuadro>
+            {COLUNAS_SOCIAL.map((col) => {
+              const lista = visiveis.filter((c) => colunaDoCard(c) === col.id)
+              return (
+                <section key={col.id} aria-label={col.nome}
+                  className={cn("flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col", COR_COLUNA[col.id].borda, estiloQuadro.column)}>
+                  <div className={cn("flex items-center gap-2 px-3 pt-3", estiloQuadro.heading)}>
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", COR_COLUNA[col.id].ponto)} />
+                    <h2 className="truncate text-sm font-semibold text-zinc-200">{col.nome}</h2>
+                    <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">{lista.length}</span>
+                  </div>
+                  <p className="px-4 pb-2 text-xs text-zinc-500">{col.dica}</p>
+                  <div className="kanban-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-2.5">
                     {lista.map((c) => (
-                      <Cartao key={c.id} c={c} coluna={col.id} hoje={hoje} mostrarLinha={linhaAtual === "todas" && (linhas.length > 1 || !c.linhaProjetoId)}
-                        ocupado={ocupado === c.id} aoAbrir={() => abrirCard(c)}
-                        aoAbrirDemanda={() => abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)}
-                        aoDescartar={() => descartar(c)} aoCobrar={() => cobrar(c)}
-                        aoPriorizar={(p) => priorizar(c, p)} aoPostar={() => marcarPostado(c)} />
+                      <div key={c.id} data-card className={estiloQuadro.card}>
+                        <Cartao c={c} coluna={col.id} hoje={hoje} mostrarLinha={linhaAtual === "todas" && (linhas.length > 1 || !c.linhaProjetoId)}
+                          ocupado={ocupado === c.id} aoAbrir={() => abrirCard(c)}
+                          aoAbrirDemanda={() => abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)}
+                          aoDescartar={() => descartar(c)} aoCobrar={() => cobrar(c)}
+                          aoPriorizar={(p) => priorizar(c, p)} aoPostar={() => marcarPostado(c)} />
+                      </div>
                     ))}
                     {col.id === "ideia" && podeCriar && (
                       <button type="button" onClick={() => setEscolhendo(true)}
-                        className="rounded-xl border border-dashed border-zinc-700 p-2.5 text-[13px] font-semibold text-zinc-400 hover:border-purple-500/60 hover:text-zinc-200">
+                        className="w-full rounded-xl border border-dashed border-zinc-700 p-2.5 text-[13px] font-semibold text-zinc-400 hover:border-purple-500/60 hover:text-zinc-200">
                         + Anotar ideia ou referência
                       </button>
                     )}
-                  </section>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                  </div>
+                </section>
+              )
+            })}
+          </TrilhoQuadro>
+        </div>
+      )}
 
+      <div className={cn(visao === "calendario" && "flex-1 overflow-y-auto px-4 pb-10 md:px-6")}>
         {data && visao === "calendario" && (
           <Calendario cards={visiveis} hoje={hoje} periodo={periodo} deslocamento={deslocamento}
             aoPeriodo={(p) => { setPeriodo(p); setDeslocamento(0) }} aoDeslocar={setDeslocamento} aoAbrir={abrirCard} />
