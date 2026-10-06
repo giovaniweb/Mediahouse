@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import type { AnexoIdeia } from "@/lib/social-quadro"
 
 // O formulário de demanda aberto pelo quadro da social (/social).
 //
@@ -73,4 +74,62 @@ export function useMudouDesdeAbrir(carregado: boolean, valores: unknown): boolea
     if (carregado && base === null) setBase(atual)
   }, [carregado, base, atual])
   return base !== null && base !== atual
+}
+
+/** "Salvar como ideia" pede título OU descrição: sem título, vale a 1ª linha da descrição. */
+export function tituloDaIdeia(titulo: string, descricao: string): string {
+  return titulo.trim() || descricao.trim().split("\n")[0].trim().slice(0, 120)
+}
+
+function lerAnexos(formulario: unknown): AnexoIdeia[] {
+  const lista = (formulario as { anexosIdeia?: unknown } | null | undefined)?.anexosIdeia
+  return Array.isArray(lista)
+    ? lista.flatMap((a) => typeof a?.url === "string" ? [{ url: a.url, nome: typeof a.nome === "string" ? a.nome : "arquivo" }] : [])
+    : []
+}
+
+/** Sobe os arquivos de referência para o caminho da ideia. Devolve os que subiram e os que não. */
+export async function subirAnexosDaIdeia(ideiaId: string, arquivos: File[]): Promise<{ anexos: AnexoIdeia[]; falhas: string[] }> {
+  const anexos: AnexoIdeia[] = []
+  const falhas: string[] = []
+  for (const arquivo of arquivos) {
+    try {
+      const tipo = arquivo.type || "application/octet-stream"
+      const res = await fetch(`/api/social/ideias/${ideiaId}/anexo?contentType=${encodeURIComponent(tipo)}`)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.uploadUrl) throw new Error(json.error ?? "sem URL")
+      const envio = await fetch(json.uploadUrl, { method: "PUT", headers: { "Content-Type": tipo }, body: arquivo })
+      if (!envio.ok) throw new Error(`HTTP ${envio.status}`)
+      anexos.push({ url: json.url, nome: arquivo.name })
+    } catch {
+      falhas.push(arquivo.name)
+    }
+  }
+  return { anexos, falhas }
+}
+
+/**
+ * A ideia por trás do formulário: o id (nasce no primeiro "Salvar como ideia")
+ * e os arquivos de referência já guardados nela. `gravar` salva o formulário,
+ * sobe os arquivos novos e grava a lista — dois PATCH quando há arquivo,
+ * porque o caminho do arquivo leva o id da ideia.
+ */
+export function useIdeiaSocial(social: OrigemSocial | undefined) {
+  const [ideiaId, setIdeiaId] = useState(social?.ideiaId)
+  const [anexosIdeia, setAnexosIdeia] = useState<AnexoIdeia[]>(() => lerAnexos(social?.formulario))
+
+  async function gravar(dados: DadosIdeia, arquivos: File[]): Promise<{ id: string; falhas: string[] }> {
+    const id = await salvarIdeiaSocial(social!, ideiaId, { ...dados, formulario: { ...dados.formulario, anexosIdeia } })
+    setIdeiaId(id)
+    if (arquivos.length === 0) return { id, falhas: [] }
+    const { anexos, falhas } = await subirAnexosDaIdeia(id, arquivos)
+    if (anexos.length > 0) {
+      const todos = [...anexosIdeia, ...anexos]
+      await salvarIdeiaSocial(social!, id, { ...dados, formulario: { ...dados.formulario, anexosIdeia: todos } })
+      setAnexosIdeia(todos)
+    }
+    return { id, falhas }
+  }
+
+  return { anexosIdeia, setAnexosIdeia, gravar }
 }

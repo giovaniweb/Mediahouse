@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { departamentosVisiveis, etapaSocial, lerDepartamento, resumoSocial, type PedidoSocial } from "@/lib/painel-departamento"
+import { acessoDasAreas, departamentosVisiveis, etapaSocial, lerDepartamento, resumoSocial, type PedidoSocial } from "@/lib/painel-departamento"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import { lerPeriodo, valorPeriodo } from "@/components/kanban/FiltrosQuadro"
 
@@ -12,7 +12,17 @@ const pedido = (id: string, statusVisivel: string, extra: Partial<PedidoSocial> 
 describe("departamentosVisiveis", () => {
   it("gestor vê os três; sem o módulo Growth, o Growth some", () => {
     expect(departamentosVisiveis({ tipo: "gestor", membership: { areas: [] } })).toEqual(["audiovisual", "growth", "social"])
-    expect(departamentosVisiveis({ tipo: "admin", modulos: { growth: false } })).toEqual(["audiovisual", "social"])
+    expect(departamentosVisiveis({ tipo: "admin", membership: null, modulos: { growth: false } })).toEqual(["audiovisual", "social"])
+  })
+  it("admin pelo papel na empresa vê os três mesmo com o tipo legado de outra coisa", () => {
+    const me = { tipo: "solicitante", membership: { papel: "admin", areas: ["audiovisual"] }, permissoes: { verSocial: false, verDesign: false } }
+    expect(departamentosVisiveis(me)).toEqual(["audiovisual", "growth", "social"])
+    expect(acessoDasAreas(me)?.gestor).toBe(true)
+  })
+  it("perfil carregando ou com erro: lista vazia, e a página não troca de área", () => {
+    expect(departamentosVisiveis(undefined)).toEqual([])
+    expect(departamentosVisiveis({ error: "Não autorizado" } as never)).toEqual([])
+    expect(acessoDasAreas(null)).toBeNull()
   })
   it("quem atua só no Growth não vê o Audiovisual; a social vê a área dela", () => {
     expect(departamentosVisiveis({ tipo: "equipe", membership: { areas: ["growth"] } })).toEqual(["growth"])

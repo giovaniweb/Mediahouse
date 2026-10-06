@@ -18,24 +18,49 @@ export function lerDepartamento(valor: string | null | undefined): Departamento 
   return (DEPARTAMENTOS as readonly string[]).includes(valor) ? (valor as Departamento) : null
 }
 
-/**
- * Departamentos que esta pessoa vê no dashboard e no histórico. Mesmas regras
- * do menu lateral: Growth pela área ou pela permissão (e com o módulo ligado),
- * Social Media pelo cargo ou pela permissão; gestor e admin veem todos.
- */
-export function departamentosVisiveis(me: {
+export type MeDoMenu = {
   tipo?: string
   membership?: { papel?: string; areas?: string[] } | null
   permissoes?: Record<string, boolean | string> | null
   modulos?: Partial<Record<string, boolean>> | null
-} | null | undefined): Departamento[] {
-  if (!me) return ["audiovisual"]
-  const gestor = me.tipo === "admin" || me.tipo === "gestor"
+}
+
+export type AcessoAreas = { gestor: boolean; audiovisual: boolean; growth: boolean; social: boolean }
+
+/**
+ * Que áreas esta pessoa vê. É a regra ÚNICA do menu lateral, do dashboard e do
+ * histórico: em 06/10/2026 o menu mostrava "Histórico" no Growth e na Social
+ * Media por uma conta e a página decidia por outra, e quem clicava caía no
+ * histórico do Audiovisual.
+ *
+ * `null` enquanto /api/me não respondeu, ou se respondeu erro (sem
+ * `membership`): quem decide com `null` não troca de área, espera.
+ *
+ * Gestor e admin pelo cargo legado (`tipo`) OU pelo papel na empresa — o papel
+ * é a autoridade (lib/papel.ts); o `tipo` fica pelo que o menu já fazia.
+ */
+export function acessoDasAreas(me: MeDoMenu | null | undefined): AcessoAreas | null {
+  if (!me || !("membership" in me)) return null
+  const papel = me.membership?.papel ?? ""
+  const gestor = ["admin", "gestor"].includes(me.tipo ?? "") || ["admin", "gestor"].includes(papel)
   const areas = me.membership?.areas ?? []
-  const lista: Departamento[] = []
-  if (gestor || areas.length === 0 || areas.includes("audiovisual")) lista.push("audiovisual")
-  if (me.modulos?.growth !== false && (gestor || areas.includes("growth") || me.permissoes?.verDesign === true)) lista.push("growth")
-  if (gestor || me.membership?.papel === "social" || me.permissoes?.verSocial === true) lista.push("social")
+  const p = me.permissoes ?? {}
+  return {
+    gestor,
+    audiovisual: gestor || areas.length === 0 || areas.includes("audiovisual"),
+    growth: me.modulos?.growth !== false && (gestor || areas.includes("growth") || p.verDesign === true),
+    social: gestor || papel === "social" || p.verSocial === true,
+  }
+}
+
+/**
+ * Departamentos que esta pessoa vê no dashboard e no histórico, pela mesma
+ * regra do menu (acessoDasAreas). Lista vazia = ainda carregando.
+ */
+export function departamentosVisiveis(me: MeDoMenu | null | undefined): Departamento[] {
+  const a = acessoDasAreas(me)
+  if (!a) return []
+  const lista = DEPARTAMENTOS.filter((d) => a[d])
   return lista.length ? lista : ["audiovisual"]
 }
 

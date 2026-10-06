@@ -20,7 +20,8 @@ import { hojeEmSaoPaulo } from "@/lib/datas"
 import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import { enviarAnexos } from "@/lib/upload-documento"
 import { useRascunho } from "@/lib/use-rascunho"
-import { salvarIdeiaSocial, useMudouDesdeAbrir, valoresDaIdeia, type OrigemSocial } from "@/components/social/ideiaNoFormulario"
+import { tituloDaIdeia, useIdeiaSocial, useMudouDesdeAbrir, valoresDaIdeia, type OrigemSocial } from "@/components/social/ideiaNoFormulario"
+import { AnexosDaIdeia } from "@/components/social/AnexosDaIdeia"
 import {
   TIPOS_CONTEUDO, tipoConteudoDe, campoVisivel, campoDescricaoDe, CHAVE_DESCRICAO,
   type CampoCondicional, type IconeVisual,
@@ -144,7 +145,7 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
 
   // Pelo quadro da social o rascunho é a própria ideia (ver NovaDemandaModal).
   // A linha é a da ideia: a social pede para a linha dela.
-  const [ideiaId, setIdeiaId] = useState(social?.ideiaId)
+  const ideia = useIdeiaSocial(social)
   const [ideiaCarregada, setIdeiaCarregada] = useState(false)
   useEffect(() => {
     if (!open || !social) return
@@ -153,12 +154,15 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega a ideia ao abrir, como o rascunho
     restaurar({
       ...v,
+      // Post já pergunta descrição e formato: sem tipo escolhido, o formulário
+      // da social não mostraria nenhum dos dois.
+      tipoVideo: v.tipoVideo || "post",
       linhaProjetoId: social.linhaProjetoId,
       detalhes: detalhesIdeia[CHAVE_DESCRICAO] || !v.descricao ? detalhesIdeia : { ...detalhesIdeia, [CHAVE_DESCRICAO]: v.descricao },
     })
     setIdeiaCarregada(true)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-  const mudou = useMudouDesdeAbrir(ideiaCarregada, { titulo, tipoVideo, prioridade, dataLimite, classificacao, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, anexos: anexos.length })
+  const mudou = useMudouDesdeAbrir(ideiaCarregada, { anexosIdeia: ideia.anexosIdeia.length, titulo, tipoVideo, prioridade, dataLimite, classificacao, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, anexos: anexos.length })
 
   function tentarFechar() {
     // O aviso não pode prometer os anexos: File não sobrevive ao localStorage.
@@ -177,25 +181,31 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
 
   // ── Quadro da social: a ideia ─────────────────────────────────────────────
   async function gravarIdeia(): Promise<string> {
-    const id = await salvarIdeiaSocial(social!, ideiaId, {
-      titulo: titulo.trim(),
+    // Sem título, a ideia leva a 1ª linha da descrição — e o campo mostra isso.
+    const tituloFinal = tituloDaIdeia(titulo, descricao)
+    if (tituloFinal !== titulo) setTitulo(tituloFinal)
+    const { id, falhas } = await ideia.gravar({
+      titulo: tituloFinal,
       descricao: descricao.trim(),
       linkReferencia: referencias[0] ?? (novaReferencia.trim() || null),
       area: "design",
       dataPostagem: dataLimite || null,
       formulario: {
-        titulo, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
+        titulo: tituloFinal, tipoVideo, prioridade, motivoUrgencia, dataLimite, classificacao,
         linhaProjetoId, responsavelIds, produtoIds, detalhes, referencias, novaReferencia, linkBrutos,
       },
-    })
-    setIdeiaId(id)
+    }, anexos)
+    // Os arquivos novos sobem para a ideia; ao virar pedido, o servidor os
+    // copia para a demanda (lib/social.ts, ligarIdeiaAoPedido).
+    if (anexos.length > 0) setAnexos([])
+    if (falhas.length > 0) toast.error(`Não foi possível guardar: ${falhas.join(", ")}`)
     return id
   }
 
   async function salvarComoIdeia() {
-    if (titulo.trim().length < 3) {
-      setErrors({ titulo: "Mínimo 3 caracteres" })
-      return toast.error("Dê um título à ideia.")
+    if (tituloDaIdeia(titulo, descricao).length < 3) {
+      setErrors({ titulo: "Escreva um título ou a descrição" })
+      return toast.error("Escreva um título ou a descrição da ideia.")
     }
     setSaving(true)
     try {
@@ -291,7 +301,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
       toast.success(social ? `Pedido ${json.codigo ?? ""} enviado ao Growth.` : `Demanda ${json.codigo ?? ""} criada!`)
       if (!social) limpar()
 
-      if (anexos.length > 0 && typeof json.id === "string") {
+      // Pela social, os arquivos já subiram para a ideia e o servidor os copiou.
+      if (!social && anexos.length > 0 && typeof json.id === "string") {
         setEnviandoAnexos(true)
         const falhas = await enviarAnexos(json.id, anexos)
         setEnviandoAnexos(false)
@@ -576,6 +587,8 @@ export function NovaDemandaGrowthModal({ open, onClose, onCreated, social }: {
             )}
           </Secao>
 
+          {social && <AnexosDaIdeia anexos={ideia.anexosIdeia}
+            onRemover={social.somenteLeitura ? undefined : (url) => ideia.setAnexosIdeia((l) => l.filter((a) => a.url !== url))} />}
           <SecaoArquivos
             anexos={anexos}
             onAnexos={setAnexos}

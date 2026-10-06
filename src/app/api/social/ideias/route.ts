@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
       origem: "manual",
       status: "nova",
       ...lido.dados,
-      formulario: lido.dados.formulario as Prisma.InputJsonValue | undefined,
+      // Ideia nova ainda não tem anexo: o caminho do arquivo leva o id dela.
+      formulario: lido.dados.formulario ? { ...lido.dados.formulario, anexosIdeia: [] } as Prisma.InputJsonValue : undefined,
     },
     select: { id: true },
   })

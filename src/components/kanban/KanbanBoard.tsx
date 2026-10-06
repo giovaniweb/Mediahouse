@@ -1,13 +1,13 @@
 "use client"
 
-import { useRef, useState, useCallback } from "react"
+import { useRef, useState } from "react"
 import { DragDropContext, Draggable, DropResult, useKeyboardSensor, useMouseSensor, useTouchSensor } from "@hello-pangea/dnd"
 import { StrictModeDroppable } from "./StrictModeDroppable"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
 import { cn } from "@/lib/utils"
 import { estaAtrasada } from "@/lib/status"
-import { Plus, ChevronLeft, ChevronRight, Lock } from "lucide-react"
+import { Plus, ChevronRight, Lock } from "lucide-react"
 import Link from "next/link"
 import { salvarOrdem } from "@/lib/kanban-order"
 import styles from "./KanbanPreview.module.css"
@@ -15,6 +15,7 @@ import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
 import { AUDIOVISUAL_COLUNA_PARA_STATUS, PEDE_TEXTO } from "@/lib/kanban-movimento"
 import { PedidoMotivo } from "./PedidoMotivo"
 import { useSensorAlca } from "./sensorAlca"
+import { TrilhoQuadro } from "./TrilhoQuadro"
 
 // A alça vem antes dos sensores padrão: ela precisa ver o toque primeiro (sensorAlca.ts).
 const SENSORES = [useSensorAlca, useMouseSensor, useKeyboardSensor, useTouchSensor]
@@ -86,11 +87,6 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const savingOrder = useRef(false)
   const [orderStatus, setOrderStatus] = useState<"idle" | "saving" | "error">("idle")
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const isDraggingScroll = useRef(false)
-  const startX = useRef(0)
-  const scrollLeft = useRef(0)
-  const [dragging, setDragging] = useState(false)
   const [modalDemandaId, setModalDemandaId] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
   // Concluído começa recolhido: com seis colunas (oito no Growth) o quadro não
@@ -100,32 +96,6 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   // Movimento que espera o motivo. O card fica onde estava até o "Mover".
   const [aguardandoMotivo, setAguardandoMotivo] = useState<{ demandaId: string; coluna: string } | null>(null)
   const pedidoAberto = aguardandoMotivo ? PEDE_TEXTO[colunaParaStatus[aguardandoMotivo.coluna] as keyof typeof PEDE_TEXTO] : undefined
-
-  const scrollBy = useCallback((amount: number) => {
-    scrollRef.current?.scrollBy({ left: amount, behavior: "smooth" })
-  }, [])
-
-  const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Only drag on the background, not on cards/buttons
-    if ((e.target as HTMLElement).closest("[data-card], button, a, input, select")) return
-    isDraggingScroll.current = true
-    setDragging(true)
-    startX.current = e.pageX - (scrollRef.current?.offsetLeft ?? 0)
-    scrollLeft.current = scrollRef.current?.scrollLeft ?? 0
-  }, [])
-
-  const onMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingScroll.current || !scrollRef.current) return
-    e.preventDefault()
-    const x = e.pageX - scrollRef.current.offsetLeft
-    const walk = (x - startX.current) * 1.2
-    scrollRef.current.scrollLeft = scrollLeft.current - walk
-  }, [])
-
-  const onMouseUp = useCallback(() => {
-    isDraggingScroll.current = false
-    setDragging(false)
-  }, [])
 
   async function handleDragEnd(result: DropResult) {
     if (savingOrder.current || orderStatus === "error") return
@@ -218,38 +188,13 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
 
   return (
     <>
-    <div className={cn("relative h-full flex flex-col", styles.board)}>
-      {orderStatus !== "idle" && (
+    <DragDropContext onDragEnd={handleDragEnd} sensors={SENSORES} enableDefaultSensors={false}>
+    <TrilhoQuadro aviso={orderStatus !== "idle" && (
         <div role={orderStatus === "error" ? "alert" : "status"} className="px-4 py-3 text-sm text-zinc-200">
           {orderStatus === "saving" ? "Salvando ordem…" : "Não foi possível salvar toda a ordem. Algumas posições podem ter sido gravadas."}
           {orderStatus === "error" && <button type="button" className="ml-3 underline" onClick={() => window.location.reload()}>Recarregar quadro para conferir</button>}
         </div>
-      )}
-      {/* Botões de navegação */}
-      <button
-        onClick={() => scrollBy(-320)}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
-        aria-label="Rolar para esquerda"
-      >
-        <ChevronLeft className="w-5 h-5" />
-      </button>
-      <button
-        onClick={() => scrollBy(320)}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
-        aria-label="Rolar para direita"
-      >
-        <ChevronRight className="w-5 h-5" />
-      </button>
-
-    <DragDropContext onDragEnd={handleDragEnd} sensors={SENSORES} enableDefaultSensors={false}>
-      <div
-        ref={scrollRef}
-        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10 select-none", dragging && "is-dragging", styles.scroll)}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-      >
+      )}>
         {COLS.map((col) => {
           const items = byCol(col.id)
           const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
@@ -363,9 +308,8 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
             </div>
           )
         })}
-      </div>
+    </TrilhoQuadro>
     </DragDropContext>
-    </div>
 
     {openMode === "modal" && (
       <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />

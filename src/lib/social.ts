@@ -16,6 +16,9 @@ import { ehGestor, papelNaOrg } from "@/lib/papel"
 import { getOrgId, semOrg } from "@/lib/org"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
+import { anexosDaIdeia } from "@/lib/social-quadro"
+import { caminhoDaUrl, caminhoMidia, copiarMidia } from "@/lib/midia"
+import { registrarArquivoDemanda } from "@/lib/arquivo-registro"
 
 export type LinhaSocial = { id: string; nome: string; socials: { usuarioId: string; nome: string }[] }
 
@@ -104,6 +107,21 @@ export async function pedidoDaSocial(escopo: EscopoSocial, id: string) {
   const daLinhaDela = !!d.socialId && !!d.linhaProjetoId && escopo.minhas.has(d.linhaProjetoId)
   if (!eDela && !daLinhaDela) return semLinha()
   return d
+}
+
+// A ideia que ainda não virou pedido é dela para mudar. Depois do pedido, quem
+// manda é a demanda — mexer na ideia mudaria o quadro sem mudar o que a equipe vê.
+export async function ideiaEditavel(session: Session | null, id: string) {
+  const escopo = await escopoSocial(session)
+  if (escopo instanceof NextResponse) return escopo
+  const ideia = await prisma.ideiaVideo.findFirst({
+    where: { id, organizacaoId: escopo.organizacaoId },
+    select: { id: true, linhaProjetoId: true, demandaId: true, dataPostagem: true },
+  })
+  if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  if (!podeEditarLinha(escopo, ideia.linhaProjetoId)) return semLinha()
+  if (ideia.demandaId) return NextResponse.json({ error: "Esta ideia já virou pedido." }, { status: 409 })
+  return { escopo, ideia }
 }
 
 // ── Cobrança ────────────────────────────────────────────────────────────────
@@ -215,10 +233,30 @@ export async function ideiaParaPedido(ideiaId: string, organizacaoId: string, us
   return { linha: { id: ideia.linhaProjeto.id, nome: ideia.linhaProjeto.nome }, socialId } as const
 }
 
-/** Liga a ideia à demanda recém-criada. `demandaId: null` no filtro segura dois envios simultâneos. */
-export async function ligarIdeiaAoPedido(ideiaId: string, demanda: { id: string; area: AreaDemanda; titulo: string }) {
-  await prisma.ideiaVideo.updateMany({
+/**
+ * Liga a ideia à demanda recém-criada. `demandaId: null` no filtro segura dois
+ * envios simultâneos. Os arquivos de referência guardados na ideia são
+ * copiados para o caminho da demanda e registrados como documento dela — é ali
+ * que a equipe procura. Falha de cópia não desfaz o pedido: o arquivo continua
+ * na ideia, e o erro fica no log.
+ */
+export async function ligarIdeiaAoPedido(ideiaId: string, demanda: { id: string; area: AreaDemanda; titulo: string; organizacaoId: string }) {
+  const ligada = await prisma.ideiaVideo.updateMany({
     where: { id: ideiaId, demandaId: null },
     data: { demandaId: demanda.id, status: "em_producao", convertidoEm: new Date(), area: demanda.area, titulo: demanda.titulo },
   })
+  if (ligada.count === 0) return
+  const ideia = await prisma.ideiaVideo.findUnique({ where: { id: ideiaId }, select: { formulario: true } })
+  for (const a of anexosDaIdeia(ideia?.formulario, demanda.organizacaoId, ideiaId)) {
+    try {
+      const de = caminhoDaUrl(a.url)
+      const ext = a.url.split(".").pop() ?? "pdf"
+      const para = caminhoMidia({ organizacaoId: demanda.organizacaoId, tipo: "docs", id: demanda.id, ext })
+      const url = de ? await copiarMidia(de, para) : null
+      if (!url) throw new Error("cópia não feita")
+      await registrarArquivoDemanda({ organizacaoId: demanda.organizacaoId, demandaId: demanda.id, tipo: "documento", nomeArquivo: a.nome, url })
+    } catch (e) {
+      console.error("[social] Anexo da ideia não foi para a demanda", { ideiaId, demandaId: demanda.id, erro: (e as Error).message })
+    }
+  }
 }

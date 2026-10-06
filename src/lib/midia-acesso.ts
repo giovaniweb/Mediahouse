@@ -5,6 +5,7 @@ import { comOrg } from "@/lib/org-contexto"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { organizacaoDoCaminho, urlDaMidia } from "@/lib/midia"
 import { PUBLICADO, urlPublicavel } from "@/lib/publicacao-midia"
+import { anexosDaIdeia } from "@/lib/social-quadro"
 
 /** Autoriza o objeto registrado, nunca apenas o prefixo da empresa ou um token válido. */
 export async function podeLerMidia(caminho: string, token: string | null): Promise<boolean> {
@@ -55,6 +56,14 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
         if (p.verCoberturas && await prisma.eventoCoberturaUpload.findFirst({ where: { OR: [{ url }, { thumbnailUrl: url }], cobertura: { organizacaoId: org } }, select: { id: true } })) return true
       }
       if (tipo === "depoimentos") return p.gerenciarConfig && !!await prisma.depoimento.findFirst({ where: { organizacaoId: org, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })
+      // Arquivo de referência de uma ideia do quadro da social
+      // (org/{org}/docs/{ideiaId}/…): só se estiver na lista da PRÓPRIA ideia.
+      // A ideia é aberta para a empresa, então vale para quem vê a social, o
+      // Audiovisual ou o Growth — os que trabalham o pedido que ela vira.
+      if (tipo === "docs" && (p.verSocial || p.verDemandas || p.verDesign)) {
+        const ideia = await prisma.ideiaVideo.findFirst({ where: { id: caminho.split("/")[3], organizacaoId: org }, select: { id: true, formulario: true } })
+        if (ideia && anexosDaIdeia(ideia.formulario, org, ideia.id).some((a) => a.url === url)) return true
+      }
       if (!p.verDemandas && !p.verDesign) return false
       const d = await prisma.demanda.findFirst({ where: { organizacaoId: org,
         AND: [

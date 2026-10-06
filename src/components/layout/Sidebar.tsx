@@ -44,6 +44,7 @@ import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
 import { moduloDaRota } from "@/lib/modulos"
+import { acessoDasAreas } from "@/lib/painel-departamento"
 import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
@@ -170,13 +171,15 @@ export function Sidebar() {
   const { aberta, fechar } = useNavegacaoMovel()
 
   const mods = me?.modulos
-  const isAdmin = me?.tipo === "admin" || me?.tipo === "gestor"
+  // Áreas pela regra única do menu, do dashboard e do histórico.
+  const acesso = acessoDasAreas(me)
+  const isAdmin = acesso?.gestor ?? false
   const atuaEmGrowth = me?.membership?.areas?.includes("growth") ?? false
-  const podeVerGrowth = atuaEmGrowth || !!me?.permissoes?.verDesign
+  const podeVerGrowth = acesso?.growth ?? false
   const podeGerenciarGrowth = atuaEmGrowth || !!me?.permissoes?.gerenciarDesigners
   // Como no Growth: o cargo abre a área mesmo com permissões gravadas antes de
   // a chave verSocial existir.
-  const podeVerSocial = me?.membership?.papel === "social" || !!me?.permissoes?.verSocial
+  const podeVerSocial = acesso?.social ?? false
 
   // Filtra itens com base nas permissões
   const canSee = (href: string) => {
@@ -193,7 +196,10 @@ export function Sidebar() {
     if (modulo && mods && !mods[modulo]) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
-    if ((href === "/design" || href === "/galeria-artes" || href === "/historico/growth") && podeVerGrowth) return true
+    // O histórico de cada área aparece exatamente para quem a página aceita.
+    if (href === "/historico/audiovisual") return acesso?.audiovisual ?? true
+    if (href === "/historico/growth") return podeVerGrowth
+    if ((href === "/design" || href === "/galeria-artes") && podeVerGrowth) return true
     if ((href === "/growth/equipe" || href === "/configuracoes/linhas-projetos") && podeGerenciarGrowth) return true
     if ((href.startsWith("/social") && href !== "/social/enviar") || href === "/historico/social") return podeVerSocial
     const key = PERMISSAO_HREF_MAP[href]
