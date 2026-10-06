@@ -8,6 +8,7 @@
 import { useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { toast } from "sonner"
+import Link from "next/link"
 import { ExternalLink, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
@@ -15,9 +16,9 @@ import { cn } from "@/lib/utils"
 import { diasEntre, hojeEmSaoPaulo, somarDias, somarMeses } from "@/lib/datas"
 import {
   COLUNAS_SOCIAL, DIAS_PARADO, ETAPA_NOME, ETAPA_PASSO, colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje,
-  type ColunaSocial,
+  type ColunaSocial, type EtapaSocial,
 } from "@/lib/social-quadro"
-import { FiltrosQuadro } from "@/components/kanban/FiltrosQuadro"
+import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
@@ -31,6 +32,9 @@ type Periodo = "semana" | "quinzena" | "mes"
 const SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 
 const dataCurta = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`
+const SEM_LINHA = "_sem"
+const etapaDoCard = (c: CardSocial): EtapaSocial | null =>
+  c.demanda ? etapaDoPedido(c.demanda.statusVisivel, c.demanda.statusInterno) : null
 const diasParado = (c: CardSocial, hoje: string) =>
   c.demanda?.ultimaMudanca ? diasEntre(c.demanda.ultimaMudanca.slice(0, 10), hoje) : 0
 
@@ -38,6 +42,11 @@ export function QuadroSocial() {
   const { data, error, isLoading, mutate } = useSWR<RespostaQuadro>("/api/social", fetcher, { refreshInterval: 30000 })
   const [linhaSel, setLinhaSel] = useState<string>("")
   const [filtro, setFiltro] = useState<Filtro>("tudo")
+  const [situacao, setSituacao] = useState("")
+  const [prioridade, setPrioridade] = useState("")
+  const [pessoa, setPessoa] = useState("")
+  const [periodoPostagem, setPeriodoPostagem] = useState("")
+  const [socialSel, setSocialSel] = useState("")
   const [visao, setVisao] = useState<Visao>("quadro")
   const [periodo, setPeriodo] = useState<Periodo>("quinzena")
   const [deslocamento, setDeslocamento] = useState(0)
@@ -50,10 +59,27 @@ export function QuadroSocial() {
   const hoje = hojeEmSaoPaulo()
   const linhas = useMemo(() => data?.linhas ?? [], [data])
   const minhas = linhas.filter((l) => l.minha)
-  // Começa na linha dela; quem tem várias (ou é gestor) pode ver todas juntas.
-  const linhaAtual = linhaSel || (minhas.length === 1 && !data?.veTodas ? minhas[0].id : "todas")
-  const visiveis = (data?.cards ?? []).filter((c) =>
-    (linhaAtual === "todas" || c.linhaProjetoId === linhaAtual) && (filtro === "tudo" || c.area === filtro))
+  const todos = useMemo(() => data?.cards ?? [], [data])
+  // Sem filtro de linha valem todas as que a pessoa vê.
+  const linhaAtual = linhaSel || "todas"
+  const { de: postagemDe, ate: postagemAte } = lerPeriodo(periodoPostagem)
+  const visiveis = todos.filter((c) => {
+    const dia = diaDaPostagem(c.dataPostagem)
+    return (linhaAtual === "todas" || (linhaAtual === SEM_LINHA ? !c.linhaProjetoId : c.linhaProjetoId === linhaAtual))
+      && (filtro === "tudo" || c.area === filtro)
+      // Situação, prioridade e pessoa são do pedido: a ideia ainda não tem.
+      && (!situacao || etapaDoCard(c) === situacao)
+      && (!prioridade || c.demanda?.prioridade === prioridade)
+      && (!pessoa || !!c.demanda?.responsaveis.includes(pessoa))
+      && (!socialSel || c.socialId === socialSel)
+      && (!periodoPostagem || (!!dia && (!postagemDe || dia >= postagemDe) && (!postagemAte || dia <= postagemAte)))
+  })
+  const pessoas = [...new Set(todos.flatMap((c) => c.demanda?.responsaveis ?? []))].sort((a, b) => a.localeCompare(b, "pt-BR"))
+  const socials = [...new Map(todos.flatMap((c) => c.socialId && c.socialNome ? [[c.socialId, c.socialNome] as const] : [])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
+  const temSemLinha = todos.some((c) => !c.linhaProjetoId)
+  // Onde se pode anotar ideia: nas linhas dela; gestor/admin, em todas.
+  const linhasParaCriar = data?.veTodas && data.podeCriar ? linhas : minhas
 
   function abrirFormulario(c: CardSocial | null, area: "audiovisual" | "design", linhaId: string) {
     const linha = linhas.find((l) => l.id === linhaId)
@@ -70,7 +96,7 @@ export function QuadroSocial() {
         linkReferencia: c?.linkReferencia,
         dataPostagem: diaDaPostagem(c?.dataPostagem),
         formulario: c?.formulario,
-        somenteLeitura: c ? !c.podeMexer : false,
+        somenteLeitura: c ? !c.podeEditar : false,
         aoTerminar: () => { setFormulario(null); mutate() },
       },
     })
@@ -119,7 +145,7 @@ export function QuadroSocial() {
     return dia && dia >= hoje && dia <= somarDias(hoje, 6) && c.demanda?.statusVisivel !== "finalizado"
   }).length
 
-  const podeCriar = minhas.length > 0
+  const podeCriar = !!data?.podeCriar && linhasParaCriar.length > 0
 
   return (
     <div className="flex h-full flex-col">
@@ -133,16 +159,33 @@ export function QuadroSocial() {
                 filtro de linha, valem todas as que esta pessoa vê; linha só entra
                 no menu quando há mais de uma. */}
             <div className="mt-3"><FiltrosQuadro filtros={[
-              ...(linhas.length > 1 ? [{
+              ...(linhas.length > 1 || temSemLinha ? [{
                 id: "linha", rotulo: "Linha de produto", valor: linhaSel,
                 onChange: (v: string) => { setLinhaSel(v); setDeslocamento(0) },
-                opcoes: linhas.map((l) => ({ valor: l.id, rotulo: l.socials.length ? `${l.nome} · ${l.socials.map((n) => n.split(" ")[0]).join(", ")}` : l.nome })),
+                opcoes: [
+                  ...linhas.map((l) => ({ valor: l.id, rotulo: l.socials.length ? `${l.nome} · ${l.socials.map((n) => n.split(" ")[0]).join(", ")}` : l.nome })),
+                  ...(temSemLinha ? [{ valor: SEM_LINHA, rotulo: "Sem linha" }] : []),
+                ],
               }] : []),
               {
                 id: "tipo", rotulo: "Tipo", valor: filtro === "tudo" ? "" : filtro,
                 onChange: (v: string) => setFiltro((v || "tudo") as Filtro),
                 opcoes: [{ valor: "audiovisual", rotulo: "Vídeo" }, { valor: "design", rotulo: "Arte" }],
               },
+              {
+                id: "situacao", rotulo: "Situação", valor: situacao, onChange: setSituacao,
+                opcoes: (["recebido", "produzindo", "revisar", "pronto"] as const).map((e) => ({ valor: e, rotulo: ETAPA_NOME[e] })),
+              },
+              {
+                id: "prioridade", rotulo: "Prioridade", valor: prioridade, onChange: setPrioridade,
+                opcoes: [{ valor: "urgente", rotulo: "Urgente" }, { valor: "alta", rotulo: "Alta" }, { valor: "normal", rotulo: "Normal" }],
+              },
+              { id: "pessoa", rotulo: "Pessoa na equipe", valor: pessoa, onChange: setPessoa, opcoes: pessoas.map((n) => ({ valor: n, rotulo: n })) },
+              { id: "postagem", rotulo: "Data de postagem", tipo: "periodo" as const, valor: periodoPostagem, onChange: setPeriodoPostagem },
+              ...(data?.veTodas && socials.length > 1 ? [{
+                id: "social", rotulo: "Social media", valor: socialSel, onChange: setSocialSel,
+                opcoes: socials.map(([id, nome]) => ({ valor: id, rotulo: nome })),
+              }] : []),
             ]} /></div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -163,11 +206,34 @@ export function QuadroSocial() {
             Você ainda não cuida de nenhuma linha de produto. Peça ao gestor para ligar você a uma linha em Social Media → Equipe.
           </p>
         )}
+        {/* Primeiro uso: o quadro vazio diz o que fazer e leva até lá. */}
+        {data && data.veTodas && !data.temSocialLigada && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-500/30 bg-purple-500/5 px-5 py-4">
+            <p className="text-sm text-zinc-200">
+              {linhas.length === 0
+                ? "Para começar, cadastre as linhas de produto da empresa e depois ligue cada social media à linha dela."
+                : "Para o quadro mostrar os pedidos de cada social media, ligue cada uma à linha de produto dela em Equipe."}
+            </p>
+            <Link href={linhas.length === 0 ? "/configuracoes/linhas-projetos" : "/social/equipe"}
+              className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500">
+              {linhas.length === 0 ? "Cadastrar linhas" : "Ligar em Equipe"}
+            </Link>
+          </div>
+        )}
+        {data && todos.length === 0 && minhas.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-4">
+            <p className="text-sm text-zinc-200">Seu quadro está vazio. Anote a primeira ideia; quando ela tiver data, vira pedido para a equipe.</p>
+            <button type="button" onClick={() => setEscolhendo(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500">
+              <Plus className="h-4 w-4" /> Ideia
+            </button>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-wrap gap-2 text-[13px] text-zinc-400">
           <Resumo n={nestaSemana} texto="postagens nesta semana" />
           <Resumo n={comEquipe.length} texto="com a equipe" />
-          <Resumo n={paraRevisar} texto="para você revisar" alerta />
+          <Resumo n={paraRevisar} texto={minhas.length > 0 ? "para você revisar" : "para revisar"} alerta />
           <Resumo n={parados} texto={`parado${parados === 1 ? "" : "s"} há ${DIAS_PARADO} dias ou mais`} alerta />
         </div>
 
@@ -185,7 +251,7 @@ export function QuadroSocial() {
                     </h2>
                     <p className="mx-1 -mt-1 mb-1 text-xs text-zinc-500">{col.dica}</p>
                     {lista.map((c) => (
-                      <Cartao key={c.id} c={c} coluna={col.id} hoje={hoje} mostrarLinha={linhaAtual === "todas"}
+                      <Cartao key={c.id} c={c} coluna={col.id} hoje={hoje} mostrarLinha={linhaAtual === "todas" && (linhas.length > 1 || !c.linhaProjetoId)}
                         ocupado={ocupado === c.id} aoAbrir={() => abrirCard(c)}
                         aoAbrirDemanda={() => abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)}
                         aoDescartar={() => descartar(c)} aoCobrar={() => cobrar(c)}
@@ -211,7 +277,7 @@ export function QuadroSocial() {
       </div>
 
       {escolhendo && (
-        <EscolherNova linhas={minhas} linhaAtual={linhaAtual}
+        <EscolherNova linhas={linhasParaCriar} linhaAtual={linhaAtual}
           aoFechar={() => setEscolhendo(false)}
           aoEscolher={(area, linhaId) => { setEscolhendo(false); abrirFormulario(null, area, linhaId) }} />
       )}
@@ -288,8 +354,8 @@ function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, aoAbrir, aoAbrirDemand
             {d.prioridade === "urgente" ? "Urgente" : "Alta"}
           </span>
         )}
-        {dia && <span className={cn(TAG, "bg-white/5 font-semibold tabular-nums text-zinc-400")}>{d?.statusVisivel === "finalizado" ? "postado " : "posta "}{dataCurta(dia)}</span>}
-        {mostrarLinha && c.linha && <span className={cn(TAG, "bg-white/5 font-semibold text-zinc-400")}>{c.linha}</span>}
+        {dia && <span className={cn(TAG, "bg-white/5 font-semibold tabular-nums text-zinc-400")}>{c.direto ? "prazo " : d?.statusVisivel === "finalizado" ? "postado " : "posta "}{dataCurta(dia)}</span>}
+        {mostrarLinha && <span className={cn(TAG, "bg-white/5 font-semibold text-zinc-400")}>{c.linha ?? "Sem linha"}</span>}
       </div>
       <h3 className="text-sm font-semibold leading-snug text-zinc-100">{c.titulo}</h3>
       {d && <p className="-mt-1 font-mono text-[11px] text-zinc-500">{d.codigo}</p>}
@@ -308,7 +374,7 @@ function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, aoAbrir, aoAbrirDemand
         </p>
       )}
 
-      {(coluna === "ideia" || coluna === "plano") && c.podeMexer && (
+      {(coluna === "ideia" || coluna === "plano") && c.podeEditar && (
         <div className="flex flex-wrap gap-1.5" onClick={pare}>
           <Mini forte={coluna === "plano"} onClick={aoAbrirDemanda}>Abrir demanda</Mini>
           <Mini onClick={aoDescartar} disabled={ocupado}>Descartar</Mini>

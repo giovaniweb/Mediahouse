@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { escopoSocial, semLinha } from "@/lib/social"
+import { escopoSocial, podeEditarLinha, semLinha } from "@/lib/social"
 import { diaDaPostagem, lerIdeiaSocial } from "@/lib/social-quadro"
 
 type Params = { params: Promise<{ id: string }> }
@@ -18,7 +18,7 @@ async function ideiaEditavel(session: Session | null, id: string) {
     select: { id: true, linhaProjetoId: true, demandaId: true, dataPostagem: true },
   })
   if (!ideia) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
-  if (!ideia.linhaProjetoId || !escopo.minhas.has(ideia.linhaProjetoId)) return semLinha()
+  if (!podeEditarLinha(escopo, ideia.linhaProjetoId)) return semLinha()
   if (ideia.demandaId) return NextResponse.json({ error: "Esta ideia já virou pedido." }, { status: 409 })
   return { escopo, ideia }
 }

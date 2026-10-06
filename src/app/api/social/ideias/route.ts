@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { escopoSocial, semLinha } from "@/lib/social"
+import { escopoSocial, podeEditarLinha, semLinha } from "@/lib/social"
 import { lerIdeiaSocial } from "@/lib/social-quadro"
 
 // POST /api/social/ideias — "Salvar como ideia" no formulário de demanda.
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const lido = lerIdeiaSocial(body)
   if (!lido.ok) return NextResponse.json({ error: lido.motivo }, { status: 400 })
   const linhaProjetoId = typeof body.linhaProjetoId === "string" ? body.linhaProjetoId : ""
-  if (!escopo.minhas.has(linhaProjetoId)) return semLinha()
+  if (!podeEditarLinha(escopo, linhaProjetoId)) return semLinha()
 
   const ideia = await prisma.ideiaVideo.create({
     data: {
