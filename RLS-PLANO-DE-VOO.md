@@ -775,3 +775,24 @@ janela continua no mesmo banco.
 dia anterior. Se criarem zero, o cron voltou a não enxergar as empresas, e a
 volta é a mesma. O Passo 6 (`FORCE ROW LEVEL SECURITY`) fica para semanas
 depois, como já estava.
+
+### 05/10/2026 — `public` fora da API do Supabase
+
+A leitura de catálogo de produção mostrou `anon`, `authenticated` e
+`service_role` com privilégio total nas 12 funções e nas 89 tabelas de `public`,
+herdado dos privilégios padrão do projeto Supabase. Dava para chamar
+`org_por_credencial` e `consumir_limite_publico` pela API REST com a anon key,
+inserir em `leads_comerciais` e apagar linhas de `_prisma_migrations`. A
+migration `20261005140000_public_fora_da_api_supabase` tira os três papéis de
+`public` (e do privilégio padrão), sem tocar em `app_user`, `app_auth` nem no
+Storage. O `verificar-rls.mjs` passou a reprovar o que ela fecha.
+
+Duas consequências para este plano:
+
+- O `provar-rls` exige todas as migrations do código aplicadas; depois do merge,
+  esta entra na conta.
+- **Mudança de região (seção 7):** o projeto novo nasce com os mesmos
+  privilégios padrão, e o restore cria as tabelas por cima deles. A
+  `_prisma_migrations` restaurada já marca esta migration como aplicada, então
+  ela não roda de novo. O `conferir` vai barrar no `verificar-rls`. O conserto
+  é rodar o SQL desta migration no destino antes do `conferir`.

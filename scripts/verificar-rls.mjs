@@ -378,6 +378,54 @@ conferir(
     : `sem RLS: ${semRls.map((r) => r.relname).join(", ")}`
 )
 
+// Fronteira da API do Supabase (20261005140000). Função SECURITY DEFINER roda
+// com o poder do dono: quem a chama de fora da aplicação passa por cima do RLS.
+// PUBLIC existe em qualquer banco; anon/authenticated/service_role só no
+// Supabase, onde o privilégio padrão do projeto os põe em todo objeto novo.
+const { rows: definerAbertas } = await c.query(`
+  SELECT p.oid::regprocedure::text AS funcao, array_agg(x.nome::text ORDER BY x.nome) AS papeis
+    FROM pg_proc p
+   CROSS JOIN LATERAL (
+     SELECT 'PUBLIC' AS nome
+      WHERE EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a WHERE a.grantee = 0)
+     UNION ALL
+     SELECT rolname FROM pg_roles
+      WHERE rolname IN ('anon', 'authenticated', 'service_role') AND has_function_privilege(oid, p.oid, 'EXECUTE')
+   ) x
+   WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
+     AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                      WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
+   GROUP BY 1 ORDER BY 1`)
+conferir(
+  definerAbertas.length === 0,
+  definerAbertas.length === 0
+    ? "nenhuma função SECURITY DEFINER de public é chamável por PUBLIC ou pela API do Supabase"
+    : `SECURITY DEFINER aberta (falta REVOKE): ${definerAbertas.map((f) => `${f.funcao} → ${f.papeis.join(", ")}`).join("; ")}`
+)
+
+const { rows: papeisApi } = await c.query(
+  `SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role')`
+)
+if (papeisApi.length > 0) {
+  const { rows: abertos } = await c.query(`
+    SELECT r.rolname || ' em ' || c.oid::regclass::text AS item
+      FROM pg_class c JOIN pg_roles r ON r.rolname IN ('anon', 'authenticated', 'service_role')
+     WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+       AND EXISTS (SELECT 1 FROM aclexplode(c.relacl) a WHERE a.grantee = r.oid)
+    UNION ALL
+    SELECT r.rolname || ' no privilégio padrão de ' || pg_get_userbyid(d.defaclrole) || ' (' || d.defaclobjtype::text || ')'
+      FROM pg_default_acl d CROSS JOIN LATERAL aclexplode(d.defaclacl) a JOIN pg_roles r ON r.oid = a.grantee
+     WHERE d.defaclnamespace = 'public'::regnamespace AND r.rolname IN ('anon', 'authenticated', 'service_role')
+     ORDER BY 1`)
+  conferir(
+    abertos.length === 0,
+    abertos.length === 0
+      ? "public fechado para anon/authenticated/service_role (tabelas e privilégio padrão)"
+      : `public aberto para a API do Supabase: ${abertos.slice(0, 10).map((r) => r.item).join("; ")}` +
+          (abertos.length > 10 ? ` (+${abertos.length - 10})` : "")
+  )
+}
+
 await c.end()
 
 if (falhas > 0) {
