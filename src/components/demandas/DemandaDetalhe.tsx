@@ -47,6 +47,7 @@ import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { SelecaoChips } from "@/components/demandas/SelecaoChips"
 import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { extrairCopy } from "@/lib/copy-criativo"
 import { formatarData, prazoVencido } from "@/lib/datas"
 import { ehImagem, extensaoDe, nomeParaMostrar } from "@/lib/nome-arquivo"
@@ -338,6 +339,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     .filter((v): v is string => !!v)
 
   const { data: dataMe } = useSWR("/api/me", fetcher)
+  // O evento de cobertura mora em /coberturas, do módulo eventos. Sem o módulo
+  // a rota devolve ao Dashboard: nem converter nem abrir. Espera o perfil para
+  // não mostrar o botão e tirá-lo em seguida.
+  const temEventos = !!dataMe?.modulos && !rotaDeModuloDesligado("/coberturas", dataMe.modulos)
   const { data: dataOpcoesCaptacao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=captacao", fetcher)
   const { data: dataOpcoesEdicao } = useSWR<{ opcoes: EquipeOpcao[] }>("/api/equipe-disponivel?papel=edicao", fetcher)
   const { data: dataProdutos } = useSWR<{ produtos: { id: string; nome: string }[] }>("/api/produtos", fetcher)
@@ -2033,7 +2038,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
-          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+          {temEventos && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
               <div className={surface.sectionHead}>
                 <h2 className={surface.sectionTitle}><CalendarRange aria-hidden /> Evento de cobertura</h2>

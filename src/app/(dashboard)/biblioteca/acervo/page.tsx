@@ -27,7 +27,7 @@ export default function Acervo() {
   const aplicaveis = plano?.itens.filter(i=>i.aplicavel).length ?? 0
   return <>
     <Header title="Revisar acervo" />
-    <PageIntro eyebrow="AUDIOVISUAL / BIBLIOTECA / ACERVO" title="Recuperar o que já foi entregue." description="Localize referências já registradas e recupere seus vínculos. A simulação não verifica se o arquivo ainda existe no Storage ou no Drive.">
+    <PageIntro eyebrow="AUDIOVISUAL / BIBLIOTECA / ACERVO" title="Recuperar o que já foi entregue." description="Localize referências já registradas e recupere seus vínculos. A simulação não verifica se o arquivo ainda existe onde foi guardado.">
       <Link href="/biblioteca" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Voltar à biblioteca</Link>
     </PageIntro>
     <main className="p-6 space-y-5 max-w-5xl">

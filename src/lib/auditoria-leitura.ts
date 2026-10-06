@@ -13,7 +13,7 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "alerta.resolver": "Alerta resolvido", "alerta.ignorar": "Alerta ignorado", "alerta.snooze": "Alerta adiado",
   "evento.documento": "Documento do evento alterado", "evento.aprovacao": "Aprovação do evento registrada",
   "acesso.negado": "Acesso bloqueado", "permissoes.alteradas": "Permissões alteradas", "usuario.alterado": "Pessoa atualizada", "usuario.removido": "Acesso da pessoa removido",
-  "configuracao.alterada": "Configuração alterada", "trello.conexao": "Conexão Trello", "drive.conexao": "Conexão Google Drive", "arquivo.publicacao": "Publicação no portfólio",
+  "configuracao.alterada": "Configuração alterada", "trello.conexao": "Conexão Trello", "drive.conexao": "Conexão de pasta externa (desativada)", "arquivo.publicacao": "Publicação no portfólio",
   "manutencao.custos": "Custos retroativos", "manutencao.arquivos": "Arquivos retroativos", "manutencao.credenciais": "Proteção de credenciais", "manutencao.retencao": "Limpeza de detalhes vencidos",
   "ia.mutacao": "Registro criado por ferramenta IA", "ia.envio": "Solicitação de envio pela IA",
 }

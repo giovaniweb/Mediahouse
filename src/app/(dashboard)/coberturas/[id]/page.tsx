@@ -392,7 +392,7 @@ export default function EventoDetailPage() {
                 className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                Pasta no Google Drive
+                Pasta do material
               </a>
             )}
           </div>

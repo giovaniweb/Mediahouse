@@ -5,7 +5,7 @@
 // empresa padrão. Hoje o link antigo redireciona para a área, mas o link a
 // divulgar é este.
 //
-// Os seis links ficavam numa lista só, todos com o mesmo peso. O que o cliente
+// Os links ficavam numa lista só, todos com o mesmo peso. O que o cliente
 // usa (a área, o pedido e o agendamento de gravação) vem agora destacado; o
 // cadastro de videomaker, a galeria e o login vêm depois.
 //
@@ -26,9 +26,11 @@ const PARA_CLIENTES: LinkPublico[] = [
   { caminho: "/pedido?tipo=video", titulo: "Quero um vídeo", texto: "Pedido de vídeo, já sem a tela de escolher o tipo. Entra em Aprovações." },
   { caminho: "/pedido?tipo=conteudo", titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo. Entra em Aprovações." },
   { caminho: "/gravacao", titulo: "Quero um videomaker", texto: "Gravação numa tela só: cliente, endereço, data e horário. Aprovado, vira Job." },
+  { caminho: "/ideia", titulo: "Mandar ideia", texto: "Ideia ou pedido para a social media, sem login. Entra no quadro da Social." },
 ]
 const OUTROS: LinkPublico[] = [
   { caminho: "/videomaker", titulo: "Quero ser videomaker", texto: "Cadastro para quem quer trabalhar com a equipe." },
+  { caminho: "/designer", titulo: "Quero ser designer", texto: "Cadastro de designer para trabalhar com a equipe." },
   { caminho: "/galeria", titulo: "Galeria", texto: "Os vídeos publicados pela empresa." },
   { caminho: "/entrar", titulo: "Entrar no sistema", texto: "Login que já abre esta empresa.", noPrincipal: true },
 ]
@@ -91,7 +93,7 @@ export function AreaPublicaEmpresa() {
         <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Link para seus clientes</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-[1_1_16rem]">
-            <p className="text-sm text-zinc-300">A página de entrada, com as seis opções: vídeo, arte, videomaker, ser videomaker, galeria e entrar.</p>
+            <p className="text-sm text-zinc-300">A página de entrada, com todas as opções: vídeo, arte, videomaker, ideia, ser videomaker ou designer, galeria e entrar.</p>
             <code className="mt-1 block break-all text-sm font-semibold text-violet-100">{base}</code>
           </div>
           <Acoes url={base} titulo="Área da empresa" copiado={copiado} copiar={copiar} />

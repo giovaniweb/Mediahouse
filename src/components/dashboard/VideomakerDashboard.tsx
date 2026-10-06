@@ -85,7 +85,7 @@ function FolderInlineEdit({ demandaId, campo, valor, label, onSaved }: FolderInl
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Cole o link do Drive..."
+          placeholder="Cole o link da pasta..."
           className="flex-1 text-xs bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-zinc-200 outline-none focus:border-purple-500"
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false) }}
           autoFocus
@@ -217,8 +217,8 @@ export function VideomakerDashboard() {
               </h2>
               <p className="text-sm text-zinc-300 leading-relaxed max-w-2xl">
                 Aqui você acompanha suas demandas ativas, acessa os links das pastas de cobertura
-                e consulta suas notas fiscais. Você pode usar o campo abaixo para colar os links
-                do Google Drive das suas pastas de brutos e material pronto.
+                e consulta suas notas fiscais. Em cada demanda abaixo você cola o link das suas
+                pastas de brutos e de material pronto.
               </p>
             </div>
           </div>

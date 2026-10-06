@@ -129,7 +129,7 @@ export function SecaoArquivos({
               onKeyDown={e => {
                 if (e.key === "Enter") { e.preventDefault(); adicionarReferencia() }
               }}
-              placeholder="Cole aqui links do Drive, Instagram, YouTube..."
+              placeholder="Cole aqui links de referência: Instagram, YouTube, sites..."
               className={cn(inputClass, "pl-10")}
             />
           </div>
@@ -162,7 +162,7 @@ export function SecaoArquivos({
             type="url"
             value={linkBrutos}
             onChange={e => onLinkBrutos(e.target.value)}
-            placeholder="https://drive.google.com/... (pasta com o material bruto)"
+            placeholder="Cole o link da pasta com o material bruto"
             className={cn(inputClass, "pl-10")}
           />
         </div>

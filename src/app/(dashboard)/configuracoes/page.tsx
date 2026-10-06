@@ -1395,7 +1395,7 @@ function TabDepoimentos() {
               className={inpClass}
               value={videoUrl}
               onChange={e => setVideoUrl(e.target.value)}
-              placeholder="https://youtube.com/... ou https://drive.google.com/..."
+              placeholder="https://youtube.com/... ou envie o arquivo pelo NuFlow"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
