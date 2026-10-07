@@ -57,7 +57,7 @@ const pedido = {
 }
 const videomaker = {
   nome: "Video Maker", cpfCnpj: "12345678901", email: "vm@estudio.test", telefone: "31977776666",
-  cidade: "Belo Horizonte", estado: "MG",
+  cidade: "Belo Horizonte", estado: "MG", aceiteTermos: true,
 }
 // O cadastro de designer usa o mesmo formulário (e o mesmo corpo) do videomaker.
 const designer = { ...videomaker, nome: "Designer Teste", email: "ds@estudio.test" }

@@ -5,6 +5,8 @@ import { barrarExcesso } from "@/lib/limite-formulario"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { z } from "zod"
 import { declararOrg } from "@/lib/org-contexto"
+import { hashDoIp } from "@/lib/limite-publico"
+import { registrarAceite } from "@/lib/juridico/aceite-servidor"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -25,6 +27,9 @@ const schema = z.object({
   portfolio: z.string().url("URL do portfólio inválida").optional().or(z.literal("")),
   areasAtuacao: z.array(z.string()).default([]),
   observacoes: z.string().optional(),
+  // Aceite dos Termos do Profissional e da Política de Privacidade: sem ele
+  // não há cadastro (Onda 3). Gravado junto do perfil, como prova.
+  aceiteTermos: z.literal(true, { message: "É preciso aceitar os Termos do Profissional e a Política de Privacidade." }),
 })
 
 export async function POST(req: NextRequest) {
@@ -80,19 +85,27 @@ export async function POST(req: NextRequest) {
   // Só o que é público entra no perfil global — ele é a rede compartilhada e vai
   // ser legível por qualquer empresa sob RLS. CPF, endereço, PIX e diária são
   // dados de quem contrata: vão para o vínculo, com PIX cifrado.
-  const videomaker = await prisma.videomaker.create({
-    data: {
-      nome: data.nome,
-      email: data.email,
-      telefone: data.telefone,
-      cidade: data.cidade,
-      estado: data.estado,
-      redesSociais: data.redesSociais,
-      portfolio: data.portfolio || null,
-      areasAtuacao: data.areasAtuacao,
-      status: "pendente", // Aguarda aprovação interna
-    },
-    select: { id: true, nome: true, email: true },
+  // Perfil e aceite na mesma transação: cadastro sem a prova do aceite não existe.
+  const videomaker = await prisma.$transaction(async tx => {
+    const criado = await tx.videomaker.create({
+      data: {
+        nome: data.nome,
+        email: data.email,
+        telefone: data.telefone,
+        cidade: data.cidade,
+        estado: data.estado,
+        redesSociais: data.redesSociais,
+        portfolio: data.portfolio || null,
+        areasAtuacao: data.areasAtuacao,
+        status: "pendente", // Aguarda aprovação interna
+      },
+      select: { id: true, nome: true, email: true },
+    })
+    await registrarAceite(tx, { organizacaoId, tecnico: "cadastro.publico" }, {
+      organizacaoId, titularTipo: "videomaker", titularId: criado.id,
+      documentos: ["profissionais", "privacidade"], origem: "cadastro_videomaker", ipHash: hashDoIp(req.headers),
+    })
+    return criado
   })
 
   const gravou = await gravarDadosPrivadosVideomaker({

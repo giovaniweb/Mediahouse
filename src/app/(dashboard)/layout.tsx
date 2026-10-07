@@ -5,8 +5,21 @@ import { Toaster } from "sonner"
 import { PainelExecutor } from "@/components/foco/PainelExecutor"
 import { NavegacaoMovelProvider } from "@/components/layout/NavegacaoMovel"
 import { BarraMovel } from "@/components/layout/BarraMovel"
+import { TelaAceite } from "@/components/juridico/TelaAceite"
+import { aceitePendenteDoPainel } from "@/lib/juridico/aceite-painel"
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Primeiro acesso, ou versão nova dos termos: a tela de aceite ocupa o lugar
+  // do painel até a pessoa aceitar. A URL não muda, então o destino original
+  // (link de job do WhatsApp) abre logo depois.
+  const aceite = await aceitePendenteDoPainel()
+  if (aceite) {
+    return (
+      <SessionProvider>
+        <TelaAceite {...aceite} />
+      </SessionProvider>
+    )
+  }
   return (
     <SessionProvider>
       {/* Altura ancorada na viewport (h-screen, não min-h-screen): sem isso o

@@ -10,6 +10,7 @@ import { iniciarMotionDoHero } from "./heroMotion"
 import { AgendaDemo, AprovacoesDemo, AvisosDemo, EquipeDemo, FluxoDemo } from "./demos"
 import s from "./Landing.module.css"
 import { LogoNuFlow } from "@/components/marca/Marca"
+import { LinksJuridicos } from "@/components/juridico/LinksJuridicos"
 
 /** Sem número de vendas configurado, "Conversar" leva direto ao formulário de interesse. */
 function Conversar({ contactUrl, className, children }: { contactUrl: string | null; className: string; children: React.ReactNode }) {
@@ -197,6 +198,7 @@ export default function Landing({ contactUrl, areaCliente }: { contactUrl: strin
           <LogoNuFlow className={s.marca} />
           <span>Gestão de operações criativas</span>
           <Link href={areaCliente} className={s.rodapeCliente}>Sou cliente — fazer um pedido</Link>
+          <LinksJuridicos apenas={["termos", "privacidade", "profissionais"]} />
           <span className={s.rodapeNota}>As animações usam dados demonstrativos. Nenhum pedido ou mensagem é enviado.</span>
         </div>
       </footer>

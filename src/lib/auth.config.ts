@@ -95,6 +95,13 @@ export const authConfig: NextAuthConfig = {
         // aberta: confere escopo do objeto para sessão/token ou publicação
         // explícita, e devolve 404 para todo o resto.
         "/api/midia",
+        // Documentos jurídicos (Onda 3): quem ainda não tem conta precisa ler
+        // antes de aceitar, no cadastro de profissional e no primeiro acesso.
+        "/termos",
+        "/privacidade",
+        "/dpa",
+        "/profissionais/termos",
+        "/profissionais/avaliacoes",
       ]
       const isPublic = publicPaths.some(
         (p) => pathname === p || pathname.startsWith(p + "/")

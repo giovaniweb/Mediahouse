@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff, ArrowRight } from "lucide-react"
 import { loginAction } from "@/app/(auth)/login/actions"
+import { LinksJuridicos } from "@/components/juridico/LinksJuridicos"
 import styles from "./AuthSurface.module.css"
 
 type Props = {
@@ -63,5 +64,6 @@ export function FormularioLogin({
       <div><strong>Sou cliente — fazer um pedido</strong><span>Vídeo, arte ou videomaker para gravar. Não precisa de conta.</span></div>
       <ArrowRight size={18} aria-hidden="true"/>
     </Link>}
+    <LinksJuridicos className={styles.juridico} apenas={["termos", "privacidade"]} />
   </section>
 }

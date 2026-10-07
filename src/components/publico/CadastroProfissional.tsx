@@ -12,6 +12,7 @@ import { urlComOrg } from "@/lib/org-publica-cliente"
 import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
 import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
 import { AREAS_ATUACAO, linkDePortfolio, type Papel } from "@/lib/cadastro-profissional"
+import { DOCUMENTOS } from "@/lib/juridico/documentos"
 
 const TEXTO: Record<Papel, { titulo: string; extras: string }> = {
   videomaker: { titulo: "Seu olhar. Novas possibilidades.", extras: "Equipamentos, experiências, certificações, etc." },
@@ -43,6 +44,9 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
   const [enviado, setEnviado] = useState(false)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [aceite, setAceite] = useState(false)
+  const [faltouAceite, setFaltouAceite] = useState(false)
+  const aceiteRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState({
     // Passo 1 — Dados da empresa
@@ -82,6 +86,12 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
 
   async function enviar() {
     if (loading) return
+    if (!aceite) {
+      // O aviso fica ao lado da caixa: o erro geral mora no topo, fora da vista.
+      setFaltouAceite(true)
+      aceiteRef.current?.focus()
+      return
+    }
     setLoading(true)
     setErro(null)
     try {
@@ -95,6 +105,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
           portfolio,
           valorDiaria: form.valorDiaria ? parseFloat(form.valorDiaria) : undefined,
           redesSociais: form.redesSociais.filter(Boolean),
+          aceiteTermos: true,
         }),
       })
       if (!res.ok) throw new Error(await erroDaResposta(res))
@@ -315,6 +326,30 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                 <textarea className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10 resize-none"
                   rows={3} aria-label="Observações" value={form.observacoes} onChange={e => { e.target.setCustomValidity(""); set("observacoes", e.target.value) }}
                   placeholder={TEXTO[papel].extras} />
+              </div>
+
+              {/* Aviso de coleta (LGPD art. 9º) e aceite obrigatório: o que vai
+                  para a Rede e o que fica só com a empresa. */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+                <p className="text-xs leading-relaxed text-zinc-400">
+                  Seu perfil (nome, cidade, áreas e portfólio) entra na Rede do NuFlow e pode ser visto por outras empresas clientes, com a nota e as avaliações do seu trabalho. CPF/CNPJ, endereço, dados bancários e PIX ficam só com {destino.estado === "pronto" ? destino.empresa.nome : "a empresa deste link"}.
+                </p>
+                <label className="flex items-start gap-3 text-sm text-zinc-200 cursor-pointer">
+                  <input ref={aceiteRef} type="checkbox" required checked={aceite} aria-invalid={faltouAceite || undefined} aria-describedby={faltouAceite ? "aviso-aceite" : undefined}
+                    onChange={e => { setAceite(e.target.checked); setFaltouAceite(false) }}
+                    className="mt-0.5 h-4 w-4 flex-shrink-0 accent-violet-500" />
+                  <span>
+                    Li e aceito os{" "}
+                    <a href={DOCUMENTOS.profissionais.caminho} target="_blank" rel="noopener" className="text-[#c2abff] underline underline-offset-2">Termos do Profissional</a>
+                    {" "}e a{" "}
+                    <a href={DOCUMENTOS.privacidade.caminho} target="_blank" rel="noopener" className="text-[#c2abff] underline underline-offset-2">Política de Privacidade</a>,
+                    {" "}incluindo a{" "}
+                    <a href={DOCUMENTOS.avaliacoes.caminho} target="_blank" rel="noopener" className="text-[#c2abff] underline underline-offset-2">Política de Avaliações</a>.
+                  </span>
+                </label>
+                {faltouAceite && (
+                  <p id="aviso-aceite" role="alert" className="text-xs text-red-400">Para enviar, marque que leu e aceita os termos.</p>
+                )}
               </div>
 
               <div className="flex gap-3 mt-2">

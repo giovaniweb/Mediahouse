@@ -341,6 +341,20 @@ try {
   conferir(r.rows[0].n === 0, "revogado: o destino deixa de ver o card")
   r = await c.query(`SELECT count(*)::int n FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
   conferir(r.rows[0].n === 1, "revogado: a aresta permanece — a prova do acesso não é apagada")
+
+  // 18. Aceite dos termos (Onda 3): por empresa, e a prova não se reescreve.
+  for (const [id, org] of [["rls-aceite-a", A], ["rls-aceite-b", B]]) {
+    await inserir("aceites_termos", { id, organizacaoId: org, titularTipo: "usuario", titularId: "rls-user-1", documentos: ["termos@1.0"], origem: "primeiro_acesso" })
+  }
+  r = await comoApp(A, `SELECT id FROM aceites_termos WHERE id LIKE 'rls-aceite-%'`)
+  conferir(r.rows.length === 1 && r.rows[0].id === "rls-aceite-a", "aceites_termos: a empresa A vê só o aceite dela")
+  const aceiteNaOutra = await erroComoApp(A, `INSERT INTO aceites_termos (id, "organizacaoId", "titularTipo", "titularId", documentos, origem)
+                                                VALUES ('rls-aceite-x', '${B}', 'usuario', 'rls-user-1', ARRAY['termos@1.0'], 'primeiro_acesso')`)
+  conferir(aceiteNaOutra !== null, "aceites_termos: a empresa A não grava aceite na B")
+  const editar = await erroComoApp(A, `UPDATE aceites_termos SET documentos = ARRAY['termos@9.9'] WHERE id = 'rls-aceite-a'`)
+  conferir(editar !== null, "aceites_termos: a aplicação não edita aceite (sem UPDATE)")
+  const apagar = await erroComoApp(A, `DELETE FROM aceites_termos WHERE id = 'rls-aceite-a'`)
+  conferir(apagar !== null, "aceites_termos: a aplicação não apaga aceite (sem DELETE)")
 } finally {
   await c.query("ROLLBACK")
 }
