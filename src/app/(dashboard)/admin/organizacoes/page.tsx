@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { requireSuperAdmin } from "@/lib/org"
 import { PainelOrganizacoes } from "@/components/admin/PainelOrganizacoes"
+import { RecifrarDados } from "@/components/admin/RecifrarDados"
 
 // Painel da plataforma — acima das empresas.
 //
@@ -18,5 +19,10 @@ export default async function AdminOrganizacoesPage() {
   const guard = await requireSuperAdmin(session)
   if (guard instanceof NextResponse) notFound()
 
-  return <PainelOrganizacoes />
+  return (
+    <>
+      <PainelOrganizacoes />
+      <RecifrarDados />
+    </>
+  )
 }

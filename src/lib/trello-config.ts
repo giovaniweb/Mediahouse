@@ -2,7 +2,7 @@
 // ao slug TRELLO_ORG (ou ao padrão da instalação). Falha no banco não autoriza
 // fallback; uma configuração explicitamente desativada também não.
 import { prisma } from "@/lib/prisma"
-import { SLUG_ORG_PADRAO } from "@/lib/org"
+import { SLUG_LINKS_ANTIGOS } from "@/lib/org"
 
 export type CredenciaisTrello = { apiKey: string; token: string; boardId: string }
 
@@ -13,7 +13,7 @@ export type ConfigTrelloResolvida =
 // Dono do board declarado por variável, para o caso de a config ainda não estar
 // no banco. Continua existindo porque `config_trello` está vazia em produção: a
 // integração roda pelas variáveis de ambiente, que são de uma empresa só.
-const SLUG_DONO = process.env.TRELLO_ORG || SLUG_ORG_PADRAO
+const SLUG_DONO = process.env.TRELLO_ORG || SLUG_LINKS_ANTIGOS
 
 /**
  * Devolve as credenciais do Trello desta organização.

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { empresaDestino } from "@/lib/portal"
+import { empresaDoLinkAntigo } from "@/lib/portal"
 import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 
 // Os endereços antigos (/cadastrar-demanda e /cadastrar-videomaker, com ou sem
@@ -8,7 +8,8 @@ import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
 // para /sobre e, sem ?org=, um pedido sem dono aparente. Em vez de manter duas
 // portas para a mesma tela, o link antigo leva à área da empresa.
 //
-// A empresa é a do ?org= ou, sem ele, a padrão (ORG_PUBLICA_PADRAO). O resto da
+// A empresa é a do ?org= ou, sem ele, a dos links antigos (a Contourline, de quem
+// eram esses endereços). A área mostra o nome dela no topo antes do envio. O resto da
 // query segue junto (?tipo=cobertura, utm_*). Slug que não existe não cai na
 // padrão: mostra o aviso, para o pedido não ir à empresa errada sem ninguém ver.
 // Redirecionamento temporário (307): a empresa padrão é configuração e pode mudar.
@@ -25,7 +26,7 @@ export async function RedirecionarParaArea({ busca, trecho }: { busca: Promise<B
       else resto.append(chave, v)
     }
   }
-  const empresa = await empresaDestino(org)
+  const empresa = await empresaDoLinkAntigo(org)
   if (!empresa) {
     return <LinkIndisponivel titulo="Empresa não encontrada" texto="Este link não aponta para nenhuma empresa ativa no NuFlow. Confira o endereço com quem enviou." />
   }

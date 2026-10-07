@@ -3,24 +3,24 @@ import { NextRequest, NextResponse } from "next/server"
 // empresa. Ver src/lib/prisma-auth.ts.
 import { prismaAuth as prisma } from "@/lib/prisma-auth"
 import { sendEmailResetSenha } from "@/lib/email"
-import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
+import { consumirLimiteLogin } from "@/lib/limite-login"
 import crypto from "crypto"
 
 // POST /api/auth/esqueci-senha
 export async function POST(req: NextRequest) {
   try {
-    const limite = checarRateLimit(`esqueci-senha:${ipDaRequisicao(req.headers)}`, 5, 15 * 60 * 1000)
-    if (!limite.ok) {
-      return NextResponse.json(
-        { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
-        { status: 429, headers: { "Retry-After": String(limite.retryAfterSegundos) } }
-      )
-    }
-
-    const { email } = await req.json()
+    const { email } = await req.json().catch(() => ({}))
 
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Email obrigatório" }, { status: 400 })
+    }
+
+    // Cada pedido manda um e-mail: limite no banco por conta e por IP.
+    const limite = await consumirLimiteLogin("esqueci", req.headers, email)
+    if (limite !== "ok") {
+      return limite === "bloqueado"
+        ? NextResponse.json({ error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." }, { status: 429, headers: { "Retry-After": "900" } })
+        : NextResponse.json({ error: "Não foi possível enviar agora. Tente de novo em alguns minutos." }, { status: 503 })
     }
 
     const usuario = await prisma.usuario.findUnique({
@@ -28,23 +28,11 @@ export async function POST(req: NextRequest) {
       select: { id: true, nome: true, email: true, status: true },
     })
 
-    if (!usuario) {
-      return NextResponse.json(
-        { ok: false, error: "E-mail não encontrado. Verifique se digitou corretamente." },
-        { status: 404 }
-      )
-    }
-
-    if (usuario.status === "inativo") {
-      return NextResponse.json(
-        { ok: false, error: "Esta conta está inativa. Entre em contato com o administrador." },
-        { status: 403 }
-      )
-    }
-
-    // Usuário sem email não pode redefinir senha por este método
-    if (!usuario.email) {
-      return NextResponse.json({ ok: false, error: "Usuário sem e-mail cadastrado. Entre em contato com o administrador." }, { status: 400 })
+    // Conta que não existe, inativa ou sem e-mail recebe a MESMA resposta de
+    // quem recebeu o link. Antes a resposta dizia "e-mail não encontrado", e
+    // isso servia para descobrir quem tem conta antes de tentar a senha.
+    if (!usuario || usuario.status === "inativo" || !usuario.email) {
+      return NextResponse.json({ ok: true, enviado: true })
     }
 
     // Invalida tokens anteriores marcando-os como usados. Apagar não serve: o

@@ -61,8 +61,8 @@ describe("getWhatsappConfig", () => {
 
 describe("organização padrão das rotas públicas", () => {
   it("vem de configuração, não de slug cravado no código", async () => {
-    const { SLUG_ORG_PADRAO } = await import("@/lib/org")
-    expect(SLUG_ORG_PADRAO).toBe(process.env.ORG_PUBLICA_PADRAO || "contourline")
+    const { SLUG_LINKS_ANTIGOS } = await import("@/lib/org")
+    expect(SLUG_LINKS_ANTIGOS).toBe(process.env.ORG_PUBLICA_PADRAO || "contourline")
   })
 })
 

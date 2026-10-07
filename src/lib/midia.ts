@@ -106,6 +106,44 @@ export async function urlDeUpload(caminho: string): Promise<{ uploadUrl: string;
   return { uploadUrl: data.signedUrl, url: urlDaMidia(caminho) }
 }
 
+/**
+ * Tamanho, tipo declarado e os primeiros bytes do objeto que o navegador subiu.
+ * É o que o servidor tem para conferir um upload direto ao Storage, que não
+ * passa por ele (ver lib/midia-limite). null quando o objeto não existe ou o
+ * Storage não respondeu.
+ */
+export async function amostraDaMidia(caminho: string, bytes = 16): Promise<{ tamanho: number; tipo: string | null; inicio: Uint8Array } | null> {
+  if (!caminhoMidiaValido(caminho)) return null
+  const sb = cliente()
+  if (!sb) return null
+  const assinada = await sb.storage.from(BUCKET_PRIVADO).createSignedUrl(caminho, 60)
+  if (assinada.error || !assinada.data?.signedUrl) return null
+  // Um pedido só: o pedaço inicial traz o tamanho total no Content-Range.
+  const r = await fetch(assinada.data.signedUrl, { headers: { Range: `bytes=0-${bytes - 1}` }, redirect: "error", signal: AbortSignal.timeout(8000) }).catch(() => null)
+  if (!r || !r.ok) return null
+  const tipo = r.headers.get("content-type")
+  if (r.status !== 206) {
+    // Servidor que ignora o Range mandaria o arquivo inteiro: lê só o cabeçalho.
+    const tamanho = Number(r.headers.get("content-length"))
+    await r.body?.cancel().catch(() => {})
+    return Number.isFinite(tamanho) && tamanho > 0 ? { tamanho, tipo, inicio: new Uint8Array() } : null
+  }
+  const total = Number(/\/(\d+)$/.exec(r.headers.get("content-range") ?? "")?.[1])
+  if (!Number.isFinite(total)) return null
+  const inicio = new Uint8Array(await r.arrayBuffer()).slice(0, bytes)
+  return { tamanho: total, tipo, inicio }
+}
+
+/** Apaga um objeto do bucket privado (o upload recusado não fica ocupando espaço). */
+export async function removerMidia(caminho: string): Promise<boolean> {
+  if (!caminhoMidiaValido(caminho)) return false
+  const sb = cliente()
+  if (!sb) return false
+  const { error } = await sb.storage.from(BUCKET_PRIVADO).remove([caminho])
+  if (error) console.error("[midia] Falha ao apagar upload recusado:", error.message)
+  return !error
+}
+
 /** Sobe um buffer direto (uploads feitos no servidor, como a nota fiscal). */
 export async function subirArquivo(
   caminho: string,

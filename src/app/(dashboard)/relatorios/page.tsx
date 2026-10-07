@@ -5,6 +5,7 @@ import { ManagementSurface, ManagementIntro } from "@/components/layout/Manageme
 import { ConsumoIA } from "@/components/automacoes/ConsumoIA"
 import type { ApresentacaoRelatorio } from "@/lib/relatorio-contrato"
 import { ConteudoRelatorio } from "@/components/relatorios/ConteudoRelatorio"
+import { LinkRelatorioExterno } from "@/components/relatorios/LinkRelatorioExterno"
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
 import useSWR from "swr"
@@ -515,9 +516,7 @@ export default function RelatoriosPage() {
                     </select>
                   </>
                 )}
-                <a href={`/relatorio-executivo/${mesEspecifico || opcoesMes[0]?.value || ""}${areaRes === "design" ? "?area=design" : ""}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
-                  <ArrowUpRight className="w-3.5 h-3.5" /> Relatório externo
-                </a>
+                <LinkRelatorioExterno caminho={`/relatorio-executivo/${mesEspecifico || opcoesMes[0]?.value || ""}${areaRes === "design" ? "?area=design" : ""}`} />
                 <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-300 hover:bg-zinc-800 px-3 py-1.5 rounded-lg">
                   <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
                 </button>

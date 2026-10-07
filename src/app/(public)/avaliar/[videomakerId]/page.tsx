@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use, useEffect } from "react"
+import { useState, use, useEffect, useRef } from "react"
 import { Star, Send, CheckCircle2, AlertCircle, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
@@ -27,7 +27,10 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
   const [videomakerNome, setVideomakerNome] = useState<string | null>(null)
   const [videomakerLocal, setVideomakerLocal] = useState<string | null>(null)
   const [loadingInfo, setLoadingInfo] = useState(true)
-  const [naoEncontrado, setNaoEncontrado] = useState(false)
+  // Convite vencido, já usado ou ausente: a mensagem da rota, no lugar do formulário.
+  const [indisponivel, setIndisponivel] = useState("")
+  // O convite do link não muda na tela: guardado sem provocar outro render.
+  const convite = useRef("")
 
   const [nota, setNota] = useState(0)
   const [hovered, setHovered] = useState(0)
@@ -44,12 +47,14 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
   const starLabels = ["", "Ruim", "Regular", "Bom", "Muito bom", "Excelente"]
 
   useEffect(() => {
-    fetch(`/api/publico/videomaker-info/${videomakerId}`)
+    // O convite do serviço vem no link (?c=). Sem ele não há avaliação.
+    const c = new URLSearchParams(window.location.search).get("c") ?? ""
+    convite.current = c
+    fetch(`/api/publico/avaliar?c=${encodeURIComponent(c)}`)
       .then(async (r) => {
-        // 404 é link que não aponta para ninguém; falha de rede segue com o
-        // formulário (o envio diz o que houve).
-        if (r.status === 404) { setNaoEncontrado(true); return {} }
-        return r.json()
+        const data = await r.json().catch(() => ({}))
+        if (r.status === 410) { setIndisponivel(data.error || "Este link de avaliação não vale mais."); return {} }
+        return data
       })
       .then((data) => {
         if (data.videomaker) {
@@ -77,7 +82,7 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
       const res = await fetch("/api/publico/avaliar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videomakerId, nota, comentario, checklist }),
+        body: JSON.stringify({ convite: convite.current, nota, comentario, checklist }),
       })
 
       const data = await res.json()
@@ -95,8 +100,8 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
     }
   }
 
-  if (naoEncontrado) {
-    return <LinkIndisponivel titulo="Link de avaliação indisponível" texto="Este link não corresponde a nenhum profissional. Peça um novo link a quem enviou." />
+  if (indisponivel) {
+    return <LinkIndisponivel titulo="Link de avaliação indisponível" texto={indisponivel} />
   }
 
   if (resultado === "ok") {

@@ -25,7 +25,10 @@ import { orgPorRelatorioToken } from "@/lib/relatorio-executivo"
 import { GET as abrirAprovacao, POST as responderAprovacao } from "@/app/api/aprovacao-video/[token]/route"
 import { GET as minhasEmpresas, POST as trocarEmpresa } from "@/app/api/me/organizacoes/route"
 import { POST as esqueciSenha } from "@/app/api/auth/esqueci-senha/route"
-import { POST as avaliarPorQr } from "@/app/api/publico/avaliar/route"
+import { GET as conferirConvite, POST as avaliarPorQr } from "@/app/api/publico/avaliar/route"
+import { criarConvite } from "@/lib/convite-avaliacao"
+import { GET as saude } from "@/app/api/health/route"
+import { registrarTentativaDeLogin } from "@/lib/auditoria-login"
 import { GET as cronAgentes } from "@/app/api/cron/agentes/route"
 
 const admin = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL_TEST }) })
@@ -37,7 +40,7 @@ const json = (body: unknown) => ({ method: "POST", body: JSON.stringify(body), h
 
 beforeAll(async () => {
   await admin.organizacao.createMany({ data: [
-    { id: a, nome: a, slug: a, relatorioToken: tokenRelatorio },
+    { id: a, nome: a, slug: a, relatorioToken: tokenRelatorio, relatorioTokenExpiraEm: new Date(Date.now() + 86400000) },
     { id: b, nome: b, slug: b },
   ] })
   await admin.usuario.createMany({ data: [
@@ -145,9 +148,40 @@ describe("recuperação de senha", () => {
 })
 
 describe("avaliação pública por QR", () => {
-  it("grava e recalcula a média global, contando a avaliação privada de outra empresa", async () => {
+  it("sem convite (só o id do videomaker, o jeito antigo) é recusada", async () => {
     const r = await avaliarPorQr(req("/api/publico/avaliar", json({ videomakerId: vm, nota: 5 })))
+    expect(r.status).toBe(403)
+  })
+
+  it("com o convite do serviço: grava e recalcula a média global, contando a avaliação privada de outra empresa", async () => {
+    const { token } = criarConvite({ tipo: "videomaker", profissionalId: vm, demandaId: da, organizacaoId: a })
+    expect((await conferirConvite(req(`/api/publico/avaliar?c=${encodeURIComponent(token)}`))).status).toBe(200)
+    const r = await avaliarPorQr(req("/api/publico/avaliar", json({ convite: token, nota: 5 })))
     expect(r.status).toBe(200)
     expect((await admin.videomaker.findUniqueOrThrow({ where: { id: vm } })).avaliacao).toBe(3)
+    // Um uso por serviço: o mesmo convite (ou outro do mesmo serviço) não avalia de novo.
+    const outro = criarConvite({ tipo: "videomaker", profissionalId: vm, demandaId: da, organizacaoId: a }).token
+    expect((await avaliarPorQr(req("/api/publico/avaliar", json({ convite: outro, nota: 5 })))).status).toBe(409)
+    expect((await conferirConvite(req(`/api/publico/avaliar?c=${encodeURIComponent(token)}`))).status).toBe(410)
+  })
+})
+
+describe("Onda 1 sob RLS: saúde e registro de login", () => {
+  it("/api/health confere fila, rotinas e e-mail sem empresa declarada, e não perde o campo ok do banco", async () => {
+    const r = await saude()
+    expect(r.status).toBe(200)
+    const j = await r.json()
+    expect(j.ok).toBe(true)
+    expect(j.banco).toBe("ok")
+    expect(["ok", "atencao"]).toContain(j.situacao)
+    expect(j.problemas).not.toContain("verificacao:falhou")
+    expect(JSON.stringify(j)).not.toContain(a)
+  })
+
+  it("login recusado entra no histórico de cada empresa da pessoa, sem e-mail nem senha", async () => {
+    await registrarTentativaDeLogin(u, "recusado")
+    const eventos = await admin.eventoAuditoria.findMany({ where: { recursoId: u, acao: "login.recusado" } })
+    expect(eventos.map((e) => e.organizacaoId).sort()).toEqual([a, b].sort())
+    expect(JSON.stringify(eventos)).not.toContain("@example.invalid")
   })
 })

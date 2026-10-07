@@ -22,15 +22,18 @@ export function mesesDisponiveis(): { value: string; label: string }[] {
 }
 
 // Resolve a organização a partir do token de leitura externa (query `?token=` ou
-// header `Authorization: Bearer`). Retorna null quando o token não existe ou a
-// organização está inativa — o chamador responde 401/404, nunca agrega tudo.
+// header `Authorization: Bearer`). Retorna null quando o token não existe, venceu
+// ou a organização está inativa — o chamador responde 401/404, nunca agrega tudo.
+// Token sem data de validade não vale: desde 07/10/2026 todo token tem data (os
+// antigos ganharam 180 dias na migration 20261007120000).
 export async function orgPorRelatorioToken(token: string | null | undefined): Promise<string | null> {
   if (!token || token.length < 16) return null
   const org = await prismaAuth.organizacao.findUnique({
     where: { relatorioToken: token },
-    select: { id: true, ativo: true },
+    select: { id: true, ativo: true, relatorioTokenExpiraEm: true },
   })
-  return org?.ativo ? org.id : null
+  if (!org?.ativo || !org.relatorioTokenExpiraEm || org.relatorioTokenExpiraEm.getTime() <= Date.now()) return null
+  return org.id
 }
 
 export interface RelatorioExecutivo {

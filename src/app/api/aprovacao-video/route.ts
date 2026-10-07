@@ -62,9 +62,11 @@ export async function POST(req: NextRequest) {
     })
     if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + (expiresInDays as number) * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // padrão: 30 dias
+    // Padrão 30 dias; o pedido pode encurtar ou alongar, mas entre 1 e 90. Sem o
+    // teto, um número qualquer no corpo fazia o link do cliente valer para sempre.
+    const pedidos = Math.trunc(Number(expiresInDays))
+    const dias = Number.isFinite(pedidos) && pedidos >= 1 ? Math.min(pedidos, 90) : 30
+    const expiresAt = new Date(Date.now() + dias * 24 * 60 * 60 * 1000)
 
     const aprovacao = await prisma.aprovacaoVideo.create({
       data: {
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
       : demanda.titulo
 
     if (telefoneSolicitante) {
-      const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n\n🔗 Acesse pelo link abaixo:\n${link}\n\n_Válido por ${(expiresInDays as number | undefined) || 30} dias._`
+      const msg = `🎥 *NuFlow — Vídeo Pronto para Aprovação!*\n\nHey ${nomeSolicitante.split(" ")[0]}! O vídeo da sua demanda está pronto!\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n\n🔗 Acesse pelo link abaixo:\n${link}\n\n_Válido por ${dias} dias._`
 
       emSegundoPlano(() => sendWhatsappMessage(telefoneSolicitante, msg, demandaId as string, demanda.organizacaoId), "wa-link-aprovacao")
     }

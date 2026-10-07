@@ -4,6 +4,7 @@ import { caminhoMidia, subirArquivo, comToken } from "@/lib/midia"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { vigente } from "@/lib/links-publicos"
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -23,7 +24,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!organizacaoId) return NextResponse.json({ error: "Portal não encontrado" }, { status: 404 })
   declararOrg(organizacaoId)
   const fornecedor = await prisma.fornecedor.findUnique({
-    where: { portalToken: token },
+    // Link vencido responde como inexistente (lib/links-publicos).
+    where: { portalToken: token, portalTokenExpiraEm: vigente() },
     select: {
       id: true, nome: true, categoria: true, cidade: true, estado: true,
       custos: {
@@ -56,7 +58,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!organizacaoId) return NextResponse.json({ error: "Portal não encontrado" }, { status: 404 })
   declararOrg(organizacaoId)
   const fornecedor = await prisma.fornecedor.findUnique({
-    where: { portalToken: token },
+    // Link vencido responde como inexistente (lib/links-publicos).
+    where: { portalToken: token, portalTokenExpiraEm: vigente() },
     select: { id: true, nome: true, organizacaoId: true },
   })
   if (!fornecedor) return NextResponse.json({ error: "Portal não encontrado" }, { status: 404 })

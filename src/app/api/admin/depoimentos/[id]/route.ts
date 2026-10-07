@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { recusarUploads } from "@/lib/midia-limite"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
@@ -25,6 +26,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const body = await req.json()
     const { nome, cidade, videoUrl, thumbnailUrl, descricao, ativo, ordem } = body
+    // Tamanho e tipo conferidos no servidor (lib/midia-limite). Recusado = apagado.
+    const recusa = await recusarUploads([videoUrl, thumbnailUrl])
+    if (recusa) return NextResponse.json({ error: recusa.erro }, { status: recusa.status })
 
     const { count } = await prisma.depoimento.updateMany({
       where: { id, organizacaoId },

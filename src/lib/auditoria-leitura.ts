@@ -16,6 +16,7 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "configuracao.alterada": "Configuração alterada", "trello.conexao": "Conexão Trello", "drive.conexao": "Conexão de pasta externa (desativada)", "arquivo.publicacao": "Publicação no portfólio",
   "manutencao.custos": "Custos retroativos", "manutencao.arquivos": "Arquivos retroativos", "manutencao.credenciais": "Proteção de credenciais", "manutencao.retencao": "Limpeza de detalhes vencidos",
   "ia.mutacao": "Registro criado por ferramenta IA", "ia.envio": "Solicitação de envio pela IA",
+  "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
 }
 const resultados: Record<string,string> = { intencao: "iniciada", sucesso: "concluída", falha: "falhou", negado: "negada" }
 

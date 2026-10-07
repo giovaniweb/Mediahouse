@@ -8,7 +8,14 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { authConfig } from "./auth.config"
-import { checarRateLimit, limparRateLimit } from "@/lib/rate-limit"
+import { CredentialsSignin } from "next-auth"
+import { consumirLimiteLogin } from "@/lib/limite-login"
+import { registrarTentativaDeLogin } from "@/lib/auditoria-login"
+
+/** Tentativas demais: o login diz "aguarde", e não "senha errada". */
+export class LoginBloqueado extends CredentialsSignin {
+  code = "bloqueado"
+}
 
 const loginSchema = z.object({
   email: z.string().min(1), // Agora aceita email OU telefone
@@ -24,15 +31,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email ou Telefone", type: "text" },
         password: { label: "Senha", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
         const { email: input, password } = parsed.data
 
-        // Trava de força bruta por identificador: 10 tentativas a cada 15 min.
-        const chaveLimite = `login:${input.toLowerCase().trim()}`
-        if (!checarRateLimit(chaveLimite, 10, 15 * 60 * 1000).ok) return null
+        // Trava de força bruta no banco, por conta e por IP (lib/limite-login).
+        // Antes de olhar a senha: quem passou do teto não chega ao bcrypt.
+        const limite = await consumirLimiteLogin("login", request?.headers ?? new Headers(), input)
+        if (limite === "indisponivel") return null
+        const bloqueado = limite === "bloqueado"
 
         // Detectar se é telefone ou email
         const isPhone = /^\+?\d[\d\s()-]{7,}$/.test(input.trim())
@@ -65,12 +74,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           })
         }
 
+        if (bloqueado) {
+          if (usuario) await registrarTentativaDeLogin(usuario.id, "bloqueado")
+          throw new LoginBloqueado()
+        }
+
         if (!usuario || usuario.status === "inativo") return null
 
         const senhaValida = await bcrypt.compare(password, usuario.senhaHash)
-        if (!senhaValida) return null
-
-        limparRateLimit(chaveLimite)
+        if (!senhaValida) {
+          await registrarTentativaDeLogin(usuario.id, "recusado")
+          return null
+        }
 
         // Organização ativa (Fase 1: a primeira/única membership do usuário)
         const membership = await prismaAuth.usuarioOrganizacao.findFirst({

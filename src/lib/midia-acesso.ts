@@ -35,7 +35,7 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
     }
     if (tipo === "nf") {
       if (await prisma.notaFiscalUpload.findFirst({ where: { token, url, demanda: { organizacaoId: org } }, select: { id: true } })) return true
-      if (await prisma.custoEvento.findFirst({ where: { notaFiscalUrl: url, evento: { organizacaoId: org }, fornecedor: { portalToken: token, organizacaoId: org } }, select: { id: true } })) return true
+      if (await prisma.custoEvento.findFirst({ where: { notaFiscalUrl: url, evento: { organizacaoId: org }, fornecedor: { portalToken: token, organizacaoId: org, portalTokenExpiraEm: { gt: new Date() } } }, select: { id: true } })) return true
     }
     return false
   })

@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const data = parsed.data
 
   // A organização que vai receber e aprovar este cadastro. Vem do `?org=` do
-  // formulário; sem ele, `orgPublica` cai na Contourline (legado). É a MESMA org
+  // formulário; sem ele, não há empresa (nada de padrão). É a MESMA org
   // que recebe o alerta logo abaixo — antes o alerta tinha dono e o dado não.
   const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
   if (!organizacaoId) {

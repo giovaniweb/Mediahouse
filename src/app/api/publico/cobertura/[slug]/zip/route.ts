@@ -7,6 +7,7 @@ const archiver = require("archiver") as typeof import("archiver")
 import { Readable } from "stream"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { vigente } from "@/lib/links-publicos"
 
 /** Convert a Web ReadableStream to a Node.js Readable */
 function webStreamToNodeReadable(webStream: ReadableStream<Uint8Array>): Readable {
@@ -51,7 +52,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   const senha = req.nextUrl.searchParams.get("senha")
 
   const cobertura = await prisma.eventoCobertura.findUnique({
-    where: { slug },
+    // Página vencida responde como inexistente (lib/links-publicos).
+    where: { slug, linkPublicoExpiraEm: vigente() },
     select: {
       id: true,
       titulo: true,

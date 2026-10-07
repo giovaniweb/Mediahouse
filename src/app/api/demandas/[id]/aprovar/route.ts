@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
-import { sendEmailNotificacao } from "@/lib/email"
+import { escaparHtml, sendEmailNotificacao } from "@/lib/email"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -178,24 +178,28 @@ async function notificarSolicitante({
     reaberta: `🔄 *NuFlow*\n\nSua demanda *${demanda.codigo}* foi reaberta para análise. Em breve você receberá uma nova resposta.`,
   }
 
+  // Nome, título e motivo vêm de quem preencheu: escapados antes de entrar no HTML.
+  const nomeHtml = escaparHtml(solicitante?.nome ?? "Solicitante")
+  const codigoHtml = escaparHtml(demanda.codigo)
+  const tituloHtml = escaparHtml(demanda.titulo)
   const htmlsEmail: Record<string, string> = {
     aprovada: `
       <h2 style="color:#16a34a">✅ Demanda Aprovada!</h2>
-      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
-      <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>aprovada</strong> e já está na fila de produção.</p>
+      <p>Olá, <strong>${nomeHtml}</strong>!</p>
+      <p>Sua demanda <strong>${codigoHtml} — ${tituloHtml}</strong> foi <strong>aprovada</strong> e já está na fila de produção.</p>
       <p>Acompanhe o progresso no sistema NuFlow.</p>
     `,
     recusada: `
       <h2 style="color:#dc2626">❌ Demanda Recusada</h2>
-      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
-      <p>Infelizmente sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi <strong>recusada</strong>.</p>
-      ${motivo ? `<p><strong>Motivo:</strong> ${motivo}</p>` : ""}
+      <p>Olá, <strong>${nomeHtml}</strong>!</p>
+      <p>Infelizmente sua demanda <strong>${codigoHtml} — ${tituloHtml}</strong> foi <strong>recusada</strong>.</p>
+      ${motivo ? `<p><strong>Motivo:</strong> ${escaparHtml(motivo)}</p>` : ""}
       <p>Caso queira recorrer, entre em contato com a equipe de operações.</p>
     `,
     reaberta: `
       <h2 style="color:#2563eb">🔄 Demanda Reaberta</h2>
-      <p>Olá, <strong>${solicitante?.nome ?? "Solicitante"}</strong>!</p>
-      <p>Sua demanda <strong>${demanda.codigo} — ${demanda.titulo}</strong> foi reaberta para nova análise.</p>
+      <p>Olá, <strong>${nomeHtml}</strong>!</p>
+      <p>Sua demanda <strong>${codigoHtml} — ${tituloHtml}</strong> foi reaberta para nova análise.</p>
       <p>Em breve você receberá uma nova resposta.</p>
     `,
   }

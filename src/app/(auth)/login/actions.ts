@@ -1,6 +1,6 @@
 "use server"
 
-import { signIn } from "@/lib/auth"
+import { signIn, LoginBloqueado } from "@/lib/auth"
 import { AuthError } from "next-auth"
 import { destinoDoLogin } from "@/lib/destino-login"
 
@@ -14,6 +14,9 @@ export async function loginAction(login: string, password: string, destino?: str
       redirectTo: destinoDoLogin(destino),
     })
   } catch (error) {
+    if (error instanceof LoginBloqueado || (error instanceof AuthError && (error as { code?: string }).code === "bloqueado")) {
+      return { error: "Muitas tentativas de entrar. Aguarde 15 minutos e tente de novo, ou use \"Esqueci minha senha\"." }
+    }
     if (error instanceof AuthError) {
       return { error: "Email/telefone ou senha incorretos." }
     }

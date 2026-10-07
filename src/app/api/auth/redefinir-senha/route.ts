@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 // Recuperação de senha é caminho de autenticação: acontece sem sessão e sem
 // empresa. Ver src/lib/prisma-auth.ts.
 import { prismaAuth as prisma } from "@/lib/prisma-auth"
-import { checarRateLimit, ipDaRequisicao } from "@/lib/rate-limit"
+import { consumirLimiteLogin } from "@/lib/limite-login"
 import bcrypt from "bcryptjs"
 
 // GET /api/auth/redefinir-senha?token=xxx — valida se token é válido
@@ -35,12 +35,11 @@ export async function GET(req: NextRequest) {
 // POST /api/auth/redefinir-senha — efetua a troca de senha
 export async function POST(req: NextRequest) {
   try {
-    const limite = checarRateLimit(`redefinir-senha:${ipDaRequisicao(req.headers)}`, 10, 15 * 60 * 1000)
-    if (!limite.ok) {
-      return NextResponse.json(
-        { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
-        { status: 429, headers: { "Retry-After": String(limite.retryAfterSegundos) } }
-      )
+    const limite = await consumirLimiteLogin("redefinir", req.headers)
+    if (limite !== "ok") {
+      return limite === "bloqueado"
+        ? NextResponse.json({ error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." }, { status: 429, headers: { "Retry-After": "900" } })
+        : NextResponse.json({ error: "Não foi possível trocar a senha agora. Tente de novo em alguns minutos." }, { status: 503 })
     }
 
     const { token, novaSenha } = await req.json()

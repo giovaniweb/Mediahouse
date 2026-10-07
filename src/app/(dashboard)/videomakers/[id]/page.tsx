@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { VideomakerPerformance } from "@/components/VideomakerPerformance"
 import { mensagemDeErro } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
+import { ConviteAvaliacao } from "@/components/pessoas/ConviteAvaliacao"
 
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -63,19 +64,10 @@ export default function VideomakerDetalhePage() {
 
   // QR
   const [showQR, setShowQR] = useState(false)
-  const [QRCode, setQRCode] = useState<React.ComponentType<{ value: string; size?: number; bgColor?: string; fgColor?: string; level?: string }> | null>(null)
 
-  async function loadQR() {
-    if (!QRCode) {
-      const mod = await import("qrcode.react")
-      setQRCode(mod.QRCodeSVG as React.ComponentType<{ value: string; size?: number; bgColor?: string; fgColor?: string; level?: string }>)
-    }
+  function loadQR() {
     setShowQR(true)
   }
-
-  const avaliacaoUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/avaliar/${id}`
-    : ""
 
   function startEdit() {
     if (!vm) return
@@ -721,37 +713,15 @@ export default function VideomakerDetalhePage() {
         </div>
       )}
 
-      {/* Modal QR */}
+      {/* Modal QR: convite de avaliação por serviço */}
       {showQR && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl mx-4 text-center">
-            <h3 className="font-semibold text-white mb-2">QR Code de Avaliação</h3>
-            <p className="text-sm text-zinc-400 mb-6">
-              Compartilhe este QR Code para o cliente avaliar {vm.nome}
-            </p>
-            <div className="flex justify-center mb-6">
-              <div className="bg-white p-4 rounded-xl">
-                {QRCode ? (
-                  <QRCode value={avaliacaoUrl} size={180} bgColor="#ffffff" fgColor="#18181b" level="M" />
-                ) : (
-                  <div className="w-44 h-44 flex items-center justify-center text-zinc-400 text-sm">Carregando...</div>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2 mb-4">
-              <span className="flex-1 text-xs text-zinc-400 truncate">{avaliacaoUrl}</span>
-              <button
-                onClick={() => { navigator.clipboard.writeText(avaliacaoUrl); toast.success("Link copiado!") }}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            </div>
-            <button onClick={() => setShowQR(false)} className="w-full border border-zinc-700 text-zinc-300 py-2 rounded-xl hover:bg-zinc-800 text-sm">
-              Fechar
-            </button>
-          </div>
-        </div>
+        <ConviteAvaliacao
+          tipo="videomaker"
+          profissionalId={id}
+          nome={vm.nome}
+          servicos={vm.demandas ?? []}
+          onFechar={() => setShowQR(false)}
+        />
       )}
     </>
   )

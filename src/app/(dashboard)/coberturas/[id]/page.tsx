@@ -1,5 +1,6 @@
 "use client"
 
+import { ValidadeLink } from "@/components/ui/ValidadeLink"
 import { useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
@@ -50,6 +51,7 @@ type Cobertura = {
   id: string
   titulo: string
   slug: string
+  linkPublicoExpiraEm: string
   tipo: string
   status: string
   descricao: string | null
@@ -435,6 +437,11 @@ export default function EventoDetailPage() {
                     <QrCode className="w-4 h-4" />
                     {showQR ? "Ocultar QR Code" : "Mostrar QR Code"}
                   </button>
+                  <ValidadeLink expiraEm={cobertura.linkPublicoExpiraEm} gerar={async () => {
+                    const r = await fetch(`/api/coberturas/${coberturaId}/novo-link`, { method: "POST" })
+                    if (r.ok) mutate()
+                    return r.ok
+                  }} />
                 </div>
                 {showQR && (
                   <div className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl w-fit">

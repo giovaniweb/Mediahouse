@@ -1719,6 +1719,8 @@ model EventoCobertura {
   linkDrive           String?
   linkDownloadPublico Boolean         @default(false)
   senhaDownload       String?
+  /// Validade da página pública da cobertura (/e/<slug>). As de antes de 07/10/2026 ganharam 180 dias a partir daí.
+  linkPublicoExpiraEm DateTime        @default(dbgenerated("(now() + '180 days'::interval)"))
   produtoId           String?
   createdById         String
   createdAt           DateTime        @default(now())
@@ -2077,6 +2079,8 @@ model Fornecedor {
   avaliacao      Float?              @default(5.0)
   status         StatusUsuario       @default(ativo)
   portalToken    String              @unique @default(cuid())
+  /// Validade do link do portal. Os links de antes de 07/10/2026 ganharam 90 dias a partir daí.
+  portalTokenExpiraEm DateTime       @default(dbgenerated("(now() + '90 days'::interval)"))
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -2208,6 +2212,8 @@ model Organizacao {
   // Token opt-in para leitura externa do Relatório Executivo (página pública + MCP).
   // Sem token, os endpoints públicos não resolvem organização e respondem 401/404.
   relatorioToken String?  @unique
+  /// Validade do relatorioToken. Sem data = sem token. Ver src/lib/relatorio-executivo.ts.
+  relatorioTokenExpiraEm DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

@@ -68,27 +68,28 @@ async function organizacaoEscolhida(): Promise<string | null> {
 }
 
 /**
- * Organização que recebe tráfego público sem `?org=`.
+ * A empresa dos LINKS ANTIGOS: os endereços de antes da área por empresa
+ * (/cadastrar-demanda, /cadastrar-videomaker sem ?org=, /sobre), que só existiam
+ * para a Contourline e continuam impressos em QR codes e mensagens.
  *
- * Deixou de ser "contourline" cravado no código: agora é `ORG_PUBLICA_PADRAO`.
- * A diferença importa quando existe uma segunda empresa — sem isso, todo link
- * público sem slug continuaria caindo na primeira, para sempre.
- *
- * Por que ainda existe um padrão em vez de 404: nenhuma página pública passa
- * `?org=` hoje, então exigir o slug tiraria do ar os formulários que já estão
- * em uso. A propagação do slug nas páginas é o que permite aposentá-lo.
+ * Serve só para NAVEGAR: leva a pessoa à área dessa empresa, com o nome e o logo
+ * dela no topo, e é ali que ela decide enviar. Nenhuma API usa isto para gravar
+ * ou ler: sem a empresa no endereço, `orgPublica` devolve null e a rota recusa.
  */
-export const SLUG_ORG_PADRAO = process.env.ORG_PUBLICA_PADRAO || "contourline"
+export const SLUG_LINKS_ANTIGOS = process.env.ORG_PUBLICA_PADRAO || "contourline"
 
-// Resolve a organização de uma rota PÚBLICA (sem sessão) a partir de `?org=<slug>`.
-// Sem slug, cai na SLUG_ORG_PADRAO. O ponto é nunca consultar sem organização
-// nenhuma, que era o que fazia as vitrines públicas agregarem dados de todas as
-// empresas.
+/**
+ * Resolve a organização de uma rota PÚBLICA (sem sessão) a partir de
+ * `?org=<slug>`, que o formulário tira do próprio endereço (/c/<slug> ou o
+ * subdomínio — ver org-publica-cliente).
+ *
+ * Sem slug, null. Até 07/10 caía na empresa padrão: um formulário aberto sem a
+ * empresa no endereço gravava o pedido de qualquer cliente no quadro da
+ * Contourline. Agora quem chama recusa (404) ou devolve vazio.
+ */
 export async function orgPublica(slug: string | null | undefined): Promise<string | null> {
-  const alvo = slug?.trim() || SLUG_ORG_PADRAO
-  if (!slug?.trim()) {
-    console.warn(`[org] rota pública sem ?org= — usando o padrão "${SLUG_ORG_PADRAO}".`)
-  }
+  const alvo = slug?.trim().toLowerCase()
+  if (!alvo) return null
   const org = await prismaAuth.organizacao.findUnique({
     where: { slug: alvo },
     select: { id: true, ativo: true },
