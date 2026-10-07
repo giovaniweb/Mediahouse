@@ -2,8 +2,8 @@ import { EMPRESA_NUFLOW as E } from "@/lib/juridico/empresa"
 
 export const resumo = [
   "O NuFlow é uma ferramenta. Quem contrata e paga você é a empresa, não o NuFlow. Não existe vínculo de emprego com o NuFlow, e o cadastro é gratuito.",
-  "Seus dados fiscais e bancários ficam só com a empresa a que você se candidatou. Na Rede, outras empresas veem seu portfólio, sua nota e as avaliações do seu trabalho.",
-  "Você pode responder a qualquer avaliação, contestar a que for injusta e apagar sua conta quando quiser.",
+  "Seus dados fiscais e bancários ficam só com a empresa a que você se candidatou. Na Rede, outras empresas veem seu portfólio e a média das notas do seu trabalho, sem comentários.",
+  "Você pode contestar uma nota injusta, sair da Rede e apagar sua conta quando quiser.",
 ]
 
 export const texto = `
@@ -52,28 +52,29 @@ O que outras empresas clientes veem antes de contratar você:
 
 - nome, cidade e estado, áreas de atuação;
 - portfólio e redes sociais que você informou;
-- seu score e as avaliações recebidas, com comentários e as suas respostas.
+- a média das notas recebidas e a quantidade de avaliações. Comentários não aparecem na Rede.
 
 O que **não** aparece: e-mail, telefone, CPF ou CNPJ, endereço, dados bancários, PIX, valor de diária. Uma empresa nova que queira trabalhar com você envia um convite pelo NuFlow, e você decide se aceita.
 
 O perfil é visto só por empresas clientes logadas. Não é aberto na internet nem aparece em buscadores.
 
-O NuFlow trata o perfil e o score como controlador, para cumprir estes Termos e no legítimo interesse das empresas de conhecer o trabalho de quem contratam, com as garantias desta seção e da seção 6.
+O NuFlow trata o perfil e a média das notas como controlador, para cumprir estes Termos e no legítimo interesse das empresas de conhecer o trabalho de quem contratam, com as garantias desta seção e da seção 6.
 
-## 6. Avaliações e score
+## 6. Avaliações e média das notas
 
-Ao final de um trabalho feito por meio do NuFlow, a empresa que contratou e, por convite dela, o cliente dela podem avaliar o trabalho, com nota de 1 a 5, recomendação e comentário opcional.
+Ao final de um trabalho feito por meio do NuFlow, a empresa que contratou e, por convite dela, o cliente dela podem avaliar o trabalho com nota de 1 a 5 e um comentário opcional.
 
-- As avaliações tratam **só do trabalho**: qualidade, prazo, comunicação e profissionalismo. Não podem conter ofensa, dado pessoal de clientes ou terceiros, nem acusação de crime. As regras completas estão na [Política de Avaliações](/profissionais/avaliacoes).
-- O **score** é a média das notas recebidas nos últimos 24 meses, aparece a partir de 3 avaliações e é recalculado a cada nova avaliação. Notas removidas por violar as regras saem do cálculo.
-- Os comentários passam por moderação antes de aparecer. Você é avisado quando recebe uma avaliação.
-- O NuFlow não é autor das avaliações, não verifica a veracidade dos fatos narrados e não as endossa. Quem avalia responde pelo que escreveu.
+- Na Rede aparecem só a **média das notas** e a quantidade de avaliações. As notas uma a uma, os comentários e o nome de quem avaliou não aparecem para outras empresas.
+- O comentário fica visível só para a empresa que contratou e para você.
+- As avaliações tratam **só do trabalho**: qualidade, prazo, comunicação e profissionalismo. As regras completas estão na [Política de Avaliações](/profissionais/avaliacoes).
+- A média considera as notas dos últimos 24 meses, aparece a partir de 3 avaliações e é recalculada a cada nova avaliação. Notas removidas por violar as regras saem do cálculo.
+- Você é avisado quando recebe uma avaliação.
+- O NuFlow não é autor das avaliações, não verifica a veracidade do que foi escrito e não as endossa. Quem avalia responde pelo que avaliou.
 
-## 7. Seu direito de resposta e de contestação
+## 7. Seu direito de contestação
 
-- **Resposta:** você pode publicar uma resposta a qualquer avaliação, que aparece logo abaixo dela. A resposta segue as mesmas regras de conteúdo.
-- **Contestação:** se uma avaliação violar as regras, tiver fato falso, não se referir a um trabalho real ou vier de quem tem conflito de interesse, você pode contestar pelo botão da avaliação ou pelo e-mail ${E.emailEncarregado}. Enquanto a contestação for analisada, o comentário contestado pode ficar oculto. O NuFlow decide, em regra, em até 5 dias úteis, explica o motivo e você pode pedir uma segunda análise.
-- **Revisão do score:** você pode pedir revisão do cálculo do score, como garante o art. 20 da LGPD.
+- **Contestação:** se uma nota não se referir a um trabalho real, vier de quem tem conflito de interesse, for retaliação ou violar as regras, você pode contestar pelo botão da avaliação ou pelo e-mail ${E.emailEncarregado}. Durante a análise, a nota contestada sai da média. O NuFlow decide, em regra, em até 5 dias úteis, explica o motivo e você pode pedir uma segunda análise. Você também pode contestar um comentário que viole as regras.
+- **Revisão da média:** você pode pedir revisão do cálculo, como garante o art. 20 da LGPD.
 
 ## 8. Suas obrigações
 
@@ -98,7 +99,7 @@ O NuFlow pode suspender ou encerrar seu cadastro se você descumprir estes Termo
 
 Você pode pedir a exclusão a qualquer momento, pelo e-mail ${E.emailEncarregado} ou pela Plataforma, quando houver essa opção. Depois do pedido:
 
-- seu perfil sai da Rede em até 2 dias úteis e é apagado, com as avaliações e o score, em até 15 dias;
+- seu perfil sai da Rede em até 2 dias úteis e é apagado, com as notas e a média, em até 15 dias;
 - para impedir a manipulação da Rede, o NuFlow guarda por até 3 anos, de forma restrita, o seu CPF ou CNPJ e as notas do perfil excluído. Se houver novo cadastro com o mesmo documento, as avaliações anteriores voltam;
 - os dados fiscais e o histórico de trabalhos que estão com cada empresa com que você trabalhou ficam sob responsabilidade dela, que pode ter de guardá-los pelo prazo da lei. O NuFlow avisa essas empresas do seu pedido;
 - o registro do seu aceite destes Termos é guardado pelo prazo de prescrição aplicável, como prova;

@@ -332,7 +332,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                   para a Rede e o que fica só com a empresa. */}
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
                 <p className="text-xs leading-relaxed text-zinc-400">
-                  Seu perfil (nome, cidade, áreas e portfólio) entra na Rede do NuFlow e pode ser visto por outras empresas clientes, com a nota e as avaliações do seu trabalho. CPF/CNPJ, endereço, dados bancários e PIX ficam só com {destino.estado === "pronto" ? destino.empresa.nome : "a empresa deste link"}.
+                  Seu perfil (nome, cidade, áreas e portfólio) entra na Rede do NuFlow e pode ser visto por outras empresas clientes, com a média das notas do seu trabalho (sem comentários). CPF/CNPJ, endereço, dados bancários e PIX ficam só com {destino.estado === "pronto" ? destino.empresa.nome : "a empresa deste link"}.
                 </p>
                 <label className="flex items-start gap-3 text-sm text-zinc-200 cursor-pointer">
                   <input ref={aceiteRef} type="checkbox" required checked={aceite} aria-invalid={faltouAceite || undefined} aria-describedby={faltouAceite ? "aviso-aceite" : undefined}

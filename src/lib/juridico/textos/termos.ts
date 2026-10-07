@@ -20,7 +20,7 @@ Fazem parte destes Termos, como se estivessem aqui escritos: a [Política de Pri
 ## 2. Definições
 
 - **Plataforma:** o sistema NuFlow, acessado pela internet, com as funções descritas na seção 3.
-- **Conteúdo do Cliente:** todo dado, texto, arquivo, vídeo, imagem, briefing, comentário e registro que a Empresa, seus Usuários ou pessoas convidadas por ela inserem na Plataforma. Não são Conteúdo do Cliente as avaliações e respostas publicadas na Rede nem os dados de perfil que o Profissional fornece ao NuFlow ao aceitar os Termos do Profissional. Desses dados, o NuFlow é o controlador.
+- **Conteúdo do Cliente:** todo dado, texto, arquivo, vídeo, imagem, briefing, comentário e registro que a Empresa, seus Usuários ou pessoas convidadas por ela inserem na Plataforma. Não são Conteúdo do Cliente as notas que entram na média da Rede nem os dados de perfil que o Profissional fornece ao NuFlow ao aceitar os Termos do Profissional. Desses dados, o NuFlow é o controlador.
 - **Profissional:** videomaker, designer ou outro prestador externo que se cadastra na Plataforma para trabalhar com empresas clientes, nos termos dos [Termos do Profissional](/profissionais/termos).
 - **Rede:** o conjunto de perfis de Profissionais visível às empresas clientes do NuFlow, com o histórico de avaliações de cada um.
 - **Usuário externo:** Profissional, cliente da Empresa que aprova uma entrega ou pessoa que só envia pedidos. Usuário externo não conta para o preço.
@@ -137,7 +137,7 @@ Enquanto o contrato durar, e por **30 dias depois do encerramento**, o Administr
 
 Passados os 30 dias, o NuFlow apaga o Conteúdo do Cliente da Plataforma em até 60 dias. As cópias de segurança, inclusive as guardadas fora da Plataforma, são apagadas no ciclo de renovação, em até 90 dias do encerramento. Fica guardado só o que a lei obriga ou o que for necessário para a defesa do NuFlow, como notas fiscais emitidas pelo NuFlow, registros de acesso pelo prazo do Marco Civil da Internet e os registros de aceite destes Termos, pelo prazo de prescrição aplicável.
 
-Os perfis de Profissionais na Rede não fazem parte do Conteúdo do Cliente. A avaliação publicada mostra o nome da Empresa avaliadora e a data, nunca o nome da pessoa que avaliou. A Empresa concorda com essa exibição, que não viola a seção 15. Depois do encerramento do contrato, as avaliações da Empresa permanecem na Rede com a indicação "empresa verificada", sem o nome dela, conforme a [Política de Avaliações](/profissionais/avaliacoes).
+Os perfis de Profissionais na Rede não fazem parte do Conteúdo do Cliente. Na Rede aparecem só a média das notas e a quantidade de avaliações de cada Profissional, sem o nome da Empresa nem de quem avaliou. Depois do encerramento do contrato, as notas dadas pela Empresa continuam contando na média, conforme a [Política de Avaliações](/profissionais/avaliacoes).
 
 ## 13. Disponibilidade e suporte
 
