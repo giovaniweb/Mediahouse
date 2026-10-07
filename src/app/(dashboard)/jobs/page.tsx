@@ -1,16 +1,19 @@
 "use client"
 
-import Link from "next/link"
 import { Suspense, useMemo, useState } from "react"
 import useSWR from "swr"
-import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Header } from "@/components/layout/Header"
 import { JobsQuadro } from "@/components/jobs/JobsQuadro"
+import { DemandaModal } from "@/components/demandas/DemandaModal"
+import { useMe } from "@/hooks/usePermissoes"
+import { movimentoDoJob } from "@/lib/jobs-quadro"
+import type { MapaPermissoes } from "@/lib/permissoes"
 import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
 import { dataCalendario, ehHoje } from "@/lib/datas"
-import { estaAtrasada } from "@/lib/status"
-import { TIPO_COBERTURA, ehJob, proximaAcao, responsavelAtual } from "@/lib/job-fase"
+import { COLUNAS_LABEL, estaAtrasada } from "@/lib/status"
+import { foiAprovada, proximaAcao, responsavelAtual } from "@/lib/job-fase"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
@@ -19,17 +22,16 @@ import { LayoutGrid, List, ChevronRight } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
-// ESCOPO: só coberturas JÁ APROVADAS. As três responsabilidades são separadas —
+// ESCOPO: Jobs JÁ APROVADOS. As três responsabilidades são separadas —
 // /demandas é o kanban geral do audiovisual, /aprovacoes é a caixa de entrada
 // das solicitações, e este quadro é a operação do que passou pela aprovação.
-// A regra vive em `ehJob` (lib/job-fase.ts), com teste.
 //
-// A restrição de origem vai na URL (`tipoVideo=cobertura_evento`) para não
-// trazer as 467 demandas do audiovisual e mostrar 28. O portão de aprovação é
-// aplicado aqui, sobre a lista carregada: a API só faz igualdade em
-// `statusInterno`, e a regra precisa de "fora destes dois estados E não
-// recusada" — expressá-la no servidor exigiria mexer em /api/demandas, que
-// pertence ao módulo de Demandas e não pode ser alterado nesta etapa.
+// O que é Job vai na URL (`quadro=jobs`, regra em lib/quadro-do-card.ts):
+// videomaker externo escalado, ou cobertura ainda sem videomaker. É a mesma
+// regra com que /demandas pede o complemento. O portão de aprovação
+// (`foiAprovada`) é aplicado aqui, sobre a lista carregada: a API só faz
+// igualdade em `statusInterno`, e a regra precisa de "fora destes dois estados
+// E não recusada".
 //
 // Consome a mesma rota do quadro atual, sem alteração nenhuma nela. Ela já
 // devolve videomaker, editor, designer, responsável, datas e status; tudo o que
@@ -57,7 +59,8 @@ export default function JobsPage() {
 type Opcao = { id: string; nome: string }
 
 function Quadro() {
-  const router = useRouter()
+  const { data: me } = useMe()
+  const [aberto, setAberto] = useState<string | null>(null)
   const [view, setView] = useState<"kanban" | "list">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
@@ -66,7 +69,7 @@ function Quadro() {
   const [captacao, setCaptacao] = useState("")
 
   // A origem é fixa: este quadro não é o das demandas gerais.
-  const params = new URLSearchParams({ area: "audiovisual", tipoVideo: TIPO_COBERTURA })
+  const params = new URLSearchParams({ area: "audiovisual", quadro: "jobs" })
   if (aba === "meus") params.set("mine", "1")
   if (aba === "atrasados") params.set("atrasadas", "1")
   if (busca.trim()) params.set("search", busca.trim())
@@ -94,7 +97,7 @@ function Quadro() {
 
   // As opções de região saem dos próprios jobs: sem cadastro paralelo, e a
   // lista nunca oferece um filtro que não devolveria nada. Não há filtro de
-  // Tipo — todo Job aqui é cobertura, o seletor teria uma opção só.
+  // Tipo: o que define o Job é quem grava, não o tipo do vídeo.
   const regioes = useMemo(
     () => [...new Set(todos.map((j) => j.cidade).filter(Boolean))].sort() as string[],
     [todos]
@@ -103,7 +106,7 @@ function Quadro() {
   const jobs = useMemo(() => {
     // O portão: fora as que ainda esperam decisão e as recusadas. Sem isto, a
     // caixa de entrada de Aprovações vazaria para dentro do quadro de operação.
-    let lista = todos.filter(ehJob)
+    let lista = todos.filter(foiAprovada)
     // "Hoje" é a captação de hoje — a pergunta é "o que acontece hoje", não
     // "o que vence hoje". Quem quer prazo usa Atrasados.
     if (aba === "hoje") lista = lista.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao))
@@ -119,9 +122,46 @@ function Quadro() {
 
   const atrasados = jobs.filter(estaAtrasada).length
 
-  // O card abre o Job, não a demanda: /jobs/[id] responde às perguntas do §64 e
-  // oferece a próxima ação. A tela de Demandas continua existindo para a gestão.
-  const abrir = (id: string) => router.push(`/jobs/${id}`)
+  // O card abre o Job no painel lateral, com "Ampliar", como em Demandas e no
+  // Growth — o mesmo detalhe de /jobs/[id], sem sair do quadro.
+  const abrir = (id: string) => setAberto(id)
+
+  // Soltar o card numa coluna. A guarda do servidor roda antes, aqui mesmo: o
+  // que ela recusaria não sai do lugar, e a frase diz por quê.
+  async function mover(id: string, coluna: string) {
+    const job = todos.find((j) => j.id === id)
+    if (!job) return
+    const ator = me ? {
+      id: me.id,
+      papel: me.membership?.papel ?? null,
+      // /api/me devolve a permissão EFETIVA (pode vir null, e null nega).
+      permissoes: (me.permissoes as unknown as MapaPermissoes | null) ?? null,
+      videomakerId: me.videomakerRef?.id ?? null,
+    } : null
+    const m = movimentoDoJob(job, coluna, ator)
+    if (!m.ok) { toast.error(m.motivo); return }
+    if (!m.mudou) return
+    const anterior = data
+    void mutate((prev) => prev && { ...prev, demandas: prev.demandas.map((j) => j.id === id ? { ...j, statusVisivel: coluna, statusInterno: m.statusInterno } : j) }, false)
+    try {
+      const res = await fetch(`/api/demandas/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statusInterno: m.statusInterno, origem: "kanban" }),
+      })
+      if (!res.ok) {
+        const erro = await res.json().catch(() => ({}))
+        void mutate(anterior, false)
+        toast.error(typeof erro.error === "string" ? erro.error : `Não foi possível mover (${res.status})`)
+        return
+      }
+      toast.success(`Job movido para ${COLUNAS_LABEL[coluna as keyof typeof COLUNAS_LABEL] ?? coluna}`)
+      void mutate()
+    } catch {
+      void mutate(anterior, false)
+      toast.error("Sem conexão. O job voltou para onde estava.")
+    }
+  }
 
   const pessoas = opcoesDePessoa([
     ...vms.map((v) => ({ papel: "vm" as const, id: v.id, nome: v.nome, funcao: "Videomaker" })),
@@ -186,15 +226,16 @@ function Quadro() {
       ) : error && !data ? null : view === "list" ? (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
           <section className={styles.list} aria-label="Lista de Jobs">
-            {jobs.map(job => <Link key={job.id} href={`/jobs/${job.id}`}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></Link>)}
+            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
             {jobs.length === 0 && <p>Nenhum job com os filtros selecionados.</p>}
           </section>
         </div>
       ) : (
         <div className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-          <JobsQuadro jobs={jobs} onAbrir={abrir} />
+          <JobsQuadro jobs={jobs} onAbrir={abrir} onMover={mover} />
         </div>
       )}
+      <DemandaModal demandaId={aberto} onClose={() => { setAberto(null); void mutate() }} />
     </>
   )
 }

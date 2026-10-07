@@ -14,6 +14,8 @@ import {
   responsavelAtual,
   type JobParaLeitura,
 } from "@/lib/job-fase"
+import type { JobArrastado } from "@/lib/jobs-quadro"
+import { AlcaArrastar, useCliqueDoCard } from "@/components/kanban/CardDoQuadro"
 
 // Card do Job — §34: "Mostrar somente dados essenciais. Evitar cards gigantes.
 // Informações detalhadas pertencem à página do Job."
@@ -21,8 +23,9 @@ import {
 // Mesmo desenho do card de Demandas (DemandCardModern.module.css): título,
 // código e prioridade, etiquetas, rodapé com pessoas e prazo. O que muda é o
 // conteúdo, que é o do Job: quando e onde é a captação, o que falta fazer e de
-// quem é a vez. Sem botão de ação: o card leva ao Job, e é lá que se age.
-export type JobDoQuadro = JobParaLeitura & {
+// quem é a vez. Sem botão de ação: o card abre o Job no painel lateral, e é lá
+// que se age. A alça e o clique são os do card de Demandas (CardDoQuadro).
+export type JobDoQuadro = JobParaLeitura & JobArrastado & {
   id: string
   codigo: string
   titulo: string
@@ -57,7 +60,7 @@ const PRIORIDADE: Record<string, { label: string; classe: string }> = {
 const iniciais = (nome: string) =>
   nome.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()
 
-export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: string) => void }) {
+export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro; onAbrir: (id: string) => void; arrastavel?: boolean }) {
   const risco = nivelDeRisco(job)
   const responsavel = responsavelAtual(job)
   const acao = proximaAcao(job)
@@ -73,12 +76,12 @@ export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: stri
     [responsavel.nome, job.videomaker?.nome, job.editor?.nome].filter((n): n is string => Boolean(n))
   )]
 
-  const abrir = () => onAbrir(job.id)
+  const clique = useCliqueDoCard(() => onAbrir(job.id))
 
   return (
+    <div {...clique.alvo}>
     <div
       data-card-surface
-      onClick={abrir}
       className={cn(
         "group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 transition-all",
         card.card,
@@ -91,15 +94,20 @@ export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: stri
       )}
     >
       {/* Cliente em destaque; o título do Job é o subtítulo. §34 põe a clínica
-          antes. O botão é o alvo do teclado: o card inteiro também abre. */}
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); abrir() }}
-        aria-label={`Abrir job: ${cliente ?? job.titulo}`}
-        className={cn("block w-full text-left line-clamp-2 rounded", card.title)}
-      >
-        {cliente ?? job.titulo}
-      </button>
+          antes. Link, não botão, como no card de Demandas: o quadro não deixa
+          arrastar a partir de um botão. Enter abre; Ctrl/⌘+clique abre em outra aba. */}
+      <div className={card.titleRow}>
+        <a
+          href={`/jobs/${job.id}`}
+          draggable={false}
+          onClick={clique.noLink}
+          aria-label={`Abrir job: ${cliente ?? job.titulo}`}
+          className={cn("block flex-1 min-w-0 text-left line-clamp-2 rounded", card.title)}
+        >
+          {cliente ?? job.titulo}
+        </a>
+        {arrastavel && <AlcaArrastar />}
+      </div>
       {cliente && <p className={styles.subtitulo} title={job.titulo}>{job.titulo}</p>}
 
       <div className={cn("flex items-start justify-between gap-2", card.top)}>
@@ -168,6 +176,7 @@ export function JobCard({ job, onAbrir }: { job: JobDoQuadro; onAbrir: (id: stri
           </span>
         )}
       </div>
+    </div>
     </div>
   )
 }

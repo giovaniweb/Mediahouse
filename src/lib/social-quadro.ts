@@ -58,6 +58,34 @@ export function colunaDoCard(c: {
   return c.dataPostagem ? "plano" : "ideia"
 }
 
+// Arrastar no quadro dela (07/10/2026: "todos os quadros iguais"). As colunas
+// daqui não são status que se escolhe: saem da ideia (tem data? virou pedido?)
+// e, depois do pedido, do andamento na produção. Por isso soltar o card não
+// grava nada sozinho. Ou abre o formulário que faz a mudança de verdade (dar a
+// data, fazer o pedido), ou devolve o card dizendo quem muda aquela etapa.
+export type SoltarNaSocial =
+  | { acao: "nada" }
+  | { acao: "formulario"; dica: string }
+  | { acao: "recusar"; motivo: string }
+
+export function soltarNaSocial(
+  c: { dataPostagem: string | Date | null; linhaProjetoId: string | null; podeEditar: boolean; demanda: { statusVisivel: string; statusInterno?: string | null } | null },
+  destino: ColunaSocial,
+): SoltarNaSocial {
+  const origem = colunaDoCard(c)
+  if (origem === destino) return { acao: "nada" }
+  if (c.demanda) return {
+    acao: "recusar",
+    motivo: "Este pedido já está com a equipe, e quem muda a etapa dele é a produção. Daqui você acompanha, cobra e marca como postado.",
+  }
+  if (!c.podeEditar) return { acao: "recusar", motivo: "Só a social media desta linha mexe nesta ideia." }
+  if (!c.linhaProjetoId) return { acao: "recusar", motivo: "Esta ideia não tem linha de produto. Abra o card e escolha a linha primeiro." }
+  if (destino === "plano") return { acao: "formulario", dica: "Escolha a data de postagem e salve: a ideia passa para No plano." }
+  if (destino === "equipe") return { acao: "formulario", dica: "Confira o pedido e envie: ele vai para a equipe." }
+  if (destino === "ideia") return { acao: "recusar", motivo: "Para voltar a ser ideia solta, abra o card e tire a data de postagem." }
+  return { acao: "recusar", motivo: "Uma ideia só fica pronta depois que a equipe entrega o pedido. Faça o pedido primeiro." }
+}
+
 /**
  * Cobrar vale uma vez por dia por pedido. "Dia" é o de Brasília: cobrar às 22h
  * e de novo às 8h da manhã seguinte são dois dias, não o mesmo dia UTC.

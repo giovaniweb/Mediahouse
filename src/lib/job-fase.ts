@@ -369,24 +369,102 @@ export function ehGrowth(job: { area?: string | null }): boolean {
   return String(job.area ?? "").toLowerCase() === "design"
 }
 
-// ── ONDE SE AGE (detalhe da demanda) ─────────────────────────────────────────
+// ── AS ABAS DO DETALHE ───────────────────────────────────────────────────────
 //
-// O detalhe tem quatro abas e abria sempre em Pedido, enquanto a ação da etapa
-// costuma estar em outra: quem edita procura Entrega, quem distribui procura
-// Equipe. Aqui fica a aba de cada status, para o detalhe abrir nela e o botão
-// ao lado da próxima ação levar até lá. `null` quando não sobra ação a fazer.
+// Desde 07/10/2026 (pedido do Giovani): quem abre a demanda quer ver o que foi
+// pedido, e o que importa muda com a etapa.
 //
-// Record completo de propósito: um status novo não compila sem decidir a aba.
-export type AbaDoDetalhe = "pedido" | "equipe" | "entrega" | "conversa"
+//   antes da aprovação      Pedido | Referências e arquivos | Conversa e histórico
+//   da aprovação em diante  Aprovação | Pedido | Referências e arquivos | Conversa e histórico
+//
+// "Equipe e contexto" deixou de ser aba: produto, classificação, equipe, linha,
+// solicitante e datas ficam embaixo do Pedido, no mesmo rolar. A aba "Entrega"
+// sumiu — o envio para aprovação foi para a faixa "Próxima ação" do topo, e as
+// versões, o link do cliente e a postagem ficam em Aprovação.
+//
+// Um detalhe só para Demandas, Growth, Jobs e Social; muda por área só o
+// conteúdo de cada bloco.
+export type AbaDoDetalhe = "aprovacao" | "pedido" | "arquivos" | "conversa"
 
 export const ABA_LABEL: Record<AbaDoDetalhe, string> = {
+  aprovacao: "Aprovação",
   pedido: "Pedido",
-  equipe: "Equipe e contexto",
-  entrega: "Entrega",
-  conversa: "Conversa",
+  arquivos: "Referências e arquivos",
+  conversa: "Conversa e histórico",
 }
 
-export const ABA_DA_ACAO: Record<StatusInterno, AbaDoDetalhe | null> = {
+/** Da aprovação em diante: a peça já foi para o cliente (ou passou dele). */
+const DA_APROVACAO_EM_DIANTE: StatusInterno[] = [
+  "edicao_finalizada",
+  "revisao_pendente",
+  // O cliente pediu ajuste: o que ele pediu está em Aprovação.
+  "ajuste_solicitado",
+  "aprovado",
+  "postagem_pendente",
+  "postado",
+  "entregue_cliente",
+  "contagem_15_dias_iniciada",
+  "lembrete_15_dias_enviado",
+  "expirado",
+  "encerrado",
+]
+
+type DemandaDasAbas = {
+  statusInterno: string
+  statusVisivel?: string | null
+  /** Link de aprovação gerado — a peça já foi enviada uma vez. */
+  linkCliente?: string | null
+  /** Quantas versões finais foram enviadas. */
+  finaisEnviados?: number
+}
+
+function daAprovacaoEmDiante(d: DemandaDasAbas): boolean {
+  // Recusada na entrada fica `encerrado` ainda na coluna Entrada (foiAprovada):
+  // nunca chegou a ter peça, então não tem o que aprovar.
+  if (d.statusInterno === "encerrado" && d.statusVisivel === "entrada") return false
+  return DA_APROVACAO_EM_DIANTE.includes(d.statusInterno as StatusInterno)
+}
+
+/** Aprovação aparece da etapa de aprovação em diante, ou depois do primeiro envio. */
+export function mostraAbaAprovacao(d: DemandaDasAbas): boolean {
+  return daAprovacaoEmDiante(d) || !!d.linkCliente || (d.finaisEnviados ?? 0) > 0
+}
+
+/** As abas na ordem em que aparecem. */
+export function abasDoDetalhe(d: DemandaDasAbas): AbaDoDetalhe[] {
+  return mostraAbaAprovacao(d) ? ["aprovacao", "pedido", "arquivos", "conversa"] : ["pedido", "arquivos", "conversa"]
+}
+
+/** Em Aprovação, Para postar ou Concluído o detalhe abre em Aprovação; no resto, em Pedido. */
+export function abaInicial(d: DemandaDasAbas): AbaDoDetalhe {
+  return daAprovacaoEmDiante(d) ? "aprovacao" : "pedido"
+}
+
+/**
+ * Quem faz a peça manda para aprovação daqui: Edição/Fazendo, ou de volta
+ * depois de um ajuste pedido. É o botão que morava na aba Entrega e agora fica
+ * na faixa "Próxima ação" do topo.
+ */
+export const PODE_ENVIAR_PARA_APROVACAO: StatusInterno[] = [
+  "brutos_enviados",
+  "editor_atribuido",
+  "fila_edicao",
+  "editando",
+  "ajuste_solicitado",
+]
+
+// ── ONDE SE AGE (o botão "Ir para…" da próxima ação) ─────────────────────────
+//
+// A ação de cada status mora num lugar do detalhe. "equipe" é o bloco Equipe
+// embaixo do Pedido: o botão abre o Pedido e rola até lá. `null` quando a ação
+// já está na própria faixa (enviar para aprovação) ou não sobra nada a fazer.
+//
+// Record completo de propósito: um status novo não compila sem decidir o lugar.
+export type LugarDaAcao = AbaDoDetalhe | "equipe"
+
+export const LUGAR_LABEL: Record<LugarDaAcao, string> = { ...ABA_LABEL, equipe: "Equipe" }
+
+export const ABA_DA_ACAO: Record<StatusInterno, LugarDaAcao | null> = {
   // Aprovar ou recusar a entrada: o aviso com os botões fica em Pedido.
   aguardando_aprovacao_interna: "pedido",
   urgencia_pendente_aprovacao:  "pedido",
@@ -401,16 +479,18 @@ export const ABA_DA_ACAO: Record<StatusInterno, AbaDoDetalhe | null> = {
   // Captação: as ações do videomaker ficam no bloco do Job, em Pedido.
   videomaker_aceitou:           "pedido",
   captacao_agendada:            "pedido",
-  // Material, versões, link de aprovação e publicação ficam em Entrega.
-  captacao_realizada:           "entrega",
-  editor_atribuido:             "entrega",
-  fila_edicao:                  "entrega",
-  editando:                     "entrega",
-  edicao_finalizada:            "entrega",
-  revisao_pendente:             "entrega",
-  ajuste_solicitado:            "entrega",
-  aprovado:                     "entrega",
-  postagem_pendente:            "entrega",
+  // Captou: o link dos brutos fica em Referências e arquivos.
+  captacao_realizada:           "arquivos",
+  // Edição: "Enviar para aprovação" está na própria faixa.
+  editor_atribuido:             null,
+  fila_edicao:                  null,
+  editando:                     null,
+  // Versões, link do cliente, ajuste pedido e postagem ficam em Aprovação.
+  edicao_finalizada:            "aprovacao",
+  revisao_pendente:             "aprovacao",
+  ajuste_solicitado:            "aprovacao",
+  aprovado:                     "aprovacao",
+  postagem_pendente:            "aprovacao",
   // Bloqueio se resolve conversando.
   impedimento:                  "conversa",
   // Nada a fazer.

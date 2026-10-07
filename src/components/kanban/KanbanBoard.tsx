@@ -1,24 +1,15 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { DragDropContext, Draggable, DropResult, useKeyboardSensor, useMouseSensor, useTouchSensor } from "@hello-pangea/dnd"
-import { StrictModeDroppable } from "./StrictModeDroppable"
+import type { DropResult } from "@hello-pangea/dnd"
 import { DemandaCard } from "@/components/demandas/DemandaCard"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
-import { cn } from "@/lib/utils"
 import { estaAtrasada } from "@/lib/status"
-import { Plus, ChevronRight, Lock } from "lucide-react"
-import Link from "next/link"
 import { salvarOrdem } from "@/lib/kanban-order"
-import styles from "./KanbanPreview.module.css"
 import type { EspelhoDoCard } from "@/components/demandas/TagEspelho"
 import { AUDIOVISUAL_COLUNA_PARA_STATUS, PEDE_TEXTO } from "@/lib/kanban-movimento"
 import { PedidoMotivo } from "./PedidoMotivo"
-import { useSensorAlca } from "./sensorAlca"
-import { TrilhoQuadro } from "./TrilhoQuadro"
-
-// A alça vem antes dos sensores padrão: ela precisa ver o toque primeiro (sensorAlca.ts).
-const SENSORES = [useSensorAlca, useMouseSensor, useKeyboardSensor, useTouchSensor]
+import { QuadroArrastavel } from "./QuadroArrastavel"
 
 export type ColunaDef = { id: string; label: string; color: string; dot: string }
 
@@ -89,10 +80,6 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
   const [orderStatus, setOrderStatus] = useState<"idle" | "saving" | "error">("idle")
   const [modalDemandaId, setModalDemandaId] = useState<string | null>(null)
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
-  // Concluído começa recolhido: com seis colunas (oito no Growth) o quadro não
-  // cabia em 1440 px e a coluna que sobrava para fora era a de trabalho em
-  // andamento. Recolhida, ela continua recebendo card arrastado.
-  const [concluidoAberto, setConcluidoAberto] = useState(false)
   // Movimento que espera o motivo. O card fica onde estava até o "Mover".
   const [aguardandoMotivo, setAguardandoMotivo] = useState<{ demandaId: string; coluna: string } | null>(null)
   const pedidoAberto = aguardandoMotivo ? PEDE_TEXTO[colunaParaStatus[aguardandoMotivo.coluna] as keyof typeof PEDE_TEXTO] : undefined
@@ -186,130 +173,38 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     return [...ordered, ...rest]
   }
 
+  const isBloqueada = (colId: string) => userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(colId)
+
   return (
     <>
-    <DragDropContext onDragEnd={handleDragEnd} sensors={SENSORES} enableDefaultSensors={false}>
-    <TrilhoQuadro aviso={orderStatus !== "idle" && (
+    <QuadroArrastavel
+      colunas={COLS.map((col) => ({ ...col, label: labels?.[col.id] ?? col.label }))}
+      itensDaColuna={byCol}
+      idDe={(d) => d.id}
+      onDragEnd={handleDragEnd}
+      nome={{ um: "demanda", varios: "demandas", vazio: "Nenhuma demanda nesta etapa." }}
+      recolhivel="finalizado"
+      verTodos={historico}
+      novo={{ coluna: "entrada", rotulo: "Criar demanda", href: "/demandas?nova=1" }}
+      bloqueada={isBloqueada}
+      arrastoDesligado={orderStatus !== "idle"}
+      aviso={orderStatus !== "idle" && (
         <div role={orderStatus === "error" ? "alert" : "status"} className="px-4 py-3 text-sm text-zinc-200">
           {orderStatus === "saving" ? "Salvando ordem…" : "Não foi possível salvar toda a ordem. Algumas posições podem ter sido gravadas."}
           {orderStatus === "error" && <button type="button" className="ml-3 underline" onClick={() => window.location.reload()}>Recarregar quadro para conferir</button>}
         </div>
-      )}>
-        {COLS.map((col) => {
-          const items = byCol(col.id)
-          const isBloqueada = userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(col.id)
-          const recolhida = col.id === "finalizado" && !concluidoAberto
-          const rotulo = labels?.[col.id] ?? col.label
-          return (
-            <div
-              key={col.id}
-              className={cn(
-                "flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
-                recolhida ? "w-14" : "w-72",
-                col.color,
-                styles.column,
-                recolhida && styles.collapsed,
-                isBloqueada && "opacity-70"
-              )}
-            >
-              {recolhida ? (
-                <button
-                  type="button"
-                  onClick={() => setConcluidoAberto(true)}
-                  aria-expanded={false}
-                  aria-label={`Mostrar ${rotulo}: ${items.length} ${items.length === 1 ? "demanda" : "demandas"}`}
-                  className="flex flex-col items-center gap-3 px-1 py-3 text-zinc-300 hover:text-white transition-colors"
-                >
-                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
-                    {items.length}
-                  </span>
-                  <span className="font-semibold text-sm [writing-mode:vertical-rl] rotate-180">{rotulo}</span>
-                </button>
-              ) : (
-              <div className={cn("flex items-center justify-between px-3 py-3", styles.heading)}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={cn("w-2 h-2 rounded-full shrink-0", col.dot)} />
-                  <span className="font-semibold text-sm text-zinc-200 truncate" title={rotulo}>{rotulo}</span>
-                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
-                    {items.length}
-                  </span>
-                  {isBloqueada && (
-                    <Lock className="w-3 h-3 text-zinc-600" aria-label="Gerenciado pela equipe interna" />
-                  )}
-                </div>
-                {col.id === "entrada" && !isBloqueada && (
-                  <Link href="/demandas?nova=1" aria-label="Criar demanda" className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
-                    <Plus className="w-4 h-4" />
-                  </Link>
-                )}
-                {col.id === "finalizado" && (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <Link
-                      href={historico}
-                      className="text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors"
-                    >
-                      Ver todos →
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => setConcluidoAberto(false)}
-                      aria-expanded={true}
-                      aria-label={`Recolher ${rotulo}`}
-                      className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* Cards */}
-              <StrictModeDroppable droppableId={col.id}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={cn(
-                      // Cada coluna rola sozinha: assim a barra horizontal do board
-                      // fica sempre no rodapé visível, em vez de ser empurrada para
-                      // o fim da coluna mais alta.
-                      "flex-1 min-h-0 overflow-y-auto kanban-scroll px-2 pb-2 space-y-2 rounded-b-xl transition-colors",
-                      snapshot.isDraggingOver && "bg-zinc-800/50"
-                    )}
-                  >
-                    {!recolhida && items.map((demanda, index) => (
-                      <Draggable isDragDisabled={orderStatus !== "idle"} key={demanda.id} draggableId={demanda.id} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            data-card
-                            className={cn(snapshot.isDragging && "rotate-1 opacity-90", styles.card)}
-                          >
-                            <DemandaCard
-                              demanda={demanda}
-                              onDelete={onDelete}
-                              onDuplicate={onDuplicate}
-                              onOpen={openMode === "modal" ? setModalDemandaId : undefined}
-                              onMarkPosted={onMarkPosted}
-                              arrastavel={orderStatus === "idle"}
-                            />
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {!recolhida && items.length === 0 && <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhuma demanda nesta etapa.</p>}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </StrictModeDroppable>
-            </div>
-          )
-        })}
-    </TrilhoQuadro>
-    </DragDropContext>
+      )}
+      renderCard={(demanda, { arrastavel }) => (
+        <DemandaCard
+          demanda={demanda}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+          onOpen={openMode === "modal" ? setModalDemandaId : undefined}
+          onMarkPosted={onMarkPosted}
+          arrastavel={arrastavel}
+        />
+      )}
+    />
 
     {openMode === "modal" && (
       <DemandaModal demandaId={modalDemandaId} onClose={() => setModalDemandaId(null)} />

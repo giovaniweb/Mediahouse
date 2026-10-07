@@ -21,7 +21,7 @@ import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/d
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
-import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
+import { whereDoQuadro } from "@/lib/quadro-do-card-server"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
@@ -237,26 +237,20 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ?semCobertura=1 — tira do resultado o que pertence ao fluxo de Jobs.
+  // ?quadro=jobs | ?quadro=demandas — em que quadro do audiovisual o card mora.
   //
-  // Uma solicitação de cobertura e uma demanda comum vivem na mesma tabela e se
-  // distinguem só pela classificação (ver lib/job-fase.ts). Depois que /jobs
-  // passou a ser a esteira das coberturas, o quadro de Demandas mostrava as
-  // mesmas 28 duas vezes — uma em cada quadro.
+  // A regra é uma só (lib/quadro-do-card.ts) e os dois quadros pedem por ela:
+  // videomaker externo escalado é Job, interno fica em Demandas, e sem
+  // videomaker a marca de cobertura decide. Antes o quadro de Jobs pedia
+  // `tipoVideo=cobertura_evento` e o de Demandas escondia `departamento=eventos`
+  // — um card marcado só pelo departamento não aparecia em nenhum dos dois.
   //
-  // É OPT-IN de propósito, e não o padrão: quem chama esta rota precisando das
-  // coberturas continua recebendo. A tela de Aprovações é o caso que prova —
-  // é lá que a solicitação de cobertura é aprovada como Job, e escondê-la ali
-  // tornaria o fluxo inalcançável. `/historico`, a busca de produtos e a
-  // contagem por solicitante também seguem vendo tudo.
-  //
-  // O NOT/OR espelha o OR de `ehSolicitacaoDeCobertura`: basta UMA das marcas
-  // para o registro ser do outro quadro, então excluir exige negar as duas.
-  if (searchParams.get("semCobertura") === "1") {
-    and.push({
-      NOT: { OR: [{ tipoVideo: TIPO_COBERTURA }, { departamento: DEPARTAMENTO_COBERTURA }] },
-    })
-  }
+  // É OPT-IN de propósito: Aprovações, /historico, a busca de produtos e a
+  // contagem por solicitante continuam vendo tudo. `semCobertura=1` (nome antigo)
+  // vale como `quadro=demandas`, para a tela que ainda estiver aberta com o
+  // código anterior não voltar a mostrar Jobs em Demandas.
+  const quadro = searchParams.get("quadro") ?? (searchParams.get("semCobertura") === "1" ? "demandas" : null)
+  if (quadro === "jobs" || quadro === "demandas") and.push(whereDoQuadro(quadro, organizacaoId))
 
   // ?semResponsavel=1 — ninguém assumiu ainda, nem pela M2M nem pelo escalar.
   if (searchParams.get("semResponsavel") === "1") {
