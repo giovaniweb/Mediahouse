@@ -9,7 +9,7 @@ export const resumo = [
 export const texto = `
 ## 1. Quem são as partes
 
-Estes Termos de Uso e Contrato de Assinatura ("Termos") regem o uso do NuFlow, sistema de gestão de produção audiovisual e criativa oferecido por ${E.razaoSocial}, inscrita no CNPJ sob o nº ${E.cnpj}, com sede em ${E.endereco} ("NuFlow", "nós").
+Estes Termos de Uso e Contrato de Assinatura ("Termos") regem o uso do NuFlow, sistema de gestão de produção audiovisual e criativa oferecido por ${E.razaoSocial}, inscrito no CNPJ sob o nº ${E.cnpj}, com sede em ${E.endereco} ("NuFlow", "nós").
 
 Do outro lado está a pessoa jurídica que contrata a assinatura ("Cliente" ou "Empresa"), representada pela pessoa que realiza o cadastro ou aceita estes Termos no primeiro acesso ("Administrador"). Ao aceitar, o Administrador declara que tem poderes para vincular a Empresa.
 
@@ -40,7 +40,7 @@ A assinatura dá à Empresa uma licença de uso da Plataforma, não exclusiva, i
 
 Módulos que não estão na lista acima, como gestão de eventos e integrações com programas de edição, não fazem parte desta assinatura, mesmo que apareçam em materiais antigos. Se forem oferecidos no futuro, terão condições próprias.
 
-O armazenamento de arquivos inclui até [PREENCHER: franquia, ex. 100 GB] por Empresa. Perto do limite, o NuFlow avisa o Administrador e propõe um ajuste. Nenhum arquivo é apagado por excesso sem aviso prévio de 30 dias.
+O armazenamento de arquivos inclui até 10 GB por Empresa. Perto do limite, o NuFlow avisa o Administrador e propõe um ajuste. Nenhum arquivo é apagado por excesso sem aviso prévio de 30 dias.
 
 ## 4. Contas e Usuários
 
@@ -59,7 +59,7 @@ O NuFlow pode pedir confirmação de identidade antes de atender um pedido que e
 O preço é de **R$ 97,00 (noventa e sete reais) por mês, por Empresa**. O valor é bruto: retenções na fonte exigidas por lei são descontadas pela Empresa, que envia o comprovante ao NuFlow.
 
 - Não há cobrança por Usuário externo.
-- Estão incluídos até [PREENCHER: número] Usuários internos por Empresa.
+- Não há limite de Usuários internos por Empresa.
 - O ciclo começa na data de ativação da Empresa e se renova a cada mês.
 - A cobrança é enviada ao e-mail do Administrador, por boleto, PIX ou outro meio indicado pelo NuFlow, com vencimento em até 5 dias corridos do envio. A nota fiscal é emitida a cada pagamento.
 - O pagamento é antecipado: cada mensalidade paga o mês que começa.

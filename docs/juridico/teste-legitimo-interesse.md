@@ -4,7 +4,7 @@ Registro interno do NuFlow. A Política de Privacidade usa o legítimo interesse
 (art. 7º, IX) em dois tratamentos, e a ANPD pode pedir este registro (art. 10,
 §3º, e art. 37). Revisar a cada versão nova da Política ou mudança na Rede.
 
-Versão 1.0 · 7 de outubro de 2026 · responsável: [PREENCHER: encarregado]
+Versão 1.0 · 7 de outubro de 2026 · responsável: Giovani Gomes da Silva
 
 ## 1. Contas dos Usuários e do Administrador
 

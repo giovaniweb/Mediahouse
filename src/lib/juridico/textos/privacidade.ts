@@ -59,9 +59,9 @@ O NuFlow não vende dados pessoais, não os usa para publicidade e não toma dec
 
 Compartilhamos dados só com quem é necessário para o serviço funcionar. Com os fornecedores de infraestrutura, isso acontece sob os termos de contrato e de proteção de dados de cada um:
 
-- **Vercel** (hospedagem da aplicação) — Estados Unidos e outras regiões;
-- **Supabase** (banco de dados e armazenamento de arquivos) — [PREENCHER: região do projeto, ex. São Paulo ou Estados Unidos];
-- **Railway** (servidor de WhatsApp e conversor de vídeo) — [PREENCHER: região];
+- **Vercel** (hospedagem da aplicação) — processamento em São Paulo, Brasil, com rede de entrega de conteúdo em outros países;
+- **Supabase** (banco de dados e armazenamento de arquivos) — São Paulo, Brasil;
+- **Railway** (servidor de WhatsApp, com as mensagens e contatos dos avisos, e conversor de vídeo) — Singapura;
 - **Resend** (envio de e-mails) — Estados Unidos;
 - **Anthropic** e **OpenAI** (inteligência artificial para análise de briefing e transcrição de áudio) — Estados Unidos. Pelos termos comerciais vigentes desses fornecedores, o que é enviado pela API não é usado para treinar modelos, mas eles podem guardar os dados por prazo limitado, para segurança e prevenção de abuso;
 - **WhatsApp (Meta):** as mensagens de aviso passam pelo WhatsApp, serviço de terceiro que segue os próprios termos, sem contrato com o NuFlow, pelo número que a própria empresa cliente conecta.
@@ -82,7 +82,7 @@ Ao se cadastrar, o profissional entra na Rede do NuFlow. As empresas clientes ve
 
 ## 7. Transferência internacional
 
-Alguns fornecedores da seção 5 tratam dados fora do Brasil, principalmente nos Estados Unidos. O NuFlow adota, para cada um, um dos mecanismos do art. 33 da LGPD e da Resolução CD/ANPD nº 19/2024, e informa qual é, a pedido do titular ou da empresa cliente.
+Alguns fornecedores da seção 5 tratam dados fora do Brasil, nos Estados Unidos e em Singapura. O NuFlow adota, para cada um, um dos mecanismos do art. 33 da LGPD e da Resolução CD/ANPD nº 19/2024, e informa qual é, a pedido do titular ou da empresa cliente.
 
 ## 8. Por quanto tempo guardamos
 

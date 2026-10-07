@@ -119,9 +119,9 @@ Em caso de conflito entre este Acordo e os Termos sobre proteção de dados, pre
 
 ## Anexo II — Suboperadores autorizados
 
-- **Vercel Inc.** — hospedagem da aplicação — Estados Unidos e outras regiões.
-- **Supabase Inc.** — banco de dados e armazenamento de arquivos — [PREENCHER: região].
-- **Railway Corp.** — servidor de WhatsApp e conversor de vídeo — [PREENCHER: região].
+- **Vercel Inc.** — hospedagem da aplicação — São Paulo, Brasil, com rede de entrega de conteúdo em outros países.
+- **Supabase Inc.** — banco de dados e armazenamento de arquivos — São Paulo, Brasil.
+- **Railway Corp.** — servidor de WhatsApp e conversor de vídeo — Singapura.
 - **Resend Inc.** — envio de e-mails — Estados Unidos.
 - **Anthropic PBC** — inteligência artificial para análise de briefing, quando ligada pela Cliente — Estados Unidos.
 - **OpenAI, L.L.C.** — transcrição de áudio e inteligência artificial, quando ligada pela Cliente — Estados Unidos.

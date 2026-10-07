@@ -33,11 +33,12 @@ export const DOCUMENTOS: Record<SlugDocumento, DocumentoJuridico> = {
 export const ORDEM_DOCUMENTOS: SlugDocumento[] = ["termos", "privacidade", "dpa", "profissionais", "avaliacoes"]
 
 /**
- * Enquanto for true, toda página jurídica abre com a faixa "minuta — revisar com
- * advogado antes de publicar". Só vira false depois da revisão do advogado e dos
- * [PREENCHER] resolvidos em ./empresa.ts.
+ * true = rascunho: toda página jurídica abre com a faixa de minuta e sai dos
+ * buscadores. Desligada em 07/10/2026, com os [PREENCHER] resolvidos e a decisão
+ * do Giovani de publicar sem revisão de advogado (revisão crítica interna feita).
+ * Um teste impede MINUTA=false com qualquer [PREENCHER] sobrando.
  */
-export const MINUTA = true
+export const MINUTA = false
 
 export function dataPorExtenso(iso: string): string {
   const [a, m, d] = iso.split("-").map(Number)

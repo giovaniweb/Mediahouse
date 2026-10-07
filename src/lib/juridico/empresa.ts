@@ -3,14 +3,15 @@
 // Um lugar só para os dados que os cinco documentos repetem. Enquanto estiverem
 // marcados [PREENCHER], as páginas mostram a marca amarela e a faixa de minuta:
 // nenhum documento pode ir ao ar como versão final com estes campos em aberto.
+// Dados do cadastro na Receita (07/10/2026): empresário individual, ativo.
 export const EMPRESA_NUFLOW = {
-  razaoSocial: "[PREENCHER: razão social de quem vende o NuFlow]",
-  cnpj: "[PREENCHER: CNPJ]",
-  endereco: "[PREENCHER: endereço completo da sede]",
-  emailContato: "[PREENCHER: e-mail de atendimento e cobrança]",
-  encarregado: "[PREENCHER: nome do encarregado de dados]",
-  emailEncarregado: "[PREENCHER: e-mail do encarregado, ex. privacidade@nuflow.space]",
-  foro: "[PREENCHER: cidade e estado da sede, para o foro]",
+  razaoSocial: "GIOVANI GOMES DA SILVA, empresário individual",
+  cnpj: "54.415.116/0001-10",
+  endereco: "Rua Cicero, 72, bairro JK, Sete Lagoas, MG, CEP 35702-194",
+  emailContato: "giovani.g@live.com",
+  encarregado: "Giovani Gomes da Silva",
+  emailEncarregado: "giovani.g@live.com",
+  foro: "Sete Lagoas, MG",
 } as const
 
 /** true enquanto qualquer campo acima ainda pede preenchimento. */

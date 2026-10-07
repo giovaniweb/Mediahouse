@@ -78,6 +78,17 @@ describe("os textos", () => {
       }
     }
   })
+  it("versão publicada não tem campo em aberto", async () => {
+    const { MINUTA } = await import("@/lib/juridico/documentos")
+    const { DADOS_EM_ABERTO } = await import("@/lib/juridico/empresa")
+    if (MINUTA) return
+    expect(DADOS_EM_ABERTO).toBe(false)
+    for (const slug of ORDEM_DOCUMENTOS) {
+      expect(TEXTOS[slug].texto, slug).not.toContain("[PREENCHER")
+      expect(TEXTOS[slug].resumo.join(" "), slug).not.toContain("[PREENCHER")
+    }
+  })
+
   it("nenhum documento promete Eventos, Cutflow ou biometria", () => {
     for (const slug of ORDEM_DOCUMENTOS) {
       const t = TEXTOS[slug].texto.toLowerCase()
