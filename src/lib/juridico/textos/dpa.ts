@@ -29,7 +29,7 @@ O NuFlow trata o Conteúdo do Cliente só para cumprir o contrato e conforme as 
 
 Se o NuFlow entender que uma instrução viola a LGPD, avisará a Cliente e poderá deixar de cumpri-la até que seja esclarecida.
 
-O NuFlow não usa o Conteúdo do Cliente para finalidade própria, não o vende e não o usa para treinar modelos de inteligência artificial.
+O NuFlow não usa o Conteúdo do Cliente para finalidade própria, não o vende e não o usa para treinar modelos de inteligência artificial. As exceções são gerar estatísticas anonimizadas (Termos, seção 11) e compartilhar cards com uma empresa parceira quando a Cliente fizer esse compartilhamento.
 
 ## 4. Deveres da Cliente
 
@@ -61,7 +61,7 @@ Se a Cliente se opuser a um suboperador novo por motivo razoável de proteção 
 
 ## 8. Transferência internacional
 
-Alguns suboperadores tratam dados fora do Brasil, como mostra o Anexo II. O NuFlow faz essas transferências só nas hipóteses do art. 33 da LGPD, em especial por cláusulas contratuais na forma da Resolução CD/ANPD nº 19/2024. A Cliente pode pedir cópia das cláusulas aplicáveis.
+Alguns suboperadores tratam dados fora do Brasil, como mostra o Anexo II. O NuFlow adota, para cada um, um dos mecanismos do art. 33 da LGPD e da Resolução CD/ANPD nº 19/2024, e informa à Cliente, quando ela pedir, qual mecanismo usa com cada suboperador.
 
 ## 9. Incidentes de segurança
 
@@ -76,7 +76,7 @@ O NuFlow complementa as informações à medida que as apurar e ajuda a Cliente 
 
 ## 10. Fim do contrato
 
-Ao fim do contrato, a Cliente tem 30 dias para pedir a exportação do Conteúdo do Cliente, entregue como dizem os Termos. Depois disso, o NuFlow apaga o Conteúdo do Cliente em até 60 dias, inclusive das cópias de segurança, que se renovam em até 90 dias, e confirma por escrito se a Cliente pedir.
+Ao fim do contrato, a Cliente tem 30 dias para pedir a exportação do Conteúdo do Cliente, entregue como dizem os Termos. Depois disso, o NuFlow apaga o Conteúdo do Cliente da Plataforma em até 60 dias e confirma por escrito se a Cliente pedir. As cópias de segurança, inclusive as guardadas fora da Plataforma, são apagadas no ciclo de renovação, em até 90 dias do encerramento.
 
 O NuFlow pode guardar só o que a lei obriga, pelo tempo que ela obriga, sem tratar para outra finalidade.
 
@@ -94,7 +94,7 @@ Uma vez por ano, ou depois de um incidente, a Cliente pode pedir ao NuFlow um qu
 
 ## 14. Responsabilidade
 
-Cada parte responde pelos danos que causar ao violar a LGPD ou este Acordo, nos termos dos arts. 42 a 45 da LGPD. Entre as partes, vale o limite dos Termos, exceto quando a lei não o admitir.
+Cada parte responde pelos danos que causar ao violar a LGPD ou este Acordo, nos termos dos arts. 42 a 45 da LGPD. Entre as partes, vale o limite dos Termos, exceto quando a lei não o admitir. Esse limite não se aplica aos direitos dos titulares de dados perante o NuFlow.
 
 ## 15. Registro das operações
 

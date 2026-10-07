@@ -16,7 +16,7 @@ Ela vale para as empresas clientes e seus Usuários, para os clientes delas que 
 ## 2. Quem pode avaliar e quando
 
 - A **empresa que contratou** o profissional para um trabalho registrado no NuFlow, por um Usuário com permissão para isso.
-- O **cliente da empresa**, por link de convite enviado pela empresa e ligado àquele trabalho. O link vale para uma avaliação só.
+- O **cliente da empresa**, por link de convite enviado pela empresa e ligado àquele trabalho. O link vale para uma avaliação só. Antes de enviar, quem avalia por link aceita esta Política. A empresa que enviou o convite responde pelas avaliações de quem ela convidou.
 - A avaliação é feita depois que o trabalho é concluído, uma vez por trabalho, em até 60 dias da conclusão.
 - Não pode avaliar quem tem conflito de interesse: o próprio profissional, parentes, sócios, concorrentes diretos ou quem recebeu algo em troca da avaliação.
 
@@ -26,7 +26,7 @@ Ela vale para as empresas clientes e seus Usuários, para os clientes delas que 
 - "Recomendo" ou "não recomendo".
 - Comentário opcional, de até 1.000 caracteres.
 
-A avaliação aparece com o nome da empresa que contratou e a data, sem o nome da pessoa que avaliou.
+A avaliação aparece com o nome da empresa que contratou e a data, sem o nome da pessoa que avaliou. Depois que a empresa deixa o NuFlow, a avaliação passa a mostrar "empresa verificada", sem o nome.
 
 ## 4. Regras para quem avalia
 
@@ -46,10 +46,11 @@ Não é permitido:
 ## 5. Moderação
 
 - **Notas sem comentário** entram no score assim que enviadas.
-- **Comentários** passam por moderação antes de aparecer, em até 2 dias úteis. A moderação é feita por pessoas da equipe do NuFlow, que podem usar filtros automáticos para apontar trechos suspeitos. A decisão final é sempre de uma pessoa.
+- **Comentários** passam por moderação antes de aparecer, em regra em até 2 dias úteis. Até lá, o comentário fica oculto. A moderação é feita por pessoas da equipe do NuFlow, que podem usar filtros automáticos para apontar trechos suspeitos. A decisão final é sempre de uma pessoa.
 - O moderador pode publicar o comentário, pedir à empresa que o corrija ou recusá-lo. O NuFlow não reescreve comentários.
 - Comentário recusado não é publicado. A nota permanece, exceto se a avaliação inteira violar as regras (trabalho inexistente, conflito de interesse, retaliação).
 - O NuFlow não remove avaliação só porque é negativa. Crítica honesta ao trabalho, feita dentro destas regras, é permitida e útil para a Rede.
+- A moderação confere apenas se o comentário segue as regras desta Política. O NuFlow não verifica a veracidade dos fatos narrados, não é autor das avaliações e não as endossa. Publicar um comentário não significa que o NuFlow concorda com ele.
 
 ## 6. Resposta do profissional
 
@@ -62,8 +63,8 @@ O profissional, a empresa avaliadora ou qualquer pessoa citada pode contestar um
 1. O NuFlow confirma o recebimento.
 2. Se a contestação for plausível, o comentário fica oculto durante a análise.
 3. O NuFlow ouve a outra parte, quando necessário, por até 3 dias úteis.
-4. A decisão sai em até **5 dias úteis** e é comunicada às duas partes, com o motivo: manter, pedir correção, ocultar o comentário ou remover a avaliação inteira.
-5. Quem discordar pode pedir uma segunda análise, uma vez, feita por outra pessoa da equipe, em até 5 dias úteis.
+4. A decisão sai, em regra, em até **5 dias úteis** e é comunicada às duas partes, com o motivo: manter, pedir correção, ocultar o comentário ou remover a avaliação inteira. Enquanto isso, o comentário contestado segue oculto.
+5. Quem discordar pode pedir uma segunda análise, uma vez, em até 5 dias úteis. Sempre que possível, ela é feita por pessoa diferente da que decidiu.
 
 Ordem judicial é cumprida no prazo determinado, sem prejuízo deste procedimento.
 
@@ -83,7 +84,7 @@ Ordem judicial é cumprida no prazo determinado, sem prejuízo deste procediment
 
 ## 10. Registro
 
-O NuFlow guarda por 6 meses o conteúdo de avaliações removidas e o histórico de moderação e contestação, com acesso restrito, para responder a pedidos de autoridades e a processos. Depois disso, apaga.
+O NuFlow guarda, com acesso restrito, o conteúdo de avaliações removidas, a identificação de quem as escreveu e o histórico de moderação e contestação por 3 anos, ou até o fim de processo em curso, para se defender e atender a ordens judiciais. Depois disso, apaga.
 
 ## 11. Responsabilidade
 

@@ -43,27 +43,28 @@ O NuFlow não pede dados sensíveis (saúde, biometria, religião, origem racial
 
 ## 4. Para que usamos e com qual base legal
 
-- **Prestar o serviço contratado** (criar contas, organizar demandas, enviar avisos, guardar arquivos): execução de contrato (art. 7º, V) e, quando o NuFlow age como operador, as instruções da empresa controladora.
+- **Prestar o serviço contratado** (organizar demandas, enviar avisos, guardar arquivos): quando o NuFlow age como operador, as instruções da empresa controladora, que responde pela base legal.
+- **Contas dos Usuários e do Administrador** (login, permissões, suporte): legítimo interesse do NuFlow e da empresa cliente em prestar o serviço contratado (art. 7º, IX). Quem contrata é a empresa, e não a pessoa, por isso a base não é a execução de contrato.
 - **Cobrança e nota fiscal da assinatura:** execução de contrato e cumprimento de obrigação legal (art. 7º, II e V).
 - **Pagamento e nota fiscal dos profissionais pelas empresas:** execução de contrato e procedimentos preliminares a ele, e obrigação legal da empresa (art. 7º, II e V). O NuFlow é operador.
-- **Rede de Profissionais, score e avaliações:** execução do contrato com o profissional (os [Termos do Profissional](/profissionais/termos)) e legítimo interesse das empresas em conhecer o trabalho de quem vão contratar (art. 7º, V e IX). O NuFlow avaliou esse interesse contra os direitos do profissional e adotou as garantias da seção 6.
+- **Rede de Profissionais, score e avaliações:** execução do contrato com o profissional (os [Termos do Profissional](/profissionais/termos)) e legítimo interesse das empresas em conhecer o trabalho de quem vão contratar (art. 7º, V e IX). O NuFlow registrou o teste desse interesse contra os direitos do profissional, adotou as garantias da seção 6 e apresenta o registro à ANPD quando ela pedir.
 - **Segurança, prevenção de fraude e registros de acesso:** cumprimento de obrigação legal (Marco Civil, art. 15) e legítimo interesse (art. 7º, II e IX).
 - **Análise de briefing e transcrição por inteligência artificial,** quando a empresa liga o recurso: execução de contrato, como operador da empresa.
-- **Responder a contatos comerciais do site:** consentimento dado no formulário (art. 7º, I), que pode ser retirado a qualquer momento.
+- **Responder a contatos comerciais do site:** procedimentos preliminares a um contrato, a pedido do próprio titular (art. 7º, V).
 - **Defesa em processos:** exercício regular de direitos (art. 7º, VI).
 
 O NuFlow não vende dados pessoais, não os usa para publicidade e não toma decisões exclusivamente automatizadas que afetem você, salvo o cálculo do score descrito na seção 6, que você pode pedir para revisar.
 
 ## 5. Com quem compartilhamos
 
-Compartilhamos dados só com quem é necessário para o serviço funcionar, sob contrato e com dever de sigilo:
+Compartilhamos dados só com quem é necessário para o serviço funcionar. Com os fornecedores de infraestrutura, isso acontece sob os termos de contrato e de proteção de dados de cada um:
 
 - **Vercel** (hospedagem da aplicação) — Estados Unidos e outras regiões;
 - **Supabase** (banco de dados e armazenamento de arquivos) — [PREENCHER: região do projeto, ex. São Paulo ou Estados Unidos];
 - **Railway** (servidor de WhatsApp e conversor de vídeo) — [PREENCHER: região];
 - **Resend** (envio de e-mails) — Estados Unidos;
-- **Anthropic** e **OpenAI** (inteligência artificial para análise de briefing e transcrição de áudio) — Estados Unidos. Pelos termos comerciais vigentes desses fornecedores, o que é enviado pela API não é usado para treinar modelos;
-- **WhatsApp (Meta)**, por onde passam as mensagens de aviso, sob os termos do próprio WhatsApp.
+- **Anthropic** e **OpenAI** (inteligência artificial para análise de briefing e transcrição de áudio) — Estados Unidos. Pelos termos comerciais vigentes desses fornecedores, o que é enviado pela API não é usado para treinar modelos, mas eles podem guardar os dados por prazo limitado, para segurança e prevenção de abuso;
+- **WhatsApp (Meta):** as mensagens de aviso passam pelo WhatsApp, serviço de terceiro que segue os próprios termos, sem contrato com o NuFlow, pelo número que a própria empresa cliente conecta.
 
 Dentro do NuFlow, os dados de uma empresa não são visíveis a outra. A exceção é o perfil da Rede e as avaliações dos profissionais, que todas as empresas clientes veem, como explicado na seção 6, e os cards que uma empresa decide compartilhar com uma empresa parceira.
 
@@ -81,18 +82,20 @@ Ao se cadastrar, o profissional entra na Rede do NuFlow. As empresas clientes ve
 
 ## 7. Transferência internacional
 
-Alguns fornecedores da seção 5 tratam dados fora do Brasil, principalmente nos Estados Unidos. Essas transferências se apoiam nas hipóteses do art. 33 da LGPD, em especial cláusulas contratuais com os fornecedores, na forma da regulamentação da ANPD (Resolução CD/ANPD nº 19/2024), e na necessidade para a execução do contrato com o titular. [PREENCHER com o advogado: o mecanismo usado com cada fornecedor.]
+Alguns fornecedores da seção 5 tratam dados fora do Brasil, principalmente nos Estados Unidos. O NuFlow adota, para cada um, um dos mecanismos do art. 33 da LGPD e da Resolução CD/ANPD nº 19/2024, e informa qual é, a pedido do titular ou da empresa cliente.
 
 ## 8. Por quanto tempo guardamos
 
 - **Conteúdo das empresas clientes:** enquanto durar o contrato. Depois do encerramento, 30 dias para exportação e exclusão em até 60 dias, com as cópias de segurança renovadas em até 90 dias.
 - **Dados fiscais de profissionais:** enquanto a empresa que os recebeu mantiver a relação e pelo prazo que a lei fiscal exigir dela, em regra 5 anos.
-- **Perfil da Rede e avaliações:** enquanto o profissional mantiver o cadastro.
+- **Perfil da Rede e avaliações:** enquanto o profissional mantiver o cadastro. Depois da exclusão, o CPF ou CNPJ e as notas ficam guardados por até 3 anos, com acesso restrito, só para impedir que alguém apague o histórico e se cadastre de novo.
+- **Avaliações removidas e histórico de moderação:** 3 anos, ou até o fim de processo em curso, com acesso restrito.
 - **Conta e cobrança da assinatura:** durante o contrato e 5 anos depois, pelo prazo de prescrição e da lei fiscal.
 - **Registros de acesso:** 6 meses, como exige o art. 15 do Marco Civil da Internet.
 - **Registro de auditoria:** o fato (quem, o quê, quando) enquanto a conta existir; os detalhes, 90 dias.
-- **Registro de aceite dos termos:** enquanto a conta existir e 5 anos depois.
+- **Registro de aceite dos termos:** enquanto a conta existir e depois, pelo prazo de prescrição aplicável.
 - **Contatos comerciais:** até 2 anos sem retorno, ou até o pedido de exclusão.
+- **Cópias de segurança:** apagadas no ciclo de renovação, em até 90 dias.
 
 Dados anonimizados, que não identificam ninguém, podem ser guardados para estatística.
 
@@ -100,7 +103,7 @@ Dados anonimizados, que não identificam ninguém, podem ser guardados para esta
 
 Usamos conexão cifrada (HTTPS), senhas guardadas com código irreversível, dados bancários e PIX cifrados, separação dos dados por empresa conferida por testes automáticos a cada mudança, controle de permissões por pessoa, registro de auditoria, limite de tentativas nos formulários públicos e cópias de segurança com restauração testada.
 
-Nenhuma medida é infalível. Se houver incidente de segurança que possa causar risco ou dano relevante, comunicaremos as empresas afetadas, a Autoridade Nacional de Proteção de Dados (ANPD) e os titulares, nos prazos da regulamentação (Resolução CD/ANPD nº 15/2024).
+Nenhuma medida é infalível. Se houver incidente que possa causar risco ou dano relevante, o NuFlow comunicará a Autoridade Nacional de Proteção de Dados (ANPD) e os titulares quando for o controlador. Quando for operador, avisará a empresa controladora em até 48 horas e a ajudará a comunicar, conforme a Resolução CD/ANPD nº 15/2024.
 
 ## 10. Seus direitos
 
@@ -115,7 +118,7 @@ A LGPD (art. 18) garante a você:
 - se opor a tratamento feito com base em legítimo interesse, quando houver descumprimento da lei;
 - pedir revisão de decisão tomada só por meio automatizado, como o score (art. 20).
 
-**Como pedir:** escreva para ${E.emailEncarregado}, informando o nome e o e-mail usados no NuFlow e a empresa a que você está ligado. Podemos pedir confirmação de identidade antes de entregar dados. Respondemos em até 15 dias. Quando a empresa cliente for a controladora, encaminhamos o pedido a ela no mesmo dia e avisamos você.
+**Como pedir:** escreva para ${E.emailEncarregado}, informando o nome e o e-mail usados no NuFlow e a empresa a que você está ligado. Podemos pedir confirmação de identidade antes de entregar dados. Respondemos em até 15 dias. Quando a empresa cliente for a controladora, encaminhamos o pedido a ela em até 2 dias úteis e avisamos você.
 
 Você também pode reclamar à ANPD (www.gov.br/anpd).
 

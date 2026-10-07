@@ -20,7 +20,7 @@ Fazem parte destes Termos, como se estivessem aqui escritos: a [Política de Pri
 ## 2. Definições
 
 - **Plataforma:** o sistema NuFlow, acessado pela internet, com as funções descritas na seção 3.
-- **Conteúdo do Cliente:** todo dado, texto, arquivo, vídeo, imagem, briefing, comentário e registro que a Empresa, seus Usuários ou pessoas convidadas por ela inserem na Plataforma.
+- **Conteúdo do Cliente:** todo dado, texto, arquivo, vídeo, imagem, briefing, comentário e registro que a Empresa, seus Usuários ou pessoas convidadas por ela inserem na Plataforma. Não são Conteúdo do Cliente as avaliações e respostas publicadas na Rede nem os dados de perfil que o Profissional fornece ao NuFlow ao aceitar os Termos do Profissional. Desses dados, o NuFlow é o controlador.
 - **Profissional:** videomaker, designer ou outro prestador externo que se cadastra na Plataforma para trabalhar com empresas clientes, nos termos dos [Termos do Profissional](/profissionais/termos).
 - **Rede:** o conjunto de perfis de Profissionais visível às empresas clientes do NuFlow, com o histórico de avaliações de cada um.
 - **Usuário externo:** Profissional, cliente da Empresa que aprova uma entrega ou pessoa que só envia pedidos. Usuário externo não conta para o preço.
@@ -56,10 +56,10 @@ O NuFlow pode pedir confirmação de identidade antes de atender um pedido que e
 
 ## 5. Preço e pagamento
 
-O preço é de **R$ 97,00 (noventa e sete reais) por mês, por Empresa**, já com os tributos incidentes sobre a nota fiscal de serviço, exceto os que a lei mande reter na fonte.
+O preço é de **R$ 97,00 (noventa e sete reais) por mês, por Empresa**. O valor é bruto: retenções na fonte exigidas por lei são descontadas pela Empresa, que envia o comprovante ao NuFlow.
 
 - Não há cobrança por Usuário externo.
-- [PREENCHER: limite de Usuários internos incluídos, se houver. Proposta: sem limite enquanto o uso for razoável.]
+- Estão incluídos até [PREENCHER: número] Usuários internos por Empresa.
 - O ciclo começa na data de ativação da Empresa e se renova a cada mês.
 - A cobrança é enviada ao e-mail do Administrador, por boleto, PIX ou outro meio indicado pelo NuFlow, com vencimento em até 5 dias corridos do envio. A nota fiscal é emitida a cada pagamento.
 - O pagamento é antecipado: cada mensalidade paga o mês que começa.
@@ -100,7 +100,8 @@ A Empresa e seus Usuários não podem usar a Plataforma para:
 - copiar, revender, sublicenciar ou fazer engenharia reversa da Plataforma;
 - inserir programas maliciosos;
 - tratar dados pessoais sem base legal, ou dados de crianças e adolescentes fora das hipóteses da lei;
-- publicar avaliações de Profissionais fora das regras da [Política de Avaliações](/profissionais/avaliacoes).
+- publicar avaliações de Profissionais fora das regras da [Política de Avaliações](/profissionais/avaliacoes);
+- copiar, exportar ou divulgar fora do NuFlow os perfis e as avaliações da Rede, ou usá-los para outra finalidade que não a contratação de Profissionais.
 
 O NuFlow pode retirar conteúdo que viole esta seção e, nos casos graves, suspender a conta envolvida, informando o motivo.
 
@@ -111,8 +112,11 @@ A Empresa é responsável:
 - pelo Conteúdo do Cliente e pela base legal para tratar os dados pessoais que coloca na Plataforma, inclusive os dados da equipe e dos próprios clientes;
 - por ter as autorizações de uso de imagem, voz e obra das pessoas que aparecem nos vídeos, fotos e artes, inclusive pacientes, consumidores e modelos;
 - por não inserir dados pessoais sensíveis (como dados de saúde, biometria ou religião) sem necessidade e sem base legal;
-- pela relação com os Profissionais que contrata: preço, prazo, pagamento, nota fiscal, tributos e direitos sobre as obras. O NuFlow não é parte dessa relação;
-- pelo número de WhatsApp que conecta à Plataforma e pelo cumprimento das regras do WhatsApp.
+- pela relação com os Profissionais que contrata: preço, prazo, pagamento, nota fiscal, tributos, direitos sobre as obras e a natureza da contratação, inclusive eventuais encargos trabalhistas e previdenciários. O NuFlow não é parte dessa relação;
+- pelas avaliações feitas por seus Usuários e por quem ela convidar a avaliar;
+- pelo número de WhatsApp que conecta à Plataforma. A Empresa conhece e aceita o risco de bloqueio descrito na seção 13.
+
+A Empresa indenizará o NuFlow por condenações, acordos e custos razoáveis de defesa decorrentes de reclamação de terceiro sobre o Conteúdo do Cliente ou sobre as avaliações descritas acima.
 
 ## 11. Propriedade dos dados e dos arquivos
 
@@ -126,14 +130,14 @@ Os direitos sobre as obras feitas por Profissionais (vídeos, artes, roteiros) s
 
 ## 12. Exportação e saída
 
-Enquanto o contrato durar, e por **30 dias depois do encerramento**, o Administrador pode pedir a exportação do Conteúdo do Cliente. O NuFlow entrega, em até 15 dias do pedido:
+Enquanto o contrato durar, e por **30 dias depois do encerramento**, o Administrador pode pedir a exportação do Conteúdo do Cliente. A exportação é feita pela Plataforma, quando houver essa função, ou a pedido, até uma vez por mês, entregue por link de download em até 15 dias úteis, com:
 
 - os registros (demandas, briefings, comentários, histórico, cadastros) em formato aberto e legível por máquina, como CSV ou JSON;
 - os arquivos enviados, no formato original.
 
-Passados os 30 dias, o NuFlow apaga o Conteúdo do Cliente em até 60 dias, inclusive das cópias de segurança, que se renovam em até 90 dias. Fica guardado só o que a lei obriga, como notas fiscais emitidas pelo NuFlow, registros de acesso pelo prazo do Marco Civil da Internet e os registros de aceite destes Termos, pelo prazo de prescrição.
+Passados os 30 dias, o NuFlow apaga o Conteúdo do Cliente da Plataforma em até 60 dias. As cópias de segurança, inclusive as guardadas fora da Plataforma, são apagadas no ciclo de renovação, em até 90 dias do encerramento. Fica guardado só o que a lei obriga ou o que for necessário para a defesa do NuFlow, como notas fiscais emitidas pelo NuFlow, registros de acesso pelo prazo do Marco Civil da Internet e os registros de aceite destes Termos, pelo prazo de prescrição aplicável.
 
-Os perfis de Profissionais na Rede não fazem parte do Conteúdo do Cliente: continuam pertencendo aos Profissionais. As avaliações feitas pela Empresa permanecem na Rede sem o nome da pessoa que avaliou, conforme a [Política de Avaliações](/profissionais/avaliacoes).
+Os perfis de Profissionais na Rede não fazem parte do Conteúdo do Cliente. A avaliação publicada mostra o nome da Empresa avaliadora e a data, nunca o nome da pessoa que avaliou. A Empresa concorda com essa exibição, que não viola a seção 15. Depois do encerramento do contrato, as avaliações da Empresa permanecem na Rede com a indicação "empresa verificada", sem o nome dela, conforme a [Política de Avaliações](/profissionais/avaliacoes).
 
 ## 13. Disponibilidade e suporte
 
@@ -155,9 +159,9 @@ O NuFlow não responde por:
 - conteúdo inserido pela Empresa, pelos Usuários ou por terceiros convidados;
 - atos de Profissionais ou de outras empresas da Rede;
 - falhas causadas por uso fora destes Termos, por senha compartilhada ou por equipamento e internet da Empresa;
-- caso fortuito e força maior, incluindo falhas gerais de provedores de internet e de serviços de terceiros fora do controle do NuFlow.
+- caso fortuito ou força maior (art. 393 do Código Civil), inclusive falhas de serviços de terceiros cujos efeitos o NuFlow não pudesse evitar ou impedir com medidas razoáveis.
 
-Esses limites não valem em caso de dolo ou culpa grave do NuFlow, nem afastam direitos que a lei não permite afastar.
+As partes reconhecem que o preço foi fixado considerando esta divisão de riscos (art. 421-A do Código Civil). Esses limites não valem em caso de dolo ou culpa grave do NuFlow, não se aplicam aos direitos dos titulares de dados perante o NuFlow e não afastam direitos que a lei não permite afastar.
 
 ## 15. Confidencialidade
 
@@ -173,7 +177,7 @@ O NuFlow pode atualizar estes Termos. Mudança que reduza direitos ou aumente de
 
 ## 18. Disposições gerais
 
-- O aceite eletrônico destes Termos tem validade de assinatura entre as partes. O NuFlow guarda quem aceitou, qual versão, quando e de onde (com o endereço IP protegido por código irreversível).
+- O aceite eletrônico destes Termos tem validade de assinatura entre as partes, nos termos do art. 10, §2º, da MP nº 2.200-2/2001 e da Lei nº 14.063/2020. O NuFlow guarda quem aceitou, qual versão, quando e de onde (com o endereço IP protegido por código irreversível).
 - As comunicações são feitas pelo e-mail do Administrador e pelo e-mail ${E.emailContato}.
 - Se uma cláusula for considerada inválida, as demais continuam valendo.
 - A tolerância com um descumprimento não significa renúncia ao direito.
@@ -182,5 +186,5 @@ O NuFlow pode atualizar estes Termos. Mudança que reduza direitos ou aumente de
 
 ## 19. Lei e foro
 
-Estes Termos seguem a lei brasileira. Fica eleito o foro da comarca de ${E.foro}, onde o NuFlow tem sede, para resolver qualquer questão sobre eles. Antes de ir à Justiça, as partes tentarão resolver a questão por conversa direta, por até 30 dias.
+Estes Termos seguem a lei brasileira. Fica eleito o foro da comarca de ${E.foro}, onde o NuFlow tem sede, para resolver qualquer questão sobre eles, ressalvado o direito da Empresa que seja considerada consumidora de propor ação no foro do seu domicílio. Antes de ir à Justiça, as partes tentarão resolver a questão por conversa direta, por até 30 dias.
 `

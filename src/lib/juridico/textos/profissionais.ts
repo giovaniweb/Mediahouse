@@ -67,25 +67,26 @@ Ao final de um trabalho feito por meio do NuFlow, a empresa que contratou e, por
 - As avaliações tratam **só do trabalho**: qualidade, prazo, comunicação e profissionalismo. Não podem conter ofensa, dado pessoal de clientes ou terceiros, nem acusação de crime. As regras completas estão na [Política de Avaliações](/profissionais/avaliacoes).
 - O **score** é a média das notas recebidas nos últimos 24 meses, aparece a partir de 3 avaliações e é recalculado a cada nova avaliação. Notas removidas por violar as regras saem do cálculo.
 - Os comentários passam por moderação antes de aparecer. Você é avisado quando recebe uma avaliação.
+- O NuFlow não é autor das avaliações, não verifica a veracidade dos fatos narrados e não as endossa. Quem avalia responde pelo que escreveu.
 
 ## 7. Seu direito de resposta e de contestação
 
 - **Resposta:** você pode publicar uma resposta a qualquer avaliação, que aparece logo abaixo dela. A resposta segue as mesmas regras de conteúdo.
-- **Contestação:** se uma avaliação violar as regras, tiver fato falso, não se referir a um trabalho real ou vier de quem tem conflito de interesse, você pode contestar pelo botão da avaliação ou pelo e-mail ${E.emailEncarregado}. Enquanto a contestação for analisada, o comentário contestado pode ficar oculto. O NuFlow decide em até 5 dias úteis, explica o motivo e você pode pedir uma segunda análise.
+- **Contestação:** se uma avaliação violar as regras, tiver fato falso, não se referir a um trabalho real ou vier de quem tem conflito de interesse, você pode contestar pelo botão da avaliação ou pelo e-mail ${E.emailEncarregado}. Enquanto a contestação for analisada, o comentário contestado pode ficar oculto. O NuFlow decide, em regra, em até 5 dias úteis, explica o motivo e você pode pedir uma segunda análise.
 - **Revisão do score:** você pode pedir revisão do cálculo do score, como garante o art. 20 da LGPD.
 
 ## 8. Suas obrigações
 
 - Informar dados verdadeiros e mantê-los atualizados.
 - **Guardar sigilo** sobre briefings, arquivos, dados de clientes e qualquer informação a que tiver acesso pelos trabalhos, e usá-los só para o trabalho contratado. Você trata esses dados em nome da empresa e deve seguir as instruções dela.
-- Não mostrar trabalhos em portfólio sem autorização da empresa contratante.
+- Não mostrar trabalhos em portfólio sem autorização da empresa contratante. Você garante que tem autorização do cliente e das pessoas que aparecem em cada peça do portfólio. Não publique peças com pacientes ou dados de saúde. O NuFlow pode retirar a peça mediante reclamação.
 - Não pedir, comprar ou trocar avaliações, não avaliar a si mesmo e não criar perfis falsos.
 - Não usar a Plataforma para assediar, ofender ou retaliar empresas, clientes ou outros profissionais.
 - Seguir as regras de uso aceitável dos [Termos de Uso](/termos), no que couber.
 
 ## 9. Direitos sobre o seu trabalho
 
-O NuFlow não adquire direitos sobre os vídeos, artes e outras obras que você produz. A cessão ou licença desses direitos é combinada entre você e a empresa e, pela Lei de Direitos Autorais, deve ser feita por escrito.
+O NuFlow não adquire direitos sobre os vídeos, artes e outras obras que você produz. A cessão ou licença desses direitos é combinada entre você e a empresa. A cessão deve ser feita por escrito (art. 50 da Lei nº 9.610/1998). A licença também convém que seja escrita, porque os contratos de direitos autorais são interpretados de forma restritiva (art. 4º da mesma lei).
 
 Ao enviar arquivos e portfólio para a Plataforma, você autoriza o NuFlow a guardá-los e exibi-los às empresas, na medida necessária para o funcionamento do serviço.
 
@@ -98,8 +99,9 @@ O NuFlow pode suspender ou encerrar seu cadastro se você descumprir estes Termo
 Você pode pedir a exclusão a qualquer momento, pelo e-mail ${E.emailEncarregado} ou pela Plataforma, quando houver essa opção. Depois do pedido:
 
 - seu perfil sai da Rede em até 2 dias úteis e é apagado, com as avaliações e o score, em até 15 dias;
+- para impedir a manipulação da Rede, o NuFlow guarda por até 3 anos, de forma restrita, o seu CPF ou CNPJ e as notas do perfil excluído. Se houver novo cadastro com o mesmo documento, as avaliações anteriores voltam;
 - os dados fiscais e o histórico de trabalhos que estão com cada empresa com que você trabalhou ficam sob responsabilidade dela, que pode ter de guardá-los pelo prazo da lei. O NuFlow avisa essas empresas do seu pedido;
-- o registro do seu aceite destes Termos é guardado por 5 anos, como prova;
+- o registro do seu aceite destes Termos é guardado pelo prazo de prescrição aplicável, como prova;
 - as cópias de segurança se renovam em até 90 dias.
 
 Se você só quiser parar de aparecer para empresas novas, pode sair da Rede sem excluir a conta. Se voltar, as avaliações anteriores voltam junto.
