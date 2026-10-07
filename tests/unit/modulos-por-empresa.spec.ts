@@ -14,7 +14,7 @@ const findMany = vi.fn()
 vi.mock("@/lib/prisma", () => ({ prisma: { moduloOrganizacao: { findMany: (...a: unknown[]) => findMany(...a) } } }))
 
 const { modulosDaOrganizacao, rotaBloqueadaParaOrg } = await import("@/lib/modulos-org")
-const { PADRAO_MODULOS, DISPONIVEL_NA_PLATAFORMA, moduloDaRota, rotaIndisponivelNaPlataforma } =
+const { PADRAO_MODULOS, DISPONIVEL_NA_PLATAFORMA, moduloDaRota, rotaIndisponivelNaPlataforma, rotaDeModuloDesligado } =
   await import("@/lib/modulos")
 
 beforeEach(() => { findMany.mockReset(); findMany.mockResolvedValue([]) })
@@ -126,5 +126,27 @@ describe("banco de ideias sai do piloto", () => {
 
   it("empresa nova não nasce com ele", () => {
     expect(PADRAO_MODULOS.ideias).toBe(false)
+  })
+})
+
+// Menu e botões fazem a mesma pergunta. Botão para rota de módulo desligado
+// devolvia a pessoa ao Dashboard ("Abrir evento", "Ver todas" as ideias).
+describe("rotaDeModuloDesligado", () => {
+  const empresa = { ...PADRAO_MODULOS, eventos: false, ideias: false, growth: true }
+
+  it("rota de módulo desligado, inclusive o detalhe", () => {
+    expect(rotaDeModuloDesligado("/coberturas/abc", empresa)).toBe(true)
+    expect(rotaDeModuloDesligado("/campo", empresa)).toBe(true)
+    expect(rotaDeModuloDesligado("/ideias", empresa)).toBe(true)
+  })
+
+  it("rota de módulo ligado ou sem módulo passa", () => {
+    expect(rotaDeModuloDesligado("/design", empresa)).toBe(false)
+    expect(rotaDeModuloDesligado("/demandas/abc", empresa)).toBe(false)
+    expect(rotaDeModuloDesligado("/social", empresa)).toBe(false)
+  })
+
+  it("perfil carregando não decide nada", () => {
+    expect(rotaDeModuloDesligado("/coberturas", undefined)).toBe(false)
   })
 })

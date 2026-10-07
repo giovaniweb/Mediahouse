@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
 import { useMe } from "@/hooks/usePermissoes"
 import { PERMISSAO_HREF_MAP } from "@/lib/permissoes"
-import { moduloDaRota } from "@/lib/modulos"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { acessoDasAreas } from "@/lib/painel-departamento"
 import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
@@ -187,13 +187,13 @@ export function Sidebar() {
     // (/api/me devolve os módulos da empresa ativa); enquanto carrega, `mods`
     // fica indefinido e nada é escondido — piscar item é melhor que piscar menu.
     //
-    // A pergunta é feita pelo mesmo `moduloDaRota` que o middleware usa, e não
-    // por href escrito à mão. Era esse o buraco: `/ideias` e `/mensagens`
+    // A pergunta é feita pelo mesmo `moduloDaRota` que o middleware usa (via
+    // rotaDeModuloDesligado, que os botões também usam), e não por href
+    // escrito à mão. Era esse o buraco: `/ideias` e `/mensagens`
     // tinham regra própria, `/eventos` era escondido pelo rótulo da seção, e
     // `/coberturas` — que mora em "Audiovisual" e pertence a "eventos" — não
     // batia em nenhuma das duas. Ficou meses no menu de um módulo desligado.
-    const modulo = moduloDaRota(href)
-    if (modulo && mods && !mods[modulo]) return false
+    if (rotaDeModuloDesligado(href, mods)) return false
     if (!me?.permissoes) return true // loading → mostra tudo
     if (isAdmin) return true
     // O histórico de cada área aparece exatamente para quem a página aceita.

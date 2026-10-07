@@ -2,7 +2,6 @@
 
 import { DashboardPreview } from "@/components/dashboard/DashboardPreview"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
@@ -71,15 +70,11 @@ function InternalDashboard() {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const router = useRouter()
 
-  // Redirecionar mobile para /campo
-  useEffect(() => {
-    const isMobile = window.innerWidth < 768 || /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent)
-    if (isMobile) {
-      router.replace("/campo")
-    }
-  }, [router])
+  // Sem desvio para celular. O redirecionamento para /campo sobrou aqui depois
+  // que o middleware perdeu o dele (09/09/2026): /campo é do módulo eventos,
+  // desligado, e a rota bloqueada devolve ao Dashboard — o celular ficava em
+  // laço. O celular vê o mesmo Dashboard, com o menu em gaveta.
 
   // Videomakers externos têm dashboard próprio
   if (session?.user?.tipo === "videomaker") {

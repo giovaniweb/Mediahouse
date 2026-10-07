@@ -13,6 +13,8 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { mensagemDeErro } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 
@@ -53,6 +55,12 @@ type ProdutoDetail = any
 export default function ProdutoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { data, mutate } = useSWR(`/api/produtos/${id}`, fetcher)
+  // As ideias por produto vêm do Banco de Ideias (/ideias). Sem o módulo, o
+  // "Ver todas" levava a uma rota bloqueada, e a Social não serve de destino:
+  // o quadro dela organiza ideias por linha, não por produto. Como no
+  // Dashboard, o bloco e o indicador somem junto com o módulo.
+  const { data: me } = useMe()
+  const temIdeias = !!me?.modulos && !rotaDeModuloDesligado("/ideias", me.modulos)
   const produto: ProdutoDetail | null = data?.produto ?? null
   const kpi: KPI | null = produto?.kpi ?? null
 
@@ -197,7 +205,7 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
 
         {/* ── KPI Cards Row 2: Ativas, Concluídas, Tempo Médio, Ideias ── */}
         {kpi && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={cn("grid grid-cols-2 gap-4", temIdeias ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-4 h-4 text-blue-400" />
@@ -214,14 +222,14 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
               <p className="text-2xl font-bold text-white">{kpi.demandasConcluidas}</p>
               <p className="text-[10px] text-zinc-600">{kpi.tempoMedioConclusao > 0 ? `~${kpi.tempoMedioConclusao}d p/ concluir` : "—"}</p>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            {temIdeias && <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Lightbulb className="w-4 h-4 text-yellow-400" />
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Ideias</span>
               </div>
               <p className="text-2xl font-bold text-white">{kpi.ideiasTotal}</p>
               <p className="text-[10px] text-zinc-600">{kpi.ideiasPendentes} pendentes · {kpi.ideiasRealizadas} realizadas</p>
-            </div>
+            </div>}
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="w-4 h-4 text-purple-400" />
@@ -317,7 +325,7 @@ export default function ProdutoDetailPage({ params }: { params: Promise<{ id: st
         )}
 
         {/* ── Ideias deste Produto ── */}
-        {kpi && kpi.ideiasRecentes && kpi.ideiasRecentes.length > 0 && (
+        {temIdeias && kpi && kpi.ideiasRecentes && kpi.ideiasRecentes.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

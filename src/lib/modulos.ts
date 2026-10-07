@@ -91,6 +91,20 @@ export function moduloDaRota(pathname: string): Modulo | null {
 }
 
 /**
+ * O caminho é de um módulo que esta empresa NÃO tem? É a pergunta do menu, e a
+ * de todo botão que leva para fora da tela (ex.: "Abrir evento" no detalhe da
+ * demanda): um botão para rota bloqueada só devolve a pessoa ao Dashboard.
+ *
+ * `modulos` indefinido = perfil ainda carregando, e aí a resposta é "não se
+ * sabe" (false). O menu prefere mostrar a piscar; um botão que leva a módulo
+ * deve esperar o perfil (`modulos && !rotaDeModuloDesligado(...)`).
+ */
+export function rotaDeModuloDesligado(pathname: string, modulos: Partial<Record<Modulo, boolean>> | null | undefined): boolean {
+  const modulo = moduloDaRota(pathname)
+  return modulo !== null && !!modulos && !modulos[modulo]
+}
+
+/**
  * Bloqueio GLOBAL — o que nem existe como produto.
  *
  * É o que roda no middleware (`auth.config.ts`), que é edge-safe e não fala com
