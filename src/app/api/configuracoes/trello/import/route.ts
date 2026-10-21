@@ -58,9 +58,10 @@ function resolveStatusFromList(
 }
 
 // Generate unique demand code
-async function nextCode(): Promise<string> {
+async function nextCode(organizacaoId: string): Promise<string> {
   const last = await prisma.demanda.findFirst({
-    where: { codigo: { startsWith: "TRL-" } },
+    // Código é único por empresa (Onda 2A): a busca leva a empresa.
+    where: { organizacaoId, codigo: { startsWith: "TRL-" } },
     orderBy: { codigo: "desc" },
     select: { codigo: true },
   })
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
         const listName = listMap.get(card.idList) ?? "Entrada"
         const { statusVisivel, statusInterno } = resolveStatusFromList(card.idList, listName, customMapping)
 
-        const codigo = await nextCode()
+        const codigo = await nextCode(organizacaoId)
 
         await prisma.demanda.create({
           data: {

@@ -58,10 +58,10 @@ async function defaultRequester(
   return membership?.usuarioId ?? null
 }
 
-async function uniqueDemandCode(): Promise<string> {
+async function uniqueDemandCode(organizacaoId: string): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const code = `MAIL-${new Date().getFullYear().toString().slice(-2)}-${crypto.randomInt(100000, 999999)}`
-    const exists = await prisma.demanda.findFirst({ where: { codigo: code }, select: { id: true } })
+    const exists = await prisma.demanda.findFirst({ where: { organizacaoId, codigo: code }, select: { id: true } })
     if (!exists) return code
   }
   throw new Error("Não foi possível gerar um código único para a demanda.")
@@ -117,7 +117,7 @@ export async function createDemandFromInboxEmail(
     throw new Error("Configure um solicitante padrão para a caixa de entrada.")
   }
 
-  const code = await uniqueDemandCode()
+  const code = await uniqueDemandCode(email.organizacaoId)
   try {
     const created = await prisma.$transaction(async (tx) => {
       const claimed = await tx.emailEntrada.updateMany({
