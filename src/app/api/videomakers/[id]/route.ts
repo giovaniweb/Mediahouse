@@ -103,7 +103,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({
     videomaker: {
       ...vm,
-      // Relação comercial desta empresa (diária, status, lista negra).
+      // Relação comercial desta empresa (diária, status, lista negra). O PUT
+      // grava contrato, edição e status no vínculo; ler do perfil global fazia
+      // a tela mostrar "Externo" depois de o vínculo já dizer "Interno".
+      tipoContrato: vinculo?.tipoContrato ?? vm.tipoContrato,
+      podeEditar: vinculo?.podeEditar ?? vm.podeEditar,
+      status: vinculo?.status ?? vm.status,
       valorDiaria: vinculo?.valorDiaria ?? null,
       emListaNegra: vinculo?.emListaNegra ?? false,
       listaNegraMotivo: vinculo?.listaNegraMotivo ?? null,

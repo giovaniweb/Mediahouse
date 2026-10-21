@@ -1,3 +1,4 @@
+import { contratoEfetivo } from "@/lib/quadro-do-card"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -56,7 +57,10 @@ export async function GET(req: NextRequest) {
         status: { not: "inativo" },
         ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
       },
-      select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true },
+      select: {
+        id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
+        vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },
+      },
       orderBy: { nome: "asc" },
     })
     for (const v of vms) {
@@ -64,7 +68,7 @@ export async function GET(req: NextRequest) {
         value: `vm:${v.id}`,
         label: v.nome,
         subtitle: v.cidade ?? "",
-        tipoContrato: v.tipoContrato,
+        tipoContrato: contratoEfetivo(v.vinculos[0]?.tipoContrato, v.tipoContrato) ?? "externo",
         origem: "vm",
         usuarioId: v.usuarioId,
       })
@@ -110,7 +114,10 @@ export async function GET(req: NextRequest) {
     // Videomakers que editam
     const vms = await prisma.videomaker.findMany({
       where: { podeEditar: true, status: { not: "inativo" } },
-      select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true },
+      select: {
+        id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
+        vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },
+      },
       orderBy: { nome: "asc" },
     })
     for (const v of vms) {
@@ -118,7 +125,7 @@ export async function GET(req: NextRequest) {
         value: `vm:${v.id}`,
         label: v.nome,
         subtitle: v.cidade ?? "",
-        tipoContrato: v.tipoContrato,
+        tipoContrato: contratoEfetivo(v.vinculos[0]?.tipoContrato, v.tipoContrato) ?? "externo",
         origem: "vm",
         usuarioId: v.usuarioId,
       })
