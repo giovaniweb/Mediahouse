@@ -127,9 +127,10 @@ function DemandasKanban() {
   params.set("filaTrabalho", "1")
 
   params.set("area", "audiovisual")
-  // Cobertura tem quadro próprio (/jobs). Sem isto o mesmo registro aparecia
-  // nos dois lugares, e converter em Job não tirava a demanda daqui.
-  params.set("semCobertura", "1")
+  // Job tem quadro próprio (/jobs). A regra de qual card é Job mora num lugar só
+  // (lib/quadro-do-card.ts): os dois quadros pedem por ela e um é o
+  // complemento exato do outro — nenhum card fica fora dos dois.
+  params.set("quadro", "demandas")
   if (search) params.set("search", search)
   if (filtroDepto) params.set("departamento", filtroDepto)
   const pessoa = parametroDaPessoa(filtroPessoa)
@@ -159,8 +160,8 @@ function DemandasKanban() {
 
   // Tamanho da fila sem recorte nem filtro, para o topo dizer "18 de 240 na
   // fila" em vez de chamar o recorte de fila. Uma linha só: interessa o total.
-  const fila = new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", semCobertura: "1", limit: "1" })
-  const recortado = chaveFiltro !== new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", semCobertura: "1" }).toString()
+  const fila = new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", quadro: "demandas", limit: "1" })
+  const recortado = chaveFiltro !== new URLSearchParams({ filaTrabalho: "1", area: "audiovisual", quadro: "demandas" }).toString()
   const { data: dataFila } = useSWR<{ total: number }>(recortado ? `/api/demandas?${fila}` : null, fetcher, { refreshInterval: 30000 })
   const demandasAll = data?.demandas ?? []
 

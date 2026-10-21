@@ -26,7 +26,12 @@ import Link from "next/link"
 import {
   ABA_DA_ACAO,
   ABA_LABEL,
+  LUGAR_LABEL,
+  PODE_ENVIAR_PARA_APROVACAO,
+  abaInicial,
+  abasDoDetalhe,
   type AbaDoDetalhe,
+  type LugarDaAcao,
   captacaoIniciada,
   ehSolicitacaoDeCobertura,
   proximaAcao,
@@ -41,6 +46,7 @@ import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
 import { Briefing } from "@/components/demandas/Briefing"
+import { MarcarPostado } from "@/components/demandas/MarcarPostado"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -146,7 +152,7 @@ function getDemandCopy(growth: boolean) {
     return {
       teamTitle: "Equipe Growth",
       responsibleLabel: "Responsável",
-      productionTitle: "Arquivos e aprovação",
+      productionTitle: "Materiais",
       rawLabel: "Materiais e referências",
       addRaw: "Adicionar link de materiais",
       rawSaved: "Link de materiais salvo!",
@@ -267,9 +273,9 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
   const { presentation, setPresentation } = useDetailPresentation()
-  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem de
-  // ABA_DA_ACAO quando a demanda carrega; depois só a pessoa troca — mudar o
-  // status enquanto ela trabalha não a arrasta para outra aba.
+  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem da
+  // etapa quando a demanda carrega (abaInicial); depois só a pessoa troca —
+  // mudar o status enquanto ela trabalha não a arrasta para outra aba.
   const [abaAtual, setAbaAtual] = useState<{ demandaId: string; aba: AbaDoDetalhe } | null>(null)
   const id = demandaId
   const router = useRouter()
@@ -320,10 +326,30 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
-  const abaDaAcao: AbaDoDetalhe | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
-  if (demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaDaAcao ?? "pedido" })
-  const detailTab: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  // As abas mudam com a etapa (lib/job-fase.ts): Aprovação só aparece da
+  // aprovação em diante ou depois do primeiro envio, e é onde o detalhe abre
+  // em Aprovação, Para postar e Concluído. No resto abre no Pedido.
+  const lugarDaAcao: LugarDaAcao | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  const dadosDasAbas = demanda ? {
+    statusInterno: demanda.statusInterno as string,
+    statusVisivel: demanda.statusVisivel as string,
+    linkCliente: demanda.linkCliente as string | null,
+    finaisEnviados: ((demanda.arquivos ?? []) as { tipoArquivo: string }[]).filter((a) => a.tipoArquivo === "final").length,
+  } : null
+  const abas: AbaDoDetalhe[] = dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"]
+  // Aprovado (Para postar ou Concluído): não se manda mais versão para o cliente.
+  const aprovacaoConcluida = !!demanda && ["para_postar", "finalizado"].includes(demanda.statusVisivel)
+  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaInicial(dadosDasAbas) })
+  const abaEscolhida: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  // Escolheu Aprovação e a demanda voltou para antes dela: cai no Pedido.
+  const detailTab: AbaDoDetalhe = abas.includes(abaEscolhida) ? abaEscolhida : "pedido"
   const setDetailTab = (aba: AbaDoDetalhe) => setAbaAtual({ demandaId: id, aba })
+  // "Equipe" mora embaixo do Pedido: abre o Pedido e rola até o bloco.
+  function irParaAcao(lugar: LugarDaAcao) {
+    if (lugar !== "equipe") return setDetailTab(lugar)
+    setDetailTab("pedido")
+    requestAnimationFrame(() => document.getElementById(`equipe-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
 
   // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
   // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
@@ -367,16 +393,26 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const podeGerenciar = !souExecutorExterno && (papelAtual === "admin" || papelAtual === "gestor")
   const podeEditar = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda))
   const podeExcluir = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda))
+  // Quem faz a peça: responsável, editor ou designer deste card.
+  const souResponsavel = !!dataMe?.id && [
+    ...((demanda?.responsaveis as { usuario?: { id?: string } }[] | undefined) ?? []).map((r) => r.usuario?.id),
+    demanda?.responsavel?.id, demanda?.editor?.usuarioId, demanda?.designer?.usuarioId,
+  ].includes(dataMe.id)
+  // "Enviar para aprovação" saiu da aba Entrega para a faixa do topo: em
+  // Edição/Fazendo (ou depois de um ajuste pedido), para quem faz a peça ou gerencia.
+  const podeEnviarAgora = !!demanda && PODE_ENVIAR_PARA_APROVACAO.includes(demanda.statusInterno) && (souResponsavel || podeEditar)
 
   // ── Converter em Job (cobertura) ────────────────────────────────────────────
   // Não duplica registro: a rota faz UPDATE da classificação nesta mesma
   // demanda. Id, solicitante, briefing, arquivos, comentários, histórico, datas
   // e responsáveis continuam onde estão — o que muda é de qual quadro ela é.
   const [convertendo, setConvertendo] = useState(false)
-  const ehCobertura = ehSolicitacaoDeCobertura({
-    tipoVideo: demanda?.tipoVideo,
-    departamento: demanda?.departamento,
-  })
+  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
+  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
+  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
+  const ehCobertura = !isGrowth && (data?.quadro
+    ? data.quadro === "jobs"
+    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
 
   // A barra de ações é do videomaker DO job. A autorização de verdade está na
   // guarda do servidor; aqui é só para não mostrar botão que não é dele.
@@ -780,6 +816,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       try { json = JSON.parse(text) } catch { /* body não é JSON */ }
       if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
       setLinkGerado(json.link ?? "")
+      // Enviado: a aba Aprovação aparece, e é lá que a peça passa a ser acompanhada.
+      setDetailTab("aprovacao")
 
       await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
@@ -1086,7 +1124,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               Nada é duplicado — muda só a classificação que o quadro de Jobs lê.
               Só aparece para audiovisual que ainda não é cobertura; Growth tem
               outro quadro e outro time. */}
-          {podeEditar && !isGrowth && !ehCobertura && (
+          {/* Com videomaker escalado quem decide o quadro é o contrato dele
+              (interno fica em Demandas): converter não mudaria nada. */}
+          {podeEditar && !isGrowth && !ehCobertura && !demanda.videomaker && (
             <button
               onClick={converterEmJob}
               disabled={convertendo}
@@ -1169,7 +1209,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     {/* Ação de aprovação — única e clara */}
                     {artesPrevia.length === 0 ? (
                       <p className={surface.hint}>
-                        Anexe a arte final em <b>Arquivos e aprovação</b>, logo abaixo, para enviar ao cliente.
+                        Envie a arte final logo abaixo para gerar o link do cliente.
                       </p>
                     ) : demanda.linkCliente ? (
                       <div className="space-y-2">
@@ -1230,14 +1270,21 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
             <p className={surface.motivo}><b>Motivo do impedimento:</b> {demanda.motivoImpedimento}</p>
           )}
-          {abaDaAcao && detailTab !== abaDaAcao && (
-            <button type="button" className={surface.nextActionGo} onClick={() => setDetailTab(abaDaAcao)}>
-              Ir para {ABA_LABEL[abaDaAcao]} <ArrowRight size={15} aria-hidden="true" />
-            </button>
-          )}
+          <div className={surface.nextActionRow}>
+            {podeEnviarAgora && (
+              <button type="button" className={surface.nextActionGo} data-principal onClick={() => abrirModalUpload("final")}>
+                <Send size={15} aria-hidden="true" /> {demanda.statusInterno === "ajuste_solicitado" ? "Enviar nova versão" : copy.sendApprovalButton}
+              </button>
+            )}
+            {lugarDaAcao && detailTab !== lugarDaAcao && (
+              <button type="button" className={surface.nextActionGo} onClick={() => irParaAcao(lugarDaAcao)}>
+                Ir para {LUGAR_LABEL[lugarDaAcao]} <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </section>
         <nav className={surface.detailTabs} aria-label="Seções da demanda">
-          {(["pedido", "entrega", "conversa", "equipe"] as const).map((key) => (
+          {abas.map((key) => (
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
         </nav>
@@ -1437,8 +1484,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          {/* ── Checklist ─────────────────────────────────────────────────── */}
+          <ChecklistSection demandaId={id as string} />
           </div>
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+          {/* ── Equipe e contexto: deixou de ser aba, fica embaixo do Pedido ── */}
+          <div id={`equipe-${id}`} hidden={detailTab !== "pedido"} className={cn(surface.tabSection, surface.grupo)}>
+          <h2 className={surface.grupoTitulo}>Equipe e contexto</h2>
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
@@ -1735,58 +1786,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
+          <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
           {entregaGrowth}
-          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          {/* ── Versões enviadas para aprovação ─────────────────────────── */}
+          {(!aprovacaoConcluida || (dadosDasAbas?.finaisEnviados ?? 0) > 0 || !!demanda.linkFinal || editMode) && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <div className={surface.sectionHead}>
-              <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
-            </div>
-            <div className="space-y-6">
-              {/* Brutos / materiais: só link, sem upload de arquivo */}
-              <div>
-                <LinkField
-                  label={copy.rawLabel}
-                  value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
-                  editMode={editMode}
-                  onChange={setLinkBrutos}
-                />
-                {!editMode && demanda.linkBrutos && (
-                  <button type="button" onClick={() => deleteVideoLink("brutos")} className={cn(surface.linkBtn, "mt-2")} data-perigo>
-                    <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover link
-                  </button>
-                )}
-                {/* Atalho para colar o link sem entrar no modo de edição */}
-                {!editMode && !demanda.linkBrutos && (
-                  <div className="mt-2">
-                    {!showQuickBrutos ? (
-                      <button type="button" onClick={() => setShowQuickBrutos(true)} className={surface.linkBtn}>
-                        <Upload className="w-3.5 h-3.5" aria-hidden /> {copy.addRaw}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={quickBrutosInput}
-                          onChange={e => setQuickBrutosInput(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
-                          placeholder="Cole o link da pasta ou do arquivo"
-                          aria-label={copy.addRaw}
-                          className={surface.input}
-                          autoFocus
-                        />
-                        <button type="button" onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()} className={surface.btnPrimary}>
-                          {savingBrutos ? "Salvando…" : "Salvar"}
-                        </button>
-                        <button type="button" onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }} className={surface.iconBtn} aria-label="Cancelar">
-                          <X aria-hidden />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Finais — lista de arquivos enviados para aprovação */}
               <div>
                 {editMode ? (
@@ -1858,7 +1862,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                         </div>
                       )}
 
-                      {/* Botão de enviar (sempre visível) */}
+                      {/* Enviar outra versão: até o cliente aprovar. */}
+                      {!aprovacaoConcluida && <>
                       <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
                         <Send className="w-4 h-4" aria-hidden />
                         {videosFinais.length > 0 ? copy.addFinalButton : copy.sendApprovalButton}
@@ -1868,9 +1873,63 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                           ? `${videosFinais.length} ${copy.finalCountLabel} · cada aprovação gera um link próprio`
                           : copy.progressHint}
                       </p>
+                      </>}
                     </>
                   )
                 })()}
+              </div>
+          </div>
+          )}
+          </div>
+          <div hidden={detailTab !== "arquivos"} className={surface.tabSection}>
+          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+            <div className={surface.sectionHead}>
+              <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
+            </div>
+            <div className="space-y-6">
+              {/* Brutos / materiais: só link, sem upload de arquivo */}
+              <div>
+                <LinkField
+                  label={copy.rawLabel}
+                  value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
+                  editMode={editMode}
+                  onChange={setLinkBrutos}
+                />
+                {!editMode && demanda.linkBrutos && (
+                  <button type="button" onClick={() => deleteVideoLink("brutos")} className={cn(surface.linkBtn, "mt-2")} data-perigo>
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover link
+                  </button>
+                )}
+                {/* Atalho para colar o link sem entrar no modo de edição */}
+                {!editMode && !demanda.linkBrutos && (
+                  <div className="mt-2">
+                    {!showQuickBrutos ? (
+                      <button type="button" onClick={() => setShowQuickBrutos(true)} className={surface.linkBtn}>
+                        <Upload className="w-3.5 h-3.5" aria-hidden /> {copy.addRaw}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="url"
+                          value={quickBrutosInput}
+                          onChange={e => setQuickBrutosInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
+                          placeholder="Cole o link da pasta ou do arquivo"
+                          aria-label={copy.addRaw}
+                          className={surface.input}
+                          autoFocus
+                        />
+                        <button type="button" onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()} className={surface.btnPrimary}>
+                          {savingBrutos ? "Salvando…" : "Salvar"}
+                        </button>
+                        <button type="button" onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }} className={surface.iconBtn} aria-label="Cancelar">
+                          <X aria-hidden />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {demanda.referencia && (
@@ -2036,7 +2095,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {temEventos && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2080,11 +2139,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
-          {/* ── Checklist ─────────────────────────────────────────────────── */}
-          <ChecklistSection demandaId={id as string} />
-
-          </div>
           <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
@@ -2101,7 +2155,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
         <div className="space-y-4">
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
@@ -2183,9 +2237,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           </div>
-          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
-          {/* Aprovação — Growth usa a prévia compartilhada em Entrega (topo no clássico). */}
-          {!isGrowth && (
+          <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
+          {/* Aprovação — Growth usa a prévia do criativo, logo acima. Aprovado
+              sem link pelo NuFlow (combinado por fora) não tem o que mostrar aqui. */}
+          {!isGrowth && (!!demanda.linkCliente || !aprovacaoConcluida) && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
             {demanda.linkCliente ? (
@@ -2224,7 +2279,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           )}
 
-          {/* Postagem */}
+          {/* Postagem: depois de aprovado, o link e o "Marcar como postado" ficam
+              aqui. Quem executa por espelhamento não publica (a dona responde ao
+              cliente final), e o servidor recusaria. */}
+          {!demanda.postagemTipo && ["aprovado", "postagem_pendente"].includes(demanda.statusInterno) && !souExecutorExterno && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+              <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Send aria-hidden /> Postagem</h2></div>
+              <MarcarPostado demandaId={demanda.id} onFeito={() => mutate()} />
+            </div>
+          )}
           {demanda.postagemTipo && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
               <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Send aria-hidden /> Postagem</h2></div>

@@ -564,13 +564,23 @@ export default function VideomakerDetalhePage() {
                 {vm.tipoContrato === "interno" ? "Interno — equipe fixa / fulltime" : "Externo — freelance temporário"}
               </p>
             </div>
-            <button
-              onClick={handleToggleTipoContrato}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${vm.tipoContrato === "interno" ? "bg-blue-600/20 border-blue-600/40 text-blue-300" : "bg-amber-600/20 border-amber-600/40 text-amber-300"}`}
-              title="Clique para alternar interno/externo"
-            >
-              {vm.tipoContrato === "interno" ? "Interno" : "Externo"}
-            </button>
+            <div role="radiogroup" aria-label="Tipo de contrato nesta empresa" className="inline-flex rounded-lg border border-zinc-700 bg-zinc-950 p-1 gap-1">
+              {(["interno", "externo"] as const).map(op => {
+                const ativo = (vm.tipoContrato === "interno" ? "interno" : "externo") === op
+                return (
+                  <button
+                    key={op}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativo}
+                    onClick={() => { if (!ativo) void handleToggleTipoContrato() }}
+                    className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${ativo ? (op === "interno" ? "bg-blue-600 text-white" : "bg-amber-500 text-zinc-950") : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"}`}
+                  >
+                    {op === "interno" ? "Interno" : "Externo"}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
 

@@ -16,6 +16,8 @@ import { validarPrazo, mesmoDia, formatarDataCurta } from "@/lib/datas"
 import { erroDeCampo } from "@/lib/erros-api"
 import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } from "@/lib/historico"
 import type { Session } from "next-auth"
+import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
+import { selectContrato } from "@/lib/quadro-do-card-server"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -51,8 +53,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     include: {
       solicitante: { select: { id: true, nome: true, email: true } },
       gestor: { select: { id: true, nome: true } },
-      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true } },
-      editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
+      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true, ...selectContrato(acesso.organizacaoId) } },
+      editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true, usuarioId: true } },
       designer: { select: { id: true, nome: true, email: true, usuarioId: true } },
       responsavel: { select: { id: true, nome: true, email: true, tipo: true } },
       responsaveis: { select: { usuario: { select: { id: true, nome: true, tipo: true } } } },
@@ -95,8 +97,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
+  // Em que quadro o card mora (lib/quadro-do-card.ts): o detalhe mostra a camada
+  // de Job e o "Converter em Job" pela mesma regra dos quadros. O contrato sai
+  // como resposta pronta; o vínculo comercial não vai no payload.
+  const { tipoContrato, vinculos, ...videomaker } = demanda.videomaker ?? { tipoContrato: null, vinculos: [] }
+  const contratoVideomaker = demanda.videomaker ? contratoEfetivo(vinculos[0]?.tipoContrato, tipoContrato) : null
+
   return NextResponse.json({
-    demanda,
+    demanda: { ...demanda, videomaker: demanda.videomaker ? videomaker : null },
+    quadro: quadroDoCard({ ...demanda, contratoVideomaker }),
+    contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
     // outra empresa não opera. `papel` vem do acesso, não do payload, porque é
     // ele que a rota já usou para autorizar.

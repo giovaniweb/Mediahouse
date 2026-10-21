@@ -14,12 +14,17 @@ import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
 import { cn } from "@/lib/utils"
 import { diasEntre, hojeEmSaoPaulo, somarDias, somarMeses } from "@/lib/datas"
+import type { DropResult } from "@hello-pangea/dnd"
+import { Calendar, User } from "lucide-react"
 import {
-  COLUNAS_SOCIAL, DIAS_PARADO, ETAPA_NOME, ETAPA_PASSO, colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje,
+  COLUNAS_SOCIAL, DIAS_PARADO, ETAPA_NOME, ETAPA_PASSO, colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje, soltarNaSocial,
   type ColunaSocial, type EtapaSocial,
 } from "@/lib/social-quadro"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
-import { TrilhoQuadro, estiloQuadro } from "@/components/kanban/TrilhoQuadro"
+import { QuadroArrastavel } from "@/components/kanban/QuadroArrastavel"
+import { AlcaArrastar, useCliqueDoCard } from "@/components/kanban/CardDoQuadro"
+import card from "@/components/demandas/DemandCardModern.module.css"
+import estilo from "./CartaoSocial.module.css"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
@@ -144,6 +149,20 @@ export function QuadroSocial() {
     chamar(c.id, `/api/social/ideias/${c.id}`, { method: "DELETE" }, () => "Ideia descartada.")
   }
 
+  // Soltar o card noutra coluna: ou abre o formulário que faz a mudança de
+  // verdade, ou devolve o card dizendo quem muda aquela etapa (soltarNaSocial).
+  function soltar(r: DropResult) {
+    if (!r.destination) return
+    const c = todos.find((x) => x.id === r.draggableId)
+    if (!c) return
+    const decisao = soltarNaSocial(c, r.destination.droppableId as ColunaSocial)
+    if (decisao.acao === "recusar") toast.error(decisao.motivo)
+    if (decisao.acao === "formulario") {
+      abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)
+      toast(decisao.dica)
+    }
+  }
+
   // ── Resumo ──────────────────────────────────────────────────────────────
   const comEquipe = visiveis.filter((c) => colunaDoCard(c) === "equipe")
   const paraRevisar = comEquipe.filter((c) => etapaDoPedido(c.demanda!.statusVisivel, c.demanda!.statusInterno) === "revisar").length
@@ -248,43 +267,32 @@ export function QuadroSocial() {
         {isLoading && <p className="mt-8 text-sm text-zinc-500">Carregando…</p>}
       </div>
 
-      {/* O mesmo trilho de /demandas e /design: altura fixa, cada coluna rola
-          sozinha, barra horizontal no rodapé e setas nas laterais. */}
+      {/* O mesmo quadro de /demandas, /design e /jobs: trilho, alça, arrasto
+          no celular e o card no desenho do de Demandas. */}
       {data && visao === "quadro" && (
         <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-          <TrilhoQuadro>
-            {COLUNAS_SOCIAL.map((col) => {
-              const lista = visiveis.filter((c) => colunaDoCard(c) === col.id)
-              return (
-                <section key={col.id} aria-label={col.nome}
-                  className={cn("flex-shrink-0 w-72 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col", COR_COLUNA[col.id].borda, estiloQuadro.column)}>
-                  <div className={cn("flex items-center gap-2 px-3 pt-3", estiloQuadro.heading)}>
-                    <span className={cn("h-2 w-2 shrink-0 rounded-full", COR_COLUNA[col.id].ponto)} />
-                    <h2 className="truncate text-sm font-semibold text-zinc-200">{col.nome}</h2>
-                    <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">{lista.length}</span>
-                  </div>
-                  <p className="px-4 pb-2 text-xs text-zinc-500">{col.dica}</p>
-                  <div className="kanban-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-2.5">
-                    {lista.map((c) => (
-                      <div key={c.id} data-card className={estiloQuadro.card}>
-                        <Cartao c={c} coluna={col.id} hoje={hoje} mostrarLinha={linhaAtual === "todas" && (linhas.length > 1 || !c.linhaProjetoId)}
-                          ocupado={ocupado === c.id} aoAbrir={() => abrirCard(c)}
-                          aoAbrirDemanda={() => abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)}
-                          aoDescartar={() => descartar(c)} aoCobrar={() => cobrar(c)}
-                          aoPriorizar={(p) => priorizar(c, p)} aoPostar={() => marcarPostado(c)} />
-                      </div>
-                    ))}
-                    {col.id === "ideia" && podeCriar && (
-                      <button type="button" onClick={() => setEscolhendo(true)}
-                        className="w-full rounded-xl border border-dashed border-zinc-700 p-2.5 text-[13px] font-semibold text-zinc-400 hover:border-purple-500/60 hover:text-zinc-200">
-                        + Anotar ideia ou referência
-                      </button>
-                    )}
-                  </div>
-                </section>
-              )
-            })}
-          </TrilhoQuadro>
+          <QuadroArrastavel
+            colunas={COLUNAS_SOCIAL.map((col) => ({ id: col.id, label: col.nome, dica: col.dica, color: COR_COLUNA[col.id].borda, dot: COR_COLUNA[col.id].ponto }))}
+            itensDaColuna={(id) => visiveis.filter((c) => colunaDoCard(c) === id)}
+            idDe={(c) => c.id}
+            onDragEnd={soltar}
+            nome={{ um: "card", varios: "cards", vazio: "Nada nesta etapa." }}
+            novo={podeCriar ? { coluna: "ideia", rotulo: "Anotar ideia", onClick: () => setEscolhendo(true) } : undefined}
+            fimDaColuna={(id) => id === "ideia" && podeCriar && (
+              <button type="button" onClick={() => setEscolhendo(true)}
+                className="w-full rounded-xl border border-dashed border-zinc-700 p-2.5 text-[13px] font-semibold text-zinc-400 hover:border-purple-500/60 hover:text-zinc-200">
+                + Anotar ideia ou referência
+              </button>
+            )}
+            renderCard={(c, { arrastavel }) => (
+              <Cartao c={c} coluna={colunaDoCard(c)} hoje={hoje} arrastavel={arrastavel}
+                mostrarLinha={linhaAtual === "todas" && (linhas.length > 1 || !c.linhaProjetoId)}
+                ocupado={ocupado === c.id} aoAbrir={() => abrirCard(c)}
+                aoAbrirDemanda={() => abrirFormulario(c, c.area ?? "audiovisual", c.linhaProjetoId!)}
+                aoDescartar={() => descartar(c)} aoCobrar={() => cobrar(c)}
+                aoPriorizar={(p) => priorizar(c, p)} aoPostar={() => marcarPostado(c)} />
+            )}
+          />
         </div>
       )}
 
@@ -346,8 +354,13 @@ function TagTipo({ area }: { area: CardSocial["area"] }) {
     : <span className={cn(TAG, "bg-fuchsia-500/15 text-fuchsia-300")}>Vídeo · Audiovisual</span>
 }
 
-function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, aoAbrir, aoAbrirDemanda, aoDescartar, aoCobrar, aoPriorizar, aoPostar }: {
-  c: CardSocial; coluna: ColunaSocial; hoje: string; mostrarLinha: boolean; ocupado: boolean
+const iniciais = (nome: string) => nome.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()
+
+// O card de Demandas (DemandCardModern), com o que é da social: a trilha de
+// quatro etapas, o prazo de postagem e os botões de cobrar, priorizar, revisar
+// e marcar como postado. Alça e clique são os mesmos de todo quadro.
+function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, arrastavel, aoAbrir, aoAbrirDemanda, aoDescartar, aoCobrar, aoPriorizar, aoPostar }: {
+  c: CardSocial; coluna: ColunaSocial; hoje: string; mostrarLinha: boolean; ocupado: boolean; arrastavel: boolean
   aoAbrir: () => void; aoAbrirDemanda: () => void; aoDescartar: () => void; aoCobrar: () => void
   aoPriorizar: (p: string) => void; aoPostar: () => void
 }) {
@@ -357,65 +370,104 @@ function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, aoAbrir, aoAbrirDemand
   const parado = d && coluna === "equipe" ? diasParado(c, hoje) : 0
   const cobrouHoje = jaCobrouHoje(d?.cobradoEm)
   const pare = (e: React.MouseEvent) => e.stopPropagation()
+  const clique = useCliqueDoCard(aoAbrir)
+  const atrasado = !!dia && dia < hoje && d?.statusVisivel !== "finalizado" && coluna !== "pronto"
+  const temAcoes = ((coluna === "ideia" || coluna === "plano") && c.podeEditar)
+    || (coluna === "equipe" && !!d && c.podeMexer && etapa !== "recusado")
+    || (coluna === "pronto" && !!d && d.statusVisivel !== "finalizado" && c.podeMexer)
 
   return (
+    <div {...clique.alvo}>
     <article
-      onClick={aoAbrir}
-      className={cn("grid min-w-0 cursor-pointer gap-2 rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 transition-colors hover:border-zinc-600",
-        etapa === "revisar" && "border-purple-400/60 shadow-[inset_0_0_0_1px_rgba(194,171,255,0.2)]",
-        parado >= DIAS_PARADO && "border-amber-400/50")}
+      data-card-surface
+      className={cn("group bg-zinc-800/80 rounded-lg border border-zinc-700/50 p-3 cursor-pointer hover:border-zinc-600 transition-all", card.card,
+        d?.prioridade === "urgente" && "border-l-[3px] border-l-red-500",
+        d?.prioridade === "alta" && "border-l-[3px] border-l-orange-500",
+        etapa === "revisar" && estilo.revisar,
+        parado >= DIAS_PARADO && estilo.parado)}
     >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <TagTipo area={c.area} />
-        {c.solicitacao && <span className={cn(TAG, "bg-zinc-700/60 text-zinc-200")}>Solicitação</span>}
+      <div className={card.titleRow}>
+        {/* Link quando já é pedido (Ctrl/⌘+clique abre em outra aba); a ideia
+            abre o formulário dela. Link, não botão: dá para arrastar por ele. */}
+        <a href={d ? `/demandas/${d.id}` : undefined} role={d ? undefined : "button"} tabIndex={0} draggable={false}
+          onClick={clique.noLink} onKeyDown={(e) => { if (!d && e.key === "Enter") aoAbrir() }}
+          aria-label={`Abrir: ${c.titulo}`}
+          className={cn("block flex-1 min-w-0 text-left line-clamp-2 rounded", card.title)}>
+          {c.titulo}
+        </a>
+        {arrastavel && <AlcaArrastar />}
+      </div>
+
+      <div className={cn("flex items-start justify-between gap-2", card.top)}>
+        <span>{d ? d.codigo : c.solicitacao ? "Solicitação" : "Ideia"}</span>
         {d && d.prioridade !== "normal" && (
-          <span className={cn(TAG, d.prioridade === "urgente" ? "bg-red-500/15 text-red-300" : "bg-amber-500/15 text-amber-300")}>
-            {d.prioridade === "urgente" ? "Urgente" : "Alta"}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border",
+              d.prioridade === "urgente" ? "bg-red-500/15 text-red-300 border-red-500/30" : "bg-orange-500/15 text-orange-300 border-orange-500/30")}>
+              {d.prioridade === "urgente" ? "Urgente" : "Alta"}
+            </span>
+          </div>
         )}
-        {dia && <span className={cn(TAG, "bg-white/5 font-semibold tabular-nums text-zinc-400")}>{c.direto ? "prazo " : d?.statusVisivel === "finalizado" ? "postado " : "posta "}{dataCurta(dia)}</span>}
+      </div>
+
+      <div className={cn("flex flex-wrap", card.tags)}>
+        <TagTipo area={c.area} />
+        {c.solicitacao && d && <span className={cn(TAG, "bg-zinc-700/60 text-zinc-200")}>Solicitação</span>}
         {mostrarLinha && <span className={cn(TAG, "bg-white/5 font-semibold text-zinc-400")}>{c.linha ?? "Sem linha"}</span>}
       </div>
-      <h3 className="text-sm font-semibold leading-snug text-zinc-100">{c.titulo}</h3>
-      {d && <p className="-mt-1 font-mono text-[11px] text-zinc-500">{d.codigo}</p>}
-      {c.enviadaPor && <p className="text-xs text-zinc-400">Enviada por {c.enviadaPor}</p>}
 
-      {coluna === "ideia" && c.linkReferencia && (
-        <a href={c.linkReferencia.startsWith("http") ? c.linkReferencia : `https://${c.linkReferencia}`} target="_blank" rel="noreferrer"
-          onClick={pare} className="flex items-center gap-1 break-all text-xs text-purple-300 hover:underline">
-          <ExternalLink className="h-3 w-3 shrink-0" /> {c.linkReferencia.replace(/^https?:\/\//, "")}
-        </a>
-      )}
+      <div className={estilo.meio}>
+        {c.enviadaPor && <p className="text-xs text-zinc-400">Enviada por {c.enviadaPor}</p>}
+        {coluna === "ideia" && c.linkReferencia && (
+          <a href={c.linkReferencia.startsWith("http") ? c.linkReferencia : `https://${c.linkReferencia}`} target="_blank" rel="noreferrer"
+            onClick={pare} className={estilo.referencia}>
+            <ExternalLink className="h-3 w-3 shrink-0" /> {c.linkReferencia.replace(/^https?:\/\//, "")}
+          </a>
+        )}
+        {coluna === "plano" && dia && diasEntre(hoje, dia) <= 5 && (
+          <p className="text-xs text-amber-300">
+            {diasEntre(hoje, dia) < 0 ? "A data já passou. Mude a data ou faça o pedido." : `Posta em ${diasEntre(hoje, dia)} dia${diasEntre(hoje, dia) === 1 ? "" : "s"}. Faça o pedido logo.`}
+          </p>
+        )}
+        {coluna === "equipe" && d && etapa && (
+          <>
+            {etapa !== "recusado" && (
+              <div className="grid grid-cols-4 gap-1" aria-label={`Etapa: ${ETAPA_NOME[etapa]}`}>
+                {[0, 1, 2, 3].map((i) => <i key={i} className={cn("h-1 rounded", i <= ETAPA_PASSO[etapa] ? "bg-purple-400" : "bg-white/10")} />)}
+              </div>
+            )}
+            <span className={cn("text-xs font-semibold", etapa === "recusado" ? "text-red-300" : "text-zinc-200")}>{ETAPA_NOME[etapa]}</span>
+            {parado >= DIAS_PARADO && <p className="text-xs text-amber-300">Parado há {parado} dias.</p>}
+            {d.cobrancas > 0 && <p className="text-xs text-zinc-400">Cobrado {d.cobrancas}x{cobrouHoje ? ", hoje" : ""}.</p>}
+            {etapa === "revisar" && !d.tokenAprovacao && <p className="text-xs text-zinc-400">A equipe ainda vai mandar a prévia.</p>}
+          </>
+        )}
+        {coluna === "pronto" && d?.statusVisivel === "finalizado" && <p className="text-xs text-emerald-300">Postado.</p>}
+      </div>
 
-      {coluna === "plano" && dia && diasEntre(hoje, dia) <= 5 && (
-        <p className="text-xs text-amber-300">
-          {diasEntre(hoje, dia) < 0 ? "A data já passou. Mude a data ou faça o pedido." : `Posta em ${diasEntre(hoje, dia)} dia${diasEntre(hoje, dia) === 1 ? "" : "s"}. Faça o pedido logo.`}
-        </p>
-      )}
-
-      {(coluna === "ideia" || coluna === "plano") && c.podeEditar && (
-        <div className="flex flex-wrap gap-1.5" onClick={pare}>
-          <Mini forte={coluna === "plano"} onClick={aoAbrirDemanda}>Abrir demanda</Mini>
-          <Mini onClick={aoDescartar} disabled={ocupado}>Descartar</Mini>
+      <div className={card.footer}>
+        <div className={card.people} aria-label={d?.responsaveis.length ? `Equipe: ${d.responsaveis.join(", ")}` : "Sem responsável ainda"}>
+          {(d?.responsaveis ?? []).slice(0, 3).map((nome, i) => <span key={nome} title={nome} data-tone={i % 3}>{iniciais(nome)}</span>)}
+          {(d?.responsaveis.length ?? 0) > 3 && <span title={d!.responsaveis.slice(3).join(", ")}>+{d!.responsaveis.length - 3}</span>}
+          {!d?.responsaveis.length && <span title={d ? "Sem responsável ainda" : "Ainda não pedido"}><User size={14} /></span>}
         </div>
-      )}
+        {dia && (
+          <span className={cn(card.date, atrasado && card.late)} title={c.direto ? "Prazo" : d?.statusVisivel === "finalizado" ? "Postado em" : "Data de postagem"}>
+            <Calendar size={14} />{c.direto ? "prazo " : d?.statusVisivel === "finalizado" ? "postado " : "posta "}{dataCurta(dia)}
+          </span>
+        )}
+      </div>
 
-      {coluna === "equipe" && d && etapa && (
-        <>
-          {etapa !== "recusado" && (
-            <div className="grid grid-cols-4 gap-1" aria-label={`Etapa: ${ETAPA_NOME[etapa]}`}>
-              {[0, 1, 2, 3].map((i) => <i key={i} className={cn("h-1 rounded", i <= ETAPA_PASSO[etapa] ? "bg-purple-400" : "bg-white/10")} />)}
-            </div>
+      {temAcoes && (
+        <div className={estilo.acoes} onClick={pare}>
+          {(coluna === "ideia" || coluna === "plano") && c.podeEditar && (
+            <>
+              <Mini forte={coluna === "plano"} onClick={aoAbrirDemanda}>Abrir demanda</Mini>
+              <Mini onClick={aoDescartar} disabled={ocupado}>Descartar</Mini>
+            </>
           )}
-          <div className="flex justify-between gap-2 text-xs font-semibold">
-            <span className={etapa === "recusado" ? "text-red-300" : "text-zinc-200"}>{ETAPA_NOME[etapa]}</span>
-            <span className="truncate font-medium text-zinc-500">{d.responsaveis.join(", ") || "Sem responsável ainda"}</span>
-          </div>
-          {parado >= DIAS_PARADO && <p className="text-xs text-amber-300">Parado há {parado} dias.</p>}
-          {d.cobrancas > 0 && <p className="text-xs text-zinc-400">Cobrado {d.cobrancas}x{cobrouHoje ? ", hoje" : ""}.</p>}
-          {etapa === "revisar" && !d.tokenAprovacao && <p className="text-xs text-zinc-400">A equipe ainda vai mandar a prévia.</p>}
-          {c.podeMexer && etapa !== "recusado" && (
-            <div className="flex flex-wrap gap-1.5" onClick={pare}>
+          {coluna === "equipe" && d && c.podeMexer && etapa !== "recusado" && (
+            <>
               {etapa === "revisar" && d.tokenAprovacao && (
                 <a href={`/aprovar/${d.tokenAprovacao}`} target="_blank" rel="noreferrer"
                   className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-500">Revisar e aprovar</a>
@@ -428,17 +480,15 @@ function Cartao({ c, coluna, hoje, mostrarLinha, ocupado, aoAbrir, aoAbrirDemand
                 </select>
               </label>
               <Mini onClick={aoCobrar} disabled={ocupado || cobrouHoje} aviso>{cobrouHoje ? "Cobrado hoje" : "Cobrar"}</Mini>
-            </div>
+            </>
           )}
-        </>
-      )}
-
-      {coluna === "pronto" && d && (
-        d.statusVisivel === "finalizado"
-          ? <p className="text-xs text-emerald-300">Postado.</p>
-          : c.podeMexer && <div onClick={pare}><Mini onClick={aoPostar} disabled={ocupado}>Marcar como postado</Mini></div>
+          {coluna === "pronto" && d && d.statusVisivel !== "finalizado" && c.podeMexer && (
+            <Mini onClick={aoPostar} disabled={ocupado}>Marcar como postado</Mini>
+          )}
+        </div>
       )}
     </article>
+    </div>
   )
 }
 

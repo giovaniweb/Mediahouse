@@ -23,7 +23,7 @@ const fs = require('node:fs');
   let data={};
   if(url.pathname==='/api/auth/session') data={user:{id:'preview-user',name:'Pessoa de teste',tipo:'admin'},expires:'2099-01-01'};
   else if(url.pathname==='/api/me') data={id:'preview-user',nome:'Pessoa de teste',tipo:'admin',superAdmin:false,modulos:{growth:true,eventos:false,ideias:true,mensagens:false},membership:{areas:['growth'],organizacaoId:'preview-org'},permissoes:{}};
-  else if(url.pathname==='/api/demandas' && url.searchParams.get('tipoVideo')==='cobertura_evento') {
+  else if(url.pathname==='/api/demandas' && url.searchParams.get('quadro')==='jobs') {
    if(failJobs) return route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:'Falha simulada'})});
    data={demandas:demands.map(d=>({...d,tipoVideo:'cobertura_evento',statusInterno:d.id==='demo-0'?'aguardando_aprovacao_interna':d.statusInterno}))};
   }

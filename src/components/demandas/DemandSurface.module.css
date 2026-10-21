@@ -136,3 +136,13 @@
   .briefingText { font-size:15px; }
 }
 @media(prefers-reduced-motion:reduce) { .btn, .btnPrimary, .btnGhost, .btnDanger, .iconBtn { transition:none; } }
+
+/* Faixa "Próxima ação": enviar para aprovação e "Ir para…" lado a lado. */
+.nextActionRow { display:flex; flex-wrap:wrap; gap:0 10px; }
+.nextActionGo[data-principal] { background:#8b6cf0; border-color:#8b6cf0; color:#fff; }
+.nextActionGo[data-principal]:hover { background:#7a5be0; }
+/* "Equipe e contexto" embaixo do Pedido: um título de grupo, não uma aba. */
+.grupo:not([hidden]) { scroll-margin-top:16px; }
+.grupoTitulo { margin-top:12px; font-size:13px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:#8d8ca3; }
+/* Quatro abas no celular: um pouco mais juntas; o resto rola de lado. */
+@media(max-width:640px) { .detailTabs { gap:16px; margin-top:20px; } .detailTabs button { font-size:14px; } }
