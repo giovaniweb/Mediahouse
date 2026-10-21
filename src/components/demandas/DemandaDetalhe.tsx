@@ -2253,25 +2253,24 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               (prévia, Aprovar, Pedir ajuste) está embutida ao lado, na coluna
               principal; aqui fica só o caminho para mandar ao cliente. */}
           {demanda.linkCliente && (
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Link2 aria-hidden /> Link do cliente</h2></div>
-            <div className="space-y-2">
-              <p className={surface.hint}>Para quem é de fora do NuFlow: abre a mesma tela de aprovação, sem login.</p>
-              <button
-                type="button"
-                onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); toast.success("Link do cliente copiado!"); setTimeout(() => setCopiado(false), 2000) }}
-                className={cn(surface.btn, surface.btnWide)}
-              >
-                {copiado ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} Copiar link do cliente
-              </button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zinc-800 px-4 py-3">
+            <span className={surface.hint}>Cliente de fora do NuFlow?</span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); toast.success("Link do cliente copiado!"); setTimeout(() => setCopiado(false), 2000) }}
+              className={surface.btn}
+            >
+              {copiado ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copiado ? "Copiado" : "Copiar link para o cliente"}
+            </button>
+            <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
+              <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Ver como o cliente vê
+            </Link>
+            <div className="basis-full empty:hidden">
               <AvisoLinkExpirado
                 linkCliente={demanda.linkCliente}
                 expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
                 onRenovado={() => mutate()}
               />
-              <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
-                <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir a página que o cliente vê
-              </Link>
             </div>
           </div>
           )}
