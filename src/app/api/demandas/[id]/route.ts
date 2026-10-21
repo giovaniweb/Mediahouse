@@ -18,6 +18,8 @@ import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } fr
 import type { Session } from "next-auth"
 import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
 import { selectContrato } from "@/lib/quadro-do-card-server"
+import { podeAprovarEntrega } from "@/lib/quem-aprova"
+import { ehGestor } from "@/lib/papel"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -53,7 +55,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     include: {
       solicitante: { select: { id: true, nome: true, email: true } },
       gestor: { select: { id: true, nome: true } },
-      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true, ...selectContrato(acesso.organizacaoId) } },
+      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true, usuarioId: true, ...selectContrato(acesso.organizacaoId) } },
       editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true, usuarioId: true } },
       designer: { select: { id: true, nome: true, email: true, usuarioId: true } },
       responsavel: { select: { id: true, nome: true, email: true, tipo: true } },
@@ -97,6 +99,20 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
+  // A última versão enviada, respondida ou não: é ela que o detalhe mostra na
+  // aba Aprovação (com o player) e é dela que sai o "Ajuste pedido por…".
+  const ultimaEntrega = await prisma.aprovacaoVideo.findFirst({
+    where: { demandaId: id, demanda: { organizacaoId: demanda.organizacaoId } },
+    orderBy: { createdAt: "desc" },
+    select: { token: true, status: true, comentario: true, aprovadoPor: true, updatedAt: true },
+  })
+  // Quem faz a peça vê, mas não aprova a própria entrega; a outra empresa de
+  // um espelhamento também não (a resposta ao cliente final é da dona).
+  const podeAprovar = acesso.papel === "dona" && podeAprovarEntrega(
+    { usuarioId: session.user.id, gestor: ehGestor(session) },
+    demanda,
+  )
+
   // Em que quadro o card mora (lib/quadro-do-card.ts): o detalhe mostra a camada
   // de Job e o "Converter em Job" pela mesma regra dos quadros. O contrato sai
   // como resposta pronta; o vínculo comercial não vai no payload.
@@ -112,6 +128,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     // ele que a rota já usou para autorizar.
     espelho: espelhoDoCard(demanda.compartilhamentos, acesso.organizacaoId),
     papelNoCard: acesso.papel,
+    ultimaEntrega,
+    podeAprovarEntrega: podeAprovar,
   })
 }
 

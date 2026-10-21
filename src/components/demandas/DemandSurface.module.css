@@ -146,3 +146,8 @@
 .grupoTitulo { margin-top:12px; font-size:13px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:#8d8ca3; }
 /* Quatro abas no celular: um pouco mais juntas; o resto rola de lado. */
 @media(max-width:640px) { .detailTabs { gap:16px; margin-top:20px; } .detailTabs button { font-size:14px; } }
+/* "Ajuste pedido por Fulano: …" — o trabalho que voltou, no topo do detalhe. */
+.ajustePedido { margin-top:16px; padding:14px 16px; border:1px solid #f0b45a55; border-left:3px solid #f0b45a; border-radius:0 12px 12px 0; background:#f0b45a14; }
+.ajustePedido strong { display:block; font-size:14px; font-weight:600; color:#ffe2b3; }
+.ajustePedido p { margin-top:6px; color:#f3e6d0; font-size:14.5px; line-height:1.6; overflow-wrap:anywhere; }
+.ajustePedido small { display:block; margin-top:8px; color:#a2a5b9; font-size:12px; }
