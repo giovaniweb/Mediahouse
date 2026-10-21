@@ -1,10 +1,10 @@
 /**
  * Cria uma organização e vincula uma pessoa como admin dela.
  *
- * Não existe auto-cadastro no Nuflow: organização nova nasce por aqui. O que ela
- * precisa para funcionar já é automático — `configuracoes/parametros` semeia os
- * 32 parâmetros (departamentos, tipos de vídeo, habilidades) no primeiro acesso,
- * por organização. Então este script cria o mínimo e sai da frente.
+ * Não existe auto-cadastro no Nuflow: organização nova nasce por aqui ou pelo
+ * painel do super-admin (/admin/organizacoes), que também convida o admin por
+ * e-mail. Os dois gravam o mesmo pacote inicial (src/lib/pacote-inicial.ts:
+ * departamentos, tipos, checklists e a linha "Geral") e o prefixo do código.
  *
  * O usuário é REAPROVEITADO quando já existe: uma pessoa, várias empresas. É
  * para isso que serve a troca de organização (src/lib/org.ts + o seletor no
@@ -20,6 +20,8 @@
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { config } from "dotenv"
+import { semearPacoteInicial } from "@/lib/pacote-inicial"
+import { sugerirPrefixo } from "@/lib/codigo-demanda"
 
 config({ path: ".env.local", quiet: true })
 config({ path: ".env", quiet: true })
@@ -69,7 +71,8 @@ async function main() {
   console.log(`  organização   "${nome}" (slug: ${slug})`)
   console.log(`  admin         ${usuario.nome} <${email}>`)
   console.log(`  já é membro de: ${usuario.organizacoes.map((o) => o.organizacao.slug).join(", ") || "nenhuma"}`)
-  console.log(`\n  Depois de entrar, os 32 parâmetros são semeados no primeiro acesso a Configurações.`)
+  console.log(`  prefixo       ${sugerirPrefixo(nome)} (códigos ${sugerirPrefixo(nome)}-AA-0001)`)
+  console.log(`\n  Nasce com o pacote inicial: departamentos, tipos, checklists e a linha "Geral".`)
   if (usuario.organizacoes.length >= 1) {
     console.log(`  Com 2+ empresas, o seletor aparece no topo — é por ele que se troca.`)
   }
@@ -83,9 +86,10 @@ async function main() {
   // Uma transação: organização sem admin é organização que ninguém abre.
   const org = await db.$transaction(async (tx) => {
     const nova = await tx.organizacao.create({
-      data: { nome, slug, ativo: true },
+      data: { nome, slug, ativo: true, prefixoCodigo: sugerirPrefixo(nome) },
       select: { id: true, nome: true, slug: true },
     })
+    await semearPacoteInicial(tx, nova.id)
     await tx.usuarioOrganizacao.create({
       data: {
         usuarioId: usuario.id,

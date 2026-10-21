@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
+import { convitePendente } from "@/lib/convite-equipe"
 
 // GET /api/usuarios — Pessoas & Acessos da organização logada (admin/gestor).
 // ISOLADO por organização (via membership). Inclui categoria/função/áreas/papel.
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest) {
     },
     select: {
       papel: true, categoria: true, funcaoProfissional: true, areas: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true,
-      usuario: { select: { id: true, nome: true, email: true, telefone: true, tipo: true, status: true, avatarUrl: true, createdAt: true } },
+      // senhaHash só para saber se o convite está pendente; não sai da rota.
+      usuario: { select: { id: true, nome: true, email: true, telefone: true, tipo: true, status: true, avatarUrl: true, createdAt: true, senhaHash: true } },
     },
     orderBy: { usuario: { nome: "asc" } },
   })
@@ -66,8 +68,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const usuarios = memberships.map((m) => ({
-    ...m.usuario,
+  const usuarios = memberships.map(({ usuario: { senhaHash, ...usuario }, ...m }) => ({
+    ...usuario,
+    convitePendente: convitePendente(senhaHash),
     papel: m.papel,
     categoria: m.categoria,
     funcaoProfissional: m.funcaoProfissional,
@@ -75,7 +78,7 @@ export async function GET(req: NextRequest) {
     liderAudiovisual: m.liderAudiovisual,
     recebeTodosAvisos: m.recebeTodosAvisos,
     operaGravacoes: m.operaGravacoes,
-    ultimaAtividade: ultimaAtividade.get(m.usuario.id) ?? null,
+    ultimaAtividade: ultimaAtividade.get(usuario.id) ?? null,
   }))
 
   if (busca) {

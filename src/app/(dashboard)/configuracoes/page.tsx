@@ -1549,8 +1549,9 @@ function TabDepoimentos() {
 function AbaPelaUrl({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   const searchParams = useSearchParams()
   useEffect(() => {
+    // "whatsapp" vem dos primeiros passos do painel (Onda 2A).
     const pedida = searchParams?.get("tab")
-    if (pedida === "empresa" || pedida === "assistentes") onSetTab(pedida)
+    if (pedida === "empresa" || pedida === "assistentes" || pedida === "whatsapp") onSetTab(pedida)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return null

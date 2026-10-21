@@ -15,7 +15,7 @@ import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
@@ -230,7 +230,7 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   // Compartilhar do card): lib/acompanhamento-gravacao.ts.
   const ehGravacao = ehSolicitacaoDeCobertura({ tipoVideo: data.tipoVideo, departamento: data.departamento }) || !!data.tipoGravacao
 
-  const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
+  const demanda = await criarComCodigoDaEmpresa(organizacaoId, "", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,

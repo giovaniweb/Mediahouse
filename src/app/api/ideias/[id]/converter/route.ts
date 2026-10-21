@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
 import { departamentoValido } from "@/lib/departamentos"
 
@@ -41,11 +41,11 @@ export async function POST(
     ? body.departamento
     : departamentoDoPedido(tipoVideo === "cobertura_evento" ? "cobertura" : "video")
 
-  // Mesmo código das demandas internas (VOP-AA-####). O "próximo VID-####"
+  // Mesmo código das demandas internas (PREFIXO-AA-####, por empresa). O "próximo VID-####"
   // de antes lia a última demanda criada, de qualquer prefixo — quase sempre
   // VOP-… —, o parseInt dava NaN e o código saía "VID-0NaN". A primeira
   // conversão passava; quase todas as seguintes batiam no mesmo código.
-  const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
+  const demanda = await criarComCodigoDaEmpresa(organizacaoId, "", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,

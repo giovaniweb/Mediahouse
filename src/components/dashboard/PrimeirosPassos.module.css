@@ -1,0 +1,16 @@
+.card { margin:32px 32px 0; border:1px solid #b39aff55; border-radius:16px; background:linear-gradient(140deg,#221d36,#191b23 65%); padding:22px 24px; color:#f5f5fb; }
+.topo { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.eyebrow { font-size:11px; font-weight:600; letter-spacing:.13em; color:#b39aff; }
+.topo h2 { font-size:20px; font-weight:500; margin:6px 0 4px; letter-spacing:-.02em; }
+.topo p { color:#a0a4b8; font-size:13px; }
+.dispensar { color:#a0a4b8; font-size:12px; white-space:nowrap; padding:6px 8px; border-radius:8px; }
+.dispensar:hover { color:#f5f5fb; background:#ffffff0d; }
+.lista { list-style:none; margin:18px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+.item { display:flex; flex-direction:column; gap:6px; border:1px solid #303341; border-radius:12px; background:#191c24; padding:14px; min-width:0; }
+.item strong { font-size:14px; font-weight:500; }
+.item span { color:#a0a4b8; font-size:12px; line-height:1.5; flex:1; }
+.link { font-size:11px; color:#c8b1ff; background:#b39aff0f; border-radius:6px; padding:4px 6px; overflow-wrap:anywhere; }
+.acao { align-self:flex-start; margin-top:4px; font-size:12px; font-weight:600; color:#dbcaff; border:1px solid #b39aff66; background:#b39aff14; padding:6px 10px; border-radius:8px; }
+.acao:hover { background:#b39aff26; }
+.progresso { color:#a0a4b8; font-size:12px; margin-top:14px; }
+@media (max-width:640px) { .card { margin:16px 16px 0; padding:18px; } .topo { flex-direction:column; } }

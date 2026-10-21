@@ -281,7 +281,9 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       if (!dataEvento) errs.dataEvento = "Data do evento obrigatória"
     }
     if (!dataLimite) errs.dataLimite = "Informe o prazo de entrega"
-    if (produtoIds.length === 0) errs.produtoIds = "Selecione ao menos um equipamento/produto"
+    // Empresa sem produto cadastrado (empresa nova) não fica presa aqui: o campo
+    // só é obrigatório quando há o que escolher.
+    if (produtos.length > 0 && produtoIds.length === 0) errs.produtoIds = "Selecione ao menos um equipamento/produto"
     if (!classificacao) errs.classificacao = "Selecione B2C ou B2B"
     if (prioridade === "urgente" && !motivoUrgencia) errs.motivoUrgencia = "Informe o motivo"
     setErrors(errs)
@@ -741,7 +743,9 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
 
             {errors.produtoIds
               ? <p className="text-xs text-red-400">{errors.produtoIds}</p>
-              : <p className="text-xs text-zinc-600">Selecione um ou mais equipamentos/produtos envolvidos.</p>}
+              : <p className="text-xs text-zinc-600">{dataProdutos && produtos.length === 0
+                ? "Nenhum produto cadastrado ainda. Dá para criar a demanda sem; cadastre em Produtos quando quiser."
+                : "Selecione um ou mais equipamentos/produtos envolvidos."}</p>}
           </Secao>
         </div>
 

@@ -4,10 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { requireDemandaOrg } from "@/lib/org"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import { ehGestor } from "@/lib/papel"
 import { demandaNoEscopo } from "@/lib/escopo-demanda"
+import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import type { Prioridade } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -50,7 +50,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(original.tipoVideo, original.prioridade as Prioridade)
 
-  const nova = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
+  const nova = await criarComCodigoDaEmpresa(organizacaoId, "", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,

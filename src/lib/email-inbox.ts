@@ -61,7 +61,7 @@ async function defaultRequester(
 async function uniqueDemandCode(): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const code = `MAIL-${new Date().getFullYear().toString().slice(-2)}-${crypto.randomInt(100000, 999999)}`
-    const exists = await prisma.demanda.findUnique({ where: { codigo: code }, select: { id: true } })
+    const exists = await prisma.demanda.findFirst({ where: { codigo: code }, select: { id: true } })
     if (!exists) return code
   }
   throw new Error("Não foi possível gerar um código único para a demanda.")

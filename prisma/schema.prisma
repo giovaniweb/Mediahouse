@@ -537,7 +537,9 @@ model Designer {
 model Demanda {
   organizacaoId  String
   id             String        @id @default(cuid())
-  codigo         String        @unique
+  // Único por empresa desde a Onda 2A (21/10/2026): cada empresa tem prefixo e
+  // numeração próprios (src/lib/codigo-demanda.ts). Os códigos antigos ficaram.
+  codigo         String
   titulo         String
   descricao      String
   departamento   String // validado contra ConfigParametro (grupo "departamentos")
@@ -697,6 +699,7 @@ model Demanda {
   mcpTokenId String?
   mcpToken   TokenMcp? @relation(fields: [mcpTokenId], references: [id], onDelete: SetNull)
 
+  @@unique([organizacaoId, codigo])
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
   @@index([mcpTokenId])
@@ -2270,6 +2273,12 @@ model Organizacao {
   relatorioToken String?  @unique
   /// Validade do relatorioToken. Sem data = sem token. Ver src/lib/relatorio-executivo.ts.
   relatorioTokenExpiraEm DateTime?
+  // Prefixo do código das demandas (ex.: "GH" → GH-26-0001). Nulo = derivado do slug.
+  prefixoCodigo  String?
+  // Primeiros passos do painel do admin: dispensados de vez, e o único item que
+  // não se deduz dos dados (copiar o link da página da empresa).
+  primeirosPassosDispensadosEm DateTime?
+  linkPaginaCopiadoEm          DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -2319,10 +2328,24 @@ model Organizacao {
   parceriasRecebidas ParceriaOrganizacao[]     @relation("ParceriaConvidada")
   espelhosConcedidos DemandaCompartilhamento[] @relation("CompartilhamentoOrigem")
   espelhosRecebidos  DemandaCompartilhamento[] @relation("CompartilhamentoDestino")
+  contadoresCodigo   ContadorCodigo[]
 
   aceitesTermos AceiteTermos[]
 
   @@map("organizacoes")
+}
+
+// Numeração do código das demandas, por empresa e por ano (Onda 2A).
+model ContadorCodigo {
+  organizacaoId String
+  ano           Int
+  ultimo        Int      @default(0)
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@id([organizacaoId, ano])
+  @@map("contadores_codigo")
 }
 
 // ── Federação entre empresas ─────────────────────────────────────────────────

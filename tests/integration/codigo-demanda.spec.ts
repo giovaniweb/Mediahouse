@@ -6,30 +6,25 @@ import { PrismaPg } from "@prisma/adapter-pg"
 import { prismaBase as adminDb } from "@/lib/prisma"
 import { comRls } from "@/lib/prisma-rls"
 import { comOrg } from "@/lib/org-contexto"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { criarComCodigoDaEmpresa, proximoNumero } from "@/lib/codigo-demanda"
 
-// Colisão de código contra o Postgres de verdade, pelo mesmo caminho da
-// produção com RLS: papel sem BYPASSRLS e cada gravação na transação em lote do
-// comRls. O código repetido é de OUTRA empresa — a consulta não o enxerga, só o
-// índice UNIQUE do INSERT.
+// Código por empresa contra o Postgres de verdade (Onda 2A): prefixo e contador
+// da empresa, unicidade por (empresa, código), e o contador isolado pelo RLS no
+// papel sem BYPASSRLS, pela transação em lote do comRls.
 
 const p = `cod${randomBytes(4).toString("hex")}`
 const a = `${p}-a`, b = `${p}-b`, u = `${p}-u`
-const prefixo = p.toUpperCase() // isola os códigos desta execução
+// Prefixo de 5 letras sorteado: isola os códigos desta execução.
+const prefixo = Array.from(randomBytes(5), (x) => String.fromCharCode(65 + (x % 26))).join("")
 const role = `teste_cod_${randomBytes(5).toString("hex")}`, senha = randomBytes(16).toString("hex")
 const admin = new pg.Client({ connectionString: process.env.DATABASE_URL_TEST })
-const AGORA = () => new Date(2026, 9, 4, 12)
+const AGORA = () => new Date(2026, 9, 21, 12)
 let raw: PrismaClient, db: PrismaClient
 
 const dados = (organizacaoId: string, codigo: string) => ({
-  organizacaoId, codigo, titulo: "Demanda sintética", descricao: "Fixture de colisão de código",
+  organizacaoId, codigo, titulo: "Demanda sintética", descricao: "Fixture de código por empresa",
   departamento: "teste", tipoVideo: "reels", cidade: "Teste", solicitanteId: u,
 })
-
-function sorteios(...numeros: number[]) {
-  let i = 0
-  return () => numeros[i++]
-}
 
 beforeAll(async () => {
   await admin.connect()
@@ -40,9 +35,11 @@ beforeAll(async () => {
   url.password = senha
   raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString() }) })
   db = comRls(raw)
-  await adminDb.organizacao.createMany({ data: [a, b].map((id) => ({ id, nome: id, slug: id })) })
+  await adminDb.organizacao.createMany({ data: [a, b].map((id) => ({ id, nome: id, slug: id, prefixoCodigo: prefixo })) })
   await adminDb.usuario.create({ data: { id: u, nome: u, tipo: "admin", senhaHash: "sem-login" } })
-  await adminDb.demanda.create({ data: dados(b, `${prefixo}-26-1234`) })
+  // A empresa B já usou o 0001; a A tem um código antigo no meio da sequência.
+  await adminDb.demanda.create({ data: dados(b, `${prefixo}-26-0001`) })
+  await adminDb.demanda.create({ data: dados(a, `${prefixo}-26-0002`) })
 })
 
 afterAll(async () => {
@@ -53,39 +50,38 @@ afterAll(async () => {
   await admin.end()
 })
 
-describe("criarComCodigoUnico com banco real", () => {
-  it("sorteia de novo quando o código já é de outra empresa, que o RLS esconde", async () => {
+describe("código da demanda por empresa, com banco real", () => {
+  it("o mesmo código pode existir em duas empresas; dentro de uma, o repetido pula para o próximo", async () => {
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      const repetido = `${prefixo}-26-1234`
-      // Conferir antes não adianta: sob RLS a empresa A não vê o código da B.
-      expect(await comOrg(a, () => db.demanda.findUnique({ where: { codigo: repetido } }))).toBeNull()
-
-      const criada = await comOrg(a, () =>
-        criarComCodigoUnico(prefixo, (codigo) => db.demanda.create({ data: dados(a, codigo) }), {
-          sortear: sorteios(1234, 5678),
-          agora: AGORA,
-        })
-      )
-      expect(criada).toMatchObject({ organizacaoId: a, codigo: `${prefixo}-26-5678` })
+      const criar = (codigo: string) => adminDb.demanda.create({ data: dados(a, codigo) })
+      const primeira = await criarComCodigoDaEmpresa(a, "", criar, { agora: AGORA })
+      // 0001 existe na B, e não importa: a unicidade é por empresa.
+      expect(primeira.codigo).toBe(`${prefixo}-26-0001`)
+      // 0002 é um código antigo da própria A: o banco recusa e o contador anda.
+      const segunda = await criarComCodigoDaEmpresa(a, "", criar, { agora: AGORA })
+      expect(segunda.codigo).toBe(`${prefixo}-26-0003`)
+      // O formulário externo divide a numeração com o interno.
+      const terceira = await criarComCodigoDaEmpresa(a, "EXT", criar, { agora: AGORA })
+      expect(terceira.codigo).toBe(`${prefixo}-EXT-26-0004`)
       expect(aviso).toHaveBeenCalledTimes(1)
-      expect(await adminDb.demanda.count({ where: { codigo: { startsWith: prefixo } } })).toBe(2)
     } finally {
       aviso.mockRestore()
     }
   })
 
-  it("também sem RLS, conectado como dono — como a produção roda hoje", async () => {
-    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {})
-    try {
-      const criada = await criarComCodigoUnico(prefixo, (codigo) => adminDb.demanda.create({ data: dados(b, codigo) }), {
-        sortear: sorteios(1234, 5678, 9012),
-        agora: AGORA,
-      })
-      expect(criada.codigo).toBe(`${prefixo}-26-9012`)
-      expect(aviso).toHaveBeenCalledTimes(2)
-    } finally {
-      aviso.mockRestore()
-    }
+  it("o índice recusa o mesmo código duas vezes na mesma empresa", async () => {
+    await expect(adminDb.demanda.create({ data: dados(b, `${prefixo}-26-0001`) })).rejects.toMatchObject({ code: "P2002" })
+  })
+
+  it("sob RLS, cada empresa só enxerga e avança o próprio contador", async () => {
+    expect(await proximoNumero(b, 26, db)).toBe(1)
+    expect(await proximoNumero(b, 26, db)).toBe(2)
+    const daA = await comOrg(a, () => db.contadorCodigo.findMany())
+    expect(daA.map((c) => c.organizacaoId)).toEqual([a])
+    expect(daA[0].ultimo).toBe(4)
+    // Gravar o contador de outra empresa estando na A: a política recusa.
+    await expect(comOrg(a, () => db.$executeRaw`INSERT INTO contadores_codigo ("organizacaoId", ano, ultimo) VALUES (${b}, 27, 1)`))
+      .rejects.toThrow(/row-level security/)
   })
 })

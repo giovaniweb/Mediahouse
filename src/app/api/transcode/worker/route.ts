@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { workerMidiaAtivo } from "@/lib/midia-worker-config"
-import { reivindicarConversao, renovarConversao, falharConversao, concluirConversao, leaseSchema, resultadoMidiaSchema } from "@/lib/midia-worker"
+import { workerMidiaLigado } from "@/lib/midia-worker-config"
+import {
+  reivindicarDeQualquerEmpresa, orgDoJobMidia, renovarConversao, falharConversao, concluirConversao, leaseSchema, resultadoMidiaSchema,
+} from "@/lib/midia-worker"
 
 const entrada = z.discriminatedUnion("acao", [
   z.object({ acao: z.literal("reivindicar") }).strict(),
@@ -10,10 +12,11 @@ const entrada = z.discriminatedUnion("acao", [
   leaseSchema.extend({ acao: z.literal("falhar"), recuperavel: z.boolean() }).strict(),
   z.object({ acao: z.literal("concluir"), resultado: resultadoMidiaSchema }).strict(),
 ])
+// A empresa nunca vem do payload: na reivindicação, a fila escolhe; nas outras
+// ações, ela sai do job (orgDoJobMidia) e o lease é conferido dentro dela.
 export async function POST(req: NextRequest) {
-  const organizacaoId = process.env.MIDIA_WORKER_ORGANIZACAO_ID ?? ""
   const headers = { "Cache-Control": "no-store" }
-  if (!workerMidiaAtivo(organizacaoId)) return NextResponse.json({ error: "worker_inativo" }, { status: 503, headers })
+  if (!workerMidiaLigado()) return NextResponse.json({ error: "worker_inativo" }, { status: 503, headers })
   const esperado = Buffer.from(`Bearer ${process.env.MIDIA_WORKER_SECRET}`), recebido = Buffer.from(req.headers.get("authorization") ?? "")
   if (recebido.length !== esperado.length || !timingSafeEqual(recebido, esperado)) return NextResponse.json({ error: "nao_autorizado" }, { status: 401, headers })
   const partes: Uint8Array[] = []
@@ -34,7 +37,9 @@ export async function POST(req: NextRequest) {
   let body
   try { body = entrada.parse(JSON.parse(texto)) } catch { return NextResponse.json({ error: "contrato_invalido" }, { status: 400, headers }) }
   try {
-    if (body.acao === "reivindicar") return NextResponse.json({ job: await reivindicarConversao(organizacaoId) }, { headers })
+    if (body.acao === "reivindicar") return NextResponse.json({ job: await reivindicarDeQualquerEmpresa() }, { headers })
+    const organizacaoId = await orgDoJobMidia(body.acao === "concluir" ? body.resultado.jobId : body.jobId)
+    if (!organizacaoId) return NextResponse.json({ ok: false }, { status: 409, headers })
     const ok = body.acao === "renovar" ? await renovarConversao(organizacaoId, body)
       : body.acao === "falhar" ? await falharConversao(organizacaoId, body, body.recuperavel)
         : await concluirConversao(organizacaoId, body.resultado)

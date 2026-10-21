@@ -11,9 +11,11 @@ import { executarRotina, ROTINAS, type Rotina } from "@/lib/automacoes-regras"
 import { processarInbox, limparConteudoInbox } from "@/lib/whatsapp-inbox"
 import { processarSaidas } from "@/lib/whatsapp-outbox"
 import { recuperarExecucoesDuravel } from "@/lib/fila-manutencao"
+import { encadear, percorrerEmpresas } from "@/lib/rodada-empresas"
 export const maxDuration = 300
 
-/** Rotinas determinísticas; agendador deve consumir nextCursor. Sem cliente de IA. */
+/** Rotinas determinísticas, para TODAS as empresas: a rodada se encadeia
+ * sozinha quando o tempo não dá (src/lib/rodada-empresas.ts). Sem cliente de IA. */
 export async function GET(req:NextRequest) {
   const segredo=process.env.CRON_SECRET
   if(!segredo) return NextResponse.json({error:"cron_nao_configurado"},{status:500})
@@ -22,10 +24,10 @@ export async function GET(req:NextRequest) {
   const agente=req.nextUrl.searchParams.get("agente")??"alertas"
   if(!ROTINAS.includes(agente as Rotina)) return NextResponse.json({error:"rotina_invalida"},{status:400})
   const cursor=req.nextUrl.searchParams.get("cursor")?.slice(0,128)
-  const orgs=await prismaAuth.organizacao.findMany({where:{ativo:true,ambienteTeste:false,...(cursor?{id:{gt:cursor}}:{})},select:{id:true},orderBy:{id:"asc"},take:11})
-  const resultados=[],inicio=Date.now()
-  for(const org of orgs.slice(0,10)) {
-    if(Date.now()-inicio>240_000) break
+  const {resultados,proximoCursor}=await percorrerEmpresas({
+    cursor, orcamentoMs:240_000,
+    listar:(depois,take)=>prismaAuth.organizacao.findMany({where:{ativo:true,ambienteTeste:false,...(depois?{id:{gt:depois}}:{})},select:{id:true},orderBy:{id:"asc"},take}),
+    processar:async(org)=>{
     try {
       const dados=await acompanharConsumidor(org.id,`agentes:${agente}`,async()=>{
       const fila=await recuperarExecucoesDuravel(org.id)
@@ -36,10 +38,12 @@ export async function GET(req:NextRequest) {
       const saidas=await processarSaidas(org.id)
       return {dados:{organizacaoId:org.id,fila,midia,inbox,regras,saidas},contadores:{concluidos:midia.concluidos+fila.concluidos+inbox.concluidos+saidas.aceitos,falhos:midia.falhos+fila.falhos+inbox.falhos+saidas.falhos+saidas.desconhecidos,pendentes:regras.intencoesCriadas}}
       })
-      resultados.push(dados)
-    } catch {resultados.push({organizacaoId:org.id,erro:"falha_local"})}
-  }
+      return dados
+    } catch {return {organizacaoId:org.id,erro:"falha_local" as const}}
+    },
+  })
+  const encadeado=encadear(req,proximoCursor)
   const parcial=resultados.some(r=>"erro" in r || ("saidas" in r && (r.saidas.falhos+r.saidas.desconhecidos+r.inbox.falhos+r.fila.falhos+r.midia.falhos)>0))
   return NextResponse.json({ok:!parcial,parcial,agente,organizacoes:resultados.length,resultados,
-    nextCursor:resultados.length<orgs.length?resultados.at(-1)?.organizacaoId??cursor??null:null})
+    nextCursor:proximoCursor,encadeado})
 }
