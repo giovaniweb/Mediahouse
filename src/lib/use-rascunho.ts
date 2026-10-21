@@ -42,6 +42,10 @@ export function useRascunho<T extends object>({
   const serializadoRef = useRef(serializado)
   const temConteudoRef = useRef(temConteudo)
   const aoRestaurarRef = useRef(aoRestaurar)
+  // O que foi limpo depois de virar demanda. Sem isto o flush de saída (abaixo)
+  // regravava o formulário enviado ao fechar o modal, e o próximo "Nova" abria
+  // com o pedido que acabou de ser criado — convite a criar duas vezes.
+  const limpoRef = useRef<string | null>(null)
 
   useEffect(() => {
     serializadoRef.current = serializado
@@ -51,10 +55,12 @@ export function useRascunho<T extends object>({
 
   const gravar = useCallback(() => {
     if (typeof window === "undefined" || !temConteudoRef.current) return
+    if (serializadoRef.current === limpoRef.current) return
     localStorage.setItem(chave, serializadoRef.current)
   }, [chave])
 
   const limpar = useCallback(() => {
+    limpoRef.current = serializadoRef.current
     if (typeof window !== "undefined") localStorage.removeItem(chave)
   }, [chave])
 

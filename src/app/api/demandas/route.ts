@@ -25,6 +25,7 @@ import { whereDoQuadro } from "@/lib/quadro-do-card-server"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
+import { podeAprovar, statusAoAprovar } from "@/lib/quem-aprova"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -89,6 +90,9 @@ const criarDemandaSchema = z.object({
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
   // Pedido feito pelo quadro da social (/social): a ideia que vira esta demanda.
   ideiaId: z.string().optional(),
+  // "+ Novo Job" de /jobs: quem pode aprovar já cria aprovado. De quem não pode,
+  // o pedido entra na fila de Aprovações como qualquer outro.
+  aprovarAoCriar: z.boolean().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -371,9 +375,14 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const statusInterno = data.prioridade === "urgente"
-    ? "urgencia_pendente_aprovacao"
-    : "aguardando_aprovacao_interna"
+  // O portão de aprovação é universal, menos para quem decide a fila: o pedido
+  // de quem pode aprovar, feito pelo "+ Novo Job", já nasce aprovado. Aprovar o
+  // próprio pedido em outra tela seria só um clique a mais.
+  const urgente = data.prioridade === "urgente"
+  const jaAprovada = !!data.aprovarAoCriar && await podeAprovar(session, organizacaoId)
+  const statusInterno = jaAprovada
+    ? statusAoAprovar(urgente)
+    : urgente ? "urgencia_pendente_aprovacao" : "aguardando_aprovacao_interna"
 
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(data.tipoVideo, data.prioridade as Prioridade)
@@ -462,6 +471,8 @@ export async function POST(req: NextRequest) {
       statusVisivel,
       pesoDemanda: peso,
       solicitanteId: session.user.id,
+      // Quem aprovou — o mesmo campo que api/demandas/[id]/aprovar preenche.
+      ...(jaAprovada && { gestorId: session.user.id }),
       dataLimite: data.dataLimite ? new Date(data.dataLimite) : undefined,
       campanha: data.campanha,
       objetivo: data.objetivo,
@@ -579,32 +590,36 @@ export async function POST(req: NextRequest) {
       statusNovo: statusInterno,
       usuarioId: session.user.id,
       origem: "manual",
-      observacao: "Demanda criada",
+      observacao: jaAprovada ? "Demanda criada e aprovada por quem pediu" : "Demanda criada",
     },
   })
 
-  // Criar alerta para gestor
-  await prisma.alertaIA.create({
-    data: {
-      organizacaoId,
-      demandaId: demanda.id,
-      tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
-      mensagem: data.prioridade === "urgente"
-        ? `🚨 Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`
-        : `📋 Nova demanda: "${data.titulo}" aguarda aprovação interna.`,
-      severidade: data.prioridade === "urgente" ? "critico" : "aviso",
-      acaoSugerida: "Aprovar ou recusar demanda",
-    },
-  })
+  // Já aprovada, não há o que pedir aos gestores: o alerta e o WhatsApp de
+  // "aguarda aprovação" seriam um aviso falso. Os líderes seguem avisados abaixo
+  // (é para atribuir e acompanhar, não para aprovar).
+  if (!jaAprovada) {
+    await prisma.alertaIA.create({
+      data: {
+        organizacaoId,
+        demandaId: demanda.id,
+        tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
+        mensagem: data.prioridade === "urgente"
+          ? `🚨 Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`
+          : `📋 Nova demanda: "${data.titulo}" aguarda aprovação interna.`,
+        severidade: data.prioridade === "urgente" ? "critico" : "aviso",
+        acaoSugerida: "Aprovar ou recusar demanda",
+      },
+    })
 
-  // NOVO: Notifica gestores/admins via WhatsApp sobre nova demanda
-  emSegundoPlano(() => notificarGestoresNovaDemanda(
-    demanda.codigo,
-    data.titulo,
-    session.user.name ?? "Usuário",
-    data.prioridade as string,
-    organizacaoId
-  ), "nova-demanda-gestores")
+    // NOVO: Notifica gestores/admins via WhatsApp sobre nova demanda
+    emSegundoPlano(() => notificarGestoresNovaDemanda(
+      demanda.codigo,
+      data.titulo,
+      session.user.name ?? "Usuário",
+      data.prioridade as string,
+      organizacaoId
+    ), "nova-demanda-gestores")
+  }
 
   // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
   if (demanda.area === "audiovisual") {

@@ -6,6 +6,8 @@ import { toast } from "sonner"
 import { Header } from "@/components/layout/Header"
 import { JobsQuadro } from "@/components/jobs/JobsQuadro"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
+import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
+import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { useMe } from "@/hooks/usePermissoes"
 import { movimentoDoJob } from "@/lib/jobs-quadro"
 import type { MapaPermissoes } from "@/lib/permissoes"
@@ -18,7 +20,7 @@ import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { LayoutGrid, List, ChevronRight } from "lucide-react"
+import { LayoutGrid, List, ChevronRight, Plus } from "lucide-react"
 
 // Quadro operacional de Jobs.
 //
@@ -61,6 +63,7 @@ type Opcao = { id: string; nome: string }
 function Quadro() {
   const { data: me } = useMe()
   const [aberto, setAberto] = useState<string | null>(null)
+  const [novoJob, setNovoJob] = useState(false)
   const [view, setView] = useState<"kanban" | "list">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
@@ -173,7 +176,16 @@ function Quadro() {
 
   return (
     <>
-      <Header title="Jobs" />
+      {/* "+ Novo Job" no mesmo lugar e desenho do "+ Nova Demanda" de /demandas.
+          O formulário é o mesmo, já em Cobertura / Entrega. */}
+      <Header
+        title="Jobs"
+        actions={
+          <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
+            <Plus className="w-4 h-4" /> Novo Job
+          </button>
+        }
+      />
 
       {/* Topo do quadro no mesmo desenho do de Demandas (BarraVisao): duas
           linhas — visão e números; recortes e filtros. O nome da página já
@@ -236,6 +248,13 @@ function Quadro() {
         </div>
       )}
       <DemandaModal demandaId={aberto} onClose={() => { setAberto(null); void mutate() }} />
+      <NovaDemandaModal
+        open={novoJob}
+        onClose={() => setNovoJob(false)}
+        // Aprovado, o card aparece no quadro na hora. Pendente só depois de
+        // Aprovações — o aviso de onde ele está sai do próprio formulário.
+        job={{ aoCriar: () => void mutate() }}
+      />
     </>
   )
 }

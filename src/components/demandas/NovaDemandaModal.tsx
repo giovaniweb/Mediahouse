@@ -11,6 +11,8 @@ import { toast } from "sonner"
 import { enviarAnexos } from "@/lib/upload-documento"
 import { ErroApi, erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import { hojeEmSaoPaulo } from "@/lib/datas"
+import { AGUARDANDO_APROVACAO } from "@/lib/job-fase"
+import type { StatusInterno } from "@prisma/client"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
 import { useRascunho } from "@/lib/use-rascunho"
@@ -39,6 +41,12 @@ interface NovaDemandaModalProps {
   prefill?: { videomakerId?: string; editorId?: string }
   /** Aberto pelo quadro da social: o mesmo formulário salva ideia ou envia o pedido. */
   social?: OrigemSocial
+  /**
+   * Aberto pelo "+ Novo Job" de /jobs: o mesmo formulário, já em Cobertura /
+   * Entrega e sem a escolha de tipo. Quem pode aprovar cria aprovado; o quadro
+   * recebe o resultado e diz onde o job foi parar.
+   */
+  job?: { aoCriar: (criado: { id: string; codigo: string; aprovado: boolean }) => void }
 }
 
 type TipoDemanda = "video" | "cobertura"
@@ -72,11 +80,11 @@ interface RascunhoAudiovisual {
   clienteEmail: string
 }
 
-export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemandaModalProps) {
+export function NovaDemandaModal({ open, onClose, prefill, social, job }: NovaDemandaModalProps) {
   const router = useRouter()
 
   // ── Tipo de demanda ──────────────────────────────────────────────────────
-  const [tipo, setTipo] = useState<TipoDemanda>("video")
+  const [tipo, setTipo] = useState<TipoDemanda>(job ? "cobertura" : "video")
 
   // ── Campos comuns ────────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
@@ -154,7 +162,9 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
   // briefing longo e esbarrava fora perdia tudo — é a queixa de "não salva o texto
   // e se sair da tela apaga". Agora só fecha sem perguntar quando não há nada
   // escrito, e o que foi digitado fica guardado no navegador até virar demanda.
-  const RASCUNHO_KEY = "nuflow:rascunho-nova-demanda"
+  // O job tem rascunho próprio: o de /demandas pode ser um vídeo, e restaurado
+  // aqui mudaria o tipo de um formulário que não deixa escolher tipo.
+  const RASCUNHO_KEY = job ? "nuflow:rascunho-novo-job" : "nuflow:rascunho-nova-demanda"
 
   const temConteudo = !!(
     titulo.trim() || descricao.trim() || tipoVideo || produtoIds.length > 0 || classificacao ||
@@ -165,7 +175,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
   )
 
   function restaurar(salvo: Partial<RascunhoAudiovisual>) {
-    setTipo(salvo.tipo ?? "video")
+    setTipo(job ? "cobertura" : salvo.tipo ?? "video")
     setTitulo(salvo.titulo ?? "")
     setDescricao(salvo.descricao ?? "")
     setPrioridade(salvo.prioridade ?? "normal")
@@ -372,9 +382,12 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
         ...(tipo === "cobertura" && clienteTelefone.trim() ? { clienteFinalTelefone: clienteTelefone.trim() } : {}),
         ...(tipo === "cobertura" && clienteEmail.trim() ? { clienteFinalEmail: clienteEmail.trim() } : {}),
         ...(linkBrutos.trim() ? { linkBrutos: linkBrutos.trim() } : {}),
-        ...(videomakerId ? { videomakerId } : {}),
+        // Pelo "+ Novo Job" quem grava não vai no pedido (o campo nem aparece):
+        // videomaker interno faria o card morar em Demandas (lib/quadro-do-card.ts).
+        ...(videomakerId && !job ? { videomakerId } : {}),
         ...(editorId ? { editorId } : {}),
         ...(ideiaDoPedido ? { ideiaId: ideiaDoPedido } : {}),
+        ...(job ? { aprovarAoCriar: true } : {}),
       }
 
       const res = await fetch("/api/demandas", {
@@ -392,7 +405,16 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       // cast mentia para o TypeScript. O usuário via "[object Object]".
       if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a demanda.")
 
-      toast.success(social ? `Pedido ${json.codigo ?? ""} enviado ao Audiovisual.` : `Demanda ${json.codigo ?? ""} criada!`)
+      // O servidor diz se o pedido já nasceu aprovado. Se não, o job só aparece
+      // no quadro depois de Aprovações, e a frase avisa para ninguém achar que sumiu.
+      const codigo = typeof json.codigo === "string" ? json.codigo : ""
+      const aprovado = !AGUARDANDO_APROVACAO.includes(json.statusInterno as StatusInterno)
+      if (job) {
+        if (aprovado) toast.success(`Job ${codigo} criado. Já está no quadro.`)
+        else toast.success("Pedido criado. Ele aparece em Jobs depois de aprovado em Aprovações.", { duration: 8000 })
+      } else {
+        toast.success(social ? `Pedido ${codigo} enviado ao Audiovisual.` : `Demanda ${codigo} criada!`)
+      }
       if (!social) limparRascunho()
 
       // Anexos vão depois da criação — a demanda precisa existir para receber o
@@ -408,7 +430,12 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       }
 
       if (social) {
-        social.aoTerminar({ tipo: "pedido", codigo: typeof json.codigo === "string" ? json.codigo : undefined })
+        social.aoTerminar({ tipo: "pedido", codigo: codigo || undefined })
+        return
+      }
+      if (job) {
+        onClose()
+        if (typeof json.id === "string") job.aoCriar({ id: json.id, codigo, aprovado })
         return
       }
       onClose()
@@ -428,7 +455,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
   return (
     <ModalFormulario
       aberto={open}
-      titulo={social ? `Vídeo · ${social.linhaNome}` : "Nova Demanda"}
+      titulo={social ? `Vídeo · ${social.linhaNome}` : job ? "Novo Job" : "Nova Demanda"}
       icone={Plus}
       aoTentarFechar={tentarFechar}
       aoConfirmar={handleSubmit}
@@ -442,7 +469,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
           ? <><Loader2 className="h-4 w-4 animate-spin" /> {social ? "Salvando..." : "Criando..."}</>
           : social
           ? <>Enviar para a equipe <span aria-hidden>→</span></>
-          : <>Criar Demanda <span aria-hidden>→</span></>
+          : <>{job ? "Criar Job" : "Criar Demanda"} <span aria-hidden>→</span></>
       }
     >
       {social && !social.somenteLeitura && (
@@ -460,8 +487,8 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
           ficava espremida na outra metade. Agora o tipo divide a linha com
           o título, e o briefing usa a largura toda. */}
       <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
-        <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
-          <Campo label="Título da demanda" obrigatorio erro={errors.titulo}>
+        <div className={cn("grid gap-x-10 gap-y-4", !job && "md:grid-cols-2")}>
+          <Campo label={job ? "Título do job" : "Título da demanda"} obrigatorio erro={errors.titulo}>
             <input
               value={titulo}
               onChange={e => { setTitulo(e.target.value); limparCampo("titulo") }}
@@ -470,7 +497,8 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
             />
           </Campo>
 
-          <Campo label="Tipo de demanda" obrigatorio>
+          {/* Pelo "+ Novo Job" o tipo já é Cobertura / Entrega. */}
+          {!job && <Campo label="Tipo de demanda" obrigatorio>
             <div className="flex gap-3">
               {(["video", "cobertura"] as const).map(t => (
                 <button
@@ -488,7 +516,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
                 </button>
               ))}
             </div>
-          </Campo>
+          </Campo>}
         </div>
 
         <Campo label="Descrição / Objetivo" obrigatorio erro={errors.descricao}>
@@ -776,24 +804,33 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
               abre o pedido normalmente não sabe quem vai gravar, e a triagem
               existe justamente para isso. */}
           <Secao icone={Users} titulo="Equipe">
-            <Campo label="Videomaker da gravação" opcional>
-              <div className="relative">
-                <select
-                  value={videomakerId}
-                  onChange={e => setVideomakerId(e.target.value)}
-                  className={cn(selectClass, "pl-10")}
-                >
-                  <option value="">Definir na triagem</option>
-                  {opcoesCaptacao.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Seta />
-              </div>
-            </Campo>
+            {/* No job, quem grava é escalado depois de aprovado. Escolher aqui um
+                videomaker interno mandaria o card para Demandas, e ele sumiria
+                do quadro de onde foi criado (lib/quadro-do-card.ts). */}
+            {job ? (
+              <p className="text-sm text-zinc-400">
+                Quem grava é escalado no próprio job, depois de criado.
+              </p>
+            ) : (
+              <Campo label="Videomaker da gravação" opcional>
+                <div className="relative">
+                  <select
+                    value={videomakerId}
+                    onChange={e => setVideomakerId(e.target.value)}
+                    className={cn(selectClass, "pl-10")}
+                  >
+                    <option value="">Definir na triagem</option>
+                    {opcoesCaptacao.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Seta />
+                </div>
+              </Campo>
+            )}
 
             <Campo label="Videomaker editor" opcional>
               <div className="relative">

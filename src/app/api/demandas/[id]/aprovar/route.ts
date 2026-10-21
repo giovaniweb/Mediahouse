@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
+import { podeAprovar, statusAoAprovar } from "@/lib/quem-aprova"
 import { prisma } from "@/lib/prisma"
 import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { sendEmailNotificacao } from "@/lib/email"
@@ -19,14 +19,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!organizacaoId) return semOrg()
 
   // Admin/gestor OU líder audiovisual da org podem aprovar/recusar/reverter.
-  if (!ehGestor(session)) {
-    const membro = await prisma.usuarioOrganizacao.findUnique({
-      where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
-      select: { liderAudiovisual: true },
-    })
-    if (!membro?.liderAudiovisual) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
+  if (!(await podeAprovar(session, organizacaoId))) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
   const { id } = await params
@@ -97,11 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const ehUrgencia = demanda.statusInterno === "urgencia_pendente_aprovacao"
 
-  // Urgência aprovada pula a triagem e entra em produção — é o que a urgência
-  // significa, e é a transição que TRANSICOES_VALIDAS já declara.
-  const novoStatus = acao !== "aprovar"
-    ? "encerrado"
-    : ehUrgencia ? "urgencia_aprovada" : "aguardando_triagem"
+  const novoStatus = acao !== "aprovar" ? "encerrado" : statusAoAprovar(ehUrgencia)
   const novoStatusVisivel = acao === "aprovar"
     ? STATUS_PARA_COLUNA[novoStatus]
     : demanda.statusVisivel
