@@ -14,7 +14,8 @@ import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 import { analisarVideoDoUpload } from "@/lib/video-compat"
 import { paraDownload } from "@/lib/midia-download"
-import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
+import { AprovacaoEntrega } from "@/components/aprovacao/AprovacaoEntrega"
+import { TextoComMomentos, irPara } from "@/components/aprovacao/Momentos"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
@@ -80,6 +81,7 @@ const STATUS_LABELS: Record<string, string> = {
   edicao_finalizada: "Edição Finalizada",
   revisao_pendente: "Aguardando Revisão",
   revisao_reprovada: "Revisão Reprovada",
+  ajuste_solicitado: "Ajuste Solicitado",
   aguardando_aprovacao_cliente: "Aguardando Cliente",
   aprovado_cliente: "Aprovado pelo Cliente",
   reprovado_cliente: "Reprovado pelo Cliente",
@@ -316,7 +318,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
   // ── Documentos anexados ───────────────────────────────────────────────────
-  const [aprovacaoAberta, setAprovacaoAberta] = useState(false)
+  // O player da aprovação embutida: o "[1:07]" do aviso de ajuste no topo leva até ele.
+  const videoAprovacaoRef = useRef<HTMLVideoElement | null>(null)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docUploadProgress, setDocUploadProgress] = useState(0)
   const fileRefDoc = useRef<HTMLInputElement>(null)
@@ -1164,8 +1167,42 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     null
   )
 
-  // Mesma prévia e ações, uma única instância: Entrega no v8, topo no clássico.
-  const entregaGrowth = isGrowth ? (
+  // A última versão enviada e quem pode decidir sobre ela — o servidor resolve
+  // a régua (lib/quem-aprova.ts), a tela só obedece.
+  const ultimaEntrega = (data?.ultimaEntrega ?? null) as {
+    token: string; status: string; comentario: string | null; aprovadoPor: string | null; updatedAt: string
+  } | null
+  const ajusteNoTopo = demanda.statusInterno === "ajuste_solicitado" && ultimaEntrega?.status === "feedback_solicitado"
+    && ultimaEntrega.comentario ? ultimaEntrega : null
+  function irAoMomento(segundos: number) {
+    setDetailTab("aprovacao")
+    requestAnimationFrame(() => irPara(videoAprovacaoRef.current, segundos))
+  }
+  const solicitanteNome = (demanda.nomeSolicitante || demanda.solicitante?.nome || "quem pediu") as string
+
+  // A mesma tela do link do cliente, embutida: prévia tocando, Aprovar e Pedir
+  // ajuste. Quem fez a peça vê o status e o que voltou, sem os botões.
+  const aprovacaoPorDentro = ultimaEntrega ? (
+    <section aria-label="Aprovação da entrega" className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+      <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
+      <AprovacaoEntrega
+        key={ultimaEntrega.token}
+        token={ultimaEntrega.token}
+        modo="equipe"
+        demandaId={demanda.id}
+        podeDecidir={!!data?.podeAprovarEntrega}
+        porQueNaoDecide={souResponsavel
+          ? `Você fez esta peça, então não aprova a própria entrega. Quem decide é ${solicitanteNome}, a social dona do pedido, gestor ou admin — ou o cliente pelo link. Se pedirem ajuste, ele aparece aqui e no topo.`
+          : `Aguardando a aprovação de ${solicitanteNome} (ou do cliente pelo link).`}
+        refVideo={isGrowth ? undefined : videoAprovacaoRef}
+        onRespondido={() => mutate()}
+      />
+    </section>
+  ) : null
+
+  // Prévia antes do primeiro envio (Growth): as artes e a copy, com o botão de
+  // mandar para aprovação. Depois do envio, quem mostra é a aprovação embutida.
+  const entregaGrowth = isGrowth && !ultimaEntrega ? (
               <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", surface.growthDelivery)}>
                 <div className={surface.sectionHead}><h2 className={surface.sectionTitle}>Entrega · prévia do criativo</h2></div>
                 <div className={surface.growthDeliveryGrid}>
@@ -1211,27 +1248,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       <p className={surface.hint}>
                         Envie a arte final logo abaixo para gerar o link do cliente.
                       </p>
-                    ) : demanda.linkCliente ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                          <span className="text-xs text-green-400 truncate flex-1">{demanda.linkCliente}</span>
-                          <button onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }} title="Copiar link">
-                            {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
-                          </button>
-                        </div>
-                        <AvisoLinkExpirado
-                          linkCliente={demanda.linkCliente}
-                          expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
-                          onRenovado={() => mutate()}
-                        />
-                        <button type="button" onClick={() => setAprovacaoAberta(true)} className={cn(surface.btnPrimary, surface.btnWide)}>
-                          <Eye className="w-4 h-4" aria-hidden /> Abrir aprovação
-                        </button>
-                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className={cn(surface.linkBtn, "w-full justify-center")}>
-                          <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir em nova aba
-                        </a>
-                      </div>
                     ) : (
                       <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
                         <Send className="w-4 h-4" aria-hidden /> Enviar para aprovação
@@ -1245,25 +1261,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const corpo = (
     <>
       <FaixaEspelho espelho={espelho} />
-      {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
-      {aprovacaoAberta && demanda.linkCliente && (
-        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
-          <div className="min-h-full flex items-start justify-center p-4">
-            <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
-                <span className="text-sm font-semibold text-zinc-200">Aprovação — {demanda.codigo}</span>
-                <button onClick={() => { setAprovacaoAberta(false); mutate() }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5">
-                <AprovacaoCriativo token={demanda.linkCliente.split("/aprovar/")[1]} onAprovado={() => mutate()} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div className={surface.detailHeading}>
         <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
         <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+        {ajusteNoTopo && (
+          <section className={surface.ajustePedido} aria-label="Ajuste pedido">
+            <strong>
+              Ajuste pedido {ajusteNoTopo.aprovadoPor ? `por ${ajusteNoTopo.aprovadoPor}` : "pelo cliente"}
+              {" · "}{format(new Date(ajusteNoTopo.updatedAt), "dd/MM 'às' HH:mm", { locale: ptBR })}
+            </strong>
+            <p><TextoComMomentos texto={ajusteNoTopo.comentario!} onIr={isGrowth ? undefined : irAoMomento} /></p>
+            {!isGrowth && /\[\d/.test(ajusteNoTopo.comentario!) && <small>Toque no tempo para ver o momento no vídeo.</small>}
+          </section>
+        )}
         <section className={surface.nextAction}>
           <strong>Próxima ação: {proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
@@ -1787,6 +1797,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           </div>
           <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
+          {aprovacaoPorDentro}
           {entregaGrowth}
           {/* ── Versões enviadas para aprovação ─────────────────────────── */}
           {(!aprovacaoConcluida || (dadosDasAbas?.finaisEnviados ?? 0) > 0 || !!demanda.linkFinal || editMode) && (
@@ -2238,44 +2249,30 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           </div>
           <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
-          {/* Aprovação — Growth usa a prévia do criativo, logo acima. Aprovado
-              sem link pelo NuFlow (combinado por fora) não tem o que mostrar aqui. */}
-          {!isGrowth && (!!demanda.linkCliente || !aprovacaoConcluida) && (
+          {/* Link do cliente — para quem é de fora do NuFlow. A aprovação em si
+              (prévia, Aprovar, Pedir ajuste) está embutida ao lado, na coluna
+              principal; aqui fica só o caminho para mandar ao cliente. */}
+          {demanda.linkCliente && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
-            {demanda.linkCliente ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-xs text-green-400 truncate flex-1">{demanda.linkCliente}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}>
-                    {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
-                  </button>
-                </div>
-                {/* Ver o vídeo aqui dentro, sem sair para o link do cliente.
-                    Quem acompanha a demanda precisa conferir o que foi enviado
-                    para aprovação — antes só dava abrindo a página pública. */}
-                <AvisoLinkExpirado
-                  linkCliente={demanda.linkCliente}
-                  expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
-                  onRenovado={() => mutate()}
-                />
-                {demanda.linkFinal && (
-                  <button
-                    type="button"
-                    onClick={() => setPlayerUrl(demanda.linkFinal!)}
-                    className={cn(surface.btn, surface.btnWide)}
-                  >
-                    <Play className="w-4 h-4" aria-hidden /> Ver o vídeo enviado
-                  </button>
-                )}
-                <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
-                  <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir a página que o cliente vê
-                </Link>
-              </div>
-            ) : (
-              <p className={surface.empty}>Nenhum link gerado ainda.</p>
-            )}
+            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Link2 aria-hidden /> Link do cliente</h2></div>
+            <div className="space-y-2">
+              <p className={surface.hint}>Para quem é de fora do NuFlow: abre a mesma tela de aprovação, sem login.</p>
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); toast.success("Link do cliente copiado!"); setTimeout(() => setCopiado(false), 2000) }}
+                className={cn(surface.btn, surface.btnWide)}
+              >
+                {copiado ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} Copiar link do cliente
+              </button>
+              <AvisoLinkExpirado
+                linkCliente={demanda.linkCliente}
+                expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
+                onRenovado={() => mutate()}
+              />
+              <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
+                <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir a página que o cliente vê
+              </Link>
+            </div>
           </div>
           )}
 
