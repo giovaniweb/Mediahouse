@@ -28,7 +28,7 @@ import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
 
 
-interface OpcaoEquipe { value: string; label: string; subtitle?: string }
+interface OpcaoEquipe { value: string; label: string; subtitle?: string; scoreTexto?: string }
 
 interface NovaDemandaModalProps {
   open: boolean
@@ -761,7 +761,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
               <EscolhaComBusca
                 value={videomakerId}
                 onChange={setVideomakerId}
-                grupos={[{ opcoes: opcoesCaptacao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null })) }]}
+                grupos={[{ opcoes: opcoesCaptacao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null, extra: o.scoreTexto ? ` · ${o.scoreTexto}` : null })) }]}
                 vazio="Definir na triagem"
                 ariaLabel="Videomaker da gravação"
                 icone={<Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" aria-hidden />}
@@ -773,7 +773,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
               <EscolhaComBusca
                 value={editorId}
                 onChange={setEditorId}
-                grupos={[{ opcoes: opcoesEdicao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null })) }]}
+                grupos={[{ opcoes: opcoesEdicao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null, extra: o.scoreTexto ? ` · ${o.scoreTexto}` : null })) }]}
                 vazio="Definir na triagem"
                 ariaLabel="Videomaker editor"
                 icone={<Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" aria-hidden />}

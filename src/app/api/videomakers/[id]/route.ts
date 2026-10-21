@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { prismaAdmin } from "@/lib/prisma-admin"
 import { getOrgId, semOrg } from "@/lib/org"
 import { encryptSecret, decryptSecret } from "@/lib/secret-crypto"
+import { scoreDaRede } from "@/lib/rede"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -91,18 +92,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!vm) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  const [vinculo, fiscais] = await Promise.all([
+  const [vinculo, fiscais, naLista, score] = await Promise.all([
     prisma.videomakerOrganizacao.findUnique({
       where: { organizacaoId_videomakerId: { organizacaoId, videomakerId: id } },
     }),
     prisma.videomakerDadosFiscais.findUnique({
       where: { organizacaoId_videomakerId: { organizacaoId, videomakerId: id } },
     }),
+    temVinculoComOrg(id, organizacaoId),
+    scoreDaRede("videomaker", id),
   ])
+
+  // Fora da lista da empresa, o perfil é o da rede: sem telefone nem e-mail
+  // (Termos do Profissional, seção 5). O contato chega com o "aceito" do convite.
+  const { telefone, email, ...perfilDaRede } = vm
 
   return NextResponse.json({
     videomaker: {
-      ...vm,
+      ...perfilDaRede,
+      telefone: naLista ? telefone : null,
+      email: naLista ? email : null,
+      naLista,
+      score,
       // Relação comercial desta empresa (diária, status, lista negra). O PUT
       // grava contrato, edição e status no vínculo; ler do perfil global fazia
       // a tela mostrar "Externo" depois de o vínculo já dizer "Interno".
@@ -154,7 +165,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
       estado: body.estado,
       telefone: body.telefone,
       email: body.email,
-      avaliacao: body.avaliacao,
+      // `avaliacao` saiu daqui (Onda 2B): é a média da rede, calculada pelo banco
+      // (score_rede). Uma empresa gravando o número mudaria o que todas veem.
       areasAtuacao: body.areasAtuacao,
       portfolio: body.portfolio,
     },

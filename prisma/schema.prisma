@@ -283,6 +283,13 @@ model Videomaker {
   coberturaEquipe EventoCoberturaEquipe[]
   vinculos        VideomakerOrganizacao[]
   dadosFiscais    VideomakerDadosFiscais[]
+  convitesRede    ConviteRede[]
+
+  // Rede (Termos do Profissional, seção 11): fora da rede, o perfil some da
+  // busca de empresas novas; quem já tem o profissional na lista continua vendo.
+  // Muda só pela função definir_participacao_rede, que o próprio profissional chama.
+  naRede       Boolean   @default(true)
+  saiuDaRedeEm DateTime?
 
   @@map("videomakers")
 }
@@ -1260,14 +1267,19 @@ model AvaliacaoVideomaker {
   demandaId    String?
   origem       String   @default("interno") // "interno" | "qr_publico"
   createdAt    DateTime @default(now())
+  // Removida por decisão da contestação: sai da média e da lista da empresa,
+  // e fica guardada com acesso restrito (Política de Avaliações, seção 8).
+  removidaEm   DateTime?
 
-  videomaker Videomaker @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+  videomaker   Videomaker             @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+  contestacoes ContestacaoAvaliacao[]
 
   /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
   organizacaoId String?
   organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
+  @@index([videomakerId, createdAt])
   @@map("avaliacoes_videomaker")
 }
 
@@ -1287,15 +1299,72 @@ model AvaliacaoEditor {
   demandaId            String?
   origem               String   @default("interno") // "interno" | "qr_publico"
   createdAt            DateTime @default(now())
+  removidaEm           DateTime?
 
-  editor Editor @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  editor       Editor                 @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  contestacoes ContestacaoAvaliacao[]
 
   /// Dono do registro. Nulável enquanto o backfill não alcança tudo — ver Fase 2.
   organizacaoId String?
   organizacao   Organizacao? @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@index([organizacaoId])
+  @@index([editorId, createdAt])
   @@map("avaliacoes_editor")
+}
+
+// ─────────────────────────────────────────────
+// REDE: CONTESTAÇÃO E CONVITE
+// ─────────────────────────────────────────────
+
+// Contestação de uma nota pelo profissional (Política de Avaliações, seção 5).
+// Em análise, a nota sai da média; quem decide é a Plataforma (/admin/contestacoes).
+// Cabe uma segunda análise: no máximo duas por avaliação.
+//
+// Sem política para app_user: o profissional abre pela função contestar_avaliacao
+// e lê pela avaliacoes_do_profissional, que conferem que a nota é dele. Só o
+// cliente de administração lê a tabela direto.
+model ContestacaoAvaliacao {
+  id                    String    @id @default(cuid())
+  avaliacaoVideomakerId String?
+  avaliacaoEditorId     String?
+  motivo                String
+  status                String    @default("em_analise") // em_analise | mantida | removida
+  decisao               String? // o motivo da decisão, que o profissional lê
+  decididoPorId         String?
+  decididoEm            DateTime?
+  createdAt             DateTime  @default(now())
+
+  avaliacaoVideomaker AvaliacaoVideomaker? @relation(fields: [avaliacaoVideomakerId], references: [id], onDelete: Cascade)
+  avaliacaoEditor     AvaliacaoEditor?     @relation(fields: [avaliacaoEditorId], references: [id], onDelete: Cascade)
+
+  @@index([avaliacaoVideomakerId])
+  @@index([avaliacaoEditorId])
+  @@index([status, createdAt])
+  @@map("contestacoes_avaliacao")
+}
+
+// Convite de uma empresa a um videomaker da rede para entrar na lista dela.
+// O contato só aparece para a empresa depois do "aceito", que cria o vínculo
+// (videomaker_organizacao). O profissional lê e responde pelas funções
+// convites_rede_do_profissional e responder_convite_rede.
+model ConviteRede {
+  id             String    @id @default(cuid())
+  organizacaoId  String
+  videomakerId   String
+  status         String    @default("pendente") // pendente | aceito | recusado | cancelado
+  convidadoPorId String?
+  mensagem       String?
+  respondidoEm   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  videomaker  Videomaker  @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId, status])
+  @@index([videomakerId, status])
+  @@map("convites_rede")
 }
 
 // ─────────────────────────────────────────────
@@ -2302,6 +2371,7 @@ model Organizacao {
   linhasProjeto      LinhaProjeto[]
   socialLinhas       SocialLinha[]
   videomakerVinculos VideomakerOrganizacao[]
+  convitesRede       ConviteRede[]
   editorVinculos     EditorOrganizacao[]
   editorFiscais      EditorDadosFiscais[]
   designerVinculos   DesignerOrganizacao[]

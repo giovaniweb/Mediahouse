@@ -535,6 +535,15 @@ export function VideomakerDashboard() {
             )}
           </section>
 
+          {/* Rede: o score que as empresas veem, contestar e convites */}
+          <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-zinc-200">Minhas avaliações na rede</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Veja a média que as empresas veem, conteste uma nota e responda aos convites.</p>
+            </div>
+            <Link href="/minhas-avaliacoes" className="text-xs text-blue-400 hover:text-blue-300 shrink-0">Abrir →</Link>
+          </section>
+
           {/* Minhas Notas Fiscais */}
           <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">

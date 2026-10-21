@@ -167,7 +167,17 @@ export async function resolveParaVideomaker(token: string, organizacaoId?: strin
     return videomakerId
   }
 
-  if (origem === "vm") return comVinculo(id)
+  // Videomaker da rede só entra na escala se já está na lista da empresa. Criar
+  // o vínculo aqui seria pular o convite da rede e entregar o contato de quem
+  // não aceitou (Termos do Profissional, seção 5). Ver /api/rede/convites.
+  if (origem === "vm") {
+    if (organizacaoId) {
+      const naLista = await prisma.videomakerOrganizacao.count({ where: { organizacaoId, videomakerId: id } })
+      if (!naLista) throw new Error("Este videomaker não está na lista da sua empresa. Convide-o pela rede.")
+    }
+    // O vínculo já existe: regravá-lo com "ativo" rebaixaria quem é preferencial.
+    return id
+  }
 
   if (origem === "ed") {
     const ed = await prisma.editor.findUnique({

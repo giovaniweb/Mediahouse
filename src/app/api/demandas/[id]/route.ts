@@ -252,7 +252,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
   } catch (e) {
     console.error("[Demanda PUT] Erro ao resolver atribuição:", e)
-    return NextResponse.json({ error: "Erro ao resolver a pessoa atribuída" }, { status: 400 })
+    const msg = e instanceof Error && e.message.includes("lista da sua empresa") ? e.message : "Erro ao resolver a pessoa atribuída"
+    return NextResponse.json({ error: msg }, { status: 400 })
   }
 
   if (body.statusVisivel) {

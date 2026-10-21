@@ -374,6 +374,27 @@ try {
   conferir(contadorNaOutra !== null, "contadores_codigo: a empresa A não cria contador na B")
   const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
   conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
+
+  // 20. Rede (Onda 2B, migration 20261113120000): convite é da empresa que
+  // convida; contestação não se lê nem se grava direto; o score só devolve número.
+  await inserir("convites_rede", { id: "rls-convite-a", organizacaoId: A, videomakerId: "rls-vm-1", updatedAt: new Date() })
+  r = await comoApp(B, `SELECT count(*)::int n FROM convites_rede WHERE id = 'rls-convite-a'`)
+  conferir(r.rows[0].n === 0, "convites_rede: a empresa B não vê o convite da A")
+  const conviteNaOutra = await erroComoApp(B, `INSERT INTO convites_rede (id, "organizacaoId", "videomakerId", "updatedAt")
+                                                 VALUES ('rls-convite-x', '${A}', 'rls-vm-1', now())`)
+  conferir(conviteNaOutra !== null, "convites_rede: a empresa B não cria convite em nome da A")
+  const apagarConvite = await erroComoApp(A, `DELETE FROM convites_rede WHERE id = 'rls-convite-a'`)
+  conferir(apagarConvite !== null, "convites_rede: a aplicação não apaga convite (cancela pelo status)")
+  const lerContestacao = await erroComoApp(A, `SELECT count(*) FROM contestacoes_avaliacao`)
+  conferir(lerContestacao !== null, "contestacoes_avaliacao: a aplicação não lê direto (só pelas funções)")
+  await inserir("avaliacoes_videomaker", { id: "rls-aval-a", videomakerId: "rls-vm-1", nota: 2, comentario: "privado da A", organizacaoId: A })
+  r = await comoApp(B, `SELECT count(*)::int n FROM avaliacoes_videomaker WHERE id = 'rls-aval-a'`)
+  conferir(r.rows[0].n === 0, "avaliacoes_videomaker: a empresa B não lê a avaliação (nem o comentário) da A")
+  r = await comoApp(B, `SELECT * FROM public.score_rede('videomaker', ARRAY['rls-vm-1'])`)
+  conferir(
+    r.rows.length === 1 && r.fields.map((f) => f.name).join(",") === "id,media,avaliacoes" && r.rows[0].avaliacoes === 1,
+    "score_rede: a empresa B vê só média e quantidade da rede, sem comentário nem empresa"
+  )
 } finally {
   await c.query("ROLLBACK")
 }
@@ -392,7 +413,10 @@ const { rows: semPolitica } = await c.query(`
   ORDER BY c.relname`)
 // limites_publicos: só a função SECURITY DEFINER consumir_limite_publico toca
 // nela (migration 20261001005000); a aplicação não lê nem escreve direto.
-const previstas = ["chat_ia_mensagens", "limites_publicos", "produtos_servico_evento", "sessions"]
+// contestacoes_avaliacao: o profissional abre e lê pelas funções SECURITY DEFINER
+// contestar_avaliacao e avaliacoes_do_profissional, e a Plataforma decide pela
+// conexão administrativa (migration 20261113120000).
+const previstas = ["chat_ia_mensagens", "contestacoes_avaliacao", "limites_publicos", "produtos_servico_evento", "sessions"]
 const inesperadas = semPolitica.map((r) => r.relname).filter((t) => !previstas.includes(t))
 conferir(
   inesperadas.length === 0,
