@@ -80,16 +80,33 @@ export function caminhoDaUrl(url: string | null | undefined): string | null {
   return m && caminhoMidiaValido(m[1]) ? m[1] : null
 }
 
+const TIPOS_MIDIA: readonly string[] = ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos"]
+
+/**
+ * Dono, tipo e id lidos do caminho. Dois formatos:
+ * - `org/{org}/{tipo}/{id}/...`: tudo que o app grava desde 24/08;
+ * - `org/{org}/legado/{tipo}/{id}/...`: o acervo do bucket público, copiado em
+ *   24/08 por `prisma/migrar-bucket.ts` com o caminho antigo depois de `legado/`.
+ *
+ * `legado` não é um tipo: quem decide acesso olha o tipo e o id de dentro. De
+ * 28/09 a 28/10 esse formato era recusado, e os 104 arquivos e 100 aprovações
+ * do acervo davam 404 para todo mundo.
+ */
+export function partesDaMidia(caminho: string): { organizacaoId: string; tipo: TipoMidia; id: string } | null {
+  const partes = caminho.split("/")
+  if (partes[0] !== "org" || !partes.every(p => /^[a-zA-Z0-9_.-]+$/.test(p) && p !== "." && p !== "..")) return null
+  const i = partes[2] === "legado" ? 3 : 2
+  if (partes.length < i + 3 || !TIPOS_MIDIA.includes(partes[i])) return null
+  return { organizacaoId: partes[1], tipo: partes[i] as TipoMidia, id: partes[i + 1] }
+}
+
 /** Caminho canônico: recusa traversal, escapes, query e segmentos vazios. */
 export function caminhoMidiaValido(caminho: string): boolean {
-  const partes = caminho.split("/")
-  return partes.length >= 5 && partes[0] === "org" &&
-    ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos"].includes(partes[2]) &&
-    partes.every(p => /^[a-zA-Z0-9_.-]+$/.test(p) && p !== "." && p !== "..")
+  return partesDaMidia(caminho) !== null
 }
 
 export function organizacaoDoCaminho(caminho: string): string | null {
-  return caminhoMidiaValido(caminho) ? caminho.split("/")[1] : null
+  return partesDaMidia(caminho)?.organizacaoId ?? null
 }
 
 /** URL assinada para SUBIR. O cliente sobe direto para o Supabase com ela. */
