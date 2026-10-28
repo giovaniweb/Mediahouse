@@ -20,17 +20,10 @@ import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
 import { AbaPerfis } from "@/components/pessoas/AbaPerfis"
 import {
   type PessoaLista, type PerfilAcesso,
-  vinculoDe, VINCULO_LABEL, VINCULO_COR, nivelDe, NIVEL_LABEL, NIVEL_COR, NIVEIS,
+  vinculoDe, VINCULO_LABEL, VINCULO_COR, papelDe, nivelDe, NIVEL_LABEL, NIVEL_COR, NIVEIS,
   perfilDe, PERFIL_LABEL, PERFIL_COR, AREA_LABEL, AREA_PONTO,
-  funcaoDe, semAtividade, iniciais, corAvatar, formatarAtividade,
+  funcaoDe, FUNCAO_LABEL, semAtividade, iniciais, corAvatar, formatarAtividade,
 } from "@/lib/pessoas-ui"
-
-const TIPO_LABEL: Record<string, string> = {
-  admin: "Admin", gestor: "Gestor", operacao: "Operação",
-  solicitante: "Solicitante", editor: "Videomaker Int", videomaker: "Videomaker", social: "Social Media",
-  designer: "Designer", gestor_eventos: "Gestor de Eventos",
-  analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego", auxiliar_admin: "Auxiliar Admin",
-}
 
 const TIPO_COLOR: Record<string, string> = {
   admin: "bg-purple-500/10 text-purple-400 border-purple-800",
@@ -167,14 +160,29 @@ const CATEGORIAS = [
 ]
 const FUNCOES = [
   "social", "designer", "analista_crm", "gestor_trafego", "videomaker", "editor",
-  "fotografo", "atendimento", "copywriter", "produtor", "coordenador", "gestor", "admin", "operacao", "outro",
+  "fotografo", "atendimento", "copywriter", "produtor", "coordenador", "gestor", "admin", "operacao",
+  "auxiliar_admin", "gestor_eventos", "outro",
 ]
-const FUNCAO_FORM_LABEL: Record<string, string> = {
-  social: "Social Media", designer: "Designer", analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego",
-  videomaker: "Videomaker", editor: "Editor", fotografo: "Fotógrafo", atendimento: "Atendimento",
-  copywriter: "Copywriter", produtor: "Produtor", coordenador: "Coordenador", gestor: "Gestor", admin: "Admin",
-  operacao: "Operação", outro: "Outro",
+
+// A função só se escolhe quando difere do papel. "Igual ao papel" é o valor
+// vazio, e a função igual ao papel some da lista para não aparecer duas vezes.
+// Função gravada fora da lista entra nela: sem a opção, o select cairia em
+// "Igual ao papel" e mostraria uma função que a pessoa não tem.
+function SelectFuncao({ papel, funcao, onChange, className }: {
+  papel: string
+  funcao: string
+  onChange: (funcao: string) => void
+  className: string
+}) {
+  const opcoes = !funcao || FUNCOES.includes(funcao) ? FUNCOES : [...FUNCOES, funcao]
+  return (
+    <select className={className} value={funcao === papel ? "" : funcao} onChange={e => onChange(e.target.value)}>
+      <option value="">Igual ao papel ({FUNCAO_LABEL[papel] ?? papel})</option>
+      {opcoes.filter(f => f !== papel).map(f => <option key={f} value={f}>{FUNCAO_LABEL[f] ?? f}</option>)}
+    </select>
+  )
 }
+
 const AREAS = [
   { value: "audiovisual", label: "Audiovisual" },
   { value: "growth", label: "Growth / Conteúdos" },
@@ -191,9 +199,15 @@ function ModalEditarUsuario({
   const [nome, setNome] = useState(usuario.nome)
   const [email, setEmail] = useState(usuario.email ?? "")
   const [telefone, setTelefone] = useState(usuario.telefone ?? "")
-  const [tipo, setTipo] = useState(usuario.tipo)
+  // O papel desta empresa, e não o `tipo` global: o salvar manda este valor como
+  // papel, e semear com o `tipo` desfazia o papel trocado aqui da vez anterior.
+  const papelInicial = papelDe(usuario)
+  const [tipo, setTipo] = useState(papelInicial)
   const [categoria, setCategoria] = useState(usuario.categoria ?? "interna")
-  const [funcao, setFuncao] = useState(usuario.funcaoProfissional ?? "")
+  // Função igual ao papel abre como "Igual ao papel" (vazio): assim ela segue o
+  // papel se ele for trocado aqui, em vez de ficar presa no nome antigo.
+  const funcaoInicial = usuario.funcaoProfissional === papelInicial ? "" : (usuario.funcaoProfissional ?? "")
+  const [funcao, setFuncao] = useState(funcaoInicial)
   const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
   const [lider, setLider] = useState(usuario.liderAudiovisual ?? false)
   const [recebeTudo, setRecebeTudo] = useState(usuario.recebeTodosAvisos ?? false)
@@ -203,21 +217,6 @@ function ModalEditarUsuario({
   const [loading, setLoading] = useState(false)
   const toggleArea = (a: string) => setAreas((cur) => cur.includes(a) ? cur.filter(x => x !== a) : [...cur, a])
 
-  const TIPOS = [
-    { value: "admin", label: "Admin" },
-    { value: "gestor", label: "Gestor" },
-    { value: "operacao", label: "Operação" },
-    { value: "solicitante", label: "Solicitante" },
-    { value: "social", label: "Social Media" },
-    { value: "designer", label: "Designer" },
-    { value: "analista_crm", label: "Analista CRM" },
-    { value: "gestor_trafego", label: "Gestor de Tráfego" },
-    { value: "auxiliar_admin", label: "Auxiliar Admin" },
-    { value: "gestor_eventos", label: "Gestor de Eventos" },
-    { value: "videomaker", label: "Videomaker Ext" },
-    { value: "editor", label: "Videomaker Int" },
-  ]
-
   const inp = "w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-500"
 
   async function salvar() {
@@ -226,7 +225,11 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo }
+      // "Igual ao papel" grava o próprio papel, como o cadastro já faz. Só vai
+      // quando a função ou o papel mudaram: quem não tem função (o solicitante)
+      // não ganha uma só porque alguém corrigiu o telefone.
+      if (funcao !== funcaoInicial || tipo !== papelInicial) body.funcaoProfissional = funcao || tipo
       if (novaSenha) body.novaSenha = novaSenha
       const res = await fetch(`/api/usuarios/${usuario.id}`, {
         method: "PATCH",
@@ -270,7 +273,7 @@ function ModalEditarUsuario({
           <div>
             <label className="text-xs text-zinc-400 block mb-1">Papel no sistema (acesso)</label>
             <select className={inp} value={tipo} onChange={e => setTipo(e.target.value)}>
-              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
             </select>
           </div>
           <div className="border-t border-zinc-800 pt-3 space-y-3">
@@ -283,10 +286,7 @@ function ModalEditarUsuario({
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
-              <select className={inp} value={funcao} onChange={e => setFuncao(e.target.value)}>
-                <option value="">— Não definida —</option>
-                {FUNCOES.map(f => <option key={f} value={f}>{FUNCAO_FORM_LABEL[f] ?? f}</option>)}
-              </select>
+              <SelectFuncao className={inp} papel={tipo} funcao={funcao} onChange={setFuncao} />
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">Equipes</label>
@@ -308,7 +308,8 @@ function ModalEditarUsuario({
               <p className="text-sm font-medium text-zinc-100">Recebe todos os avisos</p>
               <p className="text-[11px] text-zinc-400 mt-0.5">
                 Toda movimentação da operação chega no WhatsApp desta pessoa. Não altera permissão nenhuma.
-                {(tipo === "admin" || tipo === "gestor") && (
+                {/* O aviso por cargo ainda lê o `tipo` global (src/lib/notificados.ts), não o papel. */}
+                {(usuario.tipo === "admin" || usuario.tipo === "gestor") && (
                   <span className="text-zinc-500"> Admin e gestor já recebem por padrão.</span>
                 )}
               </p>
@@ -675,7 +676,7 @@ export default function PessoasAcessosPage() {
         body: JSON.stringify({ tipo: promoverTipo }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(`${promoverTarget.nome} promovido para ${TIPO_LABEL[promoverTipo] ?? promoverTipo}!`)
+      toast.success(`${promoverTarget.nome} promovido para ${FUNCAO_LABEL[promoverTipo] ?? promoverTipo}!`)
       setPromoverTarget(null)
       mutate()
     } catch (e: unknown) {
@@ -904,7 +905,7 @@ export default function PessoasAcessosPage() {
                 <label className="text-xs text-zinc-400 block mb-1">Papel / acesso *</label>
                 <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
-                  {TIPO_OPTS.map(t => <option key={t} value={t}>{TIPO_LABEL[t] ?? t}</option>)}
+                  {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">
@@ -921,11 +922,8 @@ export default function PessoasAcessosPage() {
               </div>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
-                <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
-                  value={form.funcaoProfissional} onChange={e => setForm(f => ({ ...f, funcaoProfissional: e.target.value }))}>
-                  <option value="">— Não definida —</option>
-                  {FUNCOES.map(fn => <option key={fn} value={fn}>{FUNCAO_FORM_LABEL[fn] ?? fn}</option>)}
-                </select>
+                <SelectFuncao className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                  papel={form.tipo} funcao={form.funcaoProfissional} onChange={fn => setForm(f => ({ ...f, funcaoProfissional: fn }))} />
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs text-zinc-400 block mb-1">Equipes</label>
@@ -1143,9 +1141,9 @@ export default function PessoasAcessosPage() {
                           <div className="flex justify-end">
                             <MenuLinha itens={[
                               { label: "Editar pessoa", Icon: Pencil, run: () => setEditTarget(p) },
-                              { label: "Editar permissões", Icon: ShieldCheck, run: () => setPermUser({ id: p.id, nome: p.nome, tipo: p.tipo, areas: p.areas }) },
+                              { label: "Editar permissões", Icon: ShieldCheck, run: () => setPermUser({ id: p.id, nome: p.nome, tipo: papelDe(p), areas: p.areas }) },
                               { label: "Redefinir senha", Icon: KeyRound, run: () => setResetTarget({ id: p.id, nome: p.nome, email: p.email }) },
-                              ...(p.tipo === "solicitante"
+                              ...(papelDe(p) === "solicitante"
                                 ? [{ label: "Promover", Icon: UserCog, run: () => setPromoverTarget({ id: p.id, nome: p.nome }) }]
                                 : []),
                               { label: "Mesclar duplicado", Icon: GitMerge, run: () => abrirMesclar(p) },
@@ -1269,7 +1267,7 @@ export default function PessoasAcessosPage() {
           onClose={() => setPessoaAbertaId(null)}
           acoes={{
             onEditar: () => setEditTarget(pessoaAberta),
-            onPermissoes: () => setPermUser({ id: pessoaAberta.id, nome: pessoaAberta.nome, tipo: pessoaAberta.tipo, areas: pessoaAberta.areas }),
+            onPermissoes: () => setPermUser({ id: pessoaAberta.id, nome: pessoaAberta.nome, tipo: papelDe(pessoaAberta), areas: pessoaAberta.areas }),
             onSenha: () => setResetTarget({ id: pessoaAberta.id, nome: pessoaAberta.nome, email: pessoaAberta.email }),
             onMesclar: () => abrirMesclar(pessoaAberta),
             onStatus: () => toggleStatus(pessoaAberta.id, pessoaAberta.status),
@@ -1467,7 +1465,7 @@ export default function PessoasAcessosPage() {
                     {mesclarModal.secundario.telefone && <span className="ml-2 text-zinc-500">{mesclarModal.secundario.telefone}</span>}
                   </p>
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded border inline-block mt-1", TIPO_COLOR[mesclarModal.secundario.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>
-                    {TIPO_LABEL[mesclarModal.secundario.tipo] ?? mesclarModal.secundario.tipo}
+                    {FUNCAO_LABEL[mesclarModal.secundario.tipo] ?? mesclarModal.secundario.tipo}
                   </span>
                 </div>
               )}
