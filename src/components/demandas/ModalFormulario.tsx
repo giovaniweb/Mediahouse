@@ -19,21 +19,27 @@ interface ModalFormularioProps {
   icone?: React.ComponentType<{ className?: string }>
   /** Chamado por X, Cancelar, ESC e clique no fundo. É aqui que vai o confirm. */
   aoTentarFechar: () => void
-  aoConfirmar: () => void
+  aoConfirmar?: () => void
   /** Conteúdo do botão principal — muda de rótulo enquanto salva/envia anexos. */
-  rotuloConfirmar: React.ReactNode
+  rotuloConfirmar?: React.ReactNode
   ocupado?: boolean
   /** Botão ao lado do principal. O quadro da social usa para "Salvar como ideia". */
   acaoSecundaria?: { rotulo: React.ReactNode; aoClicar: () => void }
   /** Só leitura (gestor olhando a ideia da social): sem o botão principal. */
   semConfirmar?: boolean
+  /**
+   * Sem a barra de Cancelar/Confirmar: o formulário traz o próprio botão, de
+   * largura inteira, no fim do corpo (o "+ Novo Job", no desenho do pedido
+   * público de gravação). Fechar continua no X, no ESC e no fundo.
+   */
+  semRodape?: boolean
   children: React.ReactNode
   className?: string
 }
 
 export function ModalFormulario({
   aberto, titulo, icone: Icone = Plus, aoTentarFechar, aoConfirmar,
-  rotuloConfirmar, ocupado, acaoSecundaria, semConfirmar, children, className,
+  rotuloConfirmar, ocupado, acaoSecundaria, semConfirmar, semRodape, children, className,
 }: ModalFormularioProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -123,7 +129,7 @@ export function ModalFormulario({
         <div className="flex-1 overflow-y-auto px-7 py-6">{children}</div>
 
         {/* Footer */}
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-800/80 px-7 py-4">
+        {!semRodape && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-800/80 px-7 py-4">
           <button
             onClick={aoTentarFechar}
             className="rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-900"
@@ -146,7 +152,7 @@ export function ModalFormulario({
           >
             {rotuloConfirmar}
           </button>}
-        </div>
+        </div>}
 
       </div>
     </div>

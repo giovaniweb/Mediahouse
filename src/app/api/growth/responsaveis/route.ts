@@ -45,14 +45,26 @@ export async function GET(req: NextRequest) {
     },
     select: {
       funcaoProfissional: true,
-      usuario: { select: { id: true, nome: true, email: true, tipo: true } },
+      usuario: { select: { id: true, nome: true, email: true, tipo: true, telefone: true } },
     },
     orderBy: { usuario: { nome: "asc" } },
   })
 
+  // O WhatsApp da equipe vai só para quem é da casa: é o "Quem acompanha" do
+  // "+ Novo Job", que mostra nome e WhatsApp. Freelancer logado na empresa
+  // (categoria externo) e solicitante continuam vendo só nome e função.
+  const quemPergunta = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
+    select: { categoria: true },
+  })
+  const veWhatsapp = quemPergunta?.categoria === "interna"
+
   const responsaveis = membros.map((m) => {
     const tipoLabel = rotularFuncao(m.funcaoProfissional, m.usuario.tipo)
-    return { id: m.usuario.id, nome: m.usuario.nome, email: m.usuario.email, tipo: tipoLabel, label: `${m.usuario.nome} · ${tipoLabel}` }
+    return {
+      id: m.usuario.id, nome: m.usuario.nome, email: m.usuario.email, tipo: tipoLabel, label: `${m.usuario.nome} · ${tipoLabel}`,
+      ...(veWhatsapp ? { telefone: m.usuario.telefone } : {}),
+    }
   })
 
   return NextResponse.json({ responsaveis })

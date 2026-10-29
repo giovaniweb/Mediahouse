@@ -43,6 +43,27 @@ export function SecaoArquivos({
   anexos, onAnexos, referencias, onReferencias, novaReferencia, onNovaReferencia,
   linkBrutos, onLinkBrutos, titulo = "Arquivos e referências",
 }: SecaoArquivosProps) {
+  return (
+    <Secao icone={Paperclip} titulo={titulo}>
+      <ZonaAnexos anexos={anexos} onAnexos={onAnexos} />
+      <CampoReferencias
+        referencias={referencias}
+        onReferencias={onReferencias}
+        novaReferencia={novaReferencia}
+        onNovaReferencia={onNovaReferencia}
+      />
+      <Campo label="Link dos brutos" opcional>
+        <CampoBrutos linkBrutos={linkBrutos} onLinkBrutos={onLinkBrutos} />
+      </Campo>
+    </Secao>
+  )
+}
+
+// As três peças saíram da seção para o formulário de gravação (o "+ Novo Job")
+// poder distribuí-las em blocos próprios, sem uma segunda cópia do upload.
+// `classeInput` deixa cada formulário com o próprio desenho de campo.
+
+export function ZonaAnexos({ anexos, onAnexos }: Pick<SecaoArquivosProps, "anexos" | "onAnexos">) {
   const [arrastando, setArrastando] = useState(false)
 
   function receberArquivos(lista: FileList | File[]) {
@@ -54,18 +75,11 @@ export function SecaoArquivos({
     onAnexos((atuais) => [...atuais, ...escolhidos.filter((f) => !documentoMuitoGrande(f))])
   }
 
-  function adicionarReferencia() {
-    const valor = novaReferencia.trim()
-    if (!valor) return
-    onReferencias((prev) => (prev.includes(valor) ? prev : [...prev, valor]))
-    onNovaReferencia("")
-  }
-
   return (
-    <Secao icone={Paperclip} titulo={titulo}>
+    <>
       {/* O anexo passa pela rota de documento: briefing, contrato, planilha,
           imagem de referência. Material bruto de vídeo não cabe aqui (25 MB)
-          — vai por link, no campo logo abaixo. */}
+          — vai por link, no campo dos brutos. */}
       <label
         onDragOver={e => { e.preventDefault(); setArrastando(true) }}
         onDragLeave={() => setArrastando(false)}
@@ -118,7 +132,22 @@ export function SecaoArquivos({
           ))}
         </ul>
       )}
+    </>
+  )
+}
 
+export function CampoReferencias({
+  referencias, onReferencias, novaReferencia, onNovaReferencia, classeInput = inputClass,
+}: Pick<SecaoArquivosProps, "referencias" | "onReferencias" | "novaReferencia" | "onNovaReferencia"> & { classeInput?: string }) {
+  function adicionarReferencia() {
+    const valor = novaReferencia.trim()
+    if (!valor) return
+    onReferencias((prev) => (prev.includes(valor) ? prev : [...prev, valor]))
+    onNovaReferencia("")
+  }
+
+  return (
+    <>
       <Campo label="Links de referência">
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
@@ -130,7 +159,7 @@ export function SecaoArquivos({
                 if (e.key === "Enter") { e.preventDefault(); adicionarReferencia() }
               }}
               placeholder="Cole aqui links de referência: Instagram, YouTube, sites..."
-              className={cn(inputClass, "pl-10")}
+              className={cn(classeInput, "pl-10")}
             />
           </div>
           <button
@@ -154,19 +183,24 @@ export function SecaoArquivos({
           ))}
         </div>
       )}
+    </>
+  )
+}
 
-      <Campo label="Link dos brutos" opcional>
-        <div className="relative">
-          <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-          <input
-            type="url"
-            value={linkBrutos}
-            onChange={e => onLinkBrutos(e.target.value)}
-            placeholder="Cole o link da pasta com o material bruto"
-            className={cn(inputClass, "pl-10")}
-          />
-        </div>
-      </Campo>
-    </Secao>
+export function CampoBrutos({
+  linkBrutos, onLinkBrutos, classeInput = inputClass, id,
+}: Pick<SecaoArquivosProps, "linkBrutos" | "onLinkBrutos"> & { classeInput?: string; id?: string }) {
+  return (
+    <div className="relative">
+      <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+      <input
+        id={id}
+        type="url"
+        value={linkBrutos}
+        onChange={e => onLinkBrutos(e.target.value)}
+        placeholder="Cole o link da pasta com o material bruto"
+        className={cn(classeInput, "pl-10")}
+      />
+    </div>
   )
 }
