@@ -166,9 +166,14 @@ async function relatorios(org:string,r:Resumo) {
 /** Só iniciar rotinas com objetos elegíveis ou pendências que precisam ser encerradas. */
 const ehGravacaoExterna = (d:{tipoGravacao?:string|null;tipoVideo?:string|null;departamento?:string|null}) =>
   !!d.tipoGravacao || ehSolicitacaoDeCobertura(d)
+// Ativa: ainda anda no quadro, ou já foi entregue mas a nota recebida não foi
+// para compras — o aviso de nota parada vale depois da entrega também.
 const GRAVACAO_ATIVA:Prisma.DemandaWhereInput = {
   OR:[{tipoGravacao:{not:null}},{tipoVideo:"cobertura_evento"},{departamento:"eventos"}],
-  statusInterno:{notIn:["encerrado","expirado","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado"]},
+  AND:[{OR:[
+    {statusInterno:{notIn:["encerrado","expirado","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado"]}},
+    {custos:{some:{statusPagamento:"nf_enviada",pago:false}}},
+  ]}],
 }
 /**
  * Avisos de calendário das Gravações Externas (lib/avisos-gravacao-textos.ts):

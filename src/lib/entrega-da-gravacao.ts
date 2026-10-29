@@ -51,10 +51,17 @@ export async function entregarMaterial(tx: Tx, e: {
   const d = await tx.demanda.findFirstOrThrow({ where: { id: convite.demandaId, organizacaoId: e.organizacaoId } })
   if (d.videomakerId !== convite.videomakerId) throw new ConviteInvalido("Esta gravação está com outro videomaker.", 403)
   if (etapaDaGravacao(d) === "concluido") throw new ConviteInvalido("Esta gravação já foi concluída.")
+  // O vídeo pronto só vem do videomaker quando a edição é dele: nas outras, o
+  // vídeo final é da equipe e o link do convite não alcança.
+  if (e.linkVideo !== undefined && d.edicaoPor !== "videomaker") throw new ConviteInvalido("A edição desta gravação é nossa: mande só os brutos.", 403)
+  // O que já chegou não se troca por aqui: a equipe já pode estar trabalhando
+  // em cima (editando, ou com o vídeo pronto para o cliente).
+  if (e.linkBrutos !== undefined && d.linkBrutos) throw new ConviteInvalido("Os brutos já foram recebidos. Para trocar o link, fale com a equipe.")
+  if (e.linkVideo !== undefined && d.linkFinal) throw new ConviteInvalido("O vídeo pronto já foi recebido. Para trocar o link, fale com a equipe.")
 
   const linkBrutos = e.linkBrutos?.trim() ?? d.linkBrutos
   // Sem edição, o cliente recebe os próprios brutos.
-  const linkFinal = e.linkVideo?.trim() ?? (d.edicaoPor === "sem_edicao" ? linkBrutos : d.linkFinal)
+  const linkFinal = d.linkFinal ?? e.linkVideo?.trim() ?? (d.edicaoPor === "sem_edicao" ? linkBrutos : null)
   const completo = materialCompleto({ linkBrutos, linkFinal, edicaoPor: d.edicaoPor })
   const chegouAgora = completo && esperaMaterial(d)
   const novo = chegouAgora ? statusDoMaterial(d.edicaoPor) : null
