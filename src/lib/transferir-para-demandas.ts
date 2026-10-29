@@ -10,7 +10,8 @@ import { resolverAlertas } from "@/lib/alertas"
 import { emSegundoPlano } from "@/lib/notificar"
 import { STATUS_PARA_COLUNA, EVENTO_EDICAO } from "@/lib/status"
 import { marcadorConclusao } from "@/lib/job-transicoes"
-import { AGUARDANDO_APROVACAO, TIPO_COBERTURA, conversaoDeFluxo, fluxoAtual } from "@/lib/job-fase"
+import { AGUARDANDO_APROVACAO, DEPARTAMENTO_COBERTURA, TIPO_COBERTURA, conversaoDeFluxo, fluxoAtual } from "@/lib/job-fase"
+import { origemDaConversao } from "@/lib/ficha-do-job"
 
 // "Transferir para Demandas (audiovisual)" — o caminho de volta de um card que
 // caiu em Jobs por engano.
@@ -133,6 +134,26 @@ export type AvaliacaoDaTransferencia = {
   convitesPendentes: number
   statusAtual: StatusInterno
   statusDestino: StatusInterno | null
+  /** Como o card foi pedido antes de virar Job, quando o histórico sabe. */
+  origem: { departamento: string; tipoVideo: string } | null
+}
+
+/**
+ * Como o card era antes de virar Job. Aprovar "como Job" e "Converter em Job"
+ * trocam departamento e tipo pela marca de cobertura e guardam os de antes no
+ * histórico; voltar para Demandas devolve os dois, em vez de "audiovisual /
+ * outro". Sem essa linha (o Job nasceu Job), não há o que devolver.
+ */
+async function origemDoCard(tx: Tx, demandaId: string) {
+  const linha = await tx.historicoStatus.findFirst({
+    where: { demandaId, observacao: { startsWith: "Convertido em Job" } },
+    orderBy: { createdAt: "desc" },
+    select: { observacao: true },
+  })
+  const origem = origemDaConversao(linha?.observacao)
+  // A marca de cobertura no "antes" manteria o card em Jobs (ehSolicitacaoDeCobertura).
+  if (!origem || origem.departamento === DEPARTAMENTO_COBERTURA || origem.tipoVideo === TIPO_COBERTURA) return null
+  return origem
 }
 
 async function lerSituacao(tx: Tx, organizacaoId: string, demandaId: string) {
@@ -145,12 +166,13 @@ async function lerSituacao(tx: Tx, organizacaoId: string, demandaId: string) {
   })
   if (!demanda) throw new TransferenciaInvalida("Não encontrado", 404)
   const agora = new Date()
-  const [convitesAceitos, convitesPendentes, custos] = await Promise.all([
+  const [convitesAceitos, convitesPendentes, custos, origem] = await Promise.all([
     tx.conviteVideomaker.count({ where: { demandaId, status: "aceito" } }),
     tx.conviteVideomaker.count({ where: { demandaId, status: "pendente", expiresAt: { gt: agora } } }),
     tx.custoVideomaker.count({ where: { demandaId, organizacaoId } }),
+    origemDoCard(tx, demandaId),
   ])
-  return { demanda, convitesAceitos, convitesPendentes, custos }
+  return { demanda, convitesAceitos, convitesPendentes, custos, origem }
 }
 
 /** Prévia para a tela: o que vai acontecer, ou o que impede. Não grava nada. */
@@ -163,6 +185,7 @@ export async function avaliarTransferencia(tx: Tx, organizacaoId: string, demand
     convitesPendentes: s.convitesPendentes,
     statusAtual: s.demanda.statusInterno,
     statusDestino: statusAoTransferir(s.demanda),
+    origem: s.origem,
   }
 }
 
@@ -191,7 +214,7 @@ export async function transferirParaDemandas(
   opcoes: { tipoVideo?: string | null } = {}
 ): Promise<ResultadoDaTransferencia> {
   await tx.$queryRaw`SELECT id FROM demandas WHERE id=${demandaId} AND "organizacaoId"=${ator.organizacaoId} FOR UPDATE`
-  const { demanda, convitesAceitos, custos } = await lerSituacao(tx, ator.organizacaoId, demandaId)
+  const { demanda, convitesAceitos, custos, origem } = await lerSituacao(tx, ator.organizacaoId, demandaId)
 
   // Já é Demanda: sucesso sem gravar (clique duplo, duas abas). Converter duas
   // vezes não pode fazer efeito duas vezes.
@@ -207,9 +230,10 @@ export async function transferirParaDemandas(
     throw new TransferenciaInvalida(impedimentos.map((i) => i.mensagem).join(" "), 409, { impedimentos })
   }
 
-  // Escolher "cobertura" como tipo de destino não faz sentido: cai no neutro.
-  const tipoVideo = opcoes.tipoVideo === TIPO_COBERTURA ? null : opcoes.tipoVideo
-  const mudanca = conversaoDeFluxo(demanda, "demanda", { departamento: null, tipoVideo })!
+  // Escolher "cobertura" como tipo de destino não faz sentido: cai no de antes
+  // do Job, ou no neutro. O departamento volta ao de antes quando o histórico sabe.
+  const tipoVideo = (opcoes.tipoVideo === TIPO_COBERTURA ? null : opcoes.tipoVideo) || origem?.tipoVideo
+  const mudanca = conversaoDeFluxo(demanda, "demanda", { departamento: origem?.departamento ?? null, tipoVideo })!
   const statusNovo = statusAoTransferir(demanda)!
   const statusVisivelNovo = STATUS_PARA_COLUNA[statusNovo]
   const mudouStatus = statusNovo !== demanda.statusInterno
@@ -233,6 +257,7 @@ export async function transferirParaDemandas(
 
   const de = `${demanda.departamento ?? "—"} / ${demanda.tipoVideo ?? "—"}`
   const partes = [`Transferido de Jobs para Demandas (audiovisual) — antes: ${de}`]
+  if (origem) partes.push(`voltou como foi pedido (${mudanca.departamento} / ${mudanca.tipoVideo})`)
   if (mudouStatus) partes.push(`voltou ao início do quadro de Demandas`)
   if (cancelados.count > 0) partes.push(`${cancelados.count} convite(s) pendente(s) cancelado(s)`)
 

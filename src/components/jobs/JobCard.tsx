@@ -1,14 +1,16 @@
 "use client"
 
-import { AlertTriangle, Ban, Calendar, Clock, MapPin, User } from "lucide-react"
+import { AlertTriangle, Ban, Calendar, Clapperboard, Clock, MapPin, User } from "lucide-react"
 import card from "@/components/demandas/DemandCardModern.module.css"
 import styles from "./JobsPreview.module.css"
 import { cn } from "@/lib/utils"
 import { formatarDataCurta } from "@/lib/datas"
+import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { diasDeAtraso } from "@/lib/status"
 import {
   ehBloqueado,
   ehCancelado,
+  faseDoJob,
   nivelDeRisco,
   proximaAcao,
   responsavelAtual,
@@ -32,6 +34,8 @@ export type JobDoQuadro = JobParaLeitura & JobArrastado & {
   clienteFinalNome?: string | null
   cidade?: string | null
   dataCaptacao?: string | Date | null
+  /** O pedido público só grava esta; vale quando não há `dataCaptacao`. */
+  dataEvento?: string | Date | null
   dataLimite?: string | Date | null
   statusVisivel?: string | null
   prioridade?: string | null
@@ -40,15 +44,6 @@ export type JobDoQuadro = JobParaLeitura & JobArrastado & {
   departamento?: string | null
 }
 
-/** Data + hora da captação. O prazo vai no rodapé, como no card de Demandas. */
-function captacao(job: JobDoQuadro): string | null {
-  if (!job.dataCaptacao) return null
-  const d = new Date(job.dataCaptacao)
-  const hora = d.getHours() || d.getMinutes()
-    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    : null
-  return hora ? `${formatarDataCurta(d)} · ${hora}` : formatarDataCurta(d)
-}
 
 // Os mesmos selos do card de Demandas. "Normal" não ganha selo.
 const PRIORIDADE: Record<string, { label: string; classe: string }> = {
@@ -67,7 +62,14 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
   const bloqueado = ehBloqueado(job.statusInterno)
   const cancelado = ehCancelado(job)
   const atraso = diasDeAtraso(job)
-  const quando = captacao(job)
+  // Dia da semana, data e hora da gravação (lib/ficha-do-job.ts: a captação,
+  // ou o evento do pedido público). O prazo vai no rodapé, como em Demandas.
+  const momento = momentoDoJob(job)
+  const quando = momento ? rotuloDoMomento(momento) : null
+  const cidade = ondeDoJob({ cidade: job.cidade }).cidade
+  // Faltar data ou videomaker só é aviso enquanto a gravação não aconteceu.
+  const fase = faseDoJob(job.statusInterno)
+  const antesDaGravacao = !cancelado && (fase === "pending_assignment" || fase === "dispatched" || fase === "in_progress")
   const cliente = job.clienteFinalNome?.trim() || null
   const prio = job.prioridade ? PRIORIDADE[job.prioridade] : undefined
 
@@ -134,17 +136,33 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
             Vence hoje
           </span>
         )}
-        {quando && (
-          <span className={styles.etiqueta} title="Captação">
+        {quando ? (
+          <span className={cn(styles.etiqueta, "text-zinc-100")} title="Gravação">
             <Clock className="w-3 h-3 shrink-0" />{quando}
           </span>
+        ) : antesDaGravacao && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-300 border-amber-500/30">
+            Sem data
+          </span>
         )}
-        {job.cidade && (
-          <span className={cn(styles.etiqueta, "max-w-[150px]")} title={job.cidade}>
-            <MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{job.cidade}</span>
+        {cidade && (
+          <span className={cn(styles.etiqueta, "max-w-[150px]")} title={cidade}>
+            <MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{cidade}</span>
           </span>
         )}
       </div>
+
+      {/* Quem vai gravar — escrito, não só a inicial no avatar. Faltar alguém é
+          o que mais custa num Job, então aparece enquanto falta. */}
+      {job.videomaker?.nome ? (
+        <p className={styles.quemVai} title={`Videomaker: ${job.videomaker.nome}`}>
+          <Clapperboard aria-hidden /><span className="truncate">{job.videomaker.nome}</span>
+        </p>
+      ) : fase === "pending_assignment" && !cancelado && (
+        <p className={styles.quemVai} data-falta>
+          <Clapperboard aria-hidden />Sem videomaker
+        </p>
+      )}
 
       {/* Próxima ação — §32 pede texto, não só cor */}
       <p className={cn(styles.acao, bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300")}>

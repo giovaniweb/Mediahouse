@@ -2,10 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { randomUUID } from "node:crypto"
 import { NextRequest } from "next/server"
 
-// "+ Novo Job" de /jobs: o mesmo POST /api/demandas do formulário de cobertura,
-// com aprovarAoCriar. Quem pode aprovar (admin/gestor ou líder do audiovisual)
-// cria já aprovado, e o card aparece no quadro de Jobs; quem não pode cai na
-// fila de Aprovações como sempre. Banco real, dados sintéticos.
+// "+ Novo Job" de /jobs: o mesmo POST /api/demandas do formulário de cobertura.
+// Desde 28/10/2026 quem é da casa cria já aprovado, e o card aparece no quadro
+// de Jobs; só a urgência de quem não decide a fila (admin/gestor ou líder do
+// audiovisual) cai em Aprovações. Banco real, dados sintéticos.
 const { estado, agendados } = vi.hoisted(() => ({
   estado: { sessao: null as null | { user: { id: string; organizacaoId: string; tipo: string; papel: string; name: string } } },
   agendados: [] as string[],
@@ -96,18 +96,28 @@ describe("+ Novo Job", () => {
     expect(await noQuadroDeJobs(d.id)).toBe(true)
   })
 
-  it("quem não pode aprovar: vai para Aprovações e ainda não aparece em Jobs", async () => {
+  it("quem é da casa e não aprova: entra aprovado, sem virar o gestor do pedido (28/10)", async () => {
     sessao(pessoas.solicitante, "solicitante")
     const d = await criar(corpoDoJob())
-    expect(d).toMatchObject({ statusInterno: "aguardando_aprovacao_interna", gestorId: null })
+    expect(d).toMatchObject({ statusInterno: "aguardando_triagem", gestorId: null })
+    expect(await noQuadroDeJobs(d.id)).toBe(true)
+    expect(await db.alertaIA.count({ where: { demandaId: d.id, tipoAlerta: "aprovacao_pendente" } })).toBe(0)
+    expect(agendados).not.toContain("nova-demanda-gestores")
+    const h = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: d.id } })
+    expect(h.observacao).toBe("Demanda criada pela equipe — entra sem passar por Aprovações")
+  })
+
+  it("urgência de quem não decide a fila ainda passa por Aprovações", async () => {
+    sessao(pessoas.solicitante, "solicitante")
+    const d = await criar(corpoDoJob({ prioridade: "urgente", motivoUrgencia: "Cliente antecipou" }))
+    expect(d.statusInterno).toBe("urgencia_pendente_aprovacao")
     expect(await noQuadroDeJobs(d.id)).toBe(false)
-    expect(await db.alertaIA.count({ where: { demandaId: d.id, tipoAlerta: "aprovacao_pendente" } })).toBe(1)
     expect(agendados).toContain("nova-demanda-gestores")
   })
 
-  it("sem a marca, nada muda: a demanda do admin por /demandas segue para Aprovações", async () => {
+  it("sem a marca, também: quem decide é quem cria, não a tela", async () => {
     sessao(pessoas.admin, "admin")
     const d = await criar(corpoDoJob({ aprovarAoCriar: undefined }))
-    expect(d.statusInterno).toBe("aguardando_aprovacao_interna")
+    expect(d.statusInterno).toBe("aguardando_triagem")
   })
 })

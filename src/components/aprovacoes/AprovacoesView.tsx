@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header"
 import {
   CheckCircle2, XCircle, Clock, User, Zap, AlertCircle,
   RefreshCw, Sparkles, DollarSign, Video, FileText, Receipt,
-  ExternalLink, Copy, ArrowRightLeft,
+  ExternalLink, Copy, ArrowRightLeft, Clapperboard, CalendarClock, MapPin, Building2,
 } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
@@ -18,7 +18,10 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { mensagemDeErro } from "@/lib/erro-cliente"
-import type { FluxoDoRegistro } from "@/lib/job-fase"
+import { fluxoAtual, type FluxoDoRegistro } from "@/lib/job-fase"
+import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
+import { rotuloDoTipo } from "@/lib/tipos-demanda"
+import { formatarData } from "@/lib/datas"
 import { fetcher } from "@/lib/fetcher"
 
 
@@ -32,6 +35,13 @@ interface Demanda {
   prioridade: "normal" | "alta" | "urgente"
   statusInterno: string; motivoUrgencia?: string; createdAt: string
   solicitante: { id: string; nome: string; email: string }
+  /** Quem pediu de fora (formulário público, WhatsApp): o solicitante é o sistema. */
+  nomeSolicitante?: string | null
+  dataLimite?: string | null
+  // A ficha do Job: o que se confere antes de aprovar uma gravação.
+  dataCaptacao?: string | null; dataEvento?: string | null
+  localGravacao?: string | null; localEvento?: string | null; cidade?: string | null
+  clienteFinalNome?: string | null
 }
 
 interface CustoNF {
@@ -121,44 +131,57 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
   // ─── Ações demandas ───────────────────────────────────────────────────────
 
-  async function agirDemanda(
-    id: string,
-    acao: "aprovar" | "recusar",
-    motivoRecusa?: string,
-    fluxo?: FluxoDoRegistro
-  ) {
-    setLoading(id)
+  async function decidir(id: string, acao: "aprovar" | "recusar", motivoRecusa?: string) {
+    // Urgência e demanda comum vão pela mesma rota — ela distingue pelo status.
+    const res = await fetch(`/api/demandas/${id}/aprovar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao, motivo: motivoRecusa }),
+    })
+    if (!res.ok) throw new Error((await res.json()).error)
+  }
+
+  /**
+   * Aprova o pedido como foi pedido — ou, com `trocarPara`, troca de esteira
+   * antes. A troca é a exceção e vem confirmada pela tela: aprovar "como Job"
+   * o que foi pedido como demanda era um clique no botão verde, e foi assim que
+   * pedido de edição caiu no quadro de Jobs.
+   */
+  async function aprovar(d: Demanda, trocarPara?: FluxoDoRegistro) {
+    setLoading(d.id)
     try {
       // A classificação vem ANTES da aprovação, de propósito. Se a conversão
       // falhar, o item continua na fila com a marca certa — visível e
       // repetível. Na ordem inversa ele sairia da fila classificado errado,
       // que é o estado difícil de perceber.
-      if (fluxo) {
-        const conv = await fetch(`/api/jobs/${id}/converter`, {
+      if (trocarPara) {
+        const conv = await fetch(`/api/jobs/${d.id}/converter`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // Para Demanda, a rota exige confirmação explícita (a mesma regra da
-          // "Transferir para Demandas" do Job). Aqui o clique no destino JÁ é a
+          // Para Demanda, a rota exige confirmação explícita (a mesma regra do
+          // "Mover para Demandas" do Job). Aqui a confirmação da troca JÁ é a
           // decisão de quem aprova; bloqueios (videomaker, convite aceito,
           // custo) e permissão continuam valendo e voltam como erro.
-          body: JSON.stringify(fluxo === "demanda" ? { para: fluxo, confirmar: true } : { para: fluxo }),
+          body: JSON.stringify(trocarPara === "demanda" ? { para: trocarPara, confirmar: true } : { para: trocarPara }),
         })
         if (!conv.ok) throw new Error((await conv.json()).error)
       }
+      await decidir(d.id, "aprovar")
+      const destino = trocarPara ?? fluxoAtual(d)
+      toast.success(!ehAudiovisual ? "Pedido aprovado!"
+        : destino === "job" ? "Job aprovado — está no quadro de Jobs"
+        : "Demanda aprovada — está no quadro de Demandas")
+      mutateAll()
+    } catch (err) {
+      toast.error(mensagemDeErro(err))
+    } finally { setLoading(null) }
+  }
 
-      // Urgência e demanda comum vão pela mesma rota — ela distingue pelo status.
-      const res = await fetch(`/api/demandas/${id}/aprovar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao, motivo: motivoRecusa }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(
-        acao !== "aprovar" ? "Demanda recusada"
-          : fluxo === "job" ? "Aprovada como Job — está no quadro de Jobs"
-          : fluxo === "demanda" ? "Convertida em Demanda — está no Kanban do audiovisual"
-          : "Demanda aprovada!"
-      )
+  async function recusar(id: string, motivoRecusa: string) {
+    setLoading(id)
+    try {
+      await decidir(id, "recusar", motivoRecusa)
+      toast.success("Pedido recusado")
       mutateAll(); setModal(null); setMotivo("")
     } catch (err) {
       toast.error(mensagemDeErro(err))
@@ -187,7 +210,9 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
   // ─── Tabs config ─────────────────────────────────────────────────────────
 
   const abas: { id: Aba; label: string; count: number; icon: React.ReactNode; cor: string }[] = [
-    { id: "demandas", label: "Demandas", count: normais.length, icon: <FileText className="h-4 w-4" />, cor: "blue" },
+    // "Pedidos", não "Demandas": a fila tem pedido de Job e de Demanda, e cada
+    // card diz qual é.
+    { id: "demandas", label: "Pedidos", count: normais.length, icon: <FileText className="h-4 w-4" />, cor: "blue" },
     { id: "urgencias", label: "Urgências", count: urgentes.length, icon: <Zap className="h-4 w-4" />, cor: "red" },
     // Pagamentos expõem PIX/CPF do videomaker — não aparecem no Growth.
     ...(ehAudiovisual
@@ -211,7 +236,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
         </div>
       } />
       <main className={cn("flex-1 p-6", styles.page)}>
-        <div className={styles.heading}><p>APROVAÇÕES · {rotuloArea.toUpperCase()}</p><h1>Uma decisão. O próximo passo.</h1><span>Revise o pedido, confira os detalhes e encaminhe o trabalho.</span></div>
+        <div className={styles.heading}><p>APROVAÇÕES · {rotuloArea.toUpperCase()}</p><h1>Uma decisão. O próximo passo.</h1><span>Só o que chega de fora passa por aqui: o que a equipe cria logada já entra aprovado. Confira o que foi pedido e aprove.</span></div>
         {/* Tabs */}
         <div aria-label="Filtrar aprovações" className={cn("flex gap-2 mb-6 border-b border-zinc-800 pb-0", styles.tabs)}>
           {abas.map((t) => (
@@ -250,9 +275,10 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <DemandaList
             lista={normais}
             loading={loading}
-            onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
+            podeTrocar={ehAudiovisual}
+            onAprovar={aprovar}
             onRecusar={(d) => setModal({ id: d.id })}
-            emptyMsg="Nenhuma demanda aguardando aprovação"
+            emptyMsg="Nenhum pedido aguardando aprovação"
           />
         )}
 
@@ -261,7 +287,8 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
           <DemandaList
             lista={urgentes.map(d => ({ ...d, prioridade: "urgente" as const }))}
             loading={loading}
-            onAprovar={(d, fluxo) => agirDemanda(d.id, "aprovar", undefined, fluxo)}
+            podeTrocar={ehAudiovisual}
+            onAprovar={aprovar}
             onRecusar={(d) => setModal({ id: d.id })}
             emptyMsg="Nenhuma urgência pendente"
             emptyIcon={<Zap className="w-12 h-12 text-zinc-600 mb-3" />}
@@ -335,7 +362,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
       {modal && (
         <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm", surface.overlay)}>
           <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="approval-refuse-title" tabIndex={-1} className={cn("bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4", surface.surface)}>
-            <h3 id="approval-refuse-title" className="font-semibold text-white mb-1">Recusar Demanda</h3>
+            <h3 id="approval-refuse-title" className="font-semibold text-white mb-1">Recusar pedido</h3>
             <p className="text-sm text-zinc-400 mb-4">Motivo da recusa (comunicado ao solicitante via WhatsApp).</p>
             <textarea aria-label="Motivo da recusa"
               className="w-full border border-zinc-700 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-zinc-500 bg-zinc-800 text-zinc-200"
@@ -344,7 +371,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
             />
             <div className="flex gap-2 mt-4">
               <button
-                onClick={() => agirDemanda(modal.id, "recusar", motivo)}
+                onClick={() => recusar(modal.id, motivo)}
                 disabled={loading === modal.id}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
                 {loading === modal.id ? "Recusando..." : "Confirmar Recusa"}
@@ -363,13 +390,26 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 
 // ─── Sub-componentes ─────────────────────────────────────────────────────────
 
+// O que o pedido é, escrito no topo do card. Antes a tela mostrava o
+// departamento de quem pediu ("Growth") e dois botões, com "Aprovar como Job"
+// verde em todos — pedido de edição de vídeo era aprovado como Job no reflexo.
+const PEDIDO: Record<FluxoDoRegistro, { rotulo: string; quadro: string; classe: string }> = {
+  job: { rotulo: "Pediu videomaker · Job", quadro: "Jobs", classe: "bg-violet-500/15 text-violet-200 border-violet-400/40" },
+  demanda: { rotulo: "Pediu demanda", quadro: "Demandas", classe: "bg-sky-500/15 text-sky-200 border-sky-400/40" },
+}
+
 function DemandaList({
-  lista, loading, onAprovar, onRecusar, emptyMsg, emptyIcon,
+  lista, loading, podeTrocar, onAprovar, onRecusar, emptyMsg, emptyIcon,
 }: {
   lista: Demanda[]; loading: string | null
-  onAprovar: (d: Demanda, fluxo: FluxoDoRegistro) => void; onRecusar: (d: Demanda) => void
+  /** Trocar Job ↔ Demanda só existe no audiovisual; Growth não tem Jobs. */
+  podeTrocar: boolean
+  onAprovar: (d: Demanda, trocarPara?: FluxoDoRegistro) => void; onRecusar: (d: Demanda) => void
   emptyMsg: string; emptyIcon?: React.ReactNode
 }) {
+  // O card cuja troca de esteira está sendo confirmada.
+  const [trocando, setTrocando] = useState<string | null>(null)
+
   if (lista.length === 0) return (
     <div className="flex flex-col items-center justify-center h-64 text-center">
       {emptyIcon ?? <CheckCircle2 className="w-12 h-12 text-green-400 mb-3" />}
@@ -380,7 +420,16 @@ function DemandaList({
 
   return (
     <div data-approval-list className="space-y-3 max-w-3xl">
-      {lista.map((d) => (
+      {lista.map((d) => {
+        const pedido = fluxoAtual(d)
+        const outro: FluxoDoRegistro = pedido === "job" ? "demanda" : "job"
+        const tipo = rotuloDoTipo(d.tipoVideo)
+        const momento = pedido === "job" ? momentoDoJob(d) : null
+        const onde = pedido === "job" ? ondeDoJob(d) : null
+        const lugar = onde ? [onde.endereco, onde.cidade].filter(Boolean).join(" · ") : ""
+        const quemPediu = d.nomeSolicitante?.trim() || d.solicitante.nome
+        const confirmando = trocando === d.id
+        return (
         <div key={d.id} className={cn(
           "bg-zinc-900 border rounded-2xl p-5 space-y-3",
           d.prioridade === "urgente" ? "border-red-800 shadow-sm shadow-red-900/30"
@@ -389,8 +438,16 @@ function DemandaList({
         )}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className="text-xs font-mono text-zinc-500">{d.codigo}</span>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {podeTrocar && (
+                  <span className={cn("flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", PEDIDO[pedido].classe)}>
+                    {pedido === "job" ? <Clapperboard className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                    {PEDIDO[pedido].rotulo}
+                  </span>
+                )}
+                {tipo && pedido === "demanda" && (
+                  <span className="text-xs text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded-full">{tipo}</span>
+                )}
                 {d.prioridade === "urgente" && (
                   <span className="flex items-center gap-1 text-xs font-bold text-red-400 bg-red-900/30 border border-red-800 px-2 py-0.5 rounded-full">
                     <Zap className="w-3 h-3" /> URGENTE
@@ -399,11 +456,9 @@ function DemandaList({
                 {d.prioridade === "alta" && (
                   <span className="text-xs font-semibold text-orange-400 bg-orange-900/20 border border-orange-800 px-2 py-0.5 rounded-full">ALTA</span>
                 )}
-                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
-                  {DEPT_LABEL[d.departamento] ?? d.departamento}
-                </span>
               </div>
               <h3 className="font-semibold text-zinc-100">{d.titulo}</h3>
+              <p className="text-xs font-mono text-zinc-500 mt-0.5">{d.codigo}</p>
             </div>
             <span className="flex items-center gap-1 text-xs text-zinc-500 shrink-0">
               <Clock className="w-3.5 h-3.5" />
@@ -413,6 +468,24 @@ function DemandaList({
 
           <p className="text-sm text-zinc-400 leading-relaxed line-clamp-2">{d.descricao}</p>
 
+          {/* O que se confere antes de aprovar uma gravação: quando, onde, para quem. */}
+          {pedido === "job" && podeTrocar && (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-zinc-800/50 px-3 py-2">
+                <dt className="flex items-center gap-1 text-[11px] text-zinc-500"><CalendarClock className="w-3 h-3" /> Quando</dt>
+                <dd className={momento ? "text-zinc-100 font-medium" : "text-amber-300"}>{momento ? rotuloDoMomento(momento) : "Sem data"}</dd>
+              </div>
+              <div className="rounded-lg bg-zinc-800/50 px-3 py-2 min-w-0">
+                <dt className="flex items-center gap-1 text-[11px] text-zinc-500"><Building2 className="w-3 h-3" /> Cliente</dt>
+                <dd className="truncate text-zinc-100 font-medium">{d.clienteFinalNome?.trim() || "—"}</dd>
+              </div>
+              <div className="rounded-lg bg-zinc-800/50 px-3 py-2 min-w-0 sm:col-span-2">
+                <dt className="flex items-center gap-1 text-[11px] text-zinc-500"><MapPin className="w-3 h-3" /> Onde</dt>
+                <dd className={lugar ? "text-zinc-100 font-medium" : "text-amber-300"}>{lugar || "Sem endereço"}</dd>
+              </div>
+            </dl>
+          )}
+
           {d.motivoUrgencia && (
             <div className="flex items-start gap-2 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">
               <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
@@ -420,43 +493,66 @@ function DemandaList({
             </div>
           )}
 
-
-
-          <div className="flex items-center gap-4 text-xs text-zinc-500">
-            <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{d.solicitante.nome}</span>
+          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-zinc-500">
+            <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{quemPediu} · {DEPT_LABEL[d.departamento] ?? d.departamento}</span>
+            {pedido === "demanda" && d.dataLimite && <span>Prazo {formatarData(d.dataLimite)}</span>}
             <Link href={`/demandas/${d.id}`} className="text-blue-400 hover:underline ml-auto">Ver detalhes →</Link>
           </div>
 
-          {/* Dois destinos, não dois botões de "aprovar": a solicitação sai da
-              fila para a esteira certa. O primeiro é o caminho provável — se já
-              veio marcada como cobertura, aprovar como Job é o esperado. */}
-          <div className="flex flex-col sm:flex-row items-stretch gap-2 pt-1 border-t border-zinc-800">
-            <button
-              onClick={() => onAprovar(d, "job")}
-              disabled={loading === d.id}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-              <CheckCircle2 className="w-4 h-4" /> Aprovar como Job
-            </button>
-            <button
-              onClick={() => onAprovar(d, "demanda")}
-              disabled={loading === d.id}
-              title="Aprova e manda para o Kanban do audiovisual, fora do fluxo de Jobs"
-              className="flex-1 flex items-center justify-center gap-1.5 border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-              <ArrowRightLeft className="w-4 h-4" /> Converter em Demanda
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onRecusar(d)}
-              disabled={loading === d.id}
-              className="flex-1 flex items-center justify-center gap-1.5 border border-red-800 text-red-400 hover:bg-red-900/20 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-              <XCircle className="w-4 h-4" /> Recusar
-            </button>
-
-          </div>
+          {confirmando ? (
+            /* A troca de esteira é a exceção: pede confirmação, dizendo o que
+               muda. É o caminho para o pedido feito no lugar errado. */
+            <div className="space-y-3 pt-3 border-t border-zinc-800">
+              <p className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5 leading-relaxed">
+                {outro === "job"
+                  ? "Foi pedido como demanda. Aprovar como Job manda para o quadro de Jobs, para escalar um videomaker externo."
+                  : "Foi pedido como Job (videomaker). Aprovar como demanda manda para o quadro de Demandas, fora da escala de videomaker."}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => { setTrocando(null); onAprovar(d, outro) }}
+                  disabled={loading === d.id}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
+                  <ArrowRightLeft className="w-4 h-4" /> Aprovar como {outro === "job" ? "Job" : "demanda"}
+                </button>
+                <button
+                  onClick={() => setTrocando(null)}
+                  className="flex-1 border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-sm font-medium py-2.5 rounded-xl">
+                  Voltar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-3 border-t border-zinc-800">
+              {/* O botão principal aprova o que foi pedido: Job vai para Jobs,
+                  demanda vai para Demandas. Nada é reclassificado. */}
+              <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                <button
+                  onClick={() => onAprovar(d)}
+                  disabled={loading === d.id}
+                  className="flex-[2] flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
+                  <CheckCircle2 className="w-4 h-4" /> {!podeTrocar ? "Aprovar" : pedido === "job" ? "Aprovar job" : "Aprovar demanda"}
+                </button>
+                <button
+                  onClick={() => onRecusar(d)}
+                  disabled={loading === d.id}
+                  className="flex-1 flex items-center justify-center gap-1.5 border border-red-800 text-red-400 hover:bg-red-900/20 text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
+                  <XCircle className="w-4 h-4" /> Recusar
+                </button>
+              </div>
+              {podeTrocar && (
+                <button
+                  onClick={() => setTrocando(d.id)}
+                  disabled={loading === d.id}
+                  className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-4 decoration-zinc-700 disabled:opacity-50">
+                  Pedido no lugar errado? Aprovar como {outro === "job" ? "Job" : "demanda"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

@@ -5,7 +5,7 @@
 import type { Session } from "next-auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import type { StatusInterno } from "@prisma/client"
+import type { CategoriaPessoa, StatusInterno } from "@prisma/client"
 
 export async function podeAprovar(session: Session, organizacaoId: string): Promise<boolean> {
   if (ehGestor(session)) return true
@@ -23,6 +23,57 @@ export async function podeAprovar(session: Session, organizacaoId: string): Prom
  */
 export function statusAoAprovar(urgente: boolean): StatusInterno {
   return urgente ? "urgencia_aprovada" : "aguardando_triagem"
+}
+
+// ── Pedido feito por dentro nasce aprovado ───────────────────────────────────
+// Decisão de 28/10/2026: "só preciso de aprovação de demandas externas". O
+// portão de Aprovações deixou de ser universal. Quem está logado e é da casa
+// cria o pedido já aprovado; a fila fica com o que chega de fora sem login —
+// formulário público, área do cliente (/c/<slug>), WhatsApp e e-mail, que nem
+// passam por aqui.
+//
+// Duas exceções continuam indo para a fila:
+//   - profissional externo logado (freelancer no portal): é gente de fora;
+//   - urgência de quem não decide a fila: furar a fila é decisão de gestão.
+// Sem vínculo com a empresa, também vai para a fila (fail-closed).
+
+/** A regra, sem banco. `decide` = admin/gestor ou líder do audiovisual. */
+export function pedidoNasceAprovado(q: {
+  decide: boolean
+  categoria: CategoriaPessoa | null
+  urgente: boolean
+}): boolean {
+  if (q.decide) return true
+  if (!q.categoria || q.categoria === "externo") return false
+  return !q.urgente
+}
+
+export type EntradaDoPedido = {
+  aprovado: boolean
+  /** Quem criou decide a fila: aí ele fica registrado como quem aprovou. */
+  porQuemDecide: boolean
+  statusInterno: StatusInterno
+}
+
+/** Onde nasce o pedido criado por alguém logado. */
+export async function entradaDoPedidoInterno(
+  quem: { usuarioId: string; gestor: boolean },
+  organizacaoId: string,
+  urgente: boolean
+): Promise<EntradaDoPedido> {
+  const membro = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId: quem.usuarioId, organizacaoId } },
+    select: { categoria: true, liderAudiovisual: true },
+  })
+  const decide = quem.gestor || !!membro?.liderAudiovisual
+  const aprovado = pedidoNasceAprovado({ decide, categoria: membro?.categoria ?? null, urgente })
+  return {
+    aprovado,
+    porQuemDecide: decide,
+    statusInterno: aprovado
+      ? statusAoAprovar(urgente)
+      : urgente ? "urgencia_pendente_aprovacao" : "aguardando_aprovacao_interna",
+  }
 }
 
 // ── Quem aprova a ENTREGA por dentro ─────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fezAPeca, podeAprovarEntrega } from "@/lib/quem-aprova"
+import { fezAPeca, pedidoNasceAprovado, podeAprovarEntrega } from "@/lib/quem-aprova"
 import { segundosDe, timecode } from "@/components/aprovacao/Momentos"
 import { rotuloDoTipo } from "@/lib/tipos-demanda"
 
@@ -49,5 +49,26 @@ describe("o tipo como o cliente lê", () => {
     expect(rotuloDoTipo("institucional")).toBe("Institucional")
     expect(rotuloDoTipo("outro")).toBeNull()
     expect(rotuloDoTipo("video_de_teste")).toBe("Video de teste")
+  })
+})
+
+// Pedido criado por dentro (28/10/2026): quem está logado e é da casa não passa
+// por Aprovações. A fila fica com o externo e com a urgência de quem não decide.
+describe("pedido de quem está logado", () => {
+  it("da casa nasce aprovado, seja interna ou solicitante", () => {
+    expect(pedidoNasceAprovado({ decide: false, categoria: "interna", urgente: false })).toBe(true)
+    expect(pedidoNasceAprovado({ decide: false, categoria: "solicitante", urgente: false })).toBe(true)
+    expect(pedidoNasceAprovado({ decide: false, categoria: "sistema", urgente: false })).toBe(true)
+  })
+
+  it("freelancer logado e quem não tem vínculo continuam na fila", () => {
+    expect(pedidoNasceAprovado({ decide: false, categoria: "externo", urgente: false })).toBe(false)
+    expect(pedidoNasceAprovado({ decide: false, categoria: null, urgente: false })).toBe(false)
+  })
+
+  it("urgência só entra aprovada para quem decide a fila", () => {
+    expect(pedidoNasceAprovado({ decide: false, categoria: "interna", urgente: true })).toBe(false)
+    expect(pedidoNasceAprovado({ decide: true, categoria: "interna", urgente: true })).toBe(true)
+    expect(pedidoNasceAprovado({ decide: true, categoria: null, urgente: false })).toBe(true)
   })
 })

@@ -117,6 +117,26 @@ describe("conversão", () => {
     expect(r.status).toBe(400)
     expect((await db.demanda.findUniqueOrThrow({ where: { id: d.id } })).departamento).toBe("eventos")
   })
+
+  it("aprovado como Job por engano: volta como foi pedido, com o departamento e o tipo de antes", async () => {
+    const d = await job({ departamento: "growth", tipoVideo: "reels", statusInterno: "aguardando_aprovacao_interna", statusVisivel: "entrada" })
+    // O que o "Aprovar como Job" da tela de Aprovações faz antes de aprovar.
+    const conv = await CONVERTER(
+      new NextRequest("http://localhost/api/jobs/x/converter", { method: "POST", body: JSON.stringify({ para: "job" }) }), ctx(d.id))
+    expect(conv.status).toBe(200)
+    await db.demanda.update({ where: { id: d.id }, data: { statusInterno: "aguardando_triagem", statusVisivel: "entrada" } })
+
+    expect(await (await previa(d.id)).json()).toMatchObject({ origem: { departamento: "growth", tipoVideo: "reels" } })
+    expect((await transferir(d.id, { confirmar: true, tipoVideo: "reels" })).status).toBe(200)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id: d.id } })).toMatchObject({ departamento: "growth", tipoVideo: "reels" })
+    const ultima = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: d.id }, orderBy: { createdAt: "desc" } })
+    expect(ultima.observacao).toContain("voltou como foi pedido (growth / reels)")
+  })
+
+  it("Job que nasceu Job não tem origem: vai para o audiovisual neutro", async () => {
+    const d = await job()
+    expect((await (await previa(d.id)).json()).origem).toBeNull()
+  })
 })
 
 describe("bloqueio", () => {

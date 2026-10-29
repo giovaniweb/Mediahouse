@@ -5,6 +5,8 @@ import { calcularPeso } from "@/lib/peso-demanda"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { requireDemandaOrg } from "@/lib/org"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
+import { ehGestor } from "@/lib/papel"
 import type { Prioridade } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -34,10 +36,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   if (!original) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
 
-  // Status inicial — mesma lógica do POST /api/demandas
-  const statusInterno = original.prioridade === "urgente"
-    ? "urgencia_pendente_aprovacao"
-    : "aguardando_aprovacao_interna"
+  // Status inicial — a mesma regra do POST /api/demandas: a cópia é um pedido
+  // novo de quem está logado, e nasce aprovada se ele é da casa.
+  const entrada = await entradaDoPedidoInterno(
+    { usuarioId: session.user.id, gestor: ehGestor(session) }, organizacaoId, original.prioridade === "urgente"
+  )
+  const statusInterno = entrada.statusInterno
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(original.tipoVideo, original.prioridade as Prioridade)
 
