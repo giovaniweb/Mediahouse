@@ -42,12 +42,16 @@ export type PedidoParaResumir = GravacaoParaAcompanhar & {
   ehGravacao: boolean
   /** Quem pediu pode aprovar esta entrega (lib/quem-aprova.ts). */
   podeAprovar: boolean
+  /** Há uma versão com aprovação pendente — o que responder-entrega aprova. */
+  entregaPendente: boolean
 }
 
 export function resumoDoPedido(p: PedidoParaResumir, hoje: string): ResumoDoPedido {
   const encerrado = p.statusInterno === "encerrado" || p.statusInterno === "expirado"
   const aberto = p.statusVisivel !== "finalizado" && !encerrado
-  const esperandoVoce = aberto && p.statusVisivel === "aprovacao" && p.podeAprovar
+  // A coluna sozinha não basta: ajuste pedido e impedimento também moram em
+  // "aprovacao", e aí a próxima jogada é de quem edita, não de quem pediu.
+  const esperandoVoce = aberto && p.podeAprovar && p.entregaPendente
   const atrasada = aberto && estaAtrasada(p)
 
   if (p.ehGravacao) {
@@ -76,6 +80,7 @@ export function resumoDoPedido(p: PedidoParaResumir, hoje: string): ResumoDoPedi
     return { ...base, situacao: "Pedido em análise", tom: "andamento", passos }
   }
   if (esperandoVoce) return { ...base, situacao: "Vídeo pronto, esperando sua aprovação", tom: "voce", passos }
+  if (p.statusInterno === "ajuste_solicitado") return { ...base, situacao: "Ajuste pedido, em correção", tom: "andamento", passos }
   if (p.statusVisivel === "finalizado") return { ...base, situacao: "Entregue", tom: "ok", passos }
   return { ...base, situacao: ETAPAS_DO_PEDIDO[atual].rotulo, tom: "andamento", passos }
 }

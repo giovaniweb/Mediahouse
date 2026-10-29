@@ -27,12 +27,18 @@ beforeAll(async () => {
   await db.demanda.createMany({ data: [
     { ...card, codigo: `${p}-1`, titulo: "Em produção", solicitanteId: pessoas.lucas, statusInterno: "planejamento", statusVisivel: "producao" },
     { ...card, codigo: `${p}-2`, titulo: "Para aprovar", solicitanteId: pessoas.lucas, statusInterno: "revisao_pendente", statusVisivel: "aprovacao" },
+    { ...card, codigo: `${p}-5`, titulo: "Ajuste pedido", solicitanteId: pessoas.lucas, statusInterno: "ajuste_solicitado", statusVisivel: "aprovacao" },
     { ...card, codigo: `${p}-3`, titulo: "Entregue", solicitanteId: pessoas.lucas, statusInterno: "encerrado", statusVisivel: "finalizado", finalizadaEm: new Date() },
     { ...card, codigo: `${p}-4`, titulo: "Da outra pessoa", solicitanteId: pessoas.outra, statusInterno: "planejamento", statusVisivel: "producao" },
   ] })
+  // Só "Para aprovar" tem versão esperando resposta; a do ajuste já foi respondida.
+  const [paraAprovar, ajuste] = await Promise.all([`${p}-2`, `${p}-5`].map((codigo) => db.demanda.findFirstOrThrow({ where: { codigo } })))
+  await db.aprovacaoVideo.create({ data: { demandaId: paraAprovar.id, urlVideo: "https://exemplo.test/v2.mp4", status: "pendente" } })
+  await db.aprovacaoVideo.create({ data: { demandaId: ajuste.id, urlVideo: "https://exemplo.test/v1.mp4", status: "feedback_solicitado" } })
 })
 
 afterAll(async () => {
+  await db.aprovacaoVideo.deleteMany({ where: { demanda: { organizacaoId: org } } })
   await db.demanda.deleteMany({ where: { organizacaoId: org } })
   await db.organizacao.delete({ where: { id: org } })
   await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
@@ -45,11 +51,12 @@ describe("meus pedidos", () => {
     const res = await GET()
     expect(res.status).toBe(200)
     const { pedidos, totalEncerrados } = await res.json() as { pedidos: Record<string, unknown>[]; totalEncerrados: number }
-    expect(pedidos.map((x) => x.titulo).sort()).toEqual(["Em produção", "Entregue", "Para aprovar"])
+    expect(pedidos.map((x) => x.titulo).sort()).toEqual(["Ajuste pedido", "Em produção", "Entregue", "Para aprovar"])
     expect(totalEncerrados).toBe(1)
     const porTitulo = Object.fromEntries(pedidos.map((x) => [x.titulo, x]))
     expect(porTitulo["Em produção"]).toMatchObject({ situacao: "Em produção", aberto: true, esperandoVoce: false })
     expect(porTitulo["Para aprovar"]).toMatchObject({ tom: "voce", esperandoVoce: true })
+    expect(porTitulo["Ajuste pedido"]).toMatchObject({ situacao: "Ajuste pedido, em correção", esperandoVoce: false })
     expect(porTitulo["Entregue"]).toMatchObject({ situacao: "Entregue", aberto: false })
   })
 

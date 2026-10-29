@@ -35,6 +35,8 @@ export async function GET() {
     videomakerId: true, videomaker: { select: { nome: true, usuarioId: true, ...selectContrato(organizacaoId) } },
     dataCaptacao: true, dataEvento: true, localGravacao: true, localEvento: true,
     historicos: { select: { statusNovo: true, createdAt: true }, orderBy: { createdAt: "asc" as const }, take: 200 },
+    // A versão que espera resposta — a mesma que /responder-entrega aprova.
+    aprovacoesVideo: { where: { status: "pendente" as const }, select: { id: true }, take: 1 },
   } satisfies Prisma.DemandaSelect
 
   const meus: Prisma.DemandaWhereInput = { organizacaoId, solicitanteId: session.user.id }
@@ -56,6 +58,7 @@ export async function GET() {
       videomaker: d.videomaker ? { nome: d.videomaker.nome } : null,
       ehGravacao: quadroDoCard({ ...d, contratoVideomaker }) === "jobs",
       podeAprovar: podeAprovarEntrega(quem, d),
+      entregaPendente: d.aprovacoesVideo.length > 0,
     }, hoje)
     return {
       id: d.id, codigo: d.codigo, titulo: d.titulo, cliente: d.clienteFinalNome?.trim() || null,

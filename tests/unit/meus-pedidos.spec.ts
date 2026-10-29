@@ -6,7 +6,7 @@ import { acompanhamentoDaGravacao } from "@/lib/acompanhamento-gravacao"
 const hoje = "2026-10-29"
 const pedido = (p: Partial<PedidoParaResumir>): PedidoParaResumir => ({
   titulo: "Vídeo institucional", statusInterno: "planejamento", statusVisivel: "producao",
-  ehGravacao: false, podeAprovar: true, ...p,
+  ehGravacao: false, podeAprovar: true, entregaPendente: false, ...p,
 })
 
 describe("resumo do pedido", () => {
@@ -17,11 +17,17 @@ describe("resumo do pedido", () => {
   })
 
   it("a entrega em aprovação é a vez de quem pediu", () => {
-    const r = resumoDoPedido(pedido({ statusInterno: "revisao_pendente", statusVisivel: "aprovacao" }), hoje)
+    const r = resumoDoPedido(pedido({ statusInterno: "revisao_pendente", statusVisivel: "aprovacao", entregaPendente: true }), hoje)
     expect(r).toMatchObject({ situacao: "Vídeo pronto, esperando sua aprovação", tom: "voce", esperandoVoce: true })
     // Quem não aprova (fez a peça) vê só a etapa.
-    const outro = resumoDoPedido(pedido({ statusInterno: "revisao_pendente", statusVisivel: "aprovacao", podeAprovar: false }), hoje)
+    const outro = resumoDoPedido(pedido({ statusInterno: "revisao_pendente", statusVisivel: "aprovacao", entregaPendente: true, podeAprovar: false }), hoje)
     expect(outro).toMatchObject({ situacao: "Em aprovação", esperandoVoce: false })
+  })
+
+  it("depois do ajuste pedido, a vez é de quem edita", () => {
+    // O card continua na coluna de aprovação, mas não há versão para aprovar.
+    const r = resumoDoPedido(pedido({ statusInterno: "ajuste_solicitado", statusVisivel: "aprovacao" }), hoje)
+    expect(r).toMatchObject({ situacao: "Ajuste pedido, em correção", tom: "andamento", esperandoVoce: false })
   })
 
   it("pedido parado na aprovação da gestão aparece em análise", () => {

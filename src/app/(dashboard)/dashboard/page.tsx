@@ -71,6 +71,7 @@ function InternalDashboard() {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
+  const { data: me, error: erroMe } = useMe()
 
   // Sem desvio para celular. O redirecionamento para /campo sobrou aqui depois
   // que o middleware perdeu o dele (09/09/2026): /campo é do módulo eventos,
@@ -98,8 +99,20 @@ export default function DashboardPage() {
   }
 
   // Quem pede acompanha os próprios pedidos, não os números da empresa. O papel
-  // é o da empresa ativa (a sessão já o traz), não o `tipo` global.
-  if ((session?.user?.papel ?? session?.user?.tipo) === "solicitante") {
+  // é o do vínculo com a empresa ATIVA, lido pelo /api/me: a empresa vem do
+  // cookie e pode ter sido trocada depois do login, e o `papel` do JWT continua
+  // o da empresa de antes. Até ele chegar, não se decide — nem se busca nada.
+  if (!me && !erroMe) {
+    return (
+      <>
+        <Header title="Dashboard" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full" />
+        </div>
+      </>
+    )
+  }
+  if (me?.membership?.papel === "solicitante") {
     return (
       <>
         <Header title="Meus Pedidos" />
