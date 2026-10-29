@@ -56,9 +56,11 @@ test("morte do worker durante ffmpeg encerra filho e permite limpeza; mede RSS s
     pasta = (await readdir(root)).find(n => n.startsWith("nuflow-preview-"))
     assert.ok(pasta)
     worker.kill("SIGKILL"); assert.equal((await encerrado).signal, "SIGKILL")
+    // writeFile trunca antes de escrever: a leitura nesse intervalo vem vazia e conta como "ainda não seguro".
+    const lerMarcador = () => readFile(join(root, pasta, ".nuflow-owner.json"), "utf8").then(JSON.parse).catch(() => ({}))
     let seguro = false
     for (let i = 0; i < 200; i++) {
-      const marker = JSON.parse(await readFile(join(root, pasta, ".nuflow-owner.json"), "utf8").catch(() => "{}"))
+      const marker = await lerMarcador()
       if (marker.fase === "seguro" && !processos().some(p => p.pid === ffmpeg.pid)) { seguro = true; break }
       await esperar(10)
     }
