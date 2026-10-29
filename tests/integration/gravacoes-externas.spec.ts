@@ -239,6 +239,25 @@ describe("nota do videomaker até compras", () => {
     expect(await custoDe(id)).toMatchObject({ statusPagamento: "pago", pago: true })
   })
 
+  it("a nota que veio pelo link do videomaker vai a compras com endereço completo e credencial de leitura", async () => {
+    vi.stubEnv("NEXTAUTH_URL", "https://nuflow.test/")
+    const id = await gravacao("captacao_realizada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "editando", statusVisivel: "edicao" } })
+    const url = `/api/midia/org/${org}/nf/${id}/nota.pdf`
+    const nf = await db.notaFiscalUpload.create({ data: { demandaId: id, videomakerId: vm, status: "enviada", url } })
+    await db.custoVideomaker.create({ data: { organizacaoId: org, demandaId: id, videomakerId: vm, valor: 0, dataReferencia: new Date(), statusPagamento: "nf_enviada", notaFiscalUrl: url } })
+    como(pessoas.admin, "admin")
+    emailParaCompras.resultado = { ok: true }
+    emailParaCompras.chamadas.length = 0
+    expect((await agir(id, "enviar_compras")).status).toBe(200)
+    const link = (emailParaCompras.chamadas[0][0] as { notaFiscalUrl: string }).notaFiscalUrl
+    expect(link).toBe(`https://nuflow.test${url}?token=${encodeURIComponent(nf.token)}`)
+    // Quem recebe o e-mail não tem conta: a credencial do link basta para ler a nota.
+    estado.sessao = null
+    expect(await podeLerMidia(`org/${org}/nf/${id}/nota.pdf`, nf.token)).toBe(true)
+    vi.unstubAllEnvs()
+  })
+
   it("pagar antes de mandar para compras é recusado; quem não vê custos não age", async () => {
     const id = await comNotaRecebida()
     como(pessoas.admin, "admin")
@@ -340,6 +359,19 @@ describe("entrega do videomaker pelo link do convite", () => {
     expect((await db.demanda.findUniqueOrThrow({ where: { id } })).statusInterno).toBe("captacao_agendada")
     expect(await (await mandar(token, { linkVideo: "https://drive.example/pronto" })).json()).toEqual({ completo: true, mudouEtapa: true })
     expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ statusInterno: "aprovado", linkFinal: "https://drive.example/pronto" })
+    // Pronto para o cliente: o link do convite não troca mais o vídeo.
+    expect((await mandar(token, { linkVideo: "https://drive.example/outro" })).status).toBe(409)
+    expect((await db.demanda.findUniqueOrThrow({ where: { id } })).linkFinal).toBe("https://drive.example/pronto")
+  })
+
+  it("nossa edição: o convite não aceita vídeo pronto, nem troca os brutos que já chegaram", async () => {
+    const { id, token } = await comConvite("equipe")
+    expect((await mandar(token, { linkVideo: "https://drive.example/pronto" })).status).toBe(403)
+    expect((await mandar(token, { linkBrutos: "https://drive.example/b" })).status).toBe(200)
+    await db.demanda.update({ where: { id }, data: { linkFinal: "https://drive.example/editado-pela-equipe" } })
+    expect((await mandar(token, { linkBrutos: "https://drive.example/b2" })).status).toBe(409)
+    expect((await mandar(token, { linkVideo: "https://drive.example/meu" })).status).toBe(403)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ linkBrutos: "https://drive.example/b", linkFinal: "https://drive.example/editado-pela-equipe" })
   })
 
   it("convite recusado não entrega", async () => {
@@ -415,6 +447,17 @@ describe("avisos das gravações", () => {
 
     expect(await saidas(vespera)).toEqual([expect.objectContaining({ origem: "regra", destinatarioTipo: "videomaker", destinatarioId: vm })])
     expect(await saidas(semVm)).toEqual([expect.objectContaining({ origem: "regra", destinatarioId: adminAviso })])
+  })
+
+  it("nota parada há 5 dias avisa a gestão mesmo com o vídeo já entregue ao cliente", async () => {
+    const entregue = await gravacao("captacao_realizada")
+    await db.demanda.update({ where: { id: entregue }, data: { statusInterno: "entregue_cliente", statusVisivel: "finalizado" } })
+    const custo = await db.custoVideomaker.create({ data: { organizacaoId: org, demandaId: entregue, videomakerId: vm, valor: 0, dataReferencia: new Date(), statusPagamento: "nf_enviada", notaFiscalUrl: "https://exemplo.invalid/nf.pdf" } })
+    await db.$executeRaw`UPDATE custos_videomaker SET "updatedAt" = ${new Date(Date.now() - 5 * 86400_000)} WHERE id = ${custo.id}`
+
+    await executarRotina(org, "gravacoes")
+
+    expect(await saidas(entregue)).toEqual([expect.objectContaining({ origem: "regra", destinatarioId: adminAviso })])
   })
 })
 
