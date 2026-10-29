@@ -2210,6 +2210,7 @@ model ProducaoManual {
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
   lancamentosSetor LancamentoSetor[]
+  materiaisVideomaker MaterialVideomaker[]
   cutflowSessoes CutflowSessao[]
   cutflowPuxadas CutflowPuxada[]
   lotesAcervo LoteAcervo[]
@@ -2874,3 +2875,27 @@ model LimitePublico {
   @@index([janelaInicio])
   @@map("limites_publicos")
 }
+
+// Kit do videomaker das Gravações Externas (29/10/2026): o guia de captação, os
+// vídeos de referência e a colinha do dia. Vai para o videomaker na primeira
+// gravação, pelo botão do card e sempre na página dele (link do convite); a
+// colinha sai no WhatsApp no dia da gravação. `url` é arquivo na mídia do NuFlow
+// (org/{org}/kit/…) ou link externo; `texto` é a colinha. `tipoGravacao` nulo
+// vale para todos os tipos.
+model MaterialVideomaker {
+  id            String        @id @default(cuid())
+  organizacaoId String
+  titulo        String
+  tipo          String // "guia" | "referencia" | "colinha"
+  url           String?
+  texto         String?
+  tipoGravacao  TipoGravacao?
+  ordem         Int           @default(0)
+  createdAt     DateTime      @default(now())
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
+  @@map("materiais_videomaker")
+}
+

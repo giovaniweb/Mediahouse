@@ -51,7 +51,7 @@ async function garantirBucket(): Promise<boolean> {
   return true
 }
 
-export type TipoMidia = "docs" | "videos" | "thumbnails" | "nf" | "coberturas" | "depoimentos"
+export type TipoMidia = "docs" | "videos" | "thumbnails" | "nf" | "coberturas" | "depoimentos" | "kit"
 
 /** `org/{organizacaoId}/{tipo}/{id}/{timestamp}.{ext}` — o dono vem no caminho. */
 export function caminhoMidia(p: {
@@ -84,7 +84,7 @@ export function caminhoDaUrl(url: string | null | undefined): string | null {
 export function caminhoMidiaValido(caminho: string): boolean {
   const partes = caminho.split("/")
   return partes.length >= 5 && partes[0] === "org" &&
-    ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos"].includes(partes[2]) &&
+    ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos", "kit"].includes(partes[2]) &&
     partes.every(p => /^[a-zA-Z0-9_.-]+$/.test(p) && p !== "." && p !== "..")
 }
 

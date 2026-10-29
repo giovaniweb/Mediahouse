@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Loader2, MinusCircle } from "lucide-react"
+import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Loader2, MinusCircle, Send } from "lucide-react"
 import { toast } from "sonner"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
@@ -338,9 +338,32 @@ export function EntregasDoVideomaker({ job, podeEditar, onSalvar, onAvancar, onA
     </li>
   )
 
+  async function enviarKit() {
+    setAgindo("kit")
+    try {
+      const r = await fetch(`/api/jobs/${job.id}/kit`, { method: "POST" })
+      const json = await r.json().catch(() => ({})) as { mensagem?: string; error?: string }
+      if (!r.ok) toast.error(json.error ?? "Não foi possível enviar.")
+      else toast.success(json.mensagem ?? "Enviado.")
+    } catch {
+      toast.error("Sem conexão. Tente de novo.")
+    } finally {
+      setAgindo(null)
+    }
+  }
+
   return (
     <section className={styles.entregas} aria-label="Entregas do videomaker">
-      <span className={styles.rotulo}>Entregas do videomaker</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={styles.rotulo}>Entregas do videomaker</span>
+        {/* O guia, as referências e a colinha do kit, no WhatsApp dele. */}
+        {podeEditar && (
+          <button type="button" className={surface.linkBtn} onClick={() => void enviarKit()} disabled={agindo !== null}>
+            {agindo === "kit" ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Send className="w-3.5 h-3.5" aria-hidden />}
+            Enviar instruções e referências
+          </button>
+        )}
+      </div>
       <ul className={styles.listaEntregas}>
         {linhaDeLink("brutos", "Brutos (drive)", job.linkBrutos)}
         {editaEle

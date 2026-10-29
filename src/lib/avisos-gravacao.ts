@@ -6,6 +6,8 @@ import { comOrg } from "@/lib/org-contexto"
 import { dataEmSaoPaulo } from "@/lib/datas"
 import { criarSaida, destinoAutorizado, processarSaidas } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
+import { momentoDoJob } from "@/lib/ficha-do-job"
+import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import {
   mensagensDoEvento,
   type DadosDoAviso,
@@ -70,9 +72,19 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
   if (!d) return null
   const base = process.env.NEXTAUTH_URL?.trim().replace(/\/$/, "") || "https://nuflow.space"
   const convite = d.convites.find((c) => c.videomakerId === d.videomakerId)
+  const linkEntrega = convite ? `${base}/convite/${convite.token}` : null
+  // A colinha do dia, do kit do videomaker, com os dados desta gravação.
+  const colinha = colinhaDaGravacao(await tx.materialVideomaker.findMany({
+    where: { organizacaoId, tipo: "colinha" }, select: { id: true, titulo: true, tipo: true, texto: true, tipoGravacao: true },
+  }), d.tipoGravacao)
+  const quando = momentoDoJob(d)
   return {
     ...d,
-    linkEntrega: convite ? `${base}/convite/${convite.token}` : null,
+    linkEntrega,
+    colinha: colinha?.texto ? preencherColinha(colinha.texto, {
+      cliente: d.clienteFinalNome?.trim() || d.titulo, hora: quando?.hora ?? null,
+      endereco: d.localGravacao || d.localEvento, link: linkEntrega,
+    }) : null,
     videomakerTelefone: telefoneCompleto(d.videomaker?.telefone),
     clienteTelefone: telefoneCompleto(d.clienteFinalTelefone),
     solicitanteTelefones: [...new Set([d.solicitante?.telefone, d.telefoneSolicitante].map(telefoneCompleto).filter((t): t is string => !!t))],
@@ -115,9 +127,12 @@ export async function enfileirarAvisos(tx: Tx, e: {
       // Quem não é pessoa cadastrada não recebe — a fila recusa número solto.
       if (papel !== "cliente" && !await destinoAutorizado(tx, e.organizacaoId, telefone)) continue
       const hash = createHash("sha256").update(telefone).digest("hex").slice(0, 12)
+      const chave = `grav:${g.id}:${e.motivo}:${dia}:${papel}:${hash}`.slice(0, 128)
+      // Já saiu hoje: não repete, e não conta como enviado.
+      if (await tx.saidaWhatsapp.findUnique({ where: { organizacaoId_chave: { organizacaoId: e.organizacaoId, chave } }, select: { id: true } })) continue
       await criarSaida(tx, {
         organizacaoId: e.organizacaoId, origem: "manual", referencia: g.id,
-        chave: `grav:${g.id}:${e.motivo}:${dia}:${papel}:${hash}`.slice(0, 128),
+        chave,
         telefone, texto, expiraEm: new Date(Date.now() + 86400_000),
         ...(papel === "cliente" ? { clienteDe: g.id } : {}),
       })

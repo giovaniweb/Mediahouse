@@ -22,7 +22,8 @@ import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { LayoutGrid, List, ChevronRight, Plus } from "lucide-react"
+import { LayoutGrid, List, ChevronRight, Plus, BookOpen } from "lucide-react"
+import { KitDoVideomaker } from "@/components/jobs/KitDoVideomaker"
 
 // Quadro operacional de Gravações Externas (antes "Jobs"; o endereço continua
 // /jobs para não quebrar link salvo).
@@ -67,6 +68,7 @@ function Quadro() {
   const { data: me } = useMe()
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
+  const [kitAberto, setKitAberto] = useState(false)
   const [view, setView] = useState<"kanban" | "list">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
@@ -190,9 +192,15 @@ function Quadro() {
       <Header
         title="Gravações Externas"
         actions={
-          <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
-            <Plus className="w-4 h-4" /> Nova gravação
-          </button>
+          <div className="flex items-center gap-2">
+            {/* O guia, as referências e a colinha que vão para o videomaker. */}
+            <button type="button" onClick={() => setKitAberto(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
+              <BookOpen className="w-4 h-4" aria-hidden /> Kit do videomaker
+            </button>
+            <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
+              <Plus className="w-4 h-4" /> Nova gravação
+            </button>
+          </div>
         }
       />
 
@@ -259,6 +267,7 @@ function Quadro() {
       <DemandaModal demandaId={aberto} onClose={() => { setAberto(null); void mutate() }} />
       {/* Aprovado, o card aparece no quadro na hora. Pendente só depois de
           Aprovações — o aviso de onde ele está sai do próprio formulário. */}
+      {kitAberto && <KitDoVideomaker aoFechar={() => setKitAberto(false)} />}
       {novoJob && (
         <FormularioGravacao interno={{ aoFechar: () => setNovoJob(false), aoCriar: () => void mutate() }} />
       )}

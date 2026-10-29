@@ -51,9 +51,18 @@ export async function emitirConvite(tx: Tx, ator: AtorAuditoria, demandaId: stri
   const telefone = telefoneCompleto(v.videomaker.telefone)
   if (telefone && await destinoAutorizado(tx, ator.organizacaoId, telefone)) {
     const link = `${process.env.NEXTAUTH_URL || "https://nuflow.space"}/convite/${convite.token}`
+    // Primeira gravação dele com esta empresa, e há kit montado: o convite já
+    // aponta o guia e as referências, que estão no mesmo link (29/10/2026).
+    const primeira = !await tx.conviteVideomaker.findFirst({ where: { videomakerId, status: "aceito", demanda: { organizacaoId: ator.organizacaoId } }, select: { id: true } })
+    const temKit = primeira && !!await tx.materialVideomaker.findFirst({ where: { organizacaoId: ator.organizacaoId, tipo: { in: ["guia", "referencia"] } }, select: { id: true } })
+    const cliente = d.clienteFinalNome?.trim() || d.titulo
     await criarSaida(tx, { organizacaoId: ator.organizacaoId, origem: "manual", referencia: convite.id,
       chave: `convite:${convite.id}`, telefone, expiraEm: convite.expiresAt,
-      texto: `Olá ${v.videomaker.nome}! Convite para ${d.codigo} — ${d.titulo}. Confira as condições e responda pelo link: ${link}` })
+      texto: [
+        `Olá ${v.videomaker.nome}! Convite para gravação: ${cliente} (${d.codigo}). Confira as condições e responda pelo link:`,
+        link,
+        temKit && "É a sua primeira gravação com a gente: no mesmo link estão o guia de captação e os vídeos de referência. Veja antes de gravar.",
+      ].filter(Boolean).join("\n\n") })
   }
   return convite
 }

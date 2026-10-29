@@ -51,6 +51,12 @@ describe("avisos de calendário", () => {
     expect(v).toContain("mande só os brutos")
     expect(v).toContain("https://nuflow.space/convite/tok")
   })
+  it("no dia: a colinha do kit vai para o videomaker; sem colinha, nada", () => {
+    expect(regrasDaGravacao(g, "2026-10-31")).toEqual(["dia"])
+    expect(mensagensDaRegra("dia", { ...g, colinha: "🎬 Colinha de hoje" }, "2026-10-31")).toEqual({ videomaker: "🎬 Colinha de hoje" })
+    expect(mensagensDaRegra("dia", g, "2026-10-31")).toEqual({})
+    expect(regrasDaGravacao({ ...g, statusInterno: "captacao_realizada" }, "2026-10-31")).toEqual([])
+  })
   it("material: cobra nos dias 1 e 2, trava no dia 3 (só a gestão)", () => {
     expect(regrasDaGravacao(g, "2026-11-01")).toEqual(["sem_material"])
     expect(regrasDaGravacao(g, "2026-11-02")).toEqual(["sem_material"])

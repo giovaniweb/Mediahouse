@@ -18,6 +18,11 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
     if (publicado && urlPublicavel(url, org, publicado.demandaId, publicado.publicacaoThumbnailUrl === url)) return true
     if (tipo === "depoimentos" && await prisma.depoimento.findFirst({ where: { organizacaoId: org, ativo: true, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })) return true
     if (!token) return false
+    // Kit do videomaker (guia, referências): quem tem um convite desta empresa lê.
+    if (tipo === "kit") {
+      return !!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } }) &&
+        !!await prisma.conviteVideomaker.findFirst({ where: { token, status: { in: ["pendente", "aceito"] }, demanda: { organizacaoId: org } }, select: { id: true } })
+    }
     if (["videos", "thumbnails"].includes(tipo)) {
       const d = await prisma.demanda.findFirst({ where: { organizacaoId: org, publicToken: token, publicTokenAtivo: true,
         AND: [{ OR: [{ publicTokenExpiraEm: null }, { publicTokenExpiraEm: { gt: new Date() } }] },
@@ -56,6 +61,8 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
         if (p.verCoberturas && await prisma.eventoCoberturaUpload.findFirst({ where: { OR: [{ url }, { thumbnailUrl: url }], cobertura: { organizacaoId: org } }, select: { id: true } })) return true
       }
       if (tipo === "depoimentos") return p.gerenciarConfig && !!await prisma.depoimento.findFirst({ where: { organizacaoId: org, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })
+      // Kit do videomaker: material de trabalho da empresa, para quem é dela.
+      if (tipo === "kit") return !!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } })
       // Arquivo de referência de uma ideia do quadro da social
       // (org/{org}/docs/{ideiaId}/…): só se estiver na lista da PRÓPRIA ideia.
       // A ideia é aberta para a empresa, então vale para quem vê a social, o

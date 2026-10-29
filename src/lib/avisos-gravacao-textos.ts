@@ -8,7 +8,8 @@
 //     entrou para agendar, confirmou, recusou, material, nota, pronta;
 //   gestão (admin, gestor, quem recebe tudo): só quando trava — recusa,
 //     sem videomaker perto da data, material atrasado, nota parada;
-//   videomaker: véspera, cobrança do material, pagamento feito;
+//   videomaker: véspera, a colinha no dia (do kit), cobrança do material,
+//     pagamento feito;
 //   cliente: confirmou o agendamento e o vídeo pronto;
 //   quem pediu: entregue.
 //
@@ -20,7 +21,7 @@ import { etapaDaGravacao, levarDaGravacao, materialChegouAgora } from "./etapas-
 
 export type EventoDaGravacao =
   | "entrou" | "confirmada" | "recusada" | "material" | "nota_recebida" | "pronta" | "concluida" | "nota_paga"
-export type RegraDaGravacao = "vespera" | "sem_material" | "material_travado" | "sem_videomaker" | "nota_parada"
+export type RegraDaGravacao = "vespera" | "dia" | "sem_material" | "material_travado" | "sem_videomaker" | "nota_parada"
 export type PapelDoAviso = "operacao" | "gestao" | "videomaker" | "cliente" | "solicitante"
 export type Mensagens = Partial<Record<PapelDoAviso, string>>
 
@@ -43,6 +44,8 @@ export type DadosDoAviso = {
   videomaker?: { nome: string } | null
   /** O link do convite: é por ele que o videomaker entrega. */
   linkEntrega?: string | null
+  /** A colinha do dia, já preenchida (lib/kit-videomaker.ts). Sem ela, o dia não avisa. */
+  colinha?: string | null
 }
 
 const cliente = (d: DadosDoAviso) => d.clienteFinalNome?.trim() || d.titulo
@@ -105,6 +108,7 @@ export function regrasDaGravacao(
   const regras: RegraDaGravacao[] = []
   if (dia && etapa === "agendado") {
     if (dia === somarDias(hoje, 1)) regras.push("vespera")
+    if (dia === hoje && d.statusInterno !== "captacao_realizada") regras.push("dia")
     const depois = diasEntre(dia, hoje)
     if (depois === 1 || depois === 2) regras.push("sem_material")
     if (depois === 3) regras.push("material_travado")
@@ -138,6 +142,9 @@ export function mensagensDaRegra(regra: RegraDaGravacao, d: DadosDoAviso, hoje: 
         ].filter(Boolean).join("\n"),
       }
     }
+    case "dia":
+      // A colinha do kit, no WhatsApp do videomaker na manhã da gravação.
+      return d.colinha ? { videomaker: d.colinha } : {}
     case "sem_material":
       return {
         videomaker: [`📁 Falta o material da gravação ${ref(d)}.`, d.linkEntrega && `Entregue pelo link:\n${d.linkEntrega}`].filter(Boolean).join("\n\n"),

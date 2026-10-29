@@ -35,6 +35,12 @@ import { POST as responderConvite } from "@/app/api/convites/[token]/route"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { executarRotina } from "@/lib/automacoes-regras"
 import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
+import { GET as listarKit, POST as criarKit } from "@/app/api/gravacoes/kit/route"
+import { POST as enviarKit } from "@/app/api/jobs/[id]/kit/route"
+import { emitirConvite } from "@/lib/convites"
+import { podeLerMidia } from "@/lib/midia-acesso"
+import { decryptSecret } from "@/lib/secret-crypto"
+import { comOrg } from "@/lib/org-contexto"
 import { situacaoDaNota } from "@/lib/etapas-da-gravacao"
 
 const p = `gravacoes-${randomUUID().slice(0, 8)}`, org = `${p}-org`
@@ -105,7 +111,7 @@ afterAll(async () => {
   await db.alertaIA.deleteMany({ where: { organizacaoId: org } })
   await db.demanda.deleteMany({ where: { organizacaoId: org } })
   await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org } })
-  await db.videomaker.deleteMany({ where: { id: vm } })
+  await db.videomaker.deleteMany({ where: { id: { in: [vm, `${p}-vm-novo`] } } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: org } })
   await db.produto.deleteMany({ where: { organizacaoId: org } })
   await db.usuario.deleteMany({ where: { email: { endsWith: `@${p}.test` } } })
@@ -389,6 +395,78 @@ describe("avisos das gravações", () => {
 
     expect(await saidas(vespera)).toEqual([expect.objectContaining({ origem: "regra", destinatarioTipo: "videomaker", destinatarioId: vm })])
     expect(await saidas(semVm)).toEqual([expect.objectContaining({ origem: "regra", destinatarioId: adminAviso })])
+  })
+})
+
+describe("kit do videomaker", () => {
+  const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
+  const textos = async (demandaId: string) => (await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: demandaId }, select: { conteudoCifrado: true, origem: true } }))
+    .map((x) => ({ origem: x.origem, texto: decryptSecret(x.conteudoCifrado!) }))
+  const adicionar = (corpo: unknown) => criarKit(new NextRequest("http://localhost/api/gravacoes/kit", { method: "POST", body: JSON.stringify(corpo) }))
+  const pdf = `/api/midia/org/${org}/kit/guia/1.pdf`
+
+  // Um videomaker que nunca gravou com a empresa: é a primeira vez dele.
+  const vmNovo = `${p}-vm-novo`
+  beforeAll(async () => {
+    await db.videomaker.update({ where: { id: vm }, data: { telefone: tel() } })
+    await db.videomaker.create({ data: { id: vmNovo, nome: "Novo", telefone: tel() } })
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: org, videomakerId: vmNovo, tipoContrato: "externo" } })
+  })
+
+  it("monta o kit quem é da gestão; a equipe só vê", async () => {
+    como(pessoas.admin, "admin")
+    expect((await adicionar({ titulo: "Guia de captação", tipo: "guia", url: pdf, tipoGravacao: "entrega_equipamento" })).status).toBe(201)
+    expect((await adicionar({ titulo: "Referência: depoimento", tipo: "referencia", url: "https://drive.example/depoimento" })).status).toBe(201)
+    expect((await adicionar({ titulo: "Colinha", tipo: "colinha", texto: "🎬 Hoje: {cliente}, {hora}.\n{link}" })).status).toBe(201)
+    expect((await adicionar({ titulo: "Link solto", tipo: "referencia", url: "javascript:alert(1)" })).status).toBe(400)
+    como(pessoas.equipe, "solicitante")
+    expect((await adicionar({ titulo: "Outro", tipo: "referencia", url: "https://x.example" })).status).toBe(403)
+    const lido = await (await listarKit()).json()
+    expect(lido).toMatchObject({ podeEditar: false })
+    expect(lido.materiais).toHaveLength(3)
+  })
+
+  it("o convite da primeira vez aponta o guia; o link mostra o kit e libera o PDF só com o convite", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "planejamento", videomakerId: null, tipoGravacao: "entrega_equipamento", clienteFinalNome: "Clínica Kit", dataCaptacao: new Date(`${somarDias(hojeEmSaoPaulo(), 6)}T13:00:00-03:00`) } })
+    const convite = await comOrg(org, () => db.$transaction((tx) => emitirConvite(tx, { organizacaoId: org, usuarioId: pessoas.admin }, id, vmNovo)))
+    const convites = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: convite.id }, select: { conteudoCifrado: true } })
+    expect(decryptSecret(convites[0].conteudoCifrado!)).toContain("É a sua primeira gravação com a gente")
+
+    const pagina = await (await abrirConvite(new NextRequest(`http://localhost/api/convites/${convite.token}`), { params: Promise.resolve({ token: convite.token }) })).json()
+    expect(pagina.kit.materiais.map((m: { titulo: string }) => m.titulo).sort()).toEqual(["Guia de captação", "Referência: depoimento"])
+    expect(pagina.kit.materiais.find((m: { tipo: string }) => m.tipo === "guia").url).toBe(`${pdf}?token=${encodeURIComponent(convite.token)}`)
+    expect(pagina.kit.colinha).toBe("🎬 Hoje: Clínica Kit, 13:00.")
+
+    const caminho = pdf.replace("/api/midia/", "")
+    expect(await podeLerMidia(caminho, convite.token)).toBe(true)
+    estado.sessao = null
+    expect(await podeLerMidia(caminho, "token-de-outro")).toBe(false)
+  })
+
+  it("o botão do card manda as instruções no WhatsApp do videomaker, uma vez por dia", async () => {
+    const { id } = await (async () => {
+      const id = await gravacao("captacao_agendada")
+      await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento", clienteFinalNome: "Clínica Botão" } })
+      await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token: `tok-${randomUUID()}`, status: "aceito", expiresAt: new Date(Date.now() + 86400_000) } })
+      return { id }
+    })()
+    como(pessoas.admin, "admin")
+    const mandar = () => enviarKit(new NextRequest(`http://localhost/api/jobs/${id}/kit`, { method: "POST" }), { params: Promise.resolve({ id }) })
+    expect(await (await mandar()).json()).toEqual({ mensagem: "Instruções enviadas ao videomaker." })
+    expect(await (await mandar()).json()).toEqual({ mensagem: "Já foi enviado hoje para este videomaker." })
+    const [enviado] = await textos(id)
+    expect(enviado.texto).toContain("Instruções e referências da gravação Clínica Botão")
+    expect(enviado.texto).toContain("• Guia de captação")
+    expect(enviado.texto).toContain("/convite/tok-")
+  })
+
+  it("no dia da gravação, a rotina manda a colinha preenchida", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { clienteFinalNome: "Clínica Hoje", dataCaptacao: new Date(`${hojeEmSaoPaulo()}T23:30:00-03:00`) } })
+    await executarRotina(org, "gravacoes")
+    const enviados = await textos(id)
+    expect(enviados).toEqual([expect.objectContaining({ origem: "regra", texto: expect.stringContaining("🎬 Hoje: Clínica Hoje, 23:30.") })])
   })
 })
 

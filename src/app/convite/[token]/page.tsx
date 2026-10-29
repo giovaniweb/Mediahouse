@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Check, CheckCircle2, X, Loader2 } from "lucide-react"
+import { Check, CheckCircle2, X, Loader2, FileText, PlayCircle } from "lucide-react"
 import { LogoNuFlow } from "@/components/marca/Marca"
 import { formatarData } from "@/lib/datas"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
@@ -40,6 +40,27 @@ interface ConviteData {
   }
   /** Depois do aceite, o mesmo link é a página de entrega (lib/entrega-da-gravacao.ts). */
   entrega?: { liberada: boolean; nota: { token: string; status: string } | null }
+  /** O kit do videomaker: guia, referências e a colinha do dia (lib/kit-videomaker.ts). */
+  kit?: KitDaPagina
+}
+
+type KitDaPagina = { materiais: { id: string; titulo: string; tipo: string; url: string | null }[]; colinha: string | null }
+
+/** Guia, referências e colinha: para consultar antes e durante a gravação. */
+function KitNaPagina({ kit }: { kit?: KitDaPagina }) {
+  if (!kit || (kit.materiais.length === 0 && !kit.colinha)) return null
+  return <section className={styles.kit} aria-label="Instruções e referências">
+    <h2>Instruções e referências</h2>
+    {kit.materiais.length > 0 && <ul className={styles.kitLista}>
+      {kit.materiais.filter(m => m.url).map(m => <li key={m.id}>
+        <a href={m.url!} target="_blank" rel="noopener noreferrer">
+          {m.tipo === "guia" ? <FileText size={18} aria-hidden="true" /> : <PlayCircle size={18} aria-hidden="true" />}
+          {m.titulo}<small>{m.tipo === "guia" ? "Guia" : "Referência"}</small>
+        </a>
+      </li>)}
+    </ul>}
+    {kit.colinha && <details className={styles.colinha}><summary>Colinha do dia da gravação</summary><p>{kit.colinha}</p></details>}
+  </section>
 }
 
 type ErroState = {
@@ -123,6 +144,7 @@ export default function ConvitePage() {
           {d.prioridade !== "normal" && <div><dt>Prioridade</dt><dd>{d.prioridade}</dd></div>}
         </dl>
         {d.descricao && <div className={styles.brief}><h2>Sobre a gravação</h2><p>{d.descricao}</p></div>}
+        <KitNaPagina kit={convite.kit} />
         <div className={styles.payment}><h2>Pagamento</h2><p>{convite.tarifaDiaria ? `Diária de referência: ${Number(convite.tarifaDiaria).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "Valor a confirmar com a equipe."}</p><p>{convite.condicoes || "Convite antigo sem condição registrada. Confirme valor e prazo com a equipe antes do serviço."}</p></div>
         <p className={styles.expiry}>Responda até {new Date(convite.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })} (horário de Brasília).</p>
         {erroResposta && <p role="alert" className={styles.error}>{erroResposta} Sua confirmação ainda não foi recebida nesta tela. Confira o convite antes de tentar novamente.</p>}
@@ -205,6 +227,8 @@ function EntregaDaGravacao({ token, convite, aceitouAgora, onAtualizar }: {
           {(d.localGravacao || d.localEvento) && <div><dt>Onde</dt><dd>{d.localGravacao || d.localEvento}</dd></div>}
           {levar && <div><dt>Levar</dt><dd>{levar}</dd></div>}
         </dl>
+
+        <KitNaPagina kit={convite.kit} />
 
         <form className={styles.entregas} onSubmit={enviar} aria-busy={enviando}>
           <h2>Entrega</h2>
