@@ -43,6 +43,7 @@ import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -478,7 +479,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     setDescricao(demanda.descricao ?? "")
     setCidade(demanda.cidade ?? "")
     setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-    setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+    setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
     setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
     setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
     setLinkBrutos(demanda.linkBrutos ?? "")
@@ -501,7 +502,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           // só criava a chance de reenviar um valor velho — ou vazio.
           cidade,
           dataLimite: dataLimite || null,
-          dataCaptacao: dataCaptacao || null,
+          // Só o dia, e só se mudou: a captação pode ter horário (ficha da
+          // gravação), e reenviar o dia apagava a hora (lib/ficha-do-job.ts).
+          dataCaptacao: diaComHorarioMantido(demanda?.dataCaptacao, dataCaptacao),
           videomakerId: videomakerId || null,
           editorId: editorId || null,
           linkBrutos: linkBrutos || null,
@@ -560,7 +563,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       setDescricao(demanda.descricao ?? "")
       setCidade(demanda.cidade ?? "")
       setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-      setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+      setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
       setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
       setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
       setLinkBrutos(demanda.linkBrutos ?? "")
@@ -2266,11 +2269,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> {copy.dateCaptureLabel}</span>
                 <InlineEdit
-                  value={demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : ""}
+                  value={diaDoCampo(demanda.dataCaptacao)}
                   canEdit={podeEditar}
                   tipo="date"
                   placeholder="—"
-                  onSave={(v) => salvarCampo({ dataCaptacao: v || null })}
+                  onSave={async (v) => {
+                    const novo = diaComHorarioMantido(demanda.dataCaptacao, v)
+                    if (novo !== undefined) await salvarCampo({ dataCaptacao: novo })
+                  }}
                   display={demanda.dataCaptacao
                     ? <span className="font-medium text-zinc-200">{formatarData(demanda.dataCaptacao)}</span>
                     : <span className="text-zinc-600 text-xs">—</span>}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   deCampoDataHora,
+  diaComHorarioMantido,
+  diaDoCampo,
   distanciaDoMomento,
   lerMomento,
   linkWhatsapp,
@@ -109,5 +111,32 @@ describe("a volta de uma conversão", () => {
     expect(origemDaConversao(descricaoDaConversao({ departamento: "growth", tipoVideo: "reels" }, "demanda"))).toBeNull()
     expect(origemDaConversao("Demanda criada")).toBeNull()
     expect(origemDaConversao(null)).toBeNull()
+  })
+})
+
+describe("o Editar geral não apaga o horário da captação", () => {
+  // 31/10 às 15:00 em Brasília, como a ficha grava.
+  const comHora = "2026-10-31T18:00:00.000Z"
+
+  it("o campo de dia mostra o dia de Brasília, não o de UTC", () => {
+    expect(diaDoCampo(comHora)).toBe("2026-10-31")
+    expect(diaDoCampo("2026-11-01T01:30:00.000Z")).toBe("2026-10-31") // 22:30 em Brasília
+    expect(diaDoCampo("2026-10-31T00:00:00.000Z")).toBe("2026-10-31") // só o dia
+    expect(diaDoCampo(null)).toBe("")
+  })
+
+  it("dia igual: o campo fica fora do PUT e o horário fica", () => {
+    expect(diaComHorarioMantido(comHora, "2026-10-31")).toBeUndefined()
+    expect(diaComHorarioMantido(null, "")).toBeUndefined()
+  })
+
+  it("dia novo leva o mesmo horário; sem horário antes, vai só o dia", () => {
+    expect(diaComHorarioMantido(comHora, "2026-11-02")).toBe("2026-11-02T18:00:00.000Z")
+    expect(diaComHorarioMantido("2026-10-31T00:00:00.000Z", "2026-11-02")).toBe("2026-11-02")
+    expect(diaComHorarioMantido(null, "2026-11-02")).toBe("2026-11-02")
+  })
+
+  it("apagar o dia apaga a data", () => {
+    expect(diaComHorarioMantido(comHora, "")).toBeNull()
   })
 })

@@ -83,6 +83,31 @@ export function deCampoDataHora(valor: string): string | null {
   return new Date(`${valor}:00-03:00`).toISOString()
 }
 
+/**
+ * O dia de uma data da operação para um `<input type="date">`, no fuso de São
+ * Paulo. Cortar o ISO no "T" dava o dia em UTC: a gravação das 22:30 aparecia
+ * no dia seguinte.
+ */
+export function diaDoCampo(valor: Valor): string {
+  return lerMomento(valor)?.dia ?? ""
+}
+
+/**
+ * O que gravar quando um campo de DIA é salvo sobre uma data que pode ter hora
+ * (a captação, que a ficha edita com horário).
+ *
+ * `undefined` quando o dia não mudou: o campo fica fora do PUT e o servidor
+ * guarda o que tinha. Antes o "Editar" geral reenviava sempre só o dia, e
+ * salvar qualquer outra coisa ali apagava o horário marcado na ficha. Dia
+ * novo mantém o horário que já havia.
+ */
+export function diaComHorarioMantido(original: Valor, novoDia: string): string | null | undefined {
+  const antes = lerMomento(original)
+  if ((antes?.dia ?? "") === novoDia) return undefined
+  if (!novoDia) return null
+  return antes?.hora ? deCampoDataHora(`${novoDia}T${antes.hora}`) : novoDia
+}
+
 /** "N/A" e "—" são o que os formulários gravam quando não sabem a cidade. */
 function textoUtil(v: string | null | undefined): string | null {
   const t = v?.trim()
