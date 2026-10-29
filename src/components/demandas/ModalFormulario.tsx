@@ -22,6 +22,8 @@ interface ModalFormularioProps {
   aoConfirmar?: () => void
   /** Conteúdo do botão principal — muda de rótulo enquanto salva/envia anexos. */
   rotuloConfirmar?: React.ReactNode
+  /** O botão de fechar, quando "Cancelar" confundiria (ex.: "Cancelar gravação" ao lado). */
+  rotuloFechar?: string
   ocupado?: boolean
   /** Botão ao lado do principal. O quadro da social usa para "Salvar como ideia". */
   acaoSecundaria?: { rotulo: React.ReactNode; aoClicar: () => void }
@@ -39,7 +41,7 @@ interface ModalFormularioProps {
 
 export function ModalFormulario({
   aberto, titulo, icone: Icone = Plus, aoTentarFechar, aoConfirmar,
-  rotuloConfirmar, ocupado, acaoSecundaria, semConfirmar, semRodape, children, className,
+  rotuloConfirmar, rotuloFechar, ocupado, acaoSecundaria, semConfirmar, semRodape, children, className,
 }: ModalFormularioProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -134,7 +136,7 @@ export function ModalFormulario({
             onClick={aoTentarFechar}
             className="rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-900"
           >
-            {semConfirmar ? "Fechar" : "Cancelar"}
+            {rotuloFechar ?? (semConfirmar ? "Fechar" : "Cancelar")}
           </button>
           {acaoSecundaria && !semConfirmar && (
             <button

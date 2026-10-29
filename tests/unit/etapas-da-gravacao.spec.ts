@@ -10,7 +10,10 @@ import {
   rotuloDoTipoDeGravacao,
   etapaDaGravacao,
   faltaOMaterial,
+  foiCancelada,
   materialChegouAgora,
+  perguntaCobranca,
+  acaoDaGravacao,
   passoDaGravacao,
   situacaoDaNota,
   statusAoSoltar,
@@ -198,5 +201,25 @@ describe("tipo, brinde e o que levar", () => {
     expect(rotuloDoTipoDeGravacao("demonstracao")).toBe("Demonstração")
     expect(ehTipoDeGravacao("evento")).toBe(true)
     expect(ehTipoDeGravacao("treinamento")).toBe(false)
+  })
+})
+
+describe("gravação cancelada", () => {
+  it("é a encerrada sem vídeo entregue; com vídeo, foi entregue", () => {
+    expect(foiCancelada({ statusInterno: "encerrado" })).toBe(true)
+    expect(foiCancelada({ statusInterno: "encerrado", linkFinal: "https://drive/v" })).toBe(false)
+    expect(foiCancelada({ statusInterno: "entregue_cliente" })).toBe(false)
+  })
+  it("pergunta se o videomaker cobra só quando ele confirmou e o material não chegou", () => {
+    expect(perguntaCobranca({ statusInterno: "captacao_agendada" })).toBe(true)
+    expect(perguntaCobranca({ statusInterno: "videomaker_notificado" })).toBe(false)
+    expect(perguntaCobranca({ statusInterno: "brutos_enviados" })).toBe(false)
+  })
+  it("no quadro e na linha do tempo, \"Gravação cancelada\" e não \"Enviado ao cliente\"", () => {
+    const job = { statusInterno: "encerrado" as const, videomakerId: "vm", videomaker: { nome: "João Martins" }, createdAt: "2026-10-20T12:00:00Z" }
+    expect(acaoDaGravacao(job, "2026-10-29")).toBe("Gravação cancelada")
+    const t = trilhaDoVideo(job, "2026-10-29")
+    expect(t.map((p) => p.estado)).toEqual(["feito", "feito", "pulado", "pulado", "pulado", "pulado"])
+    expect(t.at(-1)).toMatchObject({ id: "envio", detalhe: "cancelada" })
   })
 })

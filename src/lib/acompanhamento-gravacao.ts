@@ -88,7 +88,7 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
 
   // Recusado na aprovação: encerrado sem nunca sair da entrada.
   if (g.statusInterno === "encerrado" && g.statusVisivel === "entrada") return { ...base, situacao: "Pedido não aprovado", tom: "alerta", trilha: null }
-  if (g.statusInterno === "encerrado" || g.statusInterno === "expirado") return { ...base, situacao: "Gravação encerrada", tom: "alerta", trilha: null }
+  if (g.statusInterno === "encerrado" || g.statusInterno === "expirado") return { ...base, situacao: "Gravação cancelada", tom: "alerta", trilha: null }
 
   const trilha = trilhaDoVideo(g, hoje).map((p): PassoDaTrilha => {
     // As palavras de dentro viram as de quem acompanha de fora.

@@ -51,6 +51,6 @@ describe("o que quem pediu vê", () => {
   })
   it("recusado ou encerrado: a frase, sem caminho", () => {
     expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "entrada" }), hoje)).toMatchObject({ situacao: "Pedido não aprovado", trilha: null })
-    expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado" }), hoje)).toMatchObject({ situacao: "Gravação encerrada", trilha: null })
+    expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado" }), hoje)).toMatchObject({ situacao: "Gravação cancelada", trilha: null })
   })
 })

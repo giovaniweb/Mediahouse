@@ -21,6 +21,8 @@ export interface MeData {
     categoria: string
     funcaoProfissional: string | null
     areas: string[]
+    /** Opera as Gravações Externas (a Débora): age como a gestão nelas. */
+    operaGravacoes?: boolean
   } | null
   permissoes: Record<string, boolean> & { id: string; usuarioId: string }
   /** Módulos que ESTA empresa tem. Antes eram constantes compiladas no bundle,

@@ -9,6 +9,7 @@ import {
   esperaMaterial,
   etapaDaGravacao,
   faltaOMaterial,
+  foiCancelada,
   linkValido,
   materialCompleto,
   passoDaGravacao,
@@ -213,7 +214,7 @@ export function AgoraDaGravacao({
       break
 
     case "concluido":
-      titulo = job.statusInterno === "encerrado" && !job.linkFinal ? "Encerrado sem entrega" : "Enviado ao cliente"
+      titulo = foiCancelada(job) ? "Gravação cancelada" : "Enviado ao cliente"
       if (job.linkFinal) conteudo = <a className={surface.linkBtn} href={job.linkFinal} target="_blank" rel="noopener noreferrer">Abrir o vídeo <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
       break
   }
@@ -255,6 +256,10 @@ export function EntregasDoVideomaker({ job, podeEditar, onSalvar, onAvancar, onA
   const antesDaGravacao = etapa === "a_agendar" || (esperaMaterial(job) && !faltaOMaterial(job, hojeEmSaoPaulo()))
   const editaEle = job.edicaoPor === "videomaker"
   const nota = situacaoDaNota(job)
+  // Cancelada: não há material a entregar; fica só a nota, se ele cobra o
+  // cancelamento (lib/cancelar-gravacao.ts).
+  const cancelada = foiCancelada(job)
+  if (cancelada && !nota) return null
   const tokenNota = job.notasFiscais?.find((n) => n.token && n.status === "pendente")?.token ?? job.notasFiscais?.find((n) => n.token)?.token
   const linkDaNota = tokenNota ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${tokenNota}` : null
   const arquivo = job.custos?.find((c) => c.notaFiscalUrl)?.notaFiscalUrl ?? job.notasFiscais?.find((n) => n.url)?.url ?? null
@@ -357,7 +362,7 @@ export function EntregasDoVideomaker({ job, podeEditar, onSalvar, onAvancar, onA
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={styles.rotulo}>Entregas do videomaker</span>
         {/* O guia, as referências e a colinha do kit, no WhatsApp dele. */}
-        {podeEditar && (
+        {podeEditar && !cancelada && (
           <button type="button" className={surface.linkBtn} onClick={() => void enviarKit()} disabled={agindo !== null}>
             {agindo === "kit" ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Send className="w-3.5 h-3.5" aria-hidden />}
             Enviar instruções e referências
@@ -365,8 +370,8 @@ export function EntregasDoVideomaker({ job, podeEditar, onSalvar, onAvancar, onA
         )}
       </div>
       <ul className={styles.listaEntregas}>
-        {linhaDeLink("brutos", "Brutos (drive)", job.linkBrutos)}
-        {editaEle
+        {!cancelada && linhaDeLink("brutos", "Brutos (drive)", job.linkBrutos)}
+        {cancelada ? null : editaEle
           ? linhaDeLink("video", "Vídeo pronto", job.linkFinal)
           : (
             <li className={styles.entrega} data-estado="pulado">

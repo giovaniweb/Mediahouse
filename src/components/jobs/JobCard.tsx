@@ -178,7 +178,7 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
       <p className={cn(styles.acao, bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300")}>
         {(bloqueado || cancelado) && <Ban className={cn("w-3.5 h-3.5 shrink-0", bloqueado ? "text-rose-400" : "text-zinc-500")} />}
         {risco === "overdue" && !bloqueado && !cancelado && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-        <span className="truncate">{cancelado ? "Encerrado sem entrega" : acao}</span>
+        <span className="truncate">{cancelado ? "Gravação cancelada" : acao}</span>
       </p>
 
       <div className={card.footer}>

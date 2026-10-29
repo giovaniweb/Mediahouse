@@ -8,6 +8,7 @@ import type { AcaoAuditoria } from "@/lib/auditoria"
 // ações (convites, WhatsApp, alertas) apareciam na tela como código cru.
 const rotulos: Record<AcaoAuditoria, string> = {
   "convite.criar": "Convite enviado", "convite.responder": "Convite respondido", "convite.entregar": "Material entregue pelo convite",
+  "gravacao.cancelar": "Gravação cancelada",
   "demanda.transferir": "Gravação transferida para Demandas",
   "whatsapp.pausar": "Envio de WhatsApp pausado", "whatsapp.retomar": "Envio de WhatsApp retomado", "whatsapp.cancelar": "Envio de WhatsApp cancelado", "whatsapp.retentativa": "Nova tentativa de WhatsApp",
   "alerta.resolver": "Alerta resolvido", "alerta.ignorar": "Alerta ignorado", "alerta.snooze": "Alerta adiado",
