@@ -10,6 +10,7 @@ import { momentoDoJob } from "@/lib/ficha-do-job"
 import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import {
+  mensagemDaNotaEmLote,
   mensagensDoEvento,
   type DadosDoAviso,
   type EventoDaGravacao,
@@ -161,6 +162,29 @@ export async function avisarGravacao(organizacaoId: string, demandaId: string, e
     return n
   } catch (e) {
     console.error("[Avisos de gravação] falhou", { evento, erro: e instanceof Error ? e.message : String(e) })
+    return 0
+  }
+}
+
+/** A nota que cobre várias gravações: um aviso só para a operação, com a lista. */
+export async function avisarNotaEmLote(organizacaoId: string, demandaIds: string[], autorUsuarioId?: string | null) {
+  try {
+    const n = await comOrg(organizacaoId, () => prisma.$transaction(async (tx) => {
+      const g = await dadosDaGravacao(tx, organizacaoId, demandaIds[0])
+      if (!g) return 0
+      const lista = await tx.demanda.findMany({ where: { id: { in: demandaIds }, organizacaoId }, select: { codigo: true, titulo: true, clienteFinalNome: true } })
+      const nome = g.videomaker?.nome?.trim().split(/\s+/)[0] ?? "O videomaker"
+      return enfileirarAvisos(tx, {
+        organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId,
+        mensagens: mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`)),
+      })
+    }))
+    if (n > 0) {
+      try { after(async () => { await processarSaidas(organizacaoId).catch(() => undefined) }) } catch { /* o consumidor da fila retoma */ }
+    }
+    return n
+  } catch (e) {
+    console.error("[Avisos de gravação] nota em lote falhou", { erro: e instanceof Error ? e.message : String(e) })
     return 0
   }
 }
