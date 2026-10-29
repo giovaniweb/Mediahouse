@@ -52,6 +52,8 @@ const criarDemandaSchema = z.object({
   objetivo: z.string().optional(),
   plataforma: z.string().optional(),
   dataEvento: z.string().optional(),
+  // A gravação marcada no "+ Novo Job" (o mesmo momento de dataEvento).
+  dataCaptacao: z.string().optional(),
   localEvento: z.string().optional(),
   // Gravação externa: quem edita, combinado ao pedir ou ao agendar.
   edicaoPor: z.enum(["videomaker", "equipe", "sem_edicao"]).optional(),
@@ -490,6 +492,7 @@ export async function POST(req: NextRequest) {
       objetivo: data.objetivo,
       plataforma: data.plataforma,
       dataEvento: data.dataEvento ? new Date(data.dataEvento) : undefined,
+      dataCaptacao: data.dataCaptacao ? new Date(data.dataCaptacao) : undefined,
       localEvento: data.localEvento,
       cobertura: data.cobertura,
       publico: data.publico,
@@ -497,6 +500,11 @@ export async function POST(req: NextRequest) {
       referencia: data.referencia,
       localGravacao: data.localGravacao,
       edicaoPor: data.edicaoPor,
+      // O schema sempre aceitou o cliente final, mas o create não gravava: o
+      // formulário de cobertura mandava o nome e o card nascia sem ele.
+      clienteFinalNome: data.clienteFinalNome?.trim() || undefined,
+      clienteFinalTelefone: data.clienteFinalTelefone?.trim() || undefined,
+      clienteFinalEmail: data.clienteFinalEmail?.trim() || undefined,
       // Novos campos
       videomakerId: videomakerIdResolvido,
       // O seletor de equipe devolve token unificado (ed:/vm:/user:), igual ao da

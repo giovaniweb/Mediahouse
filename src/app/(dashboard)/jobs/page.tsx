@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { Header } from "@/components/layout/Header"
 import { JobsQuadro } from "@/components/jobs/JobsQuadro"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
-import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
+import FormularioGravacao from "@/components/gravacao/FormularioGravacao"
 import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { useMe } from "@/hooks/usePermissoes"
 import { movimentoDoJob } from "@/lib/jobs-quadro"
@@ -186,7 +186,7 @@ function Quadro() {
   return (
     <>
       {/* "+ Nova gravação" no mesmo lugar e desenho do "+ Nova Demanda" de /demandas.
-          O formulário é o mesmo, já em Cobertura / Entrega. */}
+          O formulário é o do pedido de gravação, com os campos de dentro. */}
       <Header
         title="Gravações Externas"
         actions={
@@ -257,13 +257,11 @@ function Quadro() {
         </div>
       )}
       <DemandaModal demandaId={aberto} onClose={() => { setAberto(null); void mutate() }} />
-      <NovaDemandaModal
-        open={novoJob}
-        onClose={() => setNovoJob(false)}
-        // Aprovado, o card aparece no quadro na hora. Pendente só depois de
-        // Aprovações — o aviso de onde ele está sai do próprio formulário.
-        job={{ aoCriar: () => void mutate() }}
-      />
+      {/* Aprovado, o card aparece no quadro na hora. Pendente só depois de
+          Aprovações — o aviso de onde ele está sai do próprio formulário. */}
+      {novoJob && (
+        <FormularioGravacao interno={{ aoFechar: () => setNovoJob(false), aoCriar: () => void mutate() }} />
+      )}
     </>
   )
 }

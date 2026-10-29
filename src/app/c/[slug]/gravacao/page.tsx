@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { empresaDoPortal } from "@/lib/portal"
-import FormularioGravacao from "@/components/publico/FormularioGravacao"
+import FormularioGravacao from "@/components/gravacao/FormularioGravacao"
 
 // "Quero um videomaker": pedido de gravação, curto, dentro da área da empresa.
 type Props = { params: Promise<{ slug: string }> }
