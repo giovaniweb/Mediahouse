@@ -1,0 +1,35 @@
+/* A ficha do Job: as quatro perguntas do dia da gravação, em grade. Mesma
+   superfície do jobContext que ela substitui (DemandSurface.module.css). */
+.ficha { display:flex; flex-direction:column; gap:18px; padding:22px; border:1px solid #303342; border-radius:14px; background:#191b23; }
+.grade { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:22px 28px; }
+.campo { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.rotulo { display:inline-flex; align-items:center; gap:6px; color:#a2a5b9; font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+.rotulo svg { width:14px; height:14px; color:#8d8ca3; }
+/* Inline: dentro do InlineEdit o lápis vem logo depois do valor; em bloco ele
+   caía numa linha vazia embaixo. Fora dele, o item do flex já vira bloco. */
+.valor { display:inline; color:#f1f0f8; font-size:17px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
+.falta { display:inline; color:#f6d9a6; font-size:16px; font-weight:600; line-height:1.35; }
+.vazio { display:inline; color:#6f7084; font-size:15px; font-weight:500; }
+/* O campo editável (InlineEdit) em linha: o lápis fica ao lado do valor e não
+   quebra para baixo quando o endereço ocupa a largura toda. */
+.campo > [role="button"] { display:flex; align-items:baseline; gap:2px; min-width:0; }
+.campo > [role="button"] > svg { flex-shrink:0; }
+.detalhe { color:#a2a5b9; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.detalhe a { color:#c7b6f5; text-decoration:underline; text-underline-offset:3px; text-decoration-color:#c7b6f566; }
+.detalhe a:hover { color:#ece6ff; }
+.detalhe a svg { display:inline; width:12px; height:12px; margin-left:2px; vertical-align:-1px; }
+.situacao[data-tom="ok"] { color:#86d9a8; }
+.situacao[data-tom="espera"] { color:#f0c27a; }
+.situacao[data-tom="alerta"] { color:#f6d9a6; }
+.acao { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; margin-top:4px; padding:7px 14px; border:1px solid #b398ff66; border-radius:20px; background:#b398ff1a; color:#ece6ff; font-size:13px; font-weight:500; }
+.acao:hover { background:#b398ff2e; }
+.acao:focus-visible { outline:2px solid #c7b6f5; outline-offset:3px; }
+.acao svg { width:14px; height:14px; }
+.levar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:14px; border-top:1px solid #303342; color:#e6e4f0; font-size:14px; }
+.levar svg { width:15px; height:15px; color:#8d8ca3; }
+.levar > span { color:#a2a5b9; }
+.rodape { display:flex; flex-wrap:wrap; gap:6px 20px; padding-top:14px; border-top:1px solid #303342; color:#a2a5b9; font-size:13px; }
+@media (max-width:520px) {
+  .ficha { padding:16px; }
+  .grade { grid-template-columns:minmax(0,1fr); gap:18px; }
+}

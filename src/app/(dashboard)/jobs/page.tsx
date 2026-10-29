@@ -13,7 +13,8 @@ import { movimentoDoJob } from "@/lib/jobs-quadro"
 import type { MapaPermissoes } from "@/lib/permissoes"
 import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
-import { dataCalendario, ehHoje } from "@/lib/datas"
+import { hojeEmSaoPaulo } from "@/lib/datas"
+import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { COLUNAS_LABEL, estaAtrasada } from "@/lib/status"
 import { foiAprovada, proximaAcao, responsavelAtual } from "@/lib/job-fase"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
@@ -97,6 +98,7 @@ function Quadro() {
   const editores = edResp?.editores ?? []
 
   const todos = useMemo(() => data?.demandas ?? [], [data])
+  const hoje = hojeEmSaoPaulo()
 
   // As opções de região saem dos próprios jobs: sem cadastro paralelo, e a
   // lista nunca oferece um filtro que não devolveria nada. Não há filtro de
@@ -110,18 +112,18 @@ function Quadro() {
     // O portão: fora as que ainda esperam decisão e as recusadas. Sem isto, a
     // caixa de entrada de Aprovações vazaria para dentro do quadro de operação.
     let lista = todos.filter(foiAprovada)
-    // "Hoje" é a captação de hoje — a pergunta é "o que acontece hoje", não
-    // "o que vence hoje". Quem quer prazo usa Atrasados.
-    if (aba === "hoje") lista = lista.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao))
+    // "Hoje" é a gravação de hoje — a pergunta é "o que acontece hoje", não
+    // "o que vence hoje". Quem quer prazo usa Atrasados. O dia é o da ficha do
+    // Job (captação, ou o evento do pedido público), no fuso de São Paulo.
+    if (aba === "hoje") lista = lista.filter((j) => momentoDoJob(j)?.dia === hoje)
     if (regiao) lista = lista.filter((j) => j.cidade === regiao)
     const { de, ate } = lerPeriodo(captacao)
     if (de || ate) lista = lista.filter((j) => {
-      // Mesmo dia de calendário que a aba "Hoje" usa (ehHoje).
-      const dia = j.dataCaptacao ? dataCalendario(j.dataCaptacao) : null
+      const dia = momentoDoJob(j)?.dia
       return !!dia && (!de || dia >= de) && (!ate || dia <= ate)
     })
     return lista
-  }, [todos, aba, regiao, captacao])
+  }, [todos, aba, regiao, captacao, hoje])
 
   const atrasados = jobs.filter(estaAtrasada).length
 
@@ -171,7 +173,12 @@ function Quadro() {
     ...editores.map((e) => ({ papel: "ed" as const, id: e.id, nome: e.nome, funcao: "Editor" })),
   ])
 
-  const captacoesHoje = jobs.filter((j) => j.dataCaptacao && ehHoje(j.dataCaptacao)).length
+  const captacoesHoje = jobs.filter((j) => momentoDoJob(j)?.dia === hoje).length
+  // Na lista: quando é e quem vai, as duas perguntas do dia da gravação.
+  const quandoEQuem = (j: JobDoQuadro) => {
+    const m = momentoDoJob(j)
+    return [m ? rotuloDoMomento(m) : "Sem data", j.videomaker?.nome ?? "sem videomaker"].join(" · ")
+  }
   const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
 
   return (
@@ -238,7 +245,7 @@ function Quadro() {
       ) : error && !data ? null : view === "list" ? (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
           <section className={styles.list} aria-label="Lista de Jobs">
-            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
+            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<p>{quandoEQuem(job)}</p><span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
             {jobs.length === 0 && <p>Nenhum job com os filtros selecionados.</p>}
           </section>
         </div>

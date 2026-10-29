@@ -42,6 +42,8 @@ import {
 import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
+import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -426,6 +428,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const souOVideomakerDoJob =
     !!meVM?.videomaker && !!demanda?.videomaker && meVM.videomaker.id === demanda.videomaker.id
 
+  // "Mover para Demandas": o caminho de volta, aberto pelo botão do topo.
+  const [moverAberto, setMoverAberto] = useState(false)
+  function abrirMoverParaDemandas() {
+    setDetailTab("pedido")
+    setMoverAberto(true)
+  }
+
   async function converterEmJob() {
     if (!demanda) return
     setConvertendo(true)
@@ -470,7 +479,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     setDescricao(demanda.descricao ?? "")
     setCidade(demanda.cidade ?? "")
     setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-    setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+    setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
     setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
     setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
     setLinkBrutos(demanda.linkBrutos ?? "")
@@ -493,7 +502,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           // só criava a chance de reenviar um valor velho — ou vazio.
           cidade,
           dataLimite: dataLimite || null,
-          dataCaptacao: dataCaptacao || null,
+          // Só o dia, e só se mudou: a captação pode ter horário (ficha da
+          // gravação), e reenviar o dia apagava a hora (lib/ficha-do-job.ts).
+          dataCaptacao: diaComHorarioMantido(demanda?.dataCaptacao, dataCaptacao),
           videomakerId: videomakerId || null,
           editorId: editorId || null,
           linkBrutos: linkBrutos || null,
@@ -552,7 +563,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       setDescricao(demanda.descricao ?? "")
       setCidade(demanda.cidade ?? "")
       setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-      setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+      setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
       setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
       setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
       setLinkBrutos(demanda.linkBrutos ?? "")
@@ -1139,6 +1150,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em Job"}
             </button>
           )}
+          {/* O caminho de volta, no mesmo lugar do "Converter em Job": o Job
+              criado ou aprovado por engano vai para Demandas. Abre a prévia no
+              topo do Pedido, com o bloqueio (videomaker, convite aceito, custo)
+              antes do clique. Decidir a esteira é de gestão. */}
+          {podeGerenciar && ehCobertura && (
+            <button
+              onClick={abrirMoverParaDemandas}
+              title="Este card não é uma gravação externa? Ele vai para o quadro de Demandas. O registro é o mesmo."
+              className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" /> Mover para Demandas
+            </button>
+          )}
           {podeEditar && (
             <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
               <Pencil className="w-3.5 h-3.5" /> Editar
@@ -1315,38 +1339,43 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
               só pintada. */}
           {ehCobertura && (
-            <section aria-label="Operação do Job" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3", surface.jobContext)}>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Etapa </span>
-                  {COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}
-                </span>
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Responsável atual </span>
-                  {responsavelDoJob.nome ?? responsavelDoJob.papel}
-                  {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
-                </span>
-              </div>
-
-              {/* As ações objetivas do videomaker (§13). O componente decide
-                  sozinho o que cabe no estado atual, e some quando a bola não
-                  é dele — quem não é o videomaker do job não vê nada. */}
-              {souOVideomakerDoJob && (
-                <AcoesVideomaker
-                  jobId={demanda.id}
-                  statusInterno={demanda.statusInterno}
-                  captacaoIniciada={captacaoIniciada(demanda.historicos)}
-                  onExecutado={() => mutate()}
-                />
-              )}
-
-              {/* O caminho de volta: Job criado por engano → Demandas
-                  (audiovisual). Reclassificar é raro e de gestão, por isso fica
-                  discreto e no fim; o componente some para quem não é admin ou
-                  gestor e mostra o bloqueio (videomaker, convite aceito, custo)
-                  antes do clique. */}
-              <TransferirParaDemandas jobId={demanda.id} codigo={demanda.codigo} />
-            </section>
+            <>
+              <TransferirParaDemandas
+                jobId={demanda.id}
+                codigo={demanda.codigo}
+                aberto={moverAberto}
+                onFechar={() => setMoverAberto(false)}
+              />
+              {/* A ficha da gravação: quando, onde, quem vai e para quem, antes
+                  do briefing — é o que decide o dia de alguém. Etapa e de quem é
+                  a vez ficam no rodapé (§32: a etapa escrita, não só pintada). */}
+              <FichaDoJob
+                job={demanda}
+                podeEditar={podeEditar}
+                onSalvar={salvarCampo}
+                onEscalar={() => irParaAcao("equipe")}
+                rodape={<>
+                  <span><span className="text-zinc-600">Etapa </span>{COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}</span>
+                  <span>
+                    <span className="text-zinc-600">Vez de </span>
+                    {responsavelDoJob.nome ?? responsavelDoJob.papel}
+                    {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
+                  </span>
+                </>}
+              >
+                {/* As ações objetivas do videomaker (§13). O componente decide
+                    sozinho o que cabe no estado atual, e some quando a bola não
+                    é dele — quem não é o videomaker do job não vê nada. */}
+                {souOVideomakerDoJob && (
+                  <AcoesVideomaker
+                    jobId={demanda.id}
+                    statusInterno={demanda.statusInterno}
+                    captacaoIniciada={captacaoIniciada(demanda.historicos)}
+                    onExecutado={() => mutate()}
+                  />
+                )}
+              </FichaDoJob>
+            </>
           )}
 
           {isGrowth ? (
@@ -1429,19 +1458,25 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
-          {/* ── Banner: Demanda externa aguardando aprovação interna ─────── */}
+          {/* ── Banner: pedido aguardando aprovação ─────────────────────────
+              Diz o que foi pedido — Job (videomaker externo) ou Demanda — e
+              para que quadro a aprovação leva, para ninguém aprovar no escuro.
+              Desde 28/10/2026 só pedido de fora chega aqui; "via formulário
+              público" saiu porque o pedido antigo, feito por dentro, também
+              aparecia com essa frase. */}
           {demanda.statusInterno === "aguardando_aprovacao_interna" && !editMode && (
             <div className={surface.notice}>
               <p>
                 <Inbox aria-hidden />
-                Demanda externa aguardando aprovação
+                {ehCobertura ? "Pedido de videomaker (Job) aguardando aprovação" : "Demanda aguardando aprovação"}
               </p>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Enviada por{" "}
+                Pedida por{" "}
                 <strong className="text-zinc-300">
-                  {demanda.solicitante?.nome ?? "solicitante externo"}
-                </strong>{" "}
-                via formulário público. Revise os dados e aprove para entrar na fila de produção, ou recuse com um motivo.
+                  {demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "solicitante externo"}
+                </strong>
+                . Aprovar leva para o quadro de {ehCobertura ? "Jobs" : "Demandas"}. Se está no lugar errado, use{" "}
+                {ehCobertura ? "“Mover para Demandas”" : "“Converter em Job”"} no topo antes de aprovar. Ou recuse com um motivo.
               </p>
               {recusando && (
                 <textarea
@@ -1461,7 +1496,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       disabled={aprovandoDemanda}
                       className={surface.btnPrimary}
                     >
-                      <CheckCircle2 className="w-4 h-4" aria-hidden /> Aprovar demanda
+                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar job" : "Aprovar demanda"}
                     </button>
                     <button
                       type="button"
@@ -2234,11 +2269,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> {copy.dateCaptureLabel}</span>
                 <InlineEdit
-                  value={demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : ""}
+                  value={diaDoCampo(demanda.dataCaptacao)}
                   canEdit={podeEditar}
                   tipo="date"
                   placeholder="—"
-                  onSave={(v) => salvarCampo({ dataCaptacao: v || null })}
+                  onSave={async (v) => {
+                    const novo = diaComHorarioMantido(demanda.dataCaptacao, v)
+                    if (novo !== undefined) await salvarCampo({ dataCaptacao: novo })
+                  }}
                   display={demanda.dataCaptacao
                     ? <span className="font-medium text-zinc-200">{formatarData(demanda.dataCaptacao)}</span>
                     : <span className="text-zinc-600 text-xs">—</span>}

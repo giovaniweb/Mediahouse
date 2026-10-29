@@ -16,7 +16,7 @@ interface BaseProps {
   placeholder?: string
 }
 
-interface TextProps extends BaseProps { tipo?: "text" | "textarea" | "date" | "number"; options?: never }
+interface TextProps extends BaseProps { tipo?: "text" | "textarea" | "date" | "datetime-local" | "number"; options?: never }
 interface SelectProps extends BaseProps { tipo: "select"; options: { value: string; label: string }[] }
 type Props = TextProps | SelectProps
 
@@ -154,7 +154,7 @@ export function InlineEdit(props: Props) {
     return (
       <span className="block w-full">
         <span className="inline-flex items-center w-full">
-          <input ref={ref as React.RefObject<HTMLInputElement>} type={tipo === "date" ? "date" : tipo === "number" ? "number" : "text"} value={val} disabled={estado === "saving"}
+          <input ref={ref as React.RefObject<HTMLInputElement>} type={tipo === "date" || tipo === "datetime-local" || tipo === "number" ? tipo : "text"} value={val} disabled={estado === "saving"}
             aria-invalid={!!erro}
             onChange={(e) => { setVal(e.target.value); setErro(null); recusado.current = null }}
             onBlur={() => salvar(val)}

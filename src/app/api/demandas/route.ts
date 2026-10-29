@@ -25,7 +25,7 @@ import { whereDoQuadro } from "@/lib/quadro-do-card-server"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
-import { podeAprovar, statusAoAprovar } from "@/lib/quem-aprova"
+import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -92,8 +92,8 @@ const criarDemandaSchema = z.object({
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
   // Pedido feito pelo quadro da social (/social): a ideia que vira esta demanda.
   ideiaId: z.string().optional(),
-  // "+ Novo Job" de /jobs: quem pode aprovar já cria aprovado. De quem não pode,
-  // o pedido entra na fila de Aprovações como qualquer outro.
+  // Aceito e ignorado: desde 28/10/2026 quem decide se o pedido nasce aprovado
+  // é quem cria (lib/quem-aprova.ts), não a tela que mandou.
   aprovarAoCriar: z.boolean().optional(),
 })
 
@@ -377,14 +377,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // O portão de aprovação é universal, menos para quem decide a fila: o pedido
-  // de quem pode aprovar, feito pelo "+ Novo Job", já nasce aprovado. Aprovar o
-  // próprio pedido em outra tela seria só um clique a mais.
+  // Pedido de quem está logado e é da casa nasce aprovado; Aprovações fica com o
+  // que chega de fora. Urgência de quem não decide a fila ainda passa por lá
+  // (regra em lib/quem-aprova.ts).
   const urgente = data.prioridade === "urgente"
-  const jaAprovada = !!data.aprovarAoCriar && await podeAprovar(session, organizacaoId)
-  const statusInterno = jaAprovada
-    ? statusAoAprovar(urgente)
-    : urgente ? "urgencia_pendente_aprovacao" : "aguardando_aprovacao_interna"
+  const entrada = await entradaDoPedidoInterno({ usuarioId: session.user.id, gestor: ehGestor(session) }, organizacaoId, urgente)
+  const jaAprovada = entrada.aprovado
+  const statusInterno = entrada.statusInterno
 
   const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
   const peso = calcularPeso(data.tipoVideo, data.prioridade as Prioridade)
@@ -473,8 +472,10 @@ export async function POST(req: NextRequest) {
       statusVisivel,
       pesoDemanda: peso,
       solicitanteId: session.user.id,
-      // Quem aprovou — o mesmo campo que api/demandas/[id]/aprovar preenche.
-      ...(jaAprovada && { gestorId: session.user.id }),
+      // Quem aprovou — o mesmo campo que api/demandas/[id]/aprovar preenche. Só
+      // quando quem criou decide a fila: entrar aprovado por ser da casa não faz
+      // de ninguém o gestor do pedido.
+      ...(jaAprovada && entrada.porQuemDecide && { gestorId: session.user.id }),
       dataLimite: data.dataLimite ? new Date(data.dataLimite) : undefined,
       campanha: data.campanha,
       objetivo: data.objetivo,
@@ -598,7 +599,9 @@ export async function POST(req: NextRequest) {
       statusNovo: statusInterno,
       usuarioId: session.user.id,
       origem: "manual",
-      observacao: jaAprovada ? "Demanda criada e aprovada por quem pediu" : "Demanda criada",
+      observacao: !jaAprovada ? "Demanda criada"
+        : entrada.porQuemDecide ? "Demanda criada e aprovada por quem pediu"
+        : "Demanda criada pela equipe — entra sem passar por Aprovações",
     },
   })
 
