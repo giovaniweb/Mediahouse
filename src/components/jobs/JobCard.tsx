@@ -38,6 +38,10 @@ export type JobDoQuadro = JobParaLeitura & JobArrastado & Pick<PagamentoDoCard, 
   dataEvento?: string | Date | null
   /** Quem edita, combinado ao escalar (lib/etapas-da-gravacao.ts). */
   edicaoPor?: string | null
+  /** Entrega de equipamento, demonstração, conteúdo ou evento. */
+  tipoGravacao?: string | null
+  /** Quando foi para finalizado (o painel conta o mês por ela). */
+  finalizadaEm?: string | Date | null
   dataLimite?: string | Date | null
   statusVisivel?: string | null
   prioridade?: string | null

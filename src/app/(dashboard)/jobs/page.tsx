@@ -22,8 +22,9 @@ import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { LayoutGrid, List, ChevronRight, Plus, BookOpen } from "lucide-react"
+import { LayoutGrid, List, ChevronRight, Plus, BookOpen, BarChart3 } from "lucide-react"
 import { KitDoVideomaker } from "@/components/jobs/KitDoVideomaker"
+import { PainelDasGravacoes } from "@/components/jobs/PainelDasGravacoes"
 
 // Quadro operacional de Gravações Externas (antes "Jobs"; o endereço continua
 // /jobs para não quebrar link salvo).
@@ -69,7 +70,7 @@ function Quadro() {
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
   const [kitAberto, setKitAberto] = useState(false)
-  const [view, setView] = useState<"kanban" | "list">("kanban")
+  const [view, setView] = useState<"kanban" | "list" | "painel">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
   const [pessoa, setPessoa] = useState("")
@@ -213,6 +214,8 @@ function Quadro() {
             <div className={topo.tabs} aria-label="Visualização das gravações">
               <button type="button" aria-label="Ver como kanban" aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><LayoutGrid size={16} />Kanban</button>
               <button type="button" aria-label="Ver como lista" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16} />Lista</button>
+              {/* O painel conta sobre esta mesma lista, com os mesmos filtros. */}
+              <button type="button" aria-label="Ver o painel" aria-pressed={view === "painel"} onClick={() => setView("painel")}><BarChart3 size={16} />Painel</button>
             </div>
             <div className={topo.counts} aria-label="Resumo das gravações filtradas">
               <span><strong>{jobs.length}</strong> {contagem(jobs.length, "gravação", "gravações")}</span>
@@ -252,7 +255,11 @@ function Quadro() {
           rolagem horizontal fica no rodapé. A lista rola com a página. */}
       {isLoading && todos.length === 0 ? (
         <p className="text-sm text-zinc-500 px-6 py-8">Carregando…</p>
-      ) : error && !data ? null : view === "list" ? (
+      ) : error && !data ? null : view === "painel" ? (
+        <div className="flex-1 min-h-0 pb-6 overflow-y-auto">
+          <PainelDasGravacoes gravacoes={jobs} carregando={isLoading && todos.length === 0} onAbrir={abrir} onVerQuadro={() => setView("kanban")} />
+        </div>
+      ) : view === "list" ? (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
           <section className={styles.list} aria-label="Lista de gravações">
             {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<p>{quandoEQuem(job)}</p><span>{acaoDaGravacao(job, hoje)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
