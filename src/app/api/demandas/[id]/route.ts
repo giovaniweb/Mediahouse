@@ -22,12 +22,14 @@ import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
 import { selectContrato } from "@/lib/quadro-do-card-server"
 import { podeAprovarEntrega } from "@/lib/quem-aprova"
 import { ehGestor } from "@/lib/papel"
+import { demandaNoEscopo } from "@/lib/escopo-demanda"
 
 type Params = { params: Promise<{ id: string }> }
 
-// Garante que a demanda pertence à org da sessão (404 se não). Retorna a org ativa
-// e o prazo já gravado — usado para não barrar a edição de uma demanda antiga cujo
-// prazo continua o mesmo (a regra "prazo >= hoje" vale para o que muda agora).
+// Garante que a demanda pertence à org da sessão e está no escopo da pessoa
+// (404 se não). Retorna a org ativa e o prazo já gravado — usado para não barrar
+// a edição de uma demanda antiga cujo prazo continua o mesmo (a regra "prazo >=
+// hoje" vale para o que muda agora).
 async function assertDemandaOrg(
   session: Session | null,
   id: string
@@ -39,6 +41,9 @@ async function assertDemandaOrg(
     select: { organizacaoId: true, dataLimite: true },
   })
   if (!pertenceAOrg(dem, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  if (!session?.user?.id || !(await demandaNoEscopo(session.user.id, organizacaoId, ehGestor(session), id))) {
+    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
   return { organizacaoId, dataLimiteAtual: dem?.dataLimite ?? null }
 }
 
@@ -51,6 +56,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // `assertDemandaOrg` — editar briefing e excluir o card são da dona.
   const acesso = await requireDemandaAcesso(session, id, "acompanhar")
   if (acesso instanceof NextResponse) return acesso
+  // A empresa pode ver o card; a pessoa, só se ele estiver no escopo dela.
+  if (!(await demandaNoEscopo(session.user.id, acesso.organizacaoId, ehGestor(session), id))) {
+    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
@@ -620,6 +629,14 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  // Excluir é da gestão ou de quem tem `excluirDemanda` — a mesma regra que a
+  // ficha usa para mostrar o botão. Antes bastava ser da empresa: o ícone de
+  // lixeira do quadro apagava o card de qualquer um.
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel) && !acesso.permissoes.excluirDemanda) {
+    return NextResponse.json({ error: "Sem permissão para excluir demandas" }, { status: 403 })
+  }
 
   await prisma.demanda.delete({ where: { id } })
 
