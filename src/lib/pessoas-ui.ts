@@ -14,6 +14,8 @@ export interface PessoaLista {
   telefone?: string | null
   avatarUrl?: string | null
   tipo: string
+  /** `UsuarioOrganizacao.papel` — o acesso nesta empresa. `tipo` é o legado global. */
+  papel?: string | null
   status: string
   createdAt: string
   categoria?: string | null
@@ -54,16 +56,27 @@ export const VINCULO_COR: Record<Vinculo, string> = {
   sistema: "bg-zinc-500/10 text-zinc-400 border-zinc-700",
 }
 
+// ─── Papel ───────────────────────────────────────────────────────────────────
+// O acesso nesta empresa. Editar e promover gravam só o `papel`; o `tipo` é a
+// coluna global antiga e fica com o valor de antes. Lendo o `tipo`, a tabela
+// mostrava Nível e Acesso de antes da troca, embora a permissão já fosse outra.
+// O `tipo` só entra quando a resposta não traz o `papel`.
+
+export function papelDe(p: Pick<PessoaLista, "papel" | "tipo">): string {
+  return p.papel ?? p.tipo
+}
+
 // ─── Nível ───────────────────────────────────────────────────────────────────
 // Quanta autoridade a pessoa tem, em quatro degraus. Vem do papel na
 // organização — não é um campo que alguém preenche à mão e esquece.
 
 export type Nivel = "supervisor" | "lider" | "executor" | "solicitante"
 
-export function nivelDe(p: Pick<PessoaLista, "tipo" | "liderAudiovisual">): Nivel {
-  if (p.tipo === "admin") return "supervisor"
-  if (p.tipo === "gestor" || p.liderAudiovisual) return "lider"
-  if (p.tipo === "solicitante") return "solicitante"
+export function nivelDe(p: Pick<PessoaLista, "papel" | "tipo" | "liderAudiovisual">): Nivel {
+  const papel = papelDe(p)
+  if (papel === "admin") return "supervisor"
+  if (papel === "gestor" || p.liderAudiovisual) return "lider"
+  if (papel === "solicitante") return "solicitante"
   return "executor"
 }
 
@@ -90,11 +103,12 @@ export const NIVEIS: Nivel[] = ["supervisor", "lider", "executor", "solicitante"
 export type PerfilAcesso =
   | "administrador" | "gestor" | "lider" | "executor" | "executor_ext" | "solicitante"
 
-export function perfilDe(p: Pick<PessoaLista, "tipo" | "categoria" | "liderAudiovisual">): PerfilAcesso {
-  if (p.tipo === "admin") return "administrador"
-  if (p.tipo === "gestor") return "gestor"
+export function perfilDe(p: Pick<PessoaLista, "papel" | "tipo" | "categoria" | "liderAudiovisual">): PerfilAcesso {
+  const papel = papelDe(p)
+  if (papel === "admin") return "administrador"
+  if (papel === "gestor") return "gestor"
   if (p.liderAudiovisual) return "lider"
-  if (p.tipo === "solicitante") return "solicitante"
+  if (papel === "solicitante") return "solicitante"
   if (vinculoDe(p) === "externo") return "executor_ext"
   return "executor"
 }
@@ -151,13 +165,16 @@ export const AREA_ACENTO: Record<string, string> = {
 }
 
 // ─── Função profissional ─────────────────────────────────────────────────────
+// Um nome por chave, e o mesmo para papel e função: os dois usam as mesmas
+// chaves, e quando cada tela tinha o seu dicionário a chave `editor` aparecia
+// como "Editor" no cadastro, "Videomaker Int" no papel e "Videomaker" na tabela.
 
 export const FUNCAO_LABEL: Record<string, string> = {
   social: "Social Media", designer: "Designer", analista_crm: "Analista CRM",
-  gestor_trafego: "Gestor de Tráfego", videomaker: "Videomaker", editor: "Videomaker",
+  gestor_trafego: "Gestor de Tráfego", videomaker: "Videomaker Externo", editor: "Videomaker Interno",
   fotografo: "Fotógrafo", atendimento: "Atendimento", copywriter: "Copywriter",
   produtor: "Produtor", coordenador: "Coordenador", gestor: "Gestor",
-  admin: "Supervisor", operacao: "Operação", auxiliar_admin: "Auxiliar Admin",
+  admin: "Admin", operacao: "Operação", auxiliar_admin: "Auxiliar Admin",
   gestor_eventos: "Gestor de Eventos", solicitante: "Solicitante", outro: "Outro",
 }
 

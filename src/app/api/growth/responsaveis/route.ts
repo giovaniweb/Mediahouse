@@ -3,20 +3,12 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import type { AreaAtuacao } from "@prisma/client"
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 // Rótulo amigável da função profissional (fallback ao tipo legado do usuário).
-const LABEL_FUNCAO: Record<string, string> = {
-  social: "Social Media", designer: "Designer", analista_crm: "Analista CRM",
-  gestor_trafego: "Gestor de Tráfego", gestor: "Gestor", admin: "Admin",
-  operacao: "Operação", auxiliar_admin: "Auxiliar Administrativo",
-  videomaker: "Videomaker", editor: "Editor", fotografo: "Fotógrafo",
-  copywriter: "Copywriter", produtor: "Produtor", coordenador: "Coordenador",
-  atendimento: "Atendimento",
-}
-
 function rotularFuncao(funcao: string | null, tipoLegado: string): string {
   const key = funcao ?? tipoLegado
-  return LABEL_FUNCAO[key] ?? key
+  return FUNCAO_LABEL[key] ?? key
 }
 
 // GET /api/growth/responsaveis?area=growth|audiovisual
