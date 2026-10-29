@@ -334,7 +334,8 @@ export function Sidebar() {
                         )}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
-                        {item.label}
+                        {/* Para quem pede, o Dashboard é a tela dos próprios pedidos. */}
+                        {item.href === "/dashboard" && me?.membership?.papel === "solicitante" ? "Meus Pedidos" : item.label}
                       </Link>
                     )
                     }

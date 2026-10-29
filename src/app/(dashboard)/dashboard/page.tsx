@@ -6,6 +6,7 @@ import useSWR from "swr"
 import { useSession } from "next-auth/react"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
+import { SolicitanteDashboard } from "@/components/dashboard/SolicitanteDashboard"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
@@ -92,6 +93,17 @@ export default function DashboardPage() {
       <>
         <Header title="Meu Painel" />
         <DesignerDashboard />
+      </>
+    )
+  }
+
+  // Quem pede acompanha os próprios pedidos, não os números da empresa. O papel
+  // é o da empresa ativa (a sessão já o traz), não o `tipo` global.
+  if ((session?.user?.papel ?? session?.user?.tipo) === "solicitante") {
+    return (
+      <>
+        <Header title="Meus Pedidos" />
+        <SolicitanteDashboard />
       </>
     )
   }
