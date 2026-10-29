@@ -15,16 +15,17 @@ import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob } from "@/lib/ficha-do-job"
-import { STATUS_PARA_COLUNA, estaAtrasada } from "@/lib/status"
-import { ROTULO_DA_ETAPA, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { ROTULO_DA_ETAPA, etapaDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { pendenciasDasGravacoes, type IdDaPendencia } from "@/lib/pendencias-gravacoes"
+import { cn } from "@/lib/utils"
 import { foiAprovada } from "@/lib/job-fase"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { LayoutGrid, Plus, BookOpen, BarChart3 } from "lucide-react"
+import { Plus, BookOpen } from "lucide-react"
 import { KitDoVideomaker } from "@/components/jobs/KitDoVideomaker"
-import { PainelDasGravacoes } from "@/components/jobs/PainelDasGravacoes"
 
 // Quadro operacional de Gravações Externas (antes "Jobs"; o endereço continua
 // /jobs para não quebrar link salvo).
@@ -43,15 +44,14 @@ import { PainelDasGravacoes } from "@/components/jobs/PainelDasGravacoes"
 // Consome a mesma rota do quadro atual, sem alteração nenhuma nela. Ela já
 // devolve videomaker, editor, designer, responsável, datas e status; tudo o que
 // o card mostra é DERIVADO disso.
+//
+// Só o kanban (29/10/2026: a Lista saiu do sistema e o painel à parte repetia o
+// quadro). Os recortes do topo são as pendências deste fluxo — sem videomaker,
+// material atrasado, falta a nota… (lib/pendencias-gravacoes.ts) — no lugar de
+// Minhas, Hoje e Atrasadas, que não serviam a ele.
 
-type Aba = "todos" | "meus" | "hoje" | "atrasados"
-
-const ABAS: { id: Aba; label: string }[] = [
-  { id: "todos",     label: "Todas" },
-  { id: "meus",      label: "Minhas" },
-  { id: "hoje",      label: "Hoje" },
-  { id: "atrasados", label: "Atrasadas" },
-]
+// As cores dos números do topo do quadro: vermelho trava, âmbar é despachar.
+const COR_DO_CHIP = { urgente: "#e497ab", atencao: "#edc27b" } as const
 
 export default function JobsPage() {
   // useSearchParams não é usado aqui, mas o Header e os hooks de sessão pedem
@@ -70,9 +70,7 @@ function Quadro() {
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
   const [kitAberto, setKitAberto] = useState(false)
-  // Kanban ou o painel de alertas. A Lista saiu de todo o sistema (Giovani, 29/10/2026).
-  const [view, setView] = useState<"kanban" | "painel">("kanban")
-  const [aba, setAba] = useState<Aba>("todos")
+  const [pendencia, setPendencia] = useState<IdDaPendencia | null>(null)
   const [busca, setBusca] = useState("")
   const [pessoa, setPessoa] = useState("")
   const [regiao, setRegiao] = useState("")
@@ -80,8 +78,6 @@ function Quadro() {
 
   // A origem é fixa: este quadro não é o das demandas gerais.
   const params = new URLSearchParams({ area: "audiovisual", quadro: "jobs" })
-  if (aba === "meus") params.set("mine", "1")
-  if (aba === "atrasados") params.set("atrasadas", "1")
   if (busca.trim()) params.set("search", busca.trim())
   const filtroPessoa = parametroDaPessoa(pessoa)
   if (filtroPessoa) params.set(...filtroPessoa)
@@ -114,14 +110,10 @@ function Quadro() {
     [todos]
   )
 
-  const jobs = useMemo(() => {
+  const base = useMemo(() => {
     // O portão: fora as que ainda esperam decisão e as recusadas. Sem isto, a
     // caixa de entrada de Aprovações vazaria para dentro do quadro de operação.
     let lista = todos.filter(foiAprovada)
-    // "Hoje" é a gravação de hoje — a pergunta é "o que acontece hoje", não
-    // "o que vence hoje". Quem quer prazo usa Atrasados. O dia é o da ficha do
-    // Job (captação, ou o evento do pedido público), no fuso de São Paulo.
-    if (aba === "hoje") lista = lista.filter((j) => momentoDoJob(j)?.dia === hoje)
     if (regiao) lista = lista.filter((j) => j.cidade === regiao)
     const { de, ate } = lerPeriodo(captacao)
     if (de || ate) lista = lista.filter((j) => {
@@ -129,9 +121,19 @@ function Quadro() {
       return !!dia && (!de || dia >= de) && (!ate || dia <= ate)
     })
     return lista
-  }, [todos, aba, regiao, captacao, hoje])
+  }, [todos, regiao, captacao])
 
-  const atrasados = jobs.filter(estaAtrasada).length
+  // Os chips contam sobre o que a busca e o "Filtrar por…" deixaram; chip
+  // zerado não aparece. Clicar filtra o quadro para aquelas gravações — e abre
+  // o Concluído quando elas estão lá (nota e pagamento correm depois da entrega).
+  const pendencias = useMemo(() => pendenciasDasGravacoes(base, hoje).filter((p) => p.itens.length > 0), [base, hoje])
+  const ativa = pendencias.find((p) => p.id === pendencia) ?? null
+  const jobs = useMemo(() => {
+    if (!ativa) return base
+    const ids = new Set(ativa.itens.map((i) => i.id))
+    return base.filter((j) => ids.has(j.id))
+  }, [base, ativa])
+  const abrirConcluido = !!ativa && jobs.some((j) => etapaDaGravacao(j) === "concluido")
 
   // O card abre o Job no painel lateral, com "Ampliar", como em Demandas e no
   // Growth — o mesmo detalhe de /jobs/[id], sem sair do quadro.
@@ -179,11 +181,6 @@ function Quadro() {
     ...editores.map((e) => ({ papel: "ed" as const, id: e.id, nome: e.nome, funcao: "Editor" })),
   ])
 
-  const captacoesHoje = jobs.filter((j) => momentoDoJob(j)?.dia === hoje).length
-  // O painel olha o quadro inteiro: o que está pendente não depende do recorte.
-  const aprovadas = useMemo(() => todos.filter(foiAprovada), [todos])
-  const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
-
   return (
     <>
       {/* "+ Nova gravação" no mesmo lugar e desenho do "+ Nova Demanda" de /demandas.
@@ -203,29 +200,19 @@ function Quadro() {
         }
       />
 
-      {/* Topo do quadro no mesmo desenho do de Demandas (BarraVisao): duas
-          linhas — visão e números; recortes e filtros. O nome da página já
-          está na barra de cima, e o quadro precisa da altura da tela. */}
+      {/* Topo numa linha só, no desenho do de Demandas (BoardOverview): os
+          chips de pendência e, ao lado, a busca e o "Filtrar por…". O nome da
+          página já está na barra de cima, e o quadro precisa da altura da tela. */}
       <div className="px-4 pt-1 pb-3">
         <section className={topo.overview} aria-label="Controles do quadro">
-          <div className={topo.topRow}>
-            <div className={topo.tabs} aria-label="Visualização das gravações">
-              <button type="button" aria-label="Ver como kanban" aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><LayoutGrid size={16} />Kanban</button>
-              <button type="button" aria-label="Ver o painel" aria-pressed={view === "painel"} onClick={() => setView("painel")}><BarChart3 size={16} />Painel</button>
-            </div>
-            {/* No painel, números, recortes e filtros saem: ele conta tudo o que está pendente. */}
-            {view === "kanban" && <div className={topo.counts} aria-label="Resumo das gravações filtradas">
-              <span><strong>{jobs.length}</strong> {contagem(jobs.length, "gravação", "gravações")}</span>
-              <span data-tone="late"><strong>{atrasados}</strong> {contagem(atrasados, "atrasada", "atrasadas")}</span>
-              <span data-tone="approval"><strong>{captacoesHoje}</strong> {contagem(captacoesHoje, "gravação", "gravações")} hoje</span>
-            </div>}
-          </div>
-          {view === "kanban" && <div className={topo.controlsRow}>
-            {/* Recortes principais (§35) */}
-            <div className={topo.scopes} aria-label="Recortes das gravações">
-              {ABAS.map((a) => (
-                <button key={a.id} type="button" aria-pressed={aba === a.id} onClick={() => setAba(a.id)}>
-                  {a.label}{aba === a.id && <span>{jobs.length}</span>}
+          <div className={topo.controlsRow}>
+            <div className={cn(topo.scopes, "max-md:flex-nowrap! max-md:overflow-x-auto max-md:pb-1")} aria-label="Pendências das gravações">
+              <button type="button" aria-label={`Todas: ${base.length}`} aria-pressed={!ativa} onClick={() => setPendencia(null)}>Todas<span>{base.length}</span></button>
+              {pendencias.map((p) => (
+                <button key={p.id} type="button" title={p.acao} aria-label={`${p.titulo}: ${p.itens.length}. ${p.acao}`} aria-pressed={ativa?.id === p.id}
+                  onClick={() => setPendencia(ativa?.id === p.id ? null : p.id)}>
+                  <i aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: COR_DO_CHIP[p.tom] }} />
+                  {p.titulo}<span style={{ color: COR_DO_CHIP[p.tom] }}>{p.itens.length}</span>
                 </button>
               ))}
             </div>
@@ -243,22 +230,18 @@ function Quadro() {
                 ]}
               />
             </div>
-          </div>}
+          </div>
         </section>
       </div>
 
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar as gravações. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {/* Kanban com altura ancorada na viewport, como em Demandas: a barra de
-          rolagem horizontal fica no rodapé. O painel rola com a página. */}
+          rolagem horizontal fica no rodapé. */}
       {isLoading && todos.length === 0 ? (
         <p className="text-sm text-zinc-500 px-6 py-8">Carregando…</p>
-      ) : error && !data ? null : view === "painel" ? (
-        <div className="flex-1 min-h-0 pb-6 overflow-y-auto">
-          <PainelDasGravacoes gravacoes={aprovadas} carregando={isLoading && todos.length === 0} onAbrir={abrir} />
-        </div>
-      ) : (
+      ) : error && !data ? null : (
         <div className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-          <JobsQuadro jobs={jobs} onAbrir={abrir} onMover={mover} />
+          <JobsQuadro jobs={jobs} onAbrir={abrir} onMover={mover} abrirConcluido={abrirConcluido} />
         </div>
       )}
       <DemandaModal demandaId={aberto} onClose={() => { setAberto(null); void mutate() }} />

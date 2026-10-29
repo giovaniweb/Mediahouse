@@ -25,7 +25,7 @@ export type ColunaQuadro = { id: string; label: string; color: string; dot: stri
 
 export function QuadroArrastavel<T>({
   colunas, itensDaColuna, idDe, renderCard, onDragEnd, nome,
-  recolhivel, verTodos, novo, bloqueada, arrastoDesligado = false, aviso, fimDaColuna,
+  recolhivel, abrirRecolhivel = false, verTodos, novo, bloqueada, arrastoDesligado = false, aviso, fimDaColuna,
 }: {
   colunas: ColunaQuadro[]
   /** Os cards de cada coluna, já na ordem em que aparecem. */
@@ -38,6 +38,8 @@ export function QuadroArrastavel<T>({
   nome: { um: string; varios: string; vazio: string }
   /** Coluna que começa recolhida (Concluído). Recolhida, continua recebendo card. */
   recolhivel?: string
+  /** Abre a coluna recolhível por fora (ex.: um filtro que achou cards nela). */
+  abrirRecolhivel?: boolean
   /** "Ver todos →" da coluna recolhível: o histórico daquele quadro. */
   verTodos?: string
   /** "+" no topo de uma coluna. */
@@ -62,7 +64,7 @@ export function QuadroArrastavel<T>({
         {colunas.map((col) => {
           const itens = itensDaColuna(col.id)
           const fechada = bloqueada?.(col.id) ?? false
-          const recolhida = col.id === recolhivel && !recolhivelAberta
+          const recolhida = col.id === recolhivel && !recolhivelAberta && !abrirRecolhivel
           return (
             <section
               key={col.id}
