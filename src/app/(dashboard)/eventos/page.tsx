@@ -1,6 +1,6 @@
 "use client"
 
-import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE } from "@/lib/evento-apresentacao"
+import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE, COLUNAS_EVENTO } from "@/lib/evento-apresentacao"
 
 import { useState, useRef } from "react"
 import useSWR from "swr"
@@ -36,8 +36,7 @@ type DashboardEventos = {
   docsPendentes: number; financeiro: { totalPrevisto: number | null; realizadoInformado: number | null; pagamentosPendentes: number; itensSemRealizado: number } | null
 }
 
-// Kanban de eventos por status (drag nativo)
-const COLUNAS_EVENTO = ["planejamento", "orcamento", "aprovacao", "producao", "execucao", "finalizado"]
+// Kanban de eventos por status (drag nativo); uma coluna para cada status.
 function EventosKanban({ eventos, onMutate }: { eventos: EventoLista[]; onMutate: () => void }) {
   const router = useRouter()
   async function mover(id: string, status: string) {

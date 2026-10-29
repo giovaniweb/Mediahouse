@@ -16,3 +16,9 @@ export const STATUS_EVENTO_STYLE: Record<string, { label: string; cls: string }>
   cancelado: { label: "Cancelado", cls: "bg-red-900/60 text-red-300 border border-red-700/50" },
 }
 
+/**
+ * As colunas do quadro de eventos: uma para cada status, na ordem do caminho.
+ * Sem a Lista (29/10/2026), evento num status sem coluna sumiria da página.
+ */
+export const COLUNAS_EVENTO = Object.keys(STATUS_EVENTO_STYLE)
+
