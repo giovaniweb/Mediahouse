@@ -7,6 +7,7 @@ import { requireDemandaOrg } from "@/lib/org"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import { ehGestor } from "@/lib/papel"
+import { demandaNoEscopo } from "@/lib/escopo-demanda"
 import type { Prioridade } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -21,6 +22,10 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
   const { organizacaoId } = guard
+  // Duplicar copia o briefing: só vale para o card que a pessoa pode abrir.
+  if (!(await demandaNoEscopo(session.user.id, organizacaoId, ehGestor(session), id))) {
+    return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })
+  }
 
   // Busca demanda original com produtos e checklist
   const original = await prisma.demanda.findUnique({

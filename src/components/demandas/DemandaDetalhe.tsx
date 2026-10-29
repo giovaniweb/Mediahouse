@@ -327,7 +327,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const fileRefDoc = useRef<HTMLInputElement>(null)
 
   // ── SWR ───────────────────────────────────────────────────────────────────
-  const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
+  const { data, mutate, error: erroAoAbrir } = useSWR(`/api/demandas/${id}`, fetcher)
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
@@ -1040,6 +1040,26 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       return { type: "video", embedUrl: url }
     }
     return { type: "external", embedUrl: url }
+  }
+
+  // ── Não abriu ─────────────────────────────────────────────────────────────
+  // Card apagado, ou fora do escopo da pessoa: a API responde 404 nos dois casos,
+  // e antes a tela ficava girando para sempre.
+  if (!demanda && erroAoAbrir) {
+    const aviso = <p className="text-sm text-zinc-400">Esta demanda não existe ou não está entre as suas.</p>
+    if (mode === "modal") {
+      return (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-5 py-4">{aviso}</div>
+        </div>
+      )
+    }
+    return (
+      <>
+        <Header title="Demanda não encontrada" />
+        <div className="flex-1 flex items-center justify-center">{aviso}</div>
+      </>
+    )
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────

@@ -12,9 +12,9 @@ import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
 import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
 import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
-import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
+import { escopoDeDemandas, filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { emSegundoPlano } from "@/lib/notificar"
-import { getPermissoes, veNotaDoVideomaker } from "@/lib/permissoes-server"
+import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
@@ -156,18 +156,11 @@ export async function GET(req: NextRequest) {
   }
 
   // Escopo "minhas demandas": explícito via ?mine=1, ou imposto quando a pessoa
-  // NÃO tem `verTodasDemandas`. Essa permissão existia na tela de permissões mas
-  // nunca era lida aqui — a promessa de "só as próprias" não era cumprida.
-  const querSoMinhas = searchParams.get("mine") === "1"
-  let escopoMinhas: Prisma.DemandaWhereInput | null = null
-  if (querSoMinhas) {
-    escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
-  } else if (!ehGestor(session)) {
-    const perm = await getPermissoes(session.user.id, organizacaoId)
-    if (perm && !perm.verTodasDemandas) {
-      escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
-    }
-  }
+  // NÃO tem `verTodasDemandas` — a regra mora em lib/escopo-demanda.ts, a mesma
+  // da ficha, da edição e da exclusão.
+  const escopoMinhas = searchParams.get("mine") === "1"
+    ? await filtroMinhasDemandas(session.user.id, organizacaoId)
+    : await escopoDeDemandas(session.user.id, organizacaoId, ehGestor(session))
 
   // O quadro mostra o que é da empresa E o que ela executa por espelhamento —
   // um card terceirizado que não aparecesse na tela de quem executa seria um job

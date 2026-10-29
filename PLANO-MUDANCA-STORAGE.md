@@ -21,6 +21,22 @@ A primeira versão deste plano esperava semanas de tráfego zero antes de apagar
 o projeto antigo, só para proteger esses links externos. Com a decisão, isso
 sai.
 
+## Estado em 29/10/2026
+
+| etapa | quando | resultado |
+|---|---|---|
+| 1. Código do acervo `legado` | 29/10 01:06 | PR #111 no ar (`3f0ff98`) |
+| 2. Migration dos links | 29/10 04:14 UTC | 83 `linkFinal` e 1 depoimento no formato do app; 0 no projeto antigo |
+| 3. Projeto novo | 29/10 | chave em `~/nuflow-virada/storage-destino.env`; limite global 5000 MB (o primeiro envio de 175 MB deu 413 antes do ajuste) |
+| 4. Primeira cópia | 29/10 01:04–01:34 | 399 objetos, 15,56 GB, 0 falhas |
+| 5. Virada | 29/10 08:34 e 09:13 | Vercel trocada e produção reconstruída (o depoimento saiu do projeto novo às 08:36); `SUPABASE_URL` do worker no Railway trocada às 09:13, deploy sem erro |
+| 6. Segunda cópia | 29/10 08:39 | nada novo: os 399 já estavam; `midia` idêntico (341 · 11,976 GB); os 214 do `uploads` antigo têm cópia; os 399 conferidos byte a byte (272 por MD5, 127 por sha256) |
+| 7. Apagar | — | liberado pelo lado técnico; é decisão do Giovani, e só o projeto `nuflow-prod` |
+
+O `.env.local` também passou para o projeto novo (backup em
+`~/nuflow-virada/env-local-antes-storage.bak`). A volta da Vercel é
+`bash ~/nuflow-virada/virada-storage.sh volta`.
+
 ---
 
 ## 1. Onde estamos

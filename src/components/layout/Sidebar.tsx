@@ -270,9 +270,10 @@ export function Sidebar() {
               <div className="space-y-0.5">
                 {[
                   { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
-                  // O videomaker enxerga o quadro do audiovisual inteiro, não só o
-                  // que é dele — o rótulo antigo prometia menos do que a tela entrega.
-                  { href: "/demandas", label: "Demandas", icon: Film },
+                  // Só as gravações em que está escalado — e card com videomaker
+                  // externo mora no quadro de Jobs, não no de Demandas, que para
+                  // ele ficaria vazio.
+                  { href: "/jobs", label: "Minhas Gravações", icon: ClipboardList },
                   { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
                 ].map((item) => {
                   const Icon = item.icon
@@ -333,7 +334,8 @@ export function Sidebar() {
                         )}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
-                        {item.label}
+                        {/* Para quem pede, o Dashboard é a tela dos próprios pedidos. */}
+                        {item.href === "/dashboard" && me?.membership?.papel === "solicitante" ? "Meus Pedidos" : item.label}
                       </Link>
                     )
                     }

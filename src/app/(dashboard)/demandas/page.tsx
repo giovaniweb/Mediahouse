@@ -39,6 +39,8 @@ function DemandasKanban() {
   const { data: me } = useMe()
   const { data: session } = useSession()
   const router = useRouter()
+  // A lixeira do card segue a regra da API: gestão ou `excluirDemanda`.
+  const podeExcluir = ["admin", "gestor"].includes(me?.membership?.papel ?? "") || !!me?.permissoes?.excluirDemanda
   const [search, setSearch] = useState("")
   const [filtroDepto, setFiltroDepto] = useState("")
   const [filtroPessoa, setFiltroPessoa] = useState("")
@@ -336,7 +338,7 @@ function DemandasKanban() {
       {/* Kanban com altura ancorada na viewport: a barra de rolagem fica no rodapé. */}
       <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={podeExcluir ? handleDelete : undefined} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
       </div>
 
       {/* Modal Nova Demanda */}
