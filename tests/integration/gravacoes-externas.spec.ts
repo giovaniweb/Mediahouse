@@ -43,7 +43,7 @@ import { emitirConvite } from "@/lib/convites"
 import { podeLerMidia } from "@/lib/midia-acesso"
 import { decryptSecret } from "@/lib/secret-crypto"
 import { comOrg } from "@/lib/org-contexto"
-import { situacaoDaNota } from "@/lib/etapas-da-gravacao"
+import { foiCancelada, situacaoDaNota } from "@/lib/etapas-da-gravacao"
 
 const p = `gravacoes-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const pessoas = { admin: `${p}-admin`, equipe: `${p}-equipe`, financeiro: `${p}-fin` }
@@ -591,6 +591,27 @@ describe("cancelar a gravação", () => {
     // No quadro, a cobrança vira "Falta a nota" para quem vê nota.
     como(pessoas.financeiro, "solicitante")
     expect(situacaoDaNota((await noQuadro(id))!)).toMatchObject({ etapa: "falta" })
+  })
+
+  it("convite sem resposta para quem não está escalado: o convidado também é avisado", async () => {
+    const id = await gravacao("captacao_agendada")
+    // O convite não escala ninguém (lib/convites.ts): a gravação segue sem videomaker.
+    await db.demanda.update({ where: { id }, data: { statusInterno: "aguardando_triagem", statusVisivel: "entrada", videomakerId: null } })
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token: `tok-${randomUUID()}`, status: "pendente", expiresAt: new Date(Date.now() + 86400_000) } })
+    como(pessoas.admin, "admin")
+    expect(await (await pedir(id, { motivo: "Cliente desistiu" })).json()).toEqual({ mensagem: "Gravação cancelada. O videomaker foi avisado." })
+    expect((await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id } })).status).toBe("expirado")
+    expect((await textos(id)).some((t) => t.includes("Gravação cancelada") && t.includes("Pode liberar a sua agenda"))).toBe(true)
+  })
+
+  it("com o vídeo já pronto: no quadro aparece cancelada, não \"Enviado ao cliente\"", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "aprovado", statusVisivel: "para_postar", linkFinal: "https://drive.example/pronto" } })
+    como(pessoas.admin, "admin")
+    expect((await pedir(id, { motivo: "O cliente não quis o vídeo" })).status).toBe(200)
+    const card = await noQuadro(id) as unknown as Parameters<typeof foiCancelada>[0]
+    expect(card.historicos?.some((h) => h.observacao?.startsWith("Gravação cancelada"))).toBe(true)
+    expect(foiCancelada(card)).toBe(true)
   })
 
   it("concluída não se cancela; quem não opera não cancela", async () => {

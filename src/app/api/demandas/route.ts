@@ -22,6 +22,7 @@ import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { whereDoQuadro } from "@/lib/quadro-do-card-server"
+import { MARCA_DO_CANCELAMENTO, STATUS_DE_ENTREGA } from "@/lib/etapas-da-gravacao"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
@@ -324,6 +325,15 @@ export async function GET(req: NextRequest) {
         ...(comPagamento && {
           custos: { where: { organizacaoId }, select: { statusPagamento: true, pago: true } },
           notasFiscais: { select: { status: true } },
+        }),
+        // Gravação encerrada: só o que separa a cancelada da entregue
+        // (foiCancelada em lib/etapas-da-gravacao.ts), não o histórico inteiro.
+        ...(quadro === "jobs" && {
+          historicos: {
+            where: { OR: [{ statusNovo: { in: STATUS_DE_ENTREGA } }, { statusNovo: "encerrado", observacao: { startsWith: MARCA_DO_CANCELAMENTO } }] },
+            select: { statusNovo: true, observacao: true },
+            take: 5,
+          },
         }),
       },
       orderBy: [

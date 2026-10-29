@@ -49,7 +49,7 @@ export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais" | "custos"> &
   dataEvento?: string | null
   createdAt?: string | null
   finalizadaEm?: string | null
-  historicos?: { statusNovo: string; createdAt: string }[] | null
+  historicos?: { statusNovo: string; createdAt: string; observacao?: string | null }[] | null
   /** O card aberto recebe também o arquivo e o token da nota (só quem vê a nota). */
   custos?: { statusPagamento: string; pago: boolean; notaFiscalUrl?: string | null }[] | null
   notasFiscais?: { status: string; token?: string | null; url?: string | null }[] | null

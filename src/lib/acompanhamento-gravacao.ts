@@ -15,6 +15,7 @@ import { AGUARDANDO_APROVACAO } from "./job-fase"
 import {
   etapaDaGravacao,
   faltaOMaterial,
+  foiCancelada,
   passoDaGravacao,
   rotuloDaEdicao,
   rotuloDoTipoDeGravacao,
@@ -48,7 +49,9 @@ export type GravacaoParaAcompanhar = {
   localEvento?: string | null
   createdAt?: string | Date | null
   finalizadaEm?: string | Date | null
-  historicos?: { statusNovo: string; createdAt: string | Date }[] | null
+  /** O vídeo entregue: separa a encerrada antiga (entregue) da cancelada. */
+  linkFinal?: string | null
+  historicos?: { statusNovo: string; createdAt: string | Date; observacao?: string | null }[] | null
 }
 
 export type AcompanhamentoDaGravacao = {
@@ -88,7 +91,8 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
 
   // Recusado na aprovação: encerrado sem nunca sair da entrada.
   if (g.statusInterno === "encerrado" && g.statusVisivel === "entrada") return { ...base, situacao: "Pedido não aprovado", tom: "alerta", trilha: null }
-  if (g.statusInterno === "encerrado" || g.statusInterno === "expirado") return { ...base, situacao: "Gravação cancelada", tom: "alerta", trilha: null }
+  // Encerrada depois da entrega segue o caminho normal ("Enviado ao cliente").
+  if (foiCancelada(g)) return { ...base, situacao: "Gravação cancelada", tom: "alerta", trilha: null }
 
   const trilha = trilhaDoVideo(g, hoje).map((p): PassoDaTrilha => {
     // As palavras de dentro viram as de quem acompanha de fora.

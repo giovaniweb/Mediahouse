@@ -220,7 +220,7 @@ export function passoDaGravacao(job: { statusInterno: string; videomakerId?: str
  * aprovado), e aqui aprovado é "Enviar ao cliente". Na edição, ela continua
  * valendo: revisão, ajuste e impedimento dizem mais que "Em edição".
  */
-export function acaoDaGravacao(job: JobParaLeitura & { dataCaptacao?: string | Date | null; dataEvento?: string | Date | null }, hoje: string): string {
+export function acaoDaGravacao(job: JobParaLeitura & { dataCaptacao?: string | Date | null; dataEvento?: string | Date | null; historicos?: HistoricoDaGravacao[] | null }, hoje: string): string {
   switch (passoDaGravacao(job)) {
     case "escalar":   return "Escalar o videomaker"
     case "confirmar": return "Aguardando o videomaker confirmar"
@@ -261,7 +261,7 @@ type JobDaLinha = PagamentoDoCard & {
   edicaoPor?: string | null
   videomaker?: { nome: string } | null
   editor?: { nome: string } | null
-  historicos?: { statusNovo: string; createdAt: string | Date }[] | null
+  historicos?: { statusNovo: string; createdAt: string | Date; observacao?: string | null }[] | null
 }
 
 const diaCurto = (v: string | Date | null | undefined) => {
@@ -270,10 +270,18 @@ const diaCurto = (v: string | Date | null | undefined) => {
 }
 const nome1 = (n?: string | null) => n?.trim().split(/\s+/)[0] ?? null
 
-/** Quando o material chegou: a primeira mudança do histórico que passou do agendado. */
+/**
+ * Quando o material chegou: a primeira mudança do histórico para a edição, para
+ * enviar ou para a entrega. Encerrado e expirado não contam: são também o fim de
+ * uma gravação cancelada, que nunca teve material.
+ */
 function chegadaDoMaterial(job: JobDaLinha): string | Date | null {
   const h = [...(job.historicos ?? [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  return h.find((x) => (ETAPA_DO_STATUS as Record<string, EtapaDaGravacao>)[x.statusNovo] && ordem(etapaDaGravacao({ statusInterno: x.statusNovo })) >= ordem("em_edicao"))?.createdAt ?? null
+  const chegou = (s: string) => {
+    const etapa = (ETAPA_DO_STATUS as Record<string, EtapaDaGravacao>)[s]
+    return etapa === "em_edicao" || etapa === "para_enviar" || ehStatusDeEntrega(s)
+  }
+  return h.find((x) => chegou(x.statusNovo))?.createdAt ?? null
 }
 
 export function trilhaDoVideo(job: JobDaLinha, hoje: string): PassoDaTrilha[] {
@@ -387,9 +395,30 @@ export function statusDoMaterial(edicaoPor: string | null | undefined): StatusIn
   return edicaoPor === "videomaker" || edicaoPor === "sem_edicao" ? "aprovado" : "brutos_enviados"
 }
 
-/** Cancelada: encerrada sem o vídeo entregue (lib/cancelar-gravacao.ts). */
-export function foiCancelada(job: { statusInterno: string; linkFinal?: string | null }): boolean {
-  return (job.statusInterno === "encerrado" || job.statusInterno === "expirado") && !job.linkFinal?.trim()
+/** O começo da observação que o cancelamento grava no histórico (lib/cancelar-gravacao.ts). */
+export const MARCA_DO_CANCELAMENTO = "Gravação cancelada"
+
+/** Status que só existem depois de o vídeo ir para o cliente. */
+export const STATUS_DE_ENTREGA = ["entregue_cliente", "postado", "contagem_15_dias_iniciada", "lembrete_15_dias_enviado"]
+
+const ehStatusDeEntrega = (s: string) => STATUS_DE_ENTREGA.includes(s)
+
+export type HistoricoDaGravacao = { statusNovo: string; observacao?: string | null }
+
+/**
+ * Cancelada. Encerrado e expirado também são o fim normal depois da entrega
+ * (contagem de 15 dias → expirado → encerrado), então o status não basta. Com o
+ * histórico a resposta é exata: a marca do cancelamento vence (mesmo com o
+ * vídeo já no link), e entrega registrada quer dizer que não foi cancelada. Sem
+ * marca nem entrega — gravação antiga, ou lista sem histórico —, vale o que
+ * valia: encerrada sem vídeo no link.
+ */
+export function foiCancelada(job: { statusInterno: string; linkFinal?: string | null; historicos?: HistoricoDaGravacao[] | null }): boolean {
+  if (job.statusInterno !== "encerrado" && job.statusInterno !== "expirado") return false
+  const h = job.historicos ?? []
+  if (h.some((x) => x.statusNovo === "encerrado" && x.observacao?.startsWith(MARCA_DO_CANCELAMENTO))) return true
+  if (h.some((x) => ehStatusDeEntrega(x.statusNovo))) return false
+  return !job.linkFinal?.trim()
 }
 
 /**

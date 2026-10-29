@@ -236,7 +236,8 @@ export function FichaDoJob({
               </Linha>
             )}
           </dl>
-          {podeEditar && <CancelarGravacao job={job} onCancelada={onAtualizar} />}
+          {/* Sem depender de editarDemanda: quem opera as gravações cancela (o componente decide). */}
+          <CancelarGravacao job={job} onCancelada={onAtualizar} />
         </aside>
       </div>
 

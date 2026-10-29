@@ -5,15 +5,17 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { marcadorConclusao } from "@/lib/job-transicoes"
 import { foiAprovada } from "@/lib/job-fase"
 import { whereDoQuadro } from "@/lib/quadro-do-card-server"
-import { etapaDaGravacao, perguntaCobranca } from "@/lib/etapas-da-gravacao"
+import { MARCA_DO_CANCELAMENTO, etapaDaGravacao, perguntaCobranca } from "@/lib/etapas-da-gravacao"
 import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
 import { mensagensDoCancelamento } from "@/lib/avisos-gravacao-textos"
+import { telefoneCompleto } from "@/lib/whatsapp-identidade"
 
 // Cancelar a gravação (Giovani, 29/10/2026). A empresa executa o que já foi
 // contratado, mas o cliente pode cancelar — chuva, doutora indisponível.
 //
 //   - Antes de o videomaker confirmar: só encerra, não houve contratação. O
-//     convite pendente deixa de valer, e o convidado é avisado.
+//     convite pendente deixa de valer, e o convidado é avisado — mesmo o que
+//     não está escalado na gravação (o convite não escala ninguém).
 //   - Videomaker confirmado, material ainda não chegou: pergunta se ele cobra
 //     pelo cancelamento (uns cobram a agenda separada, outros não). Cobra: nasce
 //     o pedido da nota e ele recebe no WhatsApp o link para mandar a nota da
@@ -64,10 +66,17 @@ export async function cancelarGravacao(tx: Tx, e: {
   await tx.historicoStatus.create({
     data: {
       demandaId: d.id, statusAnterior: d.statusInterno, statusNovo: "encerrado", usuarioId: e.usuarioId, origem: "manual",
-      observacao: `Gravação cancelada: ${motivo}${pergunta ? (cobra ? " · o videomaker cobra o cancelamento" : " · o videomaker não cobra") : ""}`,
+      observacao: `${MARCA_DO_CANCELAMENTO}: ${motivo}${pergunta ? (cobra ? " · o videomaker cobra o cancelamento" : " · o videomaker não cobra") : ""}`,
     },
   })
   // O convite sem resposta deixa de valer: não se aceita gravação cancelada.
+  // Quem tinha convite valendo também separou a agenda e fica sabendo; o
+  // convite não escala ninguém (lib/convites.ts), então o convidado pode não
+  // ser o videomaker da gravação.
+  const convidados = await tx.conviteVideomaker.findMany({
+    where: { demandaId: d.id, status: "pendente", expiresAt: { gt: new Date() } },
+    select: { videomakerId: true, videomaker: { select: { telefone: true } } },
+  })
   await tx.conviteVideomaker.updateMany({ where: { demandaId: d.id, status: "pendente" }, data: { status: "expirado" } })
 
   let linkNota: string | null = null
@@ -84,14 +93,27 @@ export async function cancelarGravacao(tx: Tx, e: {
   })
 
   const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
-  const avisos = g ? await enfileirarAvisos(tx, {
+  let avisos = g ? await enfileirarAvisos(tx, {
     organizacaoId: e.organizacaoId, gravacao: g, motivo: "cancelada", autorUsuarioId: e.usuarioId,
     mensagens: mensagensDoCancelamento(g, { motivo, avisaVideomaker, linkNota }),
   }) : 0
+  // Os convidados que não são o videomaker escalado: o mesmo aviso de agenda livre.
+  let convidadosAvisados = 0
+  for (const c of convidados) {
+    if (!g || (avisaVideomaker && c.videomakerId === d.videomakerId)) continue
+    const telefone = telefoneCompleto(c.videomaker.telefone)
+    if (!telefone) continue
+    const n = await enfileirarAvisos(tx, {
+      organizacaoId: e.organizacaoId, gravacao: { ...g, videomakerTelefone: telefone }, motivo: "cancelada", autorUsuarioId: e.usuarioId,
+      mensagens: { videomaker: mensagensDoCancelamento(g, { motivo, avisaVideomaker: true }).videomaker },
+    })
+    avisos += n
+    convidadosAvisados += n
+  }
 
   return {
     mensagem: cobra ? "Gravação cancelada. O videomaker recebeu o link para mandar a nota."
-      : avisaVideomaker ? "Gravação cancelada. O videomaker foi avisado."
+      : avisaVideomaker || convidadosAvisados > 0 ? "Gravação cancelada. O videomaker foi avisado."
       : "Gravação cancelada.",
     avisos,
   }
