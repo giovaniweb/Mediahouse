@@ -8,6 +8,8 @@ import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 
 // POST /api/demandas/[id]/aprovar
 // acao: "aprovar" | "recusar" | "reverter" (reverter demanda encerrada por recusa)
@@ -119,6 +121,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         : `Demanda recusada${motivo ? `: ${motivo}` : ""}`,
     },
   })
+
+  // Gravação externa aprovada entra para a operação agendar (lib/avisos-gravacao.ts).
+  if (acao === "aprovar" && ehSolicitacaoDeCobertura(demanda)) {
+    emSegundoPlano(() => avisarGravacao(organizacaoId, id, "entrou", session.user.id), "aviso-gravacao")
+  }
 
   // Notificar solicitante via WhatsApp e e-mail
   emSegundoPlano(() => notificarSolicitante({

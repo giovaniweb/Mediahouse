@@ -107,7 +107,9 @@ describe("+ Novo Job", () => {
     expect(await noQuadroDeJobs(d.id)).toBe(true)
     expect(await db.alertaIA.count({ where: { demandaId: d.id, tipoAlerta: "aprovacao_pendente" } })).toBe(0)
     expect(agendados).not.toContain("nova-demanda-gestores")
-    expect(agendados).toContain("nova-demanda-lideres")
+    // Gravação externa: quem é avisado é a operação (lib/avisos-gravacao.ts), não o líder.
+    expect(agendados).toContain("aviso-gravacao")
+    expect(agendados).not.toContain("nova-demanda-lideres")
     const h = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: d.id } })
     expect(h.observacao).toBe("Demanda criada e aprovada por quem pediu")
   })

@@ -31,6 +31,10 @@ import { POST as nota } from "@/app/api/jobs/[id]/nota/route"
 import { POST as pedirPublico } from "@/app/api/publico/demanda/route"
 import { GET as abrirConvite } from "@/app/api/convites/[token]/route"
 import { POST as entregar } from "@/app/api/convites/[token]/entrega/route"
+import { POST as responderConvite } from "@/app/api/convites/[token]/route"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { executarRotina } from "@/lib/automacoes-regras"
+import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
 import { situacaoDaNota } from "@/lib/etapas-da-gravacao"
 
 const p = `gravacoes-${randomUUID().slice(0, 8)}`, org = `${p}-org`
@@ -90,6 +94,9 @@ beforeEach(() => { tarefas.length = 0 })
 
 afterAll(async () => {
   const ids = (await db.demanda.findMany({ where: { organizacaoId: org }, select: { id: true } })).map((d) => d.id)
+  await db.saidaWhatsapp.deleteMany({ where: { organizacaoId: org } })
+  await db.jobAutomacao.deleteMany({ where: { organizacaoId: org } })
+  await db.agenteExecucao.deleteMany({ where: { organizacaoId: org } })
   await db.conviteVideomaker.deleteMany({ where: { demandaId: { in: ids } } })
   await db.demandaProduto.deleteMany({ where: { demandaId: { in: ids } } })
   await db.notaFiscalUpload.deleteMany({ where: { demandaId: { in: ids } } })
@@ -103,7 +110,7 @@ afterAll(async () => {
   await db.produto.deleteMany({ where: { organizacaoId: org } })
   await db.usuario.deleteMany({ where: { email: { endsWith: `@${p}.test` } } })
   await db.organizacao.delete({ where: { id: org } })
-  await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
+  await db.usuario.deleteMany({ where: { id: { in: [...Object.values(pessoas), `${p}-adm-aviso`, `${p}-debora`] } } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -313,6 +320,75 @@ describe("entrega do videomaker pelo link do convite", () => {
     const { token } = await comConvite("equipe", "recusado")
     expect((await abrir(token)).status).toBe(400)
     expect((await mandar(token, { linkBrutos: "https://drive.example/b" })).status).toBe(403)
+  })
+})
+
+describe("avisos das gravações", () => {
+  // Telefones de teste, únicos nesta rodada: a fila só aceita quem ela reconhece.
+  const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
+  const telAdmin = tel(), telOperadora = tel(), telVm = tel(), telCliente = tel()
+  const adminAviso = `${p}-adm-aviso`, operadora = `${p}-debora`
+
+  beforeAll(async () => {
+    await db.usuario.create({ data: { id: adminAviso, nome: "Gestão", tipo: "admin", telefone: telAdmin, senhaHash: "sem-login" } })
+    await db.usuarioOrganizacao.create({ data: { usuarioId: adminAviso, organizacaoId: org, papel: "admin" } })
+    await db.usuario.create({ data: { id: operadora, nome: "Débora", tipo: "solicitante", telefone: telOperadora, senhaHash: "sem-login" } })
+    await db.usuarioOrganizacao.create({ data: { usuarioId: operadora, organizacaoId: org, papel: "solicitante", operaGravacoes: true } })
+    await db.videomaker.update({ where: { id: vm }, data: { telefone: telVm } })
+  })
+
+  const saidas = (demandaId: string) => db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: demandaId }, select: { destinatarioTipo: true, destinatarioId: true, origem: true } })
+  async function noConvite(acao: "aceitar" | "recusar") {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "videomaker_notificado", clienteFinalTelefone: telCliente, dataCaptacao: new Date(`${somarDias(hojeEmSaoPaulo(), 5)}T13:00:00-03:00`) } })
+    const token = `tok-${randomUUID()}`
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token, status: "pendente", expiresAt: new Date(Date.now() + 86400_000) } })
+    const res = await responderConvite(new NextRequest(`http://localhost/api/convites/${token}`, { method: "POST", body: JSON.stringify({ acao }) }), { params: Promise.resolve({ token }) })
+    expect(res.status).toBe(200)
+    return id
+  }
+
+  it("confirmou pelo convite: a operação e o cliente recebem; a gestão, não", async () => {
+    const id = await noConvite("aceitar")
+    const s = await saidas(id)
+    expect(s).toEqual(expect.arrayContaining([
+      expect.objectContaining({ destinatarioTipo: "usuario", destinatarioId: operadora }),
+      expect.objectContaining({ destinatarioTipo: "cliente", destinatarioId: id }),
+    ]))
+    expect(s.some((x) => x.destinatarioId === adminAviso)).toBe(false)
+  })
+
+  it("recusa é trava: a operação e a gestão recebem", async () => {
+    const s = await saidas(await noConvite("recusar"))
+    expect(s.map((x) => x.destinatarioId).sort()).toEqual([adminAviso, operadora].sort())
+  })
+
+  it("quem fez a mudança não recebe; sem ninguém marcado, a gestão faz o papel da operação", async () => {
+    const id = await gravacao("captacao_agendada")
+    await avisarGravacao(org, id, "pronta", operadora)
+    expect(await saidas(id)).toEqual([])
+
+    await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: operadora, organizacaoId: org } }, data: { operaGravacoes: false } })
+    try {
+      const outra = await gravacao("captacao_agendada")
+      await avisarGravacao(org, outra, "pronta")
+      expect((await saidas(outra)).map((x) => x.destinatarioId)).toContain(adminAviso)
+    } finally {
+      await db.usuarioOrganizacao.update({ where: { usuarioId_organizacaoId: { usuarioId: operadora, organizacaoId: org } }, data: { operaGravacoes: true } })
+    }
+  })
+
+  it("rotina diária: véspera para o videomaker e gravação sem videomaker para a gestão", async () => {
+    const amanha = somarDias(hojeEmSaoPaulo(), 1)
+    const vespera = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id: vespera }, data: { dataCaptacao: new Date(`${amanha}T13:00:00-03:00`) } })
+    const semVm = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id: semVm }, data: { statusInterno: "aguardando_triagem", statusVisivel: "entrada", videomakerId: null, dataEvento: new Date(`${amanha}T09:00:00-03:00`) } })
+
+    await executarRotina(org, "gravacoes")
+
+    expect(await saidas(vespera)).toEqual([expect.objectContaining({ origem: "regra", destinatarioTipo: "videomaker", destinatarioId: vm })])
+    expect(await saidas(semVm)).toEqual([expect.objectContaining({ origem: "regra", destinatarioId: adminAviso })])
   })
 })
 

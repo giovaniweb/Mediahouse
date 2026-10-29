@@ -2495,6 +2495,10 @@ model UsuarioOrganizacao {
   // era efeito colateral de ser admin/gestor — quem quisesse só acompanhar
   // precisava ganhar acesso total ao sistema para receber as mensagens.
   recebeTodosAvisos  Boolean         @default(false)
+  // Opera as Gravações Externas (a Débora): recebe os avisos do dia a dia das
+  // gravações — entrou, confirmou, material, nota, pronta. Admin e gestor sem
+  // esta marca só recebem quando a gravação trava (29/10/2026).
+  operaGravacoes     Boolean         @default(false)
   // "No que estou agora": mora aqui, e não na demanda, porque foco é da PESSOA
   // numa empresa — cada um tem um de cada vez. Sem FK de propósito: se a demanda
   // sumir, a leitura simplesmente não encontra e limpa, em vez de exigir cascade.

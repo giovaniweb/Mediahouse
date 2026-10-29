@@ -4,6 +4,8 @@ import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
+import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
+import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
 
 type Tx = Prisma.TransactionClient
 export class ConviteInvalido extends Error {
@@ -89,16 +91,13 @@ export async function responderConvite(tx: Tx, e: {
   const ator: AtorAuditoria = e.usuarioId ? { organizacaoId: e.organizacaoId, usuarioId: e.usuarioId }
     : { organizacaoId: e.organizacaoId, tecnico: `convite:${c.id}` }
   await registrarAuditoria(tx, ator, { acao: "convite.responder", recurso: "convite", recursoId: c.id, correlationId: randomUUID() })
-  const gestores = await tx.usuario.findMany({ where: { status: "ativo", telefone: { not: null },
-    organizacoes: { some: { organizacaoId: e.organizacaoId, OR: [{ papel: { in: ["admin", "gestor"] } }, { recebeTodosAvisos: true }] } },
-  }, select: { id: true, telefone: true } })
-  for (const g of gestores) {
-    const telefone = telefoneCompleto(g.telefone)
-    const destino = telefone ? await destinoAutorizado(tx, e.organizacaoId, telefone) : null
-    if (!telefone || destino?.tipo !== "usuario" || destino.id !== g.id) continue
-    await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", referencia: c.id,
-      chave: `convite:${c.id}:resposta:${g.id}`, telefone, expiraEm: new Date(Date.now() + 86400_000),
-      texto: `Convite ${status} — ${d.codigo}: ${d.titulo}. Consulte os detalhes da gravação no Flow.` })
+  // Os avisos da gravação (lib/avisos-gravacao.ts): aceito avisa a operação e o
+  // cliente; recusado avisa a operação e a gestão. Convite que já não mexe na
+  // gravação (o job seguiu com outro) não avisa ninguém.
+  if (alterarJob) {
+    const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
+    const evento = status === "aceito" ? "confirmada" : "recusada"
+    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId: e.usuarioId })
   }
   return { status, demandaId: d.id }
 }

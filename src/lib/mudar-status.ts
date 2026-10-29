@@ -3,6 +3,9 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { materialChegouAgora } from "@/lib/etapas-da-gravacao"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { eventoDaMudanca } from "@/lib/avisos-gravacao-textos"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { requireDemandaAcesso } from "@/lib/compartilhamento"
 import { comOrg } from "@/lib/org-contexto"
@@ -320,6 +323,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       )
     }
 
+    // Gravação externa: a marca de cobertura ou o tipo da gravação dizem.
+    const ehGravacao = ehSolicitacaoDeCobertura(demandaAtual) || !!demandaAtual.tipoGravacao
     emSegundoPlano(() => notificarMudancaKanban({
       statusNovo: statusInterno,
       codigo: demandaAtual.codigo,
@@ -349,7 +354,14 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       // final como reserva. Sem nenhum dos dois, o aviso de "pronto para
       // revisão" não é enviado — ver revisao_pendente em lib/kanban-avisos.ts.
       linkAprovacao: demandaAtual.linkCliente ?? body.linkFinal ?? demandaAtual.linkFinal ?? null,
+      // Gravação externa tem os avisos dela (logo abaixo); daqui, só o editor.
+      soEditor: ehGravacao,
     }), "mudanca-kanban")
+
+    // Avisos da gravação externa (lib/avisos-gravacao.ts): confirmou, recusou,
+    // material, pronta, concluída. Quem mexeu não recebe o aviso do que fez.
+    const evento = ehGravacao ? eventoDaMudanca(demandaAtual.statusInterno, statusInterno) : null
+    if (evento) emSegundoPlano(() => avisarGravacao(organizacaoId, id, evento, session.user.id), "aviso-gravacao")
 
     return NextResponse.json(demanda)
   } catch (e) {
@@ -366,8 +378,10 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
 async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGestores" | "telefonesSocial"> & {
   demandaId: string
   organizacaoId: string
+  /** Gravação externa: só o aviso do editor sai daqui; o resto é de lib/avisos-gravacao.ts. */
+  soEditor?: boolean
 }) {
-  const { demandaId, organizacaoId, ...dados } = aviso
+  const { demandaId, organizacaoId, soEditor, ...dados } = aviso
   try {
     const gestores = await prisma.usuario.findMany({
       where: {
@@ -392,7 +406,7 @@ async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGe
     })
 
     await Promise.allSettled(
-      destinatarios.map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId))
+      destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId))
     )
   } catch (e) {
     console.error("[Kanban Notify]", e)

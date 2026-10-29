@@ -6,6 +6,8 @@ import { PagamentoInvalido, conferirPagamentoAberto, custoUnicoDoJob } from "@/l
 import { sendEmailNotaParaCompras } from "@/lib/email"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { EVENTO_NOTA } from "@/lib/status"
+import { emSegundoPlano } from "@/lib/notificar"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
 
 // A nota do videomaker de gravação externa, no caminho da casa (Giovani,
 // 29/10/2026): o videomaker manda a nota pelo link, a Débora encaminha ao setor
@@ -58,7 +60,9 @@ export async function agirNaNota(ator: Ator, demandaId: string, acao: AcaoDaNota
       })
       if (r.count === 0) throw new PagamentoInvalido("A nota mudou enquanto isso. Atualize a página.")
       await registrar(ator, d.id, d.statusInterno, custo.id, "Nota do videomaker paga", "finalizado")
-      return { mensagem: "Nota marcada como paga." }
+      // O videomaker fica sabendo do pagamento (lib/avisos-gravacao.ts).
+      emSegundoPlano(() => avisarGravacao(ator.organizacaoId, d.id, "nota_paga", ator.usuarioId), "aviso-gravacao")
+      return { mensagem: "Nota marcada como paga. O videomaker foi avisado." }
     }
 
     if (custo.statusPagamento === "aguardando_pagamento") return { mensagem: "A nota já foi enviada para compras." }

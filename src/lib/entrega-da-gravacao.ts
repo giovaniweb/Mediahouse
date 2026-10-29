@@ -3,8 +3,8 @@ import { Prisma } from "@prisma/client"
 import { registrarAuditoria } from "@/lib/auditoria"
 import { ConviteInvalido } from "@/lib/convites"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
-import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
-import { telefoneCompleto } from "@/lib/whatsapp-identidade"
+import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
+import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
 import {
   esperaMaterial,
   etapaDaGravacao,
@@ -82,19 +82,9 @@ export async function entregarMaterial(tx: Tx, e: {
   })
 
   if (chegouAgora) {
-    // A operação fica sabendo, pelo mesmo caminho do aceite do convite.
-    const gestores = await tx.usuario.findMany({ where: { status: "ativo", telefone: { not: null },
-      organizacoes: { some: { organizacaoId: e.organizacaoId, OR: [{ papel: { in: ["admin", "gestor"] } }, { recebeTodosAvisos: true }] } },
-    }, select: { id: true, telefone: true } })
-    const cliente = d.clienteFinalNome?.trim() || d.titulo
-    for (const g of gestores) {
-      const telefone = telefoneCompleto(g.telefone)
-      const destino = telefone ? await destinoAutorizado(tx, e.organizacaoId, telefone) : null
-      if (!telefone || destino?.tipo !== "usuario" || destino.id !== g.id) continue
-      await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", referencia: convite.id,
-        chave: `convite:${convite.id}:material:${g.id}`, telefone, expiraEm: new Date(Date.now() + 86400_000),
-        texto: `📁 Material recebido — ${d.codigo}: ${cliente}. ${novo === "aprovado" ? "Pronto para enviar ao cliente." : "Vai para a edição."}` })
-    }
+    // A operação fica sabendo (lib/avisos-gravacao.ts).
+    const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
+    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: "material", mensagens: mensagensDoEvento("material", g) })
   }
   return { completo, mudouEtapa: !!novo }
 }

@@ -26,6 +26,8 @@ import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -653,8 +655,15 @@ export async function POST(req: NextRequest) {
     ), "nova-demanda-gestores")
   }
 
+  // Gravação externa tem os avisos dela (lib/avisos-gravacao.ts): já aprovada,
+  // entra para a operação agendar; o líder do audiovisual não é avisado dela.
+  const ehGravacao = ehSolicitacaoDeCobertura({ tipoVideo: data.tipoVideo, departamento: data.departamento }) || !!data.tipoGravacao
+  if (ehGravacao && jaAprovada) {
+    emSegundoPlano(() => avisarGravacao(organizacaoId, demanda.id, "entrou", session.user.id), "aviso-gravacao")
+  }
+
   // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
-  if (demanda.area === "audiovisual") {
+  if (demanda.area === "audiovisual" && !ehGravacao) {
     emSegundoPlano(
       () => notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId),
       "nova-demanda-lideres"
