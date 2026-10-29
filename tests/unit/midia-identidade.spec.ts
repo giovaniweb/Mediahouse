@@ -25,4 +25,11 @@ describe("identidade da mídia", () => {
     expect(videoDaDemanda(id, "b", "d")).toBe(false)
     expect(videoDaDemanda(id, "a", "e")).toBe(false)
   })
+  it("vídeo do acervo legado pertence à demanda de dentro do caminho", () => {
+    const id = identificarMidia("/api/midia/org/a/legado/videos/d/final/v.mp4")
+    expect(id).toEqual({ provedor: "supabase", bucket: "midia", objectKey: "org/a/legado/videos/d/final/v.mp4" })
+    expect(videoDaDemanda(id, "a", "d")).toBe(true)
+    expect(videoDaDemanda(id, "b", "d")).toBe(false)
+    expect(videoDaDemanda(identificarMidia("/api/midia/org/a/legado/docs/d/v.pdf"), "a", "d")).toBe(false)
+  })
 })
