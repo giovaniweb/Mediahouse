@@ -1,6 +1,6 @@
 "use client"
 
-import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE, COLUNAS_EVENTO } from "@/lib/evento-apresentacao"
+import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE, COLUNAS_EVENTO, colunaDoEvento } from "@/lib/evento-apresentacao"
 
 import { useState, useRef } from "react"
 import useSWR from "swr"
@@ -46,7 +46,7 @@ function EventosKanban({ eventos, onMutate }: { eventos: EventoLista[]; onMutate
   return (
     <div className="flex gap-3 overflow-x-auto pb-3">
       {COLUNAS_EVENTO.map((col) => {
-        const items = eventos.filter((e) => e.status === col)
+        const items = eventos.filter((e) => colunaDoEvento(e.status) === col)
         const st = STATUS_EVENTO_STYLE[col]
         return (
           <div key={col} className="flex-shrink-0 w-64 bg-zinc-900/50 rounded-xl border border-zinc-800"
