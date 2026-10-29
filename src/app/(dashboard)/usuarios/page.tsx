@@ -218,6 +218,7 @@ function ModalEditarUsuario({
   const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
   const [lider, setLider] = useState(usuario.liderAudiovisual ?? false)
   const [recebeTudo, setRecebeTudo] = useState(usuario.recebeTodosAvisos ?? false)
+  const [operaGravacoes, setOperaGravacoes] = useState(usuario.operaGravacoes ?? false)
   const [novaSenha, setNovaSenha] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [mostrar, setMostrar] = useState(false)
@@ -232,7 +233,7 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo, operaGravacoes }
       // "Igual ao papel" grava o próprio papel, como o cadastro já faz. Só vai
       // quando a função ou o papel mudaram: quem não tem função (o solicitante)
       // não ganha uma só porque alguém corrigiu o telefone.
@@ -328,6 +329,22 @@ function ModalEditarUsuario({
             <button type="button" role="switch" aria-checked={recebeTudo} onClick={() => setRecebeTudo(v => !v)}
               className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${recebeTudo ? "bg-emerald-600" : "bg-zinc-700"}`}>
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${recebeTudo ? "left-[18px]" : "left-0.5"}`} />
+            </button>
+          </div>
+
+          {/* Quem opera as Gravações Externas (a Débora): recebe os avisos do dia
+              a dia das gravações. Admin e gestor sem a marca só recebem quando
+              a gravação trava. */}
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">Opera Gravações Externas</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Recebe no WhatsApp os avisos das gravações: entrou, confirmou, material, nota, pronta para enviar. Não altera permissão nenhuma.
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={operaGravacoes} aria-label="Opera Gravações Externas" onClick={() => setOperaGravacoes(v => !v)}
+              className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${operaGravacoes ? "bg-emerald-600" : "bg-zinc-700"}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${operaGravacoes ? "left-[18px]" : "left-0.5"}`} />
             </button>
           </div>
 

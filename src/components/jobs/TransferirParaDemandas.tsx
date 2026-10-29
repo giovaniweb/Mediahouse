@@ -118,17 +118,17 @@ export function TransferirParaDemandas({ jobId, codigo, aberto, onFechar }: {
       <div>
         <h2 className="text-sm font-semibold text-zinc-100">Mover para Demandas</h2>
         <p className="text-xs text-zinc-500 mt-1">
-          Jobs são só captações externas, feitas por videomaker. Se este card não é isso, ele sai do
-          quadro de Jobs e vai para o de Demandas. Continua sendo{" "}
+          Gravações Externas são só captações feitas por videomaker. Se este card não é isso, ele sai
+          de Gravações Externas e vai para o quadro de Demandas. Continua sendo{" "}
           <span className="font-mono text-zinc-400">{codigo}</span>: briefing, arquivos, comentários e
           histórico não se movem.
         </p>
       </div>
 
-      {!previa && !erroPrevia && <p className="text-xs text-zinc-500">Conferindo o Job…</p>}
+      {!previa && !erroPrevia && <p className="text-xs text-zinc-500">Conferindo a gravação…</p>}
       {erroPrevia && (
         <p className="text-xs text-red-300">
-          {erroPrevia instanceof Error ? erroPrevia.message : "Não foi possível conferir o Job."}
+          {erroPrevia instanceof Error ? erroPrevia.message : "Não foi possível conferir a gravação."}
         </p>
       )}
 

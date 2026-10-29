@@ -1,3 +1,5 @@
+import { ehEdicaoDaGravacao, ehTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import { emitirConvite, ConviteInvalido } from "@/lib/convites"
 import { requireAcesso } from "@/lib/acesso"
 import { marcadorConclusao } from "@/lib/job-transicoes"
@@ -119,8 +121,30 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { tipoContrato, vinculos, ...videomaker } = demanda.videomaker ?? { tipoContrato: null, vinculos: [] }
   const contratoVideomaker = demanda.videomaker ? contratoEfetivo(vinculos[0]?.tipoContrato, tipoContrato) : null
 
+  // A nota do videomaker na ficha da gravação: a mesma regra do quadro
+  // (veNotaDoVideomaker). Os custos são de quem paga — a empresa ativa.
+  const pagamento = demanda.videomakerId && await veNotaDoVideomaker(session.user.id, acesso.organizacaoId, ehGestor(session))
+    ? {
+        custos: await prisma.custoVideomaker.findMany({ where: { organizacaoId: acesso.organizacaoId, demandaId: id }, select: { statusPagamento: true, pago: true, notaFiscalUrl: true } }),
+        // O token é o link que o videomaker usa para mandar a nota, e a url é
+        // o arquivo que a Débora baixa: a ficha oferece os dois. Só aqui,
+        // nunca na lista do quadro.
+        notasFiscais: await prisma.notaFiscalUpload.findMany({ where: { demandaId: id, videomakerId: demanda.videomakerId }, select: { status: true, token: true, url: true } }),
+      }
+    : {}
+
+  // O link de entrega do videomaker é o do convite dele nesta gravação (lib/
+  // entrega-da-gravacao.ts): a ficha oferece para copiar e cobrar. Só para a dona.
+  const conviteEntrega = demanda.videomakerId && acesso.papel === "dona"
+    ? await prisma.conviteVideomaker.findFirst({
+        where: { demandaId: id, videomakerId: demanda.videomakerId, status: { in: ["aceito", "pendente"] } },
+        orderBy: { createdAt: "desc" },
+        select: { token: true },
+      })
+    : null
+
   return NextResponse.json({
-    demanda: { ...demanda, videomaker: demanda.videomaker ? videomaker : null },
+    demanda: { ...demanda, videomaker: demanda.videomaker ? videomaker : null, ...pagamento, conviteEntrega },
     quadro: quadroDoCard({ ...demanda, contratoVideomaker }),
     contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
@@ -430,6 +454,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (!linha) return NextResponse.json({ error: "Linha/projeto inválida para esta organização" }, { status: 404 })
   }
 
+  // Gravação externa: quem edita e o tipo. Nulo limpa; fora da lista é erro, não silêncio.
+  if (body.edicaoPor !== undefined && body.edicaoPor !== null && !ehEdicaoDaGravacao(body.edicaoPor)) {
+    return NextResponse.json({ error: "Quem edita: videomaker, equipe ou sem edição." }, { status: 400 })
+  }
+  if (body.tipoGravacao !== undefined && body.tipoGravacao !== null && !ehTipoDeGravacao(body.tipoGravacao)) {
+    return NextResponse.json({ error: "Tipo: entrega de equipamento, demonstração, conteúdo ou evento." }, { status: 400 })
+  }
+  const textoCurto = (v: unknown, max: number) => v === undefined ? undefined : typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null
+
   const updateData: Record<string, any> = {
     titulo: body.titulo,
     descricao: body.descricao,
@@ -453,6 +486,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
     linkPostagem: body.linkPostagem,
     linkCliente: body.linkCliente,
     localGravacao: body.localGravacao,
+    edicaoPor: body.edicaoPor,
+    tipoGravacao: body.tipoGravacao,
+    temBrinde: typeof body.temBrinde === "boolean" || body.temBrinde === null ? body.temBrinde : undefined,
+    brinde: textoCurto(body.brinde, 120),
+    levar: textoCurto(body.levar, 300),
+    clienteFinalNome: textoCurto(body.clienteFinalNome, 160),
+    clienteFinalTelefone: textoCurto(body.clienteFinalTelefone, 30),
     motivoImpedimento: body.motivoImpedimento,
     classificacao: body.classificacao,
     formato: body.formato,

@@ -107,9 +107,15 @@ describe("+ Novo Job", () => {
     expect(await noQuadroDeJobs(d.id)).toBe(true)
     expect(await db.alertaIA.count({ where: { demandaId: d.id, tipoAlerta: "aprovacao_pendente" } })).toBe(0)
     expect(agendados).not.toContain("nova-demanda-gestores")
-    expect(agendados).toContain("nova-demanda-lideres")
+    // Gravação externa: quem é avisado é a operação (lib/avisos-gravacao.ts), não o líder.
+    expect(agendados).toContain("aviso-gravacao")
+    expect(agendados).not.toContain("nova-demanda-lideres")
     const h = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: d.id } })
     expect(h.observacao).toBe("Demanda criada e aprovada por quem pediu")
+    // Nasce com o link de acompanhamento de quem pediu (o do Compartilhar).
+    const link = await db.demanda.findUniqueOrThrow({ where: { id: d.id }, select: { publicToken: true, publicTokenAtivo: true } })
+    expect(link.publicToken).toMatch(/^[\w-]{24}$/)
+    expect(link.publicTokenAtivo).toBe(true)
   })
 
   it("líder do audiovisual também aprova; urgente aprovado entra em produção", async () => {
@@ -148,8 +154,8 @@ describe("+ Novo Job", () => {
 describe("+ Novo Job pelo formulário de gravação", () => {
   const daqui = (dias: number) => somarDias(hojeEmSaoPaulo(), dias)
   const gravacao = (extra: Partial<Parameters<typeof corpoDoNovoJob>[0]> = {}) => corpoDoNovoJob({
-    cliente: "Clínica Teste", endereco: "Rua A, 10, Centro, Curitiba - PR",
-    data: daqui(10), hora: "14:00", observacao: "", videomaker: "", acompanhante: null,
+    tipo: "entrega_equipamento", cliente: "Clínica Teste", clienteTelefone: "", endereco: "Rua A, 10, Centro, Curitiba - PR",
+    data: daqui(10), hora: "14:00", temBrinde: false, brinde: "", levar: "", observacao: "", videomaker: "", acompanhante: null,
     linkBrutos: "", produtoIds: [], ...extra,
   })
 

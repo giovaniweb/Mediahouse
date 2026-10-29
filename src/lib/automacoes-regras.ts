@@ -9,8 +9,11 @@ import { dataEmSaoPaulo, somarDias } from "@/lib/datas"
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
 import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
+import { dadosDaGravacao, telefonesDaGestao, telefonesDaOperacao } from "@/lib/avisos-gravacao"
+import { mensagensDaRegra, regrasDaGravacao } from "@/lib/avisos-gravacao-textos"
 
-export const ROTINAS = ["alertas","monitor","prazos","lembretes","cobranca","briefing","vistoria","limpeza"] as const
+export const ROTINAS = ["alertas","monitor","prazos","lembretes","cobranca","briefing","vistoria","limpeza","gravacoes"] as const
 export type Rotina = typeof ROTINAS[number]
 type Tx = Prisma.TransactionClient
 const rotulos: Record<RegraDemanda,string> = {
@@ -84,7 +87,8 @@ async function demandas(org:string,rotina:Rotina,r:Resumo) {
         }
       }
       // Um aviso prioritário por demanda/dia/revisão; aprovação é trabalho do gestor, não cobrança ao prestador.
-      const regra=rotina==="lembretes" ? regras.find(v=>v==="captacao") : rotina==="prazos" ? regras.find(v=>["prazo_vencido","prazo_proximo","sem_movimento"].includes(v)) : undefined
+      // Gravação externa tem a véspera dela, com hora, endereço e o que levar (rotina "gravacoes").
+      const regra=rotina==="lembretes" ? (ehGravacaoExterna(d) ? undefined : regras.find(v=>v==="captacao")) : rotina==="prazos" ? regras.find(v=>["prazo_vencido","prazo_proximo","sem_movimento"].includes(v)) : undefined
       if(!regra) return
       const destinos=await telefones(tx,org,d)
       if(!destinos.length) r.semDestinatario++
@@ -160,8 +164,36 @@ async function relatorios(org:string,r:Resumo) {
   }
 }
 /** Só iniciar rotinas com objetos elegíveis ou pendências que precisam ser encerradas. */
+const ehGravacaoExterna = (d:{tipoGravacao?:string|null;tipoVideo?:string|null;departamento?:string|null}) =>
+  !!d.tipoGravacao || ehSolicitacaoDeCobertura(d)
+const GRAVACAO_ATIVA:Prisma.DemandaWhereInput = {
+  OR:[{tipoGravacao:{not:null}},{tipoVideo:"cobertura_evento"},{departamento:"eventos"}],
+  statusInterno:{notIn:["encerrado","expirado","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado"]},
+}
+/**
+ * Avisos de calendário das Gravações Externas (lib/avisos-gravacao-textos.ts):
+ * véspera para o videomaker, material que não chegou, sem videomaker perto da
+ * data, nota parada. Cada um vale no dia e é revalidado no envio.
+ */
+async function gravacoes(org:string,r:Resumo) {
+  const hoje=dataEmSaoPaulo(new Date()),expira=new Date(Date.now()+86400_000)
+  const lista=await prisma.demanda.findMany({where:{organizacaoId:org,...GRAVACAO_ATIVA},select:{id:true},orderBy:{id:"asc"},take:500})
+  for(const {id} of lista) await transacao(org,async tx=>{
+    const g=await dadosDaGravacao(tx,org,id)
+    if(!g) return
+    r.analisados++
+    const custo=await tx.custoVideomaker.findFirst({where:{organizacaoId:org,demandaId:id,statusPagamento:"nf_enviada",pago:false},select:{updatedAt:true}})
+    for(const regra of regrasDaGravacao(g,hoje,custo ? dataEmSaoPaulo(custo.updatedAt) : null)) {
+      const mensagens=mensagensDaRegra(regra,g,hoje),c:ContextoRegra={tipo:"gravacao",id,revisao:hoje,regra}
+      if(mensagens.videomaker && g.videomakerTelefone) await agendar(tx,org,c,g.videomakerTelefone,mensagens.videomaker,expira,r)
+      if(mensagens.operacao) for(const tel of await telefonesDaOperacao(tx,org)) await agendar(tx,org,c,tel,mensagens.operacao,expira,r)
+      if(mensagens.gestao) for(const tel of await telefonesDaGestao(tx,org)) await agendar(tx,org,c,tel,mensagens.gestao,expira,r)
+    }
+  })
+}
 async function atividadeElegivel(org:string,rotina:Rotina) {
   if(await prisma.saidaWhatsapp.count({where:{organizacaoId:org,origem:"regra",estado:"aguardando"}})) return true
+  if(rotina==="gravacoes") return !!await prisma.demanda.count({where:{organizacaoId:org,...GRAVACAO_ATIVA}})
   if(rotina==="cobranca") return !!await prisma.custoVideomaker.count({where:{organizacaoId:org,pago:false,statusPagamento:"pendente_nf",dataVencimento:{lte:new Date(`${dataEmSaoPaulo(new Date())}T23:59:59.999Z`)}}})
   if(rotina==="lembretes") return !!(await prisma.evento.count({where:{organizacaoId:org,status:{in:["agendado","confirmado"]},inicio:{gt:new Date()},notificarEm:{lte:new Date()}}}) || await prisma.demanda.count({where:{organizacaoId:org,dataCaptacao:{gt:new Date(),lte:new Date(Date.now()+86400_000)},statusVisivel:{not:"finalizado"},statusInterno:{notIn:["encerrado","expirado","videomaker_recusou","postado","entregue_cliente"]}}}))
   if(await prisma.alertaIA.count({where:{organizacaoId:org,status:"ativo"}})) return true
@@ -193,6 +225,7 @@ export async function executarRotina(org:string,rotina:Rotina,usuarioId?:string)
       if(rotina==="cobranca") await cobrancas(org,r)
       if(rotina==="briefing") await briefing(org,r)
       if(rotina==="vistoria") await relatorios(org,r)
+      if(rotina==="gravacoes") await gravacoes(org,r)
       await prisma.agenteExecucao.update({where:{id:execucao.id,organizacaoId:org},data:{status:"concluido",resultado:r,alertasGerados:r.alertasCriados,finishedAt:new Date()}})
       return r
     } catch {

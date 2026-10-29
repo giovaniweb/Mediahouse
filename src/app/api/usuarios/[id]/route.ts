@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const correlationId = correlacaoAuditoria()
   const usuario = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`permissoes:${organizacaoId}:${id}`}, 0))`
-    const antes = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, categoria: true, funcaoProfissional: true, areas: true } })
+    const antes = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true, categoria: true, funcaoProfissional: true, areas: true } })
     const identidadeAntes = await tx.usuario.findUniqueOrThrow({ where: { id } })
     const permissoesAntes = await tx.permissaoUsuario.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } } })
     const usuario = await tx.usuario.update({
@@ -84,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Só os avisos — não mexe em permissão nenhuma. É o ponto: acompanhar a
       // operação deixou de exigir virar gestor.
       if (typeof body.recebeTodosAvisos === "boolean") memData.recebeTodosAvisos = body.recebeTodosAvisos
+      if (typeof body.operaGravacoes === "boolean") memData.operaGravacoes = body.operaGravacoes
       camposMembro = Object.keys(memData).filter(k => JSON.stringify(antes?.[k as keyof typeof antes]) !== JSON.stringify(memData[k]))
       if (camposMembro.length > 0) {
         await tx.usuarioOrganizacao.updateMany({ where: { usuarioId: id, organizacaoId }, data: memData })
@@ -97,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    const depois = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, categoria: true, funcaoProfissional: true, areas: true } })
+    const depois = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true, categoria: true, funcaoProfissional: true, areas: true } })
     const campos = [...Object.keys(data).filter(k => identidadeAntes[k as keyof typeof identidadeAntes] !== data[k]), ...camposMembro]
     if (campos.length || JSON.stringify(antes) !== JSON.stringify(depois)) await registrarAuditoria(tx, acesso, {
       acao: "usuario.alterado", recurso: "usuario", recursoId: id, correlationId,

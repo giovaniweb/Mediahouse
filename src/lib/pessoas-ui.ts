@@ -24,6 +24,8 @@ export interface PessoaLista {
   liderAudiovisual?: boolean
   /** Recebe todo aviso da operação no WhatsApp, independente do cargo. */
   recebeTodosAvisos?: boolean
+  /** Opera as Gravações Externas: recebe os avisos do dia a dia das gravações. */
+  operaGravacoes?: boolean
   ultimaAtividade?: string | null
 }
 

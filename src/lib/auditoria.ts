@@ -2,12 +2,12 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BASE_FALSE, PRESETS } from "@/lib/permissoes"
 
-export const ACOES_AUDITORIA = ["convite.criar", "convite.responder", "demanda.transferir", "evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
+export const ACOES_AUDITORIA = ["convite.criar", "convite.responder", "convite.entregar", "demanda.transferir", "evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos"] as const
 export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }
 
-const booleanos = new Set([...Object.keys(BASE_FALSE), "habilitada", "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos"])
+const booleanos = new Set([...Object.keys(BASE_FALSE), "habilitada", "publicado", "conectado", "ativo", "liderAudiovisual", "recebeTodosAvisos", "operaGravacoes"])
 const motivos = new Set(["config_corrigida","provedor_normalizado","destinatario_revalidado","autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
 const contadores = new Set(["processados", "pulados", "erros", "alterados"])
 // Somente nomes de campos, jamais valores fiscais/contato/credenciais.

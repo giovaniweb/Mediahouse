@@ -67,8 +67,10 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
   videomaker_aceitou:          ["captacao_agendada", "captacao_realizada"],
   videomaker_recusou:          ["videomaker_notificado"],
   captacao_agendada:           ["captacao_realizada"],
-  captacao_realizada:          ["brutos_enviados"],
-  brutos_enviados:             ["editor_atribuido", "fila_edicao"],
+  // `aprovado` direto (28/10/2026): o material que o videomaker entrega já
+  // editado vai de "Gravado" para "Para enviar ao cliente", sem nossa edição.
+  captacao_realizada:          ["brutos_enviados", "aprovado"],
+  brutos_enviados:             ["editor_atribuido", "fila_edicao", "aprovado"],
   editor_atribuido:            ["fila_edicao", "editando"],
   fila_edicao:                 ["editando"],
   editando:                    ["edicao_finalizada", "impedimento"],
@@ -162,3 +164,7 @@ export const EVENTO_CAPTACAO_INICIADA = "captacao_iniciada"
 // É fato, não etapa — a mudança de status para `editando` segue o caminho
 // normal de transição. O `createdAt` desta linha é quando a edição começou.
 export const EVENTO_CUTFLOW_PUXADO = "cutflow_puxado"
+
+// Nota do videomaker de gravação externa (29/10/2026): enviada para compras e
+// paga. Fato do card, não etapa — a etapa do vídeo não muda por isso.
+export const EVENTO_NOTA = "nota_videomaker"

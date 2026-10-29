@@ -51,7 +51,7 @@ async function garantirBucket(): Promise<boolean> {
   return true
 }
 
-export type TipoMidia = "docs" | "videos" | "thumbnails" | "nf" | "coberturas" | "depoimentos"
+export type TipoMidia = "docs" | "videos" | "thumbnails" | "nf" | "coberturas" | "depoimentos" | "kit"
 
 /** `org/{organizacaoId}/{tipo}/{id}/{timestamp}.{ext}` — o dono vem no caminho. */
 export function caminhoMidia(p: {
@@ -80,7 +80,7 @@ export function caminhoDaUrl(url: string | null | undefined): string | null {
   return m && caminhoMidiaValido(m[1]) ? m[1] : null
 }
 
-const TIPOS_MIDIA: readonly string[] = ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos"]
+const TIPOS_MIDIA: readonly string[] = ["docs", "videos", "thumbnails", "nf", "coberturas", "depoimentos", "kit"]
 
 /**
  * Dono, tipo e id lidos do caminho. Dois formatos:

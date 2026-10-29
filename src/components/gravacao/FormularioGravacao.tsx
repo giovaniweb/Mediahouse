@@ -11,11 +11,15 @@
 //   que acompanha as visitas), então nome, WhatsApp e e-mail ficam lembrados
 //   neste navegador, por empresa.
 //
-// - "+ Novo Job" (/jobs), por dentro (prop `interno`). Os mesmos blocos e o
-//   mesmo desenho; por dentro aparecem arquivos, quem grava, quem acompanha (da
-//   equipe, em vez do contato de quem pede), links, brutos e produtos. O título
-//   é gerado, o prazo é a gravação e a prioridade sai da data (lib/gravacao.ts).
+// - "+ Nova gravação" (/jobs), por dentro (prop `interno`). Os mesmos blocos e
+//   o mesmo desenho; por dentro aparecem arquivos, quem grava, quem acompanha
+//   (da equipe, em vez do contato de quem pede), links e brutos. O título é
+//   gerado, o prazo é a gravação e a prioridade sai da data (lib/gravacao.ts).
 //   Quem pode aprovar já cria aprovado (lib/quem-aprova.ts).
+//
+// Os campos seguem a mensagem que chega no WhatsApp (Giovani, 29/10/2026): tipo,
+// equipamento, cliente e WhatsApp dele, quando, onde — e, na entrega de
+// equipamento, o brinde. "O que mais levar" vale para todos.
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import useSWR from "swr"
@@ -34,9 +38,10 @@ import { erroDeCorpo, mensagemDeErro } from "@/lib/erro-cliente"
 import { AGUARDANDO_APROVACAO } from "@/lib/job-fase"
 import type { StatusInterno } from "@prisma/client"
 import {
-  corpoDoNovoJob, dataBR, descricaoDaGravacao, momentoDaGravacao, prioridadeDaGravacao,
+  corpoDoNovoJob, dataBR, descricaoDaGravacao, levarDoPedido, momentoDaGravacao, prioridadeDaGravacao,
   whatsappLegivel, type CamposGravacao,
 } from "@/lib/gravacao"
+import { TIPOS_DE_GRAVACAO, perguntaBrinde } from "@/lib/etapas-da-gravacao"
 import { ModalFormulario } from "@/components/demandas/ModalFormulario"
 import { BannerRascunho } from "@/components/demandas/BannerRascunho"
 import { Seta } from "@/components/demandas/campos-formulario"
@@ -47,7 +52,12 @@ const inputClass =
   "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 transition-colors"
 const selectClass = cn(inputClass, "appearance-none pr-10 cursor-pointer")
 
-const CAMPOS_VAZIOS: CamposGravacao = { cliente: "", endereco: "", data: "", hora: "", observacao: "" }
+// O brinde vem marcado: quase toda entrega de equipamento leva. Só vale quando
+// o tipo pergunta (perguntaBrinde); nos outros nem aparece.
+const CAMPOS_VAZIOS: CamposGravacao = {
+  tipo: "", cliente: "", clienteTelefone: "", endereco: "", data: "", hora: "",
+  temBrinde: true, brinde: "", levar: "", observacao: "",
+}
 
 function chaveContato() {
   return `nuflow-contato:${slugDaPagina() ?? "padrao"}`
@@ -73,20 +83,42 @@ function Bloco({ id, titulo, dica, children }: { id: string; titulo: string; dic
   )
 }
 
-/** "A gravação": o que as duas portas pedem igual. */
-function BlocoGravacao({ c, mudar, children }: {
+/** "A gravação": o que as duas portas pedem igual, na ordem da mensagem do WhatsApp. */
+function BlocoGravacao({ c, mudar, produtos, produtoIds, onProdutos, children }: {
   c: CamposGravacao
-  mudar: (campo: keyof CamposGravacao, valor: string) => void
+  mudar: <K extends keyof CamposGravacao>(campo: K, valor: CamposGravacao[K]) => void
+  produtos: Produto[]
+  produtoIds: string[]
+  onProdutos: React.Dispatch<React.SetStateAction<string[]>>
   children?: React.ReactNode
 }) {
   return (
     <Bloco id="gravacao-onde" titulo="A gravação">
-      <Campo id="cliente" label="Cliente ou clínica">
-        <input id="cliente" value={c.cliente} onChange={e => mudar("cliente", e.target.value)} required minLength={2} maxLength={160} autoComplete="organization" placeholder="Clínica Dra. Solange" className={inputClass} />
-      </Campo>
-      <Campo id="endereco" label="Endereço completo">
-        <input id="endereco" value={c.endereco} onChange={e => mudar("endereco", e.target.value)} required minLength={5} maxLength={500} autoComplete="street-address" placeholder="Rua, número, bairro e cidade" className={inputClass} />
-      </Campo>
+      <div>
+        <p id="tipo-rotulo" className="block text-xs font-medium text-zinc-400 mb-1.5">Tipo</p>
+        <div className="grid grid-cols-2 gap-1.5" role="group" aria-labelledby="tipo-rotulo">
+          {TIPOS_DE_GRAVACAO.map((t) => (
+            <button key={t.id} type="button" aria-pressed={c.tipo === t.id} onClick={() => mudar("tipo", t.id)}
+              className={cn("text-sm py-2.5 rounded-xl border transition-colors",
+                c.tipo === t.id ? "bg-purple-600 border-purple-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500")}>
+              {t.rotulo}
+            </button>
+          ))}
+        </div>
+      </div>
+      {produtos.length > 0 && (
+        <Campo id="produtos" label="Equipamento">
+          <SeletorProdutos id="produtos" produtos={produtos} valores={produtoIds} onChange={onProdutos} classeSelect={selectClass} />
+        </Campo>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)] gap-4">
+        <Campo id="cliente" label="Cliente ou clínica">
+          <input id="cliente" value={c.cliente} onChange={e => mudar("cliente", e.target.value)} required minLength={2} maxLength={160} autoComplete="organization" placeholder="Clínica Dra. Solange" className={inputClass} />
+        </Campo>
+        <Campo id="cliente-telefone" label="WhatsApp do cliente">
+          <input id="cliente-telefone" type="tel" value={c.clienteTelefone} onChange={e => mudar("clienteTelefone", e.target.value)} autoComplete="off" placeholder="(19) 98103-1327" className={`${inputClass} min-w-0`} />
+        </Campo>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <Campo id="data" label="Data">
           <input id="data" type="date" value={c.data} onChange={e => mudar("data", e.target.value)} required className={`${inputClass} min-w-0`} />
@@ -95,8 +127,25 @@ function BlocoGravacao({ c, mudar, children }: {
           <input id="hora" type="time" value={c.hora} onChange={e => mudar("hora", e.target.value)} required className={`${inputClass} min-w-0`} />
         </Campo>
       </div>
-      <Campo id="observacao" label="O que gravar (opcional)">
-        <textarea id="observacao" value={c.observacao} onChange={e => mudar("observacao", e.target.value)} rows={3} maxLength={1000} placeholder="Depoimento, procedimento, entrega de equipamento…" className={inputClass} />
+      <Campo id="endereco" label="Endereço completo">
+        <input id="endereco" value={c.endereco} onChange={e => mudar("endereco", e.target.value)} required minLength={5} maxLength={500} autoComplete="street-address" placeholder="Rua, número, bairro e cidade" className={inputClass} />
+      </Campo>
+      {perguntaBrinde(c.tipo) && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm text-zinc-200 cursor-pointer">
+            <input type="checkbox" checked={c.temBrinde} onChange={e => mudar("temBrinde", e.target.checked)} className="w-4 h-4 accent-purple-500" />
+            Tem brinde
+          </label>
+          {c.temBrinde && (
+            <input id="brinde" aria-label="Qual brinde" value={c.brinde} onChange={e => mudar("brinde", e.target.value)} maxLength={120} placeholder="Qual? Ex.: caixa mineira" className={inputClass} />
+          )}
+        </div>
+      )}
+      <Campo id="levar" label="Mais alguma coisa para levar? (opcional)">
+        <input id="levar" value={c.levar} onChange={e => mudar("levar", e.target.value)} maxLength={300} placeholder="Ex.: banner, tripé extra" className={inputClass} />
+      </Campo>
+      <Campo id="observacao" label="Observações (opcional)">
+        <textarea id="observacao" value={c.observacao} onChange={e => mudar("observacao", e.target.value)} rows={2} maxLength={1000} placeholder="O que mais a equipe precisa saber" className={inputClass} />
       </Campo>
       {children}
     </Bloco>
@@ -126,7 +175,7 @@ function BotaoEnviar({ enviando, desabilitado, rotulo, rotuloEnviando }: {
 export type JobCriado = { id: string; codigo: string; aprovado: boolean }
 
 export default function FormularioGravacao({ interno }: {
-  /** Aberto pelo "+ Novo Job" de /jobs. Sem isto, é o pedido público. */
+  /** Aberto pelo "+ Nova gravação" de /jobs. Sem isto, é o pedido público. */
   interno?: { aoFechar: () => void; aoCriar: (criado: JobCriado) => void }
 }) {
   return interno ? <NovoJob {...interno} /> : <PedidoPublico />
@@ -143,7 +192,12 @@ function PedidoPublico() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [codigo, setCodigo] = useState<string | null>(null)
-  const mudar = (campo: keyof CamposGravacao, valor: string) => setC((atual) => ({ ...atual, [campo]: valor }))
+  const [acompanhamento, setAcompanhamento] = useState<string | null>(null)
+  const [produtoIds, setProdutoIds] = useState<string[]>([])
+  const mudar = <K extends keyof CamposGravacao>(campo: K, valor: CamposGravacao[K]) => setC((atual) => ({ ...atual, [campo]: valor }))
+  // Os equipamentos ativos da empresa, sem login (a vitrine pública já os lista).
+  const { data: dataProdutos } = useSWR<{ produtos: Produto[] }>(urlComOrg("/api/publico/produtos"), fetcher)
+  const produtos = dataProdutos?.produtos ?? []
 
   // Contato lembrado da última vez (só leitura do navegador, depois de montar).
   useEffect(() => {
@@ -162,6 +216,7 @@ function PedidoPublico() {
     e.preventDefault()
     if (enviando) return
     setErro(null)
+    if (!c.tipo) return setErro("Escolha o tipo da gravação.")
     if (telefone.replace(/\D/g, "").length < 10) return setErro("Confira o WhatsApp: com DDD, pelo menos 10 números.")
     const dataEvento = momentoDaGravacao(c.data, c.hora)
     const quando = new Date(dataEvento)
@@ -183,6 +238,10 @@ function PedidoPublico() {
           localEvento: c.endereco.trim(),
           dataEvento,
           clienteFinalNome: c.cliente.trim(),
+          ...(c.clienteTelefone.trim() ? { clienteFinalTelefone: c.clienteTelefone.trim() } : {}),
+          tipoGravacao: c.tipo,
+          ...levarDoPedido(c),
+          produtoIds,
           detalhesEntrega: { origem: "formulario_gravacao" },
         }),
       })
@@ -190,6 +249,8 @@ function PedidoPublico() {
       const json = await res.json()
       try { localStorage.setItem(chaveContato(), JSON.stringify({ nome: nome.trim(), telefone: telefone.trim(), email: email.trim() })) } catch { /* ignora */ }
       setCodigo(json.codigo ?? "")
+      // A página de quem pediu: situação, videomaker, data e o vídeo quando chegar.
+      setAcompanhamento(typeof json.acompanhamento === "string" ? json.acompanhamento : null)
     } catch (err: unknown) {
       setErro(erroDeEnvio(err))
     } finally {
@@ -198,7 +259,7 @@ function PedidoPublico() {
   }
 
   function outraGravacao() {
-    setC(CAMPOS_VAZIOS); setCodigo(null)
+    setC(CAMPOS_VAZIOS); setProdutoIds([]); setCodigo(null); setAcompanhamento(null)
   }
 
   const nomeEmpresa = destino.estado === "pronto" ? destino.empresa.nome : "a equipe"
@@ -214,7 +275,8 @@ function PedidoPublico() {
           {codigo && <p className="text-sm text-zinc-400 mb-4">Código: <span className="font-mono font-semibold text-white">{codigo}</span></p>}
           <p className="text-zinc-400 mb-8">{nomeEmpresa} confere a agenda e confirma o videomaker pelo WhatsApp informado.</p>
           <div className="flex flex-col items-center gap-4">
-            <button type="button" onClick={outraGravacao} className="px-5 py-2.5 text-sm bg-purple-600 text-white rounded-xl hover:bg-purple-700">Pedir outra gravação</button>
+            {acompanhamento && <Link href={acompanhamento} className="px-5 py-2.5 text-sm font-semibold bg-purple-600 text-white rounded-xl hover:bg-purple-700">Acompanhar o pedido</Link>}
+            <button type="button" onClick={outraGravacao} className={acompanhamento ? "px-5 py-2.5 text-sm text-zinc-300 border border-zinc-700 rounded-xl hover:bg-zinc-800" : "px-5 py-2.5 text-sm bg-purple-600 text-white rounded-xl hover:bg-purple-700"}>Pedir outra gravação</button>
             <Link href={destino.inicio} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2"><ArrowLeft className="w-4 h-4" aria-hidden="true" /> Voltar ao início</Link>
           </div>
         </div>
@@ -241,7 +303,7 @@ function PedidoPublico() {
         <AvisoDestino destino={destino} />
 
         <form onSubmit={enviar} className="space-y-6" aria-busy={enviando}>
-          <BlocoGravacao c={c} mudar={mudar} />
+          <BlocoGravacao c={c} mudar={mudar} produtos={produtos} produtoIds={produtoIds} onProdutos={setProdutoIds} />
 
           <Bloco id="gravacao-quem" titulo="Quem acompanha" dica="Fica lembrado neste navegador para o próximo pedido.">
             <Campo id="nome" label="Seu nome">
@@ -267,7 +329,7 @@ function PedidoPublico() {
   )
 }
 
-// ── Porta de dentro: "+ Novo Job" ─────────────────────────────────────────────
+// ── Porta de dentro: "+ Nova gravação" ────────────────────────────────────────
 
 type OpcaoVideomaker = { value: string; label: string; subtitle?: string }
 type Pessoa = { id: string; nome: string; telefone?: string | null }
@@ -300,7 +362,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
   const [produtoIds, setProdutoIds] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const mudar = (campo: keyof CamposGravacao, valor: string) => setC((atual) => ({ ...atual, [campo]: valor }))
+  const mudar = <K extends keyof CamposGravacao>(campo: K, valor: CamposGravacao[K]) => setC((atual) => ({ ...atual, [campo]: valor }))
 
   // Só os externos desta empresa: videomaker interno faria o card morar em
   // Demandas (lib/quadro-do-card.ts), e o job sumiria do quadro de onde nasceu.
@@ -317,7 +379,8 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
   const pessoaAcompanha = pessoas.find((p) => p.id === acompanhante) ?? null
 
   const temConteudo = !!(
-    c.cliente.trim() || c.endereco.trim() || c.data || c.hora || c.observacao.trim() ||
+    c.tipo || c.cliente.trim() || c.clienteTelefone.trim() || c.endereco.trim() || c.data || c.hora ||
+    c.brinde.trim() || c.levar.trim() || c.observacao.trim() ||
     videomaker || acompanhanteId || anexos.length > 0 || referencias.length > 0 ||
     novaReferencia.trim() || linkBrutos.trim() || produtoIds.length > 0
   )
@@ -329,8 +392,11 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
     valores: { ...c, videomaker, acompanhanteId, referencias, novaReferencia, linkBrutos, produtoIds },
     aoRestaurar: (salvo) => {
       setC({
-        cliente: salvo.cliente ?? "", endereco: salvo.endereco ?? "", data: salvo.data ?? "",
-        hora: salvo.hora ?? "", observacao: salvo.observacao ?? "",
+        ...CAMPOS_VAZIOS,
+        tipo: salvo.tipo ?? "", cliente: salvo.cliente ?? "", clienteTelefone: salvo.clienteTelefone ?? "",
+        endereco: salvo.endereco ?? "", data: salvo.data ?? "", hora: salvo.hora ?? "",
+        temBrinde: salvo.temBrinde ?? true, brinde: salvo.brinde ?? "", levar: salvo.levar ?? "",
+        observacao: salvo.observacao ?? "",
       })
       setVideomaker(salvo.videomaker ?? "")
       setAcompanhanteId(salvo.acompanhanteId ?? "")
@@ -347,7 +413,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
     const avisoAnexos = anexos.length > 0
       ? ` Os ${anexos.length} arquivo(s) selecionado(s) precisarão ser anexados de novo.`
       : ""
-    if (temConteudo && !confirm(`Fechar sem criar o job? O que você escreveu fica guardado e volta na próxima vez que abrir.${avisoAnexos}`)) return
+    if (temConteudo && !confirm(`Fechar sem criar a gravação? O que você escreveu fica guardado e volta na próxima vez que abrir.${avisoAnexos}`)) return
     aoFechar()
   }
 
@@ -355,6 +421,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
     e.preventDefault()
     if (enviando) return
     setErro(null)
+    if (!c.tipo) return setErro("Escolha o tipo da gravação.")
     if (Number.isNaN(new Date(momentoDaGravacao(c.data, c.hora)).getTime())) return setErro("Confira a data e o horário da gravação.")
 
     setEnviando(true)
@@ -373,18 +440,18 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
       const text = await res.text()
       let json: Record<string, unknown> = {}
       try { json = JSON.parse(text) } catch { /* body não é JSON */ }
-      if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar o job.")
+      if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a gravação.")
 
-      // O servidor diz se o pedido já nasceu aprovado. Se não, o job só aparece
-      // no quadro depois de Aprovações, e a frase avisa para ninguém achar que sumiu.
+      // O servidor diz se o pedido já nasceu aprovado. Se não, a gravação só
+      // aparece no quadro depois de Aprovações, e a frase avisa para ninguém achar que sumiu.
       const codigo = typeof json.codigo === "string" ? json.codigo : ""
       const aprovado = !AGUARDANDO_APROVACAO.includes(json.statusInterno as StatusInterno)
-      if (aprovado) toast.success(`Job ${codigo} criado. Já está no quadro.`)
-      else toast.success("Pedido criado. Ele aparece em Jobs depois de aprovado em Aprovações.", { duration: 8000 })
+      if (aprovado) toast.success(`Gravação ${codigo} criada. Já está no quadro.`)
+      else toast.success("Pedido criado. Ele aparece em Gravações Externas depois de aprovado em Aprovações.", { duration: 8000 })
       limparRascunho()
 
       // Anexos depois da criação: o upload é por demanda. Falha de anexo não
-      // desfaz o job; o arquivo pode ser reenviado no detalhe.
+      // desfaz a gravação; o arquivo pode ser reenviado no detalhe.
       if (anexos.length > 0 && typeof json.id === "string") {
         const falhas = await enviarAnexos(json.id, anexos)
         if (falhas.length > 0) toast.error(`Não foi possível anexar: ${falhas.join(", ")}`)
@@ -394,7 +461,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
       aoFechar()
       if (typeof json.id === "string") aoCriar({ id: json.id, codigo, aprovado })
     } catch (err) {
-      setErro(mensagemDeErro(err, "Não foi possível criar o job."))
+      setErro(mensagemDeErro(err, "Não foi possível criar a gravação."))
     } finally {
       setEnviando(false)
     }
@@ -405,7 +472,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
   return (
     <ModalFormulario
       aberto
-      titulo="Novo Job"
+      titulo="Nova gravação"
       icone={Plus}
       aoTentarFechar={tentarFechar}
       ocupado={enviando}
@@ -415,10 +482,10 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
       {rascunhoRecuperado && <BannerRascunho aoDescartar={descartar} />}
 
       <form onSubmit={enviar} className="space-y-6" aria-busy={enviando}>
-        <BlocoGravacao c={c} mudar={mudar}>
+        <BlocoGravacao c={c} mudar={mudar} produtos={produtos} produtoIds={produtoIds} onProdutos={setProdutoIds}>
           {c.data && (
             <p className="text-xs text-zinc-500">
-              Prazo do job: {dataBR(c.data)} · Prioridade {alta ? <span className="text-orange-300">Alta</span> : "Normal"}
+              Prazo: {dataBR(c.data)} · Prioridade {alta ? <span className="text-orange-300">Alta</span> : "Normal"}
               {alta && " (gravação em até 2 dias)"}
             </p>
           )}
@@ -428,7 +495,7 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
           </div>
         </BlocoGravacao>
 
-        <Bloco id="job-quem-grava" titulo="Quem grava" dica="Videomakers externos da empresa. Sem ninguém, o job entra para escalar depois.">
+        <Bloco id="job-quem-grava" titulo="Quem grava" dica="Videomakers externos da empresa. Sem ninguém, a gravação entra para escalar depois.">
           <Campo id="videomaker" label="Videomaker (opcional)">
             <div className="relative">
               <select id="videomaker" value={videomaker} onChange={e => setVideomaker(e.target.value)} className={selectClass}>
@@ -469,13 +536,9 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
           </Campo>
         </Bloco>
 
-        <Bloco id="job-produtos" titulo="Equipamentos / produtos">
-          <SeletorProdutos id="produtos" produtos={produtos} valores={produtoIds} onChange={setProdutoIds} classeSelect={selectClass} />
-        </Bloco>
-
         <Erro erro={erro} />
 
-        <BotaoEnviar enviando={enviando} rotulo="Criar Job" rotuloEnviando="Criando…" />
+        <BotaoEnviar enviando={enviando} rotulo="Criar gravação" rotuloEnviando="Criando…" />
       </form>
     </ModalFormulario>
   )

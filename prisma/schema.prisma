@@ -35,6 +35,23 @@ enum StatusUsuario {
 // Pessoas & Acessos (SaaS): dimensões separadas do `tipo` legado, por organização
 // (vivem em UsuarioOrganizacao). categoria = quem é a pessoa; funcaoProfissional = o
 // que faz; areas = onde atua. Papel/acesso continua em UsuarioOrganizacao.papel.
+// Gravação externa: quem edita, combinado no agendamento (28/10/2026). O
+// quadro de Gravações Externas mostra como etiqueta; nulo = ainda não combinado.
+enum EdicaoDaGravacao {
+  videomaker // o videomaker entrega editado
+  equipe // nossos editores editam os brutos
+  sem_edicao // vai bruto para o cliente
+}
+
+// Gravação externa: o que é a gravação, escolhido no pedido (29/10/2026). Quase
+// toda entrega de equipamento leva brinde; as outras não.
+enum TipoGravacao {
+  entrega_equipamento
+  demonstracao
+  conteudo
+  evento
+}
+
 enum CategoriaPessoa {
   interna // equipe interna que opera a empresa
   solicitante // pede/acompanha demandas
@@ -564,6 +581,13 @@ model Demanda {
   publicTokenAtivo    Boolean   @default(false)
   publicTokenExpiraEm DateTime?
   localGravacao       String?
+  // Gravação externa: quem edita (EdicaoDaGravacao). Nulo = não combinado.
+  edicaoPor           EdicaoDaGravacao?
+  // Gravação externa: o tipo, o brinde (tem? qual?) e o que mais levar.
+  tipoGravacao        TipoGravacao?
+  temBrinde           Boolean?
+  brinde              String?
+  levar               String?
   referencia          String?
 
   // Impedimento
@@ -2186,6 +2210,7 @@ model ProducaoManual {
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
   lancamentosSetor LancamentoSetor[]
+  materiaisVideomaker MaterialVideomaker[]
   cutflowSessoes CutflowSessao[]
   cutflowPuxadas CutflowPuxada[]
   lotesAcervo LoteAcervo[]
@@ -2471,6 +2496,10 @@ model UsuarioOrganizacao {
   // era efeito colateral de ser admin/gestor — quem quisesse só acompanhar
   // precisava ganhar acesso total ao sistema para receber as mensagens.
   recebeTodosAvisos  Boolean         @default(false)
+  // Opera as Gravações Externas (a Débora): recebe os avisos do dia a dia das
+  // gravações — entrou, confirmou, material, nota, pronta. Admin e gestor sem
+  // esta marca só recebem quando a gravação trava (29/10/2026).
+  operaGravacoes     Boolean         @default(false)
   // "No que estou agora": mora aqui, e não na demanda, porque foco é da PESSOA
   // numa empresa — cada um tem um de cada vez. Sem FK de propósito: se a demanda
   // sumir, a leitura simplesmente não encontra e limpa, em vez de exigir cascade.
@@ -2846,3 +2875,27 @@ model LimitePublico {
   @@index([janelaInicio])
   @@map("limites_publicos")
 }
+
+// Kit do videomaker das Gravações Externas (29/10/2026): o guia de captação, os
+// vídeos de referência e a colinha do dia. Vai para o videomaker na primeira
+// gravação, pelo botão do card e sempre na página dele (link do convite); a
+// colinha sai no WhatsApp no dia da gravação. `url` é arquivo na mídia do NuFlow
+// (org/{org}/kit/…) ou link externo; `texto` é a colinha. `tipoGravacao` nulo
+// vale para todos os tipos.
+model MaterialVideomaker {
+  id            String        @id @default(cuid())
+  organizacaoId String
+  titulo        String
+  tipo          String // "guia" | "referencia" | "colinha"
+  url           String?
+  texto         String?
+  tipoGravacao  TipoGravacao?
+  ordem         Int           @default(0)
+  createdAt     DateTime      @default(now())
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId])
+  @@map("materiais_videomaker")
+}
+

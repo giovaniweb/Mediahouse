@@ -1,15 +1,20 @@
 import { describe, it, expect } from "vitest"
 import {
-  cidadeDoEndereco, corpoDoNovoJob, descricaoDaGravacao, prioridadeDaGravacao,
+  cidadeDoEndereco, corpoDoNovoJob, descricaoDaGravacao, levarDoPedido, prioridadeDaGravacao,
   tituloDaGravacao, whatsappLegivel, type NovoJob,
 } from "@/lib/gravacao"
 import { quadroDoCard } from "@/lib/quadro-do-card"
 
 const base: NovoJob = {
+  tipo: "entrega_equipamento",
   cliente: " Clínica Dra. Solange ",
+  clienteTelefone: "",
   endereco: "Rua XV de Novembro, 120, Centro, Curitiba - PR",
   data: "2026-10-30",
   hora: "14:00",
+  temBrinde: false,
+  brinde: "",
+  levar: "",
   observacao: "",
   videomaker: "",
   acompanhante: null,
@@ -22,13 +27,24 @@ describe("pedido de gravação", () => {
     expect(tituloDaGravacao(" Clínica Dra. Solange ", "2026-10-30")).toBe("Gravação · Clínica Dra. Solange · 30/10")
   })
 
-  it("descrição do pedido público não mudou", () => {
-    expect(descricaoDaGravacao({ ...base, observacao: " Depoimento " })).toBe([
-      "Gravação em Clínica Dra. Solange.",
+  it("descrição na ordem da mensagem do WhatsApp: tipo, cliente, onde, quando, brinde, levar", () => {
+    expect(descricaoDaGravacao({ ...base, temBrinde: true, brinde: " Caixa mineira ", levar: "banner", observacao: " Depoimento " })).toBe([
+      "Entrega de equipamento em Clínica Dra. Solange.",
       "Endereço: Rua XV de Novembro, 120, Centro, Curitiba - PR",
       "Data: 30/10/2026 às 14:00 (horário de Brasília)",
-      "O que gravar: Depoimento",
+      "Brinde: Caixa mineira",
+      "Levar: banner",
+      "Observações: Depoimento",
     ].join("\n"))
+  })
+
+  it("brinde só na entrega de equipamento; marcado sem dizer qual, vale \"sim\"", () => {
+    expect(levarDoPedido({ ...base, tipo: "demonstracao", temBrinde: true, brinde: "Caixa" })).toEqual({ temBrinde: false, brinde: null, levar: null })
+    expect(levarDoPedido({ ...base, temBrinde: true, brinde: "  " })).toEqual({ temBrinde: true, brinde: null, levar: null })
+    expect(descricaoDaGravacao({ ...base, temBrinde: true })).toContain("Brinde: sim")
+    expect(corpoDoNovoJob({ ...base, temBrinde: true, brinde: "Caixa mineira", clienteTelefone: "19 98103-1327" }, "2026-10-20")).toMatchObject({
+      tipoGravacao: "entrega_equipamento", temBrinde: true, brinde: "Caixa mineira", levar: null, clienteFinalTelefone: "19 98103-1327",
+    })
   })
 
   it("quem acompanha entra na descrição, com o WhatsApp legível", () => {

@@ -7,8 +7,8 @@ import type { AcaoAuditoria } from "@/lib/auditoria"
 // Record<AcaoAuditoria>: ação nova sem rótulo não compila. Antes nove das 25
 // ações (convites, WhatsApp, alertas) apareciam na tela como código cru.
 const rotulos: Record<AcaoAuditoria, string> = {
-  "convite.criar": "Convite enviado", "convite.responder": "Convite respondido",
-  "demanda.transferir": "Job transferido para Demandas",
+  "convite.criar": "Convite enviado", "convite.responder": "Convite respondido", "convite.entregar": "Material entregue pelo convite",
+  "demanda.transferir": "Gravação transferida para Demandas",
   "whatsapp.pausar": "Envio de WhatsApp pausado", "whatsapp.retomar": "Envio de WhatsApp retomado", "whatsapp.cancelar": "Envio de WhatsApp cancelado", "whatsapp.retentativa": "Nova tentativa de WhatsApp",
   "alerta.resolver": "Alerta resolvido", "alerta.ignorar": "Alerta ignorado", "alerta.snooze": "Alerta adiado",
   "evento.documento": "Documento do evento alterado", "evento.aprovacao": "Aprovação do evento registrada",

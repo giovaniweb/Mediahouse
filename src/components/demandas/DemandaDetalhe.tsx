@@ -2,7 +2,7 @@
 
 import { useDetailPresentation } from "./useDetailPresentation"
 import surface from "./DemandSurface.module.css"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
 import useSWR from "swr"
@@ -39,11 +39,11 @@ import {
   responsavelAtual,
   rotuloDeEvento,
 } from "@/lib/job-fase"
-import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -58,7 +58,7 @@ import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { extrairCopy } from "@/lib/copy-criativo"
-import { formatarData, prazoVencido } from "@/lib/datas"
+import { formatarData, hojeEmSaoPaulo, prazoVencido } from "@/lib/datas"
 import { ehImagem, extensaoDe, nomeParaMostrar } from "@/lib/nome-arquivo"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -331,20 +331,33 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
+  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
+  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
+  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
+  const ehCobertura = !isGrowth && (data?.quadro
+    ? data.quadro === "jobs"
+    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
   // As abas mudam com a etapa (lib/job-fase.ts): Aprovação só aparece da
   // aprovação em diante ou depois do primeiro envio, e é onde o detalhe abre
   // em Aprovação, Para postar e Concluído. No resto abre no Pedido.
-  const lugarDaAcao: LugarDaAcao | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  // Na gravação externa a ação mora no próximo passo da ficha, no Pedido: o
+  // "Ir para…" do topo levaria à aba Aprovação, que é da publicação.
+  const lugarDaAcao: LugarDaAcao | null = demanda && !ehCobertura ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
   const dadosDasAbas = demanda ? {
     statusInterno: demanda.statusInterno as string,
     statusVisivel: demanda.statusVisivel as string,
     linkCliente: demanda.linkCliente as string | null,
     finaisEnviados: ((demanda.arquivos ?? []) as { tipoArquivo: string }[]).filter((a) => a.tipoArquivo === "final").length,
   } : null
-  const abas: AbaDoDetalhe[] = dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"]
+  // Gravação externa não tem a aba Aprovação: ela é da publicação, e aqui o
+  // fim é o envio ao cliente, que está no próximo passo da ficha.
+  const abas: AbaDoDetalhe[] = (dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"] as AbaDoDetalhe[])
+    .filter((a) => !ehCobertura || a !== "aprovacao")
   // Aprovado (Para postar ou Concluído): não se manda mais versão para o cliente.
   const aprovacaoConcluida = !!demanda && ["para_postar", "finalizado"].includes(demanda.statusVisivel)
-  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaInicial(dadosDasAbas) })
+  // A gravação externa abre sempre no Pedido: é lá que está o próximo passo
+  // (PassoDaGravacao). A aba Aprovação continua um clique ao lado.
+  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: ehCobertura ? "pedido" : abaInicial(dadosDasAbas) })
   const abaEscolhida: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
   // Escolheu Aprovação e a demanda voltou para antes dela: cai no Pedido.
   const detailTab: AbaDoDetalhe = abas.includes(abaEscolhida) ? abaEscolhida : "pedido"
@@ -412,12 +425,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // demanda. Id, solicitante, briefing, arquivos, comentários, histórico, datas
   // e responsáveis continuam onde estão — o que muda é de qual quadro ela é.
   const [convertendo, setConvertendo] = useState(false)
-  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
-  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
-  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
-  const ehCobertura = !isGrowth && (data?.quadro
-    ? data.quadro === "jobs"
-    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
 
   // A barra de ações é do videomaker DO job. A autorização de verdade está na
   // guarda do servidor; aqui é só para não mostrar botão que não é dele.
@@ -446,7 +453,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? "Não foi possível converter")
-      toast.success("Convertida em Job — agora aparece no quadro de Jobs")
+      toast.success("Convertida em gravação externa — agora aparece em Gravações Externas")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao converter")
@@ -537,6 +544,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       body: JSON.stringify(patch),
     })
     if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar este campo.")
+    await mutate()
+  }
+
+  // O próximo passo da gravação externa (PassoDaGravacao): grava o link do
+  // passo, se houver, e anda o status pela mesma rota do quadro.
+  async function avancarGravacao(statusInterno: string, patch?: Record<string, unknown>) {
+    if (patch) await salvarCampo(patch)
+    const res = await fetch(`/api/demandas/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusInterno, origem: "manual" }),
+    })
+    if (!res.ok) throw await erroDaResposta(res, "Não foi possível avançar a gravação.")
+    toast.success(`Gravação em ${ROTULO_DA_ETAPA[etapaDaGravacao({ statusInterno })]}`)
     await mutate()
   }
 
@@ -1046,7 +1067,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // Quem precisa agir agora — derivado do estado, como tudo no módulo de Jobs.
   // Fica aqui, e não no topo do componente, porque é função pura e `demanda` já
   // existe a partir deste ponto: calcular antes exigiria um fallback falso.
-  const responsavelDoJob = responsavelAtual(demanda)
+  const responsavelDoJob = ehCobertura ? vezNaGravacao(demanda) : responsavelAtual(demanda)
 
   const linkPublico =
     linkPublicoLocal !== undefined
@@ -1144,10 +1165,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <button
               onClick={converterEmJob}
               disabled={convertendo}
-              title="Move esta demanda para o fluxo de Jobs (cobertura). O registro é o mesmo."
+              title="Move esta demanda para Gravações Externas (cobertura). O registro é o mesmo."
               className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
             >
-              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em Job"}
+              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em gravação externa"}
             </button>
           )}
           {/* O caminho de volta, no mesmo lugar do "Converter em Job": o Job
@@ -1286,8 +1307,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     <>
       <FaixaEspelho espelho={espelho} />
       <div className={surface.detailHeading}>
-        <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
-        <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+        {ehCobertura ? (
+          // Na gravação, o título é quem recebe a gravação, como no quadro.
+          <>
+            <h1>{demanda.clienteFinalNome?.trim() || demanda.titulo || "Sem cliente"}</h1>
+            <p>{[rotuloDoTipoDeGravacao(demanda.tipoGravacao), demanda.codigo].filter(Boolean).join(" · ")}</p>
+          </>
+        ) : (
+          <>
+            <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
+            <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+          </>
+        )}
         {ajusteNoTopo && (
           <section className={surface.ajustePedido} aria-label="Ajuste pedido">
             <strong>
@@ -1298,8 +1329,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             {!isGrowth && /\[\d/.test(ajusteNoTopo.comentario!) && <small>Toque no tempo para ver o momento no vídeo.</small>}
           </section>
         )}
-        <section className={surface.nextAction}>
-          <strong>Próxima ação: {proximaAcao(demanda)}</strong>
+        {/* Gravação externa: a linha do tempo da ficha faz o papel desta faixa. */}
+        {!ehCobertura && <section className={surface.nextAction}>
+          <strong>Próxima ação: {ehCobertura ? acaoDaGravacao(demanda, hojeEmSaoPaulo()) : proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
           {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
             <p className={surface.motivo}><b>Motivo do impedimento:</b> {demanda.motivoImpedimento}</p>
@@ -1316,16 +1348,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </button>
             )}
           </div>
-        </section>
-        <nav className={surface.detailTabs} aria-label="Seções da demanda">
+        </section>}
+        {/* Gravação externa não tem abas (Giovani, 29/10/2026): a ficha é o card,
+            e arquivos, conversa e histórico ficam recolhidos no fim. */}
+        {!ehCobertura && <nav className={surface.detailTabs} aria-label="Seções da demanda">
           {abas.map((key) => (
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
-        </nav>
+        </nav>}
       </div>
       <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", surface.tabContent)}>
         {/* ── Coluna principal ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className={cn("space-y-5", ehCobertura ? "lg:col-span-3" : "lg:col-span-2")}>
 
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Camada de Job (cobertura) ───────────────────────────────────
@@ -1346,16 +1380,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 aberto={moverAberto}
                 onFechar={() => setMoverAberto(false)}
               />
-              {/* A ficha da gravação: quando, onde, quem vai e para quem, antes
-                  do briefing — é o que decide o dia de alguém. Etapa e de quem é
-                  a vez ficam no rodapé (§32: a etapa escrita, não só pintada). */}
+              {/* A ficha da gravação: linha do tempo, o passo da vez, a nota
+                  do videomaker e quando, onde, quem vai e para quem — antes do
+                  briefing. A etapa está na trilha; o rodapé diz de quem é a vez. */}
               <FichaDoJob
                 job={demanda}
                 podeEditar={podeEditar}
                 onSalvar={salvarCampo}
                 onEscalar={() => irParaAcao("equipe")}
+                onAvancar={avancarGravacao}
+                onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
+                onAtualizar={() => mutate()}
                 rodape={<>
-                  <span><span className="text-zinc-600">Etapa </span>{COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}</span>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
                     {responsavelDoJob.nome ?? responsavelDoJob.papel}
@@ -1386,6 +1422,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
             </>
           ) : (
+          <Recolhivel ativo={ehCobertura} titulo="Descrição do pedido">
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-5">
             <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
 
@@ -1434,6 +1471,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          </Recolhivel>
           )}
 
           {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
@@ -1468,15 +1506,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <div className={surface.notice}>
               <p>
                 <Inbox aria-hidden />
-                {ehCobertura ? "Pedido de videomaker (Job) aguardando aprovação" : "Demanda aguardando aprovação"}
+                {ehCobertura ? "Pedido de videomaker (gravação externa) aguardando aprovação" : "Demanda aguardando aprovação"}
               </p>
               <p className="text-xs text-zinc-400 leading-relaxed">
                 Pedida por{" "}
                 <strong className="text-zinc-300">
                   {demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "solicitante externo"}
                 </strong>
-                . Aprovar leva para o quadro de {ehCobertura ? "Jobs" : "Demandas"}. Se está no lugar errado, use{" "}
-                {ehCobertura ? "“Mover para Demandas”" : "“Converter em Job”"} no topo antes de aprovar. Ou recuse com um motivo.
+                . Aprovar leva para {ehCobertura ? "Gravações Externas" : "o quadro de Demandas"}. Se está no lugar errado, use{" "}
+                {ehCobertura ? "“Mover para Demandas”" : "“Converter em gravação externa”"} no topo antes de aprovar. Ou recuse com um motivo.
               </p>
               {recusando && (
                 <textarea
@@ -1496,7 +1534,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       disabled={aprovandoDemanda}
                       className={surface.btnPrimary}
                     >
-                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar job" : "Aprovar demanda"}
+                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar gravação" : "Aprovar demanda"}
                     </button>
                     <button
                       type="button"
@@ -1530,7 +1568,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           {/* ── Checklist ─────────────────────────────────────────────────── */}
-          <ChecklistSection demandaId={id as string} />
+          {/* Na gravação externa, o que levar está na ficha ("Levar"). */}
+          {!ehCobertura && <ChecklistSection demandaId={id as string} />}
           </div>
           {/* ── Equipe e contexto: deixou de ser aba, fica embaixo do Pedido ── */}
           <div id={`equipe-${id}`} hidden={detailTab !== "pedido"} className={cn(surface.tabSection, surface.grupo)}>
@@ -1802,7 +1841,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
-          {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
+          {/* Na gravação externa a confirmação é o próximo passo da ficha. */}
+          {!isGrowth && !ehCobertura && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
             <div className={surface.notice}>
               <p>
                 <Clock aria-hidden />
@@ -1927,7 +1967,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           )}
           </div>
-          <div hidden={detailTab !== "arquivos"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Arquivos">
           {/* ── Arquivos da produção ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
@@ -2140,6 +2181,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </Recolhivel>
           </div>
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
@@ -2185,7 +2227,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Conversa">
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
               campo que não existe no modelo (é `comentario`) — os comentários
@@ -2196,17 +2239,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             comentarios={demanda.comentarios ?? []}
             onEnviado={() => mutate()}
           />
+          </Recolhivel>
           </div>
         </div>
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className={cn("space-y-4", ehCobertura && "lg:col-span-3")}>
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
-          {/* Solicitante */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Solicitante — na gravação externa, é o "Pedido por" da ficha. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><User aria-hidden /> Solicitante</h2></div>
             {demanda.nomeSolicitante ? (
               <div className="flex items-center gap-2">
@@ -2241,10 +2285,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
             )}
-          </div>
+          </div>}
 
-          {/* Datas */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Datas — na gravação externa, o "Quando" da ficha já diz. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Calendar aria-hidden /> Datas</h2></div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
@@ -2283,7 +2327,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
             </div>
-          </div>
+          </div>}
 
           </div>
           <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
@@ -2348,7 +2392,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Histórico">
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800">
@@ -2386,6 +2431,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               })}
             </div>
           </div>
+          </Recolhivel>
           </div>
         </div>
       </main>
@@ -2636,5 +2682,20 @@ function LinkField({ label, value, editMode, onChange }: {
         <span className={surface.empty}>Nenhum link ainda.</span>
       )}
     </div>
+  )
+}
+
+/**
+ * Na gravação externa o card não tem abas: o que não é do dia a dia (a
+ * descrição antiga, arquivos, conversa, histórico) fica recolhido no fim, à
+ * mão para consulta. Fora dela, não muda nada.
+ */
+function Recolhivel({ ativo, titulo, children }: { ativo: boolean; titulo: string; children: ReactNode }) {
+  if (!ativo) return <>{children}</>
+  return (
+    <details className={surface.recolhivel}>
+      <summary>{titulo}</summary>
+      <div className={surface.recolhivelCorpo}>{children}</div>
+    </details>
   )
 }

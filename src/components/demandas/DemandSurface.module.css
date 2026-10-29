@@ -146,3 +146,13 @@
 .ajustePedido strong { display:block; font-size:14px; font-weight:600; color:#ffe2b3; }
 .ajustePedido p { margin-top:6px; color:#f3e6d0; font-size:14.5px; line-height:1.6; overflow-wrap:anywhere; }
 .ajustePedido small { display:block; margin-top:8px; color:#a2a5b9; font-size:12px; }
+/* Recolhível da gravação externa (DemandaDetalhe → Recolhivel): o que não é do
+   dia a dia fica fechado no fim do card, na mesma superfície das seções. */
+.recolhivel { border:1px solid #303342; border-radius:14px; background:#191c24; }
+.recolhivel > summary { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; color:#d8d6e6; font-size:14px; font-weight:600; cursor:pointer; list-style:none; }
+.recolhivel > summary::-webkit-details-marker { display:none; }
+.recolhivel > summary::after { content:"+"; color:#8d8ca3; font-weight:400; font-size:18px; }
+.recolhivel[open] > summary::after { content:"–"; }
+.recolhivel > summary:focus-visible { outline:2px solid #c7b6f5; outline-offset:-2px; border-radius:14px; }
+.recolhivelCorpo { display:flex; flex-direction:column; gap:16px; padding:0 18px 18px; }
+

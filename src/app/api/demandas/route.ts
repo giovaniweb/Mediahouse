@@ -14,7 +14,7 @@ import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { emSegundoPlano } from "@/lib/notificar"
-import { getPermissoes } from "@/lib/permissoes-server"
+import { getPermissoes, veNotaDoVideomaker } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
@@ -26,6 +26,9 @@ import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -55,6 +58,13 @@ const criarDemandaSchema = z.object({
   // A gravação marcada no "+ Novo Job" (o mesmo momento de dataEvento).
   dataCaptacao: z.string().optional(),
   localEvento: z.string().optional(),
+  // Gravação externa: quem edita, combinado ao pedir ou ao agendar.
+  edicaoPor: z.enum(["videomaker", "equipe", "sem_edicao"]).optional(),
+  // Gravação externa: tipo, brinde (tem? qual?) e o que mais levar.
+  tipoGravacao: z.enum(["entrega_equipamento", "demonstracao", "conteudo", "evento"]).optional(),
+  temBrinde: z.boolean().optional(),
+  brinde: z.string().trim().max(120).nullable().optional(),
+  levar: z.string().trim().max(300).nullable().optional(),
   cobertura: z.boolean().optional(),
   publico: z.string().optional(),
   mensagemPrincipal: z.string().optional(),
@@ -258,6 +268,11 @@ export async function GET(req: NextRequest) {
   const quadro = searchParams.get("quadro") ?? (searchParams.get("semCobertura") === "1" ? "demandas" : null)
   if (quadro === "jobs" || quadro === "demandas") and.push(whereDoQuadro(quadro, organizacaoId))
 
+  // Nota e pagamento do videomaker no card de Gravações Externas (28/10/2026):
+  // só o estado, nunca valor nem dado fiscal, e só para quem vê custos ou
+  // aprova pagamentos — as mesmas portas de /api/custos-videomaker.
+  const comPagamento = quadro === "jobs" && await veNotaDoVideomaker(session.user.id, organizacaoId, ehGestor(session))
+
   // ?semResponsavel=1 — ninguém assumiu ainda, nem pela M2M nem pelo escalar.
   if (searchParams.get("semResponsavel") === "1") {
     and.push({ responsavelId: null, responsaveis: { none: {} } })
@@ -306,6 +321,10 @@ export async function GET(req: NextRequest) {
         // entre empresas, e esta lista é servida para os dois lados.
         compartilhamentos: { where: { revogadoEm: null }, select: SELECT_ESPELHO },
         _count: { select: { comentarios: true, arquivos: true } },
+        ...(comPagamento && {
+          custos: { where: { organizacaoId }, select: { statusPagamento: true, pago: true } },
+          notasFiscais: { select: { status: true } },
+        }),
       },
       orderBy: [
         { prioridade: "desc" },
@@ -456,10 +475,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Gravação nasce com o link de acompanhamento de quem pediu (/d/<token>, o do
+  // Compartilhar do card): lib/acompanhamento-gravacao.ts.
+  const ehGravacao = ehSolicitacaoDeCobertura({ tipoVideo: data.tipoVideo, departamento: data.departamento }) || !!data.tipoGravacao
+
   const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,
+      ...(ehGravacao && { publicToken: novoTokenPublico(), publicTokenAtivo: true }),
       titulo: data.titulo,
       descricao: data.descricao,
       departamento: data.departamento,
@@ -488,6 +512,11 @@ export async function POST(req: NextRequest) {
       mensagemPrincipal: data.mensagemPrincipal,
       referencia: data.referencia,
       localGravacao: data.localGravacao,
+      edicaoPor: data.edicaoPor,
+      tipoGravacao: data.tipoGravacao,
+      temBrinde: data.temBrinde,
+      brinde: data.brinde || undefined,
+      levar: data.levar || undefined,
       // O schema sempre aceitou o cliente final, mas o create não gravava: o
       // formulário de cobertura mandava o nome e o card nascia sem ele.
       clienteFinalNome: data.clienteFinalNome?.trim() || undefined,
@@ -632,8 +661,14 @@ export async function POST(req: NextRequest) {
     ), "nova-demanda-gestores")
   }
 
+  // Gravação externa tem os avisos dela (lib/avisos-gravacao.ts): já aprovada,
+  // entra para a operação agendar; o líder do audiovisual não é avisado dela.
+  if (ehGravacao && jaAprovada) {
+    emSegundoPlano(() => avisarGravacao(organizacaoId, demanda.id, "entrou", session.user.id), "aviso-gravacao")
+  }
+
   // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
-  if (demanda.area === "audiovisual") {
+  if (demanda.area === "audiovisual" && !ehGravacao) {
     emSegundoPlano(
       () => notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId),
       "nova-demanda-lideres"

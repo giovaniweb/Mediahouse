@@ -169,7 +169,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
       await decidir(d.id, "aprovar")
       const destino = trocarPara ?? fluxoAtual(d)
       toast.success(!ehAudiovisual ? "Pedido aprovado!"
-        : destino === "job" ? "Job aprovado — está no quadro de Jobs"
+        : destino === "job" ? "Gravação aprovada — está em Gravações Externas"
         : "Demanda aprovada — está no quadro de Demandas")
       mutateAll()
     } catch (err) {
@@ -394,7 +394,7 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
 // departamento de quem pediu ("Growth") e dois botões, com "Aprovar como Job"
 // verde em todos — pedido de edição de vídeo era aprovado como Job no reflexo.
 const PEDIDO: Record<FluxoDoRegistro, { rotulo: string; quadro: string; classe: string }> = {
-  job: { rotulo: "Pediu videomaker · Job", quadro: "Jobs", classe: "bg-violet-500/15 text-violet-200 border-violet-400/40" },
+  job: { rotulo: "Pediu videomaker · Gravação externa", quadro: "Gravações Externas", classe: "bg-violet-500/15 text-violet-200 border-violet-400/40" },
   demanda: { rotulo: "Pediu demanda", quadro: "Demandas", classe: "bg-sky-500/15 text-sky-200 border-sky-400/40" },
 }
 
@@ -505,15 +505,15 @@ function DemandaList({
             <div className="space-y-3 pt-3 border-t border-zinc-800">
               <p className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5 leading-relaxed">
                 {outro === "job"
-                  ? "Foi pedido como demanda. Aprovar como Job manda para o quadro de Jobs, para escalar um videomaker externo."
-                  : "Foi pedido como Job (videomaker). Aprovar como demanda manda para o quadro de Demandas, fora da escala de videomaker."}
+                  ? "Foi pedido como demanda. Aprovar como gravação externa manda para Gravações Externas, para escalar um videomaker."
+                  : "Foi pedido como gravação externa (videomaker). Aprovar como demanda manda para o quadro de Demandas, fora da escala de videomaker."}
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={() => { setTrocando(null); onAprovar(d, outro) }}
                   disabled={loading === d.id}
                   className="flex-1 flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-                  <ArrowRightLeft className="w-4 h-4" /> Aprovar como {outro === "job" ? "Job" : "demanda"}
+                  <ArrowRightLeft className="w-4 h-4" /> Aprovar como {outro === "job" ? "gravação externa" : "demanda"}
                 </button>
                 <button
                   onClick={() => setTrocando(null)}
@@ -531,7 +531,7 @@ function DemandaList({
                   onClick={() => onAprovar(d)}
                   disabled={loading === d.id}
                   className="flex-[2] flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-50">
-                  <CheckCircle2 className="w-4 h-4" /> {!podeTrocar ? "Aprovar" : pedido === "job" ? "Aprovar job" : "Aprovar demanda"}
+                  <CheckCircle2 className="w-4 h-4" /> {!podeTrocar ? "Aprovar" : pedido === "job" ? "Aprovar gravação" : "Aprovar demanda"}
                 </button>
                 <button
                   onClick={() => onRecusar(d)}
@@ -545,7 +545,7 @@ function DemandaList({
                   onClick={() => setTrocando(d.id)}
                   disabled={loading === d.id}
                   className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-4 decoration-zinc-700 disabled:opacity-50">
-                  Pedido no lugar errado? Aprovar como {outro === "job" ? "Job" : "demanda"}
+                  Pedido no lugar errado? Aprovar como {outro === "job" ? "gravação externa" : "demanda"}
                 </button>
               )}
             </div>
