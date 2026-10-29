@@ -39,11 +39,11 @@ import {
   responsavelAtual,
   rotuloDeEvento,
 } from "@/lib/job-fase"
-import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -58,7 +58,7 @@ import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { extrairCopy } from "@/lib/copy-criativo"
-import { formatarData, prazoVencido } from "@/lib/datas"
+import { formatarData, hojeEmSaoPaulo, prazoVencido } from "@/lib/datas"
 import { ehImagem, extensaoDe, nomeParaMostrar } from "@/lib/nome-arquivo"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -331,10 +331,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
+  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
+  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
+  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
+  const ehCobertura = !isGrowth && (data?.quadro
+    ? data.quadro === "jobs"
+    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
   // As abas mudam com a etapa (lib/job-fase.ts): Aprovação só aparece da
   // aprovação em diante ou depois do primeiro envio, e é onde o detalhe abre
   // em Aprovação, Para postar e Concluído. No resto abre no Pedido.
-  const lugarDaAcao: LugarDaAcao | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  // Na gravação externa a ação mora no próximo passo da ficha, no Pedido: o
+  // "Ir para…" do topo levaria à aba Aprovação, que é da publicação.
+  const lugarDaAcao: LugarDaAcao | null = demanda && !ehCobertura ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
   const dadosDasAbas = demanda ? {
     statusInterno: demanda.statusInterno as string,
     statusVisivel: demanda.statusVisivel as string,
@@ -344,7 +352,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const abas: AbaDoDetalhe[] = dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"]
   // Aprovado (Para postar ou Concluído): não se manda mais versão para o cliente.
   const aprovacaoConcluida = !!demanda && ["para_postar", "finalizado"].includes(demanda.statusVisivel)
-  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaInicial(dadosDasAbas) })
+  // A gravação externa abre sempre no Pedido: é lá que está o próximo passo
+  // (PassoDaGravacao). A aba Aprovação continua um clique ao lado.
+  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: ehCobertura ? "pedido" : abaInicial(dadosDasAbas) })
   const abaEscolhida: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
   // Escolheu Aprovação e a demanda voltou para antes dela: cai no Pedido.
   const detailTab: AbaDoDetalhe = abas.includes(abaEscolhida) ? abaEscolhida : "pedido"
@@ -412,12 +422,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // demanda. Id, solicitante, briefing, arquivos, comentários, histórico, datas
   // e responsáveis continuam onde estão — o que muda é de qual quadro ela é.
   const [convertendo, setConvertendo] = useState(false)
-  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
-  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
-  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
-  const ehCobertura = !isGrowth && (data?.quadro
-    ? data.quadro === "jobs"
-    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
 
   // A barra de ações é do videomaker DO job. A autorização de verdade está na
   // guarda do servidor; aqui é só para não mostrar botão que não é dele.
@@ -446,7 +450,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? "Não foi possível converter")
-      toast.success("Convertida em Job — agora aparece no quadro de Jobs")
+      toast.success("Convertida em gravação externa — agora aparece em Gravações Externas")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao converter")
@@ -537,6 +541,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       body: JSON.stringify(patch),
     })
     if (!res.ok) throw await erroDaResposta(res, "Não foi possível salvar este campo.")
+    await mutate()
+  }
+
+  // O próximo passo da gravação externa (PassoDaGravacao): grava o link do
+  // passo, se houver, e anda o status pela mesma rota do quadro.
+  async function avancarGravacao(statusInterno: string, patch?: Record<string, unknown>) {
+    if (patch) await salvarCampo(patch)
+    const res = await fetch(`/api/demandas/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusInterno, origem: "manual" }),
+    })
+    if (!res.ok) throw await erroDaResposta(res, "Não foi possível avançar a gravação.")
+    toast.success(`Gravação em ${ROTULO_DA_ETAPA[etapaDaGravacao({ statusInterno })]}`)
     await mutate()
   }
 
@@ -1046,7 +1064,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // Quem precisa agir agora — derivado do estado, como tudo no módulo de Jobs.
   // Fica aqui, e não no topo do componente, porque é função pura e `demanda` já
   // existe a partir deste ponto: calcular antes exigiria um fallback falso.
-  const responsavelDoJob = responsavelAtual(demanda)
+  const responsavelDoJob = ehCobertura ? vezNaGravacao(demanda) : responsavelAtual(demanda)
 
   const linkPublico =
     linkPublicoLocal !== undefined
@@ -1144,10 +1162,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <button
               onClick={converterEmJob}
               disabled={convertendo}
-              title="Move esta demanda para o fluxo de Jobs (cobertura). O registro é o mesmo."
+              title="Move esta demanda para Gravações Externas (cobertura). O registro é o mesmo."
               className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
             >
-              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em Job"}
+              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em gravação externa"}
             </button>
           )}
           {/* O caminho de volta, no mesmo lugar do "Converter em Job": o Job
@@ -1299,7 +1317,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </section>
         )}
         <section className={surface.nextAction}>
-          <strong>Próxima ação: {proximaAcao(demanda)}</strong>
+          {/* Gravação externa fala a língua do quadro dela (lib/etapas-da-gravacao.ts). */}
+          <strong>Próxima ação: {ehCobertura ? acaoDaGravacao(demanda, hojeEmSaoPaulo()) : proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
           {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
             <p className={surface.motivo}><b>Motivo do impedimento:</b> {demanda.motivoImpedimento}</p>
@@ -1354,8 +1373,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 podeEditar={podeEditar}
                 onSalvar={salvarCampo}
                 onEscalar={() => irParaAcao("equipe")}
+                onAvancar={avancarGravacao}
+                onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
                 rodape={<>
-                  <span><span className="text-zinc-600">Etapa </span>{COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}</span>
+                  <span><span className="text-zinc-600">Etapa </span>{ROTULO_DA_ETAPA[etapaDaGravacao(demanda)]}</span>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
                     {responsavelDoJob.nome ?? responsavelDoJob.papel}
@@ -1468,15 +1489,15 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <div className={surface.notice}>
               <p>
                 <Inbox aria-hidden />
-                {ehCobertura ? "Pedido de videomaker (Job) aguardando aprovação" : "Demanda aguardando aprovação"}
+                {ehCobertura ? "Pedido de videomaker (gravação externa) aguardando aprovação" : "Demanda aguardando aprovação"}
               </p>
               <p className="text-xs text-zinc-400 leading-relaxed">
                 Pedida por{" "}
                 <strong className="text-zinc-300">
                   {demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "solicitante externo"}
                 </strong>
-                . Aprovar leva para o quadro de {ehCobertura ? "Jobs" : "Demandas"}. Se está no lugar errado, use{" "}
-                {ehCobertura ? "“Mover para Demandas”" : "“Converter em Job”"} no topo antes de aprovar. Ou recuse com um motivo.
+                . Aprovar leva para {ehCobertura ? "Gravações Externas" : "o quadro de Demandas"}. Se está no lugar errado, use{" "}
+                {ehCobertura ? "“Mover para Demandas”" : "“Converter em gravação externa”"} no topo antes de aprovar. Ou recuse com um motivo.
               </p>
               {recusando && (
                 <textarea
@@ -1496,7 +1517,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       disabled={aprovandoDemanda}
                       className={surface.btnPrimary}
                     >
-                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar job" : "Aprovar demanda"}
+                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar gravação" : "Aprovar demanda"}
                     </button>
                     <button
                       type="button"
@@ -1802,7 +1823,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
-          {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
+          {/* Na gravação externa a confirmação é o próximo passo da ficha. */}
+          {!isGrowth && !ehCobertura && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
             <div className={surface.notice}>
               <p>
                 <Clock aria-hidden />

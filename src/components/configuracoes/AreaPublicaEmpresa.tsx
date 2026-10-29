@@ -25,7 +25,7 @@ type LinkPublico = { caminho: string; titulo: string; texto: string; noPrincipal
 const PARA_CLIENTES: LinkPublico[] = [
   { caminho: "/pedido?tipo=video", titulo: "Quero um vídeo", texto: "Pedido de vídeo, já sem a tela de escolher o tipo. Entra em Aprovações." },
   { caminho: "/pedido?tipo=conteudo", titulo: "Quero uma arte", texto: "Post, story, carrossel, criativo. Entra em Aprovações." },
-  { caminho: "/gravacao", titulo: "Quero um videomaker", texto: "Gravação numa tela só: cliente, endereço, data e horário. Aprovado, vira Job." },
+  { caminho: "/gravacao", titulo: "Quero um videomaker", texto: "Gravação numa tela só: cliente, endereço, data e horário. Aprovado, vira gravação externa." },
   { caminho: "/ideia", titulo: "Mandar ideia", texto: "Ideia ou pedido para a social media, sem login. Entra no quadro da Social." },
 ]
 const OUTROS: LinkPublico[] = [

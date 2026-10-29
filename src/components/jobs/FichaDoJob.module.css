@@ -21,13 +21,13 @@
 .situacao[data-tom="ok"] { color:#86d9a8; }
 .situacao[data-tom="espera"] { color:#f0c27a; }
 .situacao[data-tom="alerta"] { color:#f6d9a6; }
-.acao { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; margin-top:4px; padding:7px 14px; border:1px solid #b398ff66; border-radius:20px; background:#b398ff1a; color:#ece6ff; font-size:13px; font-weight:500; }
-.acao:hover { background:#b398ff2e; }
-.acao:focus-visible { outline:2px solid #c7b6f5; outline-offset:3px; }
-.acao svg { width:14px; height:14px; }
 .levar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:14px; border-top:1px solid #303342; color:#e6e4f0; font-size:14px; }
 .levar svg { width:15px; height:15px; color:#8d8ca3; }
 .levar > span { color:#a2a5b9; }
+/* O próximo passo (PassoDaGravacao): só o que cabe agora, abaixo da grade. */
+.passo { display:flex; flex-direction:column; gap:12px; padding-top:16px; border-top:1px solid #303342; }
+.passoAcoes { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+.passoNota { padding-top:12px; border-top:1px solid #303342; }
 .rodape { display:flex; flex-wrap:wrap; gap:6px 20px; padding-top:14px; border-top:1px solid #303342; color:#a2a5b9; font-size:13px; }
 @media (max-width:520px) {
   .ficha { padding:16px; }

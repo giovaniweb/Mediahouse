@@ -5,6 +5,7 @@
 // cada um desses pontos precisaria lembrar de incluir a organização — e é
 // exatamente o tipo de coisa que alguém esquece. Aqui é impossível esquecer.
 import { prisma } from "@/lib/prisma"
+import { comOrg } from "@/lib/org-contexto"
 import { BASE_FALSE, permissaoEfetiva, type MapaPermissoes, type PermissaoKey } from "@/lib/permissoes"
 import type { Prisma, PermissaoUsuario } from "@prisma/client"
 
@@ -115,4 +116,15 @@ export async function permissoesEfetivas(
   // fallback — e para a pessoa com `tipo = admin` / `papel = videomaker` isso
   // seria admin numa empresa onde ela é videomaker. Aqui o banco decide.
   return { papel: vinculo.papel, permissoes }
+}
+
+/**
+ * Pode ver em que pé está a nota do videomaker (Gravações Externas, 28/10/2026)?
+ * Só o estado — nunca valor nem dado fiscal — e só para a gestão, quem vê
+ * custos ou quem aprova pagamentos: as mesmas portas de /api/custos-videomaker.
+ */
+export async function veNotaDoVideomaker(usuarioId: string, organizacaoId: string, gestor: boolean): Promise<boolean> {
+  if (gestor) return true
+  const vinculo = await comOrg(organizacaoId, () => permissoesEfetivas(usuarioId, organizacaoId))
+  return !!(vinculo?.permissoes.verCustos || vinculo?.permissoes.verAprovacoes)
 }

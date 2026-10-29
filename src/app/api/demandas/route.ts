@@ -14,7 +14,7 @@ import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { emSegundoPlano } from "@/lib/notificar"
-import { getPermissoes } from "@/lib/permissoes-server"
+import { getPermissoes, veNotaDoVideomaker } from "@/lib/permissoes-server"
 import type { Prioridade, Prisma } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
@@ -53,6 +53,8 @@ const criarDemandaSchema = z.object({
   plataforma: z.string().optional(),
   dataEvento: z.string().optional(),
   localEvento: z.string().optional(),
+  // Gravação externa: quem edita, combinado ao pedir ou ao agendar.
+  edicaoPor: z.enum(["videomaker", "equipe", "sem_edicao"]).optional(),
   cobertura: z.boolean().optional(),
   publico: z.string().optional(),
   mensagemPrincipal: z.string().optional(),
@@ -256,6 +258,11 @@ export async function GET(req: NextRequest) {
   const quadro = searchParams.get("quadro") ?? (searchParams.get("semCobertura") === "1" ? "demandas" : null)
   if (quadro === "jobs" || quadro === "demandas") and.push(whereDoQuadro(quadro, organizacaoId))
 
+  // Nota e pagamento do videomaker no card de Gravações Externas (28/10/2026):
+  // só o estado, nunca valor nem dado fiscal, e só para quem vê custos ou
+  // aprova pagamentos — as mesmas portas de /api/custos-videomaker.
+  const comPagamento = quadro === "jobs" && await veNotaDoVideomaker(session.user.id, organizacaoId, ehGestor(session))
+
   // ?semResponsavel=1 — ninguém assumiu ainda, nem pela M2M nem pelo escalar.
   if (searchParams.get("semResponsavel") === "1") {
     and.push({ responsavelId: null, responsaveis: { none: {} } })
@@ -304,6 +311,10 @@ export async function GET(req: NextRequest) {
         // entre empresas, e esta lista é servida para os dois lados.
         compartilhamentos: { where: { revogadoEm: null }, select: SELECT_ESPELHO },
         _count: { select: { comentarios: true, arquivos: true } },
+        ...(comPagamento && {
+          custos: { where: { organizacaoId }, select: { statusPagamento: true, pago: true } },
+          notasFiscais: { select: { status: true } },
+        }),
       },
       orderBy: [
         { prioridade: "desc" },
@@ -485,6 +496,7 @@ export async function POST(req: NextRequest) {
       mensagemPrincipal: data.mensagemPrincipal,
       referencia: data.referencia,
       localGravacao: data.localGravacao,
+      edicaoPor: data.edicaoPor,
       // Novos campos
       videomakerId: videomakerIdResolvido,
       // O seletor de equipe devolve token unificado (ed:/vm:/user:), igual ao da

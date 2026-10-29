@@ -2,6 +2,7 @@ import { ConviteInvalido, responderConvite } from "@/lib/convites"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
+import { materialChegouAgora } from "@/lib/etapas-da-gravacao"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { requireDemandaAcesso } from "@/lib/compartilhamento"
 import { comOrg } from "@/lib/org-contexto"
@@ -229,8 +230,11 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       }
     }
 
-    // ── Auto-criar NotaFiscalUpload quando videomaker entrega os brutos ──────
-    if (statusInterno === "brutos_enviados" && demandaAtual.videomakerId) {
+    // ── Auto-criar NotaFiscalUpload quando o material do videomaker chega ────
+    // `brutos_enviados` pedia sozinho. Desde 28/10/2026 também o material que
+    // chega editado (Gravado → Para enviar, sem passar por brutos): o Giovani
+    // quer o pagamento programado assim que o arquivo chega, editado ou bruto.
+    if ((statusInterno === "brutos_enviados" || materialChegouAgora(demandaAtual.statusInterno, statusInterno)) && demandaAtual.videomakerId) {
       // `brutos_enviados` é o único destes blocos que o espelho alcança — os
       // outros dependem de `para_postar`/`finalizado`, que estão fora da lista
       // do executor. Por isso ele roda declarando a empresa da dona: a NF e o
@@ -248,7 +252,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
             const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
             const nfLink = `${baseUrl}/nf-upload/${nf.token}`
             const msg =
-              `🧾 *NuFlow — Brutos Recebidos!*\n\n` +
+              `🧾 *NuFlow — Material recebido!*\n\n` +
               `📋 *${demandaAtual.codigo}* — ${demandaAtual.titulo}\n\n` +
               `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
               `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +

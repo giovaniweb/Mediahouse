@@ -150,7 +150,7 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
   const respostas:Record<string,string>={
     videomaker_aceitou:"Captação confirmada. A equipe dará continuidade aos detalhes.",
     videomaker_recusou:"Recusa registrada. A equipe poderá escalar outro profissional.",
-    convite_ausente_ou_ambiguo:"Não encontrei um convite único para confirmar. Abra o link do job desejado para responder com segurança.",
+    convite_ausente_ou_ambiguo:"Não encontrei um convite único para confirmar. Abra o link da gravação desejada para responder com segurança.",
     convite_alterado:"O convite mudou. Consulte a equipe antes de confirmar.",
     remetente_sem_convite:"Não encontrei um convite autorizado para este número. Consulte a equipe.",
   }

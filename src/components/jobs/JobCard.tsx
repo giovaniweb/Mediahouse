@@ -1,19 +1,19 @@
 "use client"
 
-import { AlertTriangle, Ban, Calendar, Clapperboard, Clock, MapPin, User } from "lucide-react"
+import { AlertTriangle, Ban, Calendar, Clock, MapPin, User } from "lucide-react"
 import card from "@/components/demandas/DemandCardModern.module.css"
 import styles from "./JobsPreview.module.css"
 import { cn } from "@/lib/utils"
-import { formatarDataCurta } from "@/lib/datas"
+import { formatarDataCurta, hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
+import { acaoDaGravacao, etapaDaGravacao, faltaOMaterial, rotuloDaEdicao, situacaoDaNota, vezNaGravacao, type EdicaoDaGravacao, type PagamentoDoCard } from "@/lib/etapas-da-gravacao"
+import { TAG, TAG_DA_EDICAO, TAG_DA_NOTA } from "./etiquetas"
 import { diasDeAtraso } from "@/lib/status"
 import {
   ehBloqueado,
   ehCancelado,
   faseDoJob,
   nivelDeRisco,
-  proximaAcao,
-  responsavelAtual,
   type JobParaLeitura,
 } from "@/lib/job-fase"
 import type { JobArrastado } from "@/lib/jobs-quadro"
@@ -27,7 +27,7 @@ import { AlcaArrastar, useCliqueDoCard } from "@/components/kanban/CardDoQuadro"
 // conteúdo, que é o do Job: quando e onde é a captação, o que falta fazer e de
 // quem é a vez. Sem botão de ação: o card abre o Job no painel lateral, e é lá
 // que se age. A alça e o clique são os do card de Demandas (CardDoQuadro).
-export type JobDoQuadro = JobParaLeitura & JobArrastado & {
+export type JobDoQuadro = JobParaLeitura & JobArrastado & Pick<PagamentoDoCard, "custos" | "notasFiscais"> & {
   id: string
   codigo: string
   titulo: string
@@ -36,6 +36,8 @@ export type JobDoQuadro = JobParaLeitura & JobArrastado & {
   dataCaptacao?: string | Date | null
   /** O pedido público só grava esta; vale quando não há `dataCaptacao`. */
   dataEvento?: string | Date | null
+  /** Quem edita, combinado ao escalar (lib/etapas-da-gravacao.ts). */
+  edicaoPor?: string | null
   dataLimite?: string | Date | null
   statusVisivel?: string | null
   prioridade?: string | null
@@ -57,8 +59,9 @@ const iniciais = (nome: string) =>
 
 export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro; onAbrir: (id: string) => void; arrastavel?: boolean }) {
   const risco = nivelDeRisco(job)
-  const responsavel = responsavelAtual(job)
-  const acao = proximaAcao(job)
+  const hoje = hojeEmSaoPaulo()
+  const responsavel = vezNaGravacao(job)
+  const acao = acaoDaGravacao(job, hoje)
   const bloqueado = ehBloqueado(job.statusInterno)
   const cancelado = ehCancelado(job)
   const atraso = diasDeAtraso(job)
@@ -71,6 +74,13 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
   const fase = faseDoJob(job.statusInterno)
   const antesDaGravacao = !cancelado && (fase === "pending_assignment" || fase === "dispatched" || fase === "in_progress")
   const cliente = job.clienteFinalNome?.trim() || null
+  // Quem grava, quem edita, o material e a nota: etiquetas como as do card de
+  // Demandas (./etiquetas). Some o que já não importa — no Concluído, só a nota.
+  const nota = situacaoDaNota(job)
+  const concluido = etapaDaGravacao(job) === "concluido"
+  const semMaterial = faltaOMaterial(job, hoje)
+  const edicao = !concluido && job.edicaoPor ? job.edicaoPor as EdicaoDaGravacao : null
+  const vm = job.videomaker?.nome?.trim() || null
   const prio = job.prioridade ? PRIORIDADE[job.prioridade] : undefined
 
   // De quem é a vez vem primeiro; a equipe do Job completa a fila de avatares.
@@ -103,7 +113,7 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
           href={`/jobs/${job.id}`}
           draggable={false}
           onClick={clique.noLink}
-          aria-label={`Abrir job: ${cliente ?? job.titulo}`}
+          aria-label={`Abrir gravação: ${cliente ?? job.titulo}`}
           className={cn("block flex-1 min-w-0 text-left line-clamp-2 rounded", card.title)}
         >
           {cliente ?? job.titulo}
@@ -150,19 +160,15 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
             <MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{cidade}</span>
           </span>
         )}
+        {semMaterial && <span className={TAG.alerta}>📁 Falta o material</span>}
+        {!vm && fase === "pending_assignment" && !cancelado && <span className={TAG.alerta}>📷 Sem videomaker</span>}
+        {vm && job.statusInterno === "videomaker_notificado" && <span className={TAG.espera} title={`Convite enviado a ${vm}`}>⏳ Aguardando {vm.split(/\s+/)[0]}</span>}
+        {vm && job.statusInterno !== "videomaker_notificado" && !concluido && (
+          <span className={cn(TAG.neutro, "max-w-[150px]")} title={`Videomaker: ${vm}`}><span className="truncate">🎬 {vm}</span></span>
+        )}
+        {edicao && <span className={TAG_DA_EDICAO[edicao].classe}>{TAG_DA_EDICAO[edicao].icone} {rotuloDaEdicao(edicao)}</span>}
+        {nota && <span className={TAG_DA_NOTA[nota.tom]}>🧾 {nota.texto}</span>}
       </div>
-
-      {/* Quem vai gravar — escrito, não só a inicial no avatar. Faltar alguém é
-          o que mais custa num Job, então aparece enquanto falta. */}
-      {job.videomaker?.nome ? (
-        <p className={styles.quemVai} title={`Videomaker: ${job.videomaker.nome}`}>
-          <Clapperboard aria-hidden /><span className="truncate">{job.videomaker.nome}</span>
-        </p>
-      ) : fase === "pending_assignment" && !cancelado && (
-        <p className={styles.quemVai} data-falta>
-          <Clapperboard aria-hidden />Sem videomaker
-        </p>
-      )}
 
       {/* Próxima ação — §32 pede texto, não só cor */}
       <p className={cn(styles.acao, bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300")}>

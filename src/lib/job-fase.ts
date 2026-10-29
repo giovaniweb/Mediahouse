@@ -663,7 +663,7 @@ export function acoesDoVideomaker(
   switch (statusInterno) {
     case "videomaker_notificado":
       return [
-        { chave: "aceitar", label: "Aceitar Job", alvo: "videomaker_aceitou" },
+        { chave: "aceitar", label: "Aceitar gravação", alvo: "videomaker_aceitou" },
         { chave: "recusar", label: "Recusar", alvo: "videomaker_recusou", exigeMotivo: true, negativa: true },
       ]
     case "videomaker_aceitou":
@@ -701,7 +701,7 @@ export function captacaoIniciada(historicos?: { statusNovo: string }[] | null): 
 // exportado, com rótulos de ESTADO. Não é reaproveitável aqui sem alterar o
 // módulo de Demandas, e o texto que ele guarda não serve para narrar evento.
 export const EVENTO_LABEL: Record<StatusInterno, string> = {
-  pedido_criado:                "Job criado",
+  pedido_criado:                "Pedido criado",
   aguardando_aprovacao_interna: "Enviado para aprovação",
   aguardando_triagem:           "Aprovado — foi para triagem",
   urgencia_pendente_aprovacao:  "Urgência enviada para aprovação",
@@ -741,7 +741,7 @@ export const EVENTO_LABEL: Record<StatusInterno, string> = {
 export function rotuloDeEvento(statusNovo: string, observacao?: string | null): string {
   if (statusNovo === EVENTO_CAPTACAO_INICIADA) return "Captação iniciada"
   if (statusNovo === EVENTO_CUTFLOW_PUXADO) return observacao ?? "Edição iniciada no Cutflow"
-  if (statusNovo === EVENTO_EDICAO) return observacao ?? "Job editado"
+  if (statusNovo === EVENTO_EDICAO) return observacao ?? "Gravação editada"
   if (statusNovo === EVENTO_RESPONSAVEL) return observacao ?? "Responsável alterado"
   return EVENTO_LABEL[statusNovo as StatusInterno] ?? statusNovo
 }

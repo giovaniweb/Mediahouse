@@ -37,7 +37,7 @@ export async function condicaoDoConvite(tx: Tx, organizacaoId: string, videomake
 }
 export async function emitirConvite(tx: Tx, ator: AtorAuditoria, demandaId: string, videomakerId: string) {
   const d = await bloquearDemanda(tx, ator.organizacaoId, demandaId)
-  if (!estadosDeConvite.includes(d.statusInterno)) throw new ConviteInvalido("O job não está na etapa de convite")
+  if (!estadosDeConvite.includes(d.statusInterno)) throw new ConviteInvalido("A gravação não está na etapa de convite")
   const v = await profissional(tx, ator.organizacaoId, videomakerId)
   const existente = await tx.conviteVideomaker.findFirst({ where: { demandaId, videomakerId, status: "pendente", expiresAt: { gt: new Date() } } })
   if (existente) return existente
@@ -98,7 +98,7 @@ export async function responderConvite(tx: Tx, e: {
     if (!telefone || destino?.tipo !== "usuario" || destino.id !== g.id) continue
     await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", referencia: c.id,
       chave: `convite:${c.id}:resposta:${g.id}`, telefone, expiraEm: new Date(Date.now() + 86400_000),
-      texto: `Convite ${status} — ${d.codigo}: ${d.titulo}. Consulte os detalhes do job no Flow.` })
+      texto: `Convite ${status} — ${d.codigo}: ${d.titulo}. Consulte os detalhes da gravação no Flow.` })
   }
   return { status, demandaId: d.id }
 }

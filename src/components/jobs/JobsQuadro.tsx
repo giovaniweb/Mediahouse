@@ -1,38 +1,40 @@
 "use client"
 
 import type { DropResult } from "@hello-pangea/dnd"
-import { COLUNAS_ORDER, COLUNAS_LABEL, estaAtrasada } from "@/lib/status"
+import { estaAtrasada } from "@/lib/status"
+import { ETAPAS, etapaDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { momentoDoJob } from "@/lib/ficha-do-job"
 import { QuadroArrastavel, type ColunaQuadro } from "@/components/kanban/QuadroArrastavel"
 import { JobCard, type JobDoQuadro } from "./JobCard"
 
-// O quadro de Jobs.
+// O quadro de Gravações Externas (antes "Jobs").
 //
-// Colunas: as seis operacionais que já existem (`StatusVisivel`), incluindo
-// "Para Postar". A decisão validada em 07/09/2026 foi manter o quadro mais
-// granular que as seis JobPhase — "Para Postar" é a fila real do Social, e é
-// exatamente `finished + not_published` (§25).
+// Colunas: as cinco etapas da gravação (lib/etapas-da-gravacao.ts) — a
+// agendar, agendado, em edição, para enviar e concluído. Até 28/10/2026 eram as
+// seis do audiovisual, e tudo antes da edição caía em "Produção". Quem grava,
+// quem edita e a nota do videomaker não são coluna: são etiquetas no card.
 //
 // Desde 07/10/2026 é o MESMO quadro de Demandas e do Growth (QuadroArrastavel):
 // trilho, alça, arrasto no celular e o card abrindo no painel lateral. Soltar o
 // card numa coluna passa pela guarda do servidor antes (lib/jobs-quadro.ts) —
 // quem decide se pode é a página, que conhece a pessoa.
 
-const CORES: Record<string, { borda: string; ponto: string }> = {
-  entrada:     { borda: "border-t-zinc-500",    ponto: "bg-zinc-400" },
-  producao:    { borda: "border-t-blue-500",    ponto: "bg-blue-500" },
-  edicao:      { borda: "border-t-purple-500",  ponto: "bg-purple-500" },
-  aprovacao:   { borda: "border-t-amber-500",   ponto: "bg-amber-500" },
-  para_postar: { borda: "border-t-cyan-500",    ponto: "bg-cyan-500" },
-  finalizado:  { borda: "border-t-emerald-500", ponto: "bg-emerald-500" },
+const CORES: Record<EtapaDaGravacao, { borda: string; ponto: string }> = {
+  a_agendar:   { borda: "border-t-zinc-500",    ponto: "bg-zinc-400" },
+  agendado:    { borda: "border-t-blue-500",    ponto: "bg-blue-500" },
+  em_edicao:   { borda: "border-t-purple-500",  ponto: "bg-purple-500" },
+  para_enviar: { borda: "border-t-cyan-500",    ponto: "bg-cyan-500" },
+  concluido:   { borda: "border-t-emerald-500", ponto: "bg-emerald-500" },
 }
 
-// "Concluído" lê melhor que "Finalizado" na coluna, e é o rótulo que o quadro
-// do audiovisual já usa. Os demais vêm de COLUNAS_LABEL, fonte única.
-const ROTULOS: Record<string, string> = { ...COLUNAS_LABEL, finalizado: "Concluído" }
-
-const COLUNAS: ColunaQuadro[] = COLUNAS_ORDER.map((id) => ({
-  id, label: ROTULOS[id], color: CORES[id]?.borda ?? "", dot: CORES[id]?.ponto ?? "",
+const COLUNAS: ColunaQuadro[] = ETAPAS.map((e) => ({
+  id: e.id, label: e.rotulo, dica: e.dica, color: CORES[e.id].borda, dot: CORES[e.id].ponto,
 }))
+
+// Antes da gravação, a pergunta é "qual é a próxima": ordem do dia marcado,
+// sem data por último. Depois dela, o que queima primeiro.
+const PELA_DATA: EtapaDaGravacao[] = ["a_agendar", "agendado"]
+const diaDe = (j: JobDoQuadro) => momentoDoJob(j)?.dia ?? "9999-12-31"
 
 export function JobsQuadro({
   jobs,
@@ -44,13 +46,17 @@ export function JobsQuadro({
   /** O card foi solto em outra coluna. */
   onMover: (id: string, coluna: string) => void
 }) {
-  // Atrasados no topo, depois urgentes, depois o prazo mais perto. Quem abre o
+  // Atrasadas no topo, depois urgentes, depois o prazo mais perto. Quem abre o
   // quadro precisa ver o que queima; por isso aqui não há ordem manual, e
   // soltar o card na mesma coluna não muda nada.
   const daColuna = (coluna: string) =>
     jobs
-      .filter((j) => j.statusVisivel === coluna)
+      .filter((j) => etapaDaGravacao(j) === coluna)
       .sort((a, b) => {
+        if (PELA_DATA.includes(coluna as EtapaDaGravacao)) {
+          const da = diaDe(a), db = diaDe(b)
+          if (da !== db) return da < db ? -1 : 1
+        }
         const atrA = estaAtrasada(a), atrB = estaAtrasada(b)
         if (atrA !== atrB) return atrA ? -1 : 1
         const urgA = a.prioridade === "urgente", urgB = b.prioridade === "urgente"
@@ -71,8 +77,8 @@ export function JobsQuadro({
       itensDaColuna={daColuna}
       idDe={(j) => j.id}
       onDragEnd={soltar}
-      nome={{ um: "job", varios: "jobs", vazio: "Nenhum job nesta etapa." }}
-      recolhivel="finalizado"
+      nome={{ um: "gravação", varios: "gravações", vazio: "Nenhuma gravação nesta etapa." }}
+      recolhivel="concluido"
       verTodos="/historico/audiovisual"
       renderCard={(job, { arrastavel }) => <JobCard job={job} onAbrir={onAbrir} arrastavel={arrastavel} />}
     />

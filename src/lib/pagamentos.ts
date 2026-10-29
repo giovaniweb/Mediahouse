@@ -52,7 +52,7 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
   await tx.$queryRaw`SELECT id FROM demandas WHERE id=${nf.demandaId} AND "organizacaoId"=${e.organizacaoId} FOR UPDATE`
   const d=await tx.demanda.findFirst({where:{id:nf.demandaId,organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId}})
   const vinculo=await tx.videomakerOrganizacao.findFirst({where:{organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId,status:{in:["ativo","preferencial"]},emListaNegra:false,videomaker:{OR:[{usuarioId:null},{usuario:{status:"ativo"}}]}}})
-  if(!d || !vinculo) throw new PagamentoInvalido("Profissional não está autorizado para este job",403)
+  if(!d || !vinculo) throw new PagamentoInvalido("Profissional não está autorizado para esta gravação",403)
   if(!d.linkBrutos && !d.linkFolderBrutos && !["brutos_enviados","editor_atribuido","fila_edicao","editando","edicao_finalizada","revisao_pendente","ajuste_solicitado","aprovado","postagem_pendente","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado","expirado","encerrado"].includes(d.statusInterno)) throw new PagamentoInvalido("Registre a entrega do material antes de enviar a nota fiscal.")
   const atual=await tx.notaFiscalUpload.findUniqueOrThrow({where:{id:nf.id}})
   if(atual.status!=="pendente") throw new PagamentoInvalido("Nota fiscal já enviada. Solicite revisão à equipe.")

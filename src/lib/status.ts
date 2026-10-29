@@ -67,8 +67,10 @@ export const TRANSICOES_VALIDAS: Partial<Record<StatusInterno, StatusInterno[]>>
   videomaker_aceitou:          ["captacao_agendada", "captacao_realizada"],
   videomaker_recusou:          ["videomaker_notificado"],
   captacao_agendada:           ["captacao_realizada"],
-  captacao_realizada:          ["brutos_enviados"],
-  brutos_enviados:             ["editor_atribuido", "fila_edicao"],
+  // `aprovado` direto (28/10/2026): o material que o videomaker entrega já
+  // editado vai de "Gravado" para "Para enviar ao cliente", sem nossa edição.
+  captacao_realizada:          ["brutos_enviados", "aprovado"],
+  brutos_enviados:             ["editor_atribuido", "fila_edicao", "aprovado"],
   editor_atribuido:            ["fila_edicao", "editando"],
   fila_edicao:                 ["editando"],
   editando:                    ["edicao_finalizada", "impedimento"],

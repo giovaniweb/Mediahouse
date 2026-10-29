@@ -15,17 +15,19 @@ import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
-import { COLUNAS_LABEL, estaAtrasada } from "@/lib/status"
-import { foiAprovada, proximaAcao, responsavelAtual } from "@/lib/job-fase"
+import { STATUS_PARA_COLUNA, estaAtrasada } from "@/lib/status"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { foiAprovada, responsavelAtual } from "@/lib/job-fase"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
 import { LayoutGrid, List, ChevronRight, Plus } from "lucide-react"
 
-// Quadro operacional de Jobs.
+// Quadro operacional de Gravações Externas (antes "Jobs"; o endereço continua
+// /jobs para não quebrar link salvo).
 //
-// ESCOPO: Jobs JÁ APROVADOS. As três responsabilidades são separadas —
+// ESCOPO: gravações JÁ APROVADAS. As três responsabilidades são separadas —
 // /demandas é o kanban geral do audiovisual, /aprovacoes é a caixa de entrada
 // das solicitações, e este quadro é a operação do que passou pela aprovação.
 //
@@ -43,10 +45,10 @@ import { LayoutGrid, List, ChevronRight, Plus } from "lucide-react"
 type Aba = "todos" | "meus" | "hoje" | "atrasados"
 
 const ABAS: { id: Aba; label: string }[] = [
-  { id: "todos",     label: "Todos" },
-  { id: "meus",      label: "Meus Jobs" },
+  { id: "todos",     label: "Todas" },
+  { id: "meus",      label: "Minhas" },
   { id: "hoje",      label: "Hoje" },
-  { id: "atrasados", label: "Atrasados" },
+  { id: "atrasados", label: "Atrasadas" },
 ]
 
 export default function JobsPage() {
@@ -147,7 +149,7 @@ function Quadro() {
     if (!m.ok) { toast.error(m.motivo); return }
     if (!m.mudou) return
     const anterior = data
-    void mutate((prev) => prev && { ...prev, demandas: prev.demandas.map((j) => j.id === id ? { ...j, statusVisivel: coluna, statusInterno: m.statusInterno } : j) }, false)
+    void mutate((prev) => prev && { ...prev, demandas: prev.demandas.map((j) => j.id === id ? { ...j, statusVisivel: STATUS_PARA_COLUNA[m.statusInterno], statusInterno: m.statusInterno } : j) }, false)
     try {
       const res = await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
@@ -160,11 +162,11 @@ function Quadro() {
         toast.error(typeof erro.error === "string" ? erro.error : `Não foi possível mover (${res.status})`)
         return
       }
-      toast.success(`Job movido para ${COLUNAS_LABEL[coluna as keyof typeof COLUNAS_LABEL] ?? coluna}`)
+      toast.success(`Gravação movida para ${ROTULO_DA_ETAPA[coluna as EtapaDaGravacao] ?? coluna}`)
       void mutate()
     } catch {
       void mutate(anterior, false)
-      toast.error("Sem conexão. O job voltou para onde estava.")
+      toast.error("Sem conexão. A gravação voltou para onde estava.")
     }
   }
 
@@ -183,13 +185,13 @@ function Quadro() {
 
   return (
     <>
-      {/* "+ Novo Job" no mesmo lugar e desenho do "+ Nova Demanda" de /demandas.
+      {/* "+ Nova gravação" no mesmo lugar e desenho do "+ Nova Demanda" de /demandas.
           O formulário é o mesmo, já em Cobertura / Entrega. */}
       <Header
-        title="Jobs"
+        title="Gravações Externas"
         actions={
           <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
-            <Plus className="w-4 h-4" /> Novo Job
+            <Plus className="w-4 h-4" /> Nova gravação
           </button>
         }
       />
@@ -200,19 +202,19 @@ function Quadro() {
       <div className="px-4 pt-1 pb-3">
         <section className={topo.overview} aria-label="Controles do quadro">
           <div className={topo.topRow}>
-            <div className={topo.tabs} aria-label="Visualização de Jobs">
+            <div className={topo.tabs} aria-label="Visualização das gravações">
               <button type="button" aria-label="Ver como kanban" aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><LayoutGrid size={16} />Kanban</button>
               <button type="button" aria-label="Ver como lista" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16} />Lista</button>
             </div>
-            <div className={topo.counts} aria-label="Resumo dos jobs filtrados">
-              <span><strong>{jobs.length}</strong> {contagem(jobs.length, "job", "jobs")}</span>
-              <span data-tone="late"><strong>{atrasados}</strong> {contagem(atrasados, "atrasado", "atrasados")}</span>
-              <span data-tone="approval"><strong>{captacoesHoje}</strong> {contagem(captacoesHoje, "captação", "captações")} hoje</span>
+            <div className={topo.counts} aria-label="Resumo das gravações filtradas">
+              <span><strong>{jobs.length}</strong> {contagem(jobs.length, "gravação", "gravações")}</span>
+              <span data-tone="late"><strong>{atrasados}</strong> {contagem(atrasados, "atrasada", "atrasadas")}</span>
+              <span data-tone="approval"><strong>{captacoesHoje}</strong> {contagem(captacoesHoje, "gravação", "gravações")} hoje</span>
             </div>
           </div>
           <div className={topo.controlsRow}>
             {/* Recortes principais (§35) */}
-            <div className={topo.scopes} aria-label="Recortes dos jobs">
+            <div className={topo.scopes} aria-label="Recortes das gravações">
               {ABAS.map((a) => (
                 <button key={a.id} type="button" aria-pressed={aba === a.id} onClick={() => setAba(a.id)}>
                   {a.label}{aba === a.id && <span>{jobs.length}</span>}
@@ -227,7 +229,7 @@ function Quadro() {
                 onBusca={setBusca}
                 placeholder="Buscar por código, título…"
                 filtros={[
-                  { id: "captacao", rotulo: "Data da captação", tipo: "periodo", valor: captacao, onChange: setCaptacao },
+                  { id: "captacao", rotulo: "Data da gravação", tipo: "periodo", valor: captacao, onChange: setCaptacao },
                   { id: "pessoa", rotulo: "Pessoa", valor: pessoa, onChange: setPessoa, opcoes: pessoas },
                   { id: "regiao", rotulo: "Região", valor: regiao, onChange: setRegiao, opcoes: regioes.map((r) => ({ valor: r, rotulo: r })) },
                 ]}
@@ -237,16 +239,16 @@ function Quadro() {
         </section>
       </div>
 
-      {error && <div role="alert" className={styles.error}>Não foi possível atualizar os jobs. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
+      {error && <div role="alert" className={styles.error}>Não foi possível atualizar as gravações. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {/* Kanban com altura ancorada na viewport, como em Demandas: a barra de
           rolagem horizontal fica no rodapé. A lista rola com a página. */}
       {isLoading && todos.length === 0 ? (
         <p className="text-sm text-zinc-500 px-6 py-8">Carregando…</p>
       ) : error && !data ? null : view === "list" ? (
         <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <section className={styles.list} aria-label="Lista de Jobs">
-            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<p>{quandoEQuem(job)}</p><span>{proximaAcao(job)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
-            {jobs.length === 0 && <p>Nenhum job com os filtros selecionados.</p>}
+          <section className={styles.list} aria-label="Lista de gravações">
+            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<p>{quandoEQuem(job)}</p><span>{acaoDaGravacao(job, hoje)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
+            {jobs.length === 0 && <p>Nenhuma gravação com os filtros selecionados.</p>}
           </section>
         </div>
       ) : (

@@ -35,6 +35,14 @@ enum StatusUsuario {
 // Pessoas & Acessos (SaaS): dimensões separadas do `tipo` legado, por organização
 // (vivem em UsuarioOrganizacao). categoria = quem é a pessoa; funcaoProfissional = o
 // que faz; areas = onde atua. Papel/acesso continua em UsuarioOrganizacao.papel.
+// Gravação externa: quem edita, combinado no agendamento (28/10/2026). O
+// quadro de Gravações Externas mostra como etiqueta; nulo = ainda não combinado.
+enum EdicaoDaGravacao {
+  videomaker // o videomaker entrega editado
+  equipe // nossos editores editam os brutos
+  sem_edicao // vai bruto para o cliente
+}
+
 enum CategoriaPessoa {
   interna // equipe interna que opera a empresa
   solicitante // pede/acompanha demandas
@@ -564,6 +572,8 @@ model Demanda {
   publicTokenAtivo    Boolean   @default(false)
   publicTokenExpiraEm DateTime?
   localGravacao       String?
+  // Gravação externa: quem edita (EdicaoDaGravacao). Nulo = não combinado.
+  edicaoPor           EdicaoDaGravacao?
   referencia          String?
 
   // Impedimento

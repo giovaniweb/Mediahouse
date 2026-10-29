@@ -42,6 +42,7 @@ const CAMPOS_RASTREADOS: Record<string, string> = {
   linkPostagem: "link da postagem",
   linkCliente: "link do cliente",
   localGravacao: "local de gravação",
+  edicaoPor: "quem edita",
   motivoImpedimento: "motivo do impedimento",
 }
 

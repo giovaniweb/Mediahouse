@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { CalendarClock, MapPin, Users, Building2, Package, ExternalLink, ArrowRight } from "lucide-react"
+import { CalendarClock, MapPin, Users, Building2, Package, ExternalLink } from "lucide-react"
 import type { StatusInterno } from "@prisma/client"
 import { InlineEdit } from "@/components/demandas/InlineEdit"
 import {
@@ -15,6 +15,8 @@ import {
   situacaoDaEquipe,
   telefoneLegivel,
 } from "@/lib/ficha-do-job"
+import { EDICAO, rotuloDaEdicao } from "@/lib/etapas-da-gravacao"
+import { PassoDaGravacao, type GravacaoDoPasso } from "./PassoDaGravacao"
 import styles from "./FichaDoJob.module.css"
 
 /**
@@ -24,12 +26,16 @@ import styles from "./FichaDoJob.module.css"
  * quem vai gravar precisa da data, do endereço e do contato, não do briefing.
  * Faltando um desses, a ficha diz que falta (em âmbar) em vez de esconder.
  * Data e endereço editam ali mesmo; a escala do videomaker continua em
- * "Equipe e contexto", e o botão leva até lá.
+ * "Equipe e contexto", e o botão do próximo passo leva até lá.
+ *
+ * Abaixo da grade, o próximo passo (PassoDaGravacao): o campo da vez aparece
+ * quando chega a hora, em vez de todos de uma vez. Quem edita entra junto do
+ * videomaker, porque é combinado ao escalar.
  */
 
 type Pessoa = { nome: string; telefone?: string | null }
 
-export type JobDaFicha = {
+export type JobDaFicha = Omit<GravacaoDoPasso, "statusInterno" | "videomaker" | "dataCaptacao" | "dataEvento"> & {
   statusInterno: StatusInterno
   dataCaptacao?: string | null
   dataEvento?: string | null
@@ -48,6 +54,8 @@ export function FichaDoJob({
   podeEditar,
   onSalvar,
   onEscalar,
+  onAvancar,
+  onConfirmarVideomaker,
   rodape,
   children,
 }: {
@@ -56,6 +64,9 @@ export function FichaDoJob({
   onSalvar: (patch: Record<string, unknown>) => Promise<void>
   /** Leva a "Equipe e contexto", onde se escala o videomaker. */
   onEscalar: () => void
+  /** Grava os campos do passo (se houver) e muda o status. */
+  onAvancar: (statusInterno: string, patch?: Record<string, unknown>) => Promise<void>
+  onConfirmarVideomaker: (aceite: boolean) => void
   /** Etapa e de quem é a vez. */
   rodape: ReactNode
   children?: ReactNode
@@ -123,12 +134,17 @@ export function FichaDoJob({
               {telVm && <> · {zapVm ? <a href={zapVm} target="_blank" rel="noopener noreferrer">{telVm}</a> : telVm}</>}
             </span>
           )}
-          {acompanham.length > 0 && <span className={styles.detalhe}>Acompanha: {acompanham.join(", ")}</span>}
-          {!job.videomaker && podeEditar && (
-            <button type="button" className={styles.acao} onClick={onEscalar}>
-              Escalar videomaker <ArrowRight aria-hidden />
-            </button>
+          {job.videomaker && (
+            <InlineEdit
+              value={job.edicaoPor ?? ""}
+              canEdit={podeEditar}
+              tipo="select"
+              options={[{ value: "", label: "Não combinado" }, ...EDICAO.map((e) => ({ value: e.id, label: e.rotulo }))]}
+              onSave={(v) => onSalvar({ edicaoPor: v || null })}
+              display={<span className={styles.detalhe}>Edição: {rotuloDaEdicao(job.edicaoPor) ?? <span className={styles.situacao} data-tom="alerta">não combinada</span>}</span>}
+            />
           )}
+          {acompanham.length > 0 && <span className={styles.detalhe}>Acompanha: {acompanham.join(", ")}</span>}
         </div>
 
         <div className={styles.campo}>
@@ -143,6 +159,14 @@ export function FichaDoJob({
           )}
         </div>
       </div>
+
+      <PassoDaGravacao
+        job={job}
+        podeEditar={podeEditar}
+        onAvancar={onAvancar}
+        onConfirmarVideomaker={onConfirmarVideomaker}
+        onEscalar={onEscalar}
+      />
 
       {levar.length > 0 && (
         <p className={styles.levar}><Package aria-hidden /> <span>Levar:</span> {levar.join(" · ")}</p>

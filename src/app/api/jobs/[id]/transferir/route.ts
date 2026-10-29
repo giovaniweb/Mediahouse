@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const vinculo = await permissoesEfetivas(session.user.id, organizacaoId)
   if (!vinculo || !podeTransferir(vinculo.papel)) {
-    return NextResponse.json({ error: "Só admin ou gestor pode transferir um Job para Demandas." }, { status: 403 })
+    return NextResponse.json({ error: "Só admin ou gestor pode transferir uma gravação para Demandas." }, { status: 403 })
   }
   try {
     const avaliacao = await comOrg(organizacaoId, () => prisma.$transaction((tx) => avaliarTransferencia(tx, organizacaoId, id)))

@@ -128,7 +128,7 @@ export function AcoesVideomaker({
           <div className="space-y-2">
             <label className="block text-xs text-zinc-400" htmlFor="valor-acao">
               {pedindo.exigeMotivo
-                ? "Por que está recusando? O motivo fica registrado no Job."
+                ? "Por que está recusando? O motivo fica registrado na gravação."
                 : "Link da pasta ou do arquivo com o material bruto"}
             </label>
             <input

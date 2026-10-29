@@ -106,7 +106,7 @@ export default function ConvitePage() {
           {data && <div><dt>Data</dt><dd>{formatarData(data, { day: "2-digit", month: "long", year: "numeric" })}</dd></div>}
           {d.prioridade !== "normal" && <div><dt>Prioridade</dt><dd>{d.prioridade}</dd></div>}
         </dl>
-        {d.descricao && <div className={styles.brief}><h2>Sobre o job</h2><p>{d.descricao}</p></div>}
+        {d.descricao && <div className={styles.brief}><h2>Sobre a gravação</h2><p>{d.descricao}</p></div>}
         <div className={styles.payment}><h2>Pagamento</h2><p>{convite.tarifaDiaria ? `Diária de referência: ${Number(convite.tarifaDiaria).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "Valor a confirmar com a equipe."}</p><p>{convite.condicoes || "Convite antigo sem condição registrada. Confirme valor e prazo com a equipe antes do serviço."}</p></div>
         <p className={styles.expiry}>Responda até {new Date(convite.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })} (horário de Brasília).</p>
         {erroResposta && <p role="alert" className={styles.error}>{erroResposta} Sua confirmação ainda não foi recebida nesta tela. Confira o convite antes de tentar novamente.</p>}

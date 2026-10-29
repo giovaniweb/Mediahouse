@@ -104,25 +104,25 @@ export function impedimentosDaTransferencia(
   if (d.videomakerId) {
     lista.push({
       codigo: "videomaker_escalado",
-      mensagem: "Há videomaker escalado neste Job. Tire o videomaker antes de transferir.",
+      mensagem: "Há videomaker escalado nesta gravação. Tire o videomaker antes de transferir.",
     })
   }
   if (c.convitesAceitos > 0) {
     lista.push({
       codigo: "convite_aceito",
-      mensagem: "Um videomaker já aceitou o convite deste Job.",
+      mensagem: "Um videomaker já aceitou o convite desta gravação.",
     })
   }
   if (c.custos > 0) {
     lista.push({
       codigo: "custo_lancado",
-      mensagem: "Há custo lançado para este Job. Resolva o custo em Custos antes de transferir.",
+      mensagem: "Há custo lançado para esta gravação. Resolva o custo em Custos antes de transferir.",
     })
   }
   if (statusAoTransferir(d) === null) {
     lista.push({
       codigo: "etapa_avancada",
-      mensagem: "Este Job já passou da escala do videomaker. A transferência só vale até essa etapa.",
+      mensagem: "Esta gravação já passou da escala do videomaker. A transferência só vale até essa etapa.",
     })
   }
   return lista
@@ -256,7 +256,7 @@ export async function transferirParaDemandas(
   })
 
   const de = `${demanda.departamento ?? "—"} / ${demanda.tipoVideo ?? "—"}`
-  const partes = [`Transferido de Jobs para Demandas (audiovisual) — antes: ${de}`]
+  const partes = [`Transferido de Gravações Externas para Demandas (audiovisual) — antes: ${de}`]
   if (origem) partes.push(`voltou como foi pedido (${mudanca.departamento} / ${mudanca.tipoVideo})`)
   if (mudouStatus) partes.push(`voltou ao início do quadro de Demandas`)
   if (cancelados.count > 0) partes.push(`${cancelados.count} convite(s) pendente(s) cancelado(s)`)
@@ -315,7 +315,7 @@ export async function responderTransferencia(
     return NextResponse.json({ error: "Não foi possível determinar suas permissões nesta empresa." }, { status: 403 })
   }
   if (!podeTransferir(vinculo.papel)) {
-    return NextResponse.json({ error: "Só admin ou gestor pode transferir um Job para Demandas." }, { status: 403 })
+    return NextResponse.json({ error: "Só admin ou gestor pode transferir uma gravação para Demandas." }, { status: 403 })
   }
   // A tela sempre pergunta antes; a rota não aceita o clique sem a resposta.
   if (body.confirmar !== true) {

@@ -410,8 +410,8 @@ export function NovaDemandaModal({ open, onClose, prefill, social, job }: NovaDe
       const codigo = typeof json.codigo === "string" ? json.codigo : ""
       const aprovado = !AGUARDANDO_APROVACAO.includes(json.statusInterno as StatusInterno)
       if (job) {
-        if (aprovado) toast.success(`Job ${codigo} criado. Já está no quadro.`)
-        else toast.success("Pedido criado. Ele aparece em Jobs depois de aprovado em Aprovações.", { duration: 8000 })
+        if (aprovado) toast.success(`Gravação ${codigo} criada. Já está no quadro.`)
+        else toast.success("Pedido criado. Ele aparece em Gravações Externas depois de aprovado em Aprovações.", { duration: 8000 })
       } else {
         toast.success(social ? `Pedido ${codigo} enviado ao Audiovisual.` : `Demanda ${codigo} criada!`)
       }
@@ -455,7 +455,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social, job }: NovaDe
   return (
     <ModalFormulario
       aberto={open}
-      titulo={social ? `Vídeo · ${social.linhaNome}` : job ? "Novo Job" : "Nova Demanda"}
+      titulo={social ? `Vídeo · ${social.linhaNome}` : job ? "Nova gravação" : "Nova Demanda"}
       icone={Plus}
       aoTentarFechar={tentarFechar}
       aoConfirmar={handleSubmit}
@@ -469,7 +469,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social, job }: NovaDe
           ? <><Loader2 className="h-4 w-4 animate-spin" /> {social ? "Salvando..." : "Criando..."}</>
           : social
           ? <>Enviar para a equipe <span aria-hidden>→</span></>
-          : <>{job ? "Criar Job" : "Criar Demanda"} <span aria-hidden>→</span></>
+          : <>{job ? "Criar gravação" : "Criar Demanda"} <span aria-hidden>→</span></>
       }
     >
       {social && !social.somenteLeitura && (
@@ -488,7 +488,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social, job }: NovaDe
           o título, e o briefing usa a largura toda. */}
       <Secao icone={ClipboardList} titulo="O que precisa ser feito?">
         <div className={cn("grid gap-x-10 gap-y-4", !job && "md:grid-cols-2")}>
-          <Campo label={job ? "Título do job" : "Título da demanda"} obrigatorio erro={errors.titulo}>
+          <Campo label={job ? "Título da gravação" : "Título da demanda"} obrigatorio erro={errors.titulo}>
             <input
               value={titulo}
               onChange={e => { setTitulo(e.target.value); limparCampo("titulo") }}
