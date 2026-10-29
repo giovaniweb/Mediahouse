@@ -22,7 +22,7 @@
 //
 // Uso (sem --aplicar, só mostra o plano):
 //   node scripts/storage/copiar-projeto.mjs --origem ../../../.env.local \
-//     --destino ~/nuflow-virada/storage-destino.env [--aplicar]
+//     --destino ~/nuflow-virada/storage-destino.env [--aplicar] [--maximo-mb 50]
 //
 // A origem lê NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY; o destino,
 // DESTINO_SUPABASE_URL e DESTINO_SERVICE_ROLE_KEY. Nenhuma chave é impressa.
@@ -34,6 +34,9 @@ import { join } from "node:path"
 const args = process.argv.slice(2)
 const valor = (nome) => { const i = args.indexOf(nome); return i >= 0 ? args[i + 1] : undefined }
 const aplicar = args.includes("--aplicar")
+// Limite de upload do destino, quando ainda é menor que o maior arquivo: o que passa dele
+// fica "adiado" sem ser baixado, e uma rodada posterior, com o limite certo, completa.
+const maximo = Number(valor("--maximo-mb") ?? Infinity) * 1024 ** 2
 
 function lerEnv(arquivo, chaveUrl, chaveKey) {
   const env = Object.fromEntries(readFileSync(arquivo.replace(/^~/, homedir()), "utf8").split("\n")
@@ -81,7 +84,11 @@ function projeto({ origem, key }) {
     async subir(bucket, p, corpo, mime, cache) {
       const r = await fetch(url(`object/${caminho(bucket, p)}`), { method: "POST", body: corpo, redirect: "error", signal: AbortSignal.timeout(30 * 60_000),
         headers: { ...h, "Content-Type": mime || "application/octet-stream", "x-upsert": "false", ...(cache ? { "Cache-Control": cache } : {}) } })
-      if (!r.ok) throw new Error(`subir ${bucket}/${p}: ${r.status} ${(await r.text()).slice(0, 200)}`)
+      if (!r.ok) {
+        const corpo = await r.text()
+        // 413: o destino recusa o tamanho; baixar de novo só gasta tráfego.
+        throw Object.assign(new Error(`subir ${bucket}/${p}: ${r.status} ${corpo.slice(0, 200)}`), { semRepetir: /"413"|EntityTooLarge/.test(corpo) || r.status === 413 })
+      }
     },
   }
 }
@@ -112,6 +119,8 @@ const total = (l) => l.reduce((s, o) => s + o.tamanho, 0)
 console.log(`midia: ${midia.length} objetos, ${gb(total(midia))}`)
 console.log(`uploads: ${uploads.length} objetos; ${pulados} já têm cópia idêntica no midia/legado; ${uploads.length - pulados} vão para o uploads privado (${gb(total(plano.filter((p) => p.para[0] === "uploads")))})`)
 console.log(`total a conferir: ${plano.length} objetos, ${gb(total(plano))}; maior: ${(Math.max(...plano.map((p) => p.tamanho)) / 1024 ** 2).toFixed(0)} MB`)
+const adiados = plano.filter((p) => p.tamanho > maximo)
+if (adiados.length) console.log(`adiados por passar de ${maximo / 1024 ** 2} MB: ${adiados.length} objetos, ${gb(total(adiados))}`)
 
 // ── Destino ────────────────────────────────────────────────────────────────
 const bucketsDestino = await B.buckets()
@@ -159,20 +168,21 @@ async function copiar(p) {
       cont.copiados++; cont.bytes += corpo.length
       appendFileSync(relatorio, JSON.stringify({ status: "copiado", de: p.de.join("/"), para: p.para.join("/"), tamanho: corpo.length, sha256, md5, md5Conferido: /^[a-f0-9]{32}$/.test(etag) }) + "\n")
       return
-    } catch (e) { ultimoErro = e }
+    } catch (e) { ultimoErro = e; if (e.semRepetir) break }
   }
   cont.falhas++
   appendFileSync(relatorio, JSON.stringify({ status: "falha", de: p.de.join("/"), para: p.para.join("/"), erro: String(ultimoErro?.message ?? ultimoErro) }) + "\n")
   console.error(`falha: ${p.para.join("/")}: ${ultimoErro?.message ?? ultimoErro}`)
 }
-const fila = [...plano]
+for (const p of adiados) appendFileSync(relatorio, JSON.stringify({ status: "adiado", de: p.de.join("/"), para: p.para.join("/"), tamanho: p.tamanho }) + "\n")
+const fila = plano.filter((p) => p.tamanho <= maximo)
 let feitos = 0
 await Promise.all(Array.from({ length: 2 }, async () => {
   while (fila.length) {
     await copiar(fila.shift())
-    if (++feitos % 20 === 0) console.log(`  ${feitos}/${plano.length} · ${gb(cont.bytes)} em ${Math.round((Date.now() - inicio) / 60000)} min`)
+    if (++feitos % 20 === 0) console.log(`  ${feitos}/${plano.length - adiados.length} · ${gb(cont.bytes)} em ${Math.round((Date.now() - inicio) / 60000)} min`)
   }
 }))
-console.log(`\ncopiados ${cont.copiados} (${gb(cont.bytes)}) · já estavam ${cont.jaEstavam} · conflitos ${cont.conflitos} · falhas ${cont.falhas}`)
+console.log(`\ncopiados ${cont.copiados} (${gb(cont.bytes)}) · já estavam ${cont.jaEstavam} · conflitos ${cont.conflitos} · falhas ${cont.falhas} · adiados ${adiados.length}`)
 console.log(`relatório: ${relatorio}`)
-process.exit(cont.conflitos || cont.falhas ? 1 : 0)
+process.exit(cont.conflitos || cont.falhas || adiados.length ? 1 : 0)
