@@ -8,6 +8,11 @@ describe("fronteira de publicação", () => {
     expect(urlPublicavel("/api/midia/org/a/videos/d/final/1.mp4", "a", "d")).toBe(true)
     for (const u of ["/api/midia/org/b/videos/d/1.mp4", "/api/midia/org/a/videos/outra/1.mp4", "/api/midia/org/a/docs/d/1.pdf", "/api/midia/org/a/nf/d/1.pdf", "javascript:alert(1)", "https://user:pass@example.com/a"]) expect(urlPublicavel(u,"a","d")).toBe(false)
   })
+  it("o vídeo do acervo legado vale para a própria demanda, e só para ela", () => {
+    expect(urlPublicavel("/api/midia/org/a/legado/videos/d/final/1.mp4", "a", "d")).toBe(true)
+    expect(urlPublicavel("/api/midia/org/a/legado/thumbnails/d/1.jpg", "a", "d", true)).toBe(true)
+    for (const u of ["/api/midia/org/b/legado/videos/d/final/1.mp4", "/api/midia/org/a/legado/videos/outra/final/1.mp4", "/api/midia/org/a/legado/docs/d/1.pdf"]) expect(urlPublicavel(u, "a", "d")).toBe(false)
+  })
   it("id do Drive é exato e de domínio oficial", () => {
     expect(driveFileId("https://drive.google.com/file/d/arquivo123456/view")).toBe("arquivo123456")
     expect(driveFileId("https://evil.invalid/file/d/arquivo123456/view")).toBeNull()
