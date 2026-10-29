@@ -97,6 +97,23 @@ describe("minhas notas fiscais", () => {
     expect(tarefas).toEqual(["aviso-gravacao"])
   })
 
+  it("pedido antigo não some atrás de muitas gravações recentes; uma nota cobre até 50", async () => {
+    const velha = await gravacao(vm, "editando", true, "2025-01-10")
+    const recentes = Array.from({ length: 105 }, (_, i) => `${p}-r${i}`)
+    await db.demanda.createMany({ data: recentes.map((id, i) => ({
+      id, organizacaoId: org, codigo: id, titulo: "Gravação", descricao: "-", area: "audiovisual", departamento: "eventos",
+      tipoVideo: "cobertura_evento", cidade: "Curitiba", solicitanteId: usuario, videomakerId: vm, statusInterno: "aprovado" as const,
+      statusVisivel: "para_postar" as const, dataCaptacao: new Date(Date.UTC(2026, 9, 1, 12, i)),
+    })) })
+    await db.notaFiscalUpload.createMany({ data: recentes.map((demandaId) => ({ demandaId, videomakerId: vm, status: "enviada", url: "https://exemplo.invalid/n.pdf" })) })
+    expect((await listar()).paraEnviar.map((g) => g.id)).toContain(velha)
+    const r = await enviar(Array.from({ length: 51 }, (_, i) => `${p}-x${i}`))
+    expect(r.status).toBe(400)
+    expect((await r.json()).error).toBe("Escolha de 1 a 50 gravações para esta nota.")
+    await db.notaFiscalUpload.deleteMany({ where: { demandaId: { in: [...recentes, velha] } } })
+    await db.demanda.deleteMany({ where: { id: { in: [...recentes, velha] } } })
+  })
+
   it("depois de enviada, sai da lista de espera e aparece em enviadas com o link da nota", async () => {
     const l = await listar()
     expect(l.paraEnviar).toEqual([])

@@ -9,7 +9,7 @@ import { PageIntro } from "@/components/layout/PageIntro"
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/fetcher"
 import { ModalFormulario } from "@/components/demandas/ModalFormulario"
-import { ROTULO_DA_NOTA, type EstadoDaNotaDoVideomaker } from "@/lib/notas-do-videomaker"
+import { LIMITE_POR_NOTA, ROTULO_DA_NOTA, type EstadoDaNotaDoVideomaker } from "@/lib/notas-do-videomaker"
 
 // Minhas notas fiscais (Giovani, 29/10/2026): só as gravações externas em que
 // a nota foi pedida e ainda não foi mandada — o card antigo sem pedido sai — e
@@ -41,13 +41,16 @@ export default function MinhasNotasPage() {
 
   // Só valem as marcadas que ainda esperam nota (a lista recarrega depois do envio).
   const escolhidas = paraEnviar.filter((g) => marcadas.has(g.id))
-  const todas = paraEnviar.length > 0 && escolhidas.length === paraEnviar.length
+  // Uma nota cobre até LIMITE_POR_NOTA gravações; "Marcar todas" marca até lá.
+  const cabem = paraEnviar.slice(0, LIMITE_POR_NOTA)
+  const todas = paraEnviar.length > 0 && escolhidas.length === cabem.length
+  const cheia = escolhidas.length >= LIMITE_POR_NOTA
 
   function marcar(id: string) {
     setMarcadas((atual) => {
       const nova = new Set(atual)
       if (nova.has(id)) nova.delete(id)
-      else nova.add(id)
+      else if (nova.size < LIMITE_POR_NOTA) nova.add(id)
       return nova
     })
   }
@@ -109,12 +112,15 @@ export default function MinhasNotasPage() {
               <span className="text-xs bg-zinc-800 text-zinc-500 rounded-full px-2 py-0.5 border border-zinc-700">{paraEnviar.length}</span>
             </h2>
             {paraEnviar.length > 1 && (
-              <button type="button" onClick={() => setMarcadas(todas ? new Set() : new Set(paraEnviar.map((g) => g.id)))}
+              <button type="button" onClick={() => setMarcadas(todas ? new Set() : new Set(cabem.map((g) => g.id)))}
                 className="text-xs text-purple-300 hover:text-purple-200">
-                {todas ? "Desmarcar todas" : "Marcar todas"}
+                {todas ? "Desmarcar todas" : paraEnviar.length > LIMITE_POR_NOTA ? `Marcar as ${LIMITE_POR_NOTA} primeiras` : "Marcar todas"}
               </button>
             )}
           </div>
+          {cheia && paraEnviar.length > LIMITE_POR_NOTA && (
+            <p className="text-xs text-zinc-500 mb-3">Uma nota cobre até {LIMITE_POR_NOTA} gravações. Envie esta e marque as outras depois.</p>
+          )}
 
           {isLoading ? (
             <p className="text-sm text-zinc-500">Carregando…</p>
@@ -130,7 +136,7 @@ export default function MinhasNotasPage() {
                 const marcada = marcadas.has(g.id)
                 return (
                   <li key={g.id} className={cn("bg-zinc-900 border rounded-lg p-4 flex items-center gap-4", marcada ? "border-purple-500/60" : "border-zinc-800")}>
-                    <input type="checkbox" checked={marcada} onChange={() => marcar(g.id)} aria-label={`Incluir ${g.cliente} (${g.codigo}) nesta nota`}
+                    <input type="checkbox" checked={marcada} onChange={() => marcar(g.id)} disabled={!marcada && cheia} aria-label={`Incluir ${g.cliente} (${g.codigo}) nesta nota`}
                       className="h-4 w-4 shrink-0 accent-purple-500" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">

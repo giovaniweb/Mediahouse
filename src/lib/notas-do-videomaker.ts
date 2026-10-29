@@ -23,6 +23,9 @@ export function estadoDaNotaDoVideomaker(g: GravacaoDaNota, videomakerId: string
   return s.etapa
 }
 
+/** Quantas gravações uma nota cobre de uma vez (a rota e a tela usam o mesmo teto). */
+export const LIMITE_POR_NOTA = 50
+
 /** A gravação espera a nota dele agora. */
 export const pedeNota = (e: EstadoDaNotaDoVideomaker | null) => e === "falta" || e === "refazer"
 
