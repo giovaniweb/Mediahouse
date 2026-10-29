@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z, ZodError } from "zod"
 import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { conviteDaEntrega } from "@/lib/entrega-da-gravacao"
 import { comOrg, declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 
@@ -43,6 +44,15 @@ export async function GET(
           localGravacao: true,
           dataCaptacao: true,
           prioridade: true,
+          clienteFinalNome: true,
+          tipoGravacao: true,
+          temBrinde: true,
+          brinde: true,
+          levar: true,
+          edicaoPor: true,
+          linkBrutos: true,
+          linkFinal: true,
+          statusInterno: true,
         },
       },
     },
@@ -50,6 +60,18 @@ export async function GET(
 
   if (!convite) {
     return resposta({ error: "Convite não encontrado" }, 404)
+  }
+
+  // Depois do aceite, o mesmo link vira a página de entrega da gravação
+  // (lib/entrega-da-gravacao.ts): brutos, vídeo pronto e a nota.
+  const { liberado } = await conviteDaEntrega(prisma, organizacaoId, token)
+  if (liberado) {
+    const nota = await prisma.notaFiscalUpload.findFirst({
+      where: { demandaId: convite.demanda.id, videomakerId: convite.videomakerId },
+      orderBy: { createdAt: "desc" },
+      select: { token: true, status: true },
+    })
+    return resposta({ ...convite, entrega: { liberada: true, nota } })
   }
 
   if (convite.status !== "pendente") {

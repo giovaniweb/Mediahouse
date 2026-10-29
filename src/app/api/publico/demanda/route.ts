@@ -44,6 +44,12 @@ const schema = z.object({
   tipoSolicitacao: z.enum(["video", "conteudo", "cobertura"]).optional(),
   objetivo: z.string().optional(),
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
+  // Gravação externa (29/10/2026): tipo, equipamento, brinde e o que levar.
+  tipoGravacao: z.enum(["entrega_equipamento", "demonstracao", "conteudo", "evento"]).optional(),
+  temBrinde: z.boolean().optional(),
+  brinde: z.string().trim().max(120).nullable().optional(),
+  levar: z.string().trim().max(300).nullable().optional(),
+  produtoIds: z.array(z.string().max(64)).max(10).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -156,8 +162,25 @@ export async function POST(req: NextRequest) {
       clienteFinalNome: data.clienteFinalNome,
       clienteFinalTelefone: data.clienteFinalTelefone,
       clienteFinalEmail: data.clienteFinalEmail,
+      tipoGravacao: data.tipoGravacao,
+      temBrinde: data.temBrinde,
+      brinde: data.brinde || undefined,
+      levar: data.levar || undefined,
     },
   }))
+
+  // Equipamento: só os produtos ativos desta empresa — o id vem do navegador.
+  if (data.produtoIds?.length) {
+    const validos = await prisma.produto.findMany({
+      where: { id: { in: [...new Set(data.produtoIds)] }, organizacaoId, ativo: true },
+      select: { id: true },
+    })
+    if (validos.length) {
+      // Falha aqui não desfaz o pedido, que já existe: o equipamento se acerta no card.
+      await prisma.demandaProduto.createMany({ data: validos.map((p) => ({ demandaId: demanda.id, produtoId: p.id })), skipDuplicates: true })
+        .catch((e) => console.error("[Pedido público] Erro ao vincular equipamento:", e))
+    }
+  }
 
   await prisma.historicoStatus.create({
     data: {

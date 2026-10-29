@@ -316,3 +316,75 @@ export function trilhaDaNota(job: JobDaLinha): PassoDaTrilha[] | null {
     { id: "paga", rotulo: "Paga", estado: estado(3), detalhe: null },
   ]
 }
+
+// ── Tipo, brinde e o que levar ───────────────────────────────────────────────
+//
+// O pedido do WhatsApp já diz o tipo ("Treinamento presencial Supreme" é
+// entrega de equipamento). A Débora pediu o brinde no pedido e no card (Giovani,
+// 29/10/2026): quase toda entrega de equipamento leva (caixa mineira);
+// demonstração, conteúdo e evento não — nem aparece a pergunta.
+
+export type TipoDaGravacao = "entrega_equipamento" | "demonstracao" | "conteudo" | "evento"
+
+export const TIPOS_DE_GRAVACAO: { id: TipoDaGravacao; rotulo: string; levaBrinde: boolean }[] = [
+  { id: "entrega_equipamento", rotulo: "Entrega de equipamento", levaBrinde: true },
+  { id: "demonstracao",        rotulo: "Demonstração",           levaBrinde: false },
+  { id: "conteudo",            rotulo: "Conteúdo",               levaBrinde: false },
+  { id: "evento",              rotulo: "Evento",                 levaBrinde: false },
+]
+
+export function ehTipoDeGravacao(v: unknown): v is TipoDaGravacao {
+  return TIPOS_DE_GRAVACAO.some((t) => t.id === v)
+}
+
+export function rotuloDoTipoDeGravacao(v: string | null | undefined): string | null {
+  return TIPOS_DE_GRAVACAO.find((t) => t.id === v)?.rotulo ?? null
+}
+
+/** O tipo pergunta pelo brinde? Só a entrega de equipamento. */
+export function perguntaBrinde(tipo: string | null | undefined): boolean {
+  return TIPOS_DE_GRAVACAO.find((t) => t.id === tipo)?.levaBrinde ?? false
+}
+
+/** "Brinde: caixa mineira · banner" — a linha "Levar" do card. Null sem nada. */
+export function levarDaGravacao(j: { temBrinde?: boolean | null; brinde?: string | null; levar?: string | null }): string | null {
+  const qual = j.brinde?.trim()
+  const partes = [
+    j.temBrinde ? (qual ? `Brinde: ${qual}` : "Brinde") : null,
+    j.levar?.trim() || null,
+  ].filter(Boolean)
+  return partes.length ? partes.join(" · ") : null
+}
+
+// ── Entregas do videomaker ───────────────────────────────────────────────────
+//
+// Do videomaker chegam até três coisas (Giovani, 29/10/2026): o link do drive
+// com os brutos (sempre), o vídeo pronto (quando a edição é dele) e a nota. Ele
+// mesmo entrega pelo link do convite; a Débora anexa por ele se vier pelo
+// WhatsApp. As duas portas usam esta regra.
+
+/** O material está completo? Brutos sempre; o vídeo pronto só se a edição é dele. */
+export function materialCompleto(j: { linkBrutos?: string | null; linkFinal?: string | null; edicaoPor?: string | null }): boolean {
+  return !!j.linkBrutos?.trim() && (j.edicaoPor !== "videomaker" || !!j.linkFinal?.trim())
+}
+
+/** Para onde a gravação vai quando o material chega: nossa edição, ou direto para enviar. */
+export function statusDoMaterial(edicaoPor: string | null | undefined): StatusInterno {
+  return edicaoPor === "videomaker" || edicaoPor === "sem_edicao" ? "aprovado" : "brutos_enviados"
+}
+
+/** A gravação ainda espera o material? (agendada, antes da edição) */
+export function esperaMaterial(job: { statusInterno: string }): boolean {
+  return etapaDaGravacao(job) === "agendado"
+}
+
+/** Link http(s) de verdade — o que vem da página pública não é confiável. */
+export function linkValido(v: string | null | undefined): boolean {
+  if (!v?.trim()) return false
+  try {
+    const u = new URL(v.trim())
+    return u.protocol === "https:" || u.protocol === "http:"
+  } catch {
+    return false
+  }
+}

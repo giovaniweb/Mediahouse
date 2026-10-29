@@ -4,11 +4,16 @@ import { useState, type ReactNode } from "react"
 import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Loader2, MinusCircle } from "lucide-react"
 import { toast } from "sonner"
 import { hojeEmSaoPaulo } from "@/lib/datas"
+import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import {
+  esperaMaterial,
+  etapaDaGravacao,
   faltaOMaterial,
+  linkValido,
+  materialCompleto,
   passoDaGravacao,
   situacaoDaNota,
-  trilhaDaNota,
+  statusDoMaterial,
   trilhaDoVideo,
   type EstadoDoPasso,
   type PagamentoDoCard,
@@ -16,6 +21,7 @@ import {
 } from "@/lib/etapas-da-gravacao"
 import surface from "@/components/demandas/DemandSurface.module.css"
 import styles from "./FichaDoJob.module.css"
+import { TAG_DA_NOTA } from "./etiquetas"
 
 /**
  * A linha do tempo da gravação externa, no topo da ficha do card aberto.
@@ -46,6 +52,8 @@ export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais" | "custos"> &
   /** O card aberto recebe também o arquivo e o token da nota (só quem vê a nota). */
   custos?: { statusPagamento: string; pago: boolean; notaFiscalUrl?: string | null }[] | null
   notasFiscais?: { status: string; token?: string | null; url?: string | null }[] | null
+  /** O convite do videomaker nesta gravação: o link dele para entregar (lib/entrega-da-gravacao.ts). */
+  conviteEntrega?: { token: string } | null
 }
 
 const primeiroNome = (nome?: string | null) => nome?.trim().split(/\s+/)[0] ?? "o videomaker"
@@ -160,22 +168,16 @@ export function AgoraDaGravacao({
 
     case "material": {
       const falta = faltaOMaterial(job, hojeEmSaoPaulo())
-      titulo = falta ? `Gravou — falta o material de ${vm}` : `Gravação com ${vm}`
-      dica = !falta ? "Quando o material chegar, cole o link aqui."
-        : job.edicaoPor === "equipe" ? "Cole o link do drive. Vai para a nossa edição."
-        : job.edicaoPor === "videomaker" ? "Cole o link do vídeo editado. Vai direto para enviar ao cliente."
-        : job.edicaoPor === "sem_edicao" ? "Cole o link dos brutos. Vai direto para enviar ao cliente."
-        : "Cole o link do drive e diga se veio editado."
-      const paraEdicao = () => avancar("edicao", "brutos_enviados", { linkBrutos: link.trim() })
-      const pronto = () => avancar("pronto", "aprovado", { linkBrutos: link.trim(), linkFinal: link.trim() })
-      if (podeEditar) conteudo = (
-        <>
-          {campoDoLink("Link do drive ou do vídeo")}
-          <div className="flex flex-wrap gap-2">
-            {job.edicaoPor !== "videomaker" && job.edicaoPor !== "sem_edicao" && botao("edicao", "Mandar para a edição", paraEdicao, true, true)}
-            {job.edicaoPor !== "equipe" && botao("pronto", job.edicaoPor ? "Pronto para enviar ao cliente" : "Já veio editado", pronto, !!job.edicaoPor, true)}
-          </div>
-        </>
+      const quando = momentoDoJob(job)
+      titulo = falta ? `Gravou — falta o material de ${vm}` : `Gravação com ${vm}${quando ? ` · ${rotuloDoMomento(quando)}` : ""}`
+      // O material vem dele, pelo link do convite. A Débora cobra copiando o
+      // link; se vier pelo WhatsApp, anexa por ele nas entregas, logo abaixo.
+      dica = `${vm} entrega ${job.edicaoPor === "videomaker" ? "os brutos e o vídeo pronto" : "os brutos"} pelo link do convite. Se mandar pelo WhatsApp, anexe por ele nas entregas.`
+      const token = job.conviteEntrega?.token
+      if (podeEditar && token) conteudo = (
+        <button type="button" className={falta ? surface.btnPrimary : surface.btn} onClick={() => copiar(`${window.location.origin}/convite/${token}`, "Link de entrega copiado — mande para o videomaker")}>
+          <Copy className="w-3.5 h-3.5" aria-hidden />Copiar link de entrega
+        </button>
       )
       break
     }
@@ -227,22 +229,57 @@ export function AgoraDaGravacao({
 }
 
 /**
- * A nota do videomaker até compras. Aparece quando o material chega (é quando a
- * nota é pedida), com a trilha e só a ação da vez: o link para o videomaker
- * mandar, depois baixar e enviar para compras, depois marcar como paga.
+ * O que o videomaker entrega, numa lista (Giovani, 29/10/2026): o drive dos
+ * brutos (sempre), o vídeo pronto (só se a edição é dele) e a nota fiscal. Cada
+ * linha diz se chegou e quando, com o link; o que falta tem "Anexar por ele",
+ * para quando vem pelo WhatsApp. Material completo anda a gravação, como na
+ * entrega pelo link (lib/entrega-da-gravacao.ts). A nota segue até compras.
  */
-export function NotaDaGravacao({ job, onAtualizar }: { job: GravacaoDoPasso; onAtualizar: () => Promise<unknown> | void }) {
+export function EntregasDoVideomaker({ job, podeEditar, onSalvar, onAvancar, onAtualizar }: {
+  job: GravacaoDoPasso
+  podeEditar: boolean
+  onSalvar: (patch: Record<string, unknown>) => Promise<void>
+  onAvancar: (statusInterno: string, patch?: Record<string, unknown>) => Promise<void>
+  onAtualizar: () => Promise<unknown> | void
+}) {
+  const [anexando, setAnexando] = useState<"brutos" | "video" | null>(null)
+  const [link, setLink] = useState("")
+  const [salvando, setSalvando] = useState(false)
   const [agindo, setAgindo] = useState<string | null>(null)
   const [plano, setPlano] = useState<string | null>(null)
-  const nota = situacaoDaNota(job)
-  const passos = trilhaDaNota(job)
-  if (!nota || !passos) return null
+  if (!job.videomaker) return null
 
-  const token = job.notasFiscais?.find((n) => n.token && n.status === "pendente")?.token ?? job.notasFiscais?.find((n) => n.token)?.token
-  const linkDaNota = token ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${token}` : null
+  const etapa = etapaDaGravacao(job)
+  // Antes do dia da gravação o material ainda não falta: fica "depois da
+  // gravação", mas já dá para anexar (há quem entregue no mesmo dia).
+  const antesDaGravacao = etapa === "a_agendar" || (esperaMaterial(job) && !faltaOMaterial(job, hojeEmSaoPaulo()))
+  const editaEle = job.edicaoPor === "videomaker"
+  const nota = situacaoDaNota(job)
+  const tokenNota = job.notasFiscais?.find((n) => n.token && n.status === "pendente")?.token ?? job.notasFiscais?.find((n) => n.token)?.token
+  const linkDaNota = tokenNota ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${tokenNota}` : null
   const arquivo = job.custos?.find((c) => c.notaFiscalUrl)?.notaFiscalUrl ?? job.notasFiscais?.find((n) => n.url)?.url ?? null
 
-  async function agir(acao: "enviar_compras" | "marcar_enviada" | "marcar_paga") {
+  async function anexar() {
+    if (!anexando || !linkValido(link)) return toast.error("Cole um link que comece com https://")
+    const valor = link.trim()
+    const patch: Record<string, unknown> = anexando === "brutos"
+      ? { linkBrutos: valor, ...(job.edicaoPor === "sem_edicao" && !job.linkFinal ? { linkFinal: valor } : {}) }
+      : { linkFinal: valor }
+    const depois = { ...job, ...patch } as GravacaoDoPasso
+    setSalvando(true)
+    try {
+      // Completou o material agora: anda a gravação junto, como no link do convite.
+      if (materialCompleto(depois) && esperaMaterial(job)) await onAvancar(statusDoMaterial(job.edicaoPor), patch)
+      else await onSalvar(patch)
+      setAnexando(null); setLink("")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível anexar.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function agirNaNota(acao: "enviar_compras" | "marcar_enviada" | "marcar_paga") {
     setAgindo(acao)
     try {
       const res = await fetch(`/api/jobs/${job.id}/nota`, {
@@ -267,8 +304,8 @@ export function NotaDaGravacao({ job, onAtualizar }: { job: GravacaoDoPasso; onA
     }
   }
 
-  const botao = (acao: "enviar_compras" | "marcar_enviada" | "marcar_paga", rotulo: string, principal: boolean) => (
-    <button type="button" className={principal ? surface.btnPrimary : surface.btn} onClick={() => void agir(acao)} disabled={agindo !== null}>
+  const botaoNota = (acao: "enviar_compras" | "marcar_enviada" | "marcar_paga", rotulo: string, principal: boolean) => (
+    <button type="button" className={principal ? surface.btnPrimary : surface.btn} onClick={() => void agirNaNota(acao)} disabled={agindo !== null}>
       {agindo === acao ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}
       {rotulo}
     </button>
@@ -277,54 +314,78 @@ export function NotaDaGravacao({ job, onAtualizar }: { job: GravacaoDoPasso; onA
     <a className={surface.btn} href={arquivo} target="_blank" rel="noopener noreferrer"><Download className="w-3.5 h-3.5" aria-hidden />Baixar nota</a>
   )
 
-  return (
-    <section className={styles.nota} aria-label="Nota do videomaker">
-      <span className={styles.rotulo}>Nota do videomaker</span>
-      <Trilha passos={passos} rotulo="Andamento da nota" />
-
-      {(nota.etapa === "falta" || nota.etapa === "contestada") && (
-        <>
-          <span className={surface.hint}>
-            {nota.etapa === "falta"
-              ? "O pedido da nota foi para o videomaker no WhatsApp. Se precisar, mande o link de novo ou anexe por ele."
-              : "A nota precisa ser refeita. O videomaker reenvia pelo mesmo link."}
-          </span>
-          {linkDaNota && (
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className={surface.linkBtn} onClick={() => copiar(linkDaNota, "Link da nota copiado — mande para o videomaker")}>Copiar link para o videomaker <Copy className="w-3.5 h-3.5" aria-hidden /></button>
-              <a className={surface.linkBtn} href={linkDaNota} target="_blank" rel="noopener noreferrer">Anexar a nota por ele <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
-            </div>
-          )}
-        </>
-      )}
-
-      {nota.etapa === "recebida" && (
-        <>
-          <span className={surface.hint}>Envie para compras: o e-mail vai com a nota e com cópia para você.</span>
+  const linhaDeLink = (qual: "brutos" | "video", rotulo: string, valor: string | null | undefined) => (
+    <li className={styles.entrega} data-estado={valor ? "feito" : antesDaGravacao ? "depois" : "falta"}>
+      <span className={styles.entregaRotulo}>{valor ? <CheckCircle2 aria-hidden /> : <Circle aria-hidden />}{rotulo}</span>
+      {valor
+        ? <a className={surface.linkBtn} href={valor} target="_blank" rel="noopener noreferrer">Abrir <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
+        : etapa === "a_agendar"
+          ? <span className={surface.hint}>depois da gravação</span>
+          : podeEditar && anexando !== qual
+            ? <button type="button" className={surface.linkBtn} onClick={() => { setAnexando(qual); setLink("") }}>Anexar por ele</button>
+            : antesDaGravacao && <span className={surface.hint}>depois da gravação</span>}
+      {anexando === qual && (
+        <div className={styles.anexar}>
+          <input className={surface.input} type="url" inputMode="url" aria-label={`Link: ${rotulo}`} placeholder="https://" value={link} onChange={(e) => setLink(e.target.value)} />
           <div className="flex flex-wrap gap-2">
-            {botao("enviar_compras", "Enviar para compras", true)}
+            <button type="button" className={surface.btnPrimary} onClick={() => void anexar()} disabled={salvando || !link.trim()}>
+              {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}Salvar
+            </button>
+            <button type="button" className={surface.btn} onClick={() => setAnexando(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </li>
+  )
+
+  return (
+    <section className={styles.entregas} aria-label="Entregas do videomaker">
+      <span className={styles.rotulo}>Entregas do videomaker</span>
+      <ul className={styles.listaEntregas}>
+        {linhaDeLink("brutos", "Brutos (drive)", job.linkBrutos)}
+        {editaEle
+          ? linhaDeLink("video", "Vídeo pronto", job.linkFinal)
+          : (
+            <li className={styles.entrega} data-estado="pulado">
+              <span className={styles.entregaRotulo}><MinusCircle aria-hidden />Vídeo pronto</span>
+              <span className={surface.hint}>{job.edicaoPor === "sem_edicao" ? "sem edição" : job.edicaoPor === "equipe" ? "nós editamos" : "edição não combinada"}</span>
+            </li>
+          )}
+        <li className={styles.entrega} data-estado={nota?.etapa === "paga" || nota?.etapa === "compras" || nota?.etapa === "recebida" ? "feito" : nota ? "falta" : "depois"}>
+          <span className={styles.entregaRotulo}>{nota && nota.etapa !== "falta" && nota.etapa !== "contestada" ? <CheckCircle2 aria-hidden /> : <Circle aria-hidden />}Nota fiscal</span>
+          <span className={nota ? TAG_DA_NOTA[nota.tom] : surface.hint}>{nota ? nota.texto : "depois do material"}</span>
+        </li>
+      </ul>
+
+      {(nota?.etapa === "falta" || nota?.etapa === "contestada") && linkDaNota && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={surface.linkBtn} onClick={() => copiar(linkDaNota, "Link da nota copiado — mande para o videomaker")}>Copiar link da nota <Copy className="w-3.5 h-3.5" aria-hidden /></button>
+          <a className={surface.linkBtn} href={linkDaNota} target="_blank" rel="noopener noreferrer">Anexar a nota por ele <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
+        </div>
+      )}
+      {nota?.etapa === "recebida" && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {botaoNota("enviar_compras", "Enviar nota para compras", true)}
             {baixar}
           </div>
+          <span className={surface.hint}>O e-mail vai com a nota e com cópia para você.</span>
           {plano && (
             <div className={surface.notice} role="alert">
               <p>{plano}</p>
               <div className="flex flex-wrap gap-2">
                 {baixar}
-                {botao("marcar_enviada", "Já mandei por fora", false)}
+                {botaoNota("marcar_enviada", "Já mandei por fora", false)}
               </div>
             </div>
           )}
         </>
       )}
-
-      {nota.etapa === "compras" && (
-        <>
-          <span className={surface.hint}>Com compras. Quando o pagamento sair, marque aqui.</span>
-          <div className="flex flex-wrap gap-2">
-            {botao("marcar_paga", "Marcar como paga", true)}
-            {baixar}
-          </div>
-        </>
+      {nota?.etapa === "compras" && (
+        <div className="flex flex-wrap gap-2">
+          {botaoNota("marcar_paga", "Marcar nota como paga", true)}
+          {baixar}
+        </div>
       )}
     </section>
   )

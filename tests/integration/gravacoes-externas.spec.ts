@@ -28,6 +28,9 @@ import { GET } from "@/app/api/demandas/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { GET as abrir, PUT as editar } from "@/app/api/demandas/[id]/route"
 import { POST as nota } from "@/app/api/jobs/[id]/nota/route"
+import { POST as pedirPublico } from "@/app/api/publico/demanda/route"
+import { GET as abrirConvite } from "@/app/api/convites/[token]/route"
+import { POST as entregar } from "@/app/api/convites/[token]/entrega/route"
 import { situacaoDaNota } from "@/lib/etapas-da-gravacao"
 
 const p = `gravacoes-${randomUUID().slice(0, 8)}`, org = `${p}-org`
@@ -87,6 +90,8 @@ beforeEach(() => { tarefas.length = 0 })
 
 afterAll(async () => {
   const ids = (await db.demanda.findMany({ where: { organizacaoId: org }, select: { id: true } })).map((d) => d.id)
+  await db.conviteVideomaker.deleteMany({ where: { demandaId: { in: ids } } })
+  await db.demandaProduto.deleteMany({ where: { demandaId: { in: ids } } })
   await db.notaFiscalUpload.deleteMany({ where: { demandaId: { in: ids } } })
   await db.custoVideomaker.deleteMany({ where: { organizacaoId: org } })
   await db.historicoStatus.deleteMany({ where: { demandaId: { in: ids } } })
@@ -95,6 +100,8 @@ afterAll(async () => {
   await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org } })
   await db.videomaker.deleteMany({ where: { id: vm } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: org } })
+  await db.produto.deleteMany({ where: { organizacaoId: org } })
+  await db.usuario.deleteMany({ where: { email: { endsWith: `@${p}.test` } } })
   await db.organizacao.delete({ where: { id: org } })
   await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
@@ -227,3 +234,85 @@ describe("nota do videomaker até compras", () => {
     expect((await agir(id, "marcar_enviada")).status).toBe(403)
   })
 })
+
+describe("pedido com tipo, brinde e equipamento", () => {
+  it("o pedido público grava tipo, brinde, levar e só o equipamento desta empresa", async () => {
+    // A rota assina o token de anexo da resposta.
+    vi.stubEnv("NEXTAUTH_SECRET", "segredo-so-do-teste")
+    const produto = await db.produto.create({ data: { organizacaoId: org, nome: "Supreme" } })
+    const res = await pedirPublico(new NextRequest(`http://localhost/api/publico/demanda?org=${p}`, {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.7" },
+      body: JSON.stringify({
+        nomeCliente: "Consultora Teste", email: `consultora@${p}.test`, telefone: "11999998888",
+        titulo: "Gravação · Renata", descricao: "Entrega de equipamento em Renata.",
+        tipoSolicitacao: "cobertura", tipoVideo: "cobertura_evento",
+        localEvento: "Praça Leonor de Barros Camargo, 42, Indaiatuba - SP", dataEvento: "2026-11-07T08:30:00-03:00",
+        clienteFinalNome: "Renata", clienteFinalTelefone: "5519981031327",
+        tipoGravacao: "entrega_equipamento", temBrinde: true, brinde: "Caixa mineira", levar: "banner",
+        produtoIds: [produto.id, "produto-de-outra-empresa"],
+      }),
+    }))
+    expect(res.status).toBe(201)
+    const { codigo } = await res.json() as { codigo: string }
+    const d = await db.demanda.findFirstOrThrow({ where: { codigo, organizacaoId: org }, include: { produtos: true } })
+    expect(d).toMatchObject({ tipoGravacao: "entrega_equipamento", temBrinde: true, brinde: "Caixa mineira", levar: "banner", clienteFinalTelefone: "5519981031327" })
+    expect(d.produtos.map((x) => x.produtoId)).toEqual([produto.id])
+  })
+
+  it("no card, tipo fora da lista é recusado; o certo grava", async () => {
+    const id = await gravacao("captacao_agendada")
+    como(pessoas.admin, "admin")
+    const salvar = (corpo: unknown) => editar(new NextRequest(`http://localhost/api/demandas/${id}`, { method: "PUT", body: JSON.stringify(corpo) }), { params: Promise.resolve({ id }) })
+    expect((await salvar({ tipoGravacao: "treinamento" })).status).toBe(400)
+    expect((await salvar({ tipoGravacao: "demonstracao", temBrinde: false, levar: "tripé" })).status).toBe(200)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ tipoGravacao: "demonstracao", temBrinde: false, levar: "tripé" })
+  })
+})
+
+describe("entrega do videomaker pelo link do convite", () => {
+  async function comConvite(edicaoPor: "equipe" | "videomaker", status = "aceito") {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { edicaoPor } })
+    const token = `tok-${randomUUID()}`
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token, status, expiresAt: new Date(Date.now() + 86400_000) } })
+    return { id, token }
+  }
+  const abrir = (token: string) => abrirConvite(new NextRequest(`http://localhost/api/convites/${token}`), { params: Promise.resolve({ token }) })
+  const mandar = (token: string, corpo: unknown) => entregar(
+    new NextRequest(`http://localhost/api/convites/${token}/entrega`, { method: "POST", body: JSON.stringify(corpo) }),
+    { params: Promise.resolve({ token }) },
+  )
+
+  it("nossa edição: os brutos chegam, a gravação vai para a edição e a nota abre no mesmo link", async () => {
+    const { id, token } = await comConvite("equipe")
+    const antes = await (await abrir(token)).json()
+    expect(antes.entrega).toEqual({ liberada: true, nota: null })
+
+    expect((await mandar(token, { linkBrutos: "drive sem protocolo" })).status).toBe(400)
+    const r = await mandar(token, { linkBrutos: "https://drive.example/brutos" })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toEqual({ completo: true, mudouEtapa: true })
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ statusInterno: "brutos_enviados", linkBrutos: "https://drive.example/brutos" })
+
+    const depois = await (await abrir(token)).json()
+    expect(depois.entrega.nota).toMatchObject({ status: "pendente", token: expect.any(String) })
+    const historico = await db.historicoStatus.findMany({ where: { demandaId: id }, select: { observacao: true } })
+    expect(historico.map((h) => h.observacao)).toContain("Material entregue pelo videomaker no link do convite")
+  })
+
+  it("edição dele: só os brutos não completam; com o vídeo pronto vai direto para enviar", async () => {
+    const { id, token } = await comConvite("videomaker")
+    expect(await (await mandar(token, { linkBrutos: "https://drive.example/b" })).json()).toEqual({ completo: false, mudouEtapa: false })
+    expect((await db.demanda.findUniqueOrThrow({ where: { id } })).statusInterno).toBe("captacao_agendada")
+    expect(await (await mandar(token, { linkVideo: "https://drive.example/pronto" })).json()).toEqual({ completo: true, mudouEtapa: true })
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ statusInterno: "aprovado", linkFinal: "https://drive.example/pronto" })
+  })
+
+  it("convite recusado não entrega", async () => {
+    const { token } = await comConvite("equipe", "recusado")
+    expect((await abrir(token)).status).toBe(400)
+    expect((await mandar(token, { linkBrutos: "https://drive.example/b" })).status).toBe(403)
+  })
+})
+

@@ -2,7 +2,7 @@
 
 import { useDetailPresentation } from "./useDetailPresentation"
 import surface from "./DemandSurface.module.css"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
 import useSWR from "swr"
@@ -43,7 +43,7 @@ import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
-import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -1307,8 +1307,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     <>
       <FaixaEspelho espelho={espelho} />
       <div className={surface.detailHeading}>
-        <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
-        <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+        {ehCobertura ? (
+          // Na gravação, o título é quem recebe a gravação, como no quadro.
+          <>
+            <h1>{demanda.clienteFinalNome?.trim() || demanda.titulo || "Sem cliente"}</h1>
+            <p>{[rotuloDoTipoDeGravacao(demanda.tipoGravacao), demanda.codigo].filter(Boolean).join(" · ")}</p>
+          </>
+        ) : (
+          <>
+            <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
+            <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+          </>
+        )}
         {ajusteNoTopo && (
           <section className={surface.ajustePedido} aria-label="Ajuste pedido">
             <strong>
@@ -1339,15 +1349,17 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             )}
           </div>
         </section>}
-        <nav className={surface.detailTabs} aria-label="Seções da demanda">
+        {/* Gravação externa não tem abas (Giovani, 29/10/2026): a ficha é o card,
+            e arquivos, conversa e histórico ficam recolhidos no fim. */}
+        {!ehCobertura && <nav className={surface.detailTabs} aria-label="Seções da demanda">
           {abas.map((key) => (
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
-        </nav>
+        </nav>}
       </div>
       <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", surface.tabContent)}>
         {/* ── Coluna principal ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className={cn("space-y-5", ehCobertura ? "lg:col-span-3" : "lg:col-span-2")}>
 
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Camada de Job (cobertura) ───────────────────────────────────
@@ -1410,6 +1422,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
             </>
           ) : (
+          <Recolhivel ativo={ehCobertura} titulo="Descrição do pedido">
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-5">
             <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
 
@@ -1458,6 +1471,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          </Recolhivel>
           )}
 
           {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
@@ -1953,7 +1967,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           )}
           </div>
-          <div hidden={detailTab !== "arquivos"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Arquivos">
           {/* ── Arquivos da produção ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
@@ -2166,6 +2181,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </Recolhivel>
           </div>
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
@@ -2211,7 +2227,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Conversa">
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
               campo que não existe no modelo (é `comentario`) — os comentários
@@ -2222,17 +2239,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             comentarios={demanda.comentarios ?? []}
             onEnviado={() => mutate()}
           />
+          </Recolhivel>
           </div>
         </div>
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className={cn("space-y-4", ehCobertura && "lg:col-span-3")}>
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
-          {/* Solicitante */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Solicitante — na gravação externa, é o "Pedido por" da ficha. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><User aria-hidden /> Solicitante</h2></div>
             {demanda.nomeSolicitante ? (
               <div className="flex items-center gap-2">
@@ -2267,7 +2285,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Datas — na gravação externa, o "Quando" da ficha já diz. */}
           {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
@@ -2374,7 +2392,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Histórico">
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800">
@@ -2412,6 +2431,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               })}
             </div>
           </div>
+          </Recolhivel>
           </div>
         </div>
       </main>
@@ -2662,5 +2682,20 @@ function LinkField({ label, value, editMode, onChange }: {
         <span className={surface.empty}>Nenhum link ainda.</span>
       )}
     </div>
+  )
+}
+
+/**
+ * Na gravação externa o card não tem abas: o que não é do dia a dia (a
+ * descrição antiga, arquivos, conversa, histórico) fica recolhido no fim, à
+ * mão para consulta. Fora dela, não muda nada.
+ */
+function Recolhivel({ ativo, titulo, children }: { ativo: boolean; titulo: string; children: ReactNode }) {
+  if (!ativo) return <>{children}</>
+  return (
+    <details className={surface.recolhivel}>
+      <summary>{titulo}</summary>
+      <div className={surface.recolhivelCorpo}>{children}</div>
+    </details>
   )
 }

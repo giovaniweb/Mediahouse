@@ -57,6 +57,11 @@ const criarDemandaSchema = z.object({
   localEvento: z.string().optional(),
   // Gravação externa: quem edita, combinado ao pedir ou ao agendar.
   edicaoPor: z.enum(["videomaker", "equipe", "sem_edicao"]).optional(),
+  // Gravação externa: tipo, brinde (tem? qual?) e o que mais levar.
+  tipoGravacao: z.enum(["entrega_equipamento", "demonstracao", "conteudo", "evento"]).optional(),
+  temBrinde: z.boolean().optional(),
+  brinde: z.string().trim().max(120).nullable().optional(),
+  levar: z.string().trim().max(300).nullable().optional(),
   cobertura: z.boolean().optional(),
   publico: z.string().optional(),
   mensagemPrincipal: z.string().optional(),
@@ -500,6 +505,10 @@ export async function POST(req: NextRequest) {
       referencia: data.referencia,
       localGravacao: data.localGravacao,
       edicaoPor: data.edicaoPor,
+      tipoGravacao: data.tipoGravacao,
+      temBrinde: data.temBrinde,
+      brinde: data.brinde || undefined,
+      levar: data.levar || undefined,
       // O schema sempre aceitou o cliente final, mas o create não gravava: o
       // formulário de cobertura mandava o nome e o card nascia sem ele.
       clienteFinalNome: data.clienteFinalNome?.trim() || undefined,

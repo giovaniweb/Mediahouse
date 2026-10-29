@@ -148,8 +148,8 @@ describe("+ Novo Job", () => {
 describe("+ Novo Job pelo formulário de gravação", () => {
   const daqui = (dias: number) => somarDias(hojeEmSaoPaulo(), dias)
   const gravacao = (extra: Partial<Parameters<typeof corpoDoNovoJob>[0]> = {}) => corpoDoNovoJob({
-    cliente: "Clínica Teste", endereco: "Rua A, 10, Centro, Curitiba - PR",
-    data: daqui(10), hora: "14:00", observacao: "", videomaker: "", acompanhante: null,
+    tipo: "entrega_equipamento", cliente: "Clínica Teste", clienteTelefone: "", endereco: "Rua A, 10, Centro, Curitiba - PR",
+    data: daqui(10), hora: "14:00", temBrinde: false, brinde: "", levar: "", observacao: "", videomaker: "", acompanhante: null,
     linkBrutos: "", produtoIds: [], ...extra,
   })
 

@@ -43,6 +43,15 @@ enum EdicaoDaGravacao {
   sem_edicao // vai bruto para o cliente
 }
 
+// Gravação externa: o que é a gravação, escolhido no pedido (29/10/2026). Quase
+// toda entrega de equipamento leva brinde; as outras não.
+enum TipoGravacao {
+  entrega_equipamento
+  demonstracao
+  conteudo
+  evento
+}
+
 enum CategoriaPessoa {
   interna // equipe interna que opera a empresa
   solicitante // pede/acompanha demandas
@@ -574,6 +583,11 @@ model Demanda {
   localGravacao       String?
   // Gravação externa: quem edita (EdicaoDaGravacao). Nulo = não combinado.
   edicaoPor           EdicaoDaGravacao?
+  // Gravação externa: o tipo, o brinde (tem? qual?) e o que mais levar.
+  tipoGravacao        TipoGravacao?
+  temBrinde           Boolean?
+  brinde              String?
+  levar               String?
   referencia          String?
 
   // Impedimento

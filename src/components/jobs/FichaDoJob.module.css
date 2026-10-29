@@ -1,31 +1,26 @@
-/* A ficha do Job: as quatro perguntas do dia da gravação, em grade. Mesma
-   superfície do jobContext que ela substitui (DemandSurface.module.css). */
-.ficha { display:flex; flex-direction:column; gap:18px; padding:22px; border:1px solid #303342; border-radius:14px; background:#191b23; }
-.grade { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:22px 28px; }
-.campo { display:flex; flex-direction:column; gap:6px; min-width:0; }
+/* A ficha da gravação externa (FichaDoJob + PassoDaGravacao). Mesma superfície
+   do card aberto de Demandas (DemandSurface.module.css): fundo #191b23, borda
+   #303342, roxo para o que é agora, verde para o feito, âmbar para o que falta.
+   Duas colunas quando o painel tem largura; uma no celular. */
+.ficha { container-type:inline-size; display:flex; flex-direction:column; gap:18px; padding:22px; border:1px solid #303342; border-radius:14px; background:#191b23; }
+.colunas { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+@container (min-width:680px) {
+  .colunas { grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); align-items:start; }
+}
+.principal { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .rotulo { display:inline-flex; align-items:center; gap:6px; color:#a2a5b9; font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
-.rotulo svg { width:14px; height:14px; color:#8d8ca3; }
-/* Inline: dentro do InlineEdit o lápis vem logo depois do valor; em bloco ele
-   caía numa linha vazia embaixo. Fora dele, o item do flex já vira bloco. */
 .valor { display:inline; color:#f1f0f8; font-size:17px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
-.falta { display:inline; color:#f6d9a6; font-size:16px; font-weight:600; line-height:1.35; }
-.vazio { display:inline; color:#6f7084; font-size:15px; font-weight:500; }
-/* O campo editável (InlineEdit) em linha: o lápis fica ao lado do valor e não
-   quebra para baixo quando o endereço ocupa a largura toda. */
-.campo > [role="button"] { display:flex; align-items:baseline; gap:2px; min-width:0; }
-.campo > [role="button"] > svg { flex-shrink:0; }
-.detalhe { color:#a2a5b9; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.falta { color:#f6d9a6; font-weight:600; }
+.vazio { color:#6f7084; font-weight:500; }
+.detalhe { display:block; color:#a2a5b9; font-size:12.5px; font-weight:400; line-height:1.5; overflow-wrap:anywhere; }
 .detalhe a { color:#c7b6f5; text-decoration:underline; text-underline-offset:3px; text-decoration-color:#c7b6f566; }
 .detalhe a:hover { color:#ece6ff; }
 .detalhe a svg { display:inline; width:12px; height:12px; margin-left:2px; vertical-align:-1px; }
 .situacao[data-tom="ok"] { color:#86d9a8; }
 .situacao[data-tom="espera"] { color:#f0c27a; }
 .situacao[data-tom="alerta"] { color:#f6d9a6; }
-.levar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:14px; border-top:1px solid #303342; color:#e6e4f0; font-size:14px; }
-.levar svg { width:15px; height:15px; color:#8d8ca3; }
-.levar > span { color:#a2a5b9; }
-/* Linha do tempo (PassoDaGravacao → Trilha): um passo por coluna, a barra em
-   cima diz o estado. Verde feito, roxo agora, apagado a fazer. */
+
+/* Linha do tempo: um passo por coluna, a barra em cima diz o estado. */
 .trilha { display:grid; grid-template-columns:repeat(var(--passos),minmax(0,1fr)); gap:8px; margin:0; padding:0; list-style:none; }
 .trilha li { display:flex; flex-direction:column; gap:4px; min-width:0; color:#6f7084; font-size:12px; line-height:1.3; }
 .trilha li::before { content:""; height:3px; border-radius:2px; background:#303342; }
@@ -39,14 +34,36 @@
 .trilhaRotulo svg { width:14px; height:14px; flex-shrink:0; }
 .trilha li[data-estado="feito"] .trilhaRotulo svg { color:#86d9a8; }
 .trilha li[data-estado="agora"] .trilhaRotulo svg { color:#c7b6f5; }
-/* O passo da vez, logo abaixo da trilha: o que fazer agora e só o campo dele. */
+
+/* Agora: o passo da vez e só o campo dele. */
 .agora { display:flex; flex-direction:column; gap:8px; padding:16px; border:1px solid #b398ff44; border-radius:12px; background:#b398ff0d; }
 .passoAcoes { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin-top:4px; }
-/* A nota do videomaker: trilha própria e a ação da vez. */
-.nota { display:flex; flex-direction:column; gap:10px; padding-top:16px; border-top:1px solid #303342; }
+
+/* Entregas do videomaker: brutos, vídeo pronto e nota, uma por linha. */
+.entregas { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #303342; border-radius:12px; background:#14151c; }
+.listaEntregas { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.entrega { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; padding:10px 0; border-top:1px solid #262838; color:#e6e4f0; font-size:14px; }
+.entrega:first-child { border-top:0; padding-top:4px; }
+.entregaRotulo { display:inline-flex; align-items:center; gap:8px; font-weight:500; }
+.entregaRotulo svg { width:16px; height:16px; flex-shrink:0; color:#6f7084; }
+.entrega[data-estado="feito"] .entregaRotulo svg { color:#86d9a8; }
+.entrega[data-estado="falta"] .entregaRotulo svg { color:#f0c27a; }
+.entrega[data-estado="pulado"] { color:#8d8ca3; }
+.anexar { display:flex; flex-direction:column; gap:8px; width:100%; }
+
+/* Dados da gravação, na ordem da mensagem do WhatsApp. */
+.dados { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #303342; border-radius:12px; min-width:0; }
+.lista { display:flex; flex-direction:column; margin:0; }
+.linha { display:grid; grid-template-columns:92px minmax(0,1fr); gap:10px; padding:8px 0; border-top:1px solid #262838; font-size:14px; }
+.linha:first-child { border-top:0; padding-top:2px; }
+.linha dt { color:#8d8ca3; font-size:12.5px; padding-top:2px; }
+.linha dd { margin:0; min-width:0; color:#f1f0f8; font-weight:500; overflow-wrap:anywhere; }
+/* O campo editável (InlineEdit) em linha: o lápis fica ao lado do valor. */
+.linha dd > [role="button"] { display:flex; align-items:baseline; gap:2px; min-width:0; }
+.linha dd > [role="button"] > svg { flex-shrink:0; }
+
 .rodape { display:flex; flex-wrap:wrap; gap:6px 20px; padding-top:14px; border-top:1px solid #303342; color:#a2a5b9; font-size:13px; }
 @media (max-width:520px) {
   .ficha { padding:16px; }
-  .grade { grid-template-columns:minmax(0,1fr); gap:18px; }
   .trilha { grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:12px; }
 }

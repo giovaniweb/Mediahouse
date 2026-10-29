@@ -4,6 +4,10 @@ import {
   ETAPAS,
   ETAPA_DO_STATUS,
   ehEdicaoDaGravacao,
+  ehTipoDeGravacao,
+  levarDaGravacao,
+  perguntaBrinde,
+  rotuloDoTipoDeGravacao,
   etapaDaGravacao,
   faltaOMaterial,
   materialChegouAgora,
@@ -177,5 +181,22 @@ describe("linha do tempo do card aberto", () => {
     expect(em("nf_enviada")).toEqual({ pedida: "feito", recebida: "feito", compras: "agora", paga: "depois" })
     expect(em("aguardando_pagamento")).toEqual({ pedida: "feito", recebida: "feito", compras: "feito", paga: "agora" })
     expect(em("pago", true)).toEqual({ pedida: "feito", recebida: "feito", compras: "feito", paga: "feito" })
+  })
+})
+
+describe("tipo, brinde e o que levar", () => {
+  it("só a entrega de equipamento pergunta pelo brinde", () => {
+    expect(perguntaBrinde("entrega_equipamento")).toBe(true)
+    for (const t of ["demonstracao", "conteudo", "evento", null, "outro"]) expect(perguntaBrinde(t)).toBe(false)
+  })
+  it("a linha Levar junta brinde e o resto", () => {
+    expect(levarDaGravacao({ temBrinde: true, brinde: "caixa mineira", levar: "banner" })).toBe("Brinde: caixa mineira · banner")
+    expect(levarDaGravacao({ temBrinde: true, brinde: null })).toBe("Brinde")
+    expect(levarDaGravacao({ temBrinde: false, levar: " " })).toBeNull()
+  })
+  it("rótulos e validação do tipo", () => {
+    expect(rotuloDoTipoDeGravacao("demonstracao")).toBe("Demonstração")
+    expect(ehTipoDeGravacao("evento")).toBe(true)
+    expect(ehTipoDeGravacao("treinamento")).toBe(false)
   })
 })

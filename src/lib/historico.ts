@@ -43,6 +43,12 @@ const CAMPOS_RASTREADOS: Record<string, string> = {
   linkCliente: "link do cliente",
   localGravacao: "local de gravação",
   edicaoPor: "quem edita",
+  tipoGravacao: "tipo",
+  temBrinde: "brinde",
+  brinde: "brinde",
+  levar: "o que levar",
+  clienteFinalNome: "cliente",
+  clienteFinalTelefone: "WhatsApp do cliente",
   motivoImpedimento: "motivo do impedimento",
 }
 

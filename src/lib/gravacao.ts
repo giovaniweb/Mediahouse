@@ -5,15 +5,36 @@
 //
 // Sem import de runtime do servidor: este módulo vai para o navegador.
 import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
+import { perguntaBrinde, rotuloDoTipoDeGravacao, type TipoDaGravacao } from "@/lib/etapas-da-gravacao"
 
 export type CamposGravacao = {
+  /** Entrega de equipamento, demonstração, conteúdo ou evento. */
+  tipo: TipoDaGravacao | ""
   cliente: string
+  /** WhatsApp de quem recebe na clínica (o "rd:" da mensagem). Opcional. */
+  clienteTelefone: string
   endereco: string
   /** "AAAA-MM-DD" */
   data: string
   /** "HH:MM", horário de Brasília */
   hora: string
+  /** Só vale na entrega de equipamento (perguntaBrinde). */
+  temBrinde: boolean
+  /** Qual brinde — opcional: "Brinde" sozinho também serve. */
+  brinde: string
+  /** O que mais levar, em texto livre. */
+  levar: string
   observacao: string
+}
+
+/** O que gravar no pedido sobre brinde e o que levar, já limpo. */
+export function levarDoPedido(c: CamposGravacao) {
+  const temBrinde = perguntaBrinde(c.tipo) ? c.temBrinde : false
+  return {
+    temBrinde,
+    brinde: temBrinde && c.brinde.trim() ? c.brinde.trim() : null,
+    levar: c.levar.trim() || null,
+  }
 }
 
 /** Quem da equipe acompanha a gravação (só no Novo Job). */
@@ -37,11 +58,14 @@ export function tituloDaGravacao(cliente: string, data: string): string {
 }
 
 export function descricaoDaGravacao(c: CamposGravacao, acompanhante?: Acompanhante | null): string {
+  const levar = levarDoPedido(c)
   return [
-    `Gravação em ${c.cliente.trim()}.`,
+    `${rotuloDoTipoDeGravacao(c.tipo) ?? "Gravação"} em ${c.cliente.trim()}.`,
     `Endereço: ${c.endereco.trim()}`,
     `Data: ${dataBR(c.data)} às ${c.hora} (horário de Brasília)`,
-    c.observacao.trim() && `O que gravar: ${c.observacao.trim()}`,
+    levar.temBrinde && `Brinde: ${levar.brinde ?? "sim"}`,
+    levar.levar && `Levar: ${levar.levar}`,
+    c.observacao.trim() && `Observações: ${c.observacao.trim()}`,
     acompanhante && `Quem acompanha: ${acompanhante.nome}${acompanhante.telefone ? ` · WhatsApp ${whatsappLegivel(acompanhante.telefone)}` : ""}`,
   ].filter(Boolean).join("\n")
 }
@@ -114,6 +138,9 @@ export function corpoDoNovoJob(j: NovoJob, hoje: string = hojeEmSaoPaulo()) {
     localEvento: j.endereco.trim(),
     localGravacao: j.endereco.trim(),
     clienteFinalNome: j.cliente.trim(),
+    ...(j.clienteTelefone.trim() ? { clienteFinalTelefone: j.clienteTelefone.trim() } : {}),
+    ...(j.tipo ? { tipoGravacao: j.tipo } : {}),
+    ...levarDoPedido(j),
     ...(j.acompanhante ? { responsavelIds: [j.acompanhante.id] } : {}),
     ...(j.videomaker ? { videomakerId: j.videomaker } : {}),
     ...(j.referencia ? { referencia: j.referencia } : {}),
