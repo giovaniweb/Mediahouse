@@ -164,3 +164,7 @@ export const EVENTO_CAPTACAO_INICIADA = "captacao_iniciada"
 // É fato, não etapa — a mudança de status para `editando` segue o caminho
 // normal de transição. O `createdAt` desta linha é quando a edição começou.
 export const EVENTO_CUTFLOW_PUXADO = "cutflow_puxado"
+
+// Nota do videomaker de gravação externa (29/10/2026): enviada para compras e
+// paga. Fato do card, não etapa — a etapa do vídeo não muda por isso.
+export const EVENTO_NOTA = "nota_videomaker"

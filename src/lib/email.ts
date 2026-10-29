@@ -187,6 +187,56 @@ export async function sendEmailFinanceiro(dados: PagamentoEmailData, organizacao
   })
 }
 
+// Nota de gravação externa para o setor de compras (29/10/2026). O caminho da
+// casa: a Débora recebe a nota e manda para compras. Vai para os e-mails do
+// financeiro configurados na empresa e em cópia para quem encaminhou — a cópia
+// é a prova de que saiu. Sem destinatário de compras, não envia: o card avisa
+// e a Débora manda por fora.
+export type NotaParaComprasEmail = {
+  nomeVideomaker: string
+  cliente: string
+  codigo: string
+  dataGravacao: string | null
+  notaFiscalUrl: string
+}
+
+const escaparHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
+
+function templateNotaParaCompras(d: NotaParaComprasEmail) {
+  const linha = (rotulo: string, valor: string) =>
+    `<tr><td style="padding:10px 0;color:#71717a;font-size:13px;width:40%">${rotulo}</td><td style="color:#18181b;font-weight:600">${escaparHtml(valor)}</td></tr>`
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
+  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
+  <div style="padding:32px">
+    <h2 style="margin:0 0 4px;color:#18181b">Nota fiscal para pagamento</h2>
+    <p style="color:#71717a;font-size:14px">Gravação externa concluída pelo videomaker. A nota segue no link abaixo.</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+      ${linha("Videomaker", d.nomeVideomaker)}
+      ${linha("Cliente", d.cliente)}
+      ${d.dataGravacao ? linha("Gravação", d.dataGravacao) : ""}
+      ${linha("Código", d.codigo)}
+    </table>
+    <a href="${escaparHtml(d.notaFiscalUrl)}" style="background:#18181b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">Baixar a nota fiscal →</a>
+  </div>
+</div></body></html>`
+}
+
+export async function sendEmailNotaParaCompras(
+  dados: NotaParaComprasEmail, organizacaoId: string, copia: (string | null | undefined)[]
+): Promise<ResultadoEmail> {
+  const compras = await destinatariosFinanceiro(organizacaoId)
+  if (!compras.length) return { ok: false, error: "nenhum e-mail de compras em Configurações → E-mail" }
+  const emCopia = copia.map(emailNormalizado).filter((e): e is string => Boolean(e))
+  return enviarEmail({
+    destinatarios: [...new Set([...compras, ...emCopia])],
+    assunto: `[NuFlow] Nota fiscal — ${dados.nomeVideomaker} · ${dados.cliente}`,
+    html: templateNotaParaCompras(dados),
+    evento: "nota-gravacao-para-compras",
+  })
+}
+
 export async function sendEmailVideomakerNFRecebida(
   email: string, nomeVideomaker: string, diasPrazo = 15
 ): Promise<ResultadoEmail> {

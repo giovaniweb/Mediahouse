@@ -1,34 +1,36 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { ArrowRight, Copy, ExternalLink, Loader2 } from "lucide-react"
+import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Loader2, MinusCircle } from "lucide-react"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import {
   faltaOMaterial,
   passoDaGravacao,
   situacaoDaNota,
+  trilhaDaNota,
+  trilhaDoVideo,
+  type EstadoDoPasso,
   type PagamentoDoCard,
+  type PassoDaTrilha,
 } from "@/lib/etapas-da-gravacao"
 import surface from "@/components/demandas/DemandSurface.module.css"
 import styles from "./FichaDoJob.module.css"
-import { TAG_DA_NOTA } from "./etiquetas"
 
 /**
- * O passo da vez da gravação externa, dentro da ficha do card aberto.
+ * A linha do tempo da gravação externa, no topo da ficha do card aberto.
  *
- * Progressivo (pedido do Giovani, 28/10/2026): aparece só o que cabe agora.
- * Sem videomaker, o botão de escalar; com o convite na rua, a confirmação;
- * agendado, o lugar do link do material; na edição, o do vídeo final; pronto,
- * "marcar como enviado". A nota do videomaker corre ao lado, a partir do
- * material — com o link que ele usa para mandar a nota, para copiar ou abrir.
+ * Pedido do Giovani (28 e 29/10/2026): o card aberto estava confuso. Agora é
+ * uma trilha do vídeo (pedido → envio ao cliente), o painel "Agora" com só o
+ * campo da vez — contratou o videomaker, aparece o link do material; chegou o
+ * material, aparece a nota — e, desde o material, a trilha da nota até compras.
  *
  * Campos, botões e textos são os do card aberto de Demandas
- * (DemandSurface.module.css); as etiquetas, as do card (./etiquetas).
+ * (DemandSurface.module.css).
  */
 
-export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais"> & {
+export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais" | "custos"> & {
+  id: string
   statusInterno: string
   videomakerId?: string | null
   videomaker?: { nome: string } | null
@@ -38,13 +40,47 @@ export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais"> & {
   linkFinal?: string | null
   dataCaptacao?: string | null
   dataEvento?: string | null
-  /** O card aberto recebe também o token: é o link que o videomaker usa para mandar a nota. */
-  notasFiscais?: { status: string; token?: string | null }[] | null
+  createdAt?: string | null
+  finalizadaEm?: string | null
+  historicos?: { statusNovo: string; createdAt: string }[] | null
+  /** O card aberto recebe também o arquivo e o token da nota (só quem vê a nota). */
+  custos?: { statusPagamento: string; pago: boolean; notaFiscalUrl?: string | null }[] | null
+  notasFiscais?: { status: string; token?: string | null; url?: string | null }[] | null
 }
 
 const primeiroNome = (nome?: string | null) => nome?.trim().split(/\s+/)[0] ?? "o videomaker"
 
-export function PassoDaGravacao({
+const ICONE: Record<EstadoDoPasso, ReactNode> = {
+  feito: <CheckCircle2 aria-hidden />,
+  agora: <CircleDot aria-hidden />,
+  depois: <Circle aria-hidden />,
+  pulado: <MinusCircle aria-hidden />,
+}
+const ESTADO_LIDO: Record<EstadoDoPasso, string> = { feito: "feito", agora: "agora", depois: "a fazer", pulado: "não se aplica" }
+
+export function Trilha({ passos, rotulo }: { passos: PassoDaTrilha[]; rotulo: string }) {
+  return (
+    <ol className={styles.trilha} aria-label={rotulo} style={{ ["--passos" as string]: passos.length }}>
+      {passos.map((p) => (
+        <li key={p.id} data-estado={p.estado} aria-current={p.estado === "agora" ? "step" : undefined}>
+          <span className={styles.trilhaRotulo}>{ICONE[p.estado]}{p.rotulo}</span>
+          <small>{p.detalhe ?? <span className="sr-only">{ESTADO_LIDO[p.estado]}</span>}</small>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+export function TrilhaDoVideo({ job }: { job: GravacaoDoPasso }) {
+  return <Trilha passos={trilhaDoVideo(job, hojeEmSaoPaulo())} rotulo="Andamento da gravação" />
+}
+
+function copiar(texto: string, aviso: string) {
+  navigator.clipboard.writeText(texto).then(() => toast.success(aviso), () => toast.error("Não foi possível copiar."))
+}
+
+/** O passo da vez: título, uma frase e só o campo e os botões que cabem agora. */
+export function AgoraDaGravacao({
   job,
   podeEditar,
   onAvancar,
@@ -62,7 +98,6 @@ export function PassoDaGravacao({
   const passo = passoDaGravacao(job)
   const [link, setLink] = useState("")
   const [salvando, setSalvando] = useState<string | null>(null)
-  const nota = situacaoDaNota(job)
   const vm = primeiroNome(job.videomaker?.nome)
 
   async function avancar(chave: string, statusInterno: string, patch?: Record<string, unknown>) {
@@ -125,8 +160,9 @@ export function PassoDaGravacao({
 
     case "material": {
       const falta = faltaOMaterial(job, hojeEmSaoPaulo())
-      titulo = falta ? `Gravou — falta o material de ${vm}` : "Quando o material chegar"
-      dica = job.edicaoPor === "equipe" ? "Cole o link do drive. Vai para a nossa edição."
+      titulo = falta ? `Gravou — falta o material de ${vm}` : `Gravação com ${vm}`
+      dica = !falta ? "Quando o material chegar, cole o link aqui."
+        : job.edicaoPor === "equipe" ? "Cole o link do drive. Vai para a nossa edição."
         : job.edicaoPor === "videomaker" ? "Cole o link do vídeo editado. Vai direto para enviar ao cliente."
         : job.edicaoPor === "sem_edicao" ? "Cole o link dos brutos. Vai direto para enviar ao cliente."
         : "Cole o link do drive e diga se veio editado."
@@ -180,37 +216,116 @@ export function PassoDaGravacao({
       break
   }
 
-  const token = job.notasFiscais?.find((n) => n.token && n.status === "pendente")?.token
-    ?? job.notasFiscais?.find((n) => n.token)?.token
-  const linkDaNota = token ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${token}` : null
-
   return (
-    <div className={styles.passo}>
-      <div className={styles.campo}>
-        <span className={styles.rotulo}>Próximo passo</span>
-        <strong className={styles.valor}>{titulo}</strong>
-        {dica && <span className={surface.hint}>{dica}</span>}
-      </div>
+    <section className={styles.agora} aria-label="Agora">
+      <span className={styles.rotulo}>Agora</span>
+      <strong className={styles.valor}>{titulo}</strong>
+      {dica && <span className={surface.hint}>{dica}</span>}
       {conteudo && <div className={styles.passoAcoes}>{conteudo}</div>}
-
-      {nota && (
-        <div className={cn(styles.campo, styles.passoNota)}>
-          <span className={styles.rotulo}>Nota do videomaker</span>
-          <span><span className={TAG_DA_NOTA[nota.tom]}>🧾 {nota.texto}</span></span>
-          {(nota.texto === "Falta a nota" || nota.tom === "alerta") && (linkDaNota ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className={surface.linkBtn} onClick={() => copiar(linkDaNota, "Link da nota copiado — mande para o videomaker")}>Copiar link para o videomaker <Copy className="w-3.5 h-3.5" aria-hidden /></button>
-              <a className={surface.linkBtn} href={linkDaNota} target="_blank" rel="noopener noreferrer">Abrir e anexar a nota <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
-            </div>
-          ) : <span className={surface.hint}>O link da nota é criado quando o material é marcado como recebido.</span>)}
-          {nota.texto === "Nota recebida" && <a className={surface.linkBtn} href="/aprovacoes">Aprovar o pagamento em Aprovações <ArrowRight className="w-3.5 h-3.5" aria-hidden /></a>}
-          {nota.texto === "Pagamento programado" && <span className={surface.hint}>Aprovado; com o financeiro.</span>}
-        </div>
-      )}
-    </div>
+    </section>
   )
 }
 
-function copiar(texto: string, aviso: string) {
-  navigator.clipboard.writeText(texto).then(() => toast.success(aviso), () => toast.error("Não foi possível copiar."))
+/**
+ * A nota do videomaker até compras. Aparece quando o material chega (é quando a
+ * nota é pedida), com a trilha e só a ação da vez: o link para o videomaker
+ * mandar, depois baixar e enviar para compras, depois marcar como paga.
+ */
+export function NotaDaGravacao({ job, onAtualizar }: { job: GravacaoDoPasso; onAtualizar: () => Promise<unknown> | void }) {
+  const [agindo, setAgindo] = useState<string | null>(null)
+  const [plano, setPlano] = useState<string | null>(null)
+  const nota = situacaoDaNota(job)
+  const passos = trilhaDaNota(job)
+  if (!nota || !passos) return null
+
+  const token = job.notasFiscais?.find((n) => n.token && n.status === "pendente")?.token ?? job.notasFiscais?.find((n) => n.token)?.token
+  const linkDaNota = token ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${token}` : null
+  const arquivo = job.custos?.find((c) => c.notaFiscalUrl)?.notaFiscalUrl ?? job.notasFiscais?.find((n) => n.url)?.url ?? null
+
+  async function agir(acao: "enviar_compras" | "marcar_enviada" | "marcar_paga") {
+    setAgindo(acao)
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/nota`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao }),
+      })
+      const json = await res.json().catch(() => ({})) as { mensagem?: string; error?: string }
+      if (!res.ok) {
+        // O e-mail não saiu: o plano B fica na tela, não só no toast.
+        if (acao === "enviar_compras") setPlano(json.error ?? "O e-mail para compras não saiu.")
+        toast.error(json.error ?? "Não foi possível concluir.")
+        return
+      }
+      setPlano(null)
+      toast.success(json.mensagem ?? "Feito.")
+      await onAtualizar()
+    } catch {
+      toast.error("Sem conexão. Tente de novo.")
+    } finally {
+      setAgindo(null)
+    }
+  }
+
+  const botao = (acao: "enviar_compras" | "marcar_enviada" | "marcar_paga", rotulo: string, principal: boolean) => (
+    <button type="button" className={principal ? surface.btnPrimary : surface.btn} onClick={() => void agir(acao)} disabled={agindo !== null}>
+      {agindo === acao ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}
+      {rotulo}
+    </button>
+  )
+  const baixar = arquivo && (
+    <a className={surface.btn} href={arquivo} target="_blank" rel="noopener noreferrer"><Download className="w-3.5 h-3.5" aria-hidden />Baixar nota</a>
+  )
+
+  return (
+    <section className={styles.nota} aria-label="Nota do videomaker">
+      <span className={styles.rotulo}>Nota do videomaker</span>
+      <Trilha passos={passos} rotulo="Andamento da nota" />
+
+      {(nota.etapa === "falta" || nota.etapa === "contestada") && (
+        <>
+          <span className={surface.hint}>
+            {nota.etapa === "falta"
+              ? "O pedido da nota foi para o videomaker no WhatsApp. Se precisar, mande o link de novo ou anexe por ele."
+              : "A nota precisa ser refeita. O videomaker reenvia pelo mesmo link."}
+          </span>
+          {linkDaNota && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={surface.linkBtn} onClick={() => copiar(linkDaNota, "Link da nota copiado — mande para o videomaker")}>Copiar link para o videomaker <Copy className="w-3.5 h-3.5" aria-hidden /></button>
+              <a className={surface.linkBtn} href={linkDaNota} target="_blank" rel="noopener noreferrer">Anexar a nota por ele <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
+            </div>
+          )}
+        </>
+      )}
+
+      {nota.etapa === "recebida" && (
+        <>
+          <span className={surface.hint}>Envie para compras: o e-mail vai com a nota e com cópia para você.</span>
+          <div className="flex flex-wrap gap-2">
+            {botao("enviar_compras", "Enviar para compras", true)}
+            {baixar}
+          </div>
+          {plano && (
+            <div className={surface.notice} role="alert">
+              <p>{plano}</p>
+              <div className="flex flex-wrap gap-2">
+                {baixar}
+                {botao("marcar_enviada", "Já mandei por fora", false)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {nota.etapa === "compras" && (
+        <>
+          <span className={surface.hint}>Com compras. Quando o pagamento sair, marque aqui.</span>
+          <div className="flex flex-wrap gap-2">
+            {botao("marcar_paga", "Marcar como paga", true)}
+            {baixar}
+          </div>
+        </>
+      )}
+    </section>
+  )
 }

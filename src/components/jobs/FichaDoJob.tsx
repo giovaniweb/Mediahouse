@@ -16,7 +16,7 @@ import {
   telefoneLegivel,
 } from "@/lib/ficha-do-job"
 import { EDICAO, rotuloDaEdicao } from "@/lib/etapas-da-gravacao"
-import { PassoDaGravacao, type GravacaoDoPasso } from "./PassoDaGravacao"
+import { AgoraDaGravacao, NotaDaGravacao, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
 import styles from "./FichaDoJob.module.css"
 
 /**
@@ -56,6 +56,7 @@ export function FichaDoJob({
   onEscalar,
   onAvancar,
   onConfirmarVideomaker,
+  onAtualizar,
   rodape,
   children,
 }: {
@@ -67,8 +68,10 @@ export function FichaDoJob({
   /** Grava os campos do passo (se houver) e muda o status. */
   onAvancar: (statusInterno: string, patch?: Record<string, unknown>) => Promise<void>
   onConfirmarVideomaker: (aceite: boolean) => void
-  /** Etapa e de quem é a vez. */
-  rodape: ReactNode
+  /** Recarrega o card depois de agir na nota. */
+  onAtualizar: () => Promise<unknown> | void
+  /** Linha final (de quem é a vez). A etapa já está na trilha. */
+  rodape?: ReactNode
   children?: ReactNode
 }) {
   const momento = momentoDoJob(job)
@@ -87,6 +90,16 @@ export function FichaDoJob({
 
   return (
     <section aria-label="Ficha da gravação" className={styles.ficha}>
+      <TrilhaDoVideo job={job} />
+      <AgoraDaGravacao
+        job={job}
+        podeEditar={podeEditar}
+        onAvancar={onAvancar}
+        onConfirmarVideomaker={onConfirmarVideomaker}
+        onEscalar={onEscalar}
+      />
+      <NotaDaGravacao job={job} onAtualizar={onAtualizar} />
+
       <div className={styles.grade}>
         <div className={styles.campo}>
           <span className={styles.rotulo}><CalendarClock aria-hidden /> Quando</span>
@@ -160,21 +173,13 @@ export function FichaDoJob({
         </div>
       </div>
 
-      <PassoDaGravacao
-        job={job}
-        podeEditar={podeEditar}
-        onAvancar={onAvancar}
-        onConfirmarVideomaker={onConfirmarVideomaker}
-        onEscalar={onEscalar}
-      />
-
       {levar.length > 0 && (
         <p className={styles.levar}><Package aria-hidden /> <span>Levar:</span> {levar.join(" · ")}</p>
       )}
 
       {children}
 
-      <div className={styles.rodape}>{rodape}</div>
+      {rodape && <div className={styles.rodape}>{rodape}</div>}
     </section>
   )
 }

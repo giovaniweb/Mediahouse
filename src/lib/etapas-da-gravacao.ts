@@ -171,21 +171,28 @@ export type PagamentoDoCard = {
   notasFiscais?: { status: string }[] | null
 }
 
-export type SituacaoDaNota = { texto: string; tom: "falta" | "andamento" | "ok" | "alerta" }
+export type EtapaDaNota = "falta" | "contestada" | "recebida" | "compras" | "paga"
+export type SituacaoDaNota = { etapa: EtapaDaNota; texto: string; tom: "falta" | "andamento" | "ok" | "alerta" }
 
+/**
+ * Em que pé está a nota. O caminho é o da casa (Giovani, 29/10/2026): o
+ * videomaker manda a nota, a Débora encaminha ao setor de compras, compras
+ * paga. `aguardando_pagamento` é "enviada para compras" — não há aprovação de
+ * pagamento no meio, nem valor ou PIX a conferir aqui.
+ */
 export function situacaoDaNota(job: PagamentoDoCard): SituacaoDaNota | null {
   if (!job.custos || !job.notasFiscais || !job.videomakerId) return null
   const custos = job.custos, notas = job.notasFiscais
-  if (custos.some((c) => c.pago || c.statusPagamento === "pago")) return { texto: "Videomaker pago", tom: "ok" }
-  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) return { texto: "Pagamento programado", tom: "andamento" }
-  if (custos.some((c) => c.statusPagamento === "contestado")) return { texto: "Nota contestada", tom: "alerta" }
+  if (custos.some((c) => c.pago || c.statusPagamento === "pago")) return { etapa: "paga", texto: "Nota paga", tom: "ok" }
+  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) return { etapa: "compras", texto: "Enviada para compras", tom: "andamento" }
+  if (custos.some((c) => c.statusPagamento === "contestado")) return { etapa: "contestada", texto: "Nota a refazer", tom: "alerta" }
   if (custos.some((c) => c.statusPagamento === "nf_enviada") || notas.some((n) => n.status === "enviada" || n.status === "aprovada")) {
-    return { texto: "Nota recebida", tom: "andamento" }
+    return { etapa: "recebida", texto: "Nota recebida", tom: "andamento" }
   }
   // Antes do material, a nota ainda não foi pedida — não é falta.
   if (ordem(etapaDaGravacao(job)) <= ordem("agendado")) return null
   if (job.statusInterno === "encerrado" && custos.length === 0 && notas.length === 0) return null
-  return { texto: "Falta a nota", tom: "falta" }
+  return { etapa: "falta", texto: "Falta a nota", tom: "falta" }
 }
 
 // ── Próximo passo (card aberto) ──────────────────────────────────────────────
@@ -233,4 +240,79 @@ export function vezNaGravacao(job: JobParaLeitura & { gestor?: { nome: string } 
   return passoDaGravacao(job) === "enviar"
     ? { papel: "Admin", nome: job.gestor?.nome ?? null }
     : responsavelAtual(job)
+}
+
+// ── Linha do tempo (card aberto) ─────────────────────────────────────────────
+//
+// Pedido do Giovani (29/10/2026), depois de abrir os cards na prévia: "ainda
+// confuso; se tivesse um step, uma timeline". Duas trilhas no topo da ficha: a
+// do vídeo (pedido → envio ao cliente) e a da nota do videomaker, que só
+// aparece quando o material chega. O passo "agora" é o do PassoDaGravacao.
+
+export type EstadoDoPasso = "feito" | "agora" | "depois" | "pulado"
+export type PassoDaTrilha = { id: string; rotulo: string; estado: EstadoDoPasso; detalhe: string | null }
+
+type JobDaLinha = PagamentoDoCard & {
+  createdAt?: string | Date | null
+  finalizadaEm?: string | Date | null
+  dataCaptacao?: string | Date | null
+  dataEvento?: string | Date | null
+  edicaoPor?: string | null
+  videomaker?: { nome: string } | null
+  editor?: { nome: string } | null
+  historicos?: { statusNovo: string; createdAt: string | Date }[] | null
+}
+
+const diaCurto = (v: string | Date | null | undefined) => {
+  const dia = momentoDoJob({ dataCaptacao: v ?? null })?.dia
+  return dia ? `${dia.slice(8, 10)}/${dia.slice(5, 7)}` : null
+}
+const nome1 = (n?: string | null) => n?.trim().split(/\s+/)[0] ?? null
+
+/** Quando o material chegou: a primeira mudança do histórico que passou do agendado. */
+function chegadaDoMaterial(job: JobDaLinha): string | Date | null {
+  const h = [...(job.historicos ?? [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  return h.find((x) => (ETAPA_DO_STATUS as Record<string, EtapaDaGravacao>)[x.statusNovo] && ordem(etapaDaGravacao({ statusInterno: x.statusNovo })) >= ordem("em_edicao"))?.createdAt ?? null
+}
+
+export function trilhaDoVideo(job: JobDaLinha, hoje: string): PassoDaTrilha[] {
+  const passo = passoDaGravacao(job)
+  const gravou = passo !== "escalar" && passo !== "confirmar" && (passo !== "material" || faltaOMaterial(job, hoje))
+  const atual =
+    passo === "escalar" || passo === "confirmar" ? 1
+    : passo === "material" ? (gravou ? 3 : 2)
+    : passo === "edicao" ? 4
+    : passo === "enviar" ? 5
+    : 6
+  const semNossaEdicao = job.edicaoPor === "videomaker" || job.edicaoPor === "sem_edicao"
+  const quando = momentoDoJob(job)
+  const estado = (i: number): EstadoDoPasso => (i < atual ? "feito" : i === atual ? "agora" : "depois")
+  return [
+    { id: "pedido", rotulo: "Pedido", estado: "feito", detalhe: diaCurto(job.createdAt) },
+    { id: "videomaker", rotulo: "Videomaker", estado: estado(1), detalhe: nome1(job.videomaker?.nome) ?? (atual === 1 ? "escalar" : null) },
+    { id: "gravacao", rotulo: "Gravação", estado: estado(2), detalhe: quando ? `${quando.dia.slice(8, 10)}/${quando.dia.slice(5, 7)}` : null },
+    { id: "material", rotulo: "Material", estado: estado(3), detalhe: atual > 3 ? diaCurto(chegadaDoMaterial(job)) : atual === 3 ? "falta chegar" : null },
+    {
+      id: "edicao",
+      rotulo: "Edição",
+      // Veio editado ou vai sem edição: o passo existe, mas não é nosso.
+      estado: semNossaEdicao && atual > 4 ? "pulado" : semNossaEdicao && atual <= 4 ? "depois" : estado(4),
+      detalhe: semNossaEdicao ? rotuloDaEdicao(job.edicaoPor) : nome1(job.editor?.nome),
+    },
+    { id: "envio", rotulo: "Envio ao cliente", estado: estado(5), detalhe: atual === 6 ? diaCurto(job.finalizadaEm) : null },
+  ]
+}
+
+/** A trilha da nota, ou null antes de o material chegar (a nota ainda não foi pedida). */
+export function trilhaDaNota(job: JobDaLinha): PassoDaTrilha[] | null {
+  const nota = situacaoDaNota(job)
+  if (!nota) return null
+  const atual = { falta: 1, contestada: 1, recebida: 2, compras: 3, paga: 4 }[nota.etapa]
+  const estado = (i: number): EstadoDoPasso => (i < atual ? "feito" : i === atual ? "agora" : "depois")
+  return [
+    { id: "pedida", rotulo: "Pedida", estado: "feito", detalhe: "WhatsApp" },
+    { id: "recebida", rotulo: "Recebida", estado: estado(1), detalhe: nota.etapa === "contestada" ? "a refazer" : null },
+    { id: "compras", rotulo: "Enviada para compras", estado: estado(2), detalhe: null },
+    { id: "paga", rotulo: "Paga", estado: estado(3), detalhe: null },
+  ]
 }

@@ -349,7 +349,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     linkCliente: demanda.linkCliente as string | null,
     finaisEnviados: ((demanda.arquivos ?? []) as { tipoArquivo: string }[]).filter((a) => a.tipoArquivo === "final").length,
   } : null
-  const abas: AbaDoDetalhe[] = dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"]
+  // Gravação externa não tem a aba Aprovação: ela é da publicação, e aqui o
+  // fim é o envio ao cliente, que está no próximo passo da ficha.
+  const abas: AbaDoDetalhe[] = (dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"] as AbaDoDetalhe[])
+    .filter((a) => !ehCobertura || a !== "aprovacao")
   // Aprovado (Para postar ou Concluído): não se manda mais versão para o cliente.
   const aprovacaoConcluida = !!demanda && ["para_postar", "finalizado"].includes(demanda.statusVisivel)
   // A gravação externa abre sempre no Pedido: é lá que está o próximo passo
@@ -1316,8 +1319,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             {!isGrowth && /\[\d/.test(ajusteNoTopo.comentario!) && <small>Toque no tempo para ver o momento no vídeo.</small>}
           </section>
         )}
-        <section className={surface.nextAction}>
-          {/* Gravação externa fala a língua do quadro dela (lib/etapas-da-gravacao.ts). */}
+        {/* Gravação externa: a linha do tempo da ficha faz o papel desta faixa. */}
+        {!ehCobertura && <section className={surface.nextAction}>
           <strong>Próxima ação: {ehCobertura ? acaoDaGravacao(demanda, hojeEmSaoPaulo()) : proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
           {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
@@ -1335,7 +1338,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </button>
             )}
           </div>
-        </section>
+        </section>}
         <nav className={surface.detailTabs} aria-label="Seções da demanda">
           {abas.map((key) => (
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
@@ -1365,9 +1368,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 aberto={moverAberto}
                 onFechar={() => setMoverAberto(false)}
               />
-              {/* A ficha da gravação: quando, onde, quem vai e para quem, antes
-                  do briefing — é o que decide o dia de alguém. Etapa e de quem é
-                  a vez ficam no rodapé (§32: a etapa escrita, não só pintada). */}
+              {/* A ficha da gravação: linha do tempo, o passo da vez, a nota
+                  do videomaker e quando, onde, quem vai e para quem — antes do
+                  briefing. A etapa está na trilha; o rodapé diz de quem é a vez. */}
               <FichaDoJob
                 job={demanda}
                 podeEditar={podeEditar}
@@ -1375,8 +1378,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 onEscalar={() => irParaAcao("equipe")}
                 onAvancar={avancarGravacao}
                 onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
+                onAtualizar={() => mutate()}
                 rodape={<>
-                  <span><span className="text-zinc-600">Etapa </span>{ROTULO_DA_ETAPA[etapaDaGravacao(demanda)]}</span>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
                     {responsavelDoJob.nome ?? responsavelDoJob.papel}
@@ -1551,7 +1554,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           {/* ── Checklist ─────────────────────────────────────────────────── */}
-          <ChecklistSection demandaId={id as string} />
+          {/* Na gravação externa, o que levar está na ficha ("Levar"). */}
+          {!ehCobertura && <ChecklistSection demandaId={id as string} />}
           </div>
           {/* ── Equipe e contexto: deixou de ser aba, fica embaixo do Pedido ── */}
           <div id={`equipe-${id}`} hidden={detailTab !== "pedido"} className={cn(surface.tabSection, surface.grupo)}>
@@ -2265,8 +2269,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             )}
           </div>
 
-          {/* Datas */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Datas — na gravação externa, o "Quando" da ficha já diz. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Calendar aria-hidden /> Datas</h2></div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
@@ -2305,7 +2309,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
             </div>
-          </div>
+          </div>}
 
           </div>
           <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>

@@ -24,12 +24,29 @@
 .levar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:14px; border-top:1px solid #303342; color:#e6e4f0; font-size:14px; }
 .levar svg { width:15px; height:15px; color:#8d8ca3; }
 .levar > span { color:#a2a5b9; }
-/* O próximo passo (PassoDaGravacao): só o que cabe agora, abaixo da grade. */
-.passo { display:flex; flex-direction:column; gap:12px; padding-top:16px; border-top:1px solid #303342; }
-.passoAcoes { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
-.passoNota { padding-top:12px; border-top:1px solid #303342; }
+/* Linha do tempo (PassoDaGravacao → Trilha): um passo por coluna, a barra em
+   cima diz o estado. Verde feito, roxo agora, apagado a fazer. */
+.trilha { display:grid; grid-template-columns:repeat(var(--passos),minmax(0,1fr)); gap:8px; margin:0; padding:0; list-style:none; }
+.trilha li { display:flex; flex-direction:column; gap:4px; min-width:0; color:#6f7084; font-size:12px; line-height:1.3; }
+.trilha li::before { content:""; height:3px; border-radius:2px; background:#303342; }
+.trilha li[data-estado="feito"] { color:#a2a5b9; }
+.trilha li[data-estado="feito"]::before { background:#86d9a8; }
+.trilha li[data-estado="agora"] { color:#f1f0f8; }
+.trilha li[data-estado="agora"]::before { background:#b398ff; }
+.trilha li[data-estado="pulado"]::before { background:repeating-linear-gradient(90deg,#303342 0 4px,transparent 4px 8px); }
+.trilha small { color:#8d8ca3; font-size:11.5px; overflow-wrap:anywhere; }
+.trilhaRotulo { display:inline-flex; align-items:center; gap:5px; font-weight:600; }
+.trilhaRotulo svg { width:14px; height:14px; flex-shrink:0; }
+.trilha li[data-estado="feito"] .trilhaRotulo svg { color:#86d9a8; }
+.trilha li[data-estado="agora"] .trilhaRotulo svg { color:#c7b6f5; }
+/* O passo da vez, logo abaixo da trilha: o que fazer agora e só o campo dele. */
+.agora { display:flex; flex-direction:column; gap:8px; padding:16px; border:1px solid #b398ff44; border-radius:12px; background:#b398ff0d; }
+.passoAcoes { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin-top:4px; }
+/* A nota do videomaker: trilha própria e a ação da vez. */
+.nota { display:flex; flex-direction:column; gap:10px; padding-top:16px; border-top:1px solid #303342; }
 .rodape { display:flex; flex-wrap:wrap; gap:6px 20px; padding-top:14px; border-top:1px solid #303342; color:#a2a5b9; font-size:13px; }
 @media (max-width:520px) {
   .ficha { padding:16px; }
   .grade { grid-template-columns:minmax(0,1fr); gap:18px; }
+  .trilha { grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:12px; }
 }

@@ -125,10 +125,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // (veNotaDoVideomaker). Os custos são de quem paga — a empresa ativa.
   const pagamento = demanda.videomakerId && await veNotaDoVideomaker(session.user.id, acesso.organizacaoId, ehGestor(session))
     ? {
-        custos: await prisma.custoVideomaker.findMany({ where: { organizacaoId: acesso.organizacaoId, demandaId: id }, select: { statusPagamento: true, pago: true } }),
-        // O token é o link que o videomaker usa para mandar a nota: a ficha o
-        // oferece para copiar ou abrir. Só aqui, nunca na lista do quadro.
-        notasFiscais: await prisma.notaFiscalUpload.findMany({ where: { demandaId: id, videomakerId: demanda.videomakerId }, select: { status: true, token: true } }),
+        custos: await prisma.custoVideomaker.findMany({ where: { organizacaoId: acesso.organizacaoId, demandaId: id }, select: { statusPagamento: true, pago: true, notaFiscalUrl: true } }),
+        // O token é o link que o videomaker usa para mandar a nota, e a url é
+        // o arquivo que a Débora baixa: a ficha oferece os dois. Só aqui,
+        // nunca na lista do quadro.
+        notasFiscais: await prisma.notaFiscalUpload.findMany({ where: { demandaId: id, videomakerId: demanda.videomakerId }, select: { status: true, token: true, url: true } }),
       }
     : {}
 

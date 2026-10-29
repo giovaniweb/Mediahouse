@@ -10,6 +10,8 @@ import {
   passoDaGravacao,
   situacaoDaNota,
   statusAoSoltar,
+  trilhaDaNota,
+  trilhaDoVideo,
 } from "@/lib/etapas-da-gravacao"
 
 describe("etapas de Gravações Externas", () => {
@@ -84,17 +86,17 @@ describe("linha da nota no card", () => {
   })
 
   it("material chegou e nada da nota: falta", () => {
-    expect(situacaoDaNota({ ...base, statusInterno: "brutos_enviados" })).toEqual({ texto: "Falta a nota", tom: "falta" })
+    expect(situacaoDaNota({ ...base, statusInterno: "brutos_enviados" })).toEqual({ etapa: "falta", texto: "Falta a nota", tom: "falta" })
   })
 
   it("a nota segue o pagamento até o fim", () => {
     const comCusto = (statusPagamento: string, pago = false) => situacaoDaNota({ ...base, statusInterno: "editando", custos: [{ statusPagamento, pago }] })?.texto
     expect(comCusto("pendente_nf")).toBe("Falta a nota")
     expect(comCusto("nf_enviada")).toBe("Nota recebida")
-    expect(comCusto("aguardando_pagamento")).toBe("Pagamento programado")
-    expect(comCusto("contestado")).toBe("Nota contestada")
-    expect(comCusto("pendente_nf", true)).toBe("Videomaker pago")
-    expect(comCusto("pago")).toBe("Videomaker pago")
+    expect(comCusto("aguardando_pagamento")).toBe("Enviada para compras")
+    expect(comCusto("contestado")).toBe("Nota a refazer")
+    expect(comCusto("pendente_nf", true)).toBe("Nota paga")
+    expect(comCusto("pago")).toBe("Nota paga")
   })
 
   it("nota enviada pelo link antes do custo existir já conta como recebida", () => {
@@ -137,5 +139,43 @@ describe("quem edita", () => {
     expect(["videomaker", "equipe", "sem_edicao"].every(ehEdicaoDaGravacao)).toBe(true)
     expect(ehEdicaoDaGravacao("cliente")).toBe(false)
     expect(ehEdicaoDaGravacao(null)).toBe(false)
+  })
+})
+
+describe("linha do tempo do card aberto", () => {
+  const hoje = "2026-10-29"
+  const estados = (passos: { id: string; estado: string }[]) => Object.fromEntries(passos.map((p) => [p.id, p.estado]))
+
+  it("sem videomaker: o passo da vez é o videomaker", () => {
+    expect(estados(trilhaDoVideo({ statusInterno: "aguardando_triagem", videomakerId: null }, hoje))).toEqual({
+      pedido: "feito", videomaker: "agora", gravacao: "depois", material: "depois", edicao: "depois", envio: "depois",
+    })
+  })
+
+  it("agendado para o futuro: vez da gravação; dia passado: vez do material", () => {
+    const base = { statusInterno: "captacao_agendada", videomakerId: "vm", videomaker: { nome: "João Martins" } }
+    expect(estados(trilhaDoVideo({ ...base, dataCaptacao: "2026-11-02T13:00:00.000Z" }, hoje))).toMatchObject({ videomaker: "feito", gravacao: "agora", material: "depois" })
+    expect(estados(trilhaDoVideo({ ...base, dataCaptacao: "2026-10-27T13:00:00.000Z" }, hoje))).toMatchObject({ gravacao: "feito", material: "agora" })
+    expect(trilhaDoVideo(base, hoje).find((p) => p.id === "videomaker")?.detalhe).toBe("João")
+  })
+
+  it("veio editado pelo videomaker: a edição aparece, mas não é nossa", () => {
+    const passos = trilhaDoVideo({ statusInterno: "aprovado", videomakerId: "vm", edicaoPor: "videomaker" }, hoje)
+    expect(estados(passos)).toMatchObject({ material: "feito", edicao: "pulado", envio: "agora" })
+    expect(passos.find((p) => p.id === "edicao")?.detalhe).toBe("Videomaker edita")
+  })
+
+  it("concluído: tudo feito", () => {
+    expect(Object.values(estados(trilhaDoVideo({ statusInterno: "entregue_cliente", videomakerId: "vm" }, hoje))).every((e) => e === "feito")).toBe(true)
+  })
+
+  it("a nota tem trilha só depois do material, e anda até paga", () => {
+    const base = { videomakerId: "vm", notasFiscais: [] as { status: string }[] }
+    expect(trilhaDaNota({ ...base, statusInterno: "captacao_agendada", custos: [] })).toBeNull()
+    const em = (statusPagamento: string, pago = false) => estados(trilhaDaNota({ ...base, statusInterno: "editando", custos: [{ statusPagamento, pago }] })!)
+    expect(em("pendente_nf")).toEqual({ pedida: "feito", recebida: "agora", compras: "depois", paga: "depois" })
+    expect(em("nf_enviada")).toEqual({ pedida: "feito", recebida: "feito", compras: "agora", paga: "depois" })
+    expect(em("aguardando_pagamento")).toEqual({ pedida: "feito", recebida: "feito", compras: "feito", paga: "agora" })
+    expect(em("pago", true)).toEqual({ pedida: "feito", recebida: "feito", compras: "feito", paga: "feito" })
   })
 })
