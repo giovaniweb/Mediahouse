@@ -183,6 +183,13 @@ function SelectFuncao({ papel, funcao, onChange, className }: {
   )
 }
 
+// Papel trocado para a própria função escolhida: a função vira "Igual ao papel"
+// de fato, e não só na tela. Sem isso, a troca de papel seguinte trazia a
+// função antiga de volta em vez de acompanhar o papel.
+function funcaoAposPapel(funcao: string, papel: string): string {
+  return funcao === papel ? "" : funcao
+}
+
 const AREAS = [
   { value: "audiovisual", label: "Audiovisual" },
   { value: "growth", label: "Growth / Conteúdos" },
@@ -272,7 +279,11 @@ function ModalEditarUsuario({
           </div>
           <div>
             <label className="text-xs text-zinc-400 block mb-1">Papel no sistema (acesso)</label>
-            <select className={inp} value={tipo} onChange={e => setTipo(e.target.value)}>
+            <select className={inp} value={tipo} onChange={e => {
+              const papel = e.target.value
+              setTipo(papel)
+              setFuncao(f => funcaoAposPapel(f, papel))
+            }}>
               {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
             </select>
           </div>
@@ -904,7 +915,10 @@ export default function PessoasAcessosPage() {
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Papel / acesso *</label>
                 <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
-                  value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
+                  value={form.tipo} onChange={e => {
+                    const papel = e.target.value
+                    setForm(f => ({ ...f, tipo: papel, funcaoProfissional: funcaoAposPapel(f.funcaoProfissional, papel) }))
+                  }}>
                   {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
                 </select>
               </div>
