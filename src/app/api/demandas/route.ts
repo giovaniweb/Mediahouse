@@ -27,6 +27,7 @@ import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
@@ -474,10 +475,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Gravação nasce com o link de acompanhamento de quem pediu (/d/<token>, o do
+  // Compartilhar do card): lib/acompanhamento-gravacao.ts.
+  const ehGravacao = ehSolicitacaoDeCobertura({ tipoVideo: data.tipoVideo, departamento: data.departamento }) || !!data.tipoGravacao
+
   const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,
+      ...(ehGravacao && { publicToken: novoTokenPublico(), publicTokenAtivo: true }),
       titulo: data.titulo,
       descricao: data.descricao,
       departamento: data.departamento,
@@ -657,7 +663,6 @@ export async function POST(req: NextRequest) {
 
   // Gravação externa tem os avisos dela (lib/avisos-gravacao.ts): já aprovada,
   // entra para a operação agendar; o líder do audiovisual não é avisado dela.
-  const ehGravacao = ehSolicitacaoDeCobertura({ tipoVideo: data.tipoVideo, departamento: data.departamento }) || !!data.tipoGravacao
   if (ehGravacao && jaAprovada) {
     emSegundoPlano(() => avisarGravacao(organizacaoId, demanda.id, "entrou", session.user.id), "aviso-gravacao")
   }

@@ -29,6 +29,7 @@ import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { GET as abrir, PUT as editar } from "@/app/api/demandas/[id]/route"
 import { POST as nota } from "@/app/api/jobs/[id]/nota/route"
 import { POST as pedirPublico } from "@/app/api/publico/demanda/route"
+import { GET as acompanhar } from "@/app/api/publico/demanda/[token]/route"
 import { GET as abrirConvite } from "@/app/api/convites/[token]/route"
 import { POST as entregar } from "@/app/api/convites/[token]/entrega/route"
 import { POST as responderConvite } from "@/app/api/convites/[token]/route"
@@ -267,10 +268,29 @@ describe("pedido com tipo, brinde e equipamento", () => {
       }),
     }))
     expect(res.status).toBe(201)
-    const { codigo } = await res.json() as { codigo: string }
+    const { codigo, acompanhamento } = await res.json() as { codigo: string; acompanhamento: string }
     const d = await db.demanda.findFirstOrThrow({ where: { codigo, organizacaoId: org }, include: { produtos: true } })
     expect(d).toMatchObject({ tipoGravacao: "entrega_equipamento", temBrinde: true, brinde: "Caixa mineira", levar: "banner", clienteFinalTelefone: "5519981031327" })
     expect(d.produtos.map((x) => x.produtoId)).toEqual([produto.id])
+    // Quem pediu sai com o link de acompanhamento, e ele vai no WhatsApp de recebido.
+    expect(acompanhamento).toBe(`/d/${d.publicToken}`)
+    expect(tarefas.map((t) => t.rotulo)).toContain("wa-solicitante-recebida")
+  })
+
+  it("a página de quem pediu mostra a gravação, sem nada de dentro", async () => {
+    const id = await gravacao("captacao_agendada")
+    const token = `tok-acomp-${p}`
+    await db.demanda.update({ where: { id }, data: { clienteFinalNome: "Clínica Cristal", tipoGravacao: "entrega_equipamento", clienteFinalTelefone: "5519981031327",
+      dataCaptacao: new Date("2031-05-10T16:00:00Z"), localGravacao: "Alameda dos Nhambiquaras, 1700", publicToken: token, publicTokenAtivo: true } })
+    const res = await acompanhar(new NextRequest(`http://localhost/api/publico/demanda/${token}`), { params: Promise.resolve({ token }) })
+    expect(res.status).toBe(200)
+    const { demanda } = await res.json() as { demanda: Record<string, unknown> & { gravacao: Record<string, unknown> } }
+    expect(demanda.gravacao).toMatchObject({ cliente: "Clínica Cristal", tipo: "Entrega de equipamento", quando: "Sáb, 10/05 · 13:00",
+      onde: "Alameda dos Nhambiquaras, 1700", videomaker: vm, situacao: "Gravação agendada" })
+    for (const campo of ["statusInterno", "videomaker", "videomakerId", "historicos", "custos", "clienteFinalTelefone", "edicaoPor", "departamento"]) {
+      expect(demanda, campo).not.toHaveProperty(campo)
+    }
+    await db.demanda.update({ where: { id }, data: { publicTokenAtivo: false } })
   })
 
   it("no card, tipo fora da lista é recusado; o certo grava", async () => {

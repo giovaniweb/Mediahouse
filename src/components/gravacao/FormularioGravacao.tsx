@@ -192,6 +192,7 @@ function PedidoPublico() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [codigo, setCodigo] = useState<string | null>(null)
+  const [acompanhamento, setAcompanhamento] = useState<string | null>(null)
   const [produtoIds, setProdutoIds] = useState<string[]>([])
   const mudar = <K extends keyof CamposGravacao>(campo: K, valor: CamposGravacao[K]) => setC((atual) => ({ ...atual, [campo]: valor }))
   // Os equipamentos ativos da empresa, sem login (a vitrine pública já os lista).
@@ -248,6 +249,8 @@ function PedidoPublico() {
       const json = await res.json()
       try { localStorage.setItem(chaveContato(), JSON.stringify({ nome: nome.trim(), telefone: telefone.trim(), email: email.trim() })) } catch { /* ignora */ }
       setCodigo(json.codigo ?? "")
+      // A página de quem pediu: situação, videomaker, data e o vídeo quando chegar.
+      setAcompanhamento(typeof json.acompanhamento === "string" ? json.acompanhamento : null)
     } catch (err: unknown) {
       setErro(erroDeEnvio(err))
     } finally {
@@ -256,7 +259,7 @@ function PedidoPublico() {
   }
 
   function outraGravacao() {
-    setC(CAMPOS_VAZIOS); setProdutoIds([]); setCodigo(null)
+    setC(CAMPOS_VAZIOS); setProdutoIds([]); setCodigo(null); setAcompanhamento(null)
   }
 
   const nomeEmpresa = destino.estado === "pronto" ? destino.empresa.nome : "a equipe"
@@ -272,7 +275,8 @@ function PedidoPublico() {
           {codigo && <p className="text-sm text-zinc-400 mb-4">Código: <span className="font-mono font-semibold text-white">{codigo}</span></p>}
           <p className="text-zinc-400 mb-8">{nomeEmpresa} confere a agenda e confirma o videomaker pelo WhatsApp informado.</p>
           <div className="flex flex-col items-center gap-4">
-            <button type="button" onClick={outraGravacao} className="px-5 py-2.5 text-sm bg-purple-600 text-white rounded-xl hover:bg-purple-700">Pedir outra gravação</button>
+            {acompanhamento && <Link href={acompanhamento} className="px-5 py-2.5 text-sm font-semibold bg-purple-600 text-white rounded-xl hover:bg-purple-700">Acompanhar o pedido</Link>}
+            <button type="button" onClick={outraGravacao} className={acompanhamento ? "px-5 py-2.5 text-sm text-zinc-300 border border-zinc-700 rounded-xl hover:bg-zinc-800" : "px-5 py-2.5 text-sm bg-purple-600 text-white rounded-xl hover:bg-purple-700"}>Pedir outra gravação</button>
             <Link href={destino.inicio} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2"><ArrowLeft className="w-4 h-4" aria-hidden="true" /> Voltar ao início</Link>
           </div>
         </div>

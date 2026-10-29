@@ -4,6 +4,10 @@ import { comToken } from "@/lib/midia"
 import { paraDownload } from "@/lib/midia-download"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
+import { selectContrato } from "@/lib/quadro-do-card-server"
+import { acompanhamentoDaGravacao } from "@/lib/acompanhamento-gravacao"
+import { hojeEmSaoPaulo } from "@/lib/datas"
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -14,6 +18,11 @@ type Params = { params: Promise<{ token: string }> }
 // dados bancários, telefones de terceiros, comentários internos, histórico de
 // status, motivo de impedimento e qualquer dado de outra pessoa.
 // Não use `include` nem espalhe a demanda inteira nesta resposta.
+//
+// Gravação externa (29/10/2026) ganha o bloco `gravacao`: a página vira o
+// acompanhamento de quem pediu o videomaker. Os campos de dentro que entram no
+// `select` para montá-lo (status, videomaker, histórico, contrato) NÃO saem na
+// resposta — só o que lib/acompanhamento-gravacao.ts deriva deles.
 export async function GET(_req: NextRequest, { params }: Params) {
   const { token } = await params
 
@@ -50,6 +59,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
       publicTokenAtivo: true,
       publicTokenExpiraEm: true,
       organizacaoId: true,
+      // Só para montar o bloco da gravação; nada disto sai cru.
+      statusInterno: true,
+      departamento: true,
+      clienteFinalNome: true,
+      tipoGravacao: true,
+      edicaoPor: true,
+      videomakerId: true,
+      videomaker: { select: { nome: true, ...selectContrato(organizacaoId) } },
+      dataCaptacao: true,
+      localGravacao: true,
+      localEvento: true,
+      historicos: { select: { statusNovo: true, createdAt: true }, orderBy: { createdAt: "asc" }, take: 200 },
       arquivos: {
         where: { tipoArquivo: "final" },
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
@@ -74,7 +95,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
       })
     : null
 
-  const { publicTokenAtivo: _a, publicTokenExpiraEm: _e, organizacaoId: _o, ...publico } = demanda
+  const {
+    publicTokenAtivo: _a, publicTokenExpiraEm: _e, organizacaoId: _o,
+    statusInterno, departamento, clienteFinalNome, tipoGravacao, edicaoPor, videomakerId, videomaker,
+    dataCaptacao, localGravacao, localEvento, historicos,
+    ...publico
+  } = demanda
+  const ehGravacao = quadroDoCard({
+    tipoVideo: publico.tipoVideo, departamento, videomakerId,
+    contratoVideomaker: contratoEfetivo(videomaker?.vinculos[0]?.tipoContrato, videomaker?.tipoContrato),
+  }) === "jobs"
+  const gravacao = ehGravacao ? acompanhamentoDaGravacao({
+    statusInterno, statusVisivel: publico.statusVisivel, titulo: publico.titulo, clienteFinalNome, tipoGravacao, edicaoPor,
+    videomakerId, videomaker: videomaker ? { nome: videomaker.nome } : null, dataCaptacao, dataEvento: publico.dataEvento,
+    localGravacao, localEvento, createdAt: publico.createdAt, finalizadaEm: publico.finalizadaEm, historicos,
+  }, hojeEmSaoPaulo()) : null
   // Mesma regra da aprovação: o token é a credencial de quem não tem conta, e
   // passa a valer também para a thumbnail que vive no bucket privado.
   return NextResponse.json({
@@ -86,6 +121,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         urlDownload: paraDownload(comToken(originalUrl ?? a.url, token)) })),
       thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
       organizacao,
+      gravacao,
     },
   }, { headers: { "Cache-Control": "private, no-store" } })
 }

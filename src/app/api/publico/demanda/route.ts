@@ -13,6 +13,7 @@ import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -135,6 +136,8 @@ export async function POST(req: NextRequest) {
 
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
+  // Gravação nasce com o link de acompanhamento de quem pediu (/d/<token>).
+  const tokenPublico = isCobertura ? novoTokenPublico() : null
 
   const demanda = await criarComCodigoUnico("VOP-EXT", (codigo) => prisma.demanda.create({
     data: {
@@ -166,6 +169,7 @@ export async function POST(req: NextRequest) {
       temBrinde: data.temBrinde,
       brinde: data.brinde || undefined,
       levar: data.levar || undefined,
+      ...(tokenPublico && { publicToken: tokenPublico, publicTokenAtivo: true }),
     },
   }))
 
@@ -216,7 +220,8 @@ export async function POST(req: NextRequest) {
     const primeiroNome = data.nomeCliente.split(" ")[0]
     emSegundoPlano(() => sendWhatsappMessage(
       telSolicitante,
-      `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`,
+      `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`
+        + (tokenPublico ? `\n\nAcompanhe por aqui:\n${linkPublicoDaDemanda(tokenPublico)}` : ""),
       demanda.id, organizacaoId
     ), "wa-solicitante-recebida")
   }
@@ -240,7 +245,7 @@ export async function POST(req: NextRequest) {
   // demandaId e a demanda só passa a existir aqui — sem isto, o formulário
   // público continuaria aceitando apenas link.
   return NextResponse.json(
-    { ok: true, codigo: demanda.codigo, anexoToken: gerarTokenAnexo(demanda.id) },
+    { ok: true, codigo: demanda.codigo, anexoToken: gerarTokenAnexo(demanda.id), ...(tokenPublico && { acompanhamento: `/d/${tokenPublico}` }) },
     { status: 201 }
   )
 }

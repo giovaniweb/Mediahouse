@@ -8,6 +8,7 @@ import { criarSaida, destinoAutorizado, processarSaidas } from "@/lib/whatsapp-o
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
 import { momentoDoJob } from "@/lib/ficha-do-job"
 import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
+import { linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import {
   mensagensDoEvento,
   type DadosDoAviso,
@@ -81,6 +82,7 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
   return {
     ...d,
     linkEntrega,
+    linkAcompanhamento: d.publicToken && d.publicTokenAtivo ? linkPublicoDaDemanda(d.publicToken) : null,
     colinha: colinha?.texto ? preencherColinha(colinha.texto, {
       cliente: d.clienteFinalNome?.trim() || d.titulo, hora: quando?.hora ?? null,
       endereco: d.localGravacao || d.localEvento, link: linkEntrega,

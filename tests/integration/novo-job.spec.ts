@@ -112,6 +112,10 @@ describe("+ Novo Job", () => {
     expect(agendados).not.toContain("nova-demanda-lideres")
     const h = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: d.id } })
     expect(h.observacao).toBe("Demanda criada e aprovada por quem pediu")
+    // Nasce com o link de acompanhamento de quem pediu (o do Compartilhar).
+    const link = await db.demanda.findUniqueOrThrow({ where: { id: d.id }, select: { publicToken: true, publicTokenAtivo: true } })
+    expect(link.publicToken).toMatch(/^[\w-]{24}$/)
+    expect(link.publicTokenAtivo).toBe(true)
   })
 
   it("líder do audiovisual também aprova; urgente aprovado entra em produção", async () => {

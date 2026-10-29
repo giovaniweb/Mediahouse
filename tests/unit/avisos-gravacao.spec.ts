@@ -37,6 +37,10 @@ describe("quem recebe cada evento", () => {
     expect(mensagensDoEvento("concluida", { ...g, linkFinal: "https://drive/final" }).cliente).toContain("https://drive/final")
     expect(papeis(mensagensDoEvento("concluida", g))).toEqual(["solicitante"])
   })
+  it("quem pediu recebe a página de acompanhamento junto da entrega", () => {
+    expect(mensagensDoEvento("concluida", { ...g, linkAcompanhamento: "https://nuflow.space/d/abc" }).solicitante).toContain("https://nuflow.space/d/abc")
+    expect(mensagensDoEvento("concluida", g).solicitante).not.toContain("Acompanhamento")
+  })
   it("pagamento feito vai para o videomaker", () => {
     expect(papeis(mensagensDoEvento("nota_paga", g))).toEqual(["videomaker"])
   })

@@ -46,6 +46,8 @@ export type DadosDoAviso = {
   linkEntrega?: string | null
   /** A colinha do dia, já preenchida (lib/kit-videomaker.ts). Sem ela, o dia não avisa. */
   colinha?: string | null
+  /** A página de acompanhamento de quem pediu (lib/acompanhamento-gravacao.ts). */
+  linkAcompanhamento?: string | null
 }
 
 const cliente = (d: DadosDoAviso) => d.clienteFinalNome?.trim() || d.titulo
@@ -85,7 +87,7 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
     case "concluida":
       return {
         ...(d.linkFinal ? { cliente: `Olá! O vídeo da sua gravação está pronto:\n${d.linkFinal}` } : {}),
-        solicitante: `✔️ Gravação entregue ao cliente: ${ref(d)}.`,
+        solicitante: [`✔️ Gravação entregue ao cliente: ${ref(d)}.`, d.linkAcompanhamento && `Acompanhamento:\n${d.linkAcompanhamento}`].filter(Boolean).join("\n\n"),
       }
     case "nota_paga":
       return { videomaker: `💸 Pagamento feito: gravação ${ref(d)}. Obrigado pelo trabalho!` }
