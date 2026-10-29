@@ -21,7 +21,7 @@ Projetos:
 | Release de migrations (GitHub) | **novo** desde 09/09 | feito; o release de hoje rodou em `aws-0-sa-east-1` |
 | Banco antigo | congelado (somente leitura) | ninguém do app conecta; última gravação 06/09 |
 | `.env.local` do Mac | banco e Storage **novos** | Storage trocado em 29/10, depois da segunda cópia |
-| Storage (arquivos) | **novo** desde 29/10 08:34 | Vercel virada; falta conferir o `SUPABASE_URL` do worker no Railway |
+| Storage (arquivos) | **novo** desde 29/10 08:34 | Vercel virada às 08:34, worker do Railway às 09:13; todos os arquivos conferidos byte a byte |
 | WhatsApp (Evolution) | Postgres próprio no Railway | não depende de nenhum Supabase |
 | RLS em produção | **não ligado**; produção conecta como `postgres` | Virada B pendente desde setembro |
 
@@ -67,14 +67,17 @@ gravar nele daria erro `25006`.
 
 ### Railway
 
-O CLI não está logado neste Mac, então a leitura foi pelo que a integração
-copia para a Vercel:
+Projeto `videoops-evolution` (serviços `nuflow-midia-worker`, `Postgres`,
+`evolution-api`, `evolution-v2`), lido pelo CLI em 29/10, já logado neste Mac:
 
-- **`nuflow-midia-worker`**: `SUPABASE_URL` aponta para o Storage **antigo**.
-  Precisa virar junto com a Vercel, porque o worker recusa URL assinada de
-  outro endereço.
-- **Evolution (WhatsApp)**: `DATABASE_CONNECTION_URI` aponta para um serviço
-  Postgres do próprio Railway (`railway`/`postgres`). Não depende de Supabase.
+- **`nuflow-midia-worker`**: `SUPABASE_URL` trocada para o Storage **novo** em
+  29/10 09:13; deploy `8c8d71b3` subiu sem erro. Ela precisa andar junto com a
+  Vercel, porque o worker recusa URL assinada de outro endereço.
+- **Evolution e Postgres**: nenhuma variável cita Supabase. A Evolution usa o
+  Postgres do próprio Railway.
+- O espelho `SUPABASE_URL` que a integração pôs na Vercel **não** acompanhou a
+  troca e segue com o endereço antigo. O app não lê essa variável.
+- Existe um segundo projeto, `refreshing-radiance`, vazio, de março.
 
 ---
 
@@ -120,9 +123,9 @@ e o `.env.local`.
 
 A conta antiga só pode ser apagada quando esta lista estiver vazia.
 
-1. **Storage**: a Vercel virou em 29/10. Falta confirmar a `SUPABASE_URL` do
-   worker no Railway; a cópia dela na Vercel ainda mostrava o endereço antigo
-   às 08:40.
+1. **Storage**: resolvido em 29/10 (Vercel 08:34, Railway 09:13). Sobram duas
+   variáveis da Vercel que apontam para o antigo e ninguém lê:
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` e o espelho `SUPABASE_URL`.
 2. **`.env.local`**: Storage trocado em 29/10. Sobra a
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` antiga, que o código não usa.
 3. **Prévia `preview/rls` da Vercel**: tem banco próprio, criado em 01/09,
