@@ -176,3 +176,11 @@ export function eventoDaMudanca(de: string, para: string): EventoDaGravacao | nu
   if (depois === "concluido" && antes !== "concluido" && para !== "encerrado" && para !== "expirado") return "concluida"
   return null
 }
+
+/**
+ * A nota de um videomaker que cobre várias gravações (Minhas notas fiscais):
+ * um aviso só para a operação, com a lista, em vez de um por gravação.
+ */
+export function mensagemDaNotaEmLote(videomaker: string, gravacoes: string[]): Mensagens {
+  return { operacao: `🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nEnvie para compras no NuFlow.` }
+}
