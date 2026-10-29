@@ -4,9 +4,8 @@ import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE } from "@/lib/evento-apresentaca
 
 import { useState, useRef } from "react"
 import useSWR from "swr"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { PartyPopper, Plus, Search, MapPin, Loader2, X, FileText, DollarSign, Clock, AlertTriangle, Activity, CheckCircle2 } from "lucide-react"
+import { PartyPopper, Plus, Search, Loader2, X, FileText, DollarSign, Clock, AlertTriangle, Activity, CheckCircle2 } from "lucide-react"
 import { PECAS_AUDIOVISUAIS, pecasDefaultPara } from "@/lib/eventos-pecas"
 import { PECAS_DESIGN, pecasDesignDefaultPara } from "@/lib/design-pecas"
 import { toast } from "sonner"
@@ -88,7 +87,6 @@ function MiniCard({ icon, label, value, alert }: { icon: React.ReactNode; label:
   )
 }
 
-const fmtData = (s: string) => new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
 
 
@@ -97,7 +95,6 @@ export default function EventosPage() {
   const [search, setSearch] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("")
   const [showCriar, setShowCriar] = useState(false)
-  const [view, setView] = useState<"lista" | "kanban">("lista")
 
   const qs = new URLSearchParams()
   if (search) qs.set("search", search)
@@ -148,10 +145,6 @@ export default function EventosPage() {
           <option value="">Todos os status</option>
           {Object.entries(STATUS_EVENTO_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
-        <div className="flex rounded-lg border border-zinc-700 overflow-hidden">
-          <button onClick={() => setView("lista")} className={`px-3 py-2 text-xs ${view === "lista" ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"}`}>Lista</button>
-          <button onClick={() => setView("kanban")} className={`px-3 py-2 text-xs ${view === "kanban" ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"}`}>Kanban</button>
-        </div>
       </div>
 
       {isLoading ? (
@@ -161,41 +154,9 @@ export default function EventosPage() {
           <PartyPopper className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <p>Nenhum evento ainda. Crie o primeiro!</p>
         </div>
-      ) : view === "kanban" ? (
-        <EventosKanban eventos={eventos} onMutate={mutate} />
       ) : (
-        <div className="grid gap-3">
-          {eventos.map((ev) => {
-            const st = STATUS_EVENTO_STYLE[ev.status] ?? STATUS_EVENTO_STYLE.planejamento
-            return (
-              <Link key={ev.id} href={`/eventos/${ev.id}`}
-                className="block bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">{TIPO_EVENTO_LABEL[ev.tipo] ?? ev.tipo}</span>
-                      <span className="text-[10px] text-zinc-600 font-mono">{ev.codigo}</span>
-                    </div>
-                    <h3 className="text-sm font-semibold text-zinc-100 mt-1.5 truncate">{ev.nome}</h3>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500 flex-wrap">
-                      <span>{fmtData(ev.dataInicio)} → {fmtData(ev.dataFim)}</span>
-                      {ev.cidade && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {ev.cidade}</span>}
-                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> {ev._count.demandas} demandas</span>
-                      {ev.orcamentoPrevisto != null ? <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {ev.orcamentoPrevisto.toLocaleString("pt-BR")}</span> : null}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-lg font-bold text-purple-400">{ev.percentualConclusao}%</div>
-                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full mt-1 overflow-hidden">
-                      <div className="h-full bg-purple-500 rounded-full" style={{ width: `${ev.percentualConclusao}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+        // Só o quadro (Giovani, 29/10/2026: "só vai ter Kanban").
+        <EventosKanban eventos={eventos} onMutate={mutate} />
       )}
 
       {showCriar && (

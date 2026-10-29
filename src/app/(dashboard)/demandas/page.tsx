@@ -11,10 +11,8 @@ import { Header } from "@/components/layout/Header"
 import { NovaDemandaModal } from "@/components/demandas/NovaDemandaModal"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
 import actionStyles from "@/components/demandas/DemandAction.module.css"
-import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
-import { normalizarVisao } from "@/components/demandas/tipos-visao"
-import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
+import type { AbaRapida } from "@/components/demandas/tipos-visao"
 import { Plus, XCircle } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { AUDIOVISUAL_COLUNA_PARA_STATUS } from "@/lib/kanban-movimento"
@@ -49,25 +47,10 @@ function DemandasKanban() {
   const [filtroProduto, setFiltroProduto] = useState("")
   const [filtroEvento, setFiltroEvento] = useState("")
 
-  // Visão escolhida e recorte rápido. A visão fica guardada por área: quem
-  // prefere uma lista abre direto na Lista na próxima vez, sem reconfigurar.
+  // Recorte rápido. A visão é só o kanban (Giovani, 29/10/2026: a Lista saiu
+  // de todo o sistema).
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
-  const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>("todos")
-  const CHAVE_VISAO = "nuflow:visao-demandas-audiovisual"
-
-  useEffect(() => {
-    try {
-      const salva = normalizarVisao(localStorage.getItem(CHAVE_VISAO))
-      setVisao(salva)
-      localStorage.setItem(CHAVE_VISAO, salva)
-    } catch { /* Preferência indisponível: mantém Kanban. */ }
-  }, [])
-
-  function trocarVisao(v: Visao) {
-    setVisao(v)
-    try { localStorage.setItem(CHAVE_VISAO, v) } catch { /* A navegação continua sem persistência. */ }
-  }
 
   // Filtros que chegam pela URL — é assim que os cards do dashboard abrem uma
   // lista já recortada. Antes o link mandava ?filtro=atrasadas e nem a página
@@ -341,8 +324,6 @@ function DemandasKanban() {
             </FiltrosQuadro>
           )}
           demandas={demandas}
-          visao={visao}
-          onVisao={trocarVisao}
           aba={aba}
           onAba={setAba}
           total={data?.total}
@@ -352,18 +333,11 @@ function DemandasKanban() {
         />
       </div>
 
-      {/* A visão escolhida. Kanban precisa de altura ancorada na viewport para a
-          barra de rolagem ficar no rodapé; a lista rola com a página. */}
+      {/* Kanban com altura ancorada na viewport: a barra de rolagem fica no rodapé. */}
       <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
-      {visao === "kanban" ? (
-        <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-          <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
-        </div>
-      )}
+      <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={handleDelete} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
+      </div>
 
       {/* Modal Nova Demanda */}
       <NovaDemandaModal

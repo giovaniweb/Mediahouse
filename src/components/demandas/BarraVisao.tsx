@@ -2,18 +2,13 @@
 
 import type { ReactNode } from "react"
 import styles from "./BoardOverview.module.css"
-import { LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react"
-import type { Visao, AbaRapida, DemandaLista } from "./tipos-visao"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import type { AbaRapida, DemandaLista } from "./tipos-visao"
 import { calcularKpis } from "./tipos-visao"
 
-// Topo do quadro: os números que respondem "como estamos", o seletor de visão e
-// os recortes de uso diário. Fica igual nas duas visões — muda o desenho embaixo,
-// não a navegação.
-
-const VISOES: { id: Visao; label: string; icone: typeof LayoutGrid }[] = [
-  { id: "kanban", label: "Kanban", icone: LayoutGrid },
-  { id: "lista", label: "Lista", icone: List },
-]
+// Topo do quadro: os números que respondem "como estamos" e os recortes de uso
+// diário. A visão é só o kanban: a Lista saiu de todo o sistema (Giovani,
+// 29/10/2026), e com ela o seletor de visão.
 
 // "1 abertas" aparecia toda vez que o filtro deixava uma demanda só.
 const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
@@ -33,7 +28,7 @@ const PAPEIS_MINHAS = {
 }
 
 export function BarraVisao({
-  demandas, visao, onVisao, aba, onAba, area = "audiovisual", total, totalFila, pagina, onPagina, porPagina = 100, filters, aviso,
+  demandas, aba, onAba, area = "audiovisual", total, totalFila, pagina, onPagina, porPagina = 100, filters, aviso,
 }: {
   /** Busca e filtros da página (FiltrosQuadro), na segunda linha. */
   filters?: ReactNode
@@ -41,8 +36,6 @@ export function BarraVisao({
   aviso?: ReactNode
   area?: "audiovisual" | "growth"
   demandas: DemandaLista[]
-  visao: Visao
-  onVisao: (v: Visao) => void
   aba: AbaRapida
   onAba: (a: AbaRapida) => void
   /** Total do recorte atual, devolvido pela API (não o tamanho da página carregada). */
@@ -65,9 +58,6 @@ export function BarraVisao({
   // página já está na barra de cima.
   return <section className={styles.overview} aria-label="Controles do quadro">
     <div className={styles.topRow}>
-      <div className={styles.tabs} aria-label="Visualização do quadro">
-        {VISOES.map(({id, label, icone: Icon}) => <button key={id} type="button" aria-label={`Ver como ${label.toLowerCase()}`} aria-pressed={visao === id} onClick={() => onVisao(id)}><Icon size={16} />{label}</button>)}
-      </div>
       <div className={styles.counts} aria-label="Resumo das demandas filtradas">
         <span><strong>{kpi.abertas}</strong> {contagem(kpi.abertas, "aberta", "abertas")}</span>
         <span data-tone="late"><strong>{kpi.atrasadas}</strong> {contagem(kpi.atrasadas, "atrasada", "atrasadas")}</span>

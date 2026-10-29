@@ -1,24 +1,16 @@
-// O painel das Gravações Externas (Giovani, 29/10/2026: "faz um dashboard
-// dessas gravações"), em regras puras: a tela conta sobre a MESMA lista que o
-// quadro carregou, com os mesmos filtros. Assim o número do painel e o que se
-// vê no kanban nunca discordam.
+// O painel das Gravações Externas, em regras puras: alertas do que precisa ser
+// feito (Giovani, 29/10/2026: "bater o olho e falar: tem que despachar isso").
+// Nada de gráfico para encher: cada alerta é uma ação, com a contagem e as
+// gravações para abrir na hora. Depois ele vai sofisticando.
 //
-// O que ele responde, na ordem em que a Débora pergunta:
-//   quanto há em cada etapa; o que travou; o que vem nos próximos 7 dias;
-//   quem gravou no mês e de que tipo; em que pé estão as notas (só para quem
-//   vê nota — sem permissão, a lista nem traz custos e o bloco some).
-import { dataEmSaoPaulo, diasEntre, somarDias } from "./datas"
-import { momentoDoJob, type Momento } from "./ficha-do-job"
-import {
-  ETAPAS,
-  etapaDaGravacao,
-  faltaOMaterial,
-  rotuloDoTipoDeGravacao,
-  situacaoDaNota,
-  TIPOS_DE_GRAVACAO,
-  type EtapaDaGravacao,
-  type PagamentoDoCard,
-} from "./etapas-da-gravacao"
+// Conta sobre a lista do quadro inteira (sem os recortes de Hoje, Minhas…): o
+// painel responde "o que está pendente", não "o que este filtro mostra". Os
+// alertas de nota e pagamento só existem para quem vê nota — sem a permissão,
+// a lista nem traz custos (veNotaDoVideomaker).
+import { diasEntre } from "./datas"
+import { momentoDoJob, rotuloDoMomento } from "./ficha-do-job"
+import { diasDeAtraso, estaAtrasada } from "./status"
+import { etapaDaGravacao, faltaOMaterial, situacaoDaNota, type PagamentoDoCard } from "./etapas-da-gravacao"
 
 export type GravacaoDoPainel = Pick<PagamentoDoCard, "custos" | "notasFiscais"> & {
   id: string
@@ -26,157 +18,90 @@ export type GravacaoDoPainel = Pick<PagamentoDoCard, "custos" | "notasFiscais"> 
   titulo: string
   clienteFinalNome?: string | null
   statusInterno: string
+  statusVisivel?: string | null
   videomakerId?: string | null
-  videomaker?: { id?: string; nome: string } | null
+  videomaker?: { nome: string } | null
   dataCaptacao?: string | Date | null
   dataEvento?: string | Date | null
-  tipoGravacao?: string | null
-  finalizadaEm?: string | Date | null
+  dataLimite?: string | Date | null
 }
 
-export type Contagem = { id: string; label: string; demandas: number }
+export type IdDoAlerta =
+  | "sem_videomaker" | "sem_confirmacao" | "material_atrasado" | "edicao_atrasada" | "para_enviar"
+  | "nota_falta" | "nota_compras" | "nota_refazer" | "pagamento"
 
-export type Trava = {
-  id: string
-  codigo: string
-  cliente: string
-  /** O que travou, curto: vai no selo. */
-  motivo: string
-  /** sobrecarga = vermelho (age hoje); atencao = âmbar. Os nomes do painel. */
-  tom: "sobrecarga" | "atencao"
-  dias: number
+export type ItemDoAlerta = { id: string; codigo: string; cliente: string; detalhe: string | null }
+
+export type Alerta = {
+  id: IdDoAlerta
+  titulo: string
+  /** O que fazer, numa frase. */
+  acao: string
+  /** urgente = vermelho; atencao = âmbar. */
+  tom: "urgente" | "atencao"
+  itens: ItemDoAlerta[]
 }
-
-export type Proxima = {
-  id: string
-  codigo: string
-  cliente: string
-  momento: Momento
-  tipo: string | null
-  videomaker: string | null
-  /** Agendada = videomaker confirmou. */
-  situacao: "sem_videomaker" | "a_confirmar" | "agendada"
-}
-
-export type Painel = {
-  numeros: { aAgendar: number; proximos: number; faltaMaterial: number; paraEnviar: number }
-  etapas: Contagem[]
-  travas: Trava[]
-  proximas: Proxima[]
-  mes: { total: number; porTipo: Contagem[]; porVideomaker: { id: string; nome: string; gravacoes: number }[] }
-  /** null: quem olha não vê nota (a lista veio sem custos). */
-  notas: { falta: number; recebida: number; compras: number; contestada: number } | null
-}
-
-/** Rótulo curto da etapa na barra do painel (a coluna do gráfico é estreita). */
-const ROTULO_CURTO: Partial<Record<EtapaDaGravacao, string>> = { para_enviar: "Para enviar" }
-
-/** Encerrada ou expirada sem entrega: fica na coluna Concluído, mas não foi feita. */
-const SEM_ENTREGA = new Set(["encerrado", "expirado"])
 
 const cliente = (g: GravacaoDoPainel) => g.clienteFinalNome?.trim() || g.titulo
-
-function diaDe(v: string | Date | null | undefined): string | null {
-  if (!v) return null
-  const d = typeof v === "string" ? new Date(v) : v
-  return Number.isNaN(d.getTime()) ? null : dataEmSaoPaulo(d)
+const quando = (g: GravacaoDoPainel) => {
+  const m = momentoDoJob(g)
+  return m ? rotuloDoMomento(m) : "sem data"
 }
+const vm = (g: GravacaoDoPainel) => g.videomaker?.nome?.trim() || "videomaker"
+const junta = (...partes: (string | null | false | undefined)[]) => partes.filter(Boolean).join(" · ") || null
+/** A gravação mais perto da data vem primeiro; sem data, por último. */
+const porData = (a: GravacaoDoPainel, b: GravacaoDoPainel) =>
+  (momentoDoJob(a)?.dia ?? "9999").localeCompare(momentoDoJob(b)?.dia ?? "9999")
 
-/** A gravação está travada? Uma trava por gravação: a mais grave. */
-export function travaDaGravacao(g: GravacaoDoPainel, hoje: string): Trava | null {
-  const base = { id: g.id, codigo: g.codigo, cliente: cliente(g) }
-  const etapa = etapaDaGravacao(g)
-  const dia = momentoDoJob(g)?.dia ?? null
-  if (etapa === "a_agendar") {
-    if (g.statusInterno === "videomaker_recusou") return { ...base, motivo: "Videomaker recusou", tom: "sobrecarga", dias: 0 }
-    // Perto da data (ou já passou) e ninguém confirmou: é a mesma janela do
-    // aviso "sem videomaker" (lib/avisos-gravacao-textos.ts).
-    if (dia && diasEntre(hoje, dia) <= 2) {
-      const faltam = diasEntre(hoje, dia)
-      return g.videomakerId
-        ? { ...base, motivo: "Sem confirmação", tom: faltam <= 1 ? "sobrecarga" : "atencao", dias: faltam }
-        : { ...base, motivo: "Sem videomaker", tom: "sobrecarga", dias: faltam }
-    }
-    return null
-  }
-  if (faltaOMaterial(g, hoje)) {
-    const depois = dia ? Math.max(0, diasEntre(dia, hoje)) : 0
-    return { ...base, motivo: depois > 0 ? `Falta o material · ${depois} ${depois === 1 ? "dia" : "dias"}` : "Falta o material",
-      tom: depois >= 3 ? "sobrecarga" : "atencao", dias: depois }
-  }
-  if (situacaoDaNota(g)?.etapa === "contestada") return { ...base, motivo: "Nota a refazer", tom: "atencao", dias: 0 }
-  return null
-}
+export function alertasDasGravacoes(lista: GravacaoDoPainel[], hoje: string): Alerta[] {
+  const item = (g: GravacaoDoPainel, detalhe: string | null): ItemDoAlerta => ({ id: g.id, codigo: g.codigo, cliente: cliente(g), detalhe })
+  const naEtapa = (e: ReturnType<typeof etapaDaGravacao>) => lista.filter((g) => etapaDaGravacao(g) === e)
+  const aAgendar = naEtapa("a_agendar").sort(porData)
+  const recusou = (g: GravacaoDoPainel) => g.statusInterno === "videomaker_recusou"
 
-export function painelDasGravacoes(lista: GravacaoDoPainel[], hoje: string): Painel {
-  const fim = somarDias(hoje, 6)
-  const mes = hoje.slice(0, 7)
-  const etapaDe = new Map(lista.map((g) => [g.id, etapaDaGravacao(g)]))
-  // Concluído conta o mês: a coluna inteira cresce para sempre e não diz nada.
-  const concluidaNoMes = (g: GravacaoDoPainel) =>
-    etapaDe.get(g.id) === "concluido" && !SEM_ENTREGA.has(g.statusInterno) && diaDe(g.finalizadaEm)?.slice(0, 7) === mes
-
-  const etapas = ETAPAS.map((e) => ({
-    id: e.id,
-    label: ROTULO_CURTO[e.id] ?? e.rotulo,
-    demandas: e.id === "concluido" ? lista.filter(concluidaNoMes).length : lista.filter((g) => etapaDe.get(g.id) === e.id).length,
-  }))
-
-  const travas = lista
-    .map((g) => travaDaGravacao(g, hoje))
-    .filter((t): t is Trava => !!t)
-    .sort((a, b) => (a.tom === b.tom ? b.dias - a.dias : a.tom === "sobrecarga" ? -1 : 1))
-
-  const proximas = lista
-    .flatMap((g): Proxima[] => {
-      const etapa = etapaDe.get(g.id)
-      const m = momentoDoJob(g)
-      if (!m || m.dia < hoje || m.dia > fim || (etapa !== "a_agendar" && etapa !== "agendado")) return []
-      // Já gravou (marcou realizada antes do dia): não é mais "próxima".
-      if (g.statusInterno === "captacao_realizada") return []
-      return [{
-        id: g.id, codigo: g.codigo, cliente: cliente(g), momento: m,
-        tipo: rotuloDoTipoDeGravacao(g.tipoGravacao), videomaker: g.videomaker?.nome ?? null,
-        situacao: etapa === "agendado" ? "agendada" : g.videomakerId ? "a_confirmar" : "sem_videomaker",
-      }]
-    })
-    .sort((a, b) => (a.momento.dia + (a.momento.hora ?? "99")).localeCompare(b.momento.dia + (b.momento.hora ?? "99")))
-
-  // O mês: o que foi (ou vai ser) gravado neste mês, com videomaker confirmado.
-  const doMes = lista.filter((g) => {
-    const etapa = etapaDe.get(g.id)
-    return momentoDoJob(g)?.dia.slice(0, 7) === mes && etapa !== "a_agendar" && !SEM_ENTREGA.has(g.statusInterno)
-  })
-  const porTipo = [...TIPOS_DE_GRAVACAO.map((t) => ({ id: t.id, label: t.rotulo })), { id: "", label: "Sem tipo" }]
-    .map((t) => ({ ...t, demandas: doMes.filter((g) => (g.tipoGravacao ?? "") === t.id || (t.id === "" && !rotuloDoTipoDeGravacao(g.tipoGravacao))).length }))
-    .filter((t) => t.demandas > 0)
-  const vms = new Map<string, { id: string; nome: string; gravacoes: number }>()
-  for (const g of doMes) {
-    if (!g.videomakerId || !g.videomaker) continue
-    const v = vms.get(g.videomakerId) ?? { id: g.videomakerId, nome: g.videomaker.nome, gravacoes: 0 }
-    v.gravacoes++
-    vms.set(g.videomakerId, v)
-  }
-
-  // Nota: só existe para quem a lista trouxe custos e notas (veNotaDoVideomaker).
-  const comNota = lista.some((g) => Array.isArray(g.custos) && Array.isArray(g.notasFiscais))
-  const notas = comNota ? { falta: 0, recebida: 0, compras: 0, contestada: 0 } : null
-  if (notas) for (const g of lista) {
-    const s = situacaoDaNota(g)
-    if (s && s.etapa !== "paga") notas[s.etapa]++
-  }
-
-  return {
-    numeros: {
-      aAgendar: etapas.find((e) => e.id === "a_agendar")!.demandas,
-      proximos: proximas.length,
-      faltaMaterial: lista.filter((g) => faltaOMaterial(g, hoje)).length,
-      paraEnviar: etapas.find((e) => e.id === "para_enviar")!.demandas,
+  const alertas: Alerta[] = [
+    {
+      id: "sem_videomaker", titulo: "Sem videomaker", acao: "Escalar quem vai gravar.", tom: "urgente",
+      itens: aAgendar.filter((g) => !g.videomakerId || recusou(g)).map((g) => item(g, junta(recusou(g) && `${vm(g)} recusou`, quando(g)))),
     },
-    etapas,
-    travas,
-    proximas,
-    mes: { total: doMes.length, porTipo, porVideomaker: [...vms.values()].sort((a, b) => b.gravacoes - a.gravacoes || a.nome.localeCompare(b.nome)) },
-    notas,
+    {
+      id: "sem_confirmacao", titulo: "Esperando o videomaker confirmar", acao: "Cobrar a resposta do convite.", tom: "atencao",
+      itens: aAgendar.filter((g) => g.videomakerId && !recusou(g)).map((g) => item(g, junta(vm(g), quando(g)))),
+    },
+    {
+      id: "material_atrasado", titulo: "Material atrasado", acao: "Cobrar os brutos do videomaker.", tom: "urgente",
+      itens: lista.filter((g) => faltaOMaterial(g, hoje)).sort(porData).map((g) => {
+        const dia = momentoDoJob(g)?.dia
+        const depois = dia ? diasEntre(dia, hoje) : 0
+        return item(g, junta(vm(g), depois > 0 ? `gravou há ${depois} ${depois === 1 ? "dia" : "dias"}` : "gravou hoje"))
+      }),
+    },
+    {
+      id: "edicao_atrasada", titulo: "Edição atrasada", acao: "Ver com quem está editando.", tom: "urgente",
+      itens: naEtapa("em_edicao").filter(estaAtrasada).map((g) => {
+        const dias = diasDeAtraso(g)
+        return item(g, dias ? `${dias} ${dias === 1 ? "dia" : "dias"} de atraso` : "prazo vencido")
+      }),
+    },
+    {
+      id: "para_enviar", titulo: "Para enviar ao cliente", acao: "Mandar o vídeo e marcar como enviado.", tom: "atencao",
+      itens: naEtapa("para_enviar").sort(porData).map((g) => item(g, `gravado ${quando(g)}`)),
+    },
+  ]
+
+  // Nota e pagamento: só quando a lista trouxe custos e notas.
+  if (lista.some((g) => Array.isArray(g.custos) && Array.isArray(g.notasFiscais))) {
+    const naNota = (etapa: string) => lista.filter((g) => situacaoDaNota(g)?.etapa === etapa).sort(porData)
+    alertas.push(
+      { id: "nota_compras", titulo: "Nota para enviar a compras", acao: "Encaminhar a nota ao setor de compras.", tom: "urgente",
+        itens: naNota("recebida").map((g) => item(g, vm(g))) },
+      { id: "nota_refazer", titulo: "Nota a refazer", acao: "Pedir a nota corrigida ao videomaker.", tom: "urgente",
+        itens: naNota("contestada").map((g) => item(g, vm(g))) },
+      { id: "nota_falta", titulo: "Falta a nota do videomaker", acao: "Cobrar a nota do videomaker.", tom: "atencao",
+        itens: naNota("falta").map((g) => item(g, vm(g))) },
+      { id: "pagamento", titulo: "Pagamento a fazer", acao: "Compras ainda não pagou: marcar como paga quando pagar.", tom: "atencao",
+        itens: naNota("compras").map((g) => item(g, vm(g))) },
+    )
   }
+  return alertas
 }

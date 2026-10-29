@@ -14,15 +14,15 @@ import type { MapaPermissoes } from "@/lib/permissoes"
 import type { JobDoQuadro } from "@/components/jobs/JobCard"
 import { fetcher } from "@/lib/fetcher"
 import { hojeEmSaoPaulo } from "@/lib/datas"
-import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
+import { momentoDoJob } from "@/lib/ficha-do-job"
 import { STATUS_PARA_COLUNA, estaAtrasada } from "@/lib/status"
-import { ROTULO_DA_ETAPA, acaoDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
-import { foiAprovada, responsavelAtual } from "@/lib/job-fase"
+import { ROTULO_DA_ETAPA, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { foiAprovada } from "@/lib/job-fase"
 import { FiltrosQuadro, lerPeriodo } from "@/components/kanban/FiltrosQuadro"
 import { opcoesDePessoa, parametroDaPessoa } from "@/components/kanban/filtroPessoa"
 import styles from "@/components/jobs/JobsPreview.module.css"
 import topo from "@/components/demandas/BoardOverview.module.css"
-import { LayoutGrid, List, ChevronRight, Plus, BookOpen, BarChart3 } from "lucide-react"
+import { LayoutGrid, Plus, BookOpen, BarChart3 } from "lucide-react"
 import { KitDoVideomaker } from "@/components/jobs/KitDoVideomaker"
 import { PainelDasGravacoes } from "@/components/jobs/PainelDasGravacoes"
 
@@ -70,7 +70,8 @@ function Quadro() {
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
   const [kitAberto, setKitAberto] = useState(false)
-  const [view, setView] = useState<"kanban" | "list" | "painel">("kanban")
+  // Kanban ou o painel de alertas. A Lista saiu de todo o sistema (Giovani, 29/10/2026).
+  const [view, setView] = useState<"kanban" | "painel">("kanban")
   const [aba, setAba] = useState<Aba>("todos")
   const [busca, setBusca] = useState("")
   const [pessoa, setPessoa] = useState("")
@@ -179,11 +180,8 @@ function Quadro() {
   ])
 
   const captacoesHoje = jobs.filter((j) => momentoDoJob(j)?.dia === hoje).length
-  // Na lista: quando é e quem vai, as duas perguntas do dia da gravação.
-  const quandoEQuem = (j: JobDoQuadro) => {
-    const m = momentoDoJob(j)
-    return [m ? rotuloDoMomento(m) : "Sem data", j.videomaker?.nome ?? "sem videomaker"].join(" · ")
-  }
+  // O painel olha o quadro inteiro: o que está pendente não depende do recorte.
+  const aprovadas = useMemo(() => todos.filter(foiAprovada), [todos])
   const contagem = (n: number, um: string, varios: string) => (n === 1 ? um : varios)
 
   return (
@@ -213,17 +211,16 @@ function Quadro() {
           <div className={topo.topRow}>
             <div className={topo.tabs} aria-label="Visualização das gravações">
               <button type="button" aria-label="Ver como kanban" aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><LayoutGrid size={16} />Kanban</button>
-              <button type="button" aria-label="Ver como lista" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={16} />Lista</button>
-              {/* O painel conta sobre esta mesma lista, com os mesmos filtros. */}
               <button type="button" aria-label="Ver o painel" aria-pressed={view === "painel"} onClick={() => setView("painel")}><BarChart3 size={16} />Painel</button>
             </div>
-            <div className={topo.counts} aria-label="Resumo das gravações filtradas">
+            {/* No painel, números, recortes e filtros saem: ele conta tudo o que está pendente. */}
+            {view === "kanban" && <div className={topo.counts} aria-label="Resumo das gravações filtradas">
               <span><strong>{jobs.length}</strong> {contagem(jobs.length, "gravação", "gravações")}</span>
               <span data-tone="late"><strong>{atrasados}</strong> {contagem(atrasados, "atrasada", "atrasadas")}</span>
               <span data-tone="approval"><strong>{captacoesHoje}</strong> {contagem(captacoesHoje, "gravação", "gravações")} hoje</span>
-            </div>
+            </div>}
           </div>
-          <div className={topo.controlsRow}>
+          {view === "kanban" && <div className={topo.controlsRow}>
             {/* Recortes principais (§35) */}
             <div className={topo.scopes} aria-label="Recortes das gravações">
               {ABAS.map((a) => (
@@ -246,25 +243,18 @@ function Quadro() {
                 ]}
               />
             </div>
-          </div>
+          </div>}
         </section>
       </div>
 
       {error && <div role="alert" className={styles.error}>Não foi possível atualizar as gravações. <button onClick={() => void mutate()}>Tentar novamente</button></div>}
       {/* Kanban com altura ancorada na viewport, como em Demandas: a barra de
-          rolagem horizontal fica no rodapé. A lista rola com a página. */}
+          rolagem horizontal fica no rodapé. O painel rola com a página. */}
       {isLoading && todos.length === 0 ? (
         <p className="text-sm text-zinc-500 px-6 py-8">Carregando…</p>
       ) : error && !data ? null : view === "painel" ? (
         <div className="flex-1 min-h-0 pb-6 overflow-y-auto">
-          <PainelDasGravacoes gravacoes={jobs} carregando={isLoading && todos.length === 0} onAbrir={abrir} onVerQuadro={() => setView("kanban")} />
-        </div>
-      ) : view === "list" ? (
-        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <section className={styles.list} aria-label="Lista de gravações">
-            {jobs.map(job => <a key={job.id} href={`/jobs/${job.id}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); abrir(job.id) }}><div><small>{job.codigo}</small><strong>{job.clienteFinalNome || job.titulo}</strong>{job.clienteFinalNome && <p>{job.titulo}</p>}<p>{quandoEQuem(job)}</p><span>{acaoDaGravacao(job, hoje)}</span><p>{responsavelAtual(job).nome || responsavelAtual(job).papel}{job.cidade ? ` · ${job.cidade}` : ""}</p></div><ChevronRight size={18}/></a>)}
-            {jobs.length === 0 && <p>Nenhuma gravação com os filtros selecionados.</p>}
-          </section>
+          <PainelDasGravacoes gravacoes={aprovadas} carregando={isLoading && todos.length === 0} onAbrir={abrir} />
         </div>
       ) : (
         <div className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">

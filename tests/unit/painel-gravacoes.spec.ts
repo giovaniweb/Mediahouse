@@ -1,92 +1,63 @@
 import { describe, expect, it } from "vitest"
-import { painelDasGravacoes, travaDaGravacao, type GravacaoDoPainel } from "@/lib/painel-gravacoes"
+import { alertasDasGravacoes, type GravacaoDoPainel } from "@/lib/painel-gravacoes"
+import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
 
-// Quinta, 29/10/2026. Horários em UTC: 16:00Z = 13:00 em São Paulo.
-const hoje = "2026-10-29"
+// O painel de alertas das Gravações Externas. "Hoje" é o dia real: o atraso da
+// edição usa o relógio (lib/status), e as datas daqui andam junto com ele.
+const hoje = hojeEmSaoPaulo()
+const dia = (n: number) => `${somarDias(hoje, n)}T16:00:00Z`
 let n = 0
 const g = (o: Partial<GravacaoDoPainel>): GravacaoDoPainel => ({
   id: `g${++n}`, codigo: `VOP-26-${2000 + n}`, titulo: "Gravação", statusInterno: "captacao_agendada",
   videomakerId: "vm1", videomaker: { nome: "João Martins" }, ...o,
 })
+const contagem = (lista: GravacaoDoPainel[]) => Object.fromEntries(alertasDasGravacoes(lista, hoje).map((a) => [a.id, a.itens.length]))
 
-describe("o que travou", () => {
-  it("sem videomaker a até 2 dias da data, ou já passada", () => {
-    expect(travaDaGravacao(g({ statusInterno: "aguardando_triagem", videomakerId: null, videomaker: null, dataCaptacao: "2026-10-31T16:00:00Z" }), hoje))
-      .toMatchObject({ motivo: "Sem videomaker", tom: "sobrecarga" })
-    expect(travaDaGravacao(g({ statusInterno: "aguardando_triagem", videomakerId: null, videomaker: null, dataCaptacao: "2026-11-02T16:00:00Z" }), hoje)).toBeNull()
+describe("alertas do quadro", () => {
+  const lista = [
+    g({ statusInterno: "aguardando_triagem", videomakerId: null, videomaker: null, clienteFinalNome: "Clínica Longe", dataCaptacao: dia(20) }),
+    g({ statusInterno: "aguardando_triagem", videomakerId: null, videomaker: null, clienteFinalNome: "Clínica Perto", dataCaptacao: dia(1) }),
+    g({ statusInterno: "videomaker_recusou", dataCaptacao: dia(3) }),
+    g({ statusInterno: "videomaker_notificado", dataCaptacao: dia(5) }),
+    g({ dataCaptacao: dia(-2) }),
+    g({ dataCaptacao: dia(4) }),
+    g({ statusInterno: "editando", statusVisivel: "edicao", dataLimite: dia(-3).slice(0, 10) }),
+    g({ statusInterno: "editando", statusVisivel: "edicao", dataLimite: dia(5).slice(0, 10) }),
+    g({ statusInterno: "aprovado", statusVisivel: "para_postar" }),
+    g({ statusInterno: "entregue_cliente", statusVisivel: "finalizado" }),
+  ]
+
+  it("cada alerta conta o que precisa ser feito", () => {
+    expect(contagem(lista)).toEqual({
+      sem_videomaker: 3, sem_confirmacao: 1, material_atrasado: 1, edicao_atrasada: 1, para_enviar: 1,
+    })
   })
-  it("convite sem resposta perto da data; recusa trava na hora", () => {
-    expect(travaDaGravacao(g({ statusInterno: "videomaker_notificado", dataCaptacao: "2026-10-30T16:00:00Z" }), hoje))
-      .toMatchObject({ motivo: "Sem confirmação", tom: "sobrecarga" })
-    expect(travaDaGravacao(g({ statusInterno: "videomaker_notificado", dataCaptacao: "2026-10-31T16:00:00Z" }), hoje))
-      .toMatchObject({ motivo: "Sem confirmação", tom: "atencao" })
-    expect(travaDaGravacao(g({ statusInterno: "videomaker_recusou", dataCaptacao: "2026-11-20T16:00:00Z" }), hoje))
-      .toMatchObject({ motivo: "Videomaker recusou", tom: "sobrecarga" })
+  it("sem videomaker: o mais perto da data primeiro, e a recusa entra com o nome de quem recusou", () => {
+    const a = alertasDasGravacoes(lista, hoje).find((x) => x.id === "sem_videomaker")!
+    expect(a.itens.map((i) => i.cliente)).toEqual(["Clínica Perto", "Gravação", "Clínica Longe"])
+    expect(a.itens[1].detalhe).toMatch(/^João Martins recusou · /)
   })
-  it("falta o material: âmbar nos dois primeiros dias, vermelho do terceiro em diante", () => {
-    expect(travaDaGravacao(g({ dataCaptacao: "2026-10-28T16:00:00Z" }), hoje)).toMatchObject({ motivo: "Falta o material · 1 dia", tom: "atencao" })
-    expect(travaDaGravacao(g({ dataCaptacao: "2026-10-26T16:00:00Z" }), hoje)).toMatchObject({ motivo: "Falta o material · 3 dias", tom: "sobrecarga" })
-    expect(travaDaGravacao(g({ dataCaptacao: "2026-10-30T16:00:00Z" }), hoje)).toBeNull()
+  it("material atrasado diz quem e há quanto tempo gravou; edição atrasada, os dias de atraso", () => {
+    const alertas = alertasDasGravacoes(lista, hoje)
+    expect(alertas.find((x) => x.id === "material_atrasado")!.itens[0].detalhe).toBe("João Martins · gravou há 2 dias")
+    expect(alertas.find((x) => x.id === "edicao_atrasada")!.itens[0].detalhe).toBe("3 dias de atraso")
   })
-  it("nota a refazer", () => {
-    expect(travaDaGravacao(g({ statusInterno: "editando", custos: [{ statusPagamento: "contestado", pago: false }], notasFiscais: [] }), hoje))
-      .toMatchObject({ motivo: "Nota a refazer" })
+  it("quem não vê nota não recebe alerta de nota nem de pagamento", () => {
+    expect(alertasDasGravacoes(lista, hoje).map((a) => a.id)).not.toContain("pagamento")
   })
 })
 
-describe("o painel", () => {
-  const lista = [
-    g({ statusInterno: "aguardando_triagem", videomakerId: null, videomaker: null, dataCaptacao: "2026-10-30T16:00:00Z", tipoGravacao: "evento" }),
-    g({ dataCaptacao: "2026-10-29T13:00:00Z", tipoGravacao: "entrega_equipamento" }),
-    g({ dataCaptacao: "2026-10-26T16:00:00Z", tipoGravacao: "entrega_equipamento" }),
-    g({ statusInterno: "editando", dataCaptacao: "2026-10-20T16:00:00Z", tipoGravacao: "demonstracao", videomakerId: "vm2", videomaker: { nome: "Ana" } }),
-    g({ statusInterno: "aprovado", dataCaptacao: "2026-10-15T16:00:00Z" }),
-    g({ statusInterno: "entregue_cliente", dataCaptacao: "2026-10-05T16:00:00Z", finalizadaEm: "2026-10-12T15:00:00Z", tipoGravacao: "conteudo" }),
-    g({ statusInterno: "entregue_cliente", dataCaptacao: "2026-09-20T16:00:00Z", finalizadaEm: "2026-09-25T15:00:00Z" }),
-    g({ statusInterno: "encerrado", dataCaptacao: "2026-10-10T16:00:00Z", finalizadaEm: "2026-10-11T15:00:00Z" }),
-    g({ dataCaptacao: "2026-11-06T16:00:00Z" }),
-  ]
-  const p = painelDasGravacoes(lista, hoje)
-
-  it("conta as etapas; concluído só o do mês, e entregue", () => {
-    expect(Object.fromEntries(p.etapas.map((e) => [e.id, e.demandas]))).toEqual({
-      a_agendar: 1, agendado: 3, em_edicao: 1, para_enviar: 1, concluido: 1,
-    })
-    expect(p.etapas.find((e) => e.id === "para_enviar")!.label).toBe("Para enviar")
-  })
-  it("os números do alto", () => {
-    expect(p.numeros).toEqual({ aAgendar: 1, proximos: 2, faltaMaterial: 1, paraEnviar: 1 })
-  })
-  it("próximos 7 dias em ordem, com quem vai; o dia 7 fica de fora", () => {
-    expect(p.proximas.map((x) => [x.momento.dia, x.situacao, x.videomaker])).toEqual([
-      ["2026-10-29", "agendada", "João Martins"],
-      ["2026-10-30", "sem_videomaker", null],
-    ])
-  })
-  it("travas: o vermelho primeiro", () => {
-    expect(p.travas.map((t) => t.motivo)).toEqual(["Falta o material · 3 dias", "Sem videomaker"])
-  })
-  it("o mês: gravado com videomaker, por tipo e por videomaker; encerrado não conta", () => {
-    expect(p.mes.total).toBe(5)
-    expect(p.mes.porTipo).toEqual([
-      { id: "entrega_equipamento", label: "Entrega de equipamento", demandas: 2 },
-      { id: "demonstracao", label: "Demonstração", demandas: 1 },
-      { id: "conteudo", label: "Conteúdo", demandas: 1 },
-      { id: "", label: "Sem tipo", demandas: 1 },
-    ])
-    expect(p.mes.porVideomaker).toEqual([{ id: "vm1", nome: "João Martins", gravacoes: 4 }, { id: "vm2", nome: "Ana", gravacoes: 1 }])
-  })
-  it("sem custos na lista, sem bloco de nota", () => {
-    expect(p.notas).toBeNull()
-  })
-  it("com custos: o que falta, o que chegou, o que está em compras", () => {
-    const comNota = painelDasGravacoes([
+describe("alertas de nota e pagamento", () => {
+  it("falta a nota, nota para compras, a refazer e pagamento a fazer", () => {
+    const comNota = [
       g({ statusInterno: "editando", custos: [], notasFiscais: [] }),
-      g({ statusInterno: "aprovado", custos: [], notasFiscais: [{ status: "enviada" }] }),
-      g({ statusInterno: "aprovado", custos: [{ statusPagamento: "aguardando_pagamento", pago: false }], notasFiscais: [] }),
+      g({ statusInterno: "entregue_cliente", custos: [], notasFiscais: [{ status: "enviada" }] }),
+      g({ statusInterno: "aprovado", custos: [{ statusPagamento: "contestado", pago: false }], notasFiscais: [] }),
+      g({ statusInterno: "entregue_cliente", custos: [{ statusPagamento: "aguardando_pagamento", pago: false }], notasFiscais: [] }),
       g({ statusInterno: "entregue_cliente", custos: [{ statusPagamento: "pago", pago: true }], notasFiscais: [] }),
       g({ statusInterno: "captacao_agendada", custos: [], notasFiscais: [] }),
-    ], hoje)
-    expect(comNota.notas).toEqual({ falta: 1, recebida: 1, compras: 1, contestada: 0 })
+    ]
+    expect(contagem(comNota)).toMatchObject({ nota_falta: 1, nota_compras: 1, nota_refazer: 1, pagamento: 1 })
+    expect(alertasDasGravacoes(comNota, hoje).find((a) => a.id === "nota_compras")!.itens[0].detalhe).toBe("João Martins")
   })
 })
