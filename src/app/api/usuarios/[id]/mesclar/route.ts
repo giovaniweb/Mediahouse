@@ -27,21 +27,22 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Principal e secundário não podem ser o mesmo" }, { status: 400 })
   }
 
-  // Ambos precisam pertencer à organização ativa (membership)
-  const [memPrincipal, memSecundario] = await Promise.all([
-    prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: principalId, organizacaoId } }, select: { id: true } }),
-    prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: secundarioId, organizacaoId } }, select: { id: true } }),
-  ])
+  // Ambos precisam pertencer à organização ativa (membership).
+  //
+  // Uma consulta de cada vez, e não em Promise.all: com RLS ligado, dois
+  // findUnique simultâneos no mesmo modelo devolvem null no segundo (medido em
+  // tests/runtime/remover-da-empresa.spec.ts) — o Mesclar respondia 404 para
+  // um secundário que existe.
+  const memPrincipal = await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: principalId, organizacaoId } }, select: { id: true } })
+  const memSecundario = await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: secundarioId, organizacaoId } }, select: { id: true } })
   if (!memPrincipal) return NextResponse.json({ error: "Usuário principal não encontrado nesta organização" }, { status: 404 })
   if (!memSecundario) return NextResponse.json({ error: "Usuário secundário não encontrado nesta organização" }, { status: 404 })
 
   const podeMesclar = await Promise.all([principalId, secundarioId].map(id => podeAdministrarIdentidade(acesso.usuarioId, organizacaoId, id)))
   if (podeMesclar.some(pode => !pode)) return NextResponse.json({ error: "Mesclar identidade compartilhada requer administração da plataforma" }, { status: 403 })
 
-  const [principal, secundario] = await Promise.all([
-    prisma.usuario.findUnique({ where: { id: principalId } }),
-    prisma.usuario.findUnique({ where: { id: secundarioId } }),
-  ])
+  const principal = await prisma.usuario.findUnique({ where: { id: principalId } })
+  const secundario = await prisma.usuario.findUnique({ where: { id: secundarioId } })
   if (!principal || !secundario) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
   // Demandas a migrar: SOMENTE da organização ativa

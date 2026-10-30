@@ -23,6 +23,11 @@ export async function removerDaEmpresa(tx: Tx, alvo: {
   inativarConta: boolean
 }) {
   const { usuarioId, organizacaoId } = alvo
+  // Antes de tudo: com RLS, `usuarios` só aparece por vínculo com a empresa
+  // declarada. Depois que o vínculo sai, este update não acharia mais a pessoa.
+  if (alvo.inativarConta) {
+    await tx.usuario.update({ where: { id: usuarioId }, data: { status: "inativo" } })
+  }
   await tx.editorOrganizacao.updateMany({
     where: { organizacaoId, editor: { usuarioId } },
     data: { status: "inativo" },
@@ -35,7 +40,4 @@ export async function removerDaEmpresa(tx: Tx, alvo: {
   // novo, e não por uma exceção esquecida de quando saiu.
   await tx.permissaoUsuario.deleteMany({ where: { usuarioId, organizacaoId } })
   await tx.usuarioOrganizacao.delete({ where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } } })
-  if (alvo.inativarConta) {
-    await tx.usuario.update({ where: { id: usuarioId }, data: { status: "inativo" } })
-  }
 }
