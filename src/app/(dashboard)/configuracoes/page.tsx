@@ -216,6 +216,9 @@ function TabWhatsapp() {
               onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
               placeholder="api-key"
             />
+            <span className="mt-1 block text-[11px] text-zinc-600">
+              A chave salva vale só para esta URL e esta instância. Trocou uma delas? Informe a chave de novo.
+            </span>
           </div>
           <div>
             <label className="text-xs font-medium text-zinc-500 block mb-1">Instance ID *</label>
