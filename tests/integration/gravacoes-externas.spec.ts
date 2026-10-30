@@ -113,12 +113,12 @@ afterAll(async () => {
   await db.alertaIA.deleteMany({ where: { organizacaoId: org } })
   await db.demanda.deleteMany({ where: { organizacaoId: org } })
   await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org } })
-  await db.videomaker.deleteMany({ where: { id: { in: [vm, `${p}-vm-novo`] } } })
+  await db.videomaker.deleteMany({ where: { id: { in: [vm, `${p}-vm-novo`, `${p}-vm-dele`] } } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: org } })
   await db.produto.deleteMany({ where: { organizacaoId: org } })
   await db.usuario.deleteMany({ where: { email: { endsWith: `@${p}.test` } } })
   await db.organizacao.delete({ where: { id: org } })
-  await db.usuario.deleteMany({ where: { id: { in: [...Object.values(pessoas), `${p}-adm-aviso`, `${p}-debora`] } } })
+  await db.usuario.deleteMany({ where: { id: { in: [...Object.values(pessoas), `${p}-adm-aviso`, `${p}-debora`, `${p}-vm-login`] } } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -622,5 +622,27 @@ describe("cancelar a gravação", () => {
     const outra = await gravacao("captacao_agendada")
     como(pessoas.equipe, "solicitante")
     expect((await pedir(outra, { motivo: "Chuva", cobra: false })).status).toBe(403)
+  })
+})
+
+describe("o videomaker logado no quadro de Gravações Externas", () => {
+  const login = `${p}-vm-login`, dele = `${p}-vm-dele`
+  beforeAll(async () => {
+    await db.usuario.create({ data: { id: login, nome: "Gabriel", email: `${login}@exemplo.test`, tipo: "videomaker", senhaHash: "sem-login" } })
+    await db.usuarioOrganizacao.create({ data: { usuarioId: login, organizacaoId: org, areas: ["audiovisual"], papel: "videomaker" } })
+    // O preset do videomaker não tem `verTodasDemandas` (#118): a rota devolve só as dele.
+    await db.permissaoUsuario.create({ data: { usuarioId: login, organizacaoId: org, ...PRESETS.videomaker } })
+    await db.videomaker.create({ data: { id: dele, nome: "Gabriel", usuarioId: login } })
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: org, videomakerId: dele, tipoContrato: "externo" } })
+  })
+
+  it("vê só as gravações em que ele é o videomaker", async () => {
+    const minha = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id: minha }, data: { videomakerId: dele } })
+    const deOutro = await gravacao("captacao_agendada")
+    como(login, "videomaker")
+    const ids = (await (await GET(new NextRequest("http://localhost/api/demandas?area=audiovisual&quadro=jobs"))).json() as { demandas: { id: string }[] }).demandas.map((d) => d.id)
+    expect(ids).toContain(minha)
+    expect(ids).not.toContain(deOutro)
   })
 })

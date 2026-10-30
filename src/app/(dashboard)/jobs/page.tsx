@@ -67,6 +67,9 @@ type Opcao = { id: string; nome: string }
 
 function Quadro() {
   const { data: me } = useMe()
+  // O videomaker vê aqui só as gravações dele (a rota filtra) e não abre gravação nova.
+  // Vale o papel na empresa ativa, como em papelNaOrg; o `tipo` global só sem papel.
+  const ehVideomaker = (me?.membership?.papel ?? me?.tipo) === "videomaker"
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
   const [kitAberto, setKitAberto] = useState(false)
@@ -193,9 +196,11 @@ function Quadro() {
             <button type="button" onClick={() => setKitAberto(true)} className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800">
               <BookOpen className="w-4 h-4" aria-hidden /> Kit do videomaker
             </button>
-            <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
-              <Plus className="w-4 h-4" /> Nova gravação
-            </button>
+            {!ehVideomaker && (
+              <button onClick={() => setNovoJob(true)} className={actionStyles.newDemand}>
+                <Plus className="w-4 h-4" /> Nova gravação
+              </button>
+            )}
           </div>
         }
       />
