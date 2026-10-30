@@ -127,6 +127,26 @@ describe("handler real com banco descartável", () => {
       expect(texto).not.toContain("segredo-cifrado-sintetico")
     }
   })
+  it("a chave guardada não vai para outro endereço nem para outra instância", async () => {
+    const { POST: whatsappPOST } = await import("@/app/api/configuracoes/whatsapp/route")
+    const salvar = (corpo: object) => whatsappPOST(new NextRequest("http://localhost/api/configuracoes/whatsapp", { method: "POST", body: JSON.stringify(corpo) }))
+    await db.configWhatsapp.deleteMany({ where: { organizacaoId: orgA } })
+    await db.configWhatsapp.create({ data: { organizacaoId: orgA, instanceUrl: "https://example.invalid", instanceId: prefix, apiKey: "chave-mestra-sintetica" } })
+    for (const corpo of [
+      { instanceUrl: "https://servidor-de-outro.invalid", instanceId: prefix, apiKey: "••••••" },
+      { instanceUrl: "https://servidor-de-outro.invalid", instanceId: prefix },
+      { instanceUrl: "https://example.invalid", instanceId: `${prefix}-outra`, apiKey: "••••••" },
+    ]) {
+      expect((await salvar(corpo)).status).toBe(400)
+    }
+    expect(await db.configWhatsapp.findFirst({ where: { organizacaoId: orgA } }))
+      .toMatchObject({ instanceUrl: "https://example.invalid", instanceId: prefix, apiKey: "chave-mestra-sintetica" })
+    // O mesmo destino segue sem pedir a chave; destino novo com chave nova troca os dois.
+    expect((await salvar({ instanceUrl: "https://example.invalid", instanceId: prefix, apiKey: "••••••" })).status).toBe(200)
+    expect((await salvar({ instanceUrl: "https://outro.invalid", instanceId: prefix, apiKey: "chave-nova-sintetica" })).status).toBe(200)
+    expect(await db.configWhatsapp.findFirst({ where: { organizacaoId: orgA } }))
+      .toMatchObject({ instanceUrl: "https://outro.invalid", apiKey: "chave-nova-sintetica" })
+  })
   it("todos os handlers críticos negam falta de capacidade antes de efeitos", async () => {
     estado.cookie = orgB
     await db.permissaoUsuario.create({ data: { usuarioId: usuario, organizacaoId: orgB } })

@@ -43,12 +43,25 @@ export async function POST(req: NextRequest) {
   return comOrg(organizacaoId, () => prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp:${organizacaoId}`}, 0))`
     const existing = await tx.configWhatsapp.findFirst({ where: { organizacaoId } })
-    const data = { instanceUrl, instanceId, ativo: true, ...(apiKey && !apiKey.startsWith("••••") && { apiKey }) }
-    if (!existing && !apiKey) return NextResponse.json({ error: "apiKey obrigatória" }, { status: 400 })
+    const chaveNova = typeof apiKey === "string" && apiKey && !apiKey.startsWith("••••") ? apiKey : null
+    // A chave guardada vale só para o servidor e a instância com que foi salva.
+    // Até 30/10/2026 trocar o endereço mantinha a chave antiga, e o "Testar" a
+    // mandava para o endereço novo: o admin de uma empresa levava a chave para
+    // um servidor dele, ou apontava para a instância de outra empresa no mesmo
+    // servidor. Com a Evolution gerenciada essa chave é a mestra, que abre o
+    // WhatsApp de todas as empresas.
+    const mesmoDestino = !!existing && existing.instanceUrl === instanceUrl && existing.instanceId === instanceId
+    if (!chaveNova && !mesmoDestino) {
+      return NextResponse.json(
+        { error: existing ? "Ao trocar o endereço ou a instância, informe a apiKey de novo." : "apiKey obrigatória" },
+        { status: 400 }
+      )
+    }
+    const data = { instanceUrl, instanceId, ativo: true, ...(chaveNova && { apiKey: chaveNova }) }
     if (existing && existing.instanceUrl === instanceUrl && existing.instanceId === instanceId && existing.ativo && (!data.apiKey || data.apiKey === existing.apiKey)) return NextResponse.json({ config: apresentacao(existing) })
     const atual = existing
       ? await tx.configWhatsapp.update({ where: { id: existing.id }, data })
-      : await tx.configWhatsapp.create({ data: { organizacaoId, instanceUrl, apiKey, instanceId, ativo: true } })
+      : await tx.configWhatsapp.create({ data: { organizacaoId, instanceUrl, apiKey: chaveNova!, instanceId, ativo: true } })
     await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_whatsapp", recursoId: atual.id, correlationId: correlacaoAuditoria(), antes: { ativo: !!existing?.ativo }, depois: { ativo: true, campos: ["credenciais"] } })
     return NextResponse.json({ config: apresentacao(atual) })
   }))

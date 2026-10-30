@@ -2,10 +2,12 @@ import { requireAcesso } from "@/lib/acesso"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { registrarWebhookEntrada, origemPublica } from "@/lib/whatsapp-webhook"
+import { chaveDaInstanciaGerenciada } from "@/lib/whatsapp-gerenciada"
 
 // GET /api/configuracoes/whatsapp/qr — QR da instância Evolution DA ORGANIZAÇÃO logada.
 // Cada empresa tem sua própria instância (instanceName = nuflow_<slug>).
-// Org sem config → auto-provisiona usando a Evolution gerenciada (EVOLUTION_API_URL/KEY).
+// Org sem config → auto-provisiona usando a Evolution gerenciada (EVOLUTION_API_URL/KEY);
+// a empresa guarda a chave da instância dela, nunca a mestra.
 export async function GET() {
   const acesso = await requireAcesso("gerenciarConfig")
   if (acesso instanceof NextResponse) return acesso
@@ -22,8 +24,16 @@ export async function GET() {
       return NextResponse.json({ error: "Evolution gerenciada não configurada (defina EVOLUTION_API_URL e EVOLUTION_API_KEY)" }, { status: 400 })
     }
     const instanceName = `nuflow_${org.slug}`
+    const instancia = await chaveDaInstanciaGerenciada(evoUrl, evoKey, instanceName)
+    if ("erro" in instancia) return NextResponse.json({ error: instancia.erro }, { status: 502 })
+    // Dois cliques ao mesmo tempo: a empresa só tem uma configuração (unique),
+    // e o segundo segue com a que o primeiro gravou.
     config = await prisma.configWhatsapp.create({
-      data: { organizacaoId, instanceUrl: evoUrl, apiKey: evoKey, instanceId: instanceName, instanceName, ativo: false },
+      data: { organizacaoId, instanceUrl: evoUrl, apiKey: instancia.chave, instanceId: instanceName, instanceName, ativo: false },
+    }).catch(async (e) => {
+      const gravada = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
+      if (!gravada) throw e
+      return gravada
     })
   }
 
