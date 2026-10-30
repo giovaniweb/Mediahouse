@@ -63,3 +63,17 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public.pessoa_por_token_mcp(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.pessoa_por_token_mcp(TEXT) TO app_user;
+
+-- Fora da API do Supabase, mesmo que os privilégios padrão do projeto tenham
+-- voltado (a 20261005140000 os tirou, mas a mudança para São Paulo restaurou o
+-- banco num projeto novo). Explícito para os dois objetos novos, sem depender disso.
+DO $$
+DECLARE papel TEXT;
+BEGIN
+  FOREACH papel IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = papel) THEN
+      EXECUTE format('REVOKE ALL ON "tokens_mcp" FROM %I', papel);
+      EXECUTE format('REVOKE ALL ON FUNCTION public.pessoa_por_token_mcp(TEXT) FROM %I', papel);
+    END IF;
+  END LOOP;
+END $$;
