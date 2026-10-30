@@ -70,7 +70,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       dataCaptacao: true,
       localGravacao: true,
       localEvento: true,
-      historicos: { select: { statusNovo: true, createdAt: true }, orderBy: { createdAt: "asc" }, take: 200 },
+      historicos: { select: { statusNovo: true, createdAt: true, observacao: true }, orderBy: { createdAt: "asc" }, take: 200 },
       arquivos: {
         where: { tipoArquivo: "final" },
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
@@ -108,7 +108,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const gravacao = ehGravacao ? acompanhamentoDaGravacao({
     statusInterno, statusVisivel: publico.statusVisivel, titulo: publico.titulo, clienteFinalNome, tipoGravacao, edicaoPor,
     videomakerId, videomaker: videomaker ? { nome: videomaker.nome } : null, dataCaptacao, dataEvento: publico.dataEvento,
-    localGravacao, localEvento, createdAt: publico.createdAt, finalizadaEm: publico.finalizadaEm, historicos,
+    localGravacao, localEvento, createdAt: publico.createdAt, finalizadaEm: publico.finalizadaEm, linkFinal: publico.linkFinal, historicos,
   }, hojeEmSaoPaulo()) : null
   // Mesma regra da aprovação: o token é a credencial de quem não tem conta, e
   // passa a valer também para a thumbnail que vive no bucket privado.

@@ -40,11 +40,14 @@ export function JobsQuadro({
   jobs,
   onAbrir,
   onMover,
+  abrirConcluido = false,
 }: {
   jobs: JobDoQuadro[]
   onAbrir: (id: string) => void
   /** O card foi solto em outra coluna. */
   onMover: (id: string, coluna: string) => void
+  /** Abre o Concluído: a pendência filtrada (nota, pagamento) tem cards lá. */
+  abrirConcluido?: boolean
 }) {
   // Atrasadas no topo, depois urgentes, depois o prazo mais perto. Quem abre o
   // quadro precisa ver o que queima; por isso aqui não há ordem manual, e
@@ -79,6 +82,7 @@ export function JobsQuadro({
       onDragEnd={soltar}
       nome={{ um: "gravação", varios: "gravações", vazio: "Nenhuma gravação nesta etapa." }}
       recolhivel="concluido"
+      abrirRecolhivel={abrirConcluido}
       verTodos="/historico/audiovisual"
       renderCard={(job, { arrastavel }) => <JobCard job={job} onAbrir={onAbrir} arrastavel={arrastavel} />}
     />

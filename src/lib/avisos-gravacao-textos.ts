@@ -95,6 +95,22 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
 }
 
 /**
+ * Os avisos de quando a gravação é cancelada (lib/cancelar-gravacao.ts). O
+ * videomaker convidado ou confirmado fica sabendo — ele separou a agenda — e,
+ * se cobra pelo cancelamento, recebe junto o link para mandar a nota da taxa.
+ * A operação fica com o motivo.
+ */
+export function mensagensDoCancelamento(d: DadosDoAviso, c: { motivo: string; avisaVideomaker: boolean; linkNota?: string | null }): Mensagens {
+  const texto = `❌ Gravação cancelada: ${ref(d)}, ${quando(d)}.`
+  return {
+    ...(c.avisaVideomaker ? {
+      videomaker: c.linkNota ? `${texto}\n\nMande a nota da taxa de cancelamento por aqui:\n${c.linkNota}` : `${texto} Pode liberar a sua agenda.`,
+    } : {}),
+    operacao: [texto, `Motivo: ${c.motivo}`, c.linkNota && "O videomaker cobra o cancelamento: a nota dele foi pedida."].filter(Boolean).join("\n"),
+  }
+}
+
+/**
  * Os avisos de calendário que valem hoje. Cada um sai uma vez no dia em que
  * vale (a rotina roda de manhã); os de trava saem só no dia em que travou,
  * para não virar cobrança diária na cabeça de quem só quer saber do problema.

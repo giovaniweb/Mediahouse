@@ -17,6 +17,7 @@ import {
 } from "@/lib/ficha-do-job"
 import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
 import { AgoraDaGravacao, EntregasDoVideomaker, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
+import { CancelarGravacao } from "./CancelarGravacao"
 import styles from "./FichaDoJob.module.css"
 
 /**
@@ -235,6 +236,8 @@ export function FichaDoJob({
               </Linha>
             )}
           </dl>
+          {/* Sem depender de editarDemanda: quem opera as gravações cancela (o componente decide). */}
+          <CancelarGravacao job={job} onCancelada={onAtualizar} />
         </aside>
       </div>
 

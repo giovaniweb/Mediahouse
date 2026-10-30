@@ -6,12 +6,11 @@ import styles from "./JobsPreview.module.css"
 import { cn } from "@/lib/utils"
 import { formatarDataCurta, hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
-import { acaoDaGravacao, etapaDaGravacao, faltaOMaterial, rotuloDaEdicao, situacaoDaNota, vezNaGravacao, type EdicaoDaGravacao, type PagamentoDoCard } from "@/lib/etapas-da-gravacao"
+import { acaoDaGravacao, etapaDaGravacao, faltaOMaterial, foiCancelada, rotuloDaEdicao, situacaoDaNota, vezNaGravacao, type EdicaoDaGravacao, type HistoricoDaGravacao, type PagamentoDoCard } from "@/lib/etapas-da-gravacao"
 import { TAG, TAG_DA_EDICAO, TAG_DA_NOTA } from "./etiquetas"
 import { diasDeAtraso } from "@/lib/status"
 import {
   ehBloqueado,
-  ehCancelado,
   faseDoJob,
   nivelDeRisco,
   type JobParaLeitura,
@@ -42,6 +41,8 @@ export type JobDoQuadro = JobParaLeitura & JobArrastado & Pick<PagamentoDoCard, 
   tipoGravacao?: string | null
   /** Quando foi para finalizado (o painel conta o mês por ela). */
   finalizadaEm?: string | Date | null
+  /** Só a entrega e a marca do cancelamento (lista do quadro), para foiCancelada. */
+  historicos?: HistoricoDaGravacao[] | null
   dataLimite?: string | Date | null
   statusVisivel?: string | null
   prioridade?: string | null
@@ -67,7 +68,7 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
   const responsavel = vezNaGravacao(job)
   const acao = acaoDaGravacao(job, hoje)
   const bloqueado = ehBloqueado(job.statusInterno)
-  const cancelado = ehCancelado(job)
+  const cancelado = foiCancelada(job)
   const atraso = diasDeAtraso(job)
   // Dia da semana, data e hora da gravação (lib/ficha-do-job.ts: a captação,
   // ou o evento do pedido público). O prazo vai no rodapé, como em Demandas.
@@ -178,7 +179,7 @@ export function JobCard({ job, onAbrir, arrastavel = false }: { job: JobDoQuadro
       <p className={cn(styles.acao, bloqueado ? "text-rose-400" : cancelado ? "text-zinc-500" : "text-zinc-300")}>
         {(bloqueado || cancelado) && <Ban className={cn("w-3.5 h-3.5 shrink-0", bloqueado ? "text-rose-400" : "text-zinc-500")} />}
         {risco === "overdue" && !bloqueado && !cancelado && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-        <span className="truncate">{cancelado ? "Encerrado sem entrega" : acao}</span>
+        <span className="truncate">{cancelado ? "Gravação cancelada" : acao}</span>
       </p>
 
       <div className={card.footer}>

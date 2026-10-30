@@ -51,6 +51,17 @@ describe("o que quem pediu vê", () => {
   })
   it("recusado ou encerrado: a frase, sem caminho", () => {
     expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "entrada" }), hoje)).toMatchObject({ situacao: "Pedido não aprovado", trilha: null })
-    expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado" }), hoje)).toMatchObject({ situacao: "Gravação encerrada", trilha: null })
+    expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado" }), hoje)).toMatchObject({ situacao: "Gravação cancelada", trilha: null })
+  })
+  it("encerrada depois da entrega é \"Enviado ao cliente\"; cancelada com vídeo pronto é cancelada", () => {
+    const entregue = acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado",
+      historicos: [{ statusNovo: "entregue_cliente", createdAt: "2026-10-30T12:00:00Z" }] }), hoje)
+    expect(entregue).toMatchObject({ situacao: "Enviado ao cliente", tom: "ok" })
+    const cancelada = acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado",
+      historicos: [{ statusNovo: "encerrado", createdAt: "2026-10-30T12:00:00Z", observacao: "Gravação cancelada: chuva" }] }), hoje)
+    expect(cancelada).toMatchObject({ situacao: "Gravação cancelada", trilha: null })
+    // Antiga, sem histórico, com o vídeo no link: entregue, como antes.
+    expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado", linkFinal: "https://drive/v" }), hoje))
+      .toMatchObject({ situacao: "Enviado ao cliente" })
   })
 })

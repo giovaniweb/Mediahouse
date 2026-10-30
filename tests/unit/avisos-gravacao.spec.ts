@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   eventoDaMudanca,
   mensagensDaRegra,
+  mensagensDoCancelamento,
   mensagensDoEvento,
   regrasDaGravacao,
   type DadosDoAviso,
@@ -97,5 +98,18 @@ describe("mudança de status que vira aviso", () => {
     expect(eventoDaMudanca("brutos_enviados", "editando")).toBeNull()
     expect(eventoDaMudanca("aguardando_triagem", "planejamento")).toBeNull()
     expect(eventoDaMudanca("captacao_agendada", "encerrado")).toBeNull()
+  })
+})
+
+describe("cancelamento", () => {
+  it("cobra: o videomaker recebe o link da nota; a operação, o motivo", () => {
+    const m = mensagensDoCancelamento(g, { motivo: "Chuva", avisaVideomaker: true, linkNota: "https://nuflow.space/nf-upload/abc" })
+    expect(m.videomaker).toContain("Mande a nota da taxa de cancelamento por aqui:\nhttps://nuflow.space/nf-upload/abc")
+    expect(m.operacao).toContain("Motivo: Chuva")
+    expect(m.operacao).toContain("a nota dele foi pedida")
+  })
+  it("não cobra: só o aviso para liberar a agenda; sem videomaker, só a operação", () => {
+    expect(mensagensDoCancelamento(g, { motivo: "Chuva", avisaVideomaker: true }).videomaker).toMatch(/Pode liberar a sua agenda\.$/)
+    expect(papeis(mensagensDoCancelamento(g, { motivo: "Chuva", avisaVideomaker: false }))).toEqual(["operacao"])
   })
 })

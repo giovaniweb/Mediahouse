@@ -30,7 +30,7 @@ export const ETAPAS: { id: EtapaDaGravacao; rotulo: string; dica: string }[] = [
   { id: "agendado",    rotulo: "Agendado",               dica: "Videomaker confirmado, até o material chegar." },
   { id: "em_edicao",   rotulo: "Em edição",              dica: "Só o que não veio editado pelo videomaker." },
   { id: "para_enviar", rotulo: "Para enviar ao cliente", dica: "Pronto: editado aqui ou pelo videomaker." },
-  { id: "concluido",   rotulo: "Concluído",              dica: "Enviado ao cliente. Encerrado sem entrega também fica aqui." },
+  { id: "concluido",   rotulo: "Concluído",              dica: "Enviado ao cliente. A gravação cancelada também fica aqui." },
 ]
 
 export const ROTULO_DA_ETAPA = Object.fromEntries(ETAPAS.map((e) => [e.id, e.rotulo])) as Record<EtapaDaGravacao, string>
@@ -220,14 +220,14 @@ export function passoDaGravacao(job: { statusInterno: string; videomakerId?: str
  * aprovado), e aqui aprovado é "Enviar ao cliente". Na edição, ela continua
  * valendo: revisão, ajuste e impedimento dizem mais que "Em edição".
  */
-export function acaoDaGravacao(job: JobParaLeitura & { dataCaptacao?: string | Date | null; dataEvento?: string | Date | null }, hoje: string): string {
+export function acaoDaGravacao(job: JobParaLeitura & { dataCaptacao?: string | Date | null; dataEvento?: string | Date | null; historicos?: HistoricoDaGravacao[] | null }, hoje: string): string {
   switch (passoDaGravacao(job)) {
     case "escalar":   return "Escalar o videomaker"
     case "confirmar": return "Aguardando o videomaker confirmar"
     case "material":  return faltaOMaterial(job, hoje) ? "Cobrar o material do videomaker" : "Aguardando a gravação"
     case "edicao":    return proximaAcao(job)
     case "enviar":    return "Enviar ao cliente"
-    case "concluido": return "Enviado ao cliente"
+    case "concluido": return foiCancelada(job) ? "Gravação cancelada" : "Enviado ao cliente"
   }
 }
 
@@ -253,6 +253,7 @@ export type EstadoDoPasso = "feito" | "agora" | "depois" | "pulado"
 export type PassoDaTrilha = { id: string; rotulo: string; estado: EstadoDoPasso; detalhe: string | null }
 
 type JobDaLinha = PagamentoDoCard & {
+  linkFinal?: string | null
   createdAt?: string | Date | null
   finalizadaEm?: string | Date | null
   dataCaptacao?: string | Date | null
@@ -260,7 +261,7 @@ type JobDaLinha = PagamentoDoCard & {
   edicaoPor?: string | null
   videomaker?: { nome: string } | null
   editor?: { nome: string } | null
-  historicos?: { statusNovo: string; createdAt: string | Date }[] | null
+  historicos?: { statusNovo: string; createdAt: string | Date; observacao?: string | null }[] | null
 }
 
 const diaCurto = (v: string | Date | null | undefined) => {
@@ -269,10 +270,18 @@ const diaCurto = (v: string | Date | null | undefined) => {
 }
 const nome1 = (n?: string | null) => n?.trim().split(/\s+/)[0] ?? null
 
-/** Quando o material chegou: a primeira mudança do histórico que passou do agendado. */
+/**
+ * Quando o material chegou: a primeira mudança do histórico para a edição, para
+ * enviar ou para a entrega. Encerrado e expirado não contam: são também o fim de
+ * uma gravação cancelada, que nunca teve material.
+ */
 function chegadaDoMaterial(job: JobDaLinha): string | Date | null {
   const h = [...(job.historicos ?? [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  return h.find((x) => (ETAPA_DO_STATUS as Record<string, EtapaDaGravacao>)[x.statusNovo] && ordem(etapaDaGravacao({ statusInterno: x.statusNovo })) >= ordem("em_edicao"))?.createdAt ?? null
+  const chegou = (s: string) => {
+    const etapa = (ETAPA_DO_STATUS as Record<string, EtapaDaGravacao>)[s]
+    return etapa === "em_edicao" || etapa === "para_enviar" || ehStatusDeEntrega(s)
+  }
+  return h.find((x) => chegou(x.statusNovo))?.createdAt ?? null
 }
 
 export function trilhaDoVideo(job: JobDaLinha, hoje: string): PassoDaTrilha[] {
@@ -286,6 +295,19 @@ export function trilhaDoVideo(job: JobDaLinha, hoje: string): PassoDaTrilha[] {
     : 6
   const semNossaEdicao = job.edicaoPor === "videomaker" || job.edicaoPor === "sem_edicao"
   const quando = momentoDoJob(job)
+  if (foiCancelada(job)) {
+    // Cancelada: fica o que aconteceu (pedido, quem foi escalado, material se
+    // chegou); o resto não vai acontecer, e o envio diz por quê.
+    const chegou = chegadaDoMaterial(job)
+    return [
+      { id: "pedido", rotulo: "Pedido", estado: "feito", detalhe: diaCurto(job.createdAt) },
+      { id: "videomaker", rotulo: "Videomaker", estado: job.videomaker ? "feito" : "pulado", detalhe: nome1(job.videomaker?.nome) },
+      { id: "gravacao", rotulo: "Gravação", estado: chegou ? "feito" : "pulado", detalhe: quando ? `${quando.dia.slice(8, 10)}/${quando.dia.slice(5, 7)}` : null },
+      { id: "material", rotulo: "Material", estado: chegou ? "feito" : "pulado", detalhe: diaCurto(chegou) },
+      { id: "edicao", rotulo: "Edição", estado: "pulado", detalhe: null },
+      { id: "envio", rotulo: "Envio ao cliente", estado: "pulado", detalhe: "cancelada" },
+    ]
+  }
   const estado = (i: number): EstadoDoPasso => (i < atual ? "feito" : i === atual ? "agora" : "depois")
   return [
     { id: "pedido", rotulo: "Pedido", estado: "feito", detalhe: diaCurto(job.createdAt) },
@@ -371,6 +393,40 @@ export function materialCompleto(j: { linkBrutos?: string | null; linkFinal?: st
 /** Para onde a gravação vai quando o material chega: nossa edição, ou direto para enviar. */
 export function statusDoMaterial(edicaoPor: string | null | undefined): StatusInterno {
   return edicaoPor === "videomaker" || edicaoPor === "sem_edicao" ? "aprovado" : "brutos_enviados"
+}
+
+/** O começo da observação que o cancelamento grava no histórico (lib/cancelar-gravacao.ts). */
+export const MARCA_DO_CANCELAMENTO = "Gravação cancelada"
+
+/** Status que só existem depois de o vídeo ir para o cliente. */
+export const STATUS_DE_ENTREGA = ["entregue_cliente", "postado", "contagem_15_dias_iniciada", "lembrete_15_dias_enviado"]
+
+const ehStatusDeEntrega = (s: string) => STATUS_DE_ENTREGA.includes(s)
+
+export type HistoricoDaGravacao = { statusNovo: string; observacao?: string | null }
+
+/**
+ * Cancelada. Encerrado e expirado também são o fim normal depois da entrega
+ * (contagem de 15 dias → expirado → encerrado), então o status não basta. Com o
+ * histórico a resposta é exata: a marca do cancelamento vence (mesmo com o
+ * vídeo já no link), e entrega registrada quer dizer que não foi cancelada. Sem
+ * marca nem entrega — gravação antiga, ou lista sem histórico —, vale o que
+ * valia: encerrada sem vídeo no link.
+ */
+export function foiCancelada(job: { statusInterno: string; linkFinal?: string | null; historicos?: HistoricoDaGravacao[] | null }): boolean {
+  if (job.statusInterno !== "encerrado" && job.statusInterno !== "expirado") return false
+  const h = job.historicos ?? []
+  if (h.some((x) => x.statusNovo === "encerrado" && x.observacao?.startsWith(MARCA_DO_CANCELAMENTO))) return true
+  if (h.some((x) => ehStatusDeEntrega(x.statusNovo))) return false
+  return !job.linkFinal?.trim()
+}
+
+/**
+ * Ao cancelar: o videomaker confirmou e o material não chegou — pergunta se ele
+ * cobra pelo cancelamento (lib/cancelar-gravacao.ts).
+ */
+export function perguntaCobranca(job: { statusInterno: string }): boolean {
+  return etapaDaGravacao(job) === "agendado"
 }
 
 /** A gravação ainda espera o material? (agendada, antes da edição) */

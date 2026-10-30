@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, Suspense } from "react"
+import { useState, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { useSession } from "next-auth/react"
@@ -13,10 +13,8 @@ import { toast } from "sonner"
 import { BarraVisao } from "@/components/demandas/BarraVisao"
 import actionStyles from "@/components/demandas/DemandAction.module.css"
 import { NovaDemandaGrowthModal } from "@/components/demandas/NovaDemandaGrowthModal"
-import { DemandasLista } from "@/components/demandas/DemandasLista"
 import { DemandaModal } from "@/components/demandas/DemandaModal"
-import { normalizarVisao } from "@/components/demandas/tipos-visao"
-import type { Visao, AbaRapida } from "@/components/demandas/tipos-visao"
+import type { AbaRapida } from "@/components/demandas/tipos-visao"
 import { fetcher } from "@/lib/fetcher"
 import { Header } from "@/components/layout/Header"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -44,25 +42,9 @@ function GrowthKanban() {
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroProduto, setFiltroProduto] = useState("")
 
-  // Mesmas duas visões do audiovisual, com preferência guardada em separado:
-  // quem cuida de Growth pode querer lista e quem cuida de vídeo, kanban.
+  // Só o kanban, como no audiovisual (a Lista saiu de todo o sistema em 29/10/2026).
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
-  const [visao, setVisao] = useState<Visao>("kanban")
   const [aba, setAba] = useState<AbaRapida>(atrasadasUrl ? "atrasadas" : "todos")
-  const CHAVE_VISAO = "nuflow:visao-demandas-growth"
-
-  useEffect(() => {
-    try {
-      const salva = normalizarVisao(localStorage.getItem(CHAVE_VISAO))
-      setVisao(salva)
-      localStorage.setItem(CHAVE_VISAO, salva)
-    } catch { /* Preferência indisponível: mantém Kanban. */ }
-  }, [])
-
-  function trocarVisao(v: Visao) {
-    setVisao(v)
-    try { localStorage.setItem(CHAVE_VISAO, v) } catch { /* A navegação continua sem persistência. */ }
-  }
 
   // Dados que alimentam os selects dos filtros
   const { data: rData } = useSWR<{ responsaveis: Responsavel[] }>("/api/growth/responsaveis", fetcher)
@@ -162,8 +144,6 @@ function GrowthKanban() {
             />
           )}
           demandas={demandas}
-          visao={visao}
-          onVisao={trocarVisao}
           aba={aba}
           onAba={setAba}
           total={data?.total}
@@ -174,26 +154,20 @@ function GrowthKanban() {
       </div>
 
       <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
-      {visao === "kanban" ? (
-        <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-          <KanbanBoard
-            demandas={demandas}
-            onMove={handleMove}
-            onDelete={handleDelete}
-            onDuplicate={handleDuplicate}
-            userTipo={session?.user?.tipo}
-            colunas={GROWTH_COLUNAS}
-            getColuna={(d) => growthColunaDe(d.statusInterno)}
-            colunaParaStatus={GROWTH_COLUNA_PARA_STATUS}
-            openMode="modal"
-            historico="/historico/growth"
-          />
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 px-4 pb-6 overflow-y-auto">
-          <DemandasLista demandas={demandas} onAbrir={setSelectedDetail} />
-        </div>
-      )}
+      <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
+        <KanbanBoard
+          demandas={demandas}
+          onMove={handleMove}
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          userTipo={session?.user?.tipo}
+          colunas={GROWTH_COLUNAS}
+          getColuna={(d) => growthColunaDe(d.statusInterno)}
+          colunaParaStatus={GROWTH_COLUNA_PARA_STATUS}
+          openMode="modal"
+          historico="/historico/growth"
+        />
+      </div>
 
       <NovaDemandaGrowthModal
         open={showNova}

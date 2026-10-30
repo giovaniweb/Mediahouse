@@ -38,11 +38,12 @@ import { executarRotina } from "@/lib/automacoes-regras"
 import { hojeEmSaoPaulo, somarDias } from "@/lib/datas"
 import { GET as listarKit, POST as criarKit } from "@/app/api/gravacoes/kit/route"
 import { POST as enviarKit } from "@/app/api/jobs/[id]/kit/route"
+import { POST as cancelar } from "@/app/api/jobs/[id]/cancelar/route"
 import { emitirConvite } from "@/lib/convites"
 import { podeLerMidia } from "@/lib/midia-acesso"
 import { decryptSecret } from "@/lib/secret-crypto"
 import { comOrg } from "@/lib/org-contexto"
-import { situacaoDaNota } from "@/lib/etapas-da-gravacao"
+import { foiCancelada, situacaoDaNota } from "@/lib/etapas-da-gravacao"
 
 const p = `gravacoes-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const pessoas = { admin: `${p}-admin`, equipe: `${p}-equipe`, financeiro: `${p}-fin` }
@@ -533,3 +534,93 @@ describe("kit do videomaker", () => {
   })
 })
 
+describe("cancelar a gravação", () => {
+  const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
+  const textos = async (demandaId: string) => (await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: demandaId }, select: { conteudoCifrado: true } }))
+    .map((x) => decryptSecret(x.conteudoCifrado!))
+  const pedir = (id: string, corpo: unknown) => cancelar(
+    new NextRequest(`http://localhost/api/jobs/${id}/cancelar`, { method: "POST", body: JSON.stringify(corpo) }),
+    { params: Promise.resolve({ id }) },
+  )
+  beforeAll(async () => {
+    await db.videomaker.update({ where: { id: vm }, data: { telefone: tel() } })
+  })
+
+  it("sem videomaker: encerra com o motivo, ninguém para pagar", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "aguardando_triagem", statusVisivel: "entrada", videomakerId: null } })
+    como(pessoas.admin, "admin")
+    expect((await pedir(id, { motivo: "" })).status).toBe(400)
+    const r = await pedir(id, { motivo: "Chuva" })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toEqual({ mensagem: "Gravação cancelada." })
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ statusInterno: "encerrado", statusVisivel: "finalizado" })
+    const h = await db.historicoStatus.findFirstOrThrow({ where: { demandaId: id, statusNovo: "encerrado" } })
+    expect(h.observacao).toBe("Gravação cancelada: Chuva")
+    expect(await db.notaFiscalUpload.count({ where: { demandaId: id } })).toBe(0)
+    // Continua no quadro, em Concluído (não some como recusa).
+    expect(await noQuadro(id)).toMatchObject({ statusInterno: "encerrado" })
+  })
+
+  it("convite sem resposta: o convite deixa de valer e o convidado é avisado", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "videomaker_notificado", statusVisivel: "producao" } })
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token: `tok-${randomUUID()}`, status: "pendente", expiresAt: new Date(Date.now() + 86400_000) } })
+    como(pessoas.admin, "admin")
+    expect(await (await pedir(id, { motivo: "A doutora não pôde" })).json()).toEqual({ mensagem: "Gravação cancelada. O videomaker foi avisado." })
+    expect((await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id } })).status).toBe("expirado")
+    expect((await textos(id)).some((t) => t.includes("Gravação cancelada") && t.includes("Pode liberar a sua agenda"))).toBe(true)
+  })
+
+  it("videomaker confirmado: tem de dizer se ele cobra; não cobra, só o aviso", async () => {
+    const id = await gravacao("captacao_agendada")
+    como(pessoas.admin, "admin")
+    expect((await pedir(id, { motivo: "Chuva" })).status).toBe(400)
+    expect((await pedir(id, { motivo: "Chuva", cobra: false })).status).toBe(200)
+    expect(await db.notaFiscalUpload.count({ where: { demandaId: id } })).toBe(0)
+    expect((await db.historicoStatus.findFirstOrThrow({ where: { demandaId: id, statusNovo: "encerrado" } })).observacao).toBe("Gravação cancelada: Chuva · o videomaker não cobra")
+  })
+
+  it("videomaker confirmado que cobra: a nota é pedida e ele recebe o link no WhatsApp", async () => {
+    const id = await gravacao("captacao_agendada")
+    como(pessoas.admin, "admin")
+    expect(await (await pedir(id, { motivo: "Chuva", cobra: true })).json()).toEqual({ mensagem: "Gravação cancelada. O videomaker recebeu o link para mandar a nota." })
+    const nf = await db.notaFiscalUpload.findFirstOrThrow({ where: { demandaId: id, videomakerId: vm } })
+    expect(nf.status).toBe("pendente")
+    expect((await textos(id)).some((t) => t.includes("taxa de cancelamento") && t.includes(`/nf-upload/${nf.token}`))).toBe(true)
+    // No quadro, a cobrança vira "Falta a nota" para quem vê nota.
+    como(pessoas.financeiro, "solicitante")
+    expect(situacaoDaNota((await noQuadro(id))!)).toMatchObject({ etapa: "falta" })
+  })
+
+  it("convite sem resposta para quem não está escalado: o convidado também é avisado", async () => {
+    const id = await gravacao("captacao_agendada")
+    // O convite não escala ninguém (lib/convites.ts): a gravação segue sem videomaker.
+    await db.demanda.update({ where: { id }, data: { statusInterno: "aguardando_triagem", statusVisivel: "entrada", videomakerId: null } })
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm, token: `tok-${randomUUID()}`, status: "pendente", expiresAt: new Date(Date.now() + 86400_000) } })
+    como(pessoas.admin, "admin")
+    expect(await (await pedir(id, { motivo: "Cliente desistiu" })).json()).toEqual({ mensagem: "Gravação cancelada. O videomaker foi avisado." })
+    expect((await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id } })).status).toBe("expirado")
+    expect((await textos(id)).some((t) => t.includes("Gravação cancelada") && t.includes("Pode liberar a sua agenda"))).toBe(true)
+  })
+
+  it("com o vídeo já pronto: no quadro aparece cancelada, não \"Enviado ao cliente\"", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "aprovado", statusVisivel: "para_postar", linkFinal: "https://drive.example/pronto" } })
+    como(pessoas.admin, "admin")
+    expect((await pedir(id, { motivo: "O cliente não quis o vídeo" })).status).toBe(200)
+    const card = await noQuadro(id) as unknown as Parameters<typeof foiCancelada>[0]
+    expect(card.historicos?.some((h) => h.observacao?.startsWith("Gravação cancelada"))).toBe(true)
+    expect(foiCancelada(card)).toBe(true)
+  })
+
+  it("concluída não se cancela; quem não opera não cancela", async () => {
+    const id = await gravacao("captacao_agendada")
+    await db.demanda.update({ where: { id }, data: { statusInterno: "entregue_cliente", statusVisivel: "finalizado", linkFinal: "https://drive.example/v" } })
+    como(pessoas.admin, "admin")
+    expect((await pedir(id, { motivo: "Chuva", cobra: false })).status).toBe(409)
+    const outra = await gravacao("captacao_agendada")
+    como(pessoas.equipe, "solicitante")
+    expect((await pedir(outra, { motivo: "Chuva", cobra: false })).status).toBe(403)
+  })
+})

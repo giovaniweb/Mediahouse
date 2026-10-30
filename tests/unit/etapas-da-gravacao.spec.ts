@@ -10,7 +10,10 @@ import {
   rotuloDoTipoDeGravacao,
   etapaDaGravacao,
   faltaOMaterial,
+  foiCancelada,
   materialChegouAgora,
+  perguntaCobranca,
+  acaoDaGravacao,
   passoDaGravacao,
   situacaoDaNota,
   statusAoSoltar,
@@ -198,5 +201,43 @@ describe("tipo, brinde e o que levar", () => {
     expect(rotuloDoTipoDeGravacao("demonstracao")).toBe("Demonstração")
     expect(ehTipoDeGravacao("evento")).toBe(true)
     expect(ehTipoDeGravacao("treinamento")).toBe(false)
+  })
+})
+
+describe("gravação cancelada", () => {
+  it("é a encerrada sem vídeo entregue; com vídeo, foi entregue", () => {
+    expect(foiCancelada({ statusInterno: "encerrado" })).toBe(true)
+    expect(foiCancelada({ statusInterno: "encerrado", linkFinal: "https://drive/v" })).toBe(false)
+    expect(foiCancelada({ statusInterno: "entregue_cliente" })).toBe(false)
+  })
+  it("pergunta se o videomaker cobra só quando ele confirmou e o material não chegou", () => {
+    expect(perguntaCobranca({ statusInterno: "captacao_agendada" })).toBe(true)
+    expect(perguntaCobranca({ statusInterno: "videomaker_notificado" })).toBe(false)
+    expect(perguntaCobranca({ statusInterno: "brutos_enviados" })).toBe(false)
+  })
+  it("no quadro e na linha do tempo, \"Gravação cancelada\" e não \"Enviado ao cliente\"", () => {
+    const job = { statusInterno: "encerrado" as const, videomakerId: "vm", videomaker: { nome: "João Martins" }, createdAt: "2026-10-20T12:00:00Z" }
+    expect(acaoDaGravacao(job, "2026-10-29")).toBe("Gravação cancelada")
+    const t = trilhaDoVideo(job, "2026-10-29")
+    expect(t.map((p) => p.estado)).toEqual(["feito", "feito", "pulado", "pulado", "pulado", "pulado"])
+    expect(t.at(-1)).toMatchObject({ id: "envio", detalhe: "cancelada" })
+  })
+  it("com o histórico: a marca do cancelamento vence o vídeo no link; entrega registrada não é cancelamento", () => {
+    const marca = { statusNovo: "encerrado", observacao: "Gravação cancelada: chuva" }
+    // Vídeo pronto e não enviado, cancelada: é cancelada, não "Enviado ao cliente".
+    expect(foiCancelada({ statusInterno: "encerrado", linkFinal: "https://drive/v", historicos: [marca] })).toBe(true)
+    // O fim normal depois da entrega (contagem de 15 dias → expirado → encerrado).
+    expect(foiCancelada({ statusInterno: "encerrado", historicos: [{ statusNovo: "entregue_cliente" }, { statusNovo: "encerrado" }] })).toBe(false)
+    expect(foiCancelada({ statusInterno: "expirado", historicos: [{ statusNovo: "contagem_15_dias_iniciada" }] })).toBe(false)
+    // Gravação antiga com vídeo no link e sem histórico: como antes, entregue.
+    expect(foiCancelada({ statusInterno: "encerrado", linkFinal: "https://drive/v", historicos: [] })).toBe(false)
+  })
+  it("o registro do cancelamento não conta como material chegado na linha do tempo", () => {
+    const base = { statusInterno: "encerrado" as const, videomakerId: "vm", videomaker: { nome: "João Martins" }, createdAt: "2026-10-20T12:00:00Z" }
+    const cancelada = { ...base, historicos: [{ statusNovo: "encerrado", observacao: "Gravação cancelada: chuva", createdAt: "2026-10-28T12:00:00Z" }] }
+    expect(trilhaDoVideo(cancelada, "2026-10-29").map((p) => p.estado)).toEqual(["feito", "feito", "pulado", "pulado", "pulado", "pulado"])
+    // Material que chegou antes do cancelamento continua feito, com o dia dele.
+    const depoisDoMaterial = { ...base, historicos: [{ statusNovo: "brutos_enviados", createdAt: "2026-10-25T15:00:00Z" }, ...cancelada.historicos] }
+    expect(trilhaDoVideo(depoisDoMaterial, "2026-10-29").find((p) => p.id === "material")).toMatchObject({ estado: "feito", detalhe: "25/10" })
   })
 })
