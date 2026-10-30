@@ -120,7 +120,7 @@ export default function AgendaPage() {
   const busyRef = useRef(false)
   const [actionError, setActionError] = useState("")
   const { data: session } = useSession()
-  const isAdmin = session?.user?.tipo === "admin"
+  const isAdmin = session?.user?.papel === "admin"
 
   const [mesAtual, setMesAtual] = useState(new Date())
   const [diaSelec, setDiaSelec] = useState<Date | null>(new Date())

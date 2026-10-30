@@ -31,6 +31,20 @@ export async function usuarioIdPorEmail(email: string): Promise<string | null> {
   return u?.id ?? null
 }
 
+/**
+ * Quem tem este e-mail, sem diferença de maiúscula, para VINCULAR (painel da
+ * plataforma): quem digita "Contato@..." procura a mesma pessoa. O índice único
+ * é sobre o texto exato, então pode haver duas grafias; aí não se adivinha.
+ */
+export async function usuarioPorEmail(email: string): Promise<{ id: string } | null> {
+  const achados = await prismaAuth.usuario.findMany({
+    where: { email: { equals: email.trim(), mode: "insensitive" } },
+    select: { id: true },
+    take: 2,
+  })
+  return achados.length === 1 ? achados[0] : null
+}
+
 /** Id de quem tem um telefone que contém `trecho`, em qualquer empresa. */
 export async function usuarioIdPorTelefone(trecho: string): Promise<string | null> {
   const u = await prismaAuth.usuario.findFirst({ where: { telefone: { contains: trecho } }, select: { id: true } })

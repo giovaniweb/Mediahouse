@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
   } : {}
 
   const isAdmin = temPapel(session, "admin")
-  const isVideomaker = session.user.tipo === "videomaker"
-  const isGestor = ["admin", "gestor", "operacao"].includes(session.user.tipo)
+  const isVideomaker = temPapel(session, "videomaker")
+  const isGestor = temPapel(session, "admin", "gestor", "operacao")
 
   let where: Record<string, unknown> = { ...dateFilter, organizacaoId }
 

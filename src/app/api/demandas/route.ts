@@ -2,7 +2,7 @@ import { filtroFilaTrabalho, estadoHistorico } from "@/lib/acervo-regras"
 import { numeroPagina } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
+import { ehGestor, temPapel } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { z } from "zod"
@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
   if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
   // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
-  if (session.user.tipo === "gestor_eventos") where.eventoGestaoId = { not: null }
+  if (temPapel(session, "gestor_eventos")) where.eventoGestaoId = { not: null }
 
   // Condições que internamente usam OR entram todas em AND[], para não se
   // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`

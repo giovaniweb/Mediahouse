@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 // Ver src/lib/prisma-admin.ts.
 import { prismaAdmin as prisma } from "@/lib/prisma-admin"
 import { requireSuperAdmin } from "@/lib/org"
+import { usuarioPorEmail } from "@/lib/criar-usuario"
 import type { TipoUsuario } from "@prisma/client"
 
 type Params = { params: Promise<{ id: string }> }
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const usuario = body.usuarioId
     ? await prisma.usuario.findUnique({ where: { id: body.usuarioId as string }, select: { id: true } })
-    : body.email
-      ? await prisma.usuario.findUnique({ where: { email: body.email as string }, select: { id: true } })
+    : typeof body.email === "string" && body.email.trim()
+      ? await usuarioPorEmail(body.email)
       : null
   if (!usuario) return NextResponse.json({ error: "Usuário não encontrado (informe usuarioId ou email)" }, { status: 404 })
 

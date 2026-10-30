@@ -47,7 +47,8 @@ interface KanbanBoardProps {
   onDelete?: (demandaId: string) => void
   onDuplicate?: (demandaId: string) => void
   onMarkPosted?: (id: string, tipo: string, link?: string) => Promise<void>
-  userTipo?: string
+  /** Papel na empresa ATIVA (session.user.papel), não o cargo global. */
+  papel?: string | null
   /** Sobrescreve os rótulos das colunas (ex.: kanban de Design) */
   labels?: Record<string, string>
   /** Colunas customizadas (ex.: kanban do Growth). Default: COLUNAS (audiovisual). */
@@ -73,7 +74,7 @@ const COLUNAS_BLOQUEADAS_VM: string[] = ["para_postar", "finalizado"]
 // deixou o drag-and-drop livre por tanto tempo — ver AUDITORIA-JOB-WORKFLOW §2.1.
 const COLUNAS_BLOQUEADAS_ESPELHO: string[] = ["para_postar", "finalizado"]
 
-export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, userTipo, labels, colunas, getColuna, colunaParaStatus = AUDIOVISUAL_COLUNA_PARA_STATUS, openMode = "modal", historico = "/historico/audiovisual" }: KanbanBoardProps) {
+export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPosted, papel, labels, colunas, getColuna, colunaParaStatus = AUDIOVISUAL_COLUNA_PARA_STATUS, openMode = "modal", historico = "/historico/audiovisual" }: KanbanBoardProps) {
   const COLS = colunas ?? COLUNAS
   const colDe = getColuna ?? ((d: Demanda) => d.statusVisivel)
   const savingOrder = useRef(false)
@@ -91,10 +92,10 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     const origemCol = result.source.droppableId
 
     // Gestor de eventos é só acompanhamento — não move cards (quem move é o time)
-    if (userTipo === "gestor_eventos") return
+    if (papel === "gestor_eventos") return
 
     // Restrição para videomakers externos: só podem mover até "aprovacao"
-    if (userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(destinoCol)) {
+    if (papel === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(destinoCol)) {
       return // silently block — the lock icon communicates the restriction
     }
 
@@ -173,7 +174,7 @@ export function KanbanBoard({ demandas, onMove, onDelete, onDuplicate, onMarkPos
     return [...ordered, ...rest]
   }
 
-  const isBloqueada = (colId: string) => userTipo === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(colId)
+  const isBloqueada = (colId: string) => papel === "videomaker" && COLUNAS_BLOQUEADAS_VM.includes(colId)
 
   return (
     <>

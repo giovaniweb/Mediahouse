@@ -11,8 +11,14 @@ const pedido = (id: string, statusVisivel: string, extra: Partial<PedidoSocial> 
 
 describe("departamentosVisiveis", () => {
   it("gestor vê os três; sem o módulo Growth, o Growth some", () => {
-    expect(departamentosVisiveis({ tipo: "gestor", membership: { areas: [] } })).toEqual(["audiovisual", "growth", "social"])
-    expect(departamentosVisiveis({ tipo: "admin", membership: null, modulos: { growth: false } })).toEqual(["audiovisual", "social"])
+    expect(departamentosVisiveis({ membership: { papel: "gestor", areas: [] } })).toEqual(["audiovisual", "growth", "social"])
+    expect(departamentosVisiveis({ membership: { papel: "admin", areas: [] }, modulos: { growth: false } })).toEqual(["audiovisual", "social"])
+  })
+  it("o cargo global de outra empresa não abre a gestão nesta", () => {
+    // Admin na Contourline, videomaker na empresa ativa.
+    const me = { tipo: "admin", membership: { papel: "videomaker", areas: ["audiovisual"] }, permissoes: {} }
+    expect(acessoDasAreas(me)?.gestor).toBe(false)
+    expect(departamentosVisiveis(me)).toEqual(["audiovisual"])
   })
   it("admin pelo papel na empresa vê os três mesmo com o tipo legado de outra coisa", () => {
     const me = { tipo: "solicitante", membership: { papel: "admin", areas: ["audiovisual"] }, permissoes: { verSocial: false, verDesign: false } }
