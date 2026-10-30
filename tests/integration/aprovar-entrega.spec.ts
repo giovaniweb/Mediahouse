@@ -59,6 +59,8 @@ beforeAll(async () => {
     id: editorId, nome: "Editor", usuarioId: pessoas.editor, telefone: "5511999990000",
     especialidade: [], habilidades: [], redesSociais: [], areasAtuacao: [], equipamentos: [],
   } })
+  // Sem o vínculo o card não é "dele" nesta empresa, e a ficha responde 404.
+  await db.editorOrganizacao.create({ data: { editorId, organizacaoId: org } })
 })
 
 beforeEach(() => { agendados.length = 0 })
@@ -70,6 +72,7 @@ afterAll(async () => {
   await db.comentario.deleteMany({ where: { demandaId: { in: ids } } })
   await db.aprovacaoVideo.deleteMany({ where: { demandaId: { in: ids } } })
   await db.demanda.deleteMany({ where: { organizacaoId: org } })
+  await db.editorOrganizacao.deleteMany({ where: { editorId } })
   await db.editor.deleteMany({ where: { id: editorId } })
   await db.organizacao.delete({ where: { id: org } })
   await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
