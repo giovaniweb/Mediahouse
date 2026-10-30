@@ -10,8 +10,8 @@ type Params = { params: Promise<{ id: string }> }
 // POST /api/usuarios/[principalId]/mesclar
 // Body: { secundarioId }
 // Mescla duas contas NA ORGANIZAÇÃO ATIVA: move demandas da org, copia dados faltantes e
-// tira o secundário desta empresa (lib/remover-da-empresa.ts). A conta dele só é
-// inativada se esta era a única empresa — as outras não são afetadas.
+// desativa o secundário aqui (lib/remover-da-empresa.ts): se esta era a única empresa
+// dele, a conta é inativada e o WhatsApp sai; senão, perde só o vínculo daqui.
 export async function POST(req: NextRequest, { params }: Params) {
   const acesso = await requireAcesso("gerenciarUsuarios")
   if (acesso instanceof NextResponse) return acesso
@@ -63,10 +63,10 @@ export async function POST(req: NextRequest, { params }: Params) {
       where: { organizacaoId, solicitanteId: secundarioId },
       data: { solicitanteId: principalId },
     })
-    // 3. O secundário sai desta empresa. Antes ele só era inativado e ficava aqui
-    // com o mesmo WhatsApp do principal — o que bastava para travar todo aviso
-    // para esse número.
-    await removerDaEmpresa(tx, { usuarioId: secundarioId, organizacaoId, inativarConta: soNestaOrg })
+    // 3. Desativa o secundário. Antes ele só era inativado e ficava com o mesmo
+    // WhatsApp do principal — o que bastava para travar todo aviso para esse
+    // número. O telefone dele já foi copiado no passo 1, se faltava ao principal.
+    await removerDaEmpresa(tx, { usuarioId: secundarioId, organizacaoId, soNestaEmpresa: soNestaOrg })
     return atualizado
   }))
 

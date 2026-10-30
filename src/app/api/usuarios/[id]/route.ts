@@ -118,9 +118,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // DELETE /api/usuarios/[id] — tira a pessoa da ORGANIZAÇÃO ATIVA (admin/gestor).
-// Padrão: sai desta empresa e o histórico fica (lib/remover-da-empresa.ts); se esta
-// era a única empresa dela, a conta também é inativada. `?modo=hard`: apaga de vez,
-// só cadastro sem vínculo nenhum.
+// Padrão (lib/remover-da-empresa.ts): só nesta empresa → conta inativada e WhatsApp
+// apagado, com o vínculo mantido para o histórico; em outras também → sai só desta.
+// `?modo=hard`: apaga de vez, só cadastro sem vínculo nenhum.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const acesso = await requireAcesso("gerenciarUsuarios")
   if (acesso instanceof NextResponse) return acesso
@@ -173,9 +173,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ ok: true, hardDelete: true })
   }
 
-  // ── Padrão: sai desta empresa, o histórico fica ─────────────────────────────
-  // Antes só inativava a conta e deixava o vínculo: o cadastro continuava na
-  // empresa e, com o mesmo WhatsApp de outro, travava os avisos dos dois.
+  // ── Padrão: desativa aqui, o histórico fica ─────────────────────────────────
+  // Antes só inativava a conta e deixava o WhatsApp nela: com o mesmo número de
+  // outro cadastro, travava os avisos dos dois.
   //
   // A empresa não pode ficar sem quem administre as pessoas dela.
   if (membership.papel === "admin") {
@@ -187,7 +187,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
   }
   await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
-    await removerDaEmpresa(tx, { usuarioId: id, organizacaoId, inativarConta: totalOrgs <= 1 })
+    await removerDaEmpresa(tx, { usuarioId: id, organizacaoId, soNestaEmpresa: totalOrgs <= 1 })
     await registrarAuditoria(tx, acesso, { acao: "usuario.removido", recurso: "usuario", recursoId: id, correlationId: correlacaoAuditoria(), depois: { ativo: false } })
   }))
   const usuario = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, status: true } })

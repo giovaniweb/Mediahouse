@@ -13,7 +13,8 @@ import { POST as mesclarPOST } from "@/app/api/usuarios/[id]/mesclar/route"
 
 // O caso real (30/10/2026): o cadastro inativo de uma pessoa, com o mesmo
 // WhatsApp do cadastro ativo, deixava o número "ambíguo" e todo aviso para ele
-// era descartado. Excluir e mesclar têm que tirar o cadastro velho da conta.
+// era descartado. Excluir e mesclar têm que tirar o cadastro velho da conta —
+// sem apagar o vínculo, que segura o nome no histórico (ver tests/runtime).
 const prefix = `integ-${randomUUID()}`
 const org = `${prefix}-org`, orgSoAdmin = `${prefix}-org2`
 const id = (s: string) => `${prefix}-${s}`
@@ -27,6 +28,7 @@ const excluir = (alvo: string) => DELETE(req(`/api/usuarios/${alvo}`, { method: 
 const quem = (telefone: string) => identidadeWhatsApp(org, telefone, db)
 const membro = (usuarioId: string, organizacaoId = org) =>
   db.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } } })
+const conta = (usuarioId: string) => db.usuario.findUnique({ where: { id: usuarioId }, select: { status: true, telefone: true } })
 
 beforeAll(async () => {
   await db.organizacao.createMany({ data: [org, orgSoAdmin].map(o => ({ id: o, nome: o, slug: o })) })
@@ -66,15 +68,15 @@ afterAll(async () => {
 beforeEach(() => { estado.sessao = { user: { id: id("admin"), organizacaoId: org, tipo: "admin" } } })
 
 describe("excluir e mesclar liberam o WhatsApp do cadastro que fica", () => {
-  it("cadastro inativo com o mesmo número: excluir tira da empresa e o número volta a ser da pessoa ativa", async () => {
+  it("cadastro inativo com o mesmo número: excluir apaga o WhatsApp dele e o número volta a ser da pessoa ativa", async () => {
     expect((await quem(tel(1))).usuario).toBeNull()
 
     const res = await excluir(id("joaoVelho"))
     expect(res.status).toBe(200)
     expect((await res.json()).escopo).toBe("global")
 
-    expect(await membro(id("joaoVelho"))).toBeNull()
-    expect((await db.usuario.findUnique({ where: { id: id("joaoVelho") } }))?.status).toBe("inativo")
+    expect(await membro(id("joaoVelho"))).not.toBeNull()
+    expect(await conta(id("joaoVelho"))).toEqual({ status: "inativo", telefone: null })
     expect((await quem(tel(1))).usuario?.id).toBe(id("joao"))
   })
 
@@ -83,6 +85,7 @@ describe("excluir e mesclar liberam o WhatsApp do cadastro que fica", () => {
 
     expect((await excluir(id("kev2"))).status).toBe(200)
 
+    expect(await conta(id("kev2"))).toEqual({ status: "inativo", telefone: null })
     const vinculo = await db.videomakerOrganizacao.findUnique({ where: { organizacaoId_videomakerId: { organizacaoId: org, videomakerId: id("vk2") } } })
     expect(vinculo?.status).toBe("inativo")
     const identidade = await quem(tel(2))
@@ -90,7 +93,7 @@ describe("excluir e mesclar liberam o WhatsApp do cadastro que fica", () => {
     expect(identidade.videomaker?.id).toBe(id("vk1"))
   })
 
-  it("mesclar tira o secundário da empresa, em vez de só inativá-lo aqui", async () => {
+  it("mesclar apaga o WhatsApp do secundário, em vez de só inativá-lo", async () => {
     expect((await quem(tel(3))).usuario).toBeNull()
 
     const res = await mesclarPOST(
@@ -99,7 +102,7 @@ describe("excluir e mesclar liberam o WhatsApp do cadastro que fica", () => {
     )
     expect(res.status).toBe(200)
 
-    expect(await membro(id("fab2"))).toBeNull()
+    expect(await conta(id("fab2"))).toEqual({ status: "inativo", telefone: null })
     expect((await quem(tel(3))).usuario?.id).toBe(id("fab"))
   })
 

@@ -733,10 +733,11 @@ export default function PessoasAcessosPage() {
   }
 
   // Cadastro vazio é apagado de vez (a API revalida via ?modo=hard). Com
-  // histórico, a pessoa sai da empresa e o histórico fica com o nome dela.
+  // histórico, é desativado aqui e o histórico fica com o nome.
   async function excluirPessoa() {
     if (!deleteTarget) return
     const deVez = !!deleteTarget.vinculos?.podeExcluir
+    const outraEmpresa = (deleteTarget.vinculos?.memberships ?? 0) > 1
     setDeletando(true)
     try {
       const res = await fetch(`/api/usuarios/${deleteTarget.id}${deVez ? "?modo=hard" : ""}`, { method: "DELETE" })
@@ -744,7 +745,11 @@ export default function PessoasAcessosPage() {
         const err = await res.json().catch(() => ({} as { error?: string }))
         throw new Error(err.error ?? "Erro ao excluir")
       }
-      toast.success(deVez ? `${deleteTarget.nome} foi excluído definitivamente.` : `${deleteTarget.nome} saiu da empresa.`)
+      toast.success(
+        deVez ? `${deleteTarget.nome} foi excluído definitivamente.`
+        : outraEmpresa ? `${deleteTarget.nome} saiu desta empresa.`
+        : `Cadastro de ${deleteTarget.nome} desativado, e o WhatsApp liberado.`
+      )
       if (pessoaAbertaId === deleteTarget.id) setPessoaAbertaId(null)
       setDeleteTarget(null)
       mutate()
@@ -1382,6 +1387,7 @@ export default function PessoasAcessosPage() {
         const v = deleteTarget.vinculos
         const carregando = deleteTarget.carregando
         const podeExcluir = !!v?.podeExcluir
+        const outraEmpresa = (v?.memberships ?? 0) > 1
         return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => !deletando && setDeleteTarget(null)}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4" onClick={ev => ev.stopPropagation()}>
@@ -1419,12 +1425,23 @@ export default function PessoasAcessosPage() {
             ) : (
               <>
                 <p className="text-sm text-zinc-300">
-                  <strong>{deleteTarget.nome}</strong> tem histórico no sistema, então o cadastro não pode ser apagado de vez. Ela vai <strong>sair desta empresa</strong>:
+                  <strong>{deleteTarget.nome}</strong> tem histórico no sistema, então o cadastro não pode ser apagado: o nome precisa continuar nos pedidos e comentários.{" "}
+                  {outraEmpresa ? <>Aqui, o cadastro <strong>sai desta empresa</strong>:</> : <>O cadastro vai ser <strong>desativado</strong>:</>}
                 </p>
                 <ul className="text-xs text-zinc-400 space-y-1">
-                  <li>• some da lista de pessoas e perde o acesso;</li>
-                  <li>• para de receber avisos, e o WhatsApp dela deixa de travar outro cadastro com o mesmo número;</li>
-                  <li>• pedidos, comentários e histórico continuam, com o nome dela.</li>
+                  {outraEmpresa ? (
+                    <>
+                      <li>• some da lista desta empresa e perde o acesso a ela;</li>
+                      <li>• deixa de travar outro cadastro daqui com o mesmo WhatsApp;</li>
+                      <li>• na outra empresa, nada muda.</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>• perde o acesso e fica na lista como inativo;</li>
+                      <li>• o WhatsApp sai deste cadastro e deixa de travar outro cadastro com o mesmo número;</li>
+                      <li>• pedidos, comentários e histórico continuam, com o nome.</li>
+                    </>
+                  )}
                 </ul>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                   <p className="text-[11px] font-semibold text-zinc-400 mb-1">O que fica no histórico</p>
@@ -1442,12 +1459,9 @@ export default function PessoasAcessosPage() {
                     Se for a mesma pessoa de outro cadastro, use Mesclar: as demandas vão junto para o cadastro que fica.
                   </p>
                 )}
-                {(v?.memberships ?? 0) > 1 && (
-                  <p className="text-xs text-zinc-400">Ela também está em outra empresa, e lá nada muda.</p>
-                )}
                 <button onClick={excluirPessoa} disabled={deletando}
                   className="w-full bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
-                  {deletando ? "Removendo..." : "Remover da empresa"}
+                  {deletando ? "Salvando..." : outraEmpresa ? "Remover desta empresa" : "Desativar cadastro"}
                 </button>
                 <div className="flex gap-2">
                   <button
@@ -1557,7 +1571,7 @@ export default function PessoasAcessosPage() {
                   {(mesclarModal.qtdDemandas ?? 0) > 0 && (
                     <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> <strong className="text-zinc-200">{mesclarModal.qtdDemandas}</strong> demanda(s) migrada(s)</p>
                   )}
-                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado <strong>sai desta empresa</strong></p>
+                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado <strong>desativado aqui</strong>, sem travar o WhatsApp</p>
                 </div>
               )}
               <div className="flex gap-2 pt-1">
