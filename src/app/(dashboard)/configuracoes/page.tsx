@@ -18,13 +18,28 @@ import Link from "next/link"
 
 type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos"
 
+function SecaoEvolution({ recolhida, children }: { recolhida: boolean; children: React.ReactNode }) {
+  if (!recolhida) return <>{children}</>
+  return (
+    <details className="border-t border-zinc-800 pt-4">
+      <summary className="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300">
+        Usar um servidor de WhatsApp próprio (avançado)
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  )
+}
+
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
 function TabWhatsapp() {
-  const { data, mutate } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string; ativo: boolean } | null }>(
+  const { data, mutate } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string; ativo: boolean } | null; gerenciada?: boolean }>(
     "/api/configuracoes/whatsapp", fetcher
   )
   const cfg = data?.config
+  // Empresa nova no servidor do NuFlow: não há URL nem chave a preencher, o QR
+  // cria a conexão. O formulário fica recolhido para quem tem servidor próprio.
+  const semConfigGerenciada = !!data && !cfg && !!data.gerenciada
   const [form, setForm] = useState({ instanceUrl: cfg?.instanceUrl ?? "", apiKey: cfg?.apiKey ?? "", instanceId: cfg?.instanceId ?? "" })
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
@@ -192,6 +207,7 @@ function TabWhatsapp() {
       </div>
 
       {/* Configuracao da Evolution API */}
+      <SecaoEvolution recolhida={semConfigGerenciada}>
       <div className="border-t border-zinc-800 pt-5">
         <p className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
           <Settings className="w-4 h-4 text-zinc-500" />
@@ -241,6 +257,7 @@ function TabWhatsapp() {
           </button>
         </div>
       </div>
+      </SecaoEvolution>
 
       <div className="border-t border-zinc-800 pt-4">
         {/* Esta lista dizia seis itens e nunca foi atualizada — só o quadro de
@@ -649,11 +666,15 @@ function TabWhatsappQR() {
     }
   }
 
-  // Verifica se a config do WhatsApp existe antes de tentar
-  const { data: wppConfig } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string } | null }>(
+  // Verifica se a config do WhatsApp existe antes de tentar. Sem ela, o QR só
+  // pode ser gerado no servidor do NuFlow (`gerenciada`): a rota cria a
+  // instância da empresa. Até 30/10/2026 o botão travava aqui mesmo assim, e a
+  // empresa nova nunca chegava à criação automática.
+  const { data: wppConfig, mutate: recarregarConfig } = useSWR<{ config: { instanceUrl: string; apiKey: string; instanceId: string } | null; gerenciada?: boolean }>(
     "/api/configuracoes/whatsapp", fetcher
   )
   const temConfig = !!(wppConfig?.config?.instanceUrl && wppConfig?.config?.apiKey && wppConfig?.config?.instanceId)
+  const podeGerar = temConfig || !!wppConfig?.gerenciada
 
   async function buscarQR() {
     setErro(null)
@@ -668,6 +689,8 @@ function TabWhatsappQR() {
         setErro(data.error)
         return
       }
+      // A primeira geração pode ter criado a configuração: a tela de cima passa a mostrá-la.
+      if (!temConfig) recarregarConfig()
 
       if (data.conectado) {
         setConectado(true)
@@ -700,8 +723,16 @@ function TabWhatsappQR() {
         </div>
       </div>
 
+      {/* Empresa nova no servidor do NuFlow: nada a preencher */}
+      {wppConfig !== undefined && !temConfig && podeGerar && (
+        <p className="text-xs text-zinc-400">
+          O NuFlow cria a conexão desta empresa. Clique em <strong className="text-zinc-300">Gerar QR Code</strong> e
+          leia com o celular do número que vai mandar os avisos.
+        </p>
+      )}
+
       {/* Aviso: sem config */}
-      {wppConfig !== undefined && !temConfig && (
+      {wppConfig !== undefined && !podeGerar && (
         <div className="bg-amber-500/10 border border-amber-800 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-300">
@@ -790,7 +821,7 @@ function TabWhatsappQR() {
       {!qrCode && !conectado && (
         <button
           onClick={buscarQR}
-          disabled={loading || (wppConfig !== undefined && !temConfig)}
+          disabled={loading || (wppConfig !== undefined && !podeGerar)}
           className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
         >
           {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}

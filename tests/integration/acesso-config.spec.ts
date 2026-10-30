@@ -147,6 +147,22 @@ describe("handler real com banco descartável", () => {
     expect(await db.configWhatsapp.findFirst({ where: { organizacaoId: orgA } }))
       .toMatchObject({ instanceUrl: "https://outro.invalid", apiKey: "chave-nova-sintetica" })
   })
+  it("diz à tela se a empresa sem configuração pode gerar o QR no servidor do NuFlow", async () => {
+    const { GET: whatsappGET } = await import("@/app/api/configuracoes/whatsapp/route")
+    await db.configWhatsapp.deleteMany({ where: { organizacaoId: orgA } })
+    vi.stubEnv("EVOLUTION_API_URL", "https://evo.invalid")
+    vi.stubEnv("EVOLUTION_API_KEY", "chave-mestra-sintetica")
+    try {
+      const res = await whatsappGET()
+      const corpo = await res.json()
+      expect(corpo).toEqual({ config: null, gerenciada: true })
+      expect(JSON.stringify(corpo)).not.toContain("chave-mestra-sintetica")
+      vi.stubEnv("EVOLUTION_API_KEY", "")
+      expect((await (await whatsappGET()).json()).gerenciada).toBe(false)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
   it("todos os handlers críticos negam falta de capacidade antes de efeitos", async () => {
     estado.cookie = orgB
     await db.permissaoUsuario.create({ data: { usuarioId: usuario, organizacaoId: orgB } })
