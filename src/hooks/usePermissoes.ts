@@ -42,7 +42,7 @@ export function useMe() {
 export function usePerm(key: string): boolean {
   const { data } = useMe()
   if (!data?.permissoes) return false
-  // Admin/gestor sempre tem tudo
-  if (data.tipo === "admin" || data.tipo === "gestor") return true
+  // Admin/gestor DA EMPRESA ATIVA sempre tem tudo — pelo vínculo, não pelo cargo global
+  if (data.membership?.papel === "admin" || data.membership?.papel === "gestor") return true
   return !!data.permissoes[key]
 }

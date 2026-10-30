@@ -49,6 +49,7 @@ import { useNavegacaoMovel } from "@/components/layout/NavegacaoMovel"
 import { signOut } from "next-auth/react"
 import { VersaoNoAr } from "@/components/layout/VersaoNoAr"
 import { LogoNuFlow } from "@/components/marca/Marca"
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 const sections = [
   {
@@ -169,6 +170,11 @@ export function Sidebar() {
   const expandedLabel = expanded?.path === pathname ? expanded.label : currentSection
   const { data: me } = useMe()
   const { aberta, fechar } = useNavegacaoMovel()
+  // O papel na empresa ATIVA decide o menu, não o cargo global (`tipo`): o
+  // Gabriel é videomaker na Contourline e admin na GH Produção, e até 30/10/2026
+  // entrava na GH só com "Minha Área".
+  const papel = me?.membership?.papel
+  const ehVideomaker = papel === "videomaker"
 
   const mods = me?.modulos
   // Áreas pela regra única do menu, do dashboard e do histórico.
@@ -262,7 +268,7 @@ export function Sidebar() {
           </Link>
 
           {/* Link exclusivo para videomakers externos */}
-          {me?.tipo === "videomaker" && (
+          {ehVideomaker && (
             <div>
               <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-3 mb-1">
                 Minha Área
@@ -294,7 +300,10 @@ export function Sidebar() {
             </div>
           )}
 
-          {me?.tipo !== "videomaker" && navigation.map((section) => {
+          {navigation.map((section) => {
+            // Videomaker externo fica na "Minha Área"; a seção da plataforma
+            // continua para quem administra a plataforma, em qualquer empresa.
+            if (ehVideomaker && !section.superAdmin) return null
             // Módulos congelados — ocultos da navegação (ver src/lib/modulos.ts)
             if (section.label === "Growth" && mods && !mods.growth) return null
             if (section.label === "Eventos" && mods && !mods.eventos) return null
@@ -367,7 +376,7 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-white font-medium truncate">{me.nome}</p>
-                <p className="text-[10px] text-zinc-500 capitalize">{me.tipo}</p>
+                <p className="text-[10px] text-zinc-500">{papel ? FUNCAO_LABEL[papel] ?? papel : ""}</p>
               </div>
             </div>
             <button

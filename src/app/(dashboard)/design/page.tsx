@@ -160,7 +160,7 @@ function GrowthKanban() {
           onMove={handleMove}
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
-          userTipo={session?.user?.tipo}
+          papel={session?.user?.papel}
           colunas={GROWTH_COLUNAS}
           getColuna={(d) => growthColunaDe(d.statusInterno)}
           colunaParaStatus={GROWTH_COLUNA_PARA_STATUS}

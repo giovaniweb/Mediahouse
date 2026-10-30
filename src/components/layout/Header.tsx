@@ -41,9 +41,11 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
             <span className="hidden sm:inline">Início</span>
           </Link>
 
-          {user?.tipo && (
+          {/* O papel na empresa aberta, não o cargo global: quem é videomaker
+              numa empresa pode ser admin em outra. */}
+          {user?.papel && (
             <Badge variant="outline" className="text-xs capitalize border-zinc-700 text-zinc-300">
-              {FUNCAO_LABEL[user.tipo] ?? user.tipo}
+              {FUNCAO_LABEL[user.papel] ?? user.papel}
             </Badge>
           )}
 
@@ -74,7 +76,7 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
                 <User className="w-4 h-4" />
                 Meu Perfil
               </DropdownMenuItem>
-              {["admin", "gestor"].includes(user?.tipo ?? "") && (
+              {["admin", "gestor"].includes(user?.papel ?? "") && (
                 <DropdownMenuItem
                   onClick={() => window.location.href = "/configuracoes"}
                   className="flex items-center gap-2 cursor-pointer"

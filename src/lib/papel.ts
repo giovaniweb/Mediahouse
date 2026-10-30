@@ -11,14 +11,15 @@
 import { NextResponse } from "next/server"
 import type { Session } from "next-auth"
 
-type ComPapel = { papel?: string | null; tipo?: string | null }
+type ComPapel = { papel?: string | null }
 
-// Papel efetivo na organização ativa. O fallback para `tipo` cobre sessões
-// antigas (token emitido antes de `papel` existir) e some quando os JWTs rodarem.
+// Papel efetivo na organização ativa. Desde 30/10/2026 a sessão o relê do vínculo
+// da empresa ativa a cada `auth()` (comPapelDaEmpresaAtiva, em lib/org.ts). Não
+// há mais recaída para `tipo`: sem vínculo ativo o papel é nulo, e o cargo
+// global de outra empresa não autoriza nada aqui.
 export function papelNaOrg(session: Session | null | undefined): string | null {
   const u = session?.user as ComPapel | undefined
-  if (!u) return null
-  return u.papel ?? u.tipo ?? null
+  return u?.papel ?? null
 }
 
 export function temPapel(session: Session | null | undefined, ...papeis: string[]): boolean {

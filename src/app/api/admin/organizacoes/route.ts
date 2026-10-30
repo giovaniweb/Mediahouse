@@ -5,11 +5,16 @@ import { auth } from "@/lib/auth"
 // Ver src/lib/prisma-admin.ts.
 import { prismaAdmin as prisma } from "@/lib/prisma-admin"
 import { requireSuperAdmin } from "@/lib/org"
+import { SLUG_PUBLICO, SUBDOMINIOS_RESERVADOS } from "@/lib/subdominio"
+import { usuarioPorEmail } from "@/lib/criar-usuario"
 import type { TipoUsuario } from "@prisma/client"
 
-// Gera um slug seguro a partir do nome (a-z0-9-, sem acentos).
-function gerarSlug(nome: string): string {
-  return nome
+// Gera um slug seguro (a-z0-9-, sem acentos) a partir do nome ou do slug
+// digitado. O digitado também passa por aqui: até 30/10/2026 ele era gravado
+// como veio, e uma empresa ganhou slug com espaço e acento — o link /c/ dela
+// nunca abriu.
+function gerarSlug(texto: string): string {
+  return texto
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -18,6 +23,7 @@ function gerarSlug(nome: string): string {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .substring(0, 40)
+    .replace(/^-+|-+$/g, "")
 }
 
 // GET /api/admin/organizacoes — lista organizações (super-admin)
@@ -47,12 +53,13 @@ export async function POST(req: NextRequest) {
   const nome = (body.nome as string | undefined)?.trim()
   if (!nome) return NextResponse.json({ error: "Nome obrigatório" }, { status: 400 })
 
-  let slug = (body.slug as string | undefined)?.trim() || gerarSlug(nome)
-  if (!slug) return NextResponse.json({ error: "Slug inválido" }, { status: 400 })
+  let slug = gerarSlug((body.slug as string | undefined)?.trim() || nome)
+  if (!SLUG_PUBLICO.test(slug)) return NextResponse.json({ error: "Slug inválido: use letras, números e hífen." }, { status: 400 })
 
-  // Garante unicidade do slug (sufixo incremental se necessário)
+  // Garante unicidade do slug (sufixo incremental se necessário). Endereço
+  // reservado do NuFlow (www, api, teste…) conta como ocupado.
   const base = slug
-  for (let i = 2; await prisma.organizacao.findUnique({ where: { slug }, select: { id: true } }); i++) {
+  for (let i = 2; SUBDOMINIOS_RESERVADOS.has(slug) || await prisma.organizacao.findUnique({ where: { slug }, select: { id: true } }); i++) {
     slug = `${base}-${i}`
   }
 
@@ -62,14 +69,14 @@ export async function POST(req: NextRequest) {
   })
 
   // Vincula opcionalmente um usuário inicial como admin da nova org.
-  // body.adminUsuarioId (id) OU body.adminEmail (email existente).
+  // body.adminUsuarioId (escolhido na busca) OU body.adminEmail (e-mail existente).
   const adminUsuarioId = body.adminUsuarioId as string | undefined
-  const adminEmail = body.adminEmail as string | undefined
+  const adminEmail = (body.adminEmail as string | undefined)?.trim()
   let membership: { usuarioId: string; papel: TipoUsuario } | null = null
   if (adminUsuarioId || adminEmail) {
     const usuario = adminUsuarioId
       ? await prisma.usuario.findUnique({ where: { id: adminUsuarioId }, select: { id: true } })
-      : await prisma.usuario.findUnique({ where: { email: adminEmail! }, select: { id: true } })
+      : await usuarioPorEmail(adminEmail!)
     if (usuario) {
       await prisma.usuarioOrganizacao.upsert({
         where: { usuarioId_organizacaoId: { usuarioId: usuario.id, organizacaoId: org.id } },

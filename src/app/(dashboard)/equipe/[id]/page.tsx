@@ -41,8 +41,7 @@ export default function EditorDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { data: session } = useSession()
-  const userTipo = (session?.user as { tipo?: string } | undefined)?.tipo
-  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+  const isPrivileged = ["admin", "gestor"].includes(session?.user?.papel ?? "")
 
   const { data, error, isValidating, mutate } = useSWR(`/api/editores/${id}`, fetcher)
   const editor = data?.editor

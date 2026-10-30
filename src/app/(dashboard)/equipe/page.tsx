@@ -319,8 +319,7 @@ function EditorForm({ onClose }: { onClose: () => void }) {
     return () => { dialog?.close(); previous?.focus() }
   }, [])
   const { data: session } = useSession()
-  const userTipo = (session?.user as { tipo?: string } | undefined)?.tipo
-  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+  const isPrivileged = ["admin", "gestor"].includes(session?.user?.papel ?? "")
 
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({

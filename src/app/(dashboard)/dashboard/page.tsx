@@ -3,7 +3,6 @@
 import { DashboardPreview } from "@/components/dashboard/DashboardPreview"
 import { useEffect, useState } from "react"
 import useSWR from "swr"
-import { useSession } from "next-auth/react"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
 import { SolicitanteDashboard } from "@/components/dashboard/SolicitanteDashboard"
@@ -70,7 +69,6 @@ function InternalDashboard() {
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession()
   const { data: me, error: erroMe } = useMe()
 
   // Sem desvio para celular. O redirecionamento para /campo sobrou aqui depois
@@ -78,30 +76,10 @@ export default function DashboardPage() {
   // desligado, e a rota bloqueada devolve ao Dashboard — o celular ficava em
   // laço. O celular vê o mesmo Dashboard, com o menu em gaveta.
 
-  // Videomakers externos têm dashboard próprio
-  if (session?.user?.tipo === "videomaker") {
-    return (
-      <>
-        <Header title="Meu Painel" />
-        <VideomakerDashboard />
-      </>
-    )
-  }
-
-  // Designers têm painel próprio (suas artes)
-  if (session?.user?.tipo === "designer") {
-    return (
-      <>
-        <Header title="Meu Painel" />
-        <DesignerDashboard />
-      </>
-    )
-  }
-
-  // Quem pede acompanha os próprios pedidos, não os números da empresa. O papel
-  // é o do vínculo com a empresa ATIVA, lido pelo /api/me: a empresa vem do
-  // cookie e pode ter sido trocada depois do login, e o `papel` do JWT continua
-  // o da empresa de antes. Até ele chegar, não se decide — nem se busca nada.
+  // O painel de cada um sai do papel no vínculo com a empresa ATIVA, lido pelo
+  // /api/me — não do cargo global (`tipo`). A empresa vem do cookie e pode ter
+  // sido trocada depois do login: o Gabriel é videomaker na Contourline e admin
+  // na GH Produção. Até o vínculo chegar, não se decide — nem se busca nada.
   if (!me && !erroMe) {
     return (
       <>
@@ -112,7 +90,30 @@ export default function DashboardPage() {
       </>
     )
   }
-  if (me?.membership?.papel === "solicitante") {
+  const papel = me?.membership?.papel
+
+  // Videomakers externos têm dashboard próprio
+  if (papel === "videomaker") {
+    return (
+      <>
+        <Header title="Meu Painel" />
+        <VideomakerDashboard />
+      </>
+    )
+  }
+
+  // Designers têm painel próprio (suas artes)
+  if (papel === "designer") {
+    return (
+      <>
+        <Header title="Meu Painel" />
+        <DesignerDashboard />
+      </>
+    )
+  }
+
+  // Quem pede acompanha os próprios pedidos, não os números da empresa.
+  if (papel === "solicitante") {
     return (
       <>
         <Header title="Meus Pedidos" />

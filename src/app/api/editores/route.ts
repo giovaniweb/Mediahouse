@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId, semOrg } from "@/lib/org"
@@ -72,8 +73,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
-  const userTipo = (session.user as { tipo?: string }).tipo
-  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+  const isPrivileged = ehGestor(session)
 
   // Perfil recebe só o que é da REDE. Salário, carga, observação interna e
   // fiscais são de quem contratou e vão para o vínculo — inclusive o PIX, que

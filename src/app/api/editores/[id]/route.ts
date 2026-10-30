@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { vinculoDaEmpresa, fiscaisDaEmpresa } from "@/lib/editor-vinculo"
@@ -33,8 +34,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!perfil) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  const userTipo = (session.user as { tipo?: string }).tipo
-  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+  const isPrivileged = ehGestor(session)
 
   // Comercial e fiscais são desta empresa. Só admin/gestor recebe salário e
   // dados fiscais — a mesma regra de antes, agora sobre a tabela certa. Quem não
@@ -71,8 +71,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   })
   if (!alvo) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  const userTipo = (session.user as { tipo?: string }).tipo
-  const isPrivileged = userTipo === "admin" || userTipo === "gestor"
+  const isPrivileged = ehGestor(session)
 
   // Perfil recebe só o que é da REDE; o resto vai para o vínculo desta empresa.
   const editor = await prisma.editor.update({

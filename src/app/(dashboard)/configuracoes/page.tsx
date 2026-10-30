@@ -404,7 +404,7 @@ interface Param { id: string; valor: string; label: string; ativo: boolean; orde
 
 function TabParametros() {
   const { data: session } = useSession()
-  const podeExcluir = session?.user?.tipo === "admin"
+  const podeExcluir = session?.user?.papel === "admin"
   const [grupo, setGrupo] = useState("departamentos")
   const { data, error, isLoading, isValidating, mutate } = useSWR<{ parametros: Param[] }>(
     `/api/configuracoes/parametros?grupo=${grupo}&incluirInativos=1`, fetcher
@@ -1535,7 +1535,8 @@ export default function ConfiguracoesPage() {
 
   if (sessionStatus === "loading") return <><Header title="Configurações"/><p role="status" className="p-6 text-zinc-400">Carregando suas configurações…</p></>
 
-  if (!["admin", "gestor"].includes(session?.user?.tipo ?? "")) {
+  // Papel na empresa ATIVA: é a configuração dela (WhatsApp, e-mail, links).
+  if (!["admin", "gestor"].includes(session?.user?.papel ?? "")) {
     return (
       <>
         <Header title="Configurações" />

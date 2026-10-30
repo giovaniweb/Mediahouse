@@ -338,7 +338,7 @@ function DemandasKanban() {
       {/* Kanban com altura ancorada na viewport: a barra de rolagem fica no rodapé. */}
       <DemandaModal demandaId={selectedDetail} onClose={() => setSelectedDetail(null)} />
       <div data-kanban-container className="flex-1 min-h-[560px] px-4 pb-4 pt-2 overflow-hidden">
-        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={podeExcluir ? handleDelete : undefined} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} userTipo={session?.user?.tipo} />
+        <KanbanBoard demandas={demandas} onMove={handleMove} onDelete={podeExcluir ? handleDelete : undefined} onDuplicate={handleDuplicate} onMarkPosted={handleMarkPosted} papel={session?.user?.papel} />
       </div>
 
       {/* Modal Nova Demanda */}

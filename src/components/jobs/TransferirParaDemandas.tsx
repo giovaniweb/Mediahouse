@@ -58,8 +58,8 @@ export function TransferirParaDemandas({ jobId, codigo, aberto, onFechar }: {
     if (aberto) secao.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
   }, [aberto])
 
-  const { data: me } = useSWR<{ membership?: { papel?: string }; tipo?: string }>("/api/me", fetcher)
-  const papel = String(me?.membership?.papel ?? me?.tipo ?? "").toLowerCase()
+  const { data: me } = useSWR<{ membership?: { papel?: string } }>("/api/me", fetcher)
+  const papel = String(me?.membership?.papel ?? "").toLowerCase()
   const podeTransferir = papel === "admin" || papel === "gestor"
 
   const { data: previa, error: erroPrevia, mutate: recarregarPrevia } = useSWR<Previa>(
