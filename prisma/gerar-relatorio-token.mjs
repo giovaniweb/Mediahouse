@@ -3,9 +3,8 @@
 //   • página   /relatorio-executivo/<mes>?token=<token>
 //   • MCP      Authorization: Bearer <token>
 //
-// Pelo MCP o token também LÊ as demandas da empresa (título, status, prazo,
-// editor, briefing — sem valores). Quem recebe o token vê isso; cada consulta
-// fica na Auditoria como "Consulta pelo MCP".
+// Pelo MCP este token só abre os números do relatório. Demandas (ler e criar)
+// exigem a chave da PESSOA, gerada em Configurações → Assistentes (MCP).
 //
 // Uso:
 //   node prisma/gerar-relatorio-token.mjs <slug>            # mostra o token atual (ou cria se não houver)

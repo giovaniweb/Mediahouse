@@ -2,27 +2,36 @@ import { createHash } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
-import { correlacaoAuditoria, registrarAuditoria } from "@/lib/auditoria"
+import { correlacaoAuditoria, registrarAuditoria, type AcaoAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { consumirLimitePublico } from "@/lib/limite-publico"
 import { computeRelatorioExecutivo, mesesDisponiveis, orgPorRelatorioToken } from "@/lib/relatorio-executivo"
-import { ArgumentoInvalido, LIMITE_MAXIMO, LIMITE_PADRAO, lerDemanda, listarDemandas } from "@/lib/mcp-demandas"
+import {
+  ArgumentoInvalido, FORMATOS, LIMITE_MAXIMO, LIMITE_PADRAO, criarDemandaPeloAssistente, lerDemanda, listarDemandas,
+  opcoesParaCriar, type QuemPergunta,
+} from "@/lib/mcp-demandas"
+import { pessoaPorChaveMcp } from "@/lib/mcp-token"
 import { RecorteInvalido } from "@/lib/metricas-recorte"
 
 // Servidor MCP remoto (Streamable HTTP, stateless) do NuFlow.
 // Conecte em qualquer cliente MCP (Claude, etc.) com a URL: https://nuflow.space/api/mcp
-// Expõe ferramentas para puxar o Relatório Executivo de produção e para ler as
-// demandas (pedido e briefing, sem valores — ver src/lib/mcp-demandas.ts).
 //
-// AUTENTICAÇÃO: exige `Authorization: Bearer <relatorioToken>` da organização.
-// O token é quem define de QUAL empresa são os dados — sem ele a rota não responde.
+// AUTENTICAÇÃO: `Authorization: Bearer <chave>`. Dois tipos de chave:
+//   • da PESSOA (nfmcp_…, gerada em Configurações → Assistentes): o assistente
+//     age como ela — lê as demandas que ela vê e cria pelas regras dela. Tudo
+//     vai para a Auditoria com o nome dela, e o que ela criar pode ser desfeito.
+//   • da EMPRESA (organizacoes.relatorioToken, a do link público do Relatório
+//     Executivo): só os números do relatório. Não abre demanda nenhuma — quem
+//     tem o link não sabe quem é, e nada do que fizesse teria dono.
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const PROTOCOL = "2025-06-18"
-const SERVER_INFO = { name: "nuflow", version: "1.1.0" }
+const SERVER_INFO = { name: "nuflow", version: "1.2.0" }
 
-const TOOLS = [
+const SO_LEITURA = { readOnlyHint: true, openWorldHint: false }
+
+const FERRAMENTAS_EMPRESA = [
   {
     name: "relatorio_executivo",
     description:
@@ -42,22 +51,27 @@ const TOOLS = [
         },
       },
     },
+    annotations: SO_LEITURA,
   },
   {
     name: "listar_meses",
     description: "Lista os meses disponíveis para consulta do Relatório Executivo (de maio/2026 até o mês atual).",
     inputSchema: { type: "object", properties: {} },
+    annotations: SO_LEITURA,
   },
+]
+
+const FERRAMENTAS_PESSOA = [
   {
     name: "listar_demandas",
     description:
-      "Lista as demandas (pedidos de vídeo/design) da empresa. Cada uma traz id, código, título, equipamentos, status, prazo, quem abriu, editor e o briefing (cortado em 600 caracteres; use ler_demanda para o texto inteiro). Sem status, traz só as abertas, da que vence primeiro para a última. Não traz valores nem custos.",
+      "Lista as demandas (pedidos de vídeo/design) que você vê no NuFlow. Cada uma traz id, código, título, equipamentos, status, prazo, quem abriu, editor e o briefing (cortado em 600 caracteres; use ler_demanda para o texto inteiro). Sem status, traz só as abertas, da que vence primeiro para a última. Não traz valores nem custos.",
     inputSchema: {
       type: "object",
       properties: {
         editor: {
           type: "string",
-          description: "Nome do editor, inteiro ou em parte (ex: 'Cristiano Drummond' ou 'Cristiano'). Se nenhum casar, o erro lista os editores da empresa.",
+          description: "Nome do editor, inteiro ou em parte (ex: 'Cristiano Drummond' ou 'Cristiano'). Se nenhum casar, o erro lista os editores.",
         },
         status: {
           type: "string",
@@ -72,6 +86,7 @@ const TOOLS = [
         },
       },
     },
+    annotations: SO_LEITURA,
   },
   {
     name: "ler_demanda",
@@ -84,10 +99,44 @@ const TOOLS = [
       },
       required: ["id"],
     },
+    annotations: SO_LEITURA,
   },
-  // Nenhuma ferramenta escreve. A marca avisa o cliente MCP; a garantia é não
-  // haver ferramenta de escrita aqui.
-].map((t) => ({ ...t, annotations: { readOnlyHint: true, openWorldHint: false } }))
+  {
+    name: "opcoes_para_criar",
+    description:
+      "Lista os valores aceitos para criar demanda nesta empresa: departamentos, tipos de vídeo, equipamentos, formatos, prioridades e áreas. Consulte antes de criar_demanda.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: SO_LEITURA,
+  },
+  {
+    name: "criar_demanda",
+    description:
+      "Cria uma demanda no NuFlow em seu nome, com as mesmas regras de quando você cria pela tela: se o seu papel precisa de aprovação, ela espera em Aprovações. Fica marcada como criada pelo assistente e pode ser desfeita por um gestor enquanto ninguém mexer nela. Confirme os dados com a pessoa antes de criar. Limite: 30 por dia.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        titulo: { type: "string", minLength: 3, description: "Título curto do pedido." },
+        briefing: { type: "string", minLength: 10, description: "O briefing/roteiro: o que precisa ser feito, para quem, com quais pontos." },
+        departamento: { type: "string", description: "Valor de 'departamentos' em opcoes_para_criar (ex: growth)." },
+        tipo: { type: "string", description: "Tipo de vídeo/peça: valor de 'tiposDeVideo' em opcoes_para_criar (ex: reels)." },
+        prazo: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Data de entrega no formato AAAA-MM-DD, hoje ou depois." },
+        equipamentos: { type: "array", items: { type: "string" }, description: "Nomes exatos de 'equipamentos' em opcoes_para_criar." },
+        prioridade: { type: "string", enum: ["normal", "alta", "urgente"], description: "Padrão: normal. 'urgente' exige motivoUrgencia." },
+        motivoUrgencia: { type: "string", description: "Obrigatório quando a prioridade é urgente." },
+        area: { type: "string", enum: ["audiovisual", "design"], description: "Padrão: audiovisual. 'design' para artes (Growth)." },
+        formato: { type: "string", enum: [...FORMATOS], description: "Proporção da entrega." },
+        cidade: { type: "string", description: "Cidade da gravação, se houver. Sem cidade, fica N/A." },
+        objetivo: { type: "string" },
+        mensagemPrincipal: { type: "string" },
+        referencia: { type: "string", description: "Link ou descrição de referência." },
+        plataforma: { type: "string", description: "Onde vai ser publicado (ex: Instagram)." },
+        publico: { type: "string", description: "Público-alvo." },
+      },
+      required: ["titulo", "briefing", "departamento", "tipo"],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+]
 
 type JsonRpcId = string | number | null
 const ok = (id: JsonRpcId, result: unknown) => ({ jsonrpc: "2.0", id, result })
@@ -125,38 +174,91 @@ function lerToken(req: NextRequest): string | null {
   return m ? m[1].trim() : null
 }
 
-// Freio para cliente em laço (uma IA repetindo a mesma chamada): por token,
+// Freio para cliente em laço (uma IA repetindo a mesma chamada): por chave,
 // contado no banco porque cada requisição pode cair numa instância da Vercel.
 const CONSULTAS_POR_MINUTO = 60
 
-// Impressão do token para a auditoria e para o limite: identifica qual chave
-// foi usada sem guardar a chave. Rotacionar o token muda a impressão.
+// Impressão da chave para o limite e para a auditoria da chave da empresa:
+// identifica qual chave foi usada sem guardar a chave.
 function impressaoDoToken(token: string): string {
   return createHash("sha256").update(token).digest("hex").slice(0, 12)
 }
 
-// Toda chamada de ferramenta fica na Auditoria da empresa: qual ferramenta,
-// qual demanda, quantas voltaram e se deu certo. Os filtros não entram — são
-// texto livre de fora, e a auditoria não guarda texto livre.
-async function auditar(organizacaoId: string, impressao: string, ferramenta: string, resultado: "sucesso" | "falha", recursoId: string, processados?: number) {
+type Credencial =
+  | { tipo: "empresa"; organizacaoId: string; impressao: string }
+  | { tipo: "pessoa"; organizacaoId: string; impressao: string; quem: QuemPergunta }
+
+function ator(c: Credencial): AtorAuditoria {
+  return c.tipo === "pessoa"
+    ? { organizacaoId: c.organizacaoId, usuarioId: c.quem.sessao.user.id }
+    : { organizacaoId: c.organizacaoId, tecnico: `mcp:${c.impressao}` }
+}
+
+// Toda chamada de ferramenta fica na Auditoria da empresa: quem (a pessoa da
+// chave), qual ferramenta, qual demanda, quantas voltaram e se deu certo. Os
+// filtros não entram — são texto livre de fora, e a auditoria não guarda texto livre.
+async function auditar(c: Credencial, acao: AcaoAuditoria, recurso: string, resultado: "sucesso" | "falha", recursoId: string, processados?: number) {
   try {
-    await comOrg(organizacaoId, () => registrarAuditoria(prisma, { organizacaoId, tecnico: `mcp:${impressao}` }, {
-      acao: "mcp.leitura", recurso: ferramenta, recursoId, resultado, correlationId: correlacaoAuditoria(),
+    await comOrg(c.organizacaoId, () => registrarAuditoria(prisma, ator(c), {
+      acao, recurso, recursoId, resultado, correlationId: correlacaoAuditoria(),
       ...(processados !== undefined ? { depois: { processados } } : {}),
     }))
   } catch (e) {
-    // A consulta segue sem o registro: as ferramentas só leem, e derrubar a
-    // leitura porque a auditoria falhou não protegeria nada.
+    // A chamada segue sem o registro: derrubá-la porque a auditoria falhou não
+    // protegeria nada, e a criação já fica marcada na própria demanda.
     console.error("[mcp] auditoria", e)
   }
 }
 
-const FERRAMENTAS = new Set(TOOLS.map((t) => t.name))
+const texto = (v: unknown) => (typeof v === "string" ? v : null)
 
-async function handle(msg: RpcMessage, organizacaoId: string, impressao: string): Promise<object | null> {
+async function chamarFerramenta(c: Credencial, name: string, args: Record<string, unknown>): Promise<{ data: unknown; recursoId: string; processados?: number }> {
+  if (c.tipo === "empresa") {
+    if (name === "relatorio_executivo") {
+      const data = await computeRelatorioExecutivo(c.organizacaoId, texto(args.mes), args.area === "design" ? "design" : "audiovisual")
+      return { data, recursoId: data.mes }
+    }
+    return { data: mesesDisponiveis(), recursoId: name }
+  }
+  if (name === "listar_demandas") {
+    const data = await listarDemandas(c.quem, {
+      editor: texto(args.editor),
+      status: texto(args.status),
+      limite: typeof args.limite === "number" ? args.limite : null,
+    })
+    return { data, recursoId: name, processados: data.mostrando }
+  }
+  if (name === "ler_demanda") {
+    const data = await lerDemanda(c.quem, texto(args.id) ?? "")
+    return { data, recursoId: data.id, processados: 1 }
+  }
+  if (name === "opcoes_para_criar") return { data: await opcoesParaCriar(c.quem), recursoId: name }
+  const data = await criarDemandaPeloAssistente(c.quem, {
+    titulo: texto(args.titulo) ?? "",
+    briefing: texto(args.briefing) ?? "",
+    departamento: texto(args.departamento) ?? "",
+    tipo: texto(args.tipo) ?? "",
+    prazo: texto(args.prazo),
+    prioridade: texto(args.prioridade),
+    motivoUrgencia: texto(args.motivoUrgencia),
+    area: texto(args.area),
+    formato: texto(args.formato),
+    cidade: texto(args.cidade),
+    objetivo: texto(args.objetivo),
+    mensagemPrincipal: texto(args.mensagemPrincipal),
+    referencia: texto(args.referencia),
+    plataforma: texto(args.plataforma),
+    publico: texto(args.publico),
+    equipamentos: Array.isArray(args.equipamentos) ? args.equipamentos.filter((v): v is string => typeof v === "string") : null,
+  })
+  return { data, recursoId: data.id, processados: 1 }
+}
+
+async function handle(msg: RpcMessage, c: Credencial): Promise<object | null> {
   const id = (msg.id ?? null) as JsonRpcId
   const method = msg.method
   const params = msg.params ?? {}
+  const ferramentas = c.tipo === "pessoa" ? FERRAMENTAS_PESSOA : FERRAMENTAS_EMPRESA
 
   if (method === "initialize") {
     const proto = typeof params.protocolVersion === "string" ? params.protocolVersion : PROTOCOL
@@ -164,41 +266,28 @@ async function handle(msg: RpcMessage, organizacaoId: string, impressao: string)
   }
   if (method === "ping") return ok(id, {})
   if (method?.startsWith("notifications/")) return null // notificações não respondem
-  if (method === "tools/list") return ok(id, { tools: TOOLS })
+  if (method === "tools/list") return ok(id, { tools: ferramentas })
 
   if (method === "tools/call") {
     const name = params.name as string
     const args = (params.arguments ?? {}) as Record<string, unknown>
-    if (!FERRAMENTAS.has(name)) return ok(id, textResult(`Ferramenta desconhecida: ${name}`, true))
+    if (!ferramentas.some((f) => f.name === name)) {
+      const dica = c.tipo === "empresa" && FERRAMENTAS_PESSOA.some((f) => f.name === name)
+        ? " Demandas só com a chave pessoal (Configurações → Assistentes (MCP))."
+        : ""
+      return ok(id, textResult(`Ferramenta desconhecida: ${name}.${dica}`, true))
+    }
+    const acao: AcaoAuditoria = name === "criar_demanda" ? "mcp.criar" : "mcp.leitura"
+    const recurso = name === "criar_demanda" ? "demanda" : name
     try {
-      if (!(await consumirLimitePublico(`mcp:${impressao}`, CONSULTAS_POR_MINUTO, 60))) {
+      if (!(await consumirLimitePublico(`mcp:${c.impressao}`, CONSULTAS_POR_MINUTO, 60))) {
         return ok(id, textResult(`Limite de ${CONSULTAS_POR_MINUTO} consultas por minuto atingido. Espere um minuto e tente de novo.`, true))
       }
-      if (name === "relatorio_executivo") {
-        const mes = typeof args.mes === "string" ? args.mes : null
-        const area = args.area === "design" ? "design" : "audiovisual"
-        const data = await computeRelatorioExecutivo(organizacaoId, mes, area)
-        await auditar(organizacaoId, impressao, name, "sucesso", data.mes)
-        return ok(id, textResult(data))
-      }
-      if (name === "listar_meses") {
-        await auditar(organizacaoId, impressao, name, "sucesso", name)
-        return ok(id, textResult(mesesDisponiveis()))
-      }
-      if (name === "listar_demandas") {
-        const data = await listarDemandas(organizacaoId, {
-          editor: typeof args.editor === "string" ? args.editor : null,
-          status: typeof args.status === "string" ? args.status : null,
-          limite: typeof args.limite === "number" ? args.limite : null,
-        })
-        await auditar(organizacaoId, impressao, name, "sucesso", name, data.mostrando)
-        return ok(id, textResult(data))
-      }
-      const data = await lerDemanda(organizacaoId, typeof args.id === "string" ? args.id : "")
-      await auditar(organizacaoId, impressao, name, "sucesso", data.id, 1)
-      return ok(id, textResult(data))
+      const r = await chamarFerramenta(c, name, args)
+      await auditar(c, acao, recurso, "sucesso", r.recursoId, r.processados)
+      return ok(id, textResult(r.data))
     } catch (e) {
-      await auditar(organizacaoId, impressao, name, "falha", name)
+      await auditar(c, acao, recurso, "falha", name)
       if (e instanceof ArgumentoInvalido || e instanceof RecorteInvalido) return ok(id, textResult(e.message, true))
       // Erro de banco não volta para fora: a mensagem do Prisma carrega nome de
       // tabela, de coluna e trechos da consulta.
@@ -211,13 +300,21 @@ async function handle(msg: RpcMessage, organizacaoId: string, impressao: string)
   return err(id, -32601, `Método não encontrado: ${method}`)
 }
 
-export async function POST(req: NextRequest) {
-  // Autenticação antes de qualquer parsing: o token define a empresa dos números.
-  const token = lerToken(req)
+async function credencial(token: string | null): Promise<Credencial | null> {
+  if (!token) return null
+  const impressao = impressaoDoToken(token)
+  const pessoa = await pessoaPorChaveMcp(token)
+  if (pessoa) return { tipo: "pessoa", organizacaoId: pessoa.organizacaoId, impressao, quem: pessoa }
   const organizacaoId = await orgPorRelatorioToken(token)
-  if (!organizacaoId || !token) {
+  return organizacaoId ? { tipo: "empresa", organizacaoId, impressao } : null
+}
+
+export async function POST(req: NextRequest) {
+  // Autenticação antes de qualquer parsing: a chave define a empresa e a pessoa.
+  const c = await credencial(lerToken(req))
+  if (!c) {
     return NextResponse.json(
-      err(null, -32001, "Não autorizado — informe Authorization: Bearer <token> da organização."),
+      err(null, -32001, "Não autorizado — informe Authorization: Bearer <chave>."),
       { status: 401, headers: { ...CORS, "WWW-Authenticate": "Bearer" } }
     )
   }
@@ -229,13 +326,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(err(null, -32700, "Parse error"), { status: 400, headers: CORS })
   }
 
-  const impressao = impressaoDoToken(token)
   if (Array.isArray(body)) {
-    const responses = (await Promise.all(body.map((m) => handle(m as RpcMessage, organizacaoId, impressao)))).filter(Boolean)
+    const responses = (await Promise.all(body.map((m) => handle(m as RpcMessage, c)))).filter(Boolean)
     return NextResponse.json(responses, { headers: CORS })
   }
 
-  const res = await handle(body as RpcMessage, organizacaoId, impressao)
+  const res = await handle(body as RpcMessage, c)
   if (res === null) return new NextResponse(null, { status: 202, headers: CORS })
   return NextResponse.json(res, { headers: CORS })
 }

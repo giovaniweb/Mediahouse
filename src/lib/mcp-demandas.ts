@@ -1,20 +1,32 @@
 import type { Prisma, StatusInterno, StatusVisivel } from "@prisma/client"
+import type { Session } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
+import { oQueAPessoaVe } from "@/lib/escopo-demanda"
+import { criarDemanda } from "@/lib/criar-demanda"
+import { listarDepartamentos } from "@/lib/departamentos"
 import { COLUNAS_LABEL, COLUNAS_ORDER, STATUS_PARA_COLUNA, estaAtrasada } from "@/lib/status"
 import { dataCalendario, dataEmSaoPaulo } from "@/lib/datas"
 
-// Demandas lidas pelo MCP (/api/mcp). Quem chama é um cliente externo com o
-// token da empresa, então o recorte é estreito de propósito: o pedido e o
-// briefing. Nada de dinheiro (custos, notas fiscais, valores), de contato
-// pessoal (telefones, e-mails, cliente final) nem de links de material.
+// Demandas pelo MCP (/api/mcp), com a chave de UMA pessoa (lib/mcp-token.ts).
+// O assistente age como ela: lê o que ela vê no quadro (oQueAPessoaVe) e cria
+// pelas regras dela (criarDemanda, o mesmo código da tela). O recorte de saída
+// é estreito de propósito: o pedido e o briefing. Nada de dinheiro (custos,
+// notas fiscais, valores), de contato pessoal (telefones, e-mails, cliente
+// final) nem de links de material.
 
 /** Argumento que o cliente MCP mandou errado: volta como texto para ele corrigir. */
 export class ArgumentoInvalido extends Error {}
 
+/** Quem está do outro lado: a pessoa da chave, na empresa da chave. */
+export type QuemPergunta = { organizacaoId: string; sessao: Session; tokenId: string }
+
 export const LIMITE_PADRAO = 50
 export const LIMITE_MAXIMO = 100
 const BRIEFING_NA_LISTA = 600
+/** Freios da criação, além do limite por minuto da rota: IA em laço para aqui. */
+export const CRIADAS_POR_DIA = 30
+const MINUTOS_TITULO_REPETIDO = 10
 
 function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim()
@@ -93,33 +105,32 @@ export interface FiltrosListagem {
   limite?: number | null
 }
 
-export async function listarDemandas(organizacaoId: string, filtros: FiltrosListagem) {
-  if (!organizacaoId) throw new Error("organizacaoId é obrigatório")
+export async function listarDemandas(quem: QuemPergunta, filtros: FiltrosListagem) {
+  const { organizacaoId } = quem
   const statusWhere = whereDoStatus(filtros.status)
   const limite = Math.min(Math.max(Math.trunc(filtros.limite ?? LIMITE_PADRAO) || LIMITE_PADRAO, 1), LIMITE_MAXIMO)
 
   return comOrg(organizacaoId, async () => {
+    const escopo = await oQueAPessoaVe(quem.sessao, organizacaoId)
     let editores: { id: string; nome: string }[] | null = null
     if (filtros.editor?.trim()) {
-      // Só editores que já trabalharam em demanda desta empresa: o cadastro de
-      // editor é global, e a lista de sugestões não pode mostrar o de outra.
-      const daEmpresa = await prisma.editor.findMany({
-        where: { demandas: { some: { organizacaoId } } },
+      // Só editores de demandas que a pessoa vê: o cadastro de editor é global,
+      // e a lista de sugestões não pode mostrar o de outra empresa.
+      const visiveis = await prisma.editor.findMany({
+        where: { demandas: { some: escopo } },
         select: { id: true, nome: true },
         orderBy: { nome: "asc" },
       })
-      editores = daEmpresa.filter((e) => editorCasa(e.nome, filtros.editor!))
+      editores = visiveis.filter((e) => editorCasa(e.nome, filtros.editor!))
       if (!editores.length) {
         throw new ArgumentoInvalido(
-          `Nenhum editor desta empresa corresponde a "${filtros.editor}". Editores: ${daEmpresa.map((e) => e.nome).join(", ") || "nenhum"}.`
+          `Nenhum editor corresponde a "${filtros.editor}". Editores: ${visiveis.map((e) => e.nome).join(", ") || "nenhum"}.`
         )
       }
     }
 
     const where: Prisma.DemandaWhereInput = {
-      organizacaoId,
-      ...statusWhere,
-      ...(editores ? { editorId: { in: editores.map((e) => e.id) } } : {}),
+      AND: [escopo, statusWhere, ...(editores ? [{ editorId: { in: editores.map((e) => e.id) } }] : [])],
     }
     const abertas = "statusVisivel" in statusWhere && typeof statusWhere.statusVisivel === "object"
     const [total, demandas] = await Promise.all([
@@ -165,15 +176,16 @@ function detalhesSemDinheiro(json: Prisma.JsonValue | null): Record<string, stri
   return out
 }
 
-/** Demanda pelo id ou pelo código, só desta empresa, com o briefing inteiro. */
-export async function lerDemanda(organizacaoId: string, idOuCodigo: string) {
-  if (!organizacaoId) throw new Error("organizacaoId é obrigatório")
+/** Demanda pelo id ou pelo código, se a pessoa a vê, com o briefing inteiro. */
+export async function lerDemanda(quem: QuemPergunta, idOuCodigo: string) {
+  const { organizacaoId } = quem
   const chave = idOuCodigo?.trim()
   if (!chave) throw new ArgumentoInvalido("Informe o id ou o código da demanda.")
 
-  const d = await comOrg(organizacaoId, () =>
-    prisma.demanda.findFirst({
-      where: { organizacaoId, OR: [{ id: chave }, { codigo: chave }] },
+  const d = await comOrg(organizacaoId, async () => {
+    const escopo = await oQueAPessoaVe(quem.sessao, organizacaoId)
+    return prisma.demanda.findFirst({
+      where: { AND: [escopo, { OR: [{ id: chave }, { codigo: chave }] }] },
       select: {
         ...SELECT_BASE,
         area: true,
@@ -199,7 +211,8 @@ export async function lerDemanda(organizacaoId: string, idOuCodigo: string) {
         designer: { select: { nome: true } },
       },
     })
-  )
+  })
+  // Fora do escopo responde igual a inexistente: "sem permissão" contaria que existe.
   if (!d) throw new ArgumentoInvalido(`Demanda não encontrada: ${chave}`)
 
   return {
@@ -227,4 +240,135 @@ export async function lerDemanda(organizacaoId: string, idOuCodigo: string) {
     dataPostagem: d.dataPostagem ? dataEmSaoPaulo(d.dataPostagem) : null,
     criadaEm: d.createdAt.toISOString(),
   }
+}
+
+export const FORMATOS = ["9:16", "16:9", "1:1"] as const
+
+/** O que o formulário de "Novo pedido" oferece, para o assistente não chutar valor. */
+export async function opcoesParaCriar(quem: QuemPergunta) {
+  const { organizacaoId } = quem
+  return comOrg(organizacaoId, async () => {
+    const [departamentos, tipos, produtos] = await Promise.all([
+      listarDepartamentos(organizacaoId),
+      prisma.configParametro.findMany({
+        where: { organizacaoId, grupo: "tipos_video", ativo: true },
+        orderBy: [{ ordem: "asc" }, { label: "asc" }],
+        select: { valor: true, label: true },
+      }),
+      prisma.produto.findMany({ where: { organizacaoId, ativo: true }, orderBy: { nome: "asc" }, select: { nome: true } }),
+    ])
+    return {
+      departamentos,
+      tiposDeVideo: tipos,
+      equipamentos: produtos.map((p) => p.nome),
+      formatos: FORMATOS,
+      prioridades: ["normal", "alta", "urgente"],
+      areas: ["audiovisual", "design"],
+    }
+  })
+}
+
+export interface EntradaCriacao {
+  titulo: string
+  briefing: string
+  departamento: string
+  tipo: string
+  cidade?: string | null
+  prazo?: string | null
+  prioridade?: string | null
+  motivoUrgencia?: string | null
+  area?: string | null
+  formato?: string | null
+  objetivo?: string | null
+  mensagemPrincipal?: string | null
+  referencia?: string | null
+  plataforma?: string | null
+  publico?: string | null
+  equipamentos?: string[] | null
+}
+
+/**
+ * Cria a demanda como a pessoa da chave, pelo mesmo código da tela: aprovação
+ * pelo papel dela (lib/quem-aprova.ts), os mesmos avisos, o mesmo histórico —
+ * que ainda diz "pelo assistente (MCP)". A demanda nasce marcada com a chave,
+ * para poder ser desfeita em Configurações → Assistentes (MCP).
+ */
+export async function criarDemandaPeloAssistente(quem: QuemPergunta, e: EntradaCriacao) {
+  const { organizacaoId, tokenId } = quem
+  const titulo = (e.titulo ?? "").trim()
+
+  return comOrg(organizacaoId, async () => {
+    const agora = Date.now()
+    const [noDia, repetida] = await Promise.all([
+      prisma.demanda.count({ where: { mcpTokenId: tokenId, createdAt: { gte: new Date(agora - 24 * 3600_000) } } }),
+      titulo
+        ? prisma.demanda.findFirst({
+            where: {
+              mcpTokenId: tokenId,
+              createdAt: { gte: new Date(agora - MINUTOS_TITULO_REPETIDO * 60_000) },
+              titulo: { equals: titulo, mode: "insensitive" },
+            },
+            select: { codigo: true },
+          })
+        : null,
+    ])
+    if (noDia >= CRIADAS_POR_DIA) {
+      throw new ArgumentoInvalido(`Este assistente já criou ${CRIADAS_POR_DIA} demandas nas últimas 24 horas, o limite. Peça para criar pela tela do NuFlow.`)
+    }
+    if (repetida) {
+      throw new ArgumentoInvalido(
+        `O assistente já criou "${titulo}" (${repetida.codigo}) há menos de ${MINUTOS_TITULO_REPETIDO} minutos. Se for mesmo outra demanda, mude o título.`
+      )
+    }
+
+    // Equipamento pelo nome, como aparece no formulário: só os ativos da empresa.
+    let produtoIds: string[] | undefined
+    if (e.equipamentos?.length) {
+      const ativos = await prisma.produto.findMany({ where: { organizacaoId, ativo: true }, select: { id: true, nome: true } })
+      const faltando: string[] = []
+      produtoIds = []
+      for (const nome of e.equipamentos) {
+        const p = ativos.find((a) => normalizar(a.nome) === normalizar(nome))
+        if (p) produtoIds.push(p.id)
+        else faltando.push(nome)
+      }
+      if (faltando.length) {
+        throw new ArgumentoInvalido(`Equipamento não encontrado: ${faltando.join(", ")}. Os nomes aceitos estão em opcoes_para_criar.`)
+      }
+    }
+
+    const resposta = await criarDemanda(quem.sessao, organizacaoId, {
+      titulo,
+      descricao: e.briefing,
+      departamento: e.departamento,
+      tipoVideo: e.tipo,
+      // O formulário público grava "N/A" quando não há cidade; o assistente também.
+      cidade: e.cidade?.trim() || "N/A",
+      prioridade: e.prioridade ?? undefined,
+      motivoUrgencia: e.motivoUrgencia ?? undefined,
+      dataLimite: e.prazo ?? undefined,
+      area: e.area ?? undefined,
+      formato: e.formato ?? undefined,
+      objetivo: e.objetivo ?? undefined,
+      mensagemPrincipal: e.mensagemPrincipal ?? undefined,
+      referencia: e.referencia ?? undefined,
+      plataforma: e.plataforma ?? undefined,
+      publico: e.publico ?? undefined,
+      produtoIds,
+    }, { mcpTokenId: tokenId })
+    const corpo = await resposta.json()
+    if (resposta.status >= 400) {
+      const campos = corpo.campos ? Object.entries(corpo.campos as Record<string, string>).map(([c, m]) => `${c}: ${m}`).join("; ") : ""
+      throw new ArgumentoInvalido(campos || corpo.error || "Não foi possível criar a demanda.")
+    }
+    const statusInterno = corpo.statusInterno as StatusInterno
+    return {
+      id: corpo.id as string,
+      codigo: corpo.codigo as string,
+      titulo: corpo.titulo as string,
+      status: COLUNAS_LABEL[corpo.statusVisivel as StatusVisivel],
+      statusInterno,
+      aguardaAprovacao: statusInterno === "aguardando_aprovacao_interna" || statusInterno === "urgencia_pendente_aprovacao",
+    }
+  })
 }
