@@ -8,7 +8,7 @@ import {
   Users, Search, CheckCircle2, XCircle, Plus, X, GitMerge, AlertTriangle,
   KeyRound, Eye, EyeOff, AlertCircle, Trash2, ShieldCheck, ShieldOff,
   Download, MoreHorizontal, Pencil, UserCog, Power, ChevronLeft, ChevronRight,
-  Users2, IdCard,
+  Users2, IdCard, ArrowUpDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -732,17 +732,19 @@ export default function PessoasAcessosPage() {
     }
   }
 
-  // Hard delete só para cadastro vazio (a API revalida via ?modo=hard).
+  // Cadastro vazio é apagado de vez (a API revalida via ?modo=hard). Com
+  // histórico, a pessoa sai da empresa e o histórico fica com o nome dela.
   async function excluirPessoa() {
     if (!deleteTarget) return
+    const deVez = !!deleteTarget.vinculos?.podeExcluir
     setDeletando(true)
     try {
-      const res = await fetch(`/api/usuarios/${deleteTarget.id}?modo=hard`, { method: "DELETE" })
+      const res = await fetch(`/api/usuarios/${deleteTarget.id}${deVez ? "?modo=hard" : ""}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => ({} as { error?: string }))
         throw new Error(err.error ?? "Erro ao excluir")
       }
-      toast.success(`${deleteTarget.nome} foi excluído definitivamente.`)
+      toast.success(deVez ? `${deleteTarget.nome} foi excluído definitivamente.` : `${deleteTarget.nome} saiu da empresa.`)
       if (pessoaAbertaId === deleteTarget.id) setPessoaAbertaId(null)
       setDeleteTarget(null)
       mutate()
@@ -772,6 +774,16 @@ export default function PessoasAcessosPage() {
       setMesclarModal(m => m ? { ...m, buscando: false } : null)
       toast.error("Erro ao buscar pessoa")
     }
+  }
+
+  // O Mesclar abre mantendo quem foi clicado. Vindo de "Excluir", esse é
+  // justamente o cadastro que se quer tirar: inverter escolhe o outro para ficar.
+  async function inverterMesclar() {
+    if (!mesclarModal?.secundario) return
+    const { principal, secundario } = mesclarModal
+    setMesclarModal(m => m ? { ...m, principal: secundario, secundario: principal, qtdDemandas: null } : null)
+    const qtd = await fetch(`/api/demandas?solicitanteId=${principal.id}&limit=0`).then(r => r.json()).then(j => j.total ?? 0).catch(() => 0)
+    setMesclarModal(m => m && m.secundario?.id === principal.id ? { ...m, qtdDemandas: qtd } : m)
   }
 
   async function confirmarMesclar() {
@@ -1365,7 +1377,7 @@ export default function PessoasAcessosPage() {
         </div>
       )}
 
-      {/* Excluir cadastro vazio / mesclar se tiver vínculos */}
+      {/* Excluir: cadastro vazio sai de vez; com histórico, sai da empresa */}
       {deleteTarget && (() => {
         const v = deleteTarget.vinculos
         const carregando = deleteTarget.carregando
@@ -1378,7 +1390,7 @@ export default function PessoasAcessosPage() {
                 <Trash2 className="w-4 h-4 text-red-400" />
               </div>
               <div>
-                <p className="font-semibold text-white text-sm">Excluir cadastro vazio</p>
+                <p className="font-semibold text-white text-sm">Excluir cadastro</p>
                 <p className="text-xs text-zinc-400">{deleteTarget.nome}</p>
               </div>
             </div>
@@ -1406,9 +1418,17 @@ export default function PessoasAcessosPage() {
               </>
             ) : (
               <>
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
-                  <p className="text-xs font-semibold text-amber-400 mb-1">Esta pessoa tem vínculos. Mescle com outro cadastro antes de excluir.</p>
-                  <ul className="text-[11px] text-zinc-400 space-y-0.5">
+                <p className="text-sm text-zinc-300">
+                  <strong>{deleteTarget.nome}</strong> tem histórico no sistema, então o cadastro não pode ser apagado de vez. Ela vai <strong>sair desta empresa</strong>:
+                </p>
+                <ul className="text-xs text-zinc-400 space-y-1">
+                  <li>• some da lista de pessoas e perde o acesso;</li>
+                  <li>• para de receber avisos, e o WhatsApp dela deixa de travar outro cadastro com o mesmo número;</li>
+                  <li>• pedidos, comentários e histórico continuam, com o nome dela.</li>
+                </ul>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                  <p className="text-[11px] font-semibold text-zinc-400 mb-1">O que fica no histórico</p>
+                  <ul className="text-[11px] text-zinc-500 space-y-0.5">
                     {!!v?.demandas && <li>• {v.demandas} demanda(s)</li>}
                     {!!v?.comentarios && <li>• {v.comentarios} comentário(s)</li>}
                     {!!v?.historicos && <li>• {v.historicos} registro(s) de histórico</li>}
@@ -1417,13 +1437,26 @@ export default function PessoasAcessosPage() {
                     {!!v?.profissional && <li>• {v.profissional} perfil profissional vinculado</li>}
                   </ul>
                 </div>
-                <div className="flex gap-2 pt-1">
+                {!!v?.demandas && (
+                  <p className="text-xs text-amber-400">
+                    Se for a mesma pessoa de outro cadastro, use Mesclar: as demandas vão junto para o cadastro que fica.
+                  </p>
+                )}
+                {(v?.memberships ?? 0) > 1 && (
+                  <p className="text-xs text-zinc-400">Ela também está em outra empresa, e lá nada muda.</p>
+                )}
+                <button onClick={excluirPessoa} disabled={deletando}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
+                  {deletando ? "Removendo..." : "Remover da empresa"}
+                </button>
+                <div className="flex gap-2">
                   <button
                     onClick={() => { const alvo = pessoas.find(x => x.id === deleteTarget.id); setDeleteTarget(null); if (alvo) abrirMesclar(alvo) }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
-                    <GitMerge className="w-4 h-4" /> Mesclar duplicado
+                    disabled={deletando}
+                    className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5">
+                    <GitMerge className="w-4 h-4" /> Mesclar
                   </button>
-                  <button onClick={() => setDeleteTarget(null)}
+                  <button onClick={() => setDeleteTarget(null)} disabled={deletando}
                     className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors">
                     Cancelar
                   </button>
@@ -1500,6 +1533,15 @@ export default function PessoasAcessosPage() {
                   </span>
                 </div>
               )}
+              {mesclarModal.secundario && (
+                <button
+                  onClick={inverterMesclar}
+                  disabled={mesclarModal.mesclando}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 disabled:opacity-40"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" /> Inverter: manter {mesclarModal.secundario.nome.trim()} e remover {mesclarModal.principal.nome.trim()}
+                </button>
+              )}
               {mesclarModal.buscando === false && mesclarModal.secundarioBusca && mesclarModal.secundario === null && (
                 <p className="text-xs text-zinc-500 italic">Nenhuma pessoa encontrada com esse termo.</p>
               )}
@@ -1515,7 +1557,7 @@ export default function PessoasAcessosPage() {
                   {(mesclarModal.qtdDemandas ?? 0) > 0 && (
                     <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> <strong className="text-zinc-200">{mesclarModal.qtdDemandas}</strong> demanda(s) migrada(s)</p>
                   )}
-                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado marcado como <strong>inativo</strong></p>
+                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado <strong>sai desta empresa</strong></p>
                 </div>
               )}
               <div className="flex gap-2 pt-1">

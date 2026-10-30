@@ -2,14 +2,16 @@ import { podeAdministrarIdentidade, numeroDeEmpresasDaIdentidade } from "@/lib/i
 import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { comOrg } from "@/lib/org-contexto"
+import { removerDaEmpresa } from "@/lib/remover-da-empresa"
 
 type Params = { params: Promise<{ id: string }> }
 
 // POST /api/usuarios/[principalId]/mesclar
 // Body: { secundarioId }
 // Mescla duas contas NA ORGANIZAÇÃO ATIVA: move demandas da org, copia dados faltantes e
-// desativa o secundário (global só se ele pertencer apenas a esta org; senão remove só a
-// membership desta org — não afeta outras empresas).
+// tira o secundário desta empresa (lib/remover-da-empresa.ts). A conta dele só é
+// inativada se esta era a única empresa — as outras não são afetadas.
 export async function POST(req: NextRequest, { params }: Params) {
   const acesso = await requireAcesso("gerenciarUsuarios")
   if (acesso instanceof NextResponse) return acesso
@@ -48,25 +50,24 @@ export async function POST(req: NextRequest, { params }: Params) {
   const orgsDoSecundario = await numeroDeEmpresasDaIdentidade(secundarioId)
   const soNestaOrg = orgsDoSecundario <= 1
 
-  const ops = [
+  const principalAtualizado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
     // 1. Copia dados faltantes para o principal
-    prisma.usuario.update({
+    const atualizado = await tx.usuario.update({
       where: { id: principalId },
       data: { email: principal.email ?? secundario.email, telefone: principal.telefone ?? secundario.telefone },
       select: { id: true, nome: true, email: true, telefone: true, tipo: true, status: true },
-    }),
+    })
     // 2. Move APENAS as demandas desta organização
-    prisma.demanda.updateMany({
+    await tx.demanda.updateMany({
       where: { organizacaoId, solicitanteId: secundarioId },
       data: { solicitanteId: principalId },
-    }),
-    // 3. Desativa o secundário com segurança multiempresa
-    soNestaOrg
-      ? prisma.usuario.update({ where: { id: secundarioId }, data: { status: "inativo" } })
-      : prisma.usuarioOrganizacao.delete({ where: { id: memSecundario.id } }),
-  ] as const
-
-  const [principalAtualizado] = await prisma.$transaction([...ops])
+    })
+    // 3. O secundário sai desta empresa. Antes ele só era inativado e ficava aqui
+    // com o mesmo WhatsApp do principal — o que bastava para travar todo aviso
+    // para esse número.
+    await removerDaEmpresa(tx, { usuarioId: secundarioId, organizacaoId, inativarConta: soNestaOrg })
+    return atualizado
+  }))
 
   return NextResponse.json({
     ok: true,
