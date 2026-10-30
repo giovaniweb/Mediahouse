@@ -41,6 +41,12 @@ export async function chaveDaInstanciaGerenciada(url: string, chaveMestra: strin
   const base = url.replace(/\/$/, "")
   const headers = { apikey: chaveMestra, "Content-Type": "application/json" }
   const caminho = encodeURIComponent(nome)
+  const listada = async (): Promise<Instancia> => {
+    const lista = await fetch(`${base}/instance/fetchInstances?instanceName=${caminho}`, { headers, signal: AbortSignal.timeout(TEMPO) })
+    if (!lista.ok) return { erro: `A Evolution respondeu ${lista.status} ao listar "${nome}".` }
+    const chave = chaveDaLista(await lista.json().catch(() => null), nome)
+    return chave ? { chave } : { erro: `A instância "${nome}" existe, mas a Evolution não devolveu a chave dela.` }
+  }
   try {
     const estado = await fetch(`${base}/instance/connectionState/${caminho}`, { headers, signal: AbortSignal.timeout(TEMPO) })
     if (estado.status === 404) {
@@ -50,16 +56,18 @@ export async function chaveDaInstanciaGerenciada(url: string, chaveMestra: strin
         body: JSON.stringify({ instanceName: nome, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
         signal: AbortSignal.timeout(TEMPO),
       })
-      if (!criado.ok) return { erro: `Não foi possível criar a instância "${nome}" (${criado.status}).` }
-      const chave = chaveDoCriado(await criado.json().catch(() => null))
-      return chave ? { chave } : { erro: `A Evolution criou "${nome}" mas não devolveu a chave da instância.` }
+      if (criado.ok) {
+        const chave = chaveDoCriado(await criado.json().catch(() => null))
+        return chave ? { chave } : { erro: `A Evolution criou "${nome}" mas não devolveu a chave da instância.` }
+      }
+      // Dois cliques no primeiro QR: o outro pedido pode ter criado a mesma
+      // instância entre a consulta e esta criação. Se ela existe, a chave sai
+      // da lista; se não, a criação falhou de verdade.
+      const achada = await listada()
+      return "chave" in achada ? achada : { erro: `Não foi possível criar a instância "${nome}" (${criado.status}).` }
     }
     if (!estado.ok) return { erro: `A Evolution respondeu ${estado.status} ao consultar "${nome}".` }
-
-    const lista = await fetch(`${base}/instance/fetchInstances?instanceName=${caminho}`, { headers, signal: AbortSignal.timeout(TEMPO) })
-    if (!lista.ok) return { erro: `A Evolution respondeu ${lista.status} ao listar "${nome}".` }
-    const chave = chaveDaLista(await lista.json().catch(() => null), nome)
-    return chave ? { chave } : { erro: `A instância "${nome}" existe, mas a Evolution não devolveu a chave dela.` }
+    return await listada()
   } catch (e) {
     return { erro: `Erro ao falar com a Evolution: ${e instanceof Error ? e.message : String(e)}` }
   }

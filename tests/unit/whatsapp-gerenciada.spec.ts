@@ -46,6 +46,12 @@ describe("chave da instância gerenciada", () => {
       : resposta(200, [{ name: "outra", token: "chave-de-outra" }, { name: "nuflow_gh", token: "chave-da-gh" }]))
     expect(await chaveDaInstanciaGerenciada("https://evo.invalid", MESTRA, "nuflow_gh")).toEqual({ chave: "chave-da-gh" })
   })
+  it("criação recusada porque o outro clique já criou: acha a chave na lista", async () => {
+    servidor((url, metodo) => url.includes("connectionState") ? resposta(404)
+      : metodo === "POST" ? resposta(403, { error: "This name is already in use" })
+      : resposta(200, [{ name: "nuflow_gh", token: "chave-da-gh" }]))
+    expect(await chaveDaInstanciaGerenciada("https://evo.invalid", MESTRA, "nuflow_gh")).toEqual({ chave: "chave-da-gh" })
+  })
   it.each([
     ["criação sem chave", (url: string) => url.includes("connectionState") ? resposta(404) : resposta(201, { instance: {} })],
     ["lista sem a instância", (url: string) => url.includes("connectionState") ? resposta(200) : resposta(200, [{ name: "outra", token: "x" }])],
