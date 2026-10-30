@@ -24,7 +24,11 @@ export async function GET() {
   const { organizacaoId } = acesso
 
   const config = await prisma.configWhatsapp.findFirst({ where: { organizacaoId } })
-  return NextResponse.json({ config: config ? apresentacao(config) : null })
+  // `gerenciada`: o servidor de WhatsApp do NuFlow está ligado, e a empresa sem
+  // configuração pode gerar o QR direto — a rota do QR cria a instância dela.
+  // Sem isto a tela travava o botão pedindo URL e chave que o cliente não tem.
+  const gerenciada = !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY)
+  return NextResponse.json({ config: config ? apresentacao(config) : null, gerenciada })
 }
 
 export async function POST(req: NextRequest) {
