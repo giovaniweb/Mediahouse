@@ -68,7 +68,8 @@ type Opcao = { id: string; nome: string }
 function Quadro() {
   const { data: me } = useMe()
   // O videomaker vê aqui só as gravações dele (a rota filtra) e não abre gravação nova.
-  const ehVideomaker = me?.tipo === "videomaker" || me?.membership?.papel === "videomaker"
+  // Vale o papel na empresa ativa, como em papelNaOrg; o `tipo` global só sem papel.
+  const ehVideomaker = (me?.membership?.papel ?? me?.tipo) === "videomaker"
   const [aberto, setAberto] = useState<string | null>(null)
   const [novoJob, setNovoJob] = useState(false)
   const [kitAberto, setKitAberto] = useState(false)
