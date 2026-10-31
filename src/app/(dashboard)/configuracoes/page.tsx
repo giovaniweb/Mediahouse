@@ -2,10 +2,11 @@
 
 import { SaudeAutomacoes } from "@/components/automacoes/SaudeAutomacoes"
 import { AreaPublicaEmpresa } from "@/components/configuracoes/AreaPublicaEmpresa"
+import { AssistentesMcp } from "@/components/configuracoes/AssistentesMcp"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, Video, ArrowUp, ArrowDown, Play } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, Video, ArrowUp, ArrowDown, Play, Bot } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -16,7 +17,7 @@ import { fetcher } from "@/lib/fetcher"
 import Link from "next/link"
 
 
-type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos"
+type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos" | "assistentes"
 
 function SecaoEvolution({ recolhida, children }: { recolhida: boolean; children: React.ReactNode }) {
   if (!recolhida) return <>{children}</>
@@ -1548,7 +1549,8 @@ function TabDepoimentos() {
 function AbaPelaUrl({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   const searchParams = useSearchParams()
   useEffect(() => {
-    if (searchParams?.get("tab") === "empresa") onSetTab("empresa")
+    const pedida = searchParams?.get("tab")
+    if (pedida === "empresa" || pedida === "assistentes") onSetTab(pedida)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return null
@@ -1565,6 +1567,7 @@ export default function ConfiguracoesPage() {
     { id: "email", label: "E-mail de saída", icon: Mail },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
     { id: "depoimentos", label: "Depoimentos", icon: Video },
+    { id: "assistentes", label: "Assistentes (MCP)", icon: Bot },
   ]
 
   if (sessionStatus === "loading") return <><Header title="Configurações"/><p role="status" className="p-6 text-zinc-400">Carregando suas configurações…</p></>
@@ -1640,6 +1643,7 @@ export default function ConfiguracoesPage() {
               {tab === "parametros" && <TabParametros />}
               {tab === "empresa" && <TabEmpresa />}
               {tab === "depoimentos" && <TabDepoimentos />}
+              {tab === "assistentes" && <AssistentesMcp />}
             </section>
           </div>
         </div>

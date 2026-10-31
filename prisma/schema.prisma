@@ -224,6 +224,7 @@ model Usuario {
   eventoDocumentoResp EventoGestaoDocumento[]
   cutflowSessoes      CutflowSessao[]
   cutflowPuxadas      CutflowPuxada[]
+  tokensMcp           TokenMcp[]
 
   @@map("usuarios")
 }
@@ -690,9 +691,38 @@ model Demanda {
   /// Computador do Cutflow que puxou o card para editar (trava contra edição dupla).
   cutflowPuxada CutflowPuxada?
 
+  /// Chave do assistente (MCP) que criou esta demanda. Nulo = criada por gente
+  /// pela tela, formulário, WhatsApp etc. É o que permite desfazer o que veio
+  /// pela API de uma pessoa.
+  mcpTokenId String?
+  mcpToken   TokenMcp? @relation(fields: [mcpTokenId], references: [id], onDelete: SetNull)
+
   @@index([organizacaoId])
   @@index([organizacaoId, statusVisivel])
+  @@index([mcpTokenId])
   @@map("demandas")
+}
+
+/// Chave do assistente (MCP) de UMA pessoa numa empresa (30/10/2026). O
+/// assistente age como a pessoa: lê o que ela vê, cria pelas regras dela, e a
+/// Auditoria mostra o nome dela. Guarda só o hash; a chave aparece uma vez, ao
+/// gerar. Revogar = revogadoEm; não se apaga, para continuar dizendo de quem
+/// foram as demandas que criou.
+model TokenMcp {
+  id            String    @id @default(cuid())
+  organizacaoId String
+  usuarioId     String
+  hash          String    @unique // sha256 hex da chave
+  rotulo        String // ex.: "Alfred do Cris"
+  createdAt     DateTime  @default(now())
+  revogadoEm    DateTime?
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  demandas    Demanda[]
+
+  @@index([organizacaoId])
+  @@map("tokens_mcp")
 }
 
 // ── Checklist System (estilo Trello) ──────────────────────────────────────────
@@ -2219,6 +2249,7 @@ model Organizacao {
   consumosIA ConsumoIA[]
   ambienteTeste Boolean @default(false)
   eventosAuditoria EventoAuditoria[]
+  tokensMcp TokenMcp[]
   jobsAutomacao JobAutomacao[]
   inboxWhatsapp InboxWhatsapp[]
   saidasWhatsapp SaidaWhatsapp[]

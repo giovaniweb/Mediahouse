@@ -7,6 +7,9 @@
 import { prisma } from "@/lib/prisma"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { Prisma } from "@prisma/client"
+import type { Session } from "next-auth"
+import { ehGestor, temPapel } from "@/lib/papel"
+import { escopoComEspelho } from "@/lib/compartilhamento"
 
 // Monta o filtro de demandas ligadas a um usuário dentro de uma organização.
 // Resolve os espelhos profissionais (Videomaker/Editor/Designer têm id próprio,
@@ -66,4 +69,48 @@ export async function demandaNoEscopo(
   const escopo = await escopoDeDemandas(usuarioId, organizacaoId, gestor)
   if (!escopo) return true
   return (await prisma.demanda.count({ where: { AND: [{ id: demandaId }, escopo] } })) > 0
+}
+
+/**
+ * A área em que a pessoa fica presa, ou null. A separação entre as pessoas é
+ * por ÁREA, e a área vem do vínculo: quem atua só no audiovisual ou só no
+ * Growth fica no seu quadro; quem atua nos dois, ou não tem área definida, não
+ * é trancado (o escopo de "minhas demandas" já cobre esse caso). Gestão vê tudo.
+ */
+export async function areaTravadaDaPessoa(
+  usuarioId: string,
+  organizacaoId: string,
+  gestor: boolean
+): Promise<"audiovisual" | "design" | null> {
+  if (gestor) return null
+  const membership = await prisma.usuarioOrganizacao.findUnique({
+    where: { usuarioId_organizacaoId: { usuarioId, organizacaoId } },
+    select: { areas: true },
+  })
+  const areas = membership?.areas ?? []
+  const veAudiovisual = areas.includes("audiovisual")
+  const veGrowth = areas.includes("growth")
+  if (veAudiovisual && !veGrowth) return "audiovisual"
+  if (veGrowth && !veAudiovisual) return "design"
+  return null
+}
+
+/**
+ * Tudo o que a pessoa vê no quadro, num filtro só: a empresa (e o que ela
+ * executa por espelhamento), a área do vínculo, "minhas demandas" quando não
+ * tem `verTodasDemandas`, e só cards de evento para o gestor de eventos. São as
+ * mesmas peças que GET /api/demandas monta; o assistente (MCP) da pessoa usa
+ * esta, para ler nem mais nem menos do que ela leria na tela.
+ */
+export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
+  const gestor = ehGestor(session)
+  const [area, minhas] = await Promise.all([
+    areaTravadaDaPessoa(session.user.id, organizacaoId, gestor),
+    escopoDeDemandas(session.user.id, organizacaoId, gestor),
+  ])
+  const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
+  if (area) and.push({ area })
+  if (minhas) and.push(minhas)
+  if (temPapel(session, "gestor_eventos")) and.push({ eventoGestaoId: { not: null } })
+  return { AND: and }
 }
