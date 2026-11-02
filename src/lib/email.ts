@@ -233,8 +233,6 @@ export type NotaParaComprasEmail = {
   notaFiscalUrl: string
 }
 
-const escaparHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
-
 function templateNotaParaCompras(d: NotaParaComprasEmail) {
   const linha = (rotulo: string, valor: string) =>
     `<tr><td style="padding:10px 0;color:#71717a;font-size:13px;width:40%">${rotulo}</td><td style="color:#18181b;font-weight:600">${escaparHtml(valor)}</td></tr>`

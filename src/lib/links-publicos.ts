@@ -2,7 +2,7 @@
 //
 // Portal do fornecedor, página da cobertura e relatório executivo valiam para
 // sempre. Agora cada link tem data de validade (migration
-// 20261007120000_validade_links_publicos) e a tela interna gera outro quando
+// 20261102120000_validade_links_publicos) e a tela interna gera outro quando
 // precisa. Gerar outro TROCA a credencial: o link antigo para de abrir na hora,
 // que é o que se quer quando ele foi parar onde não devia.
 //

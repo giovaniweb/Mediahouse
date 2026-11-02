@@ -204,6 +204,7 @@ describe("arquivo conferido no servidor (lib/midia-limite)", () => {
     let amostra = { tamanho: 30 * 1024 * 1024, tipo: "application/pdf", inicio: bytes("%PDF-1.7") }
     vi.doMock("@/lib/midia", () => ({
       caminhoDaUrl: (u: string) => u.replace(/^\/api\/midia\//, ""),
+      partesDaMidia: (c: string) => { const p = c.split("/"); return { organizacaoId: p[1], tipo: p[2], id: p[3] } },
       amostraDaMidia: async () => amostra,
       removerMidia: remover,
     }))
@@ -219,6 +220,15 @@ describe("arquivo conferido no servidor (lib/midia-limite)", () => {
     expect((await conferirUpload("/api/midia/org/o1/videos/d1/1.mp4"))?.ok).toBe(true)
     amostra = { tamanho: 1024, tipo: "application/octet-stream", inicio: bytes("MZ", 0x90) }
     expect((await conferirUpload("/api/midia/org/o1/videos/d1/1.mp4"))?.ok).toBe(false)
+  })
+
+  it("o teto dos arquivos grandes é configurável e, sem escolha, é o do armazenamento (5 GB)", async () => {
+    const { limiteArquivoGrandeBytes } = await import("@/lib/midia-limite")
+    const MB = 1024 * 1024
+    expect(limiteArquivoGrandeBytes(undefined)).toBe(5120 * MB)
+    expect(limiteArquivoGrandeBytes("500")).toBe(500 * MB)
+    expect(limiteArquivoGrandeBytes("abc")).toBe(5120 * MB)
+    expect(limiteArquivoGrandeBytes("1")).toBe(5120 * MB) // abaixo de 25 MB não é escolha, é engano
   })
 })
 

@@ -25,7 +25,7 @@ export function mesesDisponiveis(): { value: string; label: string }[] {
 // header `Authorization: Bearer`). Retorna null quando o token não existe, venceu
 // ou a organização está inativa — o chamador responde 401/404, nunca agrega tudo.
 // Token sem data de validade não vale: desde 07/10/2026 todo token tem data (os
-// antigos ganharam 180 dias na migration 20261007120000).
+// antigos ganharam 180 dias na migration 20261102120000).
 export async function orgPorRelatorioToken(token: string | null | undefined): Promise<string | null> {
   if (!token || token.length < 16) return null
   const org = await prismaAuth.organizacao.findUnique({

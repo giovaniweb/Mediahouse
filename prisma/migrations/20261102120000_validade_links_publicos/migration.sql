@@ -1,4 +1,5 @@
--- Validade dos links públicos que nunca expiravam (Onda 1, 07/10/2026).
+-- Validade dos links públicos que nunca expiravam (Onda 1). Escrita em 07/10/2026 e
+-- renomeada em 02/11 para vir depois da 20261030200000_tokens_mcp, a última aplicada.
 --
 -- O portal do fornecedor (/fornecedor/<token>), a página pública da cobertura
 -- (/e/<slug>) e o relatório executivo (?token= e o MCP) valiam para sempre: um

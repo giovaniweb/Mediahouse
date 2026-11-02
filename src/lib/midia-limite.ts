@@ -8,7 +8,8 @@
 //
 // O teto de verdade, que impede o arquivo grande de nem subir, é o limite do
 // bucket no Supabase (configuração, fora do código). Este é o segundo cadeado.
-import { amostraDaMidia, caminhoDaUrl, removerMidia, type TipoMidia } from "@/lib/midia"
+// O teto dos arquivos grandes ainda está em aberto (ver limiteArquivoGrandeBytes).
+import { amostraDaMidia, caminhoDaUrl, partesDaMidia, removerMidia, type TipoMidia } from "@/lib/midia"
 
 const MB = 1024 * 1024
 
@@ -24,17 +25,34 @@ const DOCUMENTOS = [
 ]
 
 /**
+ * Teto dos arquivos grandes (vídeo final e brutos, cobertura, depoimento, kit),
+ * em MB. Ainda é decisão do Giovani: a Onda 1 propôs 500 MB, o formulário de
+ * vídeo avisa em 490 MB e o armazenamento novo aceita até 5 GB. Enquanto ele não
+ * escolhe, o padrão é o do armazenamento (5120 MB), para nada que funciona hoje
+ * passar a ser recusado. Escolhido, vira LIMITE_ARQUIVO_GRANDE_MB na Vercel.
+ */
+export function limiteArquivoGrandeBytes(valor = process.env.LIMITE_ARQUIVO_GRANDE_MB): number {
+  const mbs = Number(valor)
+  return (Number.isFinite(mbs) && mbs >= 25 && mbs <= 51200 ? Math.floor(mbs) : 5120) * MB
+}
+
+/**
  * O que cada pasta do bucket aceita. Tipo conhecido tem que bater com os bytes.
  * `outros` é a pasta do arquivo final e dos brutos: o Growth entrega PSD, AI,
  * Figma, SVG e GIF, que não têm lista fechada. Ali o tipo desconhecido passa,
  * menos programa executável.
  */
-export const LIMITES_MIDIA: Partial<Record<TipoMidia, { bytes: number; tipos: string[]; outros?: boolean }>> = {
-  docs: { bytes: 25 * MB, tipos: [...DOCUMENTOS, ...IMAGENS] },
-  thumbnails: { bytes: 10 * MB, tipos: IMAGENS },
-  videos: { bytes: 500 * MB, tipos: [...VIDEOS, ...ZIP, ...IMAGENS, "application/pdf"], outros: true },
-  coberturas: { bytes: 500 * MB, tipos: [...VIDEOS, ...IMAGENS] },
-  depoimentos: { bytes: 500 * MB, tipos: [...VIDEOS, ...IMAGENS] },
+export function limitesMidia(): Partial<Record<TipoMidia, { bytes: number; tipos: string[]; outros?: boolean }>> {
+  const grande = limiteArquivoGrandeBytes()
+  return {
+    docs: { bytes: 25 * MB, tipos: [...DOCUMENTOS, ...IMAGENS] },
+    thumbnails: { bytes: 10 * MB, tipos: IMAGENS },
+    videos: { bytes: grande, tipos: [...VIDEOS, ...ZIP, ...IMAGENS, "application/pdf"], outros: true },
+    coberturas: { bytes: grande, tipos: [...VIDEOS, ...IMAGENS] },
+    depoimentos: { bytes: grande, tipos: [...VIDEOS, ...IMAGENS] },
+    // Kit do videomaker: guia em PDF, vídeo de referência e imagem (os tipos da rota de upload).
+    kit: { bytes: grande, tipos: ["application/pdf", "video/mp4", "video/quicktime", "image/jpeg", "image/png"] },
+  }
 }
 
 /** Programa executável (Windows, Linux, Mac) ou script: nunca entra. */
@@ -83,8 +101,8 @@ export function assinaturaConfere(tipo: string, b: Uint8Array): boolean {
 
 export type ConferenciaUpload = { ok: true; tamanho: number; tipo: string } | { ok: false; erro: string; status: number }
 
-function mb(bytes: number) {
-  return `${Math.round(bytes / MB)} MB`
+function tamanhoLegivel(bytes: number) {
+  return bytes >= 1024 * MB ? `${(bytes / (1024 * MB)).toFixed(1).replace(".", ",").replace(",0", "")} GB` : `${Math.round(bytes / MB)} MB`
 }
 
 /**
@@ -95,14 +113,16 @@ function mb(bytes: number) {
 export async function conferirUpload(url: string): Promise<ConferenciaUpload | null> {
   const caminho = caminhoDaUrl(url)
   if (!caminho) return null
-  const pasta = caminho.split("/")[2] as TipoMidia
-  const regra = LIMITES_MIDIA[pasta]
+  // Acervo legado (org/{org}/legado/...) não recebe upload novo: não confere.
+  if (caminho.split("/")[2] === "legado") return null
+  const pasta = partesDaMidia(caminho)?.tipo
+  const regra = pasta ? limitesMidia()[pasta] : undefined
   if (!regra) return null
   const amostra = await amostraDaMidia(caminho)
   if (!amostra) return { ok: false, erro: "O arquivo não chegou ao armazenamento. Envie de novo.", status: 422 }
   const tipo = (amostra.tipo ?? "").split(";")[0].trim().toLowerCase()
   let erro: string | null = null
-  if (amostra.tamanho > regra.bytes) erro = `Arquivo grande demais (${mb(amostra.tamanho)}). O limite é ${mb(regra.bytes)}.`
+  if (amostra.tamanho > regra.bytes) erro = `Arquivo grande demais (${tamanhoLegivel(amostra.tamanho)}). O limite é ${tamanhoLegivel(regra.bytes)}.`
   else if (ehExecutavel(amostra.inicio)) erro = "Programa executável não é aceito."
   else if (regra.tipos.includes(tipo) ? !assinaturaConfere(tipo, amostra.inicio) : !regra.outros) erro = "Tipo de arquivo não aceito aqui, ou o arquivo não é o que o nome diz."
   if (erro) {
