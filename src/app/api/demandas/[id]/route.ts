@@ -1,3 +1,5 @@
+import { ehEdicaoDaGravacao, ehTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import { emitirConvite, ConviteInvalido } from "@/lib/convites"
 import { requireAcesso } from "@/lib/acesso"
 import { marcadorConclusao } from "@/lib/job-transicoes"
@@ -16,12 +18,18 @@ import { validarPrazo, mesmoDia, formatarDataCurta } from "@/lib/datas"
 import { erroDeCampo } from "@/lib/erros-api"
 import { registrarEdicao, registrarTrocaResponsavel, registrarTrocaExecutor } from "@/lib/historico"
 import type { Session } from "next-auth"
+import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
+import { selectContrato } from "@/lib/quadro-do-card-server"
+import { podeAprovarEntrega } from "@/lib/quem-aprova"
+import { ehGestor } from "@/lib/papel"
+import { demandaNoEscopo } from "@/lib/escopo-demanda"
 
 type Params = { params: Promise<{ id: string }> }
 
-// Garante que a demanda pertence à org da sessão (404 se não). Retorna a org ativa
-// e o prazo já gravado — usado para não barrar a edição de uma demanda antiga cujo
-// prazo continua o mesmo (a regra "prazo >= hoje" vale para o que muda agora).
+// Garante que a demanda pertence à org da sessão e está no escopo da pessoa
+// (404 se não). Retorna a org ativa e o prazo já gravado — usado para não barrar
+// a edição de uma demanda antiga cujo prazo continua o mesmo (a regra "prazo >=
+// hoje" vale para o que muda agora).
 async function assertDemandaOrg(
   session: Session | null,
   id: string
@@ -33,6 +41,9 @@ async function assertDemandaOrg(
     select: { organizacaoId: true, dataLimite: true },
   })
   if (!pertenceAOrg(dem, organizacaoId)) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  if (!session?.user?.id || !(await demandaNoEscopo(session.user.id, organizacaoId, ehGestor(session), id))) {
+    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
   return { organizacaoId, dataLimiteAtual: dem?.dataLimite ?? null }
 }
 
@@ -45,14 +56,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // `assertDemandaOrg` — editar briefing e excluir o card são da dona.
   const acesso = await requireDemandaAcesso(session, id, "acompanhar")
   if (acesso instanceof NextResponse) return acesso
+  // A empresa pode ver o card; a pessoa, só se ele estiver no escopo dela.
+  if (!(await demandaNoEscopo(session.user.id, acesso.organizacaoId, ehGestor(session), id))) {
+    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  }
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
     include: {
       solicitante: { select: { id: true, nome: true, email: true } },
       gestor: { select: { id: true, nome: true } },
-      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true } },
-      editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true } },
+      videomaker: { select: { id: true, nome: true, cidade: true, telefone: true, usuarioId: true, ...selectContrato(acesso.organizacaoId) } },
+      editor: { select: { id: true, nome: true, especialidade: true, telefone: true, whatsapp: true, usuarioId: true } },
       designer: { select: { id: true, nome: true, email: true, usuarioId: true } },
       responsavel: { select: { id: true, nome: true, email: true, tipo: true } },
       responsaveis: { select: { usuario: { select: { id: true, nome: true, tipo: true } } } },
@@ -95,13 +110,59 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
-  return NextResponse.json({
+  // A última versão enviada, respondida ou não: é ela que o detalhe mostra na
+  // aba Aprovação (com o player) e é dela que sai o "Ajuste pedido por…".
+  const ultimaEntrega = await prisma.aprovacaoVideo.findFirst({
+    where: { demandaId: id, demanda: { organizacaoId: demanda.organizacaoId } },
+    orderBy: { createdAt: "desc" },
+    select: { token: true, status: true, comentario: true, aprovadoPor: true, updatedAt: true },
+  })
+  // Quem faz a peça vê, mas não aprova a própria entrega; a outra empresa de
+  // um espelhamento também não (a resposta ao cliente final é da dona).
+  const podeAprovar = acesso.papel === "dona" && podeAprovarEntrega(
+    { usuarioId: session.user.id, gestor: ehGestor(session) },
     demanda,
+  )
+
+  // Em que quadro o card mora (lib/quadro-do-card.ts): o detalhe mostra a camada
+  // de Job e o "Converter em Job" pela mesma regra dos quadros. O contrato sai
+  // como resposta pronta; o vínculo comercial não vai no payload.
+  const { tipoContrato, vinculos, ...videomaker } = demanda.videomaker ?? { tipoContrato: null, vinculos: [] }
+  const contratoVideomaker = demanda.videomaker ? contratoEfetivo(vinculos[0]?.tipoContrato, tipoContrato) : null
+
+  // A nota do videomaker na ficha da gravação: a mesma regra do quadro
+  // (veNotaDoVideomaker). Os custos são de quem paga — a empresa ativa.
+  const pagamento = demanda.videomakerId && await veNotaDoVideomaker(session.user.id, acesso.organizacaoId, ehGestor(session))
+    ? {
+        custos: await prisma.custoVideomaker.findMany({ where: { organizacaoId: acesso.organizacaoId, demandaId: id }, select: { statusPagamento: true, pago: true, notaFiscalUrl: true } }),
+        // O token é o link que o videomaker usa para mandar a nota, e a url é
+        // o arquivo que a Débora baixa: a ficha oferece os dois. Só aqui,
+        // nunca na lista do quadro.
+        notasFiscais: await prisma.notaFiscalUpload.findMany({ where: { demandaId: id, videomakerId: demanda.videomakerId }, select: { status: true, token: true, url: true } }),
+      }
+    : {}
+
+  // O link de entrega do videomaker é o do convite dele nesta gravação (lib/
+  // entrega-da-gravacao.ts): a ficha oferece para copiar e cobrar. Só para a dona.
+  const conviteEntrega = demanda.videomakerId && acesso.papel === "dona"
+    ? await prisma.conviteVideomaker.findFirst({
+        where: { demandaId: id, videomakerId: demanda.videomakerId, status: { in: ["aceito", "pendente"] } },
+        orderBy: { createdAt: "desc" },
+        select: { token: true },
+      })
+    : null
+
+  return NextResponse.json({
+    demanda: { ...demanda, videomaker: demanda.videomaker ? videomaker : null, ...pagamento, conviteEntrega },
+    quadro: quadroDoCard({ ...demanda, contratoVideomaker }),
+    contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
     // outra empresa não opera. `papel` vem do acesso, não do payload, porque é
     // ele que a rota já usou para autorizar.
     espelho: espelhoDoCard(demanda.compartilhamentos, acesso.organizacaoId),
     papelNoCard: acesso.papel,
+    ultimaEntrega,
+    podeAprovarEntrega: podeAprovar,
   })
 }
 
@@ -402,6 +463,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (!linha) return NextResponse.json({ error: "Linha/projeto inválida para esta organização" }, { status: 404 })
   }
 
+  // Gravação externa: quem edita e o tipo. Nulo limpa; fora da lista é erro, não silêncio.
+  if (body.edicaoPor !== undefined && body.edicaoPor !== null && !ehEdicaoDaGravacao(body.edicaoPor)) {
+    return NextResponse.json({ error: "Quem edita: videomaker, equipe ou sem edição." }, { status: 400 })
+  }
+  if (body.tipoGravacao !== undefined && body.tipoGravacao !== null && !ehTipoDeGravacao(body.tipoGravacao)) {
+    return NextResponse.json({ error: "Tipo: entrega de equipamento, demonstração, conteúdo ou evento." }, { status: 400 })
+  }
+  const textoCurto = (v: unknown, max: number) => v === undefined ? undefined : typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null
+
   const updateData: Record<string, any> = {
     titulo: body.titulo,
     descricao: body.descricao,
@@ -425,6 +495,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
     linkPostagem: body.linkPostagem,
     linkCliente: body.linkCliente,
     localGravacao: body.localGravacao,
+    edicaoPor: body.edicaoPor,
+    tipoGravacao: body.tipoGravacao,
+    temBrinde: typeof body.temBrinde === "boolean" || body.temBrinde === null ? body.temBrinde : undefined,
+    brinde: textoCurto(body.brinde, 120),
+    levar: textoCurto(body.levar, 300),
+    clienteFinalNome: textoCurto(body.clienteFinalNome, 160),
+    clienteFinalTelefone: textoCurto(body.clienteFinalTelefone, 30),
     motivoImpedimento: body.motivoImpedimento,
     classificacao: body.classificacao,
     formato: body.formato,
@@ -552,6 +629,14 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  // Excluir é da gestão ou de quem tem `excluirDemanda` — a mesma regra que a
+  // ficha usa para mostrar o botão. Antes bastava ser da empresa: o ícone de
+  // lixeira do quadro apagava o card de qualquer um.
+  const acesso = await requireAcesso()
+  if (acesso instanceof NextResponse) return acesso
+  if (!["admin", "gestor"].includes(acesso.papel) && !acesso.permissoes.excluirDemanda) {
+    return NextResponse.json({ error: "Sem permissão para excluir demandas" }, { status: 403 })
+  }
 
   await prisma.demanda.delete({ where: { id } })
 

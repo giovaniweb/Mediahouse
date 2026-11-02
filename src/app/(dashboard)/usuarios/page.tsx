@@ -8,7 +8,7 @@ import {
   Users, Search, CheckCircle2, XCircle, Plus, X, GitMerge, AlertTriangle,
   KeyRound, Eye, EyeOff, AlertCircle, Trash2, ShieldCheck, ShieldOff,
   Download, MoreHorizontal, Pencil, UserCog, Power, ChevronLeft, ChevronRight,
-  Users2, IdCard,
+  Users2, IdCard, ArrowUpDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -20,17 +20,10 @@ import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
 import { AbaPerfis } from "@/components/pessoas/AbaPerfis"
 import {
   type PessoaLista, type PerfilAcesso,
-  vinculoDe, VINCULO_LABEL, VINCULO_COR, nivelDe, NIVEL_LABEL, NIVEL_COR, NIVEIS,
+  vinculoDe, VINCULO_LABEL, VINCULO_COR, papelDe, nivelDe, NIVEL_LABEL, NIVEL_COR, NIVEIS,
   perfilDe, PERFIL_LABEL, PERFIL_COR, AREA_LABEL, AREA_PONTO,
-  funcaoDe, semAtividade, iniciais, corAvatar, formatarAtividade,
+  funcaoDe, FUNCAO_LABEL, semAtividade, iniciais, corAvatar, formatarAtividade,
 } from "@/lib/pessoas-ui"
-
-const TIPO_LABEL: Record<string, string> = {
-  admin: "Admin", gestor: "Gestor", operacao: "Operação",
-  solicitante: "Solicitante", editor: "Videomaker Int", videomaker: "Videomaker", social: "Social Media",
-  designer: "Designer", gestor_eventos: "Gestor de Eventos",
-  analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego", auxiliar_admin: "Auxiliar Admin",
-}
 
 const TIPO_COLOR: Record<string, string> = {
   admin: "bg-purple-500/10 text-purple-400 border-purple-800",
@@ -167,14 +160,36 @@ const CATEGORIAS = [
 ]
 const FUNCOES = [
   "social", "designer", "analista_crm", "gestor_trafego", "videomaker", "editor",
-  "fotografo", "atendimento", "copywriter", "produtor", "coordenador", "gestor", "admin", "operacao", "outro",
+  "fotografo", "atendimento", "copywriter", "produtor", "coordenador", "gestor", "admin", "operacao",
+  "auxiliar_admin", "gestor_eventos", "outro",
 ]
-const FUNCAO_FORM_LABEL: Record<string, string> = {
-  social: "Social Media", designer: "Designer", analista_crm: "Analista CRM", gestor_trafego: "Gestor de Tráfego",
-  videomaker: "Videomaker", editor: "Editor", fotografo: "Fotógrafo", atendimento: "Atendimento",
-  copywriter: "Copywriter", produtor: "Produtor", coordenador: "Coordenador", gestor: "Gestor", admin: "Admin",
-  operacao: "Operação", outro: "Outro",
+
+// A função só se escolhe quando difere do papel. "Igual ao papel" é o valor
+// vazio, e a função igual ao papel some da lista para não aparecer duas vezes.
+// Função gravada fora da lista entra nela: sem a opção, o select cairia em
+// "Igual ao papel" e mostraria uma função que a pessoa não tem.
+function SelectFuncao({ papel, funcao, onChange, className }: {
+  papel: string
+  funcao: string
+  onChange: (funcao: string) => void
+  className: string
+}) {
+  const opcoes = !funcao || FUNCOES.includes(funcao) ? FUNCOES : [...FUNCOES, funcao]
+  return (
+    <select className={className} value={funcao === papel ? "" : funcao} onChange={e => onChange(e.target.value)}>
+      <option value="">Igual ao papel ({FUNCAO_LABEL[papel] ?? papel})</option>
+      {opcoes.filter(f => f !== papel).map(f => <option key={f} value={f}>{FUNCAO_LABEL[f] ?? f}</option>)}
+    </select>
+  )
 }
+
+// Papel trocado para a própria função escolhida: a função vira "Igual ao papel"
+// de fato, e não só na tela. Sem isso, a troca de papel seguinte trazia a
+// função antiga de volta em vez de acompanhar o papel.
+function funcaoAposPapel(funcao: string, papel: string): string {
+  return funcao === papel ? "" : funcao
+}
+
 const AREAS = [
   { value: "audiovisual", label: "Audiovisual" },
   { value: "growth", label: "Growth / Conteúdos" },
@@ -191,32 +206,24 @@ function ModalEditarUsuario({
   const [nome, setNome] = useState(usuario.nome)
   const [email, setEmail] = useState(usuario.email ?? "")
   const [telefone, setTelefone] = useState(usuario.telefone ?? "")
-  const [tipo, setTipo] = useState(usuario.tipo)
+  // O papel desta empresa, e não o `tipo` global: o salvar manda este valor como
+  // papel, e semear com o `tipo` desfazia o papel trocado aqui da vez anterior.
+  const papelInicial = papelDe(usuario)
+  const [tipo, setTipo] = useState(papelInicial)
   const [categoria, setCategoria] = useState(usuario.categoria ?? "interna")
-  const [funcao, setFuncao] = useState(usuario.funcaoProfissional ?? "")
+  // Função igual ao papel abre como "Igual ao papel" (vazio): assim ela segue o
+  // papel se ele for trocado aqui, em vez de ficar presa no nome antigo.
+  const funcaoInicial = usuario.funcaoProfissional === papelInicial ? "" : (usuario.funcaoProfissional ?? "")
+  const [funcao, setFuncao] = useState(funcaoInicial)
   const [areas, setAreas] = useState<string[]>(usuario.areas ?? [])
   const [lider, setLider] = useState(usuario.liderAudiovisual ?? false)
   const [recebeTudo, setRecebeTudo] = useState(usuario.recebeTodosAvisos ?? false)
+  const [operaGravacoes, setOperaGravacoes] = useState(usuario.operaGravacoes ?? false)
   const [novaSenha, setNovaSenha] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [mostrar, setMostrar] = useState(false)
   const [loading, setLoading] = useState(false)
   const toggleArea = (a: string) => setAreas((cur) => cur.includes(a) ? cur.filter(x => x !== a) : [...cur, a])
-
-  const TIPOS = [
-    { value: "admin", label: "Admin" },
-    { value: "gestor", label: "Gestor" },
-    { value: "operacao", label: "Operação" },
-    { value: "solicitante", label: "Solicitante" },
-    { value: "social", label: "Social Media" },
-    { value: "designer", label: "Designer" },
-    { value: "analista_crm", label: "Analista CRM" },
-    { value: "gestor_trafego", label: "Gestor de Tráfego" },
-    { value: "auxiliar_admin", label: "Auxiliar Admin" },
-    { value: "gestor_eventos", label: "Gestor de Eventos" },
-    { value: "videomaker", label: "Videomaker Ext" },
-    { value: "editor", label: "Videomaker Int" },
-  ]
 
   const inp = "w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-500"
 
@@ -226,7 +233,11 @@ function ModalEditarUsuario({
     if (novaSenha && novaSenha !== confirmar) { toast.error("Senhas não coincidem"); return }
     setLoading(true)
     try {
-      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, funcaoProfissional: funcao || null, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo }
+      const body: Record<string, unknown> = { nome, email, telefone, tipo, categoria, areas, liderAudiovisual: lider, recebeTodosAvisos: recebeTudo, operaGravacoes }
+      // "Igual ao papel" grava o próprio papel, como o cadastro já faz. Só vai
+      // quando a função ou o papel mudaram: quem não tem função (o solicitante)
+      // não ganha uma só porque alguém corrigiu o telefone.
+      if (funcao !== funcaoInicial || tipo !== papelInicial) body.funcaoProfissional = funcao || tipo
       if (novaSenha) body.novaSenha = novaSenha
       const res = await fetch(`/api/usuarios/${usuario.id}`, {
         method: "PATCH",
@@ -269,8 +280,12 @@ function ModalEditarUsuario({
           </div>
           <div>
             <label className="text-xs text-zinc-400 block mb-1">Papel no sistema (acesso)</label>
-            <select className={inp} value={tipo} onChange={e => setTipo(e.target.value)}>
-              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <select className={inp} value={tipo} onChange={e => {
+              const papel = e.target.value
+              setTipo(papel)
+              setFuncao(f => funcaoAposPapel(f, papel))
+            }}>
+              {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
             </select>
           </div>
           <div className="border-t border-zinc-800 pt-3 space-y-3">
@@ -283,10 +298,7 @@ function ModalEditarUsuario({
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
-              <select className={inp} value={funcao} onChange={e => setFuncao(e.target.value)}>
-                <option value="">— Não definida —</option>
-                {FUNCOES.map(f => <option key={f} value={f}>{FUNCAO_FORM_LABEL[f] ?? f}</option>)}
-              </select>
+              <SelectFuncao className={inp} papel={tipo} funcao={funcao} onChange={setFuncao} />
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">Equipes</label>
@@ -308,7 +320,8 @@ function ModalEditarUsuario({
               <p className="text-sm font-medium text-zinc-100">Recebe todos os avisos</p>
               <p className="text-[11px] text-zinc-400 mt-0.5">
                 Toda movimentação da operação chega no WhatsApp desta pessoa. Não altera permissão nenhuma.
-                {(tipo === "admin" || tipo === "gestor") && (
+                {/* O aviso por cargo ainda lê o `tipo` global (src/lib/notificados.ts), não o papel. */}
+                {(usuario.tipo === "admin" || usuario.tipo === "gestor") && (
                   <span className="text-zinc-500"> Admin e gestor já recebem por padrão.</span>
                 )}
               </p>
@@ -316,6 +329,22 @@ function ModalEditarUsuario({
             <button type="button" role="switch" aria-checked={recebeTudo} onClick={() => setRecebeTudo(v => !v)}
               className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${recebeTudo ? "bg-emerald-600" : "bg-zinc-700"}`}>
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${recebeTudo ? "left-[18px]" : "left-0.5"}`} />
+            </button>
+          </div>
+
+          {/* Quem opera as Gravações Externas (a Débora): recebe os avisos do dia
+              a dia das gravações. Admin e gestor sem a marca só recebem quando
+              a gravação trava. */}
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">Opera Gravações Externas</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Recebe no WhatsApp os avisos das gravações: entrou, confirmou, material, nota, pronta para enviar. Não altera permissão nenhuma.
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={operaGravacoes} aria-label="Opera Gravações Externas" onClick={() => setOperaGravacoes(v => !v)}
+              className={`shrink-0 mt-0.5 w-10 h-6 rounded-full transition-colors relative ${operaGravacoes ? "bg-emerald-600" : "bg-zinc-700"}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${operaGravacoes ? "left-[18px]" : "left-0.5"}`} />
             </button>
           </div>
 
@@ -675,7 +704,7 @@ export default function PessoasAcessosPage() {
         body: JSON.stringify({ tipo: promoverTipo }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(`${promoverTarget.nome} promovido para ${TIPO_LABEL[promoverTipo] ?? promoverTipo}!`)
+      toast.success(`${promoverTarget.nome} promovido para ${FUNCAO_LABEL[promoverTipo] ?? promoverTipo}!`)
       setPromoverTarget(null)
       mutate()
     } catch (e: unknown) {
@@ -703,17 +732,24 @@ export default function PessoasAcessosPage() {
     }
   }
 
-  // Hard delete só para cadastro vazio (a API revalida via ?modo=hard).
+  // Cadastro vazio é apagado de vez (a API revalida via ?modo=hard). Com
+  // histórico, é desativado aqui e o histórico fica com o nome.
   async function excluirPessoa() {
     if (!deleteTarget) return
+    const deVez = !!deleteTarget.vinculos?.podeExcluir
+    const outraEmpresa = (deleteTarget.vinculos?.memberships ?? 0) > 1
     setDeletando(true)
     try {
-      const res = await fetch(`/api/usuarios/${deleteTarget.id}?modo=hard`, { method: "DELETE" })
+      const res = await fetch(`/api/usuarios/${deleteTarget.id}${deVez ? "?modo=hard" : ""}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => ({} as { error?: string }))
         throw new Error(err.error ?? "Erro ao excluir")
       }
-      toast.success(`${deleteTarget.nome} foi excluído definitivamente.`)
+      toast.success(
+        deVez ? `${deleteTarget.nome} foi excluído definitivamente.`
+        : outraEmpresa ? `${deleteTarget.nome} saiu desta empresa.`
+        : `Cadastro de ${deleteTarget.nome} desativado, e o WhatsApp liberado.`
+      )
       if (pessoaAbertaId === deleteTarget.id) setPessoaAbertaId(null)
       setDeleteTarget(null)
       mutate()
@@ -743,6 +779,16 @@ export default function PessoasAcessosPage() {
       setMesclarModal(m => m ? { ...m, buscando: false } : null)
       toast.error("Erro ao buscar pessoa")
     }
+  }
+
+  // O Mesclar abre mantendo quem foi clicado. Vindo de "Excluir", esse é
+  // justamente o cadastro que se quer tirar: inverter escolhe o outro para ficar.
+  async function inverterMesclar() {
+    if (!mesclarModal?.secundario) return
+    const { principal, secundario } = mesclarModal
+    setMesclarModal(m => m ? { ...m, principal: secundario, secundario: principal, qtdDemandas: null } : null)
+    const qtd = await fetch(`/api/demandas?solicitanteId=${principal.id}&limit=0`).then(r => r.json()).then(j => j.total ?? 0).catch(() => 0)
+    setMesclarModal(m => m && m.secundario?.id === principal.id ? { ...m, qtdDemandas: qtd } : m)
   }
 
   async function confirmarMesclar() {
@@ -903,8 +949,11 @@ export default function PessoasAcessosPage() {
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Papel / acesso *</label>
                 <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
-                  value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
-                  {TIPO_OPTS.map(t => <option key={t} value={t}>{TIPO_LABEL[t] ?? t}</option>)}
+                  value={form.tipo} onChange={e => {
+                    const papel = e.target.value
+                    setForm(f => ({ ...f, tipo: papel, funcaoProfissional: funcaoAposPapel(f.funcaoProfissional, papel) }))
+                  }}>
+                  {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">
@@ -921,11 +970,8 @@ export default function PessoasAcessosPage() {
               </div>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Função profissional</label>
-                <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
-                  value={form.funcaoProfissional} onChange={e => setForm(f => ({ ...f, funcaoProfissional: e.target.value }))}>
-                  <option value="">— Não definida —</option>
-                  {FUNCOES.map(fn => <option key={fn} value={fn}>{FUNCAO_FORM_LABEL[fn] ?? fn}</option>)}
-                </select>
+                <SelectFuncao className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                  papel={form.tipo} funcao={form.funcaoProfissional} onChange={fn => setForm(f => ({ ...f, funcaoProfissional: fn }))} />
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs text-zinc-400 block mb-1">Equipes</label>
@@ -1143,9 +1189,9 @@ export default function PessoasAcessosPage() {
                           <div className="flex justify-end">
                             <MenuLinha itens={[
                               { label: "Editar pessoa", Icon: Pencil, run: () => setEditTarget(p) },
-                              { label: "Editar permissões", Icon: ShieldCheck, run: () => setPermUser({ id: p.id, nome: p.nome, tipo: p.tipo, areas: p.areas }) },
+                              { label: "Editar permissões", Icon: ShieldCheck, run: () => setPermUser({ id: p.id, nome: p.nome, tipo: papelDe(p), areas: p.areas }) },
                               { label: "Redefinir senha", Icon: KeyRound, run: () => setResetTarget({ id: p.id, nome: p.nome, email: p.email }) },
-                              ...(p.tipo === "solicitante"
+                              ...(papelDe(p) === "solicitante"
                                 ? [{ label: "Promover", Icon: UserCog, run: () => setPromoverTarget({ id: p.id, nome: p.nome }) }]
                                 : []),
                               { label: "Mesclar duplicado", Icon: GitMerge, run: () => abrirMesclar(p) },
@@ -1269,7 +1315,7 @@ export default function PessoasAcessosPage() {
           onClose={() => setPessoaAbertaId(null)}
           acoes={{
             onEditar: () => setEditTarget(pessoaAberta),
-            onPermissoes: () => setPermUser({ id: pessoaAberta.id, nome: pessoaAberta.nome, tipo: pessoaAberta.tipo, areas: pessoaAberta.areas }),
+            onPermissoes: () => setPermUser({ id: pessoaAberta.id, nome: pessoaAberta.nome, tipo: papelDe(pessoaAberta), areas: pessoaAberta.areas }),
             onSenha: () => setResetTarget({ id: pessoaAberta.id, nome: pessoaAberta.nome, email: pessoaAberta.email }),
             onMesclar: () => abrirMesclar(pessoaAberta),
             onStatus: () => toggleStatus(pessoaAberta.id, pessoaAberta.status),
@@ -1336,11 +1382,12 @@ export default function PessoasAcessosPage() {
         </div>
       )}
 
-      {/* Excluir cadastro vazio / mesclar se tiver vínculos */}
+      {/* Excluir: cadastro vazio sai de vez; com histórico, sai da empresa */}
       {deleteTarget && (() => {
         const v = deleteTarget.vinculos
         const carregando = deleteTarget.carregando
         const podeExcluir = !!v?.podeExcluir
+        const outraEmpresa = (v?.memberships ?? 0) > 1
         return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => !deletando && setDeleteTarget(null)}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 space-y-4" onClick={ev => ev.stopPropagation()}>
@@ -1349,7 +1396,7 @@ export default function PessoasAcessosPage() {
                 <Trash2 className="w-4 h-4 text-red-400" />
               </div>
               <div>
-                <p className="font-semibold text-white text-sm">Excluir cadastro vazio</p>
+                <p className="font-semibold text-white text-sm">Excluir cadastro</p>
                 <p className="text-xs text-zinc-400">{deleteTarget.nome}</p>
               </div>
             </div>
@@ -1377,9 +1424,28 @@ export default function PessoasAcessosPage() {
               </>
             ) : (
               <>
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
-                  <p className="text-xs font-semibold text-amber-400 mb-1">Esta pessoa tem vínculos. Mescle com outro cadastro antes de excluir.</p>
-                  <ul className="text-[11px] text-zinc-400 space-y-0.5">
+                <p className="text-sm text-zinc-300">
+                  <strong>{deleteTarget.nome}</strong> tem histórico no sistema, então o cadastro não pode ser apagado: o nome precisa continuar nos pedidos e comentários.{" "}
+                  {outraEmpresa ? <>Aqui, o cadastro <strong>sai desta empresa</strong>:</> : <>O cadastro vai ser <strong>desativado</strong>:</>}
+                </p>
+                <ul className="text-xs text-zinc-400 space-y-1">
+                  {outraEmpresa ? (
+                    <>
+                      <li>• some da lista desta empresa e perde o acesso a ela;</li>
+                      <li>• deixa de travar outro cadastro daqui com o mesmo WhatsApp;</li>
+                      <li>• na outra empresa, nada muda.</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>• perde o acesso e fica na lista como inativo;</li>
+                      <li>• o WhatsApp sai deste cadastro e deixa de travar outro cadastro com o mesmo número;</li>
+                      <li>• pedidos, comentários e histórico continuam, com o nome.</li>
+                    </>
+                  )}
+                </ul>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                  <p className="text-[11px] font-semibold text-zinc-400 mb-1">O que fica no histórico</p>
+                  <ul className="text-[11px] text-zinc-500 space-y-0.5">
                     {!!v?.demandas && <li>• {v.demandas} demanda(s)</li>}
                     {!!v?.comentarios && <li>• {v.comentarios} comentário(s)</li>}
                     {!!v?.historicos && <li>• {v.historicos} registro(s) de histórico</li>}
@@ -1388,13 +1454,23 @@ export default function PessoasAcessosPage() {
                     {!!v?.profissional && <li>• {v.profissional} perfil profissional vinculado</li>}
                   </ul>
                 </div>
-                <div className="flex gap-2 pt-1">
+                {!!v?.demandas && (
+                  <p className="text-xs text-amber-400">
+                    Se for a mesma pessoa de outro cadastro, use Mesclar: as demandas vão junto para o cadastro que fica.
+                  </p>
+                )}
+                <button onClick={excluirPessoa} disabled={deletando}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
+                  {deletando ? "Salvando..." : outraEmpresa ? "Remover desta empresa" : "Desativar cadastro"}
+                </button>
+                <div className="flex gap-2">
                   <button
                     onClick={() => { const alvo = pessoas.find(x => x.id === deleteTarget.id); setDeleteTarget(null); if (alvo) abrirMesclar(alvo) }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
-                    <GitMerge className="w-4 h-4" /> Mesclar duplicado
+                    disabled={deletando}
+                    className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5">
+                    <GitMerge className="w-4 h-4" /> Mesclar
                   </button>
-                  <button onClick={() => setDeleteTarget(null)}
+                  <button onClick={() => setDeleteTarget(null)} disabled={deletando}
                     className="flex-1 border border-zinc-700 text-zinc-300 text-sm py-2 rounded-lg hover:bg-zinc-800 transition-colors">
                     Cancelar
                   </button>
@@ -1467,9 +1543,18 @@ export default function PessoasAcessosPage() {
                     {mesclarModal.secundario.telefone && <span className="ml-2 text-zinc-500">{mesclarModal.secundario.telefone}</span>}
                   </p>
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded border inline-block mt-1", TIPO_COLOR[mesclarModal.secundario.tipo] ?? "bg-zinc-800 text-zinc-400 border-zinc-700")}>
-                    {TIPO_LABEL[mesclarModal.secundario.tipo] ?? mesclarModal.secundario.tipo}
+                    {FUNCAO_LABEL[mesclarModal.secundario.tipo] ?? mesclarModal.secundario.tipo}
                   </span>
                 </div>
+              )}
+              {mesclarModal.secundario && (
+                <button
+                  onClick={inverterMesclar}
+                  disabled={mesclarModal.mesclando}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 disabled:opacity-40"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" /> Inverter: manter {mesclarModal.secundario.nome.trim()} e remover {mesclarModal.principal.nome.trim()}
+                </button>
               )}
               {mesclarModal.buscando === false && mesclarModal.secundarioBusca && mesclarModal.secundario === null && (
                 <p className="text-xs text-zinc-500 italic">Nenhuma pessoa encontrada com esse termo.</p>
@@ -1486,7 +1571,7 @@ export default function PessoasAcessosPage() {
                   {(mesclarModal.qtdDemandas ?? 0) > 0 && (
                     <p className="text-xs text-zinc-400 flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-green-400" /> <strong className="text-zinc-200">{mesclarModal.qtdDemandas}</strong> demanda(s) migrada(s)</p>
                   )}
-                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado marcado como <strong>inativo</strong></p>
+                  <p className="text-xs text-amber-400 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3 h-3" /> Cadastro duplicado <strong>desativado aqui</strong>, sem travar o WhatsApp</p>
                 </div>
               )}
               <div className="flex gap-2 pt-1">

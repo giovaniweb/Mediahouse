@@ -296,9 +296,10 @@ export const PRESETS: Record<string, PresetPerms> = {
     verDashboard: true,
     verDemandas: true,
     verKanban: false, // visualização em cards, não kanban
-    // Vê o quadro do audiovisual inteiro; a rota o prende a `area=audiovisual`,
-    // então o Growth continua fora do alcance.
-    verTodasDemandas: true,
+    // Só as demandas em que está escalado. De 15/08 a 29/10/2026 este preset
+    // dava o quadro inteiro do audiovisual, e quem era criado copiava isso para
+    // o próprio registro: um freelancer abria os 263 cards da Contourline.
+    verTodasDemandas: false,
   },
 
   // Designer — dashboard dele + quadro de artes (área design)

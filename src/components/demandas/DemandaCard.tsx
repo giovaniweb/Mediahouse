@@ -1,19 +1,15 @@
 "use client"
 
-import { AlertTriangle, Calendar, Trash2, User, Pencil, Copy, MessageCircle, Paperclip, GripVertical } from "lucide-react"
+import { AlertTriangle, Calendar, Trash2, User, Pencil, Copy, MessageCircle, Paperclip } from "lucide-react"
 import styles from "./DemandCardModern.module.css"
 import { cn } from "@/lib/utils"
 import { estaAtrasada, diasDeAtraso, STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { formatarDataCurta } from "@/lib/datas"
 import { naoEnviadoAoCliente } from "@/lib/growth-kanban"
 import { TagEspelho, type EspelhoDoCard } from "./TagEspelho"
-import { ATRIBUTO_ALCA } from "@/components/kanban/sensorAlca"
-
-// Quanto o ponteiro pode andar entre apertar e soltar para ainda contar como
-// clique. É o mesmo limite com que o quadro começa a arrastar (5 px).
-const LIMITE_CLIQUE = 5
+import { AlcaArrastar, useCliqueDoCard } from "@/components/kanban/CardDoQuadro"
 
 const prioridadeConfig = {
   urgente: { label: "Urgente", class: "bg-red-500/15 text-red-300 border-red-500/30" },
@@ -110,21 +106,12 @@ export function DemandaCard({ demanda, dragHandleProps, arrastavel = false, onDe
     else router.push(`/demandas/${demanda.id}`)
   }
 
-  // Clique e arrasto não brigam. Arrastar o card terminava abrindo o detalhe:
-  // depois do arrasto o quadro só marca o clique (preventDefault), e este
-  // onClick não olhava a marca. Agora o clique abre só quando o ponteiro quase
-  // não andou, não houve arrasto e não foi na alça.
-  const inicio = useRef<{ x: number; y: number } | null>(null)
-  const foiClique = (e: React.MouseEvent) => {
-    const de = inicio.current
-    inicio.current = null
-    if (e.defaultPrevented) return false
-    if ((e.target as Element).closest?.(`[${ATRIBUTO_ALCA}]`)) return false
-    return !de || Math.hypot(e.clientX - de.x, e.clientY - de.y) <= LIMITE_CLIQUE
-  }
+  // Clique e arrasto não brigam: o clique abre só quando não houve arrasto
+  // (CardDoQuadro.tsx, o mesmo gesto dos cards de Job e da social).
+  const clique = useCliqueDoCard(abrir)
 
   return (
-    <div onClick={(e) => { if (foiClique(e)) abrir() }} onPointerDown={(e) => { inicio.current = { x: e.clientX, y: e.clientY } }}>
+    <div {...clique.alvo}>
       <div
         data-card-surface
         className={cn(
@@ -191,22 +178,12 @@ export function DemandaCard({ demanda, dragHandleProps, arrastavel = false, onDe
               título ocupa a largura toda do card — era ele que encolhia a área de
               arrasto. Enter no link abre; Ctrl/⌘+clique abre em outra aba. */}
           <a href={`/demandas/${demanda.id}`} draggable={false}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (e.metaKey || e.ctrlKey || e.shiftKey) return
-              const clique = foiClique(e)
-              e.preventDefault()
-              if (clique) abrir()
-            }}
+            onClick={clique.noLink}
             className={cn("block flex-1 min-w-0 text-left text-sm font-medium text-zinc-200 leading-tight line-clamp-2 rounded", styles.title)}
             aria-label={`Abrir demanda: ${demanda.titulo}`}>
             {demanda.titulo}
           </a>
-          {arrastavel && (
-            <span {...{ [ATRIBUTO_ALCA]: "" }} className={styles.alca} title="Arraste para mudar de etapa" aria-hidden="true">
-              <GripVertical size={18} />
-            </span>
-          )}
+          {arrastavel && <AlcaArrastar />}
         </div>
 
         <div className={cn("flex flex-wrap gap-1 mb-2", styles.tags)}>

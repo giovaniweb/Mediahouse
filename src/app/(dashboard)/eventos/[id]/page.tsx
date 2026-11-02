@@ -9,7 +9,7 @@ import {
   ClipboardCheck, Plus, ExternalLink, Trash2, Video, Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
-import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE } from "@/lib/evento-apresentacao"
+import { TIPO_EVENTO_LABEL, STATUS_EVENTO_STYLE, colunaDoEvento } from "@/lib/evento-apresentacao"
 import { fetcher } from "@/lib/fetcher"
 
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
@@ -126,7 +126,8 @@ function TabRelatorio({ eventoId }: { eventoId: string }) {
 
 // ─── Visão Geral ──────────────────────────────────────────────────────────────
 function TabGeral({ ev, financeiro, onMutate }: { ev: Evento; financeiro: Financeiro | null; onMutate: () => void }) {
-  const [status, setStatus] = useState(ev.status)
+  // Evento antigo em "ideia" aparece como Planejamento, como no quadro.
+  const [status, setStatus] = useState(colunaDoEvento(ev.status))
   async function mudarStatus(novo: string) {
     setStatus(novo)
     await fetch(`/api/eventos/${ev.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: novo }) })

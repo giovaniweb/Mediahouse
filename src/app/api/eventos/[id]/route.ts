@@ -5,6 +5,7 @@ import { requireAcesso } from "@/lib/acesso"
 import { linkDocumentoSeguro, podeDecidirEvento } from "@/lib/eventos-documentos"
 import { comOrg } from "@/lib/org-contexto"
 import { requireEventoGestaoOrg } from "@/lib/org"
+import { ehStatusDeEvento } from "@/lib/evento-apresentacao"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -65,6 +66,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const body = await req.json()
+  // Status fora da lista (inclusive o antigo "ideia") é recusado com a frase,
+  // em vez de virar erro do banco.
+  if (body.status !== undefined && !ehStatusDeEvento(body.status)) return NextResponse.json({ error: "Status inválido" }, { status: 400 })
   if (!acesso.permissoes.verFinanceiroEvento && (body.orcamentoPrevisto !== undefined || body.orcamentoAprovado !== undefined)) return NextResponse.json({ error: "Sem permissão financeira" }, { status: 403 })
   for (const chave of ["orcamentoPrevisto", "orcamentoAprovado"]) {
     const valor = body[chave]

@@ -7,6 +7,7 @@ import styles from "@/components/layout/TeamSurface.module.css"
 import { Mail, Phone, MapPin, ExternalLink } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 type Membro = {
   id: string; nome: string; email: string | null; telefone: string | null
@@ -17,11 +18,6 @@ type DesignerExterno = {
   id: string; nome: string; whatsapp: string | null; email: string | null
   cidade: string | null; estado: string | null; portfolio: string | null
   especialidade: string[]; status: "pendente" | "ativo"
-}
-
-const PAPEL_LABEL: Record<string, string> = {
-  admin: "Admin", gestor: "Gestor", operacao: "Operação", solicitante: "Solicitante",
-  social: "Social Media", designer: "Designer", editor: "Editor", videomaker: "Videomaker",
 }
 
 export default function EquipeGrowthPage() {
@@ -60,7 +56,7 @@ export default function EquipeGrowthPage() {
               </div>
               <div className="col-start-2 sm:col-start-3 flex flex-wrap gap-2">
               <span className="text-[11px] px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-300 border-indigo-500/25">{m.funcao}</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full border bg-zinc-700/40 text-zinc-300 border-zinc-600/40">{PAPEL_LABEL[m.papel] ?? m.papel}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full border bg-zinc-700/40 text-zinc-300 border-zinc-600/40">{FUNCAO_LABEL[m.papel] ?? m.papel}</span>
               </div>
             </div>
           ))}

@@ -31,7 +31,7 @@ const fs = require('node:fs');
   else if(url.pathname==='/api/dashboard/hoje') data={eventosHoje:[],demandasCriticas:[],custosVencendo:[],alertasCriticos:[],geradoEm:'2026-09-20T12:00:00Z'};
   else if(url.pathname==='/api/kpi/b2c-b2b') data={b2c:{count:14,percent:70},b2b:{count:6,percent:30},sem_classificacao:{count:0,percent:0}};
   else if(url.pathname==='/api/ideias/kpi') data={totalIdeias:10,novas:2,emAnalise:1,realizadas:4,taxaConversao:40,ideiasEsteMes:2};
-  else if(url.pathname==='/api/demandas' && url.searchParams.get('tipoVideo')==='cobertura_evento') {
+  else if(url.pathname==='/api/demandas' && url.searchParams.get('quadro')==='jobs') {
    if(failJobs) return route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:'Falha simulada'})});
    data={demandas:demands.map(d=>({...d,tipoVideo:'cobertura_evento',statusInterno:d.id==='demo-0'?'aguardando_aprovacao_interna':d.statusInterno}))};
   }

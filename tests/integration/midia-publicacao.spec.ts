@@ -134,6 +134,19 @@ describe("publicação explícita e autorização por objeto", () => {
       const r = await (await listar()).json(); expect(r.total).toBe(2); expect(r.totalPages).toBe(2); expect(r.videos).toHaveLength(1)
     } finally { await db.arquivo.delete({ where: { id: extra.id } }) }
   })
+  it("acervo legado abre pelo vínculo exato, como o formato atual", async () => {
+    // Cópia de 24/08 do bucket público: org/{org}/legado/videos/{demanda}/final/{arquivo}.
+    const legado = (org: string, d: string) => `org/${org}/legado/videos/${d}/final/1.mp4`
+    await db.arquivo.update({ where: { id: arq }, data: { url: `/api/midia/${legado(a,d1)}` } })
+    await db.aprovacaoVideo.update({ where: { token: `${p}-aprovacao` }, data: { urlVideo: `/api/midia/${legado(a,d1)}` } })
+    expect((await ler(legado(a,d1),`${p}-aprovacao`)).status).toBe(302)
+    expect((await ler(legado(a,d1),`${d1}-token`)).status).toBe(302)
+    expect((await ler(legado(a,d2),`${p}-aprovacao`)).status).toBe(404)
+    sessao(leitor); expect((await ler(legado(a,d1))).status).toBe(302)
+    expect((await ler(legado(a,d2))).status).toBe(404)
+    expect((await ler(`org/${a}/legado/videos/${d1}/final/sem-registro.mp4`)).status).toBe(404)
+    sessao(admin,b); expect((await ler(legado(a,d1))).status).toBe(302)
+  })
   it("Growth inclui arquivo final mesmo sem linkFinal e respeita capacidade da área", async () => {
     await db.demanda.update({ where: { id: d1 }, data: { area: "design" } })
     try {

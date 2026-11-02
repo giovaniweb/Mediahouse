@@ -33,6 +33,7 @@ export async function GET() {
           categoria: true,
           funcaoProfissional: true,
           areas: true,
+          operaGravacoes: true,
         },
         take: 1,
       },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { caminhoMidia, urlDaMidia, caminhoDaUrl, organizacaoDoCaminho, comToken } from "@/lib/midia"
+import { caminhoMidia, urlDaMidia, caminhoDaUrl, organizacaoDoCaminho, comToken, partesDaMidia, caminhoMidiaValido } from "@/lib/midia"
 
 // O bucket `uploads` é público: em 24/08/2026 um HEAD sem autenticação num PDF
 // de briefing real devolveu 200. Qualquer pessoa com a URL baixa, para sempre.
@@ -64,4 +64,25 @@ describe("comToken — credencial de quem não tem conta", () => {
   it("sem URL, não inventa", () => {
     expect(comToken(null, "t")).toBeNull()
   })
+})
+
+describe("acervo legado — cópia de 24/08 do bucket público", () => {
+  // Formatos reais do banco de produção em 28/10/2026.
+  it.each([
+    ["org/o/legado/videos/dem-1/final/1777327198234.mp4", "videos", "dem-1"],
+    ["org/o/legado/docs/dem-1/1785761313152.pdf", "docs", "dem-1"],
+    ["org/o/legado/thumbnails/dem-1/1778763140746.jpg", "thumbnails", "dem-1"],
+    ["org/o/legado/coberturas/cob-1/dia-1/video/1778883460122.mp4", "coberturas", "cob-1"],
+  ])("lê tipo e id de dentro do legado: %s", (c, tipo, id) => {
+    expect(partesDaMidia(c)).toEqual({ organizacaoId: "o", tipo, id })
+    expect(caminhoDaUrl(urlDaMidia(c))).toBe(c)
+    expect(organizacaoDoCaminho(c)).toBe("o")
+  })
+
+  it("o formato atual continua igual", () => {
+    expect(partesDaMidia("org/o/videos/dem-1/final/1.mp4")).toEqual({ organizacaoId: "o", tipo: "videos", id: "dem-1" })
+  })
+
+  it.each(["org/o/legado/videos/dem-1", "org/o/legado/outro/x/1.mp4", "org/o/legado/legado/x/1.mp4", "org/o/legado/videos/../1.mp4", "legado/videos/d/1.mp4"])(
+    "recusa legado incompleto ou ambíguo: %s", c => { expect(caminhoMidiaValido(c)).toBe(false) })
 })

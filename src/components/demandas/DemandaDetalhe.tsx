@@ -2,7 +2,7 @@
 
 import { useDetailPresentation } from "./useDetailPresentation"
 import surface from "./DemandSurface.module.css"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
 import useSWR from "swr"
@@ -14,7 +14,8 @@ import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
 import { analisarVideoDoUpload } from "@/lib/video-compat"
 import { paraDownload } from "@/lib/midia-download"
-import { AprovacaoCriativo } from "@/components/aprovacao/AprovacaoCriativo"
+import { AprovacaoEntrega } from "@/components/aprovacao/AprovacaoEntrega"
+import { TextoComMomentos, irPara } from "@/components/aprovacao/Momentos"
 import {
   ArrowLeft, Calendar, Clock, ExternalLink, MessageCircle, Send, User,
   Video, Link2, CheckCircle2, Copy, Check, Pencil, Save, X, XCircle,
@@ -26,21 +27,29 @@ import Link from "next/link"
 import {
   ABA_DA_ACAO,
   ABA_LABEL,
+  LUGAR_LABEL,
+  PODE_ENVIAR_PARA_APROVACAO,
+  abaInicial,
+  abasDoDetalhe,
   type AbaDoDetalhe,
+  type LugarDaAcao,
   captacaoIniciada,
   ehSolicitacaoDeCobertura,
   proximaAcao,
   responsavelAtual,
   rotuloDeEvento,
 } from "@/lib/job-fase"
-import { COLUNAS_LABEL } from "@/lib/status"
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
+import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
 import { Briefing } from "@/components/demandas/Briefing"
+import { MarcarPostado } from "@/components/demandas/MarcarPostado"
 import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
@@ -49,7 +58,7 @@ import { QuickWhatsapp } from "@/components/ui/QuickWhatsapp"
 import { fetcher } from "@/lib/fetcher"
 import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { extrairCopy } from "@/lib/copy-criativo"
-import { formatarData, prazoVencido } from "@/lib/datas"
+import { formatarData, hojeEmSaoPaulo, prazoVencido } from "@/lib/datas"
 import { ehImagem, extensaoDe, nomeParaMostrar } from "@/lib/nome-arquivo"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -74,6 +83,7 @@ const STATUS_LABELS: Record<string, string> = {
   edicao_finalizada: "Edição Finalizada",
   revisao_pendente: "Aguardando Revisão",
   revisao_reprovada: "Revisão Reprovada",
+  ajuste_solicitado: "Ajuste Solicitado",
   aguardando_aprovacao_cliente: "Aguardando Cliente",
   aprovado_cliente: "Aprovado pelo Cliente",
   reprovado_cliente: "Reprovado pelo Cliente",
@@ -146,7 +156,7 @@ function getDemandCopy(growth: boolean) {
     return {
       teamTitle: "Equipe Growth",
       responsibleLabel: "Responsável",
-      productionTitle: "Arquivos e aprovação",
+      productionTitle: "Materiais",
       rawLabel: "Materiais e referências",
       addRaw: "Adicionar link de materiais",
       rawSaved: "Link de materiais salvo!",
@@ -267,9 +277,9 @@ function AvisoLinkExpirado({ linkCliente, expiresAt, onRenovado }: {
 
 export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaId: string; mode?: "page" | "modal"; onClose?: () => void }) {
   const { presentation, setPresentation } = useDetailPresentation()
-  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem de
-  // ABA_DA_ACAO quando a demanda carrega; depois só a pessoa troca — mudar o
-  // status enquanto ela trabalha não a arrasta para outra aba.
+  // Aba do detalhe, guardada junto da demanda a que pertence. A primeira vem da
+  // etapa quando a demanda carrega (abaInicial); depois só a pessoa troca —
+  // mudar o status enquanto ela trabalha não a arrasta para outra aba.
   const [abaAtual, setAbaAtual] = useState<{ demandaId: string; aba: AbaDoDetalhe } | null>(null)
   const id = demandaId
   const router = useRouter()
@@ -310,20 +320,54 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [classificacao, setClassificacao] = useState("")
   const [produtoId, setProdutoId] = useState("")
   // ── Documentos anexados ───────────────────────────────────────────────────
-  const [aprovacaoAberta, setAprovacaoAberta] = useState(false)
+  // O player da aprovação embutida: o "[1:07]" do aviso de ajuste no topo leva até ele.
+  const videoAprovacaoRef = useRef<HTMLVideoElement | null>(null)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docUploadProgress, setDocUploadProgress] = useState(0)
   const fileRefDoc = useRef<HTMLInputElement>(null)
 
   // ── SWR ───────────────────────────────────────────────────────────────────
-  const { data, mutate } = useSWR(`/api/demandas/${id}`, fetcher)
+  const { data, mutate, error: erroAoAbrir } = useSWR(`/api/demandas/${id}`, fetcher)
   const demanda = data?.demanda
   const isGrowth = isGrowthDemand(demanda)
   const copy = getDemandCopy(isGrowth)
-  const abaDaAcao: AbaDoDetalhe | null = demanda ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
-  if (demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: abaDaAcao ?? "pedido" })
-  const detailTab: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  // "É Job" pela mesma regra dos quadros (lib/quadro-do-card.ts), que o servidor
+  // já devolve resolvida: videomaker externo escalado, ou cobertura ainda sem
+  // videomaker. A marca de cobertura é a reserva enquanto a resposta não chega.
+  const ehCobertura = !isGrowth && (data?.quadro
+    ? data.quadro === "jobs"
+    : ehSolicitacaoDeCobertura({ tipoVideo: demanda?.tipoVideo, departamento: demanda?.departamento }))
+  // As abas mudam com a etapa (lib/job-fase.ts): Aprovação só aparece da
+  // aprovação em diante ou depois do primeiro envio, e é onde o detalhe abre
+  // em Aprovação, Para postar e Concluído. No resto abre no Pedido.
+  // Na gravação externa a ação mora no próximo passo da ficha, no Pedido: o
+  // "Ir para…" do topo levaria à aba Aprovação, que é da publicação.
+  const lugarDaAcao: LugarDaAcao | null = demanda && !ehCobertura ? ABA_DA_ACAO[demanda.statusInterno as keyof typeof ABA_DA_ACAO] ?? null : null
+  const dadosDasAbas = demanda ? {
+    statusInterno: demanda.statusInterno as string,
+    statusVisivel: demanda.statusVisivel as string,
+    linkCliente: demanda.linkCliente as string | null,
+    finaisEnviados: ((demanda.arquivos ?? []) as { tipoArquivo: string }[]).filter((a) => a.tipoArquivo === "final").length,
+  } : null
+  // Gravação externa não tem a aba Aprovação: ela é da publicação, e aqui o
+  // fim é o envio ao cliente, que está no próximo passo da ficha.
+  const abas: AbaDoDetalhe[] = (dadosDasAbas ? abasDoDetalhe(dadosDasAbas) : ["pedido", "arquivos", "conversa"] as AbaDoDetalhe[])
+    .filter((a) => !ehCobertura || a !== "aprovacao")
+  // Aprovado (Para postar ou Concluído): não se manda mais versão para o cliente.
+  const aprovacaoConcluida = !!demanda && ["para_postar", "finalizado"].includes(demanda.statusVisivel)
+  // A gravação externa abre sempre no Pedido: é lá que está o próximo passo
+  // (PassoDaGravacao). A aba Aprovação continua um clique ao lado.
+  if (dadosDasAbas && demanda?.id === id && abaAtual?.demandaId !== id) setAbaAtual({ demandaId: id, aba: ehCobertura ? "pedido" : abaInicial(dadosDasAbas) })
+  const abaEscolhida: AbaDoDetalhe = abaAtual?.demandaId === id ? abaAtual.aba : "pedido"
+  // Escolheu Aprovação e a demanda voltou para antes dela: cai no Pedido.
+  const detailTab: AbaDoDetalhe = abas.includes(abaEscolhida) ? abaEscolhida : "pedido"
   const setDetailTab = (aba: AbaDoDetalhe) => setAbaAtual({ demandaId: id, aba })
+  // "Equipe" mora embaixo do Pedido: abre o Pedido e rola até o bloco.
+  function irParaAcao(lugar: LugarDaAcao) {
+    if (lugar !== "equipe") return setDetailTab(lugar)
+    setDetailTab("pedido")
+    requestAnimationFrame(() => document.getElementById(`equipe-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
 
   // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
   // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
@@ -367,16 +411,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const podeGerenciar = !souExecutorExterno && (papelAtual === "admin" || papelAtual === "gestor")
   const podeEditar = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.editarDemanda))
   const podeExcluir = !souExecutorExterno && (podeGerenciar || Boolean(dataMe?.permissoes?.excluirDemanda))
+  // Quem faz a peça: responsável, editor ou designer deste card.
+  const souResponsavel = !!dataMe?.id && [
+    ...((demanda?.responsaveis as { usuario?: { id?: string } }[] | undefined) ?? []).map((r) => r.usuario?.id),
+    demanda?.responsavel?.id, demanda?.editor?.usuarioId, demanda?.designer?.usuarioId,
+  ].includes(dataMe.id)
+  // "Enviar para aprovação" saiu da aba Entrega para a faixa do topo: em
+  // Edição/Fazendo (ou depois de um ajuste pedido), para quem faz a peça ou gerencia.
+  const podeEnviarAgora = !!demanda && PODE_ENVIAR_PARA_APROVACAO.includes(demanda.statusInterno) && (souResponsavel || podeEditar)
 
   // ── Converter em Job (cobertura) ────────────────────────────────────────────
   // Não duplica registro: a rota faz UPDATE da classificação nesta mesma
   // demanda. Id, solicitante, briefing, arquivos, comentários, histórico, datas
   // e responsáveis continuam onde estão — o que muda é de qual quadro ela é.
   const [convertendo, setConvertendo] = useState(false)
-  const ehCobertura = ehSolicitacaoDeCobertura({
-    tipoVideo: demanda?.tipoVideo,
-    departamento: demanda?.departamento,
-  })
 
   // A barra de ações é do videomaker DO job. A autorização de verdade está na
   // guarda do servidor; aqui é só para não mostrar botão que não é dele.
@@ -386,6 +434,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   )
   const souOVideomakerDoJob =
     !!meVM?.videomaker && !!demanda?.videomaker && meVM.videomaker.id === demanda.videomaker.id
+
+  // "Mover para Demandas": o caminho de volta, aberto pelo botão do topo.
+  const [moverAberto, setMoverAberto] = useState(false)
+  function abrirMoverParaDemandas() {
+    setDetailTab("pedido")
+    setMoverAberto(true)
+  }
 
   async function converterEmJob() {
     if (!demanda) return
@@ -398,7 +453,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? "Não foi possível converter")
-      toast.success("Convertida em Job — agora aparece no quadro de Jobs")
+      toast.success("Convertida em gravação externa — agora aparece em Gravações Externas")
       mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao converter")
@@ -431,7 +486,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     setDescricao(demanda.descricao ?? "")
     setCidade(demanda.cidade ?? "")
     setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-    setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+    setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
     setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
     setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
     setLinkBrutos(demanda.linkBrutos ?? "")
@@ -454,7 +509,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           // só criava a chance de reenviar um valor velho — ou vazio.
           cidade,
           dataLimite: dataLimite || null,
-          dataCaptacao: dataCaptacao || null,
+          // Só o dia, e só se mudou: a captação pode ter horário (ficha da
+          // gravação), e reenviar o dia apagava a hora (lib/ficha-do-job.ts).
+          dataCaptacao: diaComHorarioMantido(demanda?.dataCaptacao, dataCaptacao),
           videomakerId: videomakerId || null,
           editorId: editorId || null,
           linkBrutos: linkBrutos || null,
@@ -490,6 +547,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     await mutate()
   }
 
+  // O próximo passo da gravação externa (PassoDaGravacao): grava o link do
+  // passo, se houver, e anda o status pela mesma rota do quadro.
+  async function avancarGravacao(statusInterno: string, patch?: Record<string, unknown>) {
+    if (patch) await salvarCampo(patch)
+    const res = await fetch(`/api/demandas/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statusInterno, origem: "manual" }),
+    })
+    if (!res.ok) throw await erroDaResposta(res, "Não foi possível avançar a gravação.")
+    toast.success(`Gravação em ${ROTULO_DA_ETAPA[etapaDaGravacao({ statusInterno })]}`)
+    await mutate()
+  }
+
   async function excluirDemanda() {
     if (!confirm(`Tem certeza que deseja excluir a demanda ${demanda.codigo}? Esta ação não pode ser desfeita.`)) return
     try {
@@ -513,7 +584,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       setDescricao(demanda.descricao ?? "")
       setCidade(demanda.cidade ?? "")
       setDataLimite(demanda.dataLimite ? demanda.dataLimite.split("T")[0] : "")
-      setDataCaptacao(demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : "")
+      setDataCaptacao(diaDoCampo(demanda.dataCaptacao))
       setVideomakerId(demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")
       setEditorId(demanda.editor ? `ed:${demanda.editor.id}` : "")
       setLinkBrutos(demanda.linkBrutos ?? "")
@@ -780,6 +851,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       try { json = JSON.parse(text) } catch { /* body não é JSON */ }
       if (!res.ok) throw new Error(json.error ?? (text.slice(0, 200) || `Erro HTTP ${res.status}`))
       setLinkGerado(json.link ?? "")
+      // Enviado: a aba Aprovação aparece, e é lá que a peça passa a ser acompanhada.
+      setDetailTab("aprovacao")
 
       await fetch(`/api/demandas/${id}/status`, {
         method: "PATCH",
@@ -969,6 +1042,26 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     return { type: "external", embedUrl: url }
   }
 
+  // ── Não abriu ─────────────────────────────────────────────────────────────
+  // Card apagado, ou fora do escopo da pessoa: a API responde 404 nos dois casos,
+  // e antes a tela ficava girando para sempre.
+  if (!demanda && erroAoAbrir) {
+    const aviso = <p className="text-sm text-zinc-400">Esta demanda não existe ou não está entre as suas.</p>
+    if (mode === "modal") {
+      return (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-5 py-4">{aviso}</div>
+        </div>
+      )
+    }
+    return (
+      <>
+        <Header title="Demanda não encontrada" />
+        <div className="flex-1 flex items-center justify-center">{aviso}</div>
+      </>
+    )
+  }
+
   // ── Loading ───────────────────────────────────────────────────────────────
   if (!demanda) {
     if (mode === "modal") {
@@ -994,7 +1087,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // Quem precisa agir agora — derivado do estado, como tudo no módulo de Jobs.
   // Fica aqui, e não no topo do componente, porque é função pura e `demanda` já
   // existe a partir deste ponto: calcular antes exigiria um fallback falso.
-  const responsavelDoJob = responsavelAtual(demanda)
+  const responsavelDoJob = ehCobertura ? vezNaGravacao(demanda) : responsavelAtual(demanda)
 
   const linkPublico =
     linkPublicoLocal !== undefined
@@ -1086,14 +1179,29 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               Nada é duplicado — muda só a classificação que o quadro de Jobs lê.
               Só aparece para audiovisual que ainda não é cobertura; Growth tem
               outro quadro e outro time. */}
-          {podeEditar && !isGrowth && !ehCobertura && (
+          {/* Com videomaker escalado quem decide o quadro é o contrato dele
+              (interno fica em Demandas): converter não mudaria nada. */}
+          {podeEditar && !isGrowth && !ehCobertura && !demanda.videomaker && (
             <button
               onClick={converterEmJob}
               disabled={convertendo}
-              title="Move esta demanda para o fluxo de Jobs (cobertura). O registro é o mesmo."
+              title="Move esta demanda para Gravações Externas (cobertura). O registro é o mesmo."
               className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
             >
-              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em Job"}
+              <ArrowRightLeft className="w-3.5 h-3.5" /> {convertendo ? "Convertendo..." : "Converter em gravação externa"}
+            </button>
+          )}
+          {/* O caminho de volta, no mesmo lugar do "Converter em Job": o Job
+              criado ou aprovado por engano vai para Demandas. Abre a prévia no
+              topo do Pedido, com o bloqueio (videomaker, convite aceito, custo)
+              antes do clique. Decidir a esteira é de gestão. */}
+          {podeGerenciar && ehCobertura && (
+            <button
+              onClick={abrirMoverParaDemandas}
+              title="Este card não é uma gravação externa? Ele vai para o quadro de Demandas. O registro é o mesmo."
+              className="flex items-center gap-1.5 text-sm border border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg hover:bg-zinc-800"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" /> Mover para Demandas
             </button>
           )}
           {podeEditar && (
@@ -1124,8 +1232,42 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     null
   )
 
-  // Mesma prévia e ações, uma única instância: Entrega no v8, topo no clássico.
-  const entregaGrowth = isGrowth ? (
+  // A última versão enviada e quem pode decidir sobre ela — o servidor resolve
+  // a régua (lib/quem-aprova.ts), a tela só obedece.
+  const ultimaEntrega = (data?.ultimaEntrega ?? null) as {
+    token: string; status: string; comentario: string | null; aprovadoPor: string | null; updatedAt: string
+  } | null
+  const ajusteNoTopo = demanda.statusInterno === "ajuste_solicitado" && ultimaEntrega?.status === "feedback_solicitado"
+    && ultimaEntrega.comentario ? ultimaEntrega : null
+  function irAoMomento(segundos: number) {
+    setDetailTab("aprovacao")
+    requestAnimationFrame(() => irPara(videoAprovacaoRef.current, segundos))
+  }
+  const solicitanteNome = (demanda.nomeSolicitante || demanda.solicitante?.nome || "quem pediu") as string
+
+  // A mesma tela do link do cliente, embutida: prévia tocando, Aprovar e Pedir
+  // ajuste. Quem fez a peça vê o status e o que voltou, sem os botões.
+  const aprovacaoPorDentro = ultimaEntrega ? (
+    <section aria-label="Aprovação da entrega" className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+      <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
+      <AprovacaoEntrega
+        key={ultimaEntrega.token}
+        token={ultimaEntrega.token}
+        modo="equipe"
+        demandaId={demanda.id}
+        podeDecidir={!!data?.podeAprovarEntrega}
+        porQueNaoDecide={souResponsavel
+          ? `Você fez esta peça, então não aprova a própria entrega. Quem decide é ${solicitanteNome}, a social dona do pedido, gestor ou admin — ou o cliente pelo link. Se pedirem ajuste, ele aparece aqui e no topo.`
+          : `Aguardando a aprovação de ${solicitanteNome} (ou do cliente pelo link).`}
+        refVideo={isGrowth ? undefined : videoAprovacaoRef}
+        onRespondido={() => mutate()}
+      />
+    </section>
+  ) : null
+
+  // Prévia antes do primeiro envio (Growth): as artes e a copy, com o botão de
+  // mandar para aprovação. Depois do envio, quem mostra é a aprovação embutida.
+  const entregaGrowth = isGrowth && !ultimaEntrega ? (
               <section aria-label="Prévia da entrega Growth" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4", surface.growthDelivery)}>
                 <div className={surface.sectionHead}><h2 className={surface.sectionTitle}>Entrega · prévia do criativo</h2></div>
                 <div className={surface.growthDeliveryGrid}>
@@ -1169,29 +1311,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     {/* Ação de aprovação — única e clara */}
                     {artesPrevia.length === 0 ? (
                       <p className={surface.hint}>
-                        Anexe a arte final em <b>Arquivos e aprovação</b>, logo abaixo, para enviar ao cliente.
+                        Envie a arte final logo abaixo para gerar o link do cliente.
                       </p>
-                    ) : demanda.linkCliente ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                          <span className="text-xs text-green-400 truncate flex-1">{demanda.linkCliente}</span>
-                          <button onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }} title="Copiar link">
-                            {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
-                          </button>
-                        </div>
-                        <AvisoLinkExpirado
-                          linkCliente={demanda.linkCliente}
-                          expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
-                          onRenovado={() => mutate()}
-                        />
-                        <button type="button" onClick={() => setAprovacaoAberta(true)} className={cn(surface.btnPrimary, surface.btnWide)}>
-                          <Eye className="w-4 h-4" aria-hidden /> Abrir aprovação
-                        </button>
-                        <a href={demanda.linkCliente} target="_blank" rel="noreferrer" className={cn(surface.linkBtn, "w-full justify-center")}>
-                          <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir em nova aba
-                        </a>
-                      </div>
                     ) : (
                       <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
                         <Send className="w-4 h-4" aria-hidden /> Enviar para aprovação
@@ -1205,46 +1326,60 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const corpo = (
     <>
       <FaixaEspelho espelho={espelho} />
-      {/* Modal de aprovação de criativo (in-app) — tela do cliente com Aprovar/Solicitar ajuste */}
-      {aprovacaoAberta && demanda.linkCliente && (
-        <div className="fixed inset-0 z-[75] bg-black/80 overflow-y-auto" onClick={(e) => { if (e.target !== e.currentTarget) return; setAprovacaoAberta(false); mutate() }}>
-          <div className="min-h-full flex items-start justify-center p-4">
-            <div className="w-full max-w-5xl my-6 bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
-                <span className="text-sm font-semibold text-zinc-200">Aprovação — {demanda.codigo}</span>
-                <button onClick={() => { setAprovacaoAberta(false); mutate() }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800" aria-label="Fechar"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5">
-                <AprovacaoCriativo token={demanda.linkCliente.split("/aprovar/")[1]} onAprovado={() => mutate()} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div className={surface.detailHeading}>
-        <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
-        <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
-        <section className={surface.nextAction}>
-          <strong>Próxima ação: {proximaAcao(demanda)}</strong>
+        {ehCobertura ? (
+          // Na gravação, o título é quem recebe a gravação, como no quadro.
+          <>
+            <h1>{demanda.clienteFinalNome?.trim() || demanda.titulo || "Sem cliente"}</h1>
+            <p>{[rotuloDoTipoDeGravacao(demanda.tipoGravacao), demanda.codigo].filter(Boolean).join(" · ")}</p>
+          </>
+        ) : (
+          <>
+            <h1><InlineEdit value={demanda.titulo ?? ""} canEdit={podeEditar} tipo="text" placeholder="Sem título" onSave={(v) => salvarCampo({ titulo: v })} display={<span>{demanda.titulo || "Sem título"}</span>} /></h1>
+            <p>{statusLabel(demanda.statusInterno, isGrowth)} · {demanda.codigo}</p>
+          </>
+        )}
+        {ajusteNoTopo && (
+          <section className={surface.ajustePedido} aria-label="Ajuste pedido">
+            <strong>
+              Ajuste pedido {ajusteNoTopo.aprovadoPor ? `por ${ajusteNoTopo.aprovadoPor}` : "pelo cliente"}
+              {" · "}{format(new Date(ajusteNoTopo.updatedAt), "dd/MM 'às' HH:mm", { locale: ptBR })}
+            </strong>
+            <p><TextoComMomentos texto={ajusteNoTopo.comentario!} onIr={isGrowth ? undefined : irAoMomento} /></p>
+            {!isGrowth && /\[\d/.test(ajusteNoTopo.comentario!) && <small>Toque no tempo para ver o momento no vídeo.</small>}
+          </section>
+        )}
+        {/* Gravação externa: a linha do tempo da ficha faz o papel desta faixa. */}
+        {!ehCobertura && <section className={surface.nextAction}>
+          <strong>Próxima ação: {ehCobertura ? acaoDaGravacao(demanda, hojeEmSaoPaulo()) : proximaAcao(demanda)}</strong>
           <p>O andamento acompanha as ações registradas neste card. Aprovar uma entrega não registra sua publicação.</p>
           {demanda.statusInterno === "impedimento" && demanda.motivoImpedimento && (
             <p className={surface.motivo}><b>Motivo do impedimento:</b> {demanda.motivoImpedimento}</p>
           )}
-          {abaDaAcao && detailTab !== abaDaAcao && (
-            <button type="button" className={surface.nextActionGo} onClick={() => setDetailTab(abaDaAcao)}>
-              Ir para {ABA_LABEL[abaDaAcao]} <ArrowRight size={15} aria-hidden="true" />
-            </button>
-          )}
-        </section>
-        <nav className={surface.detailTabs} aria-label="Seções da demanda">
-          {(["pedido", "entrega", "conversa", "equipe"] as const).map((key) => (
+          <div className={surface.nextActionRow}>
+            {podeEnviarAgora && (
+              <button type="button" className={surface.nextActionGo} data-principal onClick={() => abrirModalUpload("final")}>
+                <Send size={15} aria-hidden="true" /> {demanda.statusInterno === "ajuste_solicitado" ? "Enviar nova versão" : copy.sendApprovalButton}
+              </button>
+            )}
+            {lugarDaAcao && detailTab !== lugarDaAcao && (
+              <button type="button" className={surface.nextActionGo} onClick={() => irParaAcao(lugarDaAcao)}>
+                Ir para {LUGAR_LABEL[lugarDaAcao]} <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </section>}
+        {/* Gravação externa não tem abas (Giovani, 29/10/2026): a ficha é o card,
+            e arquivos, conversa e histórico ficam recolhidos no fim. */}
+        {!ehCobertura && <nav className={surface.detailTabs} aria-label="Seções da demanda">
+          {abas.map((key) => (
             <button key={key} type="button" aria-pressed={detailTab === key} onClick={() => setDetailTab(key)}>{ABA_LABEL[key]}</button>
           ))}
-        </nav>
+        </nav>}
       </div>
       <main className={cn("flex-1 p-6 grid grid-cols-1 gap-6 lg:grid-cols-3 max-w-6xl mx-auto w-full", surface.tabContent)}>
         {/* ── Coluna principal ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className={cn("space-y-5", ehCobertura ? "lg:col-span-3" : "lg:col-span-2")}>
 
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Camada de Job (cobertura) ───────────────────────────────────
@@ -1258,38 +1393,45 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               (lib/job-fase.ts), nunca digitados. §32 pede a etapa escrita, não
               só pintada. */}
           {ehCobertura && (
-            <section aria-label="Operação do Job" className={cn("bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3", surface.jobContext)}>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Etapa </span>
-                  {COLUNAS_LABEL[demanda.statusVisivel as keyof typeof COLUNAS_LABEL] ?? "—"}
-                </span>
-                <span className="text-zinc-400">
-                  <span className="text-zinc-600">Responsável atual </span>
-                  {responsavelDoJob.nome ?? responsavelDoJob.papel}
-                  {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
-                </span>
-              </div>
-
-              {/* As ações objetivas do videomaker (§13). O componente decide
-                  sozinho o que cabe no estado atual, e some quando a bola não
-                  é dele — quem não é o videomaker do job não vê nada. */}
-              {souOVideomakerDoJob && (
-                <AcoesVideomaker
-                  jobId={demanda.id}
-                  statusInterno={demanda.statusInterno}
-                  captacaoIniciada={captacaoIniciada(demanda.historicos)}
-                  onExecutado={() => mutate()}
-                />
-              )}
-
-              {/* O caminho de volta: Job criado por engano → Demandas
-                  (audiovisual). Reclassificar é raro e de gestão, por isso fica
-                  discreto e no fim; o componente some para quem não é admin ou
-                  gestor e mostra o bloqueio (videomaker, convite aceito, custo)
-                  antes do clique. */}
-              <TransferirParaDemandas jobId={demanda.id} codigo={demanda.codigo} />
-            </section>
+            <>
+              <TransferirParaDemandas
+                jobId={demanda.id}
+                codigo={demanda.codigo}
+                aberto={moverAberto}
+                onFechar={() => setMoverAberto(false)}
+              />
+              {/* A ficha da gravação: linha do tempo, o passo da vez, a nota
+                  do videomaker e quando, onde, quem vai e para quem — antes do
+                  briefing. A etapa está na trilha; o rodapé diz de quem é a vez. */}
+              <FichaDoJob
+                job={demanda}
+                podeEditar={podeEditar}
+                onSalvar={salvarCampo}
+                onEscalar={() => irParaAcao("equipe")}
+                onAvancar={avancarGravacao}
+                onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
+                onAtualizar={() => mutate()}
+                rodape={<>
+                  <span>
+                    <span className="text-zinc-600">Vez de </span>
+                    {responsavelDoJob.nome ?? responsavelDoJob.papel}
+                    {responsavelDoJob.nome && <span className="text-zinc-600"> · {responsavelDoJob.papel}</span>}
+                  </span>
+                </>}
+              >
+                {/* As ações objetivas do videomaker (§13). O componente decide
+                    sozinho o que cabe no estado atual, e some quando a bola não
+                    é dele — quem não é o videomaker do job não vê nada. */}
+                {souOVideomakerDoJob && (
+                  <AcoesVideomaker
+                    jobId={demanda.id}
+                    statusInterno={demanda.statusInterno}
+                    captacaoIniciada={captacaoIniciada(demanda.historicos)}
+                    onExecutado={() => mutate()}
+                  />
+                )}
+              </FichaDoJob>
+            </>
           )}
 
           {isGrowth ? (
@@ -1300,6 +1442,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
             </>
           ) : (
+          <Recolhivel ativo={ehCobertura} titulo="Descrição do pedido">
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-5">
             <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
 
@@ -1348,6 +1491,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          </Recolhivel>
           )}
 
           {isGrowth && demanda.detalhesEntrega && Object.keys(demanda.detalhesEntrega).length > 0 && (
@@ -1372,19 +1516,25 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
-          {/* ── Banner: Demanda externa aguardando aprovação interna ─────── */}
+          {/* ── Banner: pedido aguardando aprovação ─────────────────────────
+              Diz o que foi pedido — Job (videomaker externo) ou Demanda — e
+              para que quadro a aprovação leva, para ninguém aprovar no escuro.
+              Desde 28/10/2026 só pedido de fora chega aqui; "via formulário
+              público" saiu porque o pedido antigo, feito por dentro, também
+              aparecia com essa frase. */}
           {demanda.statusInterno === "aguardando_aprovacao_interna" && !editMode && (
             <div className={surface.notice}>
               <p>
                 <Inbox aria-hidden />
-                Demanda externa aguardando aprovação
+                {ehCobertura ? "Pedido de videomaker (gravação externa) aguardando aprovação" : "Demanda aguardando aprovação"}
               </p>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Enviada por{" "}
+                Pedida por{" "}
                 <strong className="text-zinc-300">
-                  {demanda.solicitante?.nome ?? "solicitante externo"}
-                </strong>{" "}
-                via formulário público. Revise os dados e aprove para entrar na fila de produção, ou recuse com um motivo.
+                  {demanda.nomeSolicitante ?? demanda.solicitante?.nome ?? "solicitante externo"}
+                </strong>
+                . Aprovar leva para {ehCobertura ? "Gravações Externas" : "o quadro de Demandas"}. Se está no lugar errado, use{" "}
+                {ehCobertura ? "“Mover para Demandas”" : "“Converter em gravação externa”"} no topo antes de aprovar. Ou recuse com um motivo.
               </p>
               {recusando && (
                 <textarea
@@ -1404,7 +1554,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       disabled={aprovandoDemanda}
                       className={surface.btnPrimary}
                     >
-                      <CheckCircle2 className="w-4 h-4" aria-hidden /> Aprovar demanda
+                      <CheckCircle2 className="w-4 h-4" aria-hidden /> {ehCobertura ? "Aprovar gravação" : "Aprovar demanda"}
                     </button>
                     <button
                       type="button"
@@ -1437,8 +1587,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          {/* ── Checklist ─────────────────────────────────────────────────── */}
+          {/* Na gravação externa, o que levar está na ficha ("Levar"). */}
+          {!ehCobertura && <ChecklistSection demandaId={id as string} />}
           </div>
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+          {/* ── Equipe e contexto: deixou de ser aba, fica embaixo do Pedido ── */}
+          <div id={`equipe-${id}`} hidden={detailTab !== "pedido"} className={cn(surface.tabSection, surface.grupo)}>
+          <h2 className={surface.grupoTitulo}>Equipe e contexto</h2>
           {/* ── Produto & Classificação ─────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
@@ -1706,7 +1861,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           {/* ── Banner de confirmação de cobertura ──────────────────────── */}
-          {!isGrowth && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
+          {/* Na gravação externa a confirmação é o próximo passo da ficha. */}
+          {!isGrowth && !ehCobertura && demanda.statusInterno === "videomaker_notificado" && demanda.videomaker && !editMode && (
             <div className={surface.notice}>
               <p>
                 <Clock aria-hidden />
@@ -1735,58 +1891,12 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
+          <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
+          {aprovacaoPorDentro}
           {entregaGrowth}
-          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          {/* ── Versões enviadas para aprovação ─────────────────────────── */}
+          {(!aprovacaoConcluida || (dadosDasAbas?.finaisEnviados ?? 0) > 0 || !!demanda.linkFinal || editMode) && (
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            <div className={surface.sectionHead}>
-              <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
-            </div>
-            <div className="space-y-6">
-              {/* Brutos / materiais: só link, sem upload de arquivo */}
-              <div>
-                <LinkField
-                  label={copy.rawLabel}
-                  value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
-                  editMode={editMode}
-                  onChange={setLinkBrutos}
-                />
-                {!editMode && demanda.linkBrutos && (
-                  <button type="button" onClick={() => deleteVideoLink("brutos")} className={cn(surface.linkBtn, "mt-2")} data-perigo>
-                    <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover link
-                  </button>
-                )}
-                {/* Atalho para colar o link sem entrar no modo de edição */}
-                {!editMode && !demanda.linkBrutos && (
-                  <div className="mt-2">
-                    {!showQuickBrutos ? (
-                      <button type="button" onClick={() => setShowQuickBrutos(true)} className={surface.linkBtn}>
-                        <Upload className="w-3.5 h-3.5" aria-hidden /> {copy.addRaw}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={quickBrutosInput}
-                          onChange={e => setQuickBrutosInput(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
-                          placeholder="Cole o link da pasta ou do arquivo"
-                          aria-label={copy.addRaw}
-                          className={surface.input}
-                          autoFocus
-                        />
-                        <button type="button" onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()} className={surface.btnPrimary}>
-                          {savingBrutos ? "Salvando…" : "Salvar"}
-                        </button>
-                        <button type="button" onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }} className={surface.iconBtn} aria-label="Cancelar">
-                          <X aria-hidden />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Finais — lista de arquivos enviados para aprovação */}
               <div>
                 {editMode ? (
@@ -1858,7 +1968,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                         </div>
                       )}
 
-                      {/* Botão de enviar (sempre visível) */}
+                      {/* Enviar outra versão: até o cliente aprovar. */}
+                      {!aprovacaoConcluida && <>
                       <button type="button" onClick={() => abrirModalUpload("final")} className={cn(surface.btnPrimary, surface.btnWide)}>
                         <Send className="w-4 h-4" aria-hidden />
                         {videosFinais.length > 0 ? copy.addFinalButton : copy.sendApprovalButton}
@@ -1868,9 +1979,64 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                           ? `${videosFinais.length} ${copy.finalCountLabel} · cada aprovação gera um link próprio`
                           : copy.progressHint}
                       </p>
+                      </>}
                     </>
                   )
                 })()}
+              </div>
+          </div>
+          )}
+          </div>
+          <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Arquivos">
+          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
+            <div className={surface.sectionHead}>
+              <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
+            </div>
+            <div className="space-y-6">
+              {/* Brutos / materiais: só link, sem upload de arquivo */}
+              <div>
+                <LinkField
+                  label={copy.rawLabel}
+                  value={editMode ? linkBrutos : (demanda.linkBrutos ?? "")}
+                  editMode={editMode}
+                  onChange={setLinkBrutos}
+                />
+                {!editMode && demanda.linkBrutos && (
+                  <button type="button" onClick={() => deleteVideoLink("brutos")} className={cn(surface.linkBtn, "mt-2")} data-perigo>
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden /> Remover link
+                  </button>
+                )}
+                {/* Atalho para colar o link sem entrar no modo de edição */}
+                {!editMode && !demanda.linkBrutos && (
+                  <div className="mt-2">
+                    {!showQuickBrutos ? (
+                      <button type="button" onClick={() => setShowQuickBrutos(true)} className={surface.linkBtn}>
+                        <Upload className="w-3.5 h-3.5" aria-hidden /> {copy.addRaw}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="url"
+                          value={quickBrutosInput}
+                          onChange={e => setQuickBrutosInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && salvarQuickBrutos()}
+                          placeholder="Cole o link da pasta ou do arquivo"
+                          aria-label={copy.addRaw}
+                          className={surface.input}
+                          autoFocus
+                        />
+                        <button type="button" onClick={salvarQuickBrutos} disabled={savingBrutos || !quickBrutosInput.trim()} className={surface.btnPrimary}>
+                          {savingBrutos ? "Salvando…" : "Salvar"}
+                        </button>
+                        <button type="button" onClick={() => { setShowQuickBrutos(false); setQuickBrutosInput("") }} className={surface.iconBtn} aria-label="Cancelar">
+                          <X aria-hidden />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {demanda.referencia && (
@@ -2035,8 +2201,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
+          </Recolhivel>
           </div>
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {temEventos && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2080,12 +2247,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
-          {/* ── Checklist ─────────────────────────────────────────────────── */}
-          <ChecklistSection demandaId={id as string} />
-
-          </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Conversa">
           {/* ── Comentários ──────────────────────────────────────────────── */}
           {/* Extraído para componente próprio. A versão anterior lia `c.texto`,
               campo que não existe no modelo (é `comentario`) — os comentários
@@ -2096,17 +2259,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             comentarios={demanda.comentarios ?? []}
             onEnviado={() => mutate()}
           />
+          </Recolhivel>
           </div>
         </div>
 
         {/* ── Coluna lateral ──────────────────────────────────────────────── */}
-        <div className="space-y-4">
-          <div hidden={detailTab !== "equipe"} className={surface.tabSection}>
+        <div className={cn("space-y-4", ehCobertura && "lg:col-span-3")}>
+          <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
 
-          {/* Solicitante */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Solicitante — na gravação externa, é o "Pedido por" da ficha. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><User aria-hidden /> Solicitante</h2></div>
             {demanda.nomeSolicitante ? (
               <div className="flex items-center gap-2">
@@ -2141,10 +2305,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 />
               </div>
             )}
-          </div>
+          </div>}
 
-          {/* Datas */}
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+          {/* Datas — na gravação externa, o "Quando" da ficha já diz. */}
+          {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Calendar aria-hidden /> Datas</h2></div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
@@ -2169,62 +2333,59 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500 flex items-center gap-1"><Clapperboard className="w-3.5 h-3.5" /> {copy.dateCaptureLabel}</span>
                 <InlineEdit
-                  value={demanda.dataCaptacao ? demanda.dataCaptacao.split("T")[0] : ""}
+                  value={diaDoCampo(demanda.dataCaptacao)}
                   canEdit={podeEditar}
                   tipo="date"
                   placeholder="—"
-                  onSave={(v) => salvarCampo({ dataCaptacao: v || null })}
+                  onSave={async (v) => {
+                    const novo = diaComHorarioMantido(demanda.dataCaptacao, v)
+                    if (novo !== undefined) await salvarCampo({ dataCaptacao: novo })
+                  }}
                   display={demanda.dataCaptacao
                     ? <span className="font-medium text-zinc-200">{formatarData(demanda.dataCaptacao)}</span>
                     : <span className="text-zinc-600 text-xs">—</span>}
                 />
               </div>
             </div>
-          </div>
+          </div>}
 
           </div>
-          <div hidden={detailTab !== "entrega"} className={surface.tabSection}>
-          {/* Aprovação — Growth usa a prévia compartilhada em Entrega (topo no clássico). */}
-          {!isGrowth && (
-          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><CheckCircle2 aria-hidden /> {copy.approvalTitle}</h2></div>
-            {demanda.linkCliente ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-xs text-green-400 truncate flex-1">{demanda.linkCliente}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); setTimeout(() => setCopiado(false), 2000) }}>
-                    {copiado ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300" />}
-                  </button>
-                </div>
-                {/* Ver o vídeo aqui dentro, sem sair para o link do cliente.
-                    Quem acompanha a demanda precisa conferir o que foi enviado
-                    para aprovação — antes só dava abrindo a página pública. */}
-                <AvisoLinkExpirado
-                  linkCliente={demanda.linkCliente}
-                  expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
-                  onRenovado={() => mutate()}
-                />
-                {demanda.linkFinal && (
-                  <button
-                    type="button"
-                    onClick={() => setPlayerUrl(demanda.linkFinal!)}
-                    className={cn(surface.btn, surface.btnWide)}
-                  >
-                    <Play className="w-4 h-4" aria-hidden /> Ver o vídeo enviado
-                  </button>
-                )}
-                <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
-                  <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Abrir a página que o cliente vê
-                </Link>
-              </div>
-            ) : (
-              <p className={surface.empty}>Nenhum link gerado ainda.</p>
-            )}
+          <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
+          {/* Link do cliente — para quem é de fora do NuFlow. A aprovação em si
+              (prévia, Aprovar, Pedir ajuste) está embutida ao lado, na coluna
+              principal; aqui fica só o caminho para mandar ao cliente. */}
+          {demanda.linkCliente && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zinc-800 px-4 py-3">
+            <span className={surface.hint}>Cliente de fora do NuFlow?</span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(demanda.linkCliente); setCopiado(true); toast.success("Link do cliente copiado!"); setTimeout(() => setCopiado(false), 2000) }}
+              className={surface.btn}
+            >
+              {copiado ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copiado ? "Copiado" : "Copiar link para o cliente"}
+            </button>
+            <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
+              <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Ver como o cliente vê
+            </Link>
+            <div className="basis-full empty:hidden">
+              <AvisoLinkExpirado
+                linkCliente={demanda.linkCliente}
+                expiresAt={demanda.aprovacoesVideo?.[0]?.expiresAt}
+                onRenovado={() => mutate()}
+              />
+            </div>
           </div>
           )}
 
-          {/* Postagem */}
+          {/* Postagem: depois de aprovado, o link e o "Marcar como postado" ficam
+              aqui. Quem executa por espelhamento não publica (a dona responde ao
+              cliente final), e o servidor recusaria. */}
+          {!demanda.postagemTipo && ["aprovado", "postagem_pendente"].includes(demanda.statusInterno) && !souExecutorExterno && (
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+              <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Send aria-hidden /> Postagem</h2></div>
+              <MarcarPostado demandaId={demanda.id} onFeito={() => mutate()} />
+            </div>
+          )}
           {demanda.postagemTipo && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
               <div className={surface.sectionHead}><h2 className={surface.sectionTitle}><Send aria-hidden /> Postagem</h2></div>
@@ -2251,7 +2412,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           )}
 
           </div>
-          <div hidden={detailTab !== "conversa"} className={surface.tabSection}>
+          <div hidden={!ehCobertura && detailTab !== "conversa"} className={surface.tabSection}>
+          <Recolhivel ativo={ehCobertura} titulo="Histórico">
           {/* Histórico */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800">
             <div className="px-4 py-3 border-b border-zinc-800">
@@ -2289,6 +2451,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               })}
             </div>
           </div>
+          </Recolhivel>
           </div>
         </div>
       </main>
@@ -2539,5 +2702,20 @@ function LinkField({ label, value, editMode, onChange }: {
         <span className={surface.empty}>Nenhum link ainda.</span>
       )}
     </div>
+  )
+}
+
+/**
+ * Na gravação externa o card não tem abas: o que não é do dia a dia (a
+ * descrição antiga, arquivos, conversa, histórico) fica recolhido no fim, à
+ * mão para consulta. Fora dela, não muda nada.
+ */
+function Recolhivel({ ativo, titulo, children }: { ativo: boolean; titulo: string; children: ReactNode }) {
+  if (!ativo) return <>{children}</>
+  return (
+    <details className={surface.recolhivel}>
+      <summary>{titulo}</summary>
+      <div className={surface.recolhivelCorpo}>{children}</div>
+    </details>
   )
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import type { Demanda, Evento, CustoVideomaker, Prisma } from "@prisma/client"
 import { dataCalendario, dataEmSaoPaulo, somarDias } from "@/lib/datas"
+import { regrasDaGravacao, type RegraDaGravacao } from "@/lib/avisos-gravacao-textos"
 
 export const VERSAO_REGRAS = 1
 export const hashRegra = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex")
@@ -29,7 +30,7 @@ export function lembreteVigente(e: Pick<Evento,"inicio"|"lembreteMinutos"|"statu
 export function cobrancaValida(c: Pick<CustoVideomaker,"pago"|"statusPagamento"|"dataVencimento">, agora: Date) {
   return !c.pago && c.statusPagamento === "pendente_nf" && !!c.dataVencimento && dataCalendario(c.dataVencimento)! <= dataEmSaoPaulo(agora)
 }
-export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"; id: string; revisao: string; regra: string }
+export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"|"gravacao"; id: string; revisao: string; regra: string }
 export async function contextoRegraValido(tx: Prisma.TransactionClient, org: string, c: ContextoRegra, agora: Date) {
   const empresa = await tx.organizacao.findUnique({where:{id:org},select:{ativo:true,ambienteTeste:true}})
   if (!empresa?.ativo || empresa.ambienteTeste) return false
@@ -44,6 +45,15 @@ export async function contextoRegraValido(tx: Prisma.TransactionClient, org: str
   if (c.tipo === "custo") {
     const custo = await tx.custoVideomaker.findFirst({where:{id:c.id,organizacaoId:org}})
     return !!custo && custo.updatedAt.toISOString() === c.revisao && cobrancaValida(custo,agora)
+  }
+  if (c.tipo === "gravacao") {
+    // Avisos de calendário das Gravações Externas: valem no dia em que foram
+    // criados e só se a regra ainda vale (o material pode ter chegado).
+    if (c.revisao !== dataEmSaoPaulo(agora)) return false
+    const d = await tx.demanda.findFirst({where:{id:c.id,organizacaoId:org},select:{codigo:true,titulo:true,statusInterno:true,dataCaptacao:true,dataEvento:true,videomakerId:true}})
+    if (!d) return false
+    const custo = await tx.custoVideomaker.findFirst({where:{organizacaoId:org,demandaId:c.id,statusPagamento:"nf_enviada",pago:false},select:{updatedAt:true}})
+    return regrasDaGravacao(d, c.revisao, custo ? dataEmSaoPaulo(custo.updatedAt) : null).includes(c.regra as RegraDaGravacao)
   }
   if (c.tipo === "gestor") {
     const membro = await tx.usuarioOrganizacao.findFirst({where:{organizacaoId:org,usuarioId:c.id,papel:{in:["admin","gestor"]},usuario:{status:"ativo"}}})

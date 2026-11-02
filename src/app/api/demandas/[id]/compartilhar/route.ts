@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { randomBytes } from "node:crypto"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 import { requireDemandaOrg } from "@/lib/org"
 import { temPermissao } from "@/lib/permissoes-server"
 import { papelNaOrg } from "@/lib/papel"
@@ -13,10 +13,6 @@ async function podeCompartilhar(usuarioId: string, organizacaoId: string, papel:
   return temPermissao(usuarioId, organizacaoId, "editarDemanda", papel)
 }
 
-function montarLink(token: string): string {
-  const base = (process.env.NEXTAUTH_URL ?? "http://localhost:3000").trim().replace(/\/$/, "")
-  return `${base}/d/${token}`
-}
 
 // POST /api/demandas/[id]/compartilhar — gera o link (ou rotaciona com ?rotacionar=1).
 // Rotacionar invalida o link já enviado: é como se revoga o acesso de quem recebeu.
@@ -38,7 +34,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { publicToken: true, codigo: true },
   })
 
-  const token = !atual?.publicToken || rotacionar ? randomBytes(18).toString("base64url") : atual.publicToken
+  const token = !atual?.publicToken || rotacionar ? novoTokenPublico() : atual.publicToken
 
   await prisma.demanda.update({
     where: { id },
@@ -54,7 +50,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     },
   }).catch(() => null)
 
-  return NextResponse.json({ ok: true, link: montarLink(token), ativo: true })
+  return NextResponse.json({ ok: true, link: linkPublicoDaDemanda(token), ativo: true })
 }
 
 // DELETE /api/demandas/[id]/compartilhar — revoga o link (mantém o token para

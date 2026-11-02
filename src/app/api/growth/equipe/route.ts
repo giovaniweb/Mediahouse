@@ -2,15 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
-
-const LABEL_FUNCAO: Record<string, string> = {
-  social: "Social Media", designer: "Designer", analista_crm: "Analista CRM",
-  gestor_trafego: "Gestor de Tráfego", gestor: "Gestor", admin: "Admin",
-  operacao: "Operação", auxiliar_admin: "Auxiliar Administrativo",
-  videomaker: "Videomaker", editor: "Editor", fotografo: "Fotógrafo",
-  copywriter: "Copywriter", produtor: "Produtor", coordenador: "Coordenador",
-  atendimento: "Atendimento",
-}
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 // GET /api/growth/equipe — equipe Growth = pessoas INTERNAS ativas da org logada com
 // área de atuação = growth. NÃO lista solicitantes, externos, inativos, sistema/teste
@@ -41,7 +33,7 @@ export async function GET() {
     email: m.usuario.email,
     telefone: m.usuario.telefone,
     papel: m.papel,
-    funcao: m.funcaoProfissional ? (LABEL_FUNCAO[m.funcaoProfissional] ?? m.funcaoProfissional) : (LABEL_FUNCAO[m.usuario.tipo] ?? m.usuario.tipo),
+    funcao: m.funcaoProfissional ? (FUNCAO_LABEL[m.funcaoProfissional] ?? m.funcaoProfissional) : (FUNCAO_LABEL[m.usuario.tipo] ?? m.usuario.tipo),
     areas: m.areas,
   }))
 

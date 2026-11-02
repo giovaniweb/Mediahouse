@@ -8,6 +8,7 @@ import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import type { Prioridade } from "@prisma/client"
 
 function gerarSlug(titulo: string): string {
@@ -148,6 +149,12 @@ export async function POST(req: NextRequest) {
       console.error("[Eventos] Erro ao criar checklist automático:", e)
     }
 
+    // As peças são pedidos de quem está logado: nascem aprovadas se ele é da
+    // casa (lib/quem-aprova.ts), como qualquer demanda criada por dentro.
+    const { statusInterno: statusDasPecas } = await entradaDoPedidoInterno(
+      { usuarioId: acesso.usuarioId, gestor: acesso.papel === "admin" || acesso.papel === "gestor" }, organizacaoId, false
+    )
+
     // Gerar demandas audiovisuais para cada peça selecionada
     const pecasKeys: string[] = Array.isArray(pecas) ? pecas : []
     const demandasCriadas: string[] = []
@@ -195,8 +202,8 @@ export async function POST(req: NextRequest) {
             tipoVideo: peca.tipoVideo,
             cidade: cidade ?? "—",
             prioridade: "normal",
-            statusInterno: "aguardando_aprovacao_interna",
-            statusVisivel: STATUS_PARA_COLUNA["aguardando_aprovacao_interna"],
+            statusInterno: statusDasPecas,
+            statusVisivel: STATUS_PARA_COLUNA[statusDasPecas],
             pesoDemanda: peso,
             solicitanteId: acesso.usuarioId,
             dataEvento: inicio,
@@ -228,8 +235,8 @@ export async function POST(req: NextRequest) {
             tipoVideo: peca.key,
             cidade: cidade ?? "—",
             prioridade: "normal",
-            statusInterno: "aguardando_aprovacao_interna",
-            statusVisivel: STATUS_PARA_COLUNA["aguardando_aprovacao_interna"],
+            statusInterno: statusDasPecas,
+            statusVisivel: STATUS_PARA_COLUNA[statusDasPecas],
             pesoDemanda: 1,
             solicitanteId: acesso.usuarioId,
             dataEvento: inicio,

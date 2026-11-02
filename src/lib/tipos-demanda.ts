@@ -65,3 +65,17 @@ export const TIPOS_DUPLICADOS: Record<string, string> = {
   institucional: "video_institucional",
   ads: "video_meta_ads",
 }
+
+const ROTULOS = new Map<string, string>([...video, ...criativo])
+
+/**
+ * O tipo como gente lê ("Reels / Stories"), para telas que não carregam os
+ * parâmetros da empresa — o link do cliente. "Outro" não diz nada a quem
+ * aprova e some; valor fora da semente sai com o "_" trocado por espaço.
+ */
+export function rotuloDoTipo(valor?: string | null): string | null {
+  const v = (valor ?? "").trim()
+  if (!v || v === "outro") return null
+  const chave = TIPOS_DUPLICADOS[v] ?? v
+  return ROTULOS.get(chave) ?? v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+}

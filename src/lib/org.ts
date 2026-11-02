@@ -29,12 +29,26 @@ export const COOKIE_ORG_ATIVA = "org_ativa"
  * Sessões legadas sem seleção usam o primeiro vínculo ativo validado no banco.
  */
 export async function getOrgId(session: SessionShape): Promise<string | null> {
+  return (await vinculoAtivo(session))?.organizacaoId ?? null
+}
+
+/**
+ * A empresa ativa E o papel da pessoa nela, pela mesma regra de `getOrgId`.
+ *
+ * O papel vem daqui, e não do JWT, desde 30/10/2026. O login gravava no token o
+ * papel do PRIMEIRO vínculo e nunca mais trocava: quem mudava de empresa pelo
+ * seletor levava o papel da outra. O Gabriel, videomaker na Contourline e admin
+ * na GH Produção, entrava na GH como videomaker; no sentido inverso, admin de
+ * uma empresa virava gestor numa segunda onde era só solicitante.
+ */
+export async function vinculoAtivo(session: SessionShape): Promise<{ organizacaoId: string; papel: string } | null> {
   const u = session?.user as SessionUser | undefined
   if (!u?.id) return null
 
   const selecionada = (await organizacaoEscolhida()) || u.organizacaoId
   const select = {
     organizacaoId: true,
+    papel: true,
     usuario: { select: { status: true } },
     organizacao: { select: { ativo: true } },
   } as const
@@ -50,7 +64,27 @@ export async function getOrgId(session: SessionShape): Promise<string | null> {
         select,
       })
 
-  return m?.usuario.status === "ativo" && m.organizacao.ativo ? m.organizacaoId : null
+  return m?.usuario.status === "ativo" && m.organizacao.ativo
+    ? { organizacaoId: m.organizacaoId, papel: m.papel }
+    : null
+}
+
+/**
+ * Callback de sessão do lado Node (src/lib/auth.ts): `session.user.papel` passa
+ * a ser o papel na empresa ATIVA a cada leitura, e é ele que `ehGestor`,
+ * `temPapel` e `papelNaOrg` (lib/papel.ts) leem. Sem vínculo ativo, ou com a
+ * consulta falhando, o papel fica nulo — nega, não concede.
+ */
+export async function comPapelDaEmpresaAtiva<S extends { user?: { id?: string; organizacaoId?: string | null; papel?: string | null } }>(
+  session: S
+): Promise<S> {
+  if (!session.user) return session
+  const vinculo = await vinculoAtivo(session).catch((e) => {
+    console.error("[org] papel da empresa ativa indisponível", e)
+    return null
+  })
+  session.user.papel = vinculo?.papel ?? null
+  return session
 }
 
 /**

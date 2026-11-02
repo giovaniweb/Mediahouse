@@ -13,6 +13,7 @@ import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -44,6 +45,12 @@ const schema = z.object({
   tipoSolicitacao: z.enum(["video", "conteudo", "cobertura"]).optional(),
   objetivo: z.string().optional(),
   detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
+  // Gravação externa (29/10/2026): tipo, equipamento, brinde e o que levar.
+  tipoGravacao: z.enum(["entrega_equipamento", "demonstracao", "conteudo", "evento"]).optional(),
+  temBrinde: z.boolean().optional(),
+  brinde: z.string().trim().max(120).nullable().optional(),
+  levar: z.string().trim().max(300).nullable().optional(),
+  produtoIds: z.array(z.string().max(64)).max(10).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -129,6 +136,8 @@ export async function POST(req: NextRequest) {
 
   // Normaliza telefone do solicitante para WhatsApp
   const telSolicitante = data.telefone.replace(/\D/g, "")
+  // Gravação nasce com o link de acompanhamento de quem pediu (/d/<token>).
+  const tokenPublico = isCobertura ? novoTokenPublico() : null
 
   const demanda = await criarComCodigoUnico("VOP-EXT", (codigo) => prisma.demanda.create({
     data: {
@@ -156,8 +165,26 @@ export async function POST(req: NextRequest) {
       clienteFinalNome: data.clienteFinalNome,
       clienteFinalTelefone: data.clienteFinalTelefone,
       clienteFinalEmail: data.clienteFinalEmail,
+      tipoGravacao: data.tipoGravacao,
+      temBrinde: data.temBrinde,
+      brinde: data.brinde || undefined,
+      levar: data.levar || undefined,
+      ...(tokenPublico && { publicToken: tokenPublico, publicTokenAtivo: true }),
     },
   }))
+
+  // Equipamento: só os produtos ativos desta empresa — o id vem do navegador.
+  if (data.produtoIds?.length) {
+    const validos = await prisma.produto.findMany({
+      where: { id: { in: [...new Set(data.produtoIds)] }, organizacaoId, ativo: true },
+      select: { id: true },
+    })
+    if (validos.length) {
+      // Falha aqui não desfaz o pedido, que já existe: o equipamento se acerta no card.
+      await prisma.demandaProduto.createMany({ data: validos.map((p) => ({ demandaId: demanda.id, produtoId: p.id })), skipDuplicates: true })
+        .catch((e) => console.error("[Pedido público] Erro ao vincular equipamento:", e))
+    }
+  }
 
   await prisma.historicoStatus.create({
     data: {
@@ -193,7 +220,8 @@ export async function POST(req: NextRequest) {
     const primeiroNome = data.nomeCliente.split(" ")[0]
     emSegundoPlano(() => sendWhatsappMessage(
       telSolicitante,
-      `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`,
+      `Hey ${primeiroNome}! Aqui é a *NuFlow* 🤖\n\n✅ Sua solicitação foi recebida!\n\n📋 *${demanda.codigo}* — ${data.titulo}\n\nNossa equipe vai analisar e te aviso assim que tiver novidade. 🚀`
+        + (tokenPublico ? `\n\nAcompanhe por aqui:\n${linkPublicoDaDemanda(tokenPublico)}` : ""),
       demanda.id, organizacaoId
     ), "wa-solicitante-recebida")
   }
@@ -217,7 +245,7 @@ export async function POST(req: NextRequest) {
   // demandaId e a demanda só passa a existir aqui — sem isto, o formulário
   // público continuaria aceitando apenas link.
   return NextResponse.json(
-    { ok: true, codigo: demanda.codigo, anexoToken: gerarTokenAnexo(demanda.id) },
+    { ok: true, codigo: demanda.codigo, anexoToken: gerarTokenAnexo(demanda.id), ...(tokenPublico && { acompanhamento: `/d/${tokenPublico}` }) },
     { status: 201 }
   )
 }

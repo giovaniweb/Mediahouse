@@ -3,6 +3,9 @@
 //   • página   /relatorio-executivo/<mes>?token=<token>
 //   • MCP      Authorization: Bearer <token>
 //
+// Pelo MCP este token só abre os números do relatório. Demandas (ler e criar)
+// exigem a chave da PESSOA, gerada em Configurações → Assistentes (MCP).
+//
 // Uso:
 //   node prisma/gerar-relatorio-token.mjs <slug>            # mostra o token atual (ou cria se não houver)
 //   node prisma/gerar-relatorio-token.mjs <slug> --rotate   # gera um novo, invalidando o anterior

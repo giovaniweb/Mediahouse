@@ -16,6 +16,7 @@ import { fetcher } from "@/lib/fetcher"
 import { Header } from "@/components/layout/Header"
 import { PageIntro } from "@/components/layout/PageIntro"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 type Org = {
   id: string
@@ -32,6 +33,15 @@ type Membro = {
 }
 
 const PAPEIS = ["admin", "gestor", "videomaker", "editor", "designer", "social", "solicitante"] as const
+
+/** Pessoa achada na busca da plataforma (/api/admin/usuarios). */
+type PessoaAchada = {
+  id: string
+  nome: string
+  email: string | null
+  empresas: { nome: string; papel: string }[]
+}
+const nomeDoPapel = (papel: string) => FUNCAO_LABEL[papel] ?? papel
 
 type ModuloDaOrg = {
   chave: string
@@ -171,24 +181,27 @@ export function PainelOrganizacoes() {
 function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada: () => void }) {
   const [nome, setNome] = useState("")
   const [slug, setSlug] = useState("")
-  const [adminEmail, setAdminEmail] = useState("")
+  const [adminTexto, setAdminTexto] = useState("")
+  const [admin, setAdmin] = useState<PessoaAchada | null>(null)
   const [salvando, setSalvando] = useState(false)
 
   async function criar() {
     if (!nome.trim() || salvando) return
     setSalvando(true)
+    // Escolhida na lista vai pelo id; e-mail digitado sem escolher segue valendo.
+    const quem = admin ? { adminUsuarioId: admin.id } : adminTexto.trim() ? { adminEmail: adminTexto.trim() } : {}
     try {
       const res = await fetch("/api/admin/organizacoes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, ...(slug.trim() ? { slug: slug.trim() } : {}), ...(adminEmail.trim() ? { adminEmail: adminEmail.trim() } : {}) }),
+        body: JSON.stringify({ nome, ...(slug.trim() ? { slug: slug.trim() } : {}), ...quem }),
       })
       if (!res.ok) throw await erroDaResposta(res)
-      const { membership } = await res.json()
+      const { membership, organizacao } = await res.json()
       toast.success(
-        adminEmail.trim() && !membership
-          ? "Empresa criada — mas o e-mail do admin não existe no sistema. Vincule em Pessoas."
-          : "Empresa criada."
+        Object.keys(quem).length > 0 && !membership
+          ? "Empresa criada — mas essa pessoa não foi achada no sistema. Vincule em Pessoas."
+          : `Empresa criada em /c/${organizacao.slug}${admin ? `, com ${admin.nome} como admin` : ""}.`
       )
       onCriada()
     } catch (e) {
@@ -207,12 +220,13 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
         placeholder="gerado a partir do nome"
         ajuda="Vira o endereço da área pública da empresa: /c/slug. Só minúsculas, números e hífen."
       />
-      <Campo
-        rotulo="E-mail do admin (opcional)"
-        valor={adminEmail}
-        onChange={setAdminEmail}
-        placeholder="pessoa@empresa.com"
-        ajuda="Precisa já ter conta no sistema. Sem isso, a empresa nasce sem ninguém dentro."
+      <BuscaPessoa
+        rotulo="Admin da empresa (opcional)"
+        texto={adminTexto}
+        onTexto={setAdminTexto}
+        escolhida={admin}
+        onEscolher={setAdmin}
+        ajuda="Digite o nome ou o e-mail de quem já tem conta. Sem ninguém, a empresa nasce vazia."
       />
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Cancelar</button>
@@ -230,21 +244,23 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
 
 function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
   const { data, mutate, isLoading, error } = useSWR<{ membros: Membro[] }>(`/api/admin/organizacoes/${org.id}/usuarios`, fetcher)
-  const [email, setEmail] = useState("")
+  const [texto, setTexto] = useState("")
+  const [pessoa, setPessoa] = useState<PessoaAchada | null>(null)
   const [papel, setPapel] = useState<string>("solicitante")
   const membros = data?.membros ?? []
 
   async function vincular() {
-    if (!email.trim()) return
+    if (!pessoa && !texto.trim()) return
     try {
       const res = await fetch(`/api/admin/organizacoes/${org.id}/usuarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), papel }),
+        body: JSON.stringify({ ...(pessoa ? { usuarioId: pessoa.id } : { email: texto.trim() }), papel }),
       })
       if (!res.ok) throw await erroDaResposta(res)
-      setEmail("")
-      toast.success("Pessoa vinculada.")
+      setTexto("")
+      setPessoa(null)
+      toast.success(`${pessoa?.nome ?? "Pessoa"} vinculada como ${nomeDoPapel(papel)}.`)
       mutate()
     } catch (e) {
       toast.error(mensagemDeErro(e, "Não foi possível vincular."))
@@ -274,7 +290,7 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
           <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-800/40 px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm text-zinc-200">{m.usuario.nome}</p>
-              <p className="truncate text-xs text-zinc-500">{m.usuario.email ?? "sem e-mail"} · {m.papel}</p>
+              <p className="truncate text-xs text-zinc-500">{m.usuario.email ?? "sem e-mail"} · {nomeDoPapel(m.papel)}</p>
             </div>
             <button onClick={() => desvincular(m)} aria-label={`Desvincular ${m.usuario.nome}`} title="Desvincular" className="shrink-0 text-zinc-600 hover:text-red-400">
               <X className="h-4 w-4" />
@@ -284,12 +300,13 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
       </div>
 
       <div className="space-y-2 border-t border-zinc-800 pt-3">
-        <Campo
+        <BuscaPessoa
           rotulo="Vincular pessoa"
-          valor={email}
-          onChange={setEmail}
-          placeholder="e-mail de quem já tem conta"
-          ajuda="Vincular não cria login. A pessoa precisa já existir no sistema."
+          texto={texto}
+          onTexto={setTexto}
+          escolhida={pessoa}
+          onEscolher={setPessoa}
+          ajuda="Digite o nome ou o e-mail. Vincular não cria login: a pessoa precisa já existir no sistema."
         />
         <div className="flex items-end gap-2">
           <label className="flex-1 text-xs text-zinc-500">
@@ -299,12 +316,12 @@ function ModalPessoas({ org, onClose }: { org: Org; onClose: () => void }) {
               onChange={(e) => setPapel(e.target.value)}
               className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200"
             >
-              {PAPEIS.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PAPEIS.map((p) => <option key={p} value={p}>{nomeDoPapel(p)}</option>)}
             </select>
           </label>
           <button
             onClick={vincular}
-            disabled={!email.trim()}
+            disabled={!pessoa && !texto.trim()}
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             <UserPlus className="h-4 w-4" /> Vincular
@@ -337,6 +354,13 @@ function ModalModulos({ org, onClose }: { org: Org; onClose: () => void }) {
     <Overlay titulo={`Módulos · ${org.nome}`} onClose={onClose}>
       <p className="text-xs text-zinc-500">
         O que esta empresa enxerga. Mudança vale no próximo carregamento de página.
+      </p>
+      {/* Pergunta que esta tela não respondia: "cadê o audiovisual?". Não é
+          módulo — está em toda empresa; o que a pessoa vê depende do papel dela. */}
+      <p className="rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400">
+        Sempre ligados, em toda empresa: Demandas, Gravações Externas e Aprovações do audiovisual.
+        Os avisos por WhatsApp não dependem de Mensagens: a empresa conecta o número dela em
+        Configurações → WhatsApp.
       </p>
       <div className="space-y-2">
         {isLoading && <p role="status">Carregando módulos…</p>}
@@ -411,6 +435,135 @@ function Overlay({ titulo, children, onClose }: { titulo: string; children: Reac
         {children}
       </div>
     </dialog>
+  )
+}
+
+// Procurar quem já tem conta enquanto digita. Antes os dois campos pediam o
+// e-mail exato, sem dizer se ele existia — e o Giovani precisava saber de cor o
+// e-mail do Gabriel para fazê-lo admin da GH Produção.
+//
+// A lista fica no fluxo do diálogo (não flutua): um <dialog> corta o que passa
+// da borda, e a lista é curta. O e-mail digitado sem escolher ainda vale — o
+// servidor procura por ele.
+function BuscaPessoa({ rotulo, ajuda, texto, onTexto, escolhida, onEscolher }: {
+  rotulo: string
+  ajuda?: string
+  texto: string
+  onTexto: (v: string) => void
+  escolhida: PessoaAchada | null
+  onEscolher: (p: PessoaAchada | null) => void
+}) {
+  const idLista = useId()
+  const idAjuda = useId()
+  const [termo, setTermo] = useState("")
+  const [aberta, setAberta] = useState(false)
+  const [ativo, setAtivo] = useState(0)
+
+  // Espera a pessoa parar de digitar antes de perguntar ao servidor.
+  useEffect(() => {
+    const t = setTimeout(() => setTermo(texto.trim()), 250)
+    return () => clearTimeout(t)
+  }, [texto])
+
+  const chave = !escolhida && termo.length >= 2 ? `/api/admin/usuarios?busca=${encodeURIComponent(termo)}` : null
+  const { data, error, isLoading } = useSWR<{ usuarios: PessoaAchada[] }>(chave, fetcher, { keepPreviousData: true })
+  const achados = data?.usuarios ?? []
+  const mostrar = aberta && !!chave
+
+  function escolher(p: PessoaAchada) {
+    onEscolher(p)
+    onTexto(p.email ?? p.nome)
+    setAberta(false)
+  }
+
+  if (escolhida) {
+    return (
+      <div className="text-xs text-zinc-500">
+        {rotulo}
+        <div className="mt-1 flex items-start justify-between gap-2 rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm text-zinc-100">{escolhida.nome}</p>
+            <p className="truncate text-xs text-zinc-400">{escolhida.email ?? "sem e-mail"}</p>
+            {escolhida.empresas.length > 0 && (
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500">
+                {escolhida.empresas.map((e) => `${e.nome} (${nomeDoPapel(e.papel)})`).join(" · ")}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => { onEscolher(null); onTexto("") }}
+            aria-label={`Trocar ${escolhida.nome}`}
+            title="Trocar"
+            className="shrink-0 text-zinc-500 hover:text-zinc-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="text-xs text-zinc-500">
+      <label>
+        {rotulo}
+        <input
+          role="combobox"
+          aria-expanded={mostrar}
+          aria-controls={idLista}
+          aria-autocomplete="list"
+          aria-describedby={ajuda ? idAjuda : undefined}
+          aria-activedescendant={mostrar && achados[ativo] ? `${idLista}-${achados[ativo].id}` : undefined}
+          value={texto}
+          onChange={(e) => { onTexto(e.target.value); setAberta(true); setAtivo(0) }}
+          onFocus={() => setAberta(true)}
+          onBlur={() => setAberta(false)}
+          onKeyDown={(e) => {
+            if (!mostrar) return
+            // Esc fecha a lista, não o diálogo.
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setAberta(false); return }
+            if (achados.length === 0) return
+            if (e.key === "ArrowDown") { e.preventDefault(); setAtivo((i) => (i + 1) % achados.length) }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setAtivo((i) => (i - 1 + achados.length) % achados.length) }
+            else if (e.key === "Enter") { e.preventDefault(); escolher(achados[ativo] ?? achados[0]) }
+          }}
+          placeholder="nome ou e-mail"
+          autoComplete="off"
+          className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+        />
+      </label>
+      {mostrar && (
+        <div className="mt-1 rounded-lg border border-zinc-700 bg-zinc-900">
+          {isLoading && achados.length === 0 && <p role="status" className="px-3 py-2 text-xs text-zinc-500">Procurando…</p>}
+          {error && <p role="alert" className="px-3 py-2 text-xs text-red-400">Não foi possível buscar. Tente de novo.</p>}
+          {!isLoading && !error && achados.length === 0 && (
+            <p className="px-3 py-2 text-xs text-zinc-500">Ninguém ativo com esse nome ou e-mail.</p>
+          )}
+          <ul id={idLista} role="listbox" aria-label={rotulo} className="max-h-56 overflow-y-auto">
+            {achados.map((p, i) => (
+              <li
+                key={p.id}
+                id={`${idLista}-${p.id}`}
+                role="option"
+                aria-selected={i === ativo}
+                // mousedown, e não click: o blur do campo fecharia a lista antes.
+                onMouseDown={(e) => { e.preventDefault(); escolher(p) }}
+                onMouseEnter={() => setAtivo(i)}
+                className={`cursor-pointer px-3 py-2 ${i === ativo ? "bg-zinc-800" : ""}`}
+              >
+                <p className="truncate text-sm text-zinc-200">{p.nome}</p>
+                <p className="truncate text-xs text-zinc-500">
+                  {p.email ?? "sem e-mail"}
+                  {p.empresas.length > 0 && ` · ${p.empresas.map((e) => `${e.nome} (${nomeDoPapel(e.papel)})`).join(", ")}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {ajuda && <span id={idAjuda} className="mt-1 block text-[11px] text-zinc-600">{ajuda}</span>}
+    </div>
   )
 }
 

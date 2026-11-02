@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z, ZodError } from "zod"
 import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { conviteDaEntrega } from "@/lib/entrega-da-gravacao"
+import { colinhaDaGravacao, materiaisDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
+import { momentoDoJob } from "@/lib/ficha-do-job"
+import { comToken } from "@/lib/midia"
 import { comOrg, declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 
@@ -43,6 +47,15 @@ export async function GET(
           localGravacao: true,
           dataCaptacao: true,
           prioridade: true,
+          clienteFinalNome: true,
+          tipoGravacao: true,
+          temBrinde: true,
+          brinde: true,
+          levar: true,
+          edicaoPor: true,
+          linkBrutos: true,
+          linkFinal: true,
+          statusInterno: true,
         },
       },
     },
@@ -50,6 +63,38 @@ export async function GET(
 
   if (!convite) {
     return resposta({ error: "Convite não encontrado" }, 404)
+  }
+
+  // O kit do videomaker (guia, referências, colinha), já com o acesso deste
+  // convite nos arquivos do NuFlow (lib/midia-acesso.ts → tipo "kit").
+  const montarKit = async () => {
+    const materiais = materiaisDaGravacao(await prisma.materialVideomaker.findMany({
+      where: { organizacaoId }, select: { id: true, titulo: true, tipo: true, url: true, texto: true, tipoGravacao: true, ordem: true },
+    }), convite.demanda.tipoGravacao)
+    const quando = momentoDoJob(convite.demanda)
+    const colinha = colinhaDaGravacao(materiais, convite.demanda.tipoGravacao)
+    const kit = {
+      materiais: materiais.filter((m) => m.tipo !== "colinha").map((m) => ({ id: m.id, titulo: m.titulo, tipo: m.tipo, url: comToken(m.url, token) })),
+      colinha: colinha?.texto ? preencherColinha(colinha.texto, {
+        cliente: convite.demanda.clienteFinalNome?.trim() || convite.demanda.titulo,
+        hora: quando?.hora ?? null,
+        endereco: convite.demanda.localGravacao || convite.demanda.localEvento,
+        link: null,
+      }) : null,
+    }
+    return kit
+  }
+
+  // Depois do aceite, o mesmo link vira a página de entrega da gravação
+  // (lib/entrega-da-gravacao.ts): brutos, vídeo pronto e a nota.
+  const { liberado } = await conviteDaEntrega(prisma, organizacaoId, token)
+  if (liberado) {
+    const nota = await prisma.notaFiscalUpload.findFirst({
+      where: { demandaId: convite.demanda.id, videomakerId: convite.videomakerId },
+      orderBy: { createdAt: "desc" },
+      select: { token: true, status: true },
+    })
+    return resposta({ ...convite, kit: await montarKit(), entrega: { liberada: true, nota } })
   }
 
   if (convite.status !== "pendente") {
@@ -60,7 +105,7 @@ export async function GET(
     return resposta({ error: "Convite expirado" }, 410)
   }
 
-  return resposta(convite)
+  return resposta({ ...convite, kit: await montarKit() })
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {

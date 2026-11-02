@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       } : {}),
     },
     select: {
-      papel: true, categoria: true, funcaoProfissional: true, areas: true, liderAudiovisual: true, recebeTodosAvisos: true,
+      papel: true, categoria: true, funcaoProfissional: true, areas: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true,
       usuario: { select: { id: true, nome: true, email: true, telefone: true, tipo: true, status: true, avatarUrl: true, createdAt: true } },
     },
     orderBy: { usuario: { nome: "asc" } },
@@ -74,6 +74,7 @@ export async function GET(req: NextRequest) {
     areas: m.areas,
     liderAudiovisual: m.liderAudiovisual,
     recebeTodosAvisos: m.recebeTodosAvisos,
+    operaGravacoes: m.operaGravacoes,
     ultimaAtividade: ultimaAtividade.get(m.usuario.id) ?? null,
   }))
 

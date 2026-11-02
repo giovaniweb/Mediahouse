@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { authConfig } from "./auth.config"
 import { CredentialsSignin } from "next-auth"
+import { comPapelDaEmpresaAtiva } from "@/lib/org"
 import { consumirLimiteLogin } from "@/lib/limite-login"
 import { registrarTentativaDeLogin } from "@/lib/auditoria-login"
 
@@ -106,4 +107,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  callbacks: {
+    ...authConfig.callbacks,
+    // O papel do token é o do login, na primeira empresa; o da sessão é o da
+    // empresa ATIVA, relido a cada `auth()` (ver comPapelDaEmpresaAtiva). Fica
+    // aqui, e não em auth.config.ts, porque o proxy não fala com o banco.
+    async session(params) {
+      return comPapelDaEmpresaAtiva(await authConfig.callbacks!.session!(params))
+    },
+  },
 })

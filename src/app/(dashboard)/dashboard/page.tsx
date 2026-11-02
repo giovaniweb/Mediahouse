@@ -3,9 +3,9 @@
 import { DashboardPreview } from "@/components/dashboard/DashboardPreview"
 import { useEffect, useState } from "react"
 import useSWR from "swr"
-import { useSession } from "next-auth/react"
 import { VideomakerDashboard } from "@/components/dashboard/VideomakerDashboard"
 import { DesignerDashboard } from "@/components/dashboard/DesignerDashboard"
+import { SolicitanteDashboard } from "@/components/dashboard/SolicitanteDashboard"
 import { Header } from "@/components/layout/Header"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
@@ -69,15 +69,31 @@ function InternalDashboard() {
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession()
+  const { data: me, error: erroMe } = useMe()
 
   // Sem desvio para celular. O redirecionamento para /campo sobrou aqui depois
   // que o middleware perdeu o dele (09/09/2026): /campo é do módulo eventos,
   // desligado, e a rota bloqueada devolve ao Dashboard — o celular ficava em
   // laço. O celular vê o mesmo Dashboard, com o menu em gaveta.
 
+  // O painel de cada um sai do papel no vínculo com a empresa ATIVA, lido pelo
+  // /api/me — não do cargo global (`tipo`). A empresa vem do cookie e pode ter
+  // sido trocada depois do login: o Gabriel é videomaker na Contourline e admin
+  // na GH Produção. Até o vínculo chegar, não se decide — nem se busca nada.
+  if (!me && !erroMe) {
+    return (
+      <>
+        <Header title="Dashboard" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full" />
+        </div>
+      </>
+    )
+  }
+  const papel = me?.membership?.papel
+
   // Videomakers externos têm dashboard próprio
-  if (session?.user?.tipo === "videomaker") {
+  if (papel === "videomaker") {
     return (
       <>
         <Header title="Meu Painel" />
@@ -87,11 +103,21 @@ export default function DashboardPage() {
   }
 
   // Designers têm painel próprio (suas artes)
-  if (session?.user?.tipo === "designer") {
+  if (papel === "designer") {
     return (
       <>
         <Header title="Meu Painel" />
         <DesignerDashboard />
+      </>
+    )
+  }
+
+  // Quem pede acompanha os próprios pedidos, não os números da empresa.
+  if (papel === "solicitante") {
+    return (
+      <>
+        <Header title="Meus Pedidos" />
+        <SolicitanteDashboard />
       </>
     )
   }

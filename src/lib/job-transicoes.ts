@@ -267,7 +267,7 @@ export function podeTransicionar(entrada: {
         return {
           ok: false,
           codigo: "nao_e_seu_job",
-          motivo: "Este job não está atribuído a você.",
+          motivo: "Esta gravação não está atribuída a você.",
           avisos,
         }
       }

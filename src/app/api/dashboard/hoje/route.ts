@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { temPapel } from "@/lib/papel"
 import { hojeEmSaoPaulo, inicioDoDia, somarDias } from "@/lib/datas"
 
 // GET /api/dashboard/hoje — dados para o painel "Hoje em Foco" (TDAH)
@@ -20,7 +21,7 @@ export async function GET() {
 
   // Para videomakers externos: filtrar por videomakerId deles
   let videomakerId: string | undefined
-  if (session.user.tipo === "videomaker") {
+  if (temPapel(session, "videomaker")) {
     const vmRecord = await prisma.videomaker.findFirst({
       where: { usuarioId: session.user.id },
       select: { id: true },

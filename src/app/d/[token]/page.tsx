@@ -2,7 +2,7 @@
 
 import useSWR from "swr"
 import { useParams } from "next/navigation"
-import { Loader2, CalendarDays, CheckCircle2, Clock, Film, Sparkles, Download } from "lucide-react"
+import { Loader2, CalendarDays, CheckCircle2, Clock, Film, Sparkles, Download, Minus } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { formatarData } from "@/lib/datas"
 
@@ -25,6 +25,26 @@ type Demanda = {
   thumbnailUrl: string | null
   arquivos: Arquivo[]
   organizacao: { nome: string; logoUrl: string | null } | null
+  /** Gravação externa: o acompanhamento de quem pediu (lib/acompanhamento-gravacao.ts). */
+  gravacao?: Gravacao | null
+}
+
+type PassoDaTrilha = { id: string; rotulo: string; estado: "feito" | "agora" | "depois" | "pulado"; detalhe: string | null }
+type Gravacao = {
+  cliente: string
+  tipo: string | null
+  quando: string | null
+  onde: string | null
+  videomaker: string | null
+  situacao: string
+  tom: "andamento" | "ok" | "alerta"
+  trilha: PassoDaTrilha[] | null
+}
+
+const PILULA: Record<Gravacao["tom"], string> = {
+  ok: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  andamento: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+  alerta: "bg-amber-500/15 text-amber-300 border-amber-500/30",
 }
 
 // Etapas na linguagem de quem acompanha de fora — sem jargão interno.
@@ -71,6 +91,7 @@ export default function DemandaPublicaPage() {
   }
 
   const d = data.demanda
+  const g = d.gravacao
   const etapaAtual = Math.max(0, ETAPAS.findIndex((e) => e.id === d.statusVisivel))
   const entregue = d.statusVisivel === "finalizado" || d.statusVisivel === "para_postar"
   // O botão baixa o original; sem conversão, original e link são o mesmo arquivo.
@@ -102,7 +123,7 @@ export default function DemandaPublicaPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-5 py-8">
+      {g ? <AcompanhamentoDaGravacao d={d} g={g} finais={finais} /> : <div className="max-w-3xl mx-auto px-5 py-8">
         {/* O estado atual é a resposta que a pessoa veio buscar: vem primeiro,
             antes de título e descrição. */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -220,7 +241,92 @@ export default function DemandaPublicaPage() {
         <p className="text-[11px] text-zinc-700 mt-10">
           Acompanhamento somente leitura · NuFlow
         </p>
-      </div>
+      </div>}
     </main>
+  )
+}
+
+// Gravação externa: quem pediu o videomaker quer saber se alguém vai, quando,
+// e quando o vídeo chega. Mesma página, mesmas peças; as etapas são as do card
+// aberto da gravação, com as palavras de quem acompanha de fora.
+function AcompanhamentoDaGravacao({ d, g, finais }: { d: Demanda; g: Gravacao; finais: string[] }) {
+  const trilha = g.trilha ?? []
+  const contam = trilha.filter((p) => p.estado !== "pulado")
+  const progresso = contam.length ? Math.round((contam.filter((p) => p.estado === "feito").length / contam.length) * 100) : 0
+  const entregue = g.tom === "ok"
+  const dados: [string, string | null][] = [
+    ["Quando", g.quando],
+    ["Onde", g.onde],
+    ["Videomaker", g.videomaker ?? (g.trilha ? "a confirmar" : null)],
+  ]
+  return (
+    <div className="max-w-3xl mx-auto px-5 py-8">
+      {/* As datas do pedido e do envio estão na trilha, no dia de São Paulo. */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${PILULA[g.tom]}`}>{g.situacao}</span>
+      </div>
+
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">{g.cliente}</h1>
+      <p className="text-sm text-zinc-500 mb-6">{[g.tipo, d.codigo].filter(Boolean).join(" · ")}</p>
+
+      <dl className="grid gap-4 sm:grid-cols-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 mb-8">
+        {dados.filter(([, v]) => v).map(([rotulo, valor]) => (
+          <div key={rotulo} className="min-w-0">
+            <dt className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">{rotulo}</dt>
+            <dd className="text-sm text-zinc-200 break-words">{valor}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {entregue && finais.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Vídeo</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {finais.map((url, i) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer"
+                className="group flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 hover:border-emerald-500/50 transition-colors">
+                <Download className="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400 transition-colors shrink-0" />
+                <span className="text-xs text-zinc-300 truncate">{d.arquivos[i]?.nomeArquivo ?? `Arquivo ${i + 1}`}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {trilha.length > 0 && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Andamento</h2>
+            <span className="text-xs text-zinc-600">{progresso}%</span>
+          </div>
+          <div className="h-1 rounded-full bg-zinc-800 overflow-hidden mb-5">
+            <div className={entregue ? "h-full bg-emerald-500" : "h-full bg-blue-500"} style={{ width: `${progresso}%` }} />
+          </div>
+          <ol className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-4">
+            {trilha.map((p) => (
+              <li key={p.id} className="flex items-start gap-2">
+                {p.estado === "feito" ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-400 shrink-0" />
+                  : p.estado === "agora" ? <Clock className="w-3.5 h-3.5 mt-0.5 text-blue-400 shrink-0" />
+                  : p.estado === "pulado" ? <Minus className="w-3.5 h-3.5 mt-0.5 text-zinc-600 shrink-0" />
+                  : <span className="w-3.5 h-3.5 mt-0.5 rounded-full border border-zinc-700 shrink-0" />}
+                <span className="min-w-0">
+                  <span className={p.estado === "agora" ? "block text-xs text-blue-300 font-medium" : p.estado === "feito" ? "block text-xs text-zinc-400" : "block text-xs text-zinc-600"}>{p.rotulo}</span>
+                  {p.detalhe && <span className="block text-[11px] text-zinc-500">{p.detalhe}</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {d.descricao && (
+        <details className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-3 text-sm">
+          <summary className="cursor-pointer text-xs font-semibold text-zinc-500 uppercase tracking-wide">O que foi pedido</summary>
+          <p className="text-zinc-400 whitespace-pre-wrap leading-relaxed mt-3">{d.descricao}</p>
+        </details>
+      )}
+
+      <p className="text-[11px] text-zinc-700 mt-10">Acompanhamento somente leitura · NuFlow</p>
+    </div>
   )
 }

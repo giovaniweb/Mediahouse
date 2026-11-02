@@ -36,13 +36,14 @@ export type AcessoAreas = { gestor: boolean; audiovisual: boolean; growth: boole
  * `null` enquanto /api/me não respondeu, ou se respondeu erro (sem
  * `membership`): quem decide com `null` não troca de área, espera.
  *
- * Gestor e admin pelo cargo legado (`tipo`) OU pelo papel na empresa — o papel
- * é a autoridade (lib/papel.ts); o `tipo` fica pelo que o menu já fazia.
+ * Gestor e admin pelo papel na empresa ativa, só por ele (lib/papel.ts). Até
+ * 30/10/2026 o cargo global (`tipo`) também valia, e quem era admin numa
+ * empresa ganhava o menu de gestão em outra onde era videomaker.
  */
 export function acessoDasAreas(me: MeDoMenu | null | undefined): AcessoAreas | null {
   if (!me || !("membership" in me)) return null
   const papel = me.membership?.papel ?? ""
-  const gestor = ["admin", "gestor"].includes(me.tipo ?? "") || ["admin", "gestor"].includes(papel)
+  const gestor = ["admin", "gestor"].includes(papel)
   const areas = me.membership?.areas ?? []
   const p = me.permissoes ?? {}
   return {

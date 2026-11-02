@@ -1,8 +1,7 @@
-// Regras compartilhadas por Kanban e Lista.
+// Regras compartilhadas pelo quadro (kanban) e pelo topo dele (BarraVisao).
 
 import { estaAtrasada, diasDeAtraso, venceHoje } from "@/lib/status"
 
-export type Visao = "kanban" | "lista"
 export type AbaRapida = "todos" | "minhas" | "criadas" | "atrasadas"
 
 export interface DemandaLista {
@@ -97,5 +96,3 @@ export function calcularKpis(demandas: DemandaLista[]) {
 
 export { estaAtrasada, diasDeAtraso, venceHoje }
 
-/** Preferências antigas de Tabela migram para o quadro. */
-export function normalizarVisao(valor: unknown): Visao { return valor === "lista" ? "lista" : "kanban" }

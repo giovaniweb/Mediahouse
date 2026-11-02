@@ -268,6 +268,10 @@ describe("fila do Social (§31)", () => {
 import {
   ABA_DA_ACAO,
   ABA_LABEL,
+  LUGAR_LABEL,
+  abaInicial,
+  abasDoDetalhe,
+  mostraAbaAprovacao,
   PROXIMA_ACAO,
   PROXIMA_ACAO_GROWTH,
   nivelDeRisco,
@@ -395,20 +399,25 @@ describe("aba onde se age (detalhe da demanda)", () => {
     expect(Object.keys(ABA_DA_ACAO).sort()).toEqual([...TODOS].sort())
   })
 
-  it("toda aba apontada existe no detalhe", () => {
+  it("todo lugar apontado existe no detalhe", () => {
     for (const s of TODOS) {
-      const aba = ABA_DA_ACAO[s]
-      if (aba !== null) expect(Object.keys(ABA_LABEL), `${s} → ${aba}`).toContain(aba)
+      const lugar = ABA_DA_ACAO[s]
+      if (lugar !== null) expect(Object.keys(LUGAR_LABEL), `${s} → ${lugar}`).toContain(lugar)
     }
   })
 
-  it("quem edita vai para Entrega; quem distribui, para Equipe; a entrada, para Pedido", () => {
-    expect(ABA_DA_ACAO.editando).toBe("entrega")
-    expect(ABA_DA_ACAO.ajuste_solicitado).toBe("entrega")
+  it("quem distribui vai para Equipe; a entrada, para Pedido; o ajuste, para Aprovação", () => {
     expect(ABA_DA_ACAO.brutos_enviados).toBe("equipe")
     expect(ABA_DA_ACAO.aguardando_triagem).toBe("equipe")
     expect(ABA_DA_ACAO.aguardando_aprovacao_interna).toBe("pedido")
+    expect(ABA_DA_ACAO.captacao_realizada).toBe("arquivos")
+    expect(ABA_DA_ACAO.ajuste_solicitado).toBe("aprovacao")
     expect(ABA_DA_ACAO.impedimento).toBe("conversa")
+  })
+
+  it("em edição o envio para aprovação está na própria faixa: não manda para aba nenhuma", () => {
+    expect(ABA_DA_ACAO.editando).toBeNull()
+    expect(ABA_DA_ACAO.fila_edicao).toBeNull()
   })
 
   it("sem ação a fazer não há aba para onde mandar", () => {
@@ -807,5 +816,35 @@ describe("/demandas e /jobs não se sobrepõem", () => {
     const volta = conversaoDeFluxo(umaCobertura, "demanda")!
     expect(filtroDemandas(volta)).toBe(true)
     expect(ehSolicitacaoDeCobertura(volta)).toBe(false)
+  })
+})
+
+describe("abas do detalhe por etapa (07/10/2026)", () => {
+  it("antes da aprovação: Pedido, Referências e arquivos, Conversa e histórico — e abre no Pedido", () => {
+    for (const statusInterno of ["pedido_criado", "aguardando_triagem", "planejamento", "captacao_agendada", "editando", "impedimento"]) {
+      expect(abasDoDetalhe({ statusInterno }), statusInterno).toEqual(["pedido", "arquivos", "conversa"])
+      expect(abaInicial({ statusInterno }), statusInterno).toBe("pedido")
+    }
+    expect(ABA_LABEL.arquivos).toBe("Referências e arquivos")
+    expect(ABA_LABEL.conversa).toBe("Conversa e histórico")
+  })
+
+  it("da aprovação em diante: Aprovação vem primeiro e é onde abre", () => {
+    for (const statusInterno of ["revisao_pendente", "aprovado", "postagem_pendente", "postado", "entregue_cliente"]) {
+      expect(abasDoDetalhe({ statusInterno }), statusInterno).toEqual(["aprovacao", "pedido", "arquivos", "conversa"])
+      expect(abaInicial({ statusInterno }), statusInterno).toBe("aprovacao")
+    }
+  })
+
+  it("depois do primeiro envio a aba Aprovação aparece, mesmo ainda em edição", () => {
+    expect(mostraAbaAprovacao({ statusInterno: "editando" })).toBe(false)
+    expect(mostraAbaAprovacao({ statusInterno: "editando", linkCliente: "https://x/aprovar/t" })).toBe(true)
+    expect(mostraAbaAprovacao({ statusInterno: "editando", finaisEnviados: 1 })).toBe(true)
+    expect(abaInicial({ statusInterno: "editando", linkCliente: "https://x/aprovar/t" })).toBe("pedido")
+  })
+
+  it("recusada na entrada não tem o que aprovar", () => {
+    expect(mostraAbaAprovacao({ statusInterno: "encerrado", statusVisivel: "entrada" })).toBe(false)
+    expect(abaInicial({ statusInterno: "encerrado", statusVisivel: "entrada" })).toBe("pedido")
   })
 })

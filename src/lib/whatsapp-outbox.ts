@@ -19,12 +19,24 @@ export async function destinoAutorizado(tx:Tx,organizacaoId:string,telefone:stri
     i.videomaker ? {tipo:"videomaker",id:i.videomaker.id} : null
   return destino
 }
+/**
+ * O cliente da gravação externa (29/10/2026) não é pessoa cadastrada, então
+ * `destinoAutorizado` não o reconhece. Ele é destino só da própria gravação: o
+ * número precisa ser o WhatsApp de cliente gravado nela, conferido na criação
+ * e de novo no envio (destinoContinuaValido). Fora disso, nada muda.
+ */
+async function destinoCliente(tx:Tx,organizacaoId:string,demandaId:string,telefone:string) {
+  const d=await tx.demanda.findFirst({where:{id:demandaId,organizacaoId},select:{clienteFinalTelefone:true}})
+  return d && telefoneCompleto(d.clienteFinalTelefone)===telefone ? {tipo:"cliente",id:demandaId} : null
+}
 async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
   await enfileirar(tx,{organizacaoId:s.organizacaoId,tipo:TIPO,referencia:s.id,
     chave:`${s.id}:${s.revisao}:${s.tentativas}`,payload:{revisao:s.revisao},agendadoPara,expiraEm:s.expiraEm})
 }
 /** Intenção + negócio no mesmo tx. Autoridade do produtor é validada na fronteira. */
-export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado"|"regra";regraContexto?:ContextoRegra;referencia:string;telefone:string;texto:string;expiraEm:Date}) {
+export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado"|"regra";regraContexto?:ContextoRegra;referencia:string;telefone:string;texto:string;expiraEm:Date;
+  /** Só aviso manual ao cliente da gravação: o id dela (destinoCliente). */
+  clienteDe?:string}) {
   const telefone=telefoneCompleto(e.telefone)
   if(!telefone || !e.texto.trim() || e.texto.length>4096 || !e.chave || e.chave.length>128 || !e.referencia || e.referencia.length>128 ||
     !Number.isFinite(e.expiraEm.getTime()) || e.expiraEm<=new Date()) throw new Error("Intenção de saída inválida")
@@ -36,6 +48,9 @@ export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;orig
       const c=JSON.parse(decryptSecret(inbox.conteudoCifrado)) as ConteudoEntrada
       if(jidRecebidoVerificado(c.remoteJid,c.remoteJidAlt)?.telefone===telefone) destino={tipo:"inbox",id:e.referencia}
     }
+  } else if(e.clienteDe) {
+    if(e.origem!=="manual") throw new Error("Cliente só por aviso manual")
+    destino=await destinoCliente(tx,e.organizacaoId,e.clienteDe,telefone)
   } else destino=await destinoAutorizado(tx,e.organizacaoId,telefone)
   if(!destino) throw new Error("Destinatário não autorizado")
   const id=randomUUID(),criado=await tx.saidaWhatsapp.createMany({data:{
@@ -55,6 +70,7 @@ async function destinoContinuaValido(tx:Tx,s:SaidaWhatsapp,telefone:string,insta
     const c=JSON.parse(decryptSecret(i.conteudoCifrado)) as ConteudoEntrada
     return jidRecebidoVerificado(c.remoteJid,c.remoteJidAlt)?.telefone===telefone
   }
+  if(s.destinatarioTipo==="cliente") return !!await destinoCliente(tx,s.organizacaoId,s.destinatarioId,telefone)
   const d=await destinoAutorizado(tx,s.organizacaoId,telefone)
   return d?.tipo===s.destinatarioTipo && d.id===s.destinatarioId
 }

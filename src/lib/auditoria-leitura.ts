@@ -7,8 +7,9 @@ import type { AcaoAuditoria } from "@/lib/auditoria"
 // Record<AcaoAuditoria>: ação nova sem rótulo não compila. Antes nove das 25
 // ações (convites, WhatsApp, alertas) apareciam na tela como código cru.
 const rotulos: Record<AcaoAuditoria, string> = {
-  "convite.criar": "Convite enviado", "convite.responder": "Convite respondido",
-  "demanda.transferir": "Job transferido para Demandas",
+  "convite.criar": "Convite enviado", "convite.responder": "Convite respondido", "convite.entregar": "Material entregue pelo convite",
+  "gravacao.cancelar": "Gravação cancelada",
+  "demanda.transferir": "Gravação transferida para Demandas",
   "whatsapp.pausar": "Envio de WhatsApp pausado", "whatsapp.retomar": "Envio de WhatsApp retomado", "whatsapp.cancelar": "Envio de WhatsApp cancelado", "whatsapp.retentativa": "Nova tentativa de WhatsApp",
   "alerta.resolver": "Alerta resolvido", "alerta.ignorar": "Alerta ignorado", "alerta.snooze": "Alerta adiado",
   "evento.documento": "Documento do evento alterado", "evento.aprovacao": "Aprovação do evento registrada",
@@ -16,6 +17,8 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "configuracao.alterada": "Configuração alterada", "trello.conexao": "Conexão Trello", "drive.conexao": "Conexão de pasta externa (desativada)", "arquivo.publicacao": "Publicação no portfólio",
   "manutencao.custos": "Custos retroativos", "manutencao.arquivos": "Arquivos retroativos", "manutencao.credenciais": "Proteção de credenciais", "manutencao.retencao": "Limpeza de detalhes vencidos",
   "ia.mutacao": "Registro criado por ferramenta IA", "ia.envio": "Solicitação de envio pela IA",
+  "mcp.leitura": "Consulta pelo assistente (MCP)", "mcp.criar": "Demanda criada pelo assistente (MCP)",
+  "mcp.chave": "Chave de assistente (MCP) gerada ou revogada", "mcp.desfazer": "Demanda do assistente (MCP) desfeita",
   "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
 }
 const resultados: Record<string,string> = { intencao: "iniciada", sucesso: "concluída", falha: "falhou", negado: "negada" }

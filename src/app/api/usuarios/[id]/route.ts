@@ -5,6 +5,7 @@ import { requireAcesso } from "@/lib/acesso"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { contarVinculos } from "@/lib/usuario-vinculos"
+import { removerDaEmpresa } from "@/lib/remover-da-empresa"
 import { PRESETS } from "@/lib/permissoes"
 import { setPermissoes } from "@/lib/permissoes-server"
 import bcrypt from "bcryptjs"
@@ -59,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const correlationId = correlacaoAuditoria()
   const usuario = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`permissoes:${organizacaoId}:${id}`}, 0))`
-    const antes = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, categoria: true, funcaoProfissional: true, areas: true } })
+    const antes = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true, categoria: true, funcaoProfissional: true, areas: true } })
     const identidadeAntes = await tx.usuario.findUniqueOrThrow({ where: { id } })
     const permissoesAntes = await tx.permissaoUsuario.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } } })
     const usuario = await tx.usuario.update({
@@ -84,6 +85,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Só os avisos — não mexe em permissão nenhuma. É o ponto: acompanhar a
       // operação deixou de exigir virar gestor.
       if (typeof body.recebeTodosAvisos === "boolean") memData.recebeTodosAvisos = body.recebeTodosAvisos
+      if (typeof body.operaGravacoes === "boolean") memData.operaGravacoes = body.operaGravacoes
       camposMembro = Object.keys(memData).filter(k => JSON.stringify(antes?.[k as keyof typeof antes]) !== JSON.stringify(memData[k]))
       if (camposMembro.length > 0) {
         await tx.usuarioOrganizacao.updateMany({ where: { usuarioId: id, organizacaoId }, data: memData })
@@ -97,7 +99,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    const depois = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, categoria: true, funcaoProfissional: true, areas: true } })
+    const depois = await tx.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } }, select: { papel: true, liderAudiovisual: true, recebeTodosAvisos: true, operaGravacoes: true, categoria: true, funcaoProfissional: true, areas: true } })
     const campos = [...Object.keys(data).filter(k => identidadeAntes[k as keyof typeof identidadeAntes] !== data[k]), ...camposMembro]
     if (campos.length || JSON.stringify(antes) !== JSON.stringify(depois)) await registrarAuditoria(tx, acesso, {
       acao: "usuario.alterado", recurso: "usuario", recursoId: id, correlationId,
@@ -115,9 +117,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ usuario })
 }
 
-// DELETE /api/usuarios/[id] — desativa pessoa na ORGANIZAÇÃO ATIVA (admin/gestor).
-// Se a pessoa pertence só a esta org: inativa a conta global. Se pertence a mais de
-// uma org: remove apenas o vínculo desta org (não afeta outras empresas).
+// DELETE /api/usuarios/[id] — tira a pessoa da ORGANIZAÇÃO ATIVA (admin/gestor).
+// Padrão (lib/remover-da-empresa.ts): só nesta empresa → conta inativada e WhatsApp
+// apagado, com o vínculo mantido para o histórico; em outras também → sai só desta.
+// `?modo=hard`: apaga de vez, só cadastro sem vínculo nenhum.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const acesso = await requireAcesso("gerenciarUsuarios")
   if (acesso instanceof NextResponse) return acesso
@@ -132,7 +135,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   // Só desativa/remove quem pertence à organização ativa
   const membership = await prisma.usuarioOrganizacao.findUnique({
     where: { usuarioId_organizacaoId: { usuarioId: id, organizacaoId } },
-    select: { id: true },
+    select: { id: true, papel: true },
   })
   if (!membership) return NextResponse.json({ error: "Pessoa não encontrada nesta organização" }, { status: 404 })
 
@@ -170,20 +173,23 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ ok: true, hardDelete: true })
   }
 
-  // ── SOFT (padrão): desativa global se só nesta org; senão remove só o vínculo ─
-  if (totalOrgs <= 1) {
-    const usuario = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
-      const antes = await tx.usuario.findUniqueOrThrow({ where: { id }, select: { status: true } })
-      const atualizado = await tx.usuario.update({ where: { id }, data: { status: "inativo" }, select: { id: true, nome: true, status: true } })
-      if (antes.status !== "inativo") await registrarAuditoria(tx, acesso, { acao: "usuario.removido", recurso: "usuario", recursoId: id, correlationId: correlacaoAuditoria(), depois: { ativo: false } })
-      return atualizado
-    }))
-    return NextResponse.json({ usuario, escopo: "global" })
+  // ── Padrão: desativa aqui, o histórico fica ─────────────────────────────────
+  // Antes só inativava a conta e deixava o WhatsApp nela: com o mesmo número de
+  // outro cadastro, travava os avisos dos dois.
+  //
+  // A empresa não pode ficar sem quem administre as pessoas dela.
+  if (membership.papel === "admin") {
+    const outrosAdmins = await prisma.usuarioOrganizacao.count({
+      where: { organizacaoId, papel: "admin", usuarioId: { not: id }, usuario: { status: "ativo" } },
+    })
+    if (outrosAdmins === 0) {
+      return NextResponse.json({ error: "Esta é a única pessoa admin da empresa. Dê o papel de admin a outra pessoa antes." }, { status: 409 })
+    }
   }
   await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
-    await tx.usuarioOrganizacao.delete({ where: { id: membership.id } })
+    await removerDaEmpresa(tx, { usuarioId: id, organizacaoId, soNestaEmpresa: totalOrgs <= 1 })
     await registrarAuditoria(tx, acesso, { acao: "usuario.removido", recurso: "usuario", recursoId: id, correlationId: correlacaoAuditoria(), depois: { ativo: false } })
   }))
   const usuario = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, status: true } })
-  return NextResponse.json({ usuario, escopo: "organizacao" })
+  return NextResponse.json({ usuario, escopo: totalOrgs <= 1 ? "global" : "organizacao" })
 }

@@ -17,15 +17,15 @@ import { useRascunho } from "@/lib/use-rascunho"
 import { tituloDaIdeia, useIdeiaSocial, useMudouDesdeAbrir, valoresDaIdeia, type OrigemSocial } from "@/components/social/ideiaNoFormulario"
 import { AnexosDaIdeia } from "@/components/social/AnexosDaIdeia"
 import {
-  Secao, Campo, Seta, Chip,
+  Secao, Campo, Seta,
   inputClass, selectClass, erroClass, MOTIVOS_URGENCIA, COR_PRIORIDADE,
 } from "./campos-formulario"
 import { ModalFormulario } from "./ModalFormulario"
 import { BannerRascunho } from "./BannerRascunho"
 import { SecaoArquivos, juntarReferencias } from "./SecaoArquivos"
+import { SeletorProdutos, type Produto } from "./SeletorProdutos"
 
 
-interface Produto { id: string; nome: string }
 interface OpcaoEquipe { value: string; label: string; subtitle?: string }
 
 interface NovaDemandaModalProps {
@@ -125,9 +125,6 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
     fetcher
   )
   const produtos = dataProdutos?.produtos ?? []
-  const produtosSelecionados = produtoIds
-    .map((id) => produtos.find((p) => p.id === id))
-    .filter((p): p is Produto => !!p)
 
   // ── Tipos de vídeo (Configurações → Parâmetros) ──────────────────────────
   const { data: dataTipos } = useSWR<{ parametros: { valor: string; label: string }[] }>(
@@ -392,7 +389,8 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       // cast mentia para o TypeScript. O usuário via "[object Object]".
       if (!res.ok) throw erroDeCorpo(json, res.status, text, "Não foi possível criar a demanda.")
 
-      toast.success(social ? `Pedido ${json.codigo ?? ""} enviado ao Audiovisual.` : `Demanda ${json.codigo ?? ""} criada!`)
+      const codigo = typeof json.codigo === "string" ? json.codigo : ""
+      toast.success(social ? `Pedido ${codigo} enviado ao Audiovisual.` : `Demanda ${codigo} criada!`)
       if (!social) limparRascunho()
 
       // Anexos vão depois da criação — a demanda precisa existir para receber o
@@ -408,7 +406,7 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       }
 
       if (social) {
-        social.aoTerminar({ tipo: "pedido", codigo: typeof json.codigo === "string" ? json.codigo : undefined })
+        social.aoTerminar({ tipo: "pedido", codigo: codigo || undefined })
         return
       }
       onClose()
@@ -731,37 +729,12 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
 
 
           <Secao icone={Package} titulo="Equipamentos / Produtos">
-            <div className="relative">
-              <Plus className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <select
-                value=""
-                onChange={e => {
-                  const id = e.target.value
-                  if (!id) return
-                  setProdutoIds(prev => prev.includes(id) ? prev : [...prev, id])
-                  limparCampo("produtoIds")
-                }}
-                className={cn(selectClass, "pl-10", errors.produtoIds && erroClass)}
-              >
-                <option value="">Adicionar equipamento / produto</option>
-                {produtos
-                  .filter(p => !produtoIds.includes(p.id))
-                  .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
-              <Seta />
-            </div>
-
-            {produtosSelecionados.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {produtosSelecionados.map(p => (
-                  <Chip
-                    key={p.id}
-                    texto={p.nome}
-                    onRemover={() => setProdutoIds(prev => prev.filter(id => id !== p.id))}
-                  />
-                ))}
-              </div>
-            )}
+            <SeletorProdutos
+              produtos={produtos}
+              valores={produtoIds}
+              onChange={(atualizar) => { setProdutoIds(atualizar); limparCampo("produtoIds") }}
+              erro={!!errors.produtoIds}
+            />
 
             {errors.produtoIds
               ? <p className="text-xs text-red-400">{errors.produtoIds}</p>

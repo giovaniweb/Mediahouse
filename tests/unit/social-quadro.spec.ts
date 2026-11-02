@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
-  colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje, lerDataPostagem, lerIdeiaSocial, lerSugestao,
+  colunaDoCard, diaDaPostagem, etapaDoPedido, jaCobrouHoje, lerDataPostagem, lerIdeiaSocial, lerSugestao, soltarNaSocial,
 } from "@/lib/social-quadro"
 import { unicas } from "@/lib/social"
 import { PERMISSAO_HREF_MAP, PRESETS } from "@/lib/permissoes"
@@ -135,5 +135,31 @@ describe("salvar como ideia pede título ou descrição", () => {
     expect(tituloDaIdeia("", "Vídeo do showroom novo\ncom a equipe toda")).toBe("Vídeo do showroom novo")
     expect(tituloDaIdeia("  Título  ", "descrição")).toBe("Título")
     expect(tituloDaIdeia("", "")).toBe("")
+  })
+})
+
+describe("soltarNaSocial — arrastar no quadro dela", () => {
+  const ideia = { dataPostagem: null, linhaProjetoId: "l1", podeEditar: true, demanda: null }
+  const noPlano = { ...ideia, dataPostagem: "2026-10-20" }
+  const pedido = { ...noPlano, demanda: { statusVisivel: "producao", statusInterno: "planejamento" } }
+
+  it("na mesma coluna não faz nada", () => {
+    expect(soltarNaSocial(ideia, "ideia")).toEqual({ acao: "nada" })
+    expect(soltarNaSocial(pedido, "equipe")).toEqual({ acao: "nada" })
+  })
+
+  it("dar a data ou fazer o pedido abre o formulário; o card só muda quando ele é salvo", () => {
+    expect(soltarNaSocial(ideia, "plano").acao).toBe("formulario")
+    expect(soltarNaSocial(ideia, "equipe").acao).toBe("formulario")
+    expect(soltarNaSocial(noPlano, "equipe").acao).toBe("formulario")
+  })
+
+  it("o que não é dela é devolvido com a explicação", () => {
+    expect(soltarNaSocial(pedido, "pronto")).toMatchObject({ acao: "recusar", motivo: expect.stringMatching(/produção/) })
+    expect(soltarNaSocial(pedido, "ideia").acao).toBe("recusar")
+    expect(soltarNaSocial(ideia, "pronto").acao).toBe("recusar")
+    expect(soltarNaSocial(noPlano, "ideia")).toMatchObject({ acao: "recusar", motivo: expect.stringMatching(/data de postagem/) })
+    expect(soltarNaSocial({ ...ideia, podeEditar: false }, "plano").acao).toBe("recusar")
+    expect(soltarNaSocial({ ...ideia, linhaProjetoId: null }, "plano").acao).toBe("recusar")
   })
 })

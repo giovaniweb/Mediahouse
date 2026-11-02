@@ -1,4 +1,4 @@
-import { caminhoDaUrl, resolverParaAssinada } from "@/lib/midia"
+import { caminhoDaUrl, partesDaMidia, resolverParaAssinada } from "@/lib/midia"
 
 export const SEM_CACHE_MIDIA = { "Cache-Control": "private, no-store" }
 export const PUBLICADO = { tipoArquivo: "final" as const, publicadoEm: { not: null }, revogadoEm: null, publicacaoUrl: { not: null } }
@@ -8,10 +8,10 @@ export function urlPublicavel(url: string | null, organizacaoId: string, demanda
   if (!url) return false
   if (url.startsWith("/")) {
     const caminho = caminhoDaUrl(url)
-    if (!caminho) return false
-    const p = caminho.split("/")
-    return p[1] === organizacaoId && p[3] === demandaId &&
-      (thumbnail ? p[2] === "thumbnails" : p[2] === "videos")
+    const p = caminho ? partesDaMidia(caminho) : null
+    if (!p) return false
+    return p.organizacaoId === organizacaoId && p.id === demandaId &&
+      p.tipo === (thumbnail ? "thumbnails" : "videos")
   }
   try {
     const u = new URL(url)
@@ -32,8 +32,8 @@ export function numeroPagina(valor: string | null, padrao: number, max = 100000)
 export async function resolverMidiaCobertura(url: string | null, org: string, cobertura: string, segundos?: number) {
   if (!url) return null
   if (url.startsWith("/")) {
-    const c = caminhoDaUrl(url)?.split("/")
-    if (!c || c[1] !== org || c[3] !== cobertura || !["coberturas", "thumbnails"].includes(c[2])) return null
+    const c = caminhoDaUrl(url), p = c ? partesDaMidia(c) : null
+    if (!p || p.organizacaoId !== org || p.id !== cobertura || !["coberturas", "thumbnails"].includes(p.tipo)) return null
   } else {
     try { const u = new URL(url); if (u.protocol !== "https:" || u.username || u.password) return null } catch { return null }
   }

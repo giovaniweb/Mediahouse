@@ -4,6 +4,8 @@ import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
+import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
+import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
 
 type Tx = Prisma.TransactionClient
 export class ConviteInvalido extends Error {
@@ -37,7 +39,7 @@ export async function condicaoDoConvite(tx: Tx, organizacaoId: string, videomake
 }
 export async function emitirConvite(tx: Tx, ator: AtorAuditoria, demandaId: string, videomakerId: string) {
   const d = await bloquearDemanda(tx, ator.organizacaoId, demandaId)
-  if (!estadosDeConvite.includes(d.statusInterno)) throw new ConviteInvalido("O job não está na etapa de convite")
+  if (!estadosDeConvite.includes(d.statusInterno)) throw new ConviteInvalido("A gravação não está na etapa de convite")
   const v = await profissional(tx, ator.organizacaoId, videomakerId)
   const existente = await tx.conviteVideomaker.findFirst({ where: { demandaId, videomakerId, status: "pendente", expiresAt: { gt: new Date() } } })
   if (existente) return existente
@@ -49,9 +51,18 @@ export async function emitirConvite(tx: Tx, ator: AtorAuditoria, demandaId: stri
   const telefone = telefoneCompleto(v.videomaker.telefone)
   if (telefone && await destinoAutorizado(tx, ator.organizacaoId, telefone)) {
     const link = `${process.env.NEXTAUTH_URL || "https://nuflow.space"}/convite/${convite.token}`
+    // Primeira gravação dele com esta empresa, e há kit montado: o convite já
+    // aponta o guia e as referências, que estão no mesmo link (29/10/2026).
+    const primeira = !await tx.conviteVideomaker.findFirst({ where: { videomakerId, status: "aceito", demanda: { organizacaoId: ator.organizacaoId } }, select: { id: true } })
+    const temKit = primeira && !!await tx.materialVideomaker.findFirst({ where: { organizacaoId: ator.organizacaoId, tipo: { in: ["guia", "referencia"] } }, select: { id: true } })
+    const cliente = d.clienteFinalNome?.trim() || d.titulo
     await criarSaida(tx, { organizacaoId: ator.organizacaoId, origem: "manual", referencia: convite.id,
       chave: `convite:${convite.id}`, telefone, expiraEm: convite.expiresAt,
-      texto: `Olá ${v.videomaker.nome}! Convite para ${d.codigo} — ${d.titulo}. Confira as condições e responda pelo link: ${link}` })
+      texto: [
+        `Olá ${v.videomaker.nome}! Convite para gravação: ${cliente} (${d.codigo}). Confira as condições e responda pelo link:`,
+        link,
+        temKit && "É a sua primeira gravação com a gente: no mesmo link estão o guia de captação e os vídeos de referência. Veja antes de gravar.",
+      ].filter(Boolean).join("\n\n") })
   }
   return convite
 }
@@ -89,16 +100,13 @@ export async function responderConvite(tx: Tx, e: {
   const ator: AtorAuditoria = e.usuarioId ? { organizacaoId: e.organizacaoId, usuarioId: e.usuarioId }
     : { organizacaoId: e.organizacaoId, tecnico: `convite:${c.id}` }
   await registrarAuditoria(tx, ator, { acao: "convite.responder", recurso: "convite", recursoId: c.id, correlationId: randomUUID() })
-  const gestores = await tx.usuario.findMany({ where: { status: "ativo", telefone: { not: null },
-    organizacoes: { some: { organizacaoId: e.organizacaoId, OR: [{ papel: { in: ["admin", "gestor"] } }, { recebeTodosAvisos: true }] } },
-  }, select: { id: true, telefone: true } })
-  for (const g of gestores) {
-    const telefone = telefoneCompleto(g.telefone)
-    const destino = telefone ? await destinoAutorizado(tx, e.organizacaoId, telefone) : null
-    if (!telefone || destino?.tipo !== "usuario" || destino.id !== g.id) continue
-    await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", referencia: c.id,
-      chave: `convite:${c.id}:resposta:${g.id}`, telefone, expiraEm: new Date(Date.now() + 86400_000),
-      texto: `Convite ${status} — ${d.codigo}: ${d.titulo}. Consulte os detalhes do job no Flow.` })
+  // Os avisos da gravação (lib/avisos-gravacao.ts): aceito avisa a operação e o
+  // cliente; recusado avisa a operação e a gestão. Convite que já não mexe na
+  // gravação (o job seguiu com outro) não avisa ninguém.
+  if (alterarJob) {
+    const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
+    const evento = status === "aceito" ? "confirmada" : "recusada"
+    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId: e.usuarioId })
   }
   return { status, demandaId: d.id }
 }

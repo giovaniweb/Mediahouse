@@ -1,4 +1,4 @@
-import { BUCKET_PRIVADO, caminhoDaUrl, caminhoMidiaValido } from "@/lib/midia"
+import { BUCKET_PRIVADO, caminhoDaUrl, caminhoMidiaValido, partesDaMidia } from "@/lib/midia"
 
 export type IdentidadeMidia =
   | { provedor: "supabase"; bucket: string; objectKey: string }
@@ -37,8 +37,10 @@ export function identificarMidia(valor: string | null | undefined): IdentidadeMi
 /** Exige também vínculo exato no banco no chamador. Prefixo sozinho nunca autoriza. */
 export function videoDaDemanda(identidade: IdentidadeMidia | null, organizacaoId: string, demandaId: string): boolean {
   if (identidade?.provedor !== "supabase") return false
+  if (identidade.bucket === BUCKET_PRIVADO) {
+    const m = partesDaMidia(identidade.objectKey)
+    return m?.organizacaoId === organizacaoId && m.tipo === "videos" && m.id === demandaId
+  }
   const p = identidade.objectKey.split("/")
-  return identidade.bucket === BUCKET_PRIVADO
-    ? p[0] === "org" && p[1] === organizacaoId && p[2] === "videos" && p[3] === demandaId
-    : identidade.bucket === "uploads" && p[0] === "videos" && p[1] === demandaId && p.length >= 3
+  return identidade.bucket === "uploads" && p[0] === "videos" && p[1] === demandaId && p.length >= 3
 }

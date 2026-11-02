@@ -1,60 +1,65 @@
 "use client"
 
-import kanban from "@/components/kanban/KanbanPreview.module.css"
-import { useRef, useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { COLUNAS_ORDER, COLUNAS_LABEL, estaAtrasada } from "@/lib/status"
+import type { DropResult } from "@hello-pangea/dnd"
+import { estaAtrasada } from "@/lib/status"
+import { ETAPAS, etapaDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
+import { momentoDoJob } from "@/lib/ficha-do-job"
+import { QuadroArrastavel, type ColunaQuadro } from "@/components/kanban/QuadroArrastavel"
 import { JobCard, type JobDoQuadro } from "./JobCard"
 
-// O quadro de Jobs.
+// O quadro de Gravações Externas (antes "Jobs").
 //
-// Colunas: as seis operacionais que já existem (`StatusVisivel`), incluindo
-// "Para Postar". A decisão validada em 07/09/2026 foi manter o quadro mais
-// granular que as seis JobPhase — "Para Postar" é a fila real do Social, e é
-// exatamente `finished + not_published` (§25). As macrofases servem leitura,
-// filtro e métrica; não obrigam o quadro a ter seis colunas.
+// Colunas: as cinco etapas da gravação (lib/etapas-da-gravacao.ts) — a
+// agendar, agendado, em edição, para enviar e concluído. Até 28/10/2026 eram as
+// seis do audiovisual, e tudo antes da edição caía em "Produção". Quem grava,
+// quem edita e a nota do videomaker não são coluna: são etiquetas no card.
 //
-// SEM drag-and-drop, de propósito. §3 e §63: o Kanban representa o estado, não
-// o define. Mudar etapa é ação de negócio na página do Job. O quadro leva até lá.
-//
-// O desenho é o do KanbanBoard de Demandas e Growth (KanbanPreview.module.css):
-// colunas de 240–300 px, nome em uma linha, contagem, Concluído recolhido e
-// rolagem discreta por coluna. Não usa o componente porque ele é o quadro de
-// arrastar — aqui só o visual é compartilhado.
+// Desde 07/10/2026 é o MESMO quadro de Demandas e do Growth (QuadroArrastavel):
+// trilho, alça, arrasto no celular e o card abrindo no painel lateral. Soltar o
+// card numa coluna passa pela guarda do servidor antes (lib/jobs-quadro.ts) —
+// quem decide se pode é a página, que conhece a pessoa.
 
-const CORES: Record<string, { borda: string; ponto: string }> = {
-  entrada:     { borda: "border-t-zinc-500",    ponto: "bg-zinc-400" },
-  producao:    { borda: "border-t-blue-500",    ponto: "bg-blue-500" },
-  edicao:      { borda: "border-t-purple-500",  ponto: "bg-purple-500" },
-  aprovacao:   { borda: "border-t-amber-500",   ponto: "bg-amber-500" },
-  para_postar: { borda: "border-t-cyan-500",    ponto: "bg-cyan-500" },
-  finalizado:  { borda: "border-t-emerald-500", ponto: "bg-emerald-500" },
+const CORES: Record<EtapaDaGravacao, { borda: string; ponto: string }> = {
+  a_agendar:   { borda: "border-t-zinc-500",    ponto: "bg-zinc-400" },
+  agendado:    { borda: "border-t-blue-500",    ponto: "bg-blue-500" },
+  em_edicao:   { borda: "border-t-purple-500",  ponto: "bg-purple-500" },
+  para_enviar: { borda: "border-t-cyan-500",    ponto: "bg-cyan-500" },
+  concluido:   { borda: "border-t-emerald-500", ponto: "bg-emerald-500" },
 }
 
-// "Concluído" lê melhor que "Finalizado" na coluna, e é o rótulo que o quadro
-// do audiovisual já usa. Os demais vêm de COLUNAS_LABEL, fonte única.
-const ROTULOS: Record<string, string> = { ...COLUNAS_LABEL, finalizado: "Concluído" }
+const COLUNAS: ColunaQuadro[] = ETAPAS.map((e) => ({
+  id: e.id, label: e.rotulo, dica: e.dica, color: CORES[e.id].borda, dot: CORES[e.id].ponto,
+}))
+
+// Antes da gravação, a pergunta é "qual é a próxima": ordem do dia marcado,
+// sem data por último. Depois dela, o que queima primeiro.
+const PELA_DATA: EtapaDaGravacao[] = ["a_agendar", "agendado"]
+const diaDe = (j: JobDoQuadro) => momentoDoJob(j)?.dia ?? "9999-12-31"
 
 export function JobsQuadro({
   jobs,
   onAbrir,
+  onMover,
+  abrirConcluido = false,
 }: {
   jobs: JobDoQuadro[]
   onAbrir: (id: string) => void
+  /** O card foi solto em outra coluna. */
+  onMover: (id: string, coluna: string) => void
+  /** Abre o Concluído: a pendência filtrada (nota, pagamento) tem cards lá. */
+  abrirConcluido?: boolean
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  // Como no quadro de Demandas: Concluído começa recolhido para as colunas de
-  // trabalho em andamento caberem na tela.
-  const [concluidoAberto, setConcluidoAberto] = useState(false)
-  const rolar = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })
-
-  // Atrasados no topo, depois urgentes, depois o mais antigo primeiro. Mesma
-  // ordenação do quadro atual — quem abre o quadro precisa ver o que queima.
+  // Atrasadas no topo, depois urgentes, depois o prazo mais perto. Quem abre o
+  // quadro precisa ver o que queima; por isso aqui não há ordem manual, e
+  // soltar o card na mesma coluna não muda nada.
   const daColuna = (coluna: string) =>
     jobs
-      .filter((j) => j.statusVisivel === coluna)
+      .filter((j) => etapaDaGravacao(j) === coluna)
       .sort((a, b) => {
+        if (PELA_DATA.includes(coluna as EtapaDaGravacao)) {
+          const da = diaDe(a), db = diaDe(b)
+          if (da !== db) return da < db ? -1 : 1
+        }
         const atrA = estaAtrasada(a), atrB = estaAtrasada(b)
         if (atrA !== atrB) return atrA ? -1 : 1
         const urgA = a.prioridade === "urgente", urgB = b.prioridade === "urgente"
@@ -64,97 +69,22 @@ export function JobsQuadro({
         return pa - pb
       })
 
+  function soltar(r: DropResult) {
+    if (!r.destination || r.destination.droppableId === r.source.droppableId) return
+    onMover(r.draggableId, r.destination.droppableId)
+  }
+
   return (
-    <div className={cn("relative h-full flex flex-col", kanban.board)}>
-      <button
-        onClick={() => rolar(-320)}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-r-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
-        aria-label="Rolar para a esquerda"
-      >
-        <ChevronLeft className="w-5 h-5" />
-      </button>
-      <button
-        onClick={() => rolar(320)}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 flex items-center justify-center bg-zinc-900/90 border border-zinc-700 rounded-l-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg"
-        aria-label="Rolar para a direita"
-      >
-        <ChevronRight className="w-5 h-5" />
-      </button>
-
-      <div
-        ref={scrollRef}
-        className={cn("kanban-scroll flex gap-3 overflow-x-auto overflow-y-hidden pb-2 h-full min-h-0 px-10", kanban.scroll)}
-      >
-        {COLUNAS_ORDER.map((coluna) => {
-          const itens = daColuna(coluna)
-          const rotulo = ROTULOS[coluna]
-          const recolhida = coluna === "finalizado" && !concluidoAberto
-          return (
-            <section
-              key={coluna}
-              aria-label={rotulo}
-              className={cn(
-                "flex-shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800 border-t-[3px] flex flex-col",
-                recolhida ? "w-14" : "w-72",
-                CORES[coluna]?.borda,
-                kanban.column,
-                recolhida && kanban.collapsed
-              )}
-            >
-              {recolhida ? (
-                <button
-                  type="button"
-                  onClick={() => setConcluidoAberto(true)}
-                  aria-expanded={false}
-                  aria-label={`Mostrar ${rotulo}: ${itens.length} ${itens.length === 1 ? "job" : "jobs"}`}
-                  className="flex flex-col items-center gap-3 px-1 py-3 text-zinc-300 hover:text-white transition-colors"
-                >
-                  <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
-                    {itens.length}
-                  </span>
-                  <span className="font-semibold text-sm [writing-mode:vertical-rl] rotate-180">{rotulo}</span>
-                </button>
-              ) : (
-                <header className={cn("flex items-center justify-between px-3 py-3", kanban.heading)}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className={cn("w-2 h-2 rounded-full shrink-0", CORES[coluna]?.ponto)} />
-                    <h2 className="font-semibold text-sm text-zinc-200 truncate" title={rotulo}>{rotulo}</h2>
-                    <span className="text-xs bg-zinc-800 text-zinc-400 rounded-full px-2 py-0.5 font-medium border border-zinc-700">
-                      {itens.length}
-                    </span>
-                  </div>
-                  {coluna === "finalizado" && (
-                    <button
-                      type="button"
-                      onClick={() => setConcluidoAberto(false)}
-                      aria-expanded={true}
-                      aria-label={`Recolher ${rotulo}`}
-                      className="ml-auto p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  )}
-                </header>
-              )}
-
-              {!recolhida && (
-                // Cada coluna rola sozinha, com a mesma barra discreta do quadro de
-                // Demandas; a barra horizontal fica no rodapé visível.
-                <div className="flex-1 min-h-0 overflow-y-auto kanban-scroll px-2 pb-2 space-y-2 rounded-b-xl">
-                  {itens.map((job) => (
-                    <div key={job.id} className={kanban.card}>
-                      <JobCard job={job} onAbrir={onAbrir} />
-                    </div>
-                  ))}
-                  {itens.length === 0 && (
-                    <p className="m-2 rounded-xl border border-dashed border-zinc-700/60 p-5 text-center text-xs text-zinc-400">Nenhum job nesta etapa.</p>
-                  )}
-                </div>
-              )}
-            </section>
-          )
-        })}
-      </div>
-    </div>
+    <QuadroArrastavel
+      colunas={COLUNAS}
+      itensDaColuna={daColuna}
+      idDe={(j) => j.id}
+      onDragEnd={soltar}
+      nome={{ um: "gravação", varios: "gravações", vazio: "Nenhuma gravação nesta etapa." }}
+      recolhivel="concluido"
+      abrirRecolhivel={abrirConcluido}
+      verTodos="/historico/audiovisual"
+      renderCard={(job, { arrastavel }) => <JobCard job={job} onAbrir={onAbrir} arrastavel={arrastavel} />}
+    />
   )
 }

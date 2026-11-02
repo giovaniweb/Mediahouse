@@ -2,94 +2,21 @@ import { filtroFilaTrabalho, estadoHistorico } from "@/lib/acervo-regras"
 import { numeroPagina } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { ehGestor } from "@/lib/papel"
+import { ehGestor, temPapel } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { quemRecebeTudo } from "@/lib/notificados"
-import { z } from "zod"
-import { calcularPeso } from "@/lib/peso-demanda"
-import { STATUS_PARA_COLUNA, STATUS_PRAZO_PAUSADO } from "@/lib/status"
-import { sendWhatsappMessage, templates } from "@/lib/whatsapp"
-import { notificarLideresAudiovisual } from "@/lib/lideres-audiovisual"
+import { STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { getOrgId, semOrg } from "@/lib/org"
-import { whereResponsavel, setResponsaveis } from "@/lib/responsaveis"
-import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
-import { emSegundoPlano } from "@/lib/notificar"
-import { getPermissoes } from "@/lib/permissoes-server"
-import type { Prioridade, Prisma } from "@prisma/client"
-import { departamentoValido } from "@/lib/departamentos"
-import { formatarDataCurta, inicioDoDia, somarDias, validarPrazo } from "@/lib/datas"
+import { whereResponsavel } from "@/lib/responsaveis"
+import { areaTravadaDaPessoa, escopoDeDemandas, filtroMinhasDemandas } from "@/lib/escopo-demanda"
+import { veNotaDoVideomaker } from "@/lib/permissoes-server"
+import type { Prisma } from "@prisma/client"
+import { inicioDoDia, somarDias } from "@/lib/datas"
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
-import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
+import { erroDeCampo } from "@/lib/erros-api"
 import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
-import { DEPARTAMENTO_COBERTURA, TIPO_COBERTURA } from "@/lib/job-fase"
-import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
-import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
-
-// Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
-// inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
-// na tela do usuário.
-const criarDemandaSchema = z.object({
-  titulo: z.string().trim().min(3, "O título precisa ter pelo menos 3 caracteres."),
-  descricao: z.string().trim().min(10, "A descrição precisa ter pelo menos 10 caracteres."),
-  // Não é mais uma lista fixa: o conjunto válido vem de ConfigParametro por
-  // empresa e é conferido depois do parse, com departamentoValido().
-  departamento: z.string().trim().min(1),
-  tipoVideo: z.string().trim().min(1),
-  cidade: z.string().trim().min(2),
-  prioridade: z.enum(["normal", "alta", "urgente"]).default("normal"),
-  motivoUrgencia: z.string().optional(),
-  dataLimite: z
-    .string()
-    .optional()
-    .superRefine((valor, ctx) => {
-      const r = validarPrazo(valor)
-      if (!r.ok) ctx.addIssue({ code: "custom", message: r.motivo })
-    }),
-  // Campos condicionais
-  campanha: z.string().optional(),
-  objetivo: z.string().optional(),
-  plataforma: z.string().optional(),
-  dataEvento: z.string().optional(),
-  localEvento: z.string().optional(),
-  cobertura: z.boolean().optional(),
-  publico: z.string().optional(),
-  mensagemPrincipal: z.string().optional(),
-  // Extras
-  referencia: z.string().optional(),
-  localGravacao: z.string().optional(),
-  linkBrutos: z.string().optional(),
-  // Proporção da entrega ("9:16" | "16:9" | "1:1")
-  formato: z.enum(["9:16", "16:9", "1:1"]).optional(),
-  // Área (audiovisual padrão | design)
-  area: z.enum(["audiovisual", "design"]).optional(),
-  // Evento mestre vinculado (card criado a partir de um evento)
-  eventoGestaoId: z.string().optional(),
-  // Videomaker + Editor + Designer (opcionais na criação)
-  videomakerId: z.string().optional(),
-  editorId: z.string().optional(),
-  designerId: z.string().optional(),
-  // Growth: responsável(eis) interno(s) da org + segmentação genérica
-  responsavelId: z.string().optional(),            // legado (1 responsável)
-  responsavelIds: z.array(z.string()).optional(),  // múltiplos responsáveis (Growth)
-  linhaProjeto: z.string().optional(),     // texto legado (compat)
-  linhaProjetoId: z.string().optional(),   // referência principal (LinhaProjeto da org)
-  // Cliente final (cobertura/entrega)
-  clienteFinalNome: z.string().optional(),
-  clienteFinalTelefone: z.string().optional(),
-  clienteFinalEmail: z.string().optional(),
-  // Produto(s) vinculado(s) — multi-seleção (produtoId legado mantido p/ compat)
-  produtoId: z.string().optional(),
-  produtoIds: z.array(z.string()).optional(),
-  // Telefone solicitante
-  telefoneSolicitante: z.string().optional(),
-  // Classificação B2C/B2B
-  classificacao: z.enum(["b2c", "b2b"]).optional(),
-  // Campos condicionais por tipo de entrega (Growth)
-  detalhesEntrega: z.record(z.string(), z.unknown()).optional(),
-  // Pedido feito pelo quadro da social (/social): a ideia que vira esta demanda.
-  ideiaId: z.string().optional(),
-})
+import { whereDoQuadro } from "@/lib/quadro-do-card-server"
+import { MARCA_DO_CANCELAMENTO, STATUS_DE_ENTREGA } from "@/lib/etapas-da-gravacao"
+import { criarDemanda } from "@/lib/criar-demanda"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -124,33 +51,16 @@ export async function GET(req: NextRequest) {
   // fica nela. Dentro da própria área, o quanto se enxerga é decidido por
   // `verTodasDemandas`. É isso que o painel edita: mudar a área de alguém muda o
   // que ele vê, sem tocar em código.
-  if (!ehGestor(session)) {
-    const membership = await prisma.usuarioOrganizacao.findUnique({
-      where: { usuarioId_organizacaoId: { usuarioId: session.user.id, organizacaoId } },
-      select: { areas: true },
-    })
-    const areas = membership?.areas ?? []
-    const veAudiovisual = areas.includes("audiovisual")
-    const veGrowth = areas.includes("growth")
-    // Só tranca quem tem exatamente um dos dois quadros. Sem área definida não
-    // tranca nada: o escopo de "minhas demandas" abaixo já cobre esse caso.
-    if (veAudiovisual && !veGrowth) area = "audiovisual"
-    else if (veGrowth && !veAudiovisual) area = "design"
-  }
+  // A regra mora em lib/escopo-demanda.ts — o assistente (MCP) usa a mesma.
+  const travada = await areaTravadaDaPessoa(session.user.id, organizacaoId, ehGestor(session))
+  if (travada) area = travada
 
   // Escopo "minhas demandas": explícito via ?mine=1, ou imposto quando a pessoa
-  // NÃO tem `verTodasDemandas`. Essa permissão existia na tela de permissões mas
-  // nunca era lida aqui — a promessa de "só as próprias" não era cumprida.
-  const querSoMinhas = searchParams.get("mine") === "1"
-  let escopoMinhas: Prisma.DemandaWhereInput | null = null
-  if (querSoMinhas) {
-    escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
-  } else if (!ehGestor(session)) {
-    const perm = await getPermissoes(session.user.id, organizacaoId)
-    if (perm && !perm.verTodasDemandas) {
-      escopoMinhas = await filtroMinhasDemandas(session.user.id, organizacaoId)
-    }
-  }
+  // NÃO tem `verTodasDemandas` — a regra mora em lib/escopo-demanda.ts, a mesma
+  // da ficha, da edição e da exclusão.
+  const escopoMinhas = searchParams.get("mine") === "1"
+    ? await filtroMinhasDemandas(session.user.id, organizacaoId)
+    : await escopoDeDemandas(session.user.id, organizacaoId, ehGestor(session))
 
   // O quadro mostra o que é da empresa E o que ela executa por espelhamento —
   // um card terceirizado que não aparecesse na tela de quem executa seria um job
@@ -174,7 +84,7 @@ export async function GET(req: NextRequest) {
   if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
   // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
-  if (session.user.tipo === "gestor_eventos") where.eventoGestaoId = { not: null }
+  if (temPapel(session, "gestor_eventos")) where.eventoGestaoId = { not: null }
 
   // Condições que internamente usam OR entram todas em AND[], para não se
   // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`
@@ -237,26 +147,25 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ?semCobertura=1 — tira do resultado o que pertence ao fluxo de Jobs.
+  // ?quadro=jobs | ?quadro=demandas — em que quadro do audiovisual o card mora.
   //
-  // Uma solicitação de cobertura e uma demanda comum vivem na mesma tabela e se
-  // distinguem só pela classificação (ver lib/job-fase.ts). Depois que /jobs
-  // passou a ser a esteira das coberturas, o quadro de Demandas mostrava as
-  // mesmas 28 duas vezes — uma em cada quadro.
+  // A regra é uma só (lib/quadro-do-card.ts) e os dois quadros pedem por ela:
+  // videomaker externo escalado é Job, interno fica em Demandas, e sem
+  // videomaker a marca de cobertura decide. Antes o quadro de Jobs pedia
+  // `tipoVideo=cobertura_evento` e o de Demandas escondia `departamento=eventos`
+  // — um card marcado só pelo departamento não aparecia em nenhum dos dois.
   //
-  // É OPT-IN de propósito, e não o padrão: quem chama esta rota precisando das
-  // coberturas continua recebendo. A tela de Aprovações é o caso que prova —
-  // é lá que a solicitação de cobertura é aprovada como Job, e escondê-la ali
-  // tornaria o fluxo inalcançável. `/historico`, a busca de produtos e a
-  // contagem por solicitante também seguem vendo tudo.
-  //
-  // O NOT/OR espelha o OR de `ehSolicitacaoDeCobertura`: basta UMA das marcas
-  // para o registro ser do outro quadro, então excluir exige negar as duas.
-  if (searchParams.get("semCobertura") === "1") {
-    and.push({
-      NOT: { OR: [{ tipoVideo: TIPO_COBERTURA }, { departamento: DEPARTAMENTO_COBERTURA }] },
-    })
-  }
+  // É OPT-IN de propósito: Aprovações, /historico, a busca de produtos e a
+  // contagem por solicitante continuam vendo tudo. `semCobertura=1` (nome antigo)
+  // vale como `quadro=demandas`, para a tela que ainda estiver aberta com o
+  // código anterior não voltar a mostrar Jobs em Demandas.
+  const quadro = searchParams.get("quadro") ?? (searchParams.get("semCobertura") === "1" ? "demandas" : null)
+  if (quadro === "jobs" || quadro === "demandas") and.push(whereDoQuadro(quadro, organizacaoId))
+
+  // Nota e pagamento do videomaker no card de Gravações Externas (28/10/2026):
+  // só o estado, nunca valor nem dado fiscal, e só para quem vê custos ou
+  // aprova pagamentos — as mesmas portas de /api/custos-videomaker.
+  const comPagamento = quadro === "jobs" && await veNotaDoVideomaker(session.user.id, organizacaoId, ehGestor(session))
 
   // ?semResponsavel=1 — ninguém assumiu ainda, nem pela M2M nem pelo escalar.
   if (searchParams.get("semResponsavel") === "1") {
@@ -306,6 +215,19 @@ export async function GET(req: NextRequest) {
         // entre empresas, e esta lista é servida para os dois lados.
         compartilhamentos: { where: { revogadoEm: null }, select: SELECT_ESPELHO },
         _count: { select: { comentarios: true, arquivos: true } },
+        ...(comPagamento && {
+          custos: { where: { organizacaoId }, select: { statusPagamento: true, pago: true } },
+          notasFiscais: { select: { status: true } },
+        }),
+        // Gravação encerrada: só o que separa a cancelada da entregue
+        // (foiCancelada em lib/etapas-da-gravacao.ts), não o histórico inteiro.
+        ...(quadro === "jobs" && {
+          historicos: {
+            where: { OR: [{ statusNovo: { in: STATUS_DE_ENTREGA } }, { statusNovo: "encerrado", observacao: { startsWith: MARCA_DO_CANCELAMENTO } }] },
+            select: { statusNovo: true, observacao: true },
+            take: 5,
+          },
+        }),
       },
       orderBy: [
         { prioridade: "desc" },
@@ -335,318 +257,5 @@ export async function POST(req: NextRequest) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
-  const body = await req.json()
-  const parsed = criarDemandaSchema.safeParse(body)
-
-  if (!parsed.success) {
-    return erroDeZod(parsed.error)
-  }
-
-  const data = parsed.data
-
-  // Token unificado da equipe (ed:/vm:/user:) → id real do editor, mesmo caminho
-  // que o PUT já usava. Cria o registro espelho quando a pessoa vem de outra tabela.
-  let editorIdResolvido: string | undefined = data.editorId || undefined
-  if (editorIdResolvido?.includes(":")) {
-    try {
-      editorIdResolvido = await resolveParaEditor(editorIdResolvido, organizacaoId)
-    } catch (e) {
-      return erroDeCampo("editorId", e instanceof Error ? e.message : "Não foi possível identificar o editor.")
-    }
-  }
-
-  // Mesmo tratamento para o slot de captação: /api/equipe-disponivel devolve
-  // token unificado nos dois papéis, e aqui o videomakerId entrava cru — quem
-  // escolhesse alguém vindo de Editor/Usuario gravaria um id que não existe em
-  // Videomaker. O formulário de criação nunca tinha oferecido o campo, então o
-  // caminho nunca chegou a ser exercitado.
-  let videomakerIdResolvido: string | undefined = data.videomakerId || undefined
-  if (videomakerIdResolvido?.includes(":")) {
-    try {
-      videomakerIdResolvido = await resolveParaVideomaker(videomakerIdResolvido, organizacaoId)
-    } catch (e) {
-      return erroDeCampo("videomakerId", e instanceof Error ? e.message : "Não foi possível identificar o videomaker.")
-    }
-  }
-
-  // Validar urgência
-  if (data.prioridade === "urgente" && !data.motivoUrgencia) {
-    return NextResponse.json(
-      { error: "Motivo de urgência é obrigatório." },
-      { status: 400 }
-    )
-  }
-
-  const statusInterno = data.prioridade === "urgente"
-    ? "urgencia_pendente_aprovacao"
-    : "aguardando_aprovacao_interna"
-
-  const statusVisivel = STATUS_PARA_COLUNA[statusInterno]
-  const peso = calcularPeso(data.tipoVideo, data.prioridade as Prioridade)
-
-  // Growth: resolve o responsável (Usuario interno da org). Valida que pertence à
-  // organização logada (isolamento) e, se for designer com espelho Designer, também
-  // preenche designerId para manter a visão/portal do designer funcionando.
-  // Aceita responsavelIds[] (novo, múltiplos) e responsavelId (legado, 1). O primeiro
-  // válido vira o responsável "primário" (compat com card/modal/relatórios).
-  const idsResp = Array.from(new Set([
-    ...(data.responsavelIds ?? []),
-    ...(data.responsavelId ? [data.responsavelId] : []),
-  ]))
-  let responsavelId: string | undefined
-  let designerIdResolvido = data.designerId
-  let responsaveisValidos: string[] = []
-  if (idsResp.length > 0) {
-    const membros = await prisma.usuario.findMany({
-      where: { id: { in: idsResp }, organizacoes: { some: { organizacaoId } } },
-      select: { id: true, tipo: true },
-    })
-    if (membros.length === 0) {
-      return NextResponse.json({ error: "Responsável inválido para esta organização" }, { status: 400 })
-    }
-    // Mantém a ordem enviada e descarta IDs de outra org
-    responsaveisValidos = idsResp.filter((id) => membros.some((m) => m.id === id))
-    responsavelId = responsaveisValidos[0]
-    const primeiro = membros.find((m) => m.id === responsavelId)
-    if (primeiro?.tipo === "designer" && !designerIdResolvido) {
-      const designer = await prisma.designer.findFirst({
-        where: { usuarioId: primeiro.id, vinculos: { some: { organizacaoId } } },
-        select: { id: true },
-      })
-      if (designer) designerIdResolvido = designer.id
-    }
-  }
-
-  // Growth: resolve a linha/projeto. Valida que pertence à org logada (404 se de outra
-  // org). Mantém também o texto `linhaProjeto` (nome) para compatibilidade.
-  let linhaProjetoId: string | undefined
-  let linhaProjetoTexto = data.linhaProjeto?.trim() || undefined
-  if (data.linhaProjetoId) {
-    const linha = await prisma.linhaProjeto.findFirst({
-      where: { id: data.linhaProjetoId, organizacaoId },
-      select: { id: true, nome: true },
-    })
-    if (!linha) {
-      return NextResponse.json({ error: "Linha/projeto inválida para esta organização" }, { status: 404 })
-    }
-    linhaProjetoId = linha.id
-    linhaProjetoTexto = linha.nome
-  }
-
-  // Pedido do quadro da social: a ideia precisa ser dela (ou o pedido vir de
-  // gestor/admin) e ainda não ter virado pedido. A linha da demanda passa a ser a da ideia, e `socialId` marca o
-  // pedido como dela — é o selo "Social" no card da equipe.
-  let socialId: string | undefined
-  if (data.ideiaId) {
-    const r = await ideiaParaPedido(data.ideiaId, organizacaoId, session.user.id, ehGestor(session))
-    if ("erro" in r) return NextResponse.json({ error: r.erro }, { status: r.status })
-    linhaProjetoId = r.linha.id
-    linhaProjetoTexto = r.linha.nome
-    socialId = r.socialId
-  }
-
-  if (!(await departamentoValido(data.departamento, organizacaoId))) {
-    return NextResponse.json(
-      { error: "Departamento inválido — cadastre-o em Configurações → Parâmetros" },
-      { status: 400 }
-    )
-  }
-
-  const demanda = await criarComCodigoUnico("VOP", (codigo) => prisma.demanda.create({
-    data: {
-      organizacaoId,
-      codigo,
-      titulo: data.titulo,
-      descricao: data.descricao,
-      departamento: data.departamento,
-      area: (data.area ?? "audiovisual") as "audiovisual" | "design",
-      tipoVideo: data.tipoVideo,
-      cidade: data.cidade,
-      prioridade: data.prioridade as Prioridade,
-      motivoUrgencia: data.motivoUrgencia,
-      statusInterno,
-      statusVisivel,
-      pesoDemanda: peso,
-      solicitanteId: session.user.id,
-      dataLimite: data.dataLimite ? new Date(data.dataLimite) : undefined,
-      campanha: data.campanha,
-      objetivo: data.objetivo,
-      plataforma: data.plataforma,
-      dataEvento: data.dataEvento ? new Date(data.dataEvento) : undefined,
-      localEvento: data.localEvento,
-      cobertura: data.cobertura,
-      publico: data.publico,
-      mensagemPrincipal: data.mensagemPrincipal,
-      referencia: data.referencia,
-      localGravacao: data.localGravacao,
-      // Novos campos
-      videomakerId: videomakerIdResolvido,
-      // O seletor de equipe devolve token unificado (ed:/vm:/user:), igual ao da
-      // edição. Sem resolver aqui, escolher o editor na CRIAÇÃO gravaria um id
-      // inválido — por isso o campo nunca tinha sido oferecido nos formulários.
-      editorId: editorIdResolvido,
-      designerId: designerIdResolvido || undefined,
-      responsavelId: responsavelId || undefined,
-      linhaProjeto: linhaProjetoTexto,
-      linhaProjetoId: linhaProjetoId || undefined,
-      socialId,
-      eventoGestaoId: data.eventoGestaoId || undefined,
-      telefoneSolicitante: data.telefoneSolicitante || undefined,
-      classificacao: data.classificacao || undefined,
-      formato: data.formato || undefined,
-      linkBrutos: data.linkBrutos || undefined,
-      detalhesEntrega: data.detalhesEntrega ? (data.detalhesEntrega as object) : undefined,
-    },
-  }))
-
-  if (data.ideiaId) await ligarIdeiaAoPedido(data.ideiaId, demanda)
-
-  // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
-  const produtoIds = Array.from(new Set([
-    ...(data.produtoIds ?? []),
-    ...(data.produtoId ? [data.produtoId] : []),
-  ]))
-  if (produtoIds.length > 0) {
-    const validos = await prisma.produto.findMany({
-      where: { id: { in: produtoIds }, organizacaoId },
-      select: { id: true },
-    })
-    if (validos.length > 0) {
-      await prisma.demandaProduto.createMany({
-        data: validos.map((p) => ({ demandaId: demanda.id, produtoId: p.id })),
-        skipDuplicates: true,
-      }).catch(e => console.error("[Demanda] Erro ao vincular produtos:", e))
-    }
-  }
-
-  // Vincular responsável(eis) — já validados como membros da org. Passa pelo
-  // escritor compartilhado para a M2M e a coluna derivada nascerem em sincronia.
-  if (responsaveisValidos.length > 0) {
-    await setResponsaveis(demanda.id, responsaveisValidos)
-      .catch(e => console.error("[Demanda] Erro ao vincular responsáveis:", e))
-
-    // Avisa quem já nasce responsável. Sem isto, criar a demanda de Growth já
-    // atribuída era o único caminho em que a pessoa nunca ficava sabendo —
-    // atribuir depois avisa (ver PATCH), criar atribuindo não avisava.
-    emSegundoPlano(async () => {
-      const novos = responsaveisValidos.filter((uid) => uid !== session.user.id)
-      if (novos.length === 0) return
-      const pessoas = await prisma.usuario.findMany({
-        where: { id: { in: novos }, status: "ativo", telefone: { not: null } },
-        select: { telefone: true },
-      })
-      const prazo = demanda.dataLimite ? formatarDataCurta(demanda.dataLimite) : null
-      const msg = templates.responsavelAtribuido(demanda.codigo, demanda.titulo, prazo)
-      await Promise.allSettled(
-        pessoas.map((p) => sendWhatsappMessage(p.telefone!, msg, demanda.id, organizacaoId))
-      )
-    }, "wa-responsavel-nova-demanda")
-  }
-
-  // Auto-populate checklist a partir de templates
-  try {
-    const templates = await prisma.checklistTemplate.findMany({
-      where: {
-        ativo: true,
-        OR: [
-          { tipoVideo: data.tipoVideo },
-          { tipoVideo: null },
-        ],
-      },
-      include: { itens: { orderBy: { ordem: "asc" } } },
-    })
-
-    // Priorizar templates específicos do tipoVideo; se não houver, usar o "Geral"
-    const templatesFiltrados = templates.filter(t => t.tipoVideo === data.tipoVideo)
-    const templatesParaAplicar = templatesFiltrados.length > 0
-      ? templatesFiltrados
-      : templates.filter(t => t.tipoVideo === null && t.papel === "geral")
-
-    const checklistData = templatesParaAplicar.flatMap(t =>
-      t.itens.map(item => ({
-        demandaId: demanda.id,
-        texto: item.texto,
-        ordem: item.ordem,
-        grupo: t.papel ?? "geral",
-      }))
-    )
-
-    if (checklistData.length > 0) {
-      await prisma.checklistItem.createMany({ data: checklistData })
-    }
-  } catch (e) {
-    console.error("[Demanda] Erro ao criar checklist automático:", e)
-  }
-
-  // Registrar histórico inicial
-  await prisma.historicoStatus.create({
-    data: {
-      demandaId: demanda.id,
-      statusNovo: statusInterno,
-      usuarioId: session.user.id,
-      origem: "manual",
-      observacao: "Demanda criada",
-    },
-  })
-
-  // Criar alerta para gestor
-  await prisma.alertaIA.create({
-    data: {
-      organizacaoId,
-      demandaId: demanda.id,
-      tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
-      mensagem: data.prioridade === "urgente"
-        ? `🚨 Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`
-        : `📋 Nova demanda: "${data.titulo}" aguarda aprovação interna.`,
-      severidade: data.prioridade === "urgente" ? "critico" : "aviso",
-      acaoSugerida: "Aprovar ou recusar demanda",
-    },
-  })
-
-  // NOVO: Notifica gestores/admins via WhatsApp sobre nova demanda
-  emSegundoPlano(() => notificarGestoresNovaDemanda(
-    demanda.codigo,
-    data.titulo,
-    session.user.name ?? "Usuário",
-    data.prioridade as string,
-    organizacaoId
-  ), "nova-demanda-gestores")
-
-  // Notifica os líderes do audiovisual (alerta direcionado no sino + WhatsApp)
-  if (demanda.area === "audiovisual") {
-    emSegundoPlano(
-      () => notificarLideresAudiovisual(demanda.id, demanda.codigo, data.titulo, organizacaoId),
-      "nova-demanda-lideres"
-    )
-  }
-
-  return NextResponse.json(demanda, { status: 201 })
-}
-
-/**
- * Notifica gestores/admins via WhatsApp sobre nova demanda criada no portal
- */
-async function notificarGestoresNovaDemanda(
-  codigo: string,
-  titulo: string,
-  nomeSolicitante: string,
-  prioridade: string,
-  organizacaoId?: string | null
-) {
-  try {
-    const gestores = await quemRecebeTudo(organizacaoId)
-
-    const emoji = prioridade === "urgente" ? "🚨" : prioridade === "alta" ? "⚡" : "📋"
-    const prioLabel = prioridade === "urgente" ? "URGENTE" : prioridade === "alta" ? "Alta" : "Normal"
-
-    const msg = `${emoji} *Nova Demanda no Sistema!*\n\n📋 *${codigo}* — ${titulo}\n👤 Solicitante: ${nomeSolicitante}\n⚡ Prioridade: ${prioLabel}\n\nAcesse o sistema para aprovar.`
-
-    for (const g of gestores) {
-      if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId).catch(() => null)
-      }
-    }
-  } catch (e) {
-    console.error("[Demanda] Falha ao notificar gestores:", e)
-  }
+  return criarDemanda(session, organizacaoId, await req.json())
 }

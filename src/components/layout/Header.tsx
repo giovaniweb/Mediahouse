@@ -15,21 +15,7 @@ import { NotificationBell } from "@/components/layout/NotificationBell"
 import { SeletorOrganizacao } from "@/components/layout/SeletorOrganizacao"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-
-const TIPO_LABEL: Record<string, string> = {
-  admin: "Admin",
-  gestor: "Gestor",
-  operacao: "Operação",
-  solicitante: "Solicitante",
-  editor: "Editor",
-  videomaker: "Videomaker",
-  social: "Social Media",
-  designer: "Designer",
-  gestor_eventos: "Gestor de Eventos",
-  analista_crm: "Analista CRM",
-  gestor_trafego: "Gestor de Tráfego",
-  auxiliar_admin: "Auxiliar Admin",
-}
+import { FUNCAO_LABEL } from "@/lib/pessoas-ui"
 
 export function Header({ title, actions }: { title?: string; actions?: React.ReactNode }) {
   const { data: session } = useSession()
@@ -55,9 +41,11 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
             <span className="hidden sm:inline">Início</span>
           </Link>
 
-          {user?.tipo && (
+          {/* O papel na empresa aberta, não o cargo global: quem é videomaker
+              numa empresa pode ser admin em outra. */}
+          {user?.papel && (
             <Badge variant="outline" className="text-xs capitalize border-zinc-700 text-zinc-300">
-              {TIPO_LABEL[user.tipo] ?? user.tipo}
+              {FUNCAO_LABEL[user.papel] ?? user.papel}
             </Badge>
           )}
 
@@ -88,7 +76,7 @@ export function Header({ title, actions }: { title?: string; actions?: React.Rea
                 <User className="w-4 h-4" />
                 Meu Perfil
               </DropdownMenuItem>
-              {["admin", "gestor"].includes(user?.tipo ?? "") && (
+              {["admin", "gestor"].includes(user?.papel ?? "") && (
                 <DropdownMenuItem
                   onClick={() => window.location.href = "/configuracoes"}
                   className="flex items-center gap-2 cursor-pointer"

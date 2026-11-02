@@ -5,6 +5,8 @@ vi.mock("@/lib/acesso",()=>({requireAcesso:m.acesso}))
 vi.mock("@/lib/prisma",()=>({prisma:{$transaction:m.tx,demanda:{findFirst:m.findFirst},conviteVideomaker:{findMany:m.findMany,findUnique:m.findUnique}}}))
 vi.mock("@/lib/convites",()=>({emitirConvite:m.emitir,responderConvite:m.responder,ConviteInvalido:class extends Error{}}))
 vi.mock("@/lib/org-por-credencial",()=>({orgPorCredencial:m.credencial}))
+// A entrega pelo link (lib/entrega-da-gravacao.ts) tem teste de integração próprio; aqui o convite segue fechado para entrega.
+vi.mock("@/lib/entrega-da-gravacao",()=>({conviteDaEntrega:async()=>({liberado:false})}))
 import { GET, POST } from "@/app/api/convites/route"
 import { POST as responder, GET as consultar } from "@/app/api/convites/[token]/route"
 const req=(body:unknown)=>new NextRequest("http://localhost/api/convites",{method:"POST",body:JSON.stringify(body)})

@@ -33,6 +33,13 @@ describe("catálogo de permissões", () => {
     expect(lider.gerenciarUsuarios).toBe(false)
   })
 
+  it("quem é de fora vê só as próprias demandas", () => {
+    // O preset é copiado para o registro de quem é criado: um `true` aqui vira
+    // um freelancer com o quadro inteiro da empresa (29/10/2026).
+    expect(PRESETS.videomaker.verTodasDemandas).toBe(false)
+    expect(PRESETS.solicitante.verTodasDemandas).toBe(false)
+  })
+
   it("nenhum preset concede permissão fora do catálogo", () => {
     const conhecidas = new Set(Object.keys(PERMISSAO_LABELS))
     for (const [nome, preset] of Object.entries(PRESETS)) {

@@ -3,21 +3,28 @@ import { prisma } from "@/lib/prisma"
 import { requireAcesso } from "@/lib/acesso"
 import { comOrg } from "@/lib/org-contexto"
 import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
-import { organizacaoDoCaminho, urlDaMidia } from "@/lib/midia"
+import { partesDaMidia, urlDaMidia } from "@/lib/midia"
 import { PUBLICADO, urlPublicavel } from "@/lib/publicacao-midia"
 import { anexosDaIdeia } from "@/lib/social-quadro"
 
 /** Autoriza o objeto registrado, nunca apenas o prefixo da empresa ou um token válido. */
 export async function podeLerMidia(caminho: string, token: string | null): Promise<boolean> {
-  const org = organizacaoDoCaminho(caminho)
-  if (!org) return false
-  const url = urlDaMidia(caminho), tipo = caminho.split("/")[2]
+  const partes = partesDaMidia(caminho)
+  if (!partes) return false
+  // No acervo `legado`, tipo e id vêm depois de `legado/`; `partesDaMidia` já resolve.
+  const { organizacaoId: org, tipo, id: idDoCaminho } = partes
+  const url = urlDaMidia(caminho)
   if (!await comOrg(org, () => prisma.organizacao.findFirst({ where: { id: org, ativo: true }, select: { id: true } }))) return false
   const publico = await comOrg(org, async () => {
     const publicado = await prisma.arquivo.findFirst({ where: { ...PUBLICADO, demanda: { organizacaoId: org }, OR: [{ publicacaoUrl: url }, { publicacaoThumbnailUrl: url }] }, select: { demandaId: true, publicacaoUrl: true, publicacaoThumbnailUrl: true } })
     if (publicado && urlPublicavel(url, org, publicado.demandaId, publicado.publicacaoThumbnailUrl === url)) return true
     if (tipo === "depoimentos" && await prisma.depoimento.findFirst({ where: { organizacaoId: org, ativo: true, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })) return true
     if (!token) return false
+    // Kit do videomaker (guia, referências): quem tem um convite desta empresa lê.
+    if (tipo === "kit") {
+      return !!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } }) &&
+        !!await prisma.conviteVideomaker.findFirst({ where: { token, status: { in: ["pendente", "aceito"] }, demanda: { organizacaoId: org } }, select: { id: true } })
+    }
     if (["videos", "thumbnails"].includes(tipo)) {
       const d = await prisma.demanda.findFirst({ where: { organizacaoId: org, publicToken: token, publicTokenAtivo: true,
         AND: [{ OR: [{ publicTokenExpiraEm: null }, { publicTokenExpiraEm: { gt: new Date() } }] },
@@ -56,12 +63,14 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
         if (p.verCoberturas && await prisma.eventoCoberturaUpload.findFirst({ where: { OR: [{ url }, { thumbnailUrl: url }], cobertura: { organizacaoId: org } }, select: { id: true } })) return true
       }
       if (tipo === "depoimentos") return p.gerenciarConfig && !!await prisma.depoimento.findFirst({ where: { organizacaoId: org, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })
+      // Kit do videomaker: material de trabalho da empresa, para quem é dela.
+      if (tipo === "kit") return !!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } })
       // Arquivo de referência de uma ideia do quadro da social
       // (org/{org}/docs/{ideiaId}/…): só se estiver na lista da PRÓPRIA ideia.
       // A ideia é aberta para a empresa, então vale para quem vê a social, o
       // Audiovisual ou o Growth — os que trabalham o pedido que ela vira.
       if (tipo === "docs" && (p.verSocial || p.verDemandas || p.verDesign)) {
-        const ideia = await prisma.ideiaVideo.findFirst({ where: { id: caminho.split("/")[3], organizacaoId: org }, select: { id: true, formulario: true } })
+        const ideia = await prisma.ideiaVideo.findFirst({ where: { id: idDoCaminho, organizacaoId: org }, select: { id: true, formulario: true } })
         if (ideia && anexosDaIdeia(ideia.formulario, org, ideia.id).some((a) => a.url === url)) return true
       }
       if (!p.verDemandas && !p.verDesign) return false
@@ -74,7 +83,7 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
             { aprovacoesVideo: { some: { urlVideo: url } } }] },
         ] }, select: { id: true } })
       // Arquivos de briefing recebidos pelo WhatsApp usam docs/whatsapp; a vinculação exata no banco é obrigatória.
-      return !!d && ((tipo === "docs" && caminho.split("/")[3] === "whatsapp") || caminho.split("/")[3] === d.id)
+      return !!d && ((tipo === "docs" && idDoCaminho === "whatsapp") || idDoCaminho === d.id)
     }
     if (!p.verDemandas && !p.verDesign) return false
     if (!["videos", "thumbnails"].includes(tipo)) return false
@@ -87,6 +96,6 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
       compartilhamentos: { some: { organizacaoDestinoId: acesso.organizacaoId, revogadoEm: null } },
       OR: [{ linkFinal: url }, { thumbnailUrl: url }, { arquivos: { some: { tipoArquivo: { in: ["final", "bruto", "referencia"] }, OR: [{ url }, { thumbnailUrl: url }, { originalUrl: url }] } } }],
     }, select: { id: true, area: true } })
-    return !!d && caminho.split("/")[3] === d.id && (d.area === "design" ? p.verDesign : p.verDemandas)
+    return !!d && idDoCaminho === d.id && (d.area === "design" ? p.verDesign : p.verDemandas)
   })
 }

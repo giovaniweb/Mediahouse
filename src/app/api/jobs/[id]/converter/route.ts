@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   // é acompanhada.
   if (para === "job" && demanda.area !== "audiovisual") {
     return NextResponse.json(
-      { error: "Só demandas de audiovisual podem virar Job. Esta é de Growth/design." },
+      { error: "Só demandas de audiovisual podem virar gravação externa. Esta é de Growth/design." },
       { status: 400 }
     )
   }

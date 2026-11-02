@@ -47,7 +47,8 @@ it("dois profissionais simultâneos não ocupam a mesma vaga; retry não repete 
   const c=atual.videomakerId===vm ? a : b
   await responder(c.token,"aceitar",org,atual.videomakerId!)
   expect(await adminDb.historicoStatus.count({where:{demandaId:d.id}})).toBe(1)
-  expect(await adminDb.saidaWhatsapp.count({where:{organizacaoId:org,referencia:c.id}})).toBe(1)
+  // Um aviso só, mesmo com a resposta repetida: o da gravação (lib/avisos-gravacao.ts), que tem a gravação como referência.
+  expect(await adminDb.saidaWhatsapp.count({where:{organizacaoId:org,referencia:d.id}})).toBe(1)
   expect(await adminDb.eventoAuditoria.count({where:{organizacaoId:org,recursoId:c.id,acao:"convite.responder"}})).toBe(1)
   expect(fetch).not.toHaveBeenCalled()
 })

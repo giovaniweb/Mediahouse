@@ -3,13 +3,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { comToken } from "@/lib/midia"
 import { paraDownload } from "@/lib/midia-download"
-import { quemRecebeTudo } from "@/lib/notificados"
 import { getOrgId } from "@/lib/org"
-import { emSegundoPlano } from "@/lib/notificar"
-import { resolverAlertas } from "@/lib/alertas"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { declararOrg } from "@/lib/org-contexto"
+import { responderAprovacao } from "@/lib/responder-aprovacao"
 
 // Sob RLS, ler a aprovação pelo token já exige a empresa declarada — sem ela o
 // banco devolve vazio e o cliente lê "link não encontrado". O token diz de qual
@@ -169,116 +166,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Link expirado" }, { status: 410 })
   }
 
-  if (aprovacao.status !== "pendente") {
-    return NextResponse.json({ error: "Esta aprovação já foi respondida", status: aprovacao.status }, { status: 400 })
-  }
-
-  const novoStatus = acao === "aprovar" ? "aprovado" : "feedback_solicitado"
-
-  const updated = await prisma.aprovacaoVideo.update({
-    where: { token },
-    data: { status: novoStatus, aprovadoPor, comentario },
-  })
-
-  // Se aprovado → vai para "Para Postar". O vídeo continua no armazenamento do NuFlow.
-  if (acao === "aprovar") {
-    await prisma.demanda.update({
-      where: { id: aprovacao.demandaId },
-      data: {
-        statusInterno: "aprovado",
-        statusVisivel: "para_postar",
-      },
-    })
-    await prisma.historicoStatus.create({
-      data: {
-        demandaId: aprovacao.demandaId,
-        statusAnterior: aprovacao.status,
-        statusNovo: "aprovado",
-        origem: "manual",
-        observacao: `Vídeo aprovado pelo cliente${aprovadoPor ? ` (${aprovadoPor})` : ""} — aguardando postagem`,
-      },
-    })
-  } else {
-    // Solicita ajuste
-    await prisma.demanda.update({
-      where: { id: aprovacao.demandaId },
-      data: { statusInterno: "ajuste_solicitado", statusVisivel: "aprovacao" },
-    })
-    await prisma.historicoStatus.create({
-      data: {
-        demandaId: aprovacao.demandaId,
-        statusAnterior: "revisao_pendente",
-        statusNovo: "ajuste_solicitado",
-        origem: "manual",
-        observacao: `Feedback do cliente: ${comentario ?? "Ajuste solicitado"}`,
-      },
-    })
-  }
-
-  // Cria alerta para a equipe
-  await prisma.alertaIA.create({
-    data: {
-      organizacaoId,
-      demandaId: aprovacao.demandaId,
-      tipoAlerta: acao === "aprovar" ? "video_aprovado" : "ajuste_solicitado",
-      mensagem: acao === "aprovar"
-        ? `✅ Vídeo aprovado pelo cliente${aprovadoPor ? ` (${aprovadoPor})` : ""}!`
-        : `🔄 Cliente solicitou ajustes: "${comentario ?? "Sem comentário"}"`,
-      severidade: acao === "aprovar" ? "info" : "aviso",
-    },
-  })
-
-  // NOVO: Notifica admin/gestor e editor via WhatsApp
-  const demanda = await prisma.demanda.findUnique({
-    where: { id: aprovacao.demandaId },
-    include: {
-      editor: { select: { nome: true, telefone: true, whatsapp: true } },
-      videomaker: { select: { nome: true, telefone: true } },
-    },
-  })
-
-  if (demanda) {
-    const msgBase = acao === "aprovar"
-      ? `✅ *Vídeo Aprovado pelo Cliente!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}${aprovadoPor ? `\n👤 Aprovado por: ${aprovadoPor}` : ""}\n\nMovido para *Para Postar*. Realize a postagem e finalize no sistema. 🎬`
-      : `🔄 *Cliente Pediu Ajustes!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
-
-    // Notifica gestores
-    emSegundoPlano(() => notificarGestoresAprovacao(msgBase, demanda.organizacaoId), "gestores-aprovacao")
-    // A demanda mudou de estado — o que estava pendente por causa do estado
-    // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
-    emSegundoPlano(() => resolverAlertas(demanda.organizacaoId, demanda.id), "resolver-alertas")
-
-    // Notifica editor (quem edita precisa saber de ajustes)
-    if (demanda.editor) {
-      const telEditor = demanda.editor.whatsapp || demanda.editor.telefone
-      if (telEditor) {
-        emSegundoPlano(() => sendWhatsappMessage(telEditor, msgBase, demanda.id, demanda.organizacaoId), "wa-editor-aprovacao")
-      }
-    }
-
-    // Notifica videomaker se aprovado
-    const telVmAprovacao = demanda.videomaker?.telefone
-    if (acao === "aprovar" && telVmAprovacao) {
-      emSegundoPlano(() => sendWhatsappMessage(
-        telVmAprovacao,
-        `✅ *Vídeo Aprovado!*\n\n📋 *${demanda.codigo}* — ${demanda.titulo}\n\nParabéns! O cliente aprovou o vídeo. 🎬`,
-        demanda.id, demanda.organizacaoId
-      ), "wa-videomaker-aprovado")
-    }
-  }
-
-  return NextResponse.json({ ok: true, status: updated.status })
-}
-
-async function notificarGestoresAprovacao(mensagem: string, organizacaoId?: string | null) {
-  try {
-    const gestores = await quemRecebeTudo(organizacaoId)
-    for (const g of gestores) {
-      if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
-      }
-    }
-  } catch (e) {
-    console.error("[AprovacaoVideo] Falha ao notificar gestores:", e)
-  }
+  // O que acontece depois (status, histórico, alerta, avisos) é o mesmo de quem
+  // responde por dentro do NuFlow — lib/responder-aprovacao.ts.
+  const r = await responderAprovacao({ aprovacao, organizacaoId, acao, comentario, aprovadoPor })
+  if (!r.ok) return NextResponse.json({ error: r.erro, status: r.status }, { status: r.http })
+  return NextResponse.json({ ok: true, status: r.status })
 }

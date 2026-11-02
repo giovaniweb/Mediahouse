@@ -45,8 +45,7 @@ type SortDir = "asc" | "desc"
 
 export default function ProdutosPage() {
   const { data: session } = useSession()
-  const userTipo = (session?.user as { tipo?: string })?.tipo
-  const canEdit = userTipo === "admin" || userTipo === "gestor"
+  const canEdit = ["admin", "gestor"].includes(session?.user?.papel ?? "")
 
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Produto | null>(null)

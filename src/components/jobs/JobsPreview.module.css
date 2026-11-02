@@ -14,13 +14,3 @@
 .error { padding:12px 24px; color:#ff9baf; font-size:13px; }
 .error button { text-decoration:underline; margin-left:12px; }
 
-.list {border:1px solid #303342;border-radius:16px;background:#191b23;padding:0 22px;}
-.list > a {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0;border-bottom:1px solid #303342;}
-.list > a:last-child {border-bottom:0;}
-.list small {font-size:12px;color:#a2a5b9;}
-.list strong {display:block;font-size:17px;font-weight:500;color:#f0eef8;margin:6px 0;}
-.list span {display:block;color:#b398ff;font-size:13px;margin:8px 0;}
-.list p {color:#a2a5b9;font-size:13px;line-height:1.6;}
-.list > p {padding:24px 0;}
-.list a:focus-visible {outline:2px solid #b398ff;outline-offset:3px;}
-@media(max-width:767px) {.list {padding-inline:16px;}.list strong {overflow-wrap:anywhere;}}
