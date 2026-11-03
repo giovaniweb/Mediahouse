@@ -96,11 +96,27 @@ export async function areaTravadaDaPessoa(
 }
 
 /**
+ * O recorte do gestor de eventos, ou null para os demais papéis: os cards
+ * ligados a um evento, mais os que a própria pessoa pediu (um ou outro basta).
+ *
+ * De 03/06 a 03/11/2026 eram só os de evento. Na Contourline nenhum dos 826
+ * cards tem evento ligado, e a Mariana (gestora de eventos) via o quadro vazio,
+ * com 39 pedidos dela abertos em aprovação, edição e para postar. Quem pede
+ * acompanha o que pediu, como qualquer solicitante.
+ *
+ * É um OR: quem chama põe no AND[], para não brigar com a busca e a data.
+ */
+export function recorteDoGestorDeEventos(session: Session): Prisma.DemandaWhereInput | null {
+  if (!temPapel(session, "gestor_eventos")) return null
+  return { OR: [{ eventoGestaoId: { not: null } }, { solicitanteId: session.user.id }] }
+}
+
+/**
  * Tudo o que a pessoa vê no quadro, num filtro só: a empresa (e o que ela
  * executa por espelhamento), a área do vínculo, "minhas demandas" quando não
- * tem `verTodasDemandas`, e só cards de evento para o gestor de eventos. São as
- * mesmas peças que GET /api/demandas monta; o assistente (MCP) da pessoa usa
- * esta, para ler nem mais nem menos do que ela leria na tela.
+ * tem `verTodasDemandas`, e o recorte do gestor de eventos. São as mesmas peças
+ * que GET /api/demandas monta; o assistente (MCP) da pessoa usa esta, para ler
+ * nem mais nem menos do que ela leria na tela.
  */
 export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
   const gestor = ehGestor(session)
@@ -111,6 +127,7 @@ export async function oQueAPessoaVe(session: Session, organizacaoId: string): Pr
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) and.push({ area })
   if (minhas) and.push(minhas)
-  if (temPapel(session, "gestor_eventos")) and.push({ eventoGestaoId: { not: null } })
+  const eventos = recorteDoGestorDeEventos(session)
+  if (eventos) and.push(eventos)
   return { AND: and }
 }

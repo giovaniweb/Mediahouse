@@ -2,12 +2,12 @@ import { filtroFilaTrabalho, estadoHistorico } from "@/lib/acervo-regras"
 import { numeroPagina } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { ehGestor, temPapel } from "@/lib/papel"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { getOrgId, semOrg } from "@/lib/org"
 import { whereResponsavel } from "@/lib/responsaveis"
-import { areaTravadaDaPessoa, escopoDeDemandas, filtroMinhasDemandas } from "@/lib/escopo-demanda"
+import { areaTravadaDaPessoa, escopoDeDemandas, filtroMinhasDemandas, recorteDoGestorDeEventos } from "@/lib/escopo-demanda"
 import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import type { Prisma } from "@prisma/client"
 import { inicioDoDia, somarDias } from "@/lib/datas"
@@ -83,8 +83,12 @@ export async function GET(req: NextRequest) {
   if (tipoVideo) where.tipoVideo = tipoVideo
   if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
-  // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
-  if (temPapel(session, "gestor_eventos")) where.eventoGestaoId = { not: null }
+  // Gestor de eventos acompanha os cards de evento e os que ele mesmo pediu, não
+  // o pipeline todo. É um OR, e por isso vai no AND[] (ver abaixo). Antes era
+  // `where.eventoGestaoId = { not: null }`, que ainda apagava o filtro por evento
+  // escolhido na tela. A regra mora em lib/escopo-demanda.ts, a mesma do MCP.
+  const recorteEventos = recorteDoGestorDeEventos(session)
+  if (recorteEventos) and.push(recorteEventos)
 
   // Condições que internamente usam OR entram todas em AND[], para não se
   // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`
