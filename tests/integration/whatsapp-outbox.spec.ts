@@ -9,6 +9,8 @@ import {prismaAuth} from "@/lib/prisma-auth"
 import {criarSaida,processarSaidas,tentarNovamente} from "@/lib/whatsapp-outbox"
 import {receberEntrada,processarInbox} from "@/lib/whatsapp-inbox"
 import {encryptSecret} from "@/lib/secret-crypto"
+import {comOrg} from "@/lib/org-contexto"
+import {contarFalhasDeEntrega} from "@/lib/saude-sistema"
 import {GET as listar,POST as reenvio} from "@/app/api/mensagens-falhadas/route"
 import {POST as enviarManual} from "@/app/api/whatsapp/enviar/route"
 const p=`saida-${randomUUID()}`,a=`${p}-a`,b=`${p}-b`,u=`${p}-u`,instance=`${p}-inst`,telefone="5511998887777"
@@ -201,5 +203,31 @@ describe("outbox e recibos WhatsApp",()=>{
     await processarSaidas(a)
     expect(http).toHaveBeenCalledTimes(1)
     expect((JSON.parse(String(http.mock.calls[0][1]?.body)) as {number:string}).number).toBe(telefone)
+  })
+  it("retenção limpa só quem ainda tem conteúdo e não mexe no updatedAt das linhas já limpas",async()=>{
+    const antigo=new Date(Date.now()-3*86400_000),passado=new Date(Date.now()-60_000)
+    const limpa=await criar(),cheia=await criar()
+    await db.saidaWhatsapp.update({where:{id:limpa.id},data:{estado:"falhou",motivo:"rejeitado_provedor",conteudoExpiraEm:passado,
+      telefoneCifrado:null,conteudoCifrado:null,updatedAt:antigo}})
+    await db.saidaWhatsapp.update({where:{id:cheia.id},data:{estado:"falhou",motivo:"rejeitado_provedor",conteudoExpiraEm:passado,updatedAt:antigo}})
+    await processarSaidas(a)
+    expect((await ler(limpa.id)).updatedAt.getTime()).toBe(antigo.getTime())
+    const depois=await ler(cheia.id)
+    expect(depois.telefoneCifrado).toBeNull();expect(depois.conteudoCifrado).toBeNull()
+    expect(depois.updatedAt.getTime()).toBeGreaterThan(antigo.getTime())
+    // A rodada seguinte já não regrava nada: a falha de três dias não volta a ser "da última hora".
+    const marca=(await ler(cheia.id)).updatedAt.getTime()
+    await processarSaidas(a)
+    expect((await ler(cheia.id)).updatedAt.getTime()).toBe(marca)
+    expect(await comOrg(a,()=>contarFalhasDeEntrega(a,new Date(Date.now()+2*3600_000)))).toBe(0)
+  })
+  it("saúde não conta sem_config como falha de entrega",async()=>{
+    const motivos=["sem_config","sem_config","sem_config","rejeitado_provedor","timeout_ou_rede"]
+    for(const motivo of motivos){
+      const s=await criar()
+      await db.saidaWhatsapp.update({where:{id:s.id},data:{estado:motivo==="timeout_ou_rede" ? "desconhecido" : "falhou",motivo}})
+    }
+    expect(await comOrg(a,()=>contarFalhasDeEntrega(a))).toBe(2)
+    expect(await comOrg(b,()=>contarFalhasDeEntrega(b))).toBe(0)
   })
 })

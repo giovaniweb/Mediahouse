@@ -138,7 +138,10 @@ export async function processarSaidas(organizacaoId:string) {
     const org=await prisma.organizacao.findUnique({where:{id:organizacaoId},select:{ativo:true}})
     if(!org?.ativo) await prisma.saidaWhatsapp.updateMany({where:{organizacaoId,estado:"aguardando"},data:{estado:"cancelado",motivo:"empresa_inativa",proximaTentativa:null}})
     // Retenção da cópia de saída: sete dias, conservando chave/tentativas/recibos.
-    await prisma.saidaWhatsapp.updateMany({where:{organizacaoId,conteudoExpiraEm:{lte:new Date()}},data:{telefoneCifrado:null,conteudoCifrado:null}})
+    // Só as linhas que ainda guardam conteúdo: regravar as já limpas a cada rodada
+    // movia o updatedAt de todas, e a saúde lia falha antiga como falha da última hora.
+    await prisma.saidaWhatsapp.updateMany({where:{organizacaoId,conteudoExpiraEm:{lte:new Date()},
+      OR:[{telefoneCifrado:{not:null}},{conteudoCifrado:{not:null}}]},data:{telefoneCifrado:null,conteudoCifrado:null}})
   })
   const fila=criarFila(prisma),inicio=Date.now()
   const resumo={reivindicados:0,aceitos:0,falhos:0,desconhecidos:0,semEnvio:0}
