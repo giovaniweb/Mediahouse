@@ -22,9 +22,17 @@ function segredo(): string | null {
  * puro, nunca um hash sem segredo, que se desfaz por força bruta em minutos.
  */
 export function hashDoIp(headers: Headers): string | null {
+  return hashComSegredo("ip", ipDaRequisicao(headers))
+}
+
+/**
+ * O mesmo HMAC para outro identificador (o e-mail ou telefone de quem tenta
+ * entrar). A contagem do login fica por conta sem o e-mail em claro no banco.
+ */
+export function hashComSegredo(rotulo: string, valor: string): string | null {
   const s = segredo()
   if (!s) return null
-  return createHmac("sha256", `nuflow:ip:${s}`).update(ipDaRequisicao(headers)).digest("base64url").slice(0, 32)
+  return createHmac("sha256", `nuflow:${rotulo}:${s}`).update(valor).digest("base64url").slice(0, 32)
 }
 
 /** true enquanto a chave está dentro do teto na janela; false quando passou. */

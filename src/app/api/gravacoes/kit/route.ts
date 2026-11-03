@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { recusarUploads } from "@/lib/midia-limite"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
   if (d.tipo === "colinha" ? !d.texto : !d.url || !urlDoKitValida(d.url, acesso.organizacaoId)) {
     return NextResponse.json({ error: d.tipo === "colinha" ? "Escreva a colinha." : "Mande o arquivo ou um link https." }, { status: 400 })
   }
+  // Arquivo que subiu direto para o armazenamento: tamanho e tipo conferidos aqui (lib/midia-limite).
+  const recusa = d.tipo === "colinha" ? null : await recusarUploads([d.url])
+  if (recusa) return NextResponse.json({ error: recusa.erro }, { status: recusa.status })
   const criado = await comOrg(acesso.organizacaoId, () => prisma.materialVideomaker.create({
     data: {
       organizacaoId: acesso.organizacaoId, titulo: d.titulo, tipo: d.tipo, tipoGravacao: d.tipoGravacao ?? null,

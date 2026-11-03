@@ -9,23 +9,9 @@ import { criarSaida, processarSaidas } from "@/lib/whatsapp-outbox"
 import { prisma } from "@/lib/prisma"
 
 // ─── Resolução de organização (SaaS multiempresa) ────────────────────────────
-// Organização que recebe tráfego PÚBLICO sem `?org=` — formulários e links que
-// já circulam sem identificar a empresa. Deixou de ser "contourline" cravado no
-// código: agora é `ORG_PUBLICA_PADRAO`, para que a segunda empresa não herde os
-// links da primeira nem o contrário.
-//
-// Este helper NÃO serve mais de fallback para envio de notificação. Mandar
-// WhatsApp pelo número de outra empresa é pior que não mandar — ver
-// getWhatsappConfig e resolverOrgEnvio, que agora falham fechado.
-let _orgPadraoId: string | null = null
-export async function orgPadraoPublica(): Promise<string | null> {
-  if (_orgPadraoId) return _orgPadraoId
-  const slug = process.env.ORG_PUBLICA_PADRAO || "contourline"
-  const org = await prisma.organizacao.findUnique({ where: { slug }, select: { id: true } })
-  if (!org) console.error(`[org] ORG_PUBLICA_PADRAO="${slug}" não existe no banco.`)
-  _orgPadraoId = org?.id ?? null
-  return _orgPadraoId
-}
+// Não há empresa padrão para envio: mandar WhatsApp pelo número de outra
+// empresa é pior que não mandar — ver getWhatsappConfig e resolverOrgEnvio, que
+// falham fechado.
 
 // Config de WhatsApp de uma organização. Sem org, não envia.
 export async function getWhatsappConfig(organizacaoId?: string | null) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Star, CheckCircle2, Smile, ThumbsUp, Send, Loader2 } from "lucide-react"
 import Image from "next/image"
 import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
@@ -14,7 +14,10 @@ interface Editor {
 }
 
 export default function AvaliarEditorPage({ params }: { params: Promise<{ editorId: string }> }) {
-  const [editorId, setEditorId] = useState("")
+  // O convite do link não muda na tela: guardado sem provocar outro render.
+  const convite = useRef("")
+  // Convite vencido, já usado ou ausente: a mensagem da rota, no lugar do formulário.
+  const [indisponivel, setIndisponivel] = useState("")
   const [editor, setEditor] = useState<Editor | null>(null)
   const [loading, setLoading] = useState(true)
   const [enviando, setEnviando] = useState(false)
@@ -29,16 +32,16 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
   const [contratariaNovamente, setContratariaNovamente] = useState<boolean | null>(null)
 
   useEffect(() => {
-    params.then(({ editorId: id }) => {
-      setEditorId(id)
-      // Rota pública dedicada. Antes apontava para /api/editores/[id]/avaliar,
-      // que o middleware nunca liberou sem sessão: esta tela levava 401 e
-      // mostrava "erro ao carregar dados" para todo mundo que lia o QR.
-      fetch(`/api/publico/avaliar-editor?id=${id}`)
-        .then(r => r.json())
-        .then(data => {
+    params.then(() => {
+      // O convite do serviço vem no link (?c=). Sem ele não há avaliação.
+      const c = new URLSearchParams(window.location.search).get("c") ?? ""
+      convite.current = c
+      fetch(`/api/publico/avaliar-editor?c=${encodeURIComponent(c)}`)
+        .then(async r => {
+          const data = await r.json().catch(() => ({}))
+          if (r.status === 410) { setIndisponivel(data.error || "Este link de avaliação não vale mais."); return }
           if (data.editor) setEditor(data.editor)
-          else setErro("Editor não encontrado")
+          else setErro("Erro ao carregar dados")
         })
         .catch(() => setErro("Erro ao carregar dados"))
         .finally(() => setLoading(false))
@@ -53,7 +56,7 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          editorId,
+          convite: convite.current,
           nota,
           comentario: comentario || undefined,
           atendeuDemandas: atendeuDemandas ?? undefined,
@@ -62,7 +65,11 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
           // `origem` não vai mais no corpo: a rota pública decide sozinha.
         }),
       })
-      if (!res.ok) throw new Error("Erro ao enviar avaliação")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErro(typeof data.error === "string" ? data.error : "Erro ao enviar avaliação. Tente novamente.")
+        return
+      }
       setEnviado(true)
     } catch {
       setErro("Erro ao enviar avaliação. Tente novamente.")
@@ -77,9 +84,9 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
     </div>
   )
 
-  if (erro && !editor) return erro === "Editor não encontrado"
-    ? <LinkIndisponivel titulo="Link de avaliação indisponível" texto="Este link não corresponde a nenhum editor. Peça um novo link a quem enviou." />
-    : <LinkIndisponivel titulo="Não foi possível abrir a avaliação" texto="Confira sua conexão e recarregue a página." />
+  if (indisponivel) return <LinkIndisponivel titulo="Link de avaliação indisponível" texto={indisponivel} />
+
+  if (erro && !editor) return <LinkIndisponivel titulo="Não foi possível abrir a avaliação" texto="Confira sua conexão e recarregue a página." />
 
   if (enviado) return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">

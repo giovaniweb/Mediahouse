@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { recusarUploads } from "@/lib/midia-limite"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
@@ -42,6 +43,9 @@ export async function POST(req: NextRequest) {
     if (!nome || !videoUrl) {
       return NextResponse.json({ error: "Nome e videoUrl são obrigatórios" }, { status: 400 })
     }
+    // Tamanho e tipo conferidos no servidor (lib/midia-limite). Recusado = apagado.
+    const recusa = await recusarUploads([videoUrl, thumbnailUrl])
+    if (recusa) return NextResponse.json({ error: recusa.erro }, { status: recusa.status })
 
     // Ordem: por padrão, no final da fila DESTA empresa. Antes o "último" era o
     // último da plataforma inteira, então a numeração de uma empresa pulava

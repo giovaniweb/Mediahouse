@@ -15,6 +15,9 @@ const { estado, tarefas, emailParaCompras } = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@/lib/notificar", () => ({ emSegundoPlano: (tarefa: () => Promise<unknown>, rotulo: string) => { tarefas.push({ rotulo, tarefa }) } }))
+// Sem armazenamento no teste: a conferência de tamanho e tipo do arquivo do kit
+// tem teste próprio (tests/unit/onda1-portas).
+vi.mock("@/lib/midia-limite", () => ({ recusarUploads: async () => null }))
 // Nenhum e-mail sai do teste: o resultado do envio para compras é escolhido aqui.
 vi.mock("@/lib/email", async (original) => ({
   ...await original<typeof import("@/lib/email")>(),

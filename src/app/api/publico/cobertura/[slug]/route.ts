@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { resolverMidiaCobertura, SEM_CACHE_MIDIA } from "@/lib/publicacao-midia"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { vigente } from "@/lib/links-publicos"
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -24,7 +25,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   const senha = req.nextUrl.searchParams.get("senha")
 
   const cobertura = await prisma.eventoCobertura.findUnique({
-    where: { slug },
+    // Página vencida responde como inexistente (lib/links-publicos).
+    where: { slug, linkPublicoExpiraEm: vigente() },
     select: {
       id: true,
       titulo: true,

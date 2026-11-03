@@ -4,9 +4,9 @@
 //   contourline.nuflow.space/pedido — a área no subdomínio (ver lib/subdominio)
 //   /c/contourline/pedido — a área no endereço antigo
 // O link antigo (/cadastrar-demanda, com ou sem ?org=) redireciona para a área,
-// então o formulário quase sempre tem o slug no caminho. O `?org=` e o padrão da
-// API (ORG_PUBLICA_PADRAO) ficam para as telas públicas que ainda não estão na
-// área, como /galeria.
+// então o formulário quase sempre tem o slug no caminho. O `?org=` fica para as
+// telas públicas que ainda não estão na área, como /galeria. Sem empresa nenhuma,
+// a API não tem padrão (Onda 1): recusa ou devolve vazio.
 //
 // É isto que permite a segunda empresa ter formulário próprio sem herdar o
 // tráfego da primeira: basta o link carregar o slug dela.

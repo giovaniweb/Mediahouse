@@ -7,7 +7,7 @@
 // desligada responde como inexistente.
 import { prismaAuth } from "@/lib/prisma-auth"
 import { SLUG_PUBLICO } from "@/lib/org-publica-cliente"
-import { SLUG_ORG_PADRAO } from "@/lib/org"
+import { SLUG_LINKS_ANTIGOS } from "@/lib/org"
 
 export type EmpresaPublica = { nome: string; slug: string; logoUrl: string | null }
 
@@ -22,12 +22,23 @@ export async function empresaDoPortal(slug: string | null | undefined): Promise<
   return { nome: org.nome, slug: org.slug, logoUrl: org.logoUrl }
 }
 
+/** Identidade pública da empresa pelo id (a de quem está logado, na galeria aberta do painel). */
+export async function empresaPorId(id: string): Promise<EmpresaPublica | null> {
+  const org = await prismaAuth.organizacao.findUnique({
+    where: { id },
+    select: { nome: true, slug: true, logoUrl: true, ativo: true },
+  })
+  if (!org?.ativo) return null
+  return { nome: org.nome, slug: org.slug, logoUrl: org.logoUrl }
+}
+
 /**
- * A empresa que recebe um formulário público: a do slug, ou a padrão quando o
- * link não traz slug nenhum (os links antigos). Slug que não existe não cai na
- * padrão: devolve null, para a tela dizer que o link está errado em vez de
- * mandar o pedido para a empresa errada sem avisar.
+ * Para onde vai um LINK ANTIGO (/cadastrar-demanda, /cadastrar-videomaker): a
+ * área da empresa do ?org=, ou, sem ele, a dos links antigos (SLUG_LINKS_ANTIGOS),
+ * que é de quem esses links eram. A pessoa chega à área com o nome da empresa no
+ * topo; nada é gravado aqui. Slug que não existe não cai em empresa nenhuma:
+ * devolve null, para a tela dizer que o link está errado.
  */
-export async function empresaDestino(slug: string | null | undefined): Promise<EmpresaPublica | null> {
-  return empresaDoPortal(slug?.trim() ? slug : SLUG_ORG_PADRAO)
+export async function empresaDoLinkAntigo(slug: string | null | undefined): Promise<EmpresaPublica | null> {
+  return empresaDoPortal(slug?.trim() ? slug : SLUG_LINKS_ANTIGOS)
 }

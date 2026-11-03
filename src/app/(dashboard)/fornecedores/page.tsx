@@ -1,5 +1,6 @@
 "use client"
 
+import { ValidadeLink } from "@/components/ui/ValidadeLink"
 import { useState } from "react"
 import useSWR from "swr"
 import { Truck, Plus, Search, Loader2, X, Phone, Mail, MapPin, Trash2, Link2 } from "lucide-react"
@@ -9,7 +10,7 @@ import { fetcher } from "@/lib/fetcher"
 type Fornecedor = {
   id: string; nome: string; contato: string | null; cnpj: string | null
   telefone: string | null; email: string | null; cidade: string | null; estado: string | null
-  categoria: string; status: string; portalToken: string; _count: { produtos: number; custos: number }
+  categoria: string; status: string; portalToken: string; portalTokenExpiraEm: string; _count: { produtos: number; custos: number }
 }
 
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
@@ -80,10 +81,18 @@ export default function FornecedoresPage() {
                   {f.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {f.email}</span>}
                   {f.cidade && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {f.cidade}{f.estado ? `/${f.estado}` : ""}</span>}
                   <span>{f._count.custos} lançamento(s)</span>
+                  <ValidadeLink expiraEm={f.portalTokenExpiraEm} gerar={async () => {
+                    const r = await fetch(`/api/fornecedores/${f.id}/novo-link`, { method: "POST" })
+                    if (r.ok) mutate()
+                    return r.ok
+                  }} />
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/fornecedor/${f.portalToken}`); toast.success("Link do portal copiado!") }}
+                <button onClick={() => {
+                  if (new Date(f.portalTokenExpiraEm).getTime() <= Date.now()) { toast.error("O link do portal venceu. Gere um novo."); return }
+                  navigator.clipboard.writeText(`${window.location.origin}/fornecedor/${f.portalToken}`); toast.success("Link do portal copiado!")
+                }}
                   title="Copiar link do portal" className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-purple-400 p-1"><Link2 className="w-4 h-4" /></button>
                 <button onClick={() => remover(f.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
               </div>

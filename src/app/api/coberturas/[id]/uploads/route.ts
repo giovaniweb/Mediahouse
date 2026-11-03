@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { recusarUploads } from "@/lib/midia-limite"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCoberturaOrg } from "@/lib/org"
@@ -64,6 +65,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!url || !dia) {
       return NextResponse.json({ error: "url e dia são obrigatórios" }, { status: 400 })
     }
+
+    // Tamanho e tipo conferidos no servidor (lib/midia-limite). Recusado = apagado.
+    const recusa = await recusarUploads([url, thumbnailUrl])
+    if (recusa) return NextResponse.json({ error: recusa.erro }, { status: recusa.status })
 
     const upload = await prisma.eventoCoberturaUpload.create({
       data: {

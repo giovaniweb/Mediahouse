@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { vigente } from "@/lib/links-publicos"
 
 // POST /api/publico/cobertura/[slug]/face-search
 // Busca fotos/vídeos onde o rosto aparece via distância euclidiana
@@ -42,7 +43,8 @@ export async function POST(
 
   // Buscar cobertura por slug
   const cobertura = await prisma.eventoCobertura.findUnique({
-    where: { slug },
+    // Página vencida responde como inexistente (lib/links-publicos).
+    where: { slug, linkPublicoExpiraEm: vigente() },
     select: { id: true, titulo: true, linkDownloadPublico: true },
   })
 

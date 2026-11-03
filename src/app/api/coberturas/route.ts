@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -19,7 +20,9 @@ function gerarSlug(titulo: string): string {
       .replace(/^-+|-+$/g, "")
       .substring(0, 60) +
     "-" +
-    Date.now().toString(36)
+    // Final aleatório: o endereço da página pública é a credencial dela, e
+    // título + hora da criação dava para adivinhar.
+    randomBytes(6).toString("hex")
   )
 }
 

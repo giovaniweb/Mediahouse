@@ -46,7 +46,7 @@ const ids = (dados: { demandas: { id: string }[] }) => dados.demandas.map((d) =>
 
 beforeAll(async () => {
   await db.organizacao.createMany({ data: [
-    { id: a, nome: a, slug: a, relatorioToken: tokenEmpresa },
+    { id: a, nome: a, slug: a, relatorioToken: tokenEmpresa, relatorioTokenExpiraEm: new Date(Date.now() + 86400000) },
     { id: b, nome: b, slug: b },
   ] })
   await db.usuario.createMany({ data: [
@@ -116,6 +116,15 @@ describe("chaves", () => {
     const tentativa = await ferramenta(tokenEmpresa, "listar_demandas")
     expect(tentativa.erro).toBe(true)
     expect(tentativa.texto).toMatch(/chave pessoal/)
+  })
+
+  it("a da empresa vencida não responde (Onda 1: link do relatório com validade)", async () => {
+    await db.organizacao.update({ where: { id: a }, data: { relatorioTokenExpiraEm: new Date(Date.now() - 60_000) } })
+    try {
+      expect((await chamar({ jsonrpc: "2.0", id: 1, method: "tools/list" }, tokenEmpresa)).status).toBe(401)
+    } finally {
+      await db.organizacao.update({ where: { id: a }, data: { relatorioTokenExpiraEm: new Date(Date.now() + 86400000) } })
+    }
   })
 
   it("a da pessoa abre as demandas; só criar_demanda escreve", async () => {

@@ -2,7 +2,7 @@ import { paginarGaleria } from "@/lib/galeria-indice"
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { orgPublica } from "@/lib/org"
+import { orgPublicaOuDaSessao } from "@/lib/org-da-requisicao"
 import { comOrg } from "@/lib/org-contexto"
 import { PUBLICADO, SEM_CACHE_MIDIA, numeroPagina, resolverPublicacao, urlPublicavel } from "@/lib/publicacao-midia"
 import { resolverParaAssinada } from "@/lib/midia"
@@ -10,7 +10,7 @@ import { resolverParaAssinada } from "@/lib/midia"
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const page = numeroPagina(sp.get("page"), 1), limit = numeroPagina(sp.get("limit"), 24, 48)
-  const organizacaoId = await orgPublica(sp.get("org"))
+  const { organizacaoId } = await orgPublicaOuDaSessao(sp.get("org"))
   if (!organizacaoId) return NextResponse.json({ total: 0, page, limit, totalPages: 0, videos: [] }, { headers: SEM_CACHE_MIDIA })
   return comOrg(organizacaoId, async () => {
     const search = sp.get("search")?.slice(0, 200), tipo = sp.get("tipo"), produtoId = sp.get("produtoId")

@@ -86,7 +86,7 @@ async function enviarEmail({
     const { data, error } = await client.resend.emails.send({
       from: client.from,
       to: destinatarios,
-      subject: assunto,
+      subject: assuntoSeguro(assunto),
       html,
     })
     if (error) {
@@ -101,6 +101,39 @@ async function enviarEmail({
     console.error("[Email] falha inesperada no envio", { evento, erro: error, destinatarios: destinatarios.length })
     return { ok: false, error }
   }
+}
+
+// ─── Escape ──────────────────────────────────────────────────────────────────
+//
+// Nome, chave PIX, título da demanda e motivo vêm de quem preencheu um
+// formulário. Sem escape, um nome como `<a href="...">Clique aqui</a>` saía
+// formatado no e-mail do financeiro, com link para onde a pessoa quisesse.
+// Todo dado de usuário que entra num template passa por aqui.
+
+/** Texto de usuário para dentro de HTML (conteúdo e atributo entre aspas). */
+export function escaparHtml(valor: unknown): string {
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/** Link para `href`: só http(s); o resto vira vazio. Escapado para o atributo. */
+export function linkSeguro(url: string | null | undefined): string {
+  if (!url) return ""
+  try {
+    const u = new URL(url)
+    return u.protocol === "https:" || u.protocol === "http:" ? escaparHtml(u.toString()) : ""
+  } catch {
+    return ""
+  }
+}
+
+/** Assunto numa linha só e sem tamanho absurdo. */
+export function assuntoSeguro(assunto: string): string {
+  return assunto.replace(/[\r\n]+/g, " ").trim().slice(0, 200)
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
@@ -118,14 +151,14 @@ function templateFinanceiro(dados: {
     <h2 style="margin:0 0 4px;color:#18181b">Solicitação de Pagamento</h2>
     <p style="color:#71717a;font-size:14px">Uma nota fiscal foi recebida e aguarda pagamento.</p>
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-      <tr><td style="padding:10px 0;color:#71717a;font-size:13px;width:45%">Videomaker</td><td style="color:#18181b;font-weight:600">${dados.nomeVideomaker}</td></tr>
-      ${dados.cpfCnpj ? `<tr><td style="padding:10px 0;color:#71717a;font-size:13px">CPF/CNPJ</td><td>${dados.cpfCnpj}</td></tr>` : ""}
+      <tr><td style="padding:10px 0;color:#71717a;font-size:13px;width:45%">Videomaker</td><td style="color:#18181b;font-weight:600">${escaparHtml(dados.nomeVideomaker)}</td></tr>
+      ${dados.cpfCnpj ? `<tr><td style="padding:10px 0;color:#71717a;font-size:13px">CPF/CNPJ</td><td>${escaparHtml(dados.cpfCnpj)}</td></tr>` : ""}
       <tr><td style="padding:10px 0;color:#71717a;font-size:13px">Valor</td><td style="font-weight:600">R$ ${dados.valorDiaria.toFixed(2).replace(".", ",")}</td></tr>
-      <tr><td style="padding:10px 0;color:#71717a;font-size:13px">Chave PIX</td><td style="font-family:monospace">${dados.chavePix}</td></tr>
-      <tr><td style="padding:10px 0;color:#71717a;font-size:13px">Demanda</td><td>${dados.codigoDemanda} — ${dados.tituloDemanda}</td></tr>
-      ${dados.notaFiscalUrl ? `<tr><td style="padding:10px 0;color:#71717a;font-size:13px">Nota Fiscal</td><td><a href="${dados.notaFiscalUrl}">Ver documento →</a></td></tr>` : ""}
+      <tr><td style="padding:10px 0;color:#71717a;font-size:13px">Chave PIX</td><td style="font-family:monospace">${escaparHtml(dados.chavePix)}</td></tr>
+      <tr><td style="padding:10px 0;color:#71717a;font-size:13px">Demanda</td><td>${escaparHtml(dados.codigoDemanda)} — ${escaparHtml(dados.tituloDemanda)}</td></tr>
+      ${linkSeguro(dados.notaFiscalUrl) ? `<tr><td style="padding:10px 0;color:#71717a;font-size:13px">Nota Fiscal</td><td><a href="${linkSeguro(dados.notaFiscalUrl)}">Ver documento →</a></td></tr>` : ""}
     </table>
-    <a href="${dados.linkConfirmacao}" style="background:#18181b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">Confirmar Pagamento →</a>
+    <a href="${linkSeguro(dados.linkConfirmacao)}" style="background:#18181b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">Confirmar Pagamento →</a>
   </div>
 </div></body></html>`
 }
@@ -136,11 +169,11 @@ function templateNFRecebida(nomeVideomaker: string, diasPrazo = 15) {
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
   <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
   <div style="padding:32px">
-    <h2 style="color:#18181b">Obrigado, ${nomeVideomaker}! 🙏</h2>
+    <h2 style="color:#18181b">Obrigado, ${escaparHtml(nomeVideomaker)}! 🙏</h2>
     <p style="color:#52525b;font-size:15px;line-height:1.6">Recebemos sua nota fiscal. Ela está em análise.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px">
       <strong style="color:#15803d">✅ Prazo:</strong>
-      <span style="color:#166534"> até ${diasPrazo} dias úteis após aprovação, via PIX.</span>
+      <span style="color:#166534"> até ${Math.trunc(Number(diasPrazo)) || 15} dias úteis após aprovação, via PIX.</span>
     </div>
   </div>
 </div></body></html>`
@@ -153,9 +186,9 @@ function templateResetSenha(nome: string, linkReset: string) {
   <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
   <div style="padding:32px">
     <h2 style="color:#18181b">Redefinição de Senha</h2>
-    <p style="color:#52525b;font-size:15px;line-height:1.6">Olá, <strong>${nome}</strong>! Clique abaixo para criar uma nova senha. Válido por <strong>1 hora</strong>.</p>
-    <a href="${linkReset}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:24px">Redefinir Minha Senha →</a>
-    <p style="color:#71717a;font-size:12px;word-break:break-all">Link: ${linkReset}</p>
+    <p style="color:#52525b;font-size:15px;line-height:1.6">Olá, <strong>${escaparHtml(nome)}</strong>! Clique abaixo para criar uma nova senha. Válido por <strong>1 hora</strong>.</p>
+    <a href="${linkSeguro(linkReset)}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:24px">Redefinir Minha Senha →</a>
+    <p style="color:#71717a;font-size:12px;word-break:break-all">Link: ${escaparHtml(linkReset)}</p>
     <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:14px;margin-top:16px">
       <p style="margin:0;color:#92400e;font-size:13px">⚠️ Se você não solicitou isso, ignore este e-mail.</p>
     </div>
@@ -178,10 +211,10 @@ export async function sendEmailFinanceiro(dados: PagamentoEmailData, organizacao
   const baseUrl = process.env.NEXTAUTH_URL?.trim()
   if (!baseUrl) return { ok: false, error: "NEXTAUTH_URL não configurada" }
 
-  const linkConfirmacao = `${baseUrl.replace(/\/$/, "")}/custos?aprovar=${dados.custoId}`
+  const linkConfirmacao = `${baseUrl.replace(/\/$/, "")}/custos?aprovar=${encodeURIComponent(dados.custoId)}`
   return enviarEmail({
     destinatarios,
-    assunto: `[NuFlow] Pagamento Pendente — ${dados.nomeVideomaker}`,
+    assunto: assuntoSeguro(`[NuFlow] Pagamento Pendente — ${dados.nomeVideomaker}`),
     html: templateFinanceiro({ ...dados, linkConfirmacao }),
     evento: "financeiro-pagamento-pendente",
   })
@@ -199,8 +232,6 @@ export type NotaParaComprasEmail = {
   dataGravacao: string | null
   notaFiscalUrl: string
 }
-
-const escaparHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
 
 function templateNotaParaCompras(d: NotaParaComprasEmail) {
   const linha = (rotulo: string, valor: string) =>

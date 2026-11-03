@@ -21,7 +21,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const perfil = await prisma.editor.findFirst({
     where: { id, vinculos: { some: { organizacaoId } } },
     include: {
+      // Só as demandas DESTA empresa, como no perfil do videomaker: o editor com
+      // vínculo em duas empresas mostrava o pipeline de uma para a outra.
       demandas: {
+        where: { organizacaoId },
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {

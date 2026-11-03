@@ -1,6 +1,7 @@
 import { workerMidiaAtivo } from "@/lib/midia-worker-config"
 import { createHash } from "node:crypto"
 import { fonteUploadValida, registrarArquivoDemanda } from "@/lib/arquivo-registro"
+import { conferirUpload } from "@/lib/midia-limite"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -60,6 +61,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     (thumbnailUrl !== undefined && (typeof thumbnailUrl !== "string" || !fonteUploadValida(thumbnailUrl, guard.organizacaoId, id, "thumbnail"))) ||
     (body.nomeArquivo !== undefined && typeof body.nomeArquivo !== "string")) {
     return NextResponse.json({ error: "Referência de mídia inválida para esta demanda" }, { status: 422 })
+  }
+
+  // O navegador subiu direto para o Storage: o tamanho e o tipo são conferidos
+  // aqui, no servidor, antes de registrar (lib/midia-limite). Recusado = apagado.
+  for (const alvo of [url, thumbnailUrl]) {
+    if (!alvo) continue
+    const conferencia = await conferirUpload(alvo)
+    if (conferencia && !conferencia.ok) return NextResponse.json({ error: conferencia.erro }, { status: conferencia.status })
   }
 
   // ── Documento: cria/deleta Arquivo, sem tocar em linkFinal/linkBrutos ─────

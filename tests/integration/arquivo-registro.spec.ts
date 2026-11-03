@@ -7,6 +7,8 @@ const estado = vi.hoisted(() => ({ org: "", url: "" }))
 vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: "teste" } }) }))
 vi.mock("@/lib/org", () => ({ requireDemandaOrg: async () => ({ organizacaoId: estado.org }) }))
 vi.mock("@/lib/midia", async importOriginal => ({ ...await importOriginal<object>(), subirArquivo: vi.fn(async () => estado.url) }))
+// A conferência de tamanho e tipo no Storage tem teste próprio (tests/unit/onda1-portas); aqui não há Storage.
+vi.mock("@/lib/midia-limite", () => ({ conferirUpload: vi.fn(async () => null) }))
 vi.mock("@/lib/transcode", () => ({ precisaTranscodeConferindo: vi.fn(async () => false), enqueueTranscode: vi.fn(async () => false) }))
 import { prismaBase as db } from "@/lib/prisma"
 import { registrarArquivoDemanda } from "@/lib/arquivo-registro"

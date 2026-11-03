@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const data = parsed.data
 
   // `?org=<slug>` identifica a empresa dona do formulário (o portal /c/<slug>
-  // sempre manda); sem ele, a padrão — os links antigos da Contourline.
+  // sempre manda). Sem ele, 404: não há empresa padrão para receber o pedido.
   const organizacaoId = await orgPublica(req.nextUrl.searchParams.get("org"))
   if (!organizacaoId) {
     return NextResponse.json({ error: "Organização não encontrada. Verifique o link do formulário." }, { status: 404 })

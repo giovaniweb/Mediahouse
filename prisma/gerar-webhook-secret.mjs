@@ -28,17 +28,21 @@ if (!slug) {
 // Precisa produzir exatamente o mesmo formato de src/lib/secret-crypto.ts,
 // senão o webhook não consegue decifrar: aes-256-gcm, chave = sha256(segredo do
 // ambiente), partes unidas por "." em base64url.
+// Com CHAVE_CIFRA_DADOS (a chave própria, desde 07/10/2026), o formato novo:
+// prefixo "v2." e chave = sha256("nuflow:dados:v2:" + chave).
 function encryptSecret(valor) {
-  const fonte = process.env.EMAIL_ENCRYPTION_KEY || process.env.NEXTAUTH_SECRET
+  const nova = process.env.CHAVE_CIFRA_DADOS?.trim()
+  const usarNova = !!nova && nova.length >= 32
+  const fonte = usarNova ? nova : (process.env.EMAIL_ENCRYPTION_KEY || process.env.NEXTAUTH_SECRET)
   if (!fonte) {
-    throw new Error("Defina EMAIL_ENCRYPTION_KEY ou NEXTAUTH_SECRET — é a chave que cifra os segredos.")
+    throw new Error("Defina CHAVE_CIFRA_DADOS — é a chave que cifra os segredos.")
   }
-  const key = createHash("sha256").update(fonte).digest()
+  const key = createHash("sha256").update(usarNova ? `nuflow:dados:v2:${fonte}` : fonte).digest()
   const iv = randomBytes(12)
   const cipher = createCipheriv("aes-256-gcm", key, iv)
   const dados = Buffer.concat([cipher.update(valor, "utf8"), cipher.final()])
   const tag = cipher.getAuthTag()
-  return [iv, tag, dados].map((p) => p.toString("base64url")).join(".")
+  return (usarNova ? "v2." : "") + [iv, tag, dados].map((p) => p.toString("base64url")).join(".")
 }
 
 const client = new pg.Client({
