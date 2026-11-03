@@ -1,4 +1,4 @@
-import { conexaoBanco } from "@/lib/banco-conexao"
+import { adapterDoBanco } from "@/lib/banco-pool"
 // Cliente do caminho de AUTENTICAÇÃO.
 //
 // Existe por um problema de ordem, não por conveniência: o login precisa ler
@@ -19,14 +19,12 @@ import { conexaoBanco } from "@/lib/banco-conexao"
 // Com RLS ativo, AUTH_DATABASE_URL é obrigatória. Sem RLS, usa fallback legado. É o estado de hoje, antes da
 // virada: sem RLS ligada para o role atual, um cliente só resolve tudo.
 import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
 
 const globalParaAuth = globalThis as unknown as { prismaAuth: PrismaClient | undefined }
 
 function criar() {
-  const url = conexaoBanco("auth")
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url }),
+    adapter: adapterDoBanco("auth"),
     log: ["error"],
   })
 }

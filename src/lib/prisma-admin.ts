@@ -1,4 +1,4 @@
-import { conexaoBanco } from "@/lib/banco-conexao"
+import { adapterDoBanco } from "@/lib/banco-pool"
 // Cliente de ADMINISTRAÇÃO — atravessa o isolamento de propósito.
 //
 // A tela de Super Admin lista TODAS as empresas: é o painel de quem opera a
@@ -14,15 +14,13 @@ import { conexaoBanco } from "@/lib/banco-conexao"
 // Todo uso daqui passa antes por `requireSuperAdmin`. Se você está importando
 // este arquivo numa rota que não faz essa checagem, está errado.
 import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
 
 const globalParaAdmin = globalThis as unknown as { prismaAdmin: PrismaClient | undefined }
 
 function criar() {
   // RLS ativo exige ADMIN_DATABASE_URL explícita. Fallback só no modo legado.
-  const url = conexaoBanco("admin")
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url }),
+    adapter: adapterDoBanco("admin"),
     log: ["error"],
   })
 }
