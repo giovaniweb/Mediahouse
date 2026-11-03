@@ -40,6 +40,22 @@ export function estadoDaRotina(ultima: { createdAt: Date; status: string } | nul
 const QUINZE_MIN = 15 * 60000
 const FALHAS_PARA_ALERTA = 3
 
+/**
+ * Falhas de entrega da última hora numa empresa. "sem_config" fica de fora: é
+ * aviso de regra para empresa que nunca ligou o WhatsApp, não envio que falhou.
+ * Chamar dentro do comOrg da empresa.
+ */
+export function contarFalhasDeEntrega(organizacaoId: string, agora = new Date()) {
+  return prisma.saidaWhatsapp.count({
+    where: {
+      organizacaoId,
+      estado: { in: ["falhou", "desconhecido", "expirado"] },
+      updatedAt: { gt: new Date(agora.getTime() - 60 * 60000) },
+      OR: [{ motivo: null }, { motivo: { not: "sem_config" } }],
+    },
+  })
+}
+
 async function empresasAtivas(): Promise<string[]> {
   const orgs = await prismaAuth.organizacao.findMany({ where: { ativo: true }, select: { id: true }, take: 100 })
   return orgs.map((o) => o.id)
@@ -66,9 +82,7 @@ export async function conferirSaude(agora = new Date()) {
           },
           select: { id: true },
         }),
-        prisma.saidaWhatsapp.count({
-          where: { organizacaoId: org, estado: { in: ["falhou", "desconhecido", "expirado"] }, updatedAt: { gt: new Date(agora.getTime() - 60 * 60000) } },
-        }),
+        contarFalhasDeEntrega(org, agora),
         prisma.agenteExecucao.findMany({
           where: { organizacaoId: org, agente: { in: Object.keys(CADENCIAS_PADRAO).map((c) => `heartbeat:${c}`) } },
           orderBy: { createdAt: "desc" },
@@ -78,7 +92,8 @@ export async function conferirSaude(agora = new Date()) {
       ])
       if (cfg?.ativo) whatsappConfigurado = true
       if (cfg?.ativo && parada) filaParada = true
-      falhasRecentes += falhas
+      // Empresa sem WhatsApp ligado não tem entrega para falhar.
+      if (cfg?.ativo) falhasRecentes += falhas
       for (const b of batidas) {
         const nome = b.agente.replace(/^heartbeat:/, "")
         const atual = ultimas.get(nome)
