@@ -1,4 +1,4 @@
-// Conexões com o banco: um Pool por URL, no processo inteiro.
+// Conexões com o banco: um Pool por papel (app, auth, admin), no processo inteiro.
 //
 // O pooler do Supabase aceita 200 clientes ao mesmo tempo no modo transação
 // (porta 6543). Em 03/11/2026 um deploy no meio do expediente passou desse teto
@@ -6,45 +6,54 @@
 //
 // Antes, cada cliente Prisma (app, auth, admin) abria o próprio Pool com o
 // padrão do `pg`: até 10 conexões cada, e a ociosa só fechava depois de 10 s.
-// O relógio da ociosa não anda com a instância congelada. A Vercel congela a
-// instância logo depois da resposta, e na troca de deploy as instâncias da
-// versão anterior ficavam paradas segurando as conexões abertas enquanto as da
-// versão nova abriam as delas.
+// O Next avalia esses arquivos duas vezes por processo (rotas de API e páginas),
+// então eram dois Pools de cada. E o relógio da ociosa não anda com a instância
+// congelada: a Vercel congela a instância logo depois da resposta, e na troca
+// de deploy as instâncias da versão anterior ficavam paradas segurando as
+// conexões abertas enquanto as da versão nova abriam as delas.
 //
 // Três travas, e cada uma resolve uma parte:
-//   1. Um Pool por URL, guardado em `globalThis`. O Next pode avaliar os
-//      arquivos do Prisma mais de uma vez no mesmo processo, e app e auth usam
-//      a mesma URL enquanto o RLS estiver desligado: tudo cai no mesmo Pool.
-//   2. No máximo 5 conexões por Pool, e a ociosa fecha em 5 s.
+//   1. Um Pool por papel, guardado em `globalThis`: as duas avaliações do Next
+//      caem no mesmo Pool.
+//   2. Teto por papel (app 10, auth 5, admin 5), ociosa fechando em 5 s, e no
+//      máximo 10 s de espera por uma conexão livre — espera maior vira erro,
+//      não função pendurada até o limite da Vercel.
 //   3. `attachDatabasePool` segura a instância acordada até as ociosas
 //      fecharem, antes de a Vercel congelá-la. Fora da Vercel não faz nada.
 //
-// O RLS não muda: `app.org_id` continua valendo por transação (SET LOCAL), e
-// nenhum código abre ajuste de sessão. Dividir o Pool não deixa resíduo.
+// Os papéis não dividem Pool, nem quando a URL é a mesma (RLS desligado): uma
+// transação do app que consulte o auth por dentro pega a conexão do Pool do
+// auth e não fica esperando por uma que ela mesma segura. Transação que pede
+// uma segunda conexão do PRÓPRIO cliente trava com qualquer teto; o
+// `auditar:transacoes` barra isso no CI.
+//
+// O RLS não muda: `app.org_id` continua valendo por transação (SET LOCAL).
 import { Pool } from "pg"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { attachDatabasePool } from "@vercel/functions/db-connections"
 import { conexaoBanco } from "@/lib/banco-conexao"
 
-export const LIMITE_POOL = { max: 5, idleTimeoutMillis: 5_000 } as const
-
-const globalParaPools = globalThis as unknown as { nuflowPools?: Map<string, Pool> }
-
 type Tipo = "app" | "auth" | "admin"
 type Env = Readonly<Record<string, string | undefined>>
 
+export const LIMITE_POOL: Record<Tipo, number> = { app: 10, auth: 5, admin: 5 }
+export const TEMPOS_POOL = { idleTimeoutMillis: 5_000, connectionTimeoutMillis: 10_000 } as const
+
+const globalParaPools = globalThis as unknown as { nuflowPools?: Map<string, Pool> }
+
 export function poolDoBanco(tipo: Tipo, env: Env = process.env): Pool {
   const url = conexaoBanco(tipo, env)
+  const chave = `${tipo} ${url ?? ""}`
   const pools = (globalParaPools.nuflowPools ??= new Map())
-  const existente = pools.get(url ?? "")
+  const existente = pools.get(chave)
   if (existente) return existente
 
-  const pool = new Pool({ connectionString: url, ...LIMITE_POOL })
+  const pool = new Pool({ connectionString: url, max: LIMITE_POOL[tipo], ...TEMPOS_POOL })
   // Sem ouvinte, uma conexão ociosa que o pooler derruba vira exceção sem dono
   // e mata o processo. O do Prisma só existe entre o connect e o $disconnect.
   pool.on("error", erro => console.error(`[banco] conexão ociosa caiu (${tipo}):`, erro.message))
   attachDatabasePool(pool)
-  pools.set(url ?? "", pool)
+  pools.set(chave, pool)
   return pool
 }
 

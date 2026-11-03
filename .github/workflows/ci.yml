@@ -100,6 +100,11 @@ jobs:
       - name: Perfis globais sem dado privado (auditor estático)
         run: npm run auditar:perfil-global
 
+      # Transação que consulta por fora do tx pede uma segunda conexão do Pool e
+      # trava quando o Pool enche de transações assim (src/lib/banco-pool.ts).
+      - name: Transações sem segunda conexão (auditor estático)
+        run: npm run auditar:transacoes
+
       - name: Migrations aplicam num banco limpo
         run: npx prisma migrate deploy
 

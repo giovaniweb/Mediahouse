@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "auditar:tenancy": "node scripts/auditar-tenancy.mjs",
     "auditar:perfil-global": "node scripts/auditar-perfil-global.mjs",
+    "auditar:transacoes": "node scripts/auditar-transacoes.mjs",
     "checar:fundacao": "node scripts/checar-fundacao.mjs",
     "verificar:rls": "node scripts/verificar-rls.mjs",
     "db:migrate": "node scripts/guarda-banco.mjs && prisma migrate dev",

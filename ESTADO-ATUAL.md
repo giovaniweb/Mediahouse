@@ -86,9 +86,10 @@ SEGURANCA.md               as 6 CVEs transitivas e por que não são alcançáve
 `prisma.config.ts` carrega `.env.local` primeiro, então **todo comando de Prisma
 aponta para produção por padrão**. `DIRECT_URL` (porta 5432) para DDL,
 `DATABASE_URL` (6543, pooler) para consulta. Escrita passa por
-`scripts/guarda-banco.mjs`. Na aplicação, cada processo abre um Pool por URL,
-com no máximo 5 conexões e ociosa fechando em 5 s (`src/lib/banco-pool.ts`): o
-pooler aceita 200 clientes, e passar disso derrubou a produção em 03/11/2026.
+`scripts/guarda-banco.mjs`. Na aplicação, cada processo abre um Pool por papel
+(app 10, auth 5, admin 5), com ociosa fechando em 5 s (`src/lib/banco-pool.ts`):
+o pooler aceita 200 clientes, e passar disso derrubou a produção em 03/11/2026.
+Dentro de `$transaction`, tudo passa pelo `tx` — o `auditar:transacoes` barra o resto.
 
 **Eixo central: `Organizacao`.** Quase todo modelo tem `organizacaoId`. `Usuario`
 é global e se liga por `UsuarioOrganizacao` (papel, categoria, funcaoProfissional,
