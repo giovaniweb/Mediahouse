@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
-import { ehGestor, temPapel } from "@/lib/papel"
+import { ehGestor } from "@/lib/papel"
 import { escopoComEspelho } from "@/lib/compartilhamento"
 
 // Monta o filtro de demandas ligadas a um usuário dentro de uma organização.
@@ -96,27 +96,17 @@ export async function areaTravadaDaPessoa(
 }
 
 /**
- * O recorte do gestor de eventos, ou null para os demais papéis: os cards
- * ligados a um evento, mais os que a própria pessoa pediu (um ou outro basta).
- *
- * De 03/06 a 03/11/2026 eram só os de evento. Na Contourline nenhum dos 826
- * cards tem evento ligado, e a Mariana (gestora de eventos) via o quadro vazio,
- * com 39 pedidos dela abertos em aprovação, edição e para postar. Quem pede
- * acompanha o que pediu, como qualquer solicitante.
- *
- * É um OR: quem chama põe no AND[], para não brigar com a busca e a data.
- */
-export function recorteDoGestorDeEventos(session: Session): Prisma.DemandaWhereInput | null {
-  if (!temPapel(session, "gestor_eventos")) return null
-  return { OR: [{ eventoGestaoId: { not: null } }, { solicitanteId: session.user.id }] }
-}
-
-/**
  * Tudo o que a pessoa vê no quadro, num filtro só: a empresa (e o que ela
- * executa por espelhamento), a área do vínculo, "minhas demandas" quando não
- * tem `verTodasDemandas`, e o recorte do gestor de eventos. São as mesmas peças
- * que GET /api/demandas monta; o assistente (MCP) da pessoa usa esta, para ler
- * nem mais nem menos do que ela leria na tela.
+ * executa por espelhamento), a área do vínculo e "minhas demandas" quando não
+ * tem `verTodasDemandas`. São as mesmas peças que GET /api/demandas monta; o
+ * assistente (MCP) da pessoa usa esta, para ler nem mais nem menos do que ela
+ * leria na tela.
+ *
+ * O gestor de eventos não tem regra própria: vale a caixinha "Ver Todas
+ * Demandas", como para os outros papéis. De 03/06 a 04/11/2026 ele só via os
+ * cards ligados a um evento, mesmo com a caixinha marcada; na Contourline, que
+ * não tem nenhum, a Mariana (gestora de eventos, 39 pedidos abertos) via o
+ * quadro vazio.
  */
 export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
   const gestor = ehGestor(session)
@@ -127,7 +117,5 @@ export async function oQueAPessoaVe(session: Session, organizacaoId: string): Pr
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) and.push({ area })
   if (minhas) and.push(minhas)
-  const eventos = recorteDoGestorDeEventos(session)
-  if (eventos) and.push(eventos)
   return { AND: and }
 }
