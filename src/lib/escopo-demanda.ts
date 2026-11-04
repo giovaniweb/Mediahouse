@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
-import { ehGestor, temPapel } from "@/lib/papel"
+import { ehGestor } from "@/lib/papel"
 import { escopoComEspelho } from "@/lib/compartilhamento"
 
 // Monta o filtro de demandas ligadas a um usuário dentro de uma organização.
@@ -97,10 +97,16 @@ export async function areaTravadaDaPessoa(
 
 /**
  * Tudo o que a pessoa vê no quadro, num filtro só: a empresa (e o que ela
- * executa por espelhamento), a área do vínculo, "minhas demandas" quando não
- * tem `verTodasDemandas`, e só cards de evento para o gestor de eventos. São as
- * mesmas peças que GET /api/demandas monta; o assistente (MCP) da pessoa usa
- * esta, para ler nem mais nem menos do que ela leria na tela.
+ * executa por espelhamento), a área do vínculo e "minhas demandas" quando não
+ * tem `verTodasDemandas`. São as mesmas peças que GET /api/demandas monta; o
+ * assistente (MCP) da pessoa usa esta, para ler nem mais nem menos do que ela
+ * leria na tela.
+ *
+ * O gestor de eventos não tem regra própria: vale a caixinha "Ver Todas
+ * Demandas", como para os outros papéis. De 03/06 a 04/11/2026 ele só via os
+ * cards ligados a um evento, mesmo com a caixinha marcada; na Contourline, que
+ * não tem nenhum, a Mariana (gestora de eventos, 39 pedidos abertos) via o
+ * quadro vazio.
  */
 export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
   const gestor = ehGestor(session)
@@ -111,6 +117,5 @@ export async function oQueAPessoaVe(session: Session, organizacaoId: string): Pr
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) and.push({ area })
   if (minhas) and.push(minhas)
-  if (temPapel(session, "gestor_eventos")) and.push({ eventoGestaoId: { not: null } })
   return { AND: and }
 }

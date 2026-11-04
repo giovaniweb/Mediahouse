@@ -2,7 +2,7 @@ import { filtroFilaTrabalho, estadoHistorico } from "@/lib/acervo-regras"
 import { numeroPagina } from "@/lib/publicacao-midia"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { ehGestor, temPapel } from "@/lib/papel"
+import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PRAZO_PAUSADO } from "@/lib/status"
 import { getOrgId, semOrg } from "@/lib/org"
@@ -83,8 +83,11 @@ export async function GET(req: NextRequest) {
   if (tipoVideo) where.tipoVideo = tipoVideo
   if (linhaProjetoId) where.linhaProjetoId = linhaProjetoId
   if (eventoGestaoId) where.eventoGestaoId = eventoGestaoId
-  // Gestor de eventos só acompanha cards ligados a eventos (não o pipeline todo)
-  if (temPapel(session, "gestor_eventos")) where.eventoGestaoId = { not: null }
+  // Gestor de eventos não tem trava própria: vale o "Ver Todas Demandas" do
+  // escopo, lá em cima, como para os outros papéis. De 03/06 a 04/11/2026 havia
+  // aqui `where.eventoGestaoId = { not: null }` para ele: com a caixinha
+  // marcada, via só os cards ligados a evento (na Contourline, nenhum), e o
+  // filtro por evento escolhido na tela era trocado por "qualquer evento".
 
   // Condições que internamente usam OR entram todas em AND[], para não se
   // sobrescreverem. Antes, filtro de data e busca disputavam o mesmo `where.OR`
