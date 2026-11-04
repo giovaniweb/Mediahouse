@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import type { Demanda, Evento, CustoVideomaker, Prisma } from "@prisma/client"
 import { dataCalendario, dataEmSaoPaulo, somarDias } from "@/lib/datas"
 import { regrasDaGravacao, type RegraDaGravacao } from "@/lib/avisos-gravacao-textos"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 
 export const VERSAO_REGRAS = 1
 export const hashRegra = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex")
@@ -21,6 +22,15 @@ export function regrasDemanda(d: DemandaRegra, temArquivoFinal: boolean, agora: 
   if (aberta && d.dataCaptacao && d.dataCaptacao > agora && d.dataCaptacao.getTime()-agora.getTime() <= 86400_000) regras.push("captacao")
   return regras
 }
+/**
+ * Gravação Externa tem os avisos dela (lib/avisos-gravacao-textos.ts, tabela
+ * aprovada em 29/10/2026), pela rotina "gravacoes": o videomaker recebe só a
+ * véspera, a colinha, a cobrança do material e o pagamento. As regras de
+ * demanda acima (prazo, sem atualização, captação) continuam como alerta na
+ * central, mas não viram WhatsApp para ela.
+ */
+export const ehGravacaoExterna = (d: { tipoGravacao?: string | null; tipoVideo?: string | null; departamento?: string | null }) =>
+  !!d.tipoGravacao || ehSolicitacaoDeCobertura(d)
 export const revisaoEvento = (e: Evento) => hashRegra([e.inicio,e.fim,e.lembreteMinutos,e.usuarioId,e.editorId,e.videomakerId,e.status,e.titulo,e.local,e.privado])
 export function lembreteVigente(e: Pick<Evento,"inicio"|"lembreteMinutos"|"status">, agora: Date) {
   return ["agendado","confirmado"].includes(e.status) && e.inicio > agora &&
@@ -36,7 +46,8 @@ export async function contextoRegraValido(tx: Prisma.TransactionClient, org: str
   if (!empresa?.ativo || empresa.ambienteTeste) return false
   if (c.tipo === "demanda") {
     const d = await tx.demanda.findFirst({where:{id:c.id,organizacaoId:org},include:{arquivos:{where:{tipoArquivo:"final"},select:{id:true},take:1}}})
-    return !!d && d.updatedAt.toISOString() === c.revisao && regrasDemanda(d,d.arquivos.length>0,agora).includes(c.regra as RegraDemanda)
+    // Aviso de demanda já na fila não sai para gravação externa (ver ehGravacaoExterna).
+    return !!d && !ehGravacaoExterna(d) && d.updatedAt.toISOString() === c.revisao && regrasDemanda(d,d.arquivos.length>0,agora).includes(c.regra as RegraDemanda)
   }
   if (c.tipo === "evento") {
     const e = await tx.evento.findFirst({where:{id:c.id,organizacaoId:org}})

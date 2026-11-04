@@ -1,5 +1,5 @@
 import { describe,it,expect } from "vitest"
-import { regrasDemanda,lembreteVigente,cobrancaValida } from "@/lib/regras-operacionais"
+import { regrasDemanda,lembreteVigente,cobrancaValida,ehGravacaoExterna } from "@/lib/regras-operacionais"
 describe("regras puras O04",()=>{
   it.each([8,14,22])("lembrete às %ih respeita minutos e cron atrasado",hora=>{
     const inicio=new Date(`2026-09-29T${String(hora).padStart(2,"0")}:00:00-03:00`)
@@ -25,5 +25,12 @@ describe("regras puras O04",()=>{
     expect(cobrancaValida({...c,statusPagamento:"pago"},agora)).toBe(false)
     expect(cobrancaValida({...c,statusPagamento:"contestado"},agora)).toBe(false)
     expect(cobrancaValida({...c,dataVencimento:new Date("2026-09-30")},agora)).toBe(false)
+  })
+  it("gravação externa: tipo de gravação, pedido de cobertura ou departamento eventos",()=>{
+    expect(ehGravacaoExterna({tipoGravacao:"entrega_equipamento"})).toBe(true)
+    expect(ehGravacaoExterna({tipoVideo:"cobertura_evento",departamento:"marketing"})).toBe(true)
+    expect(ehGravacaoExterna({tipoVideo:"reels",departamento:"eventos"})).toBe(true)
+    expect(ehGravacaoExterna({tipoGravacao:null,tipoVideo:"reels",departamento:"marketing"})).toBe(false)
+    expect(ehGravacaoExterna({})).toBe(false)
   })
 })
