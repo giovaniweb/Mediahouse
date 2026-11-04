@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { precisaTranscodeConferindo, enqueueTranscode } from "@/lib/transcode"
 import { requireDemandaOrg } from "@/lib/org"
 import { caminhoMidia, subirArquivo } from "@/lib/midia"
+import { guardaDoEnvio } from "@/lib/quem-envia-arquivo"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -56,6 +57,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
   }
+  // Gravar, trocar e apagar: o card tem de ser da pessoa, e ela, de quem sobe
+  // arquivo nele (lib/quem-envia-arquivo). A empresa sozinha não basta.
+  const negado = await guardaDoEnvio(session, guard.organizacaoId, id, tipo as TipoVideo)
+  if (negado) return negado
 
   if ((url !== null && (typeof url !== "string" || !fonteUploadValida(url, guard.organizacaoId, id, tipo === "brutos" ? "bruto" : tipo as "final" | "documento"))) ||
     (thumbnailUrl !== undefined && (typeof thumbnailUrl !== "string" || !fonteUploadValida(thumbnailUrl, guard.organizacaoId, id, "thumbnail"))) ||
@@ -136,6 +141,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: `tipo deve ser: ${TIPOS_VALIDOS.join(", ")}` }, { status: 400 })
   }
+  const negado = await guardaDoEnvio(session, guard.organizacaoId, id, tipo as TipoVideo)
+  if (negado) return negado
 
   if (!MIME_VALIDOS.includes(file.type)) {
     return NextResponse.json(

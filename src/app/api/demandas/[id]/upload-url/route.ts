@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
 import { caminhoMidia, urlDeUpload } from "@/lib/midia"
+import { guardaDoEnvio } from "@/lib/quem-envia-arquivo"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -49,6 +50,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!tipo || !TIPOS_VALIDOS.includes(tipo)) {
     return NextResponse.json({ error: `tipo deve ser: ${TIPOS_VALIDOS.join(", ")}` }, { status: 400 })
   }
+  // A empresa não basta: o card tem de ser da pessoa, e ela, de quem sobe
+  // arquivo nele (lib/quem-envia-arquivo).
+  const negado = await guardaDoEnvio(session, guard.organizacaoId, id, tipo)
+  if (negado) return negado
 
   const demanda = await prisma.demanda.findUnique({ where: { id }, select: { id: true } })
   if (!demanda) return NextResponse.json({ error: "Demanda não encontrada" }, { status: 404 })

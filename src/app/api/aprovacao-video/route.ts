@@ -5,6 +5,7 @@ import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { getOrgId, semOrg, requireDemandaOrg } from "@/lib/org"
+import { guardaDoEnvio } from "@/lib/quem-envia-arquivo"
 
 // GET /api/aprovacao-video?status=pendente&area=audiovisual|design
 // Aprovações de entregável da organização logada. Existe porque a aba "Vídeos"
@@ -53,6 +54,11 @@ export async function POST(req: NextRequest) {
     // empresa gerava link público e sobrescrevia o linkCliente de uma demanda alheia.
     const guard = await requireDemandaOrg(session, demandaId as string)
     if (guard instanceof NextResponse) return guard
+    // A versão que vai ao cliente é o vídeo final: mesma régua de quem o sobe
+    // (lib/quem-envia-arquivo). Só a empresa deixava qualquer pessoa dela trocar
+    // o link do cliente de um card alheio e avisar o solicitante pelo WhatsApp.
+    const negado = await guardaDoEnvio(session, guard.organizacaoId, demandaId as string, "final")
+    if (negado) return negado
 
     const demanda = await prisma.demanda.findUnique({
       where: { id: demandaId as string },
