@@ -42,8 +42,9 @@ import {
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { MidiaDaGravacao } from "@/components/jobs/MidiaDaGravacao"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
-import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -306,6 +307,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [compartilhando, setCompartilhando] = useState(false)
   // null = ainda não mexemos nesta sessão; a origem da verdade é a demanda.
   const [linkPublicoLocal, setLinkPublicoLocal] = useState<string | null | undefined>(undefined)
+  // Gravação externa: o link que está sendo trocado no "Agora" (o único lugar
+  // de envio). O "Trocar" do bloco "Mídia da gravação" abre o campo lá.
+  const [trocaNoAgora, setTrocaNoAgora] = useState<TrocaNoAgora | null>(null)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -514,8 +518,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           dataCaptacao: diaComHorarioMantido(demanda?.dataCaptacao, dataCaptacao),
           videomakerId: videomakerId || null,
           editorId: editorId || null,
-          linkBrutos: linkBrutos || null,
-          linkFinal: linkFinal || null,
+          // Na gravação externa os links não têm campo neste formulário: entram
+          // e trocam pelo "Agora". Reenviá-los daqui gravaria um valor velho.
+          ...(ehCobertura ? {} : { linkBrutos: linkBrutos || null, linkFinal: linkFinal || null }),
           localGravacao: localGravacao || null,
           classificacao: classificacao || null,
           produtoId: produtoId || null,
@@ -563,10 +568,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
   // O vídeo final da gravação, subido no card (Giovani, 04/11/2026): o mesmo
   // envio de Demandas, com o nome do arquivo para quem baixa. Grava o linkFinal
-  // e o Arquivo; o passo anda depois, no "Pronto" ou no "Marcar como enviado".
+  // e o Arquivo; o passo anda depois, no "Pronto" ou no "Marcar como enviado"
+  // (ou já, se era o vídeo pronto que faltava no material). Devolve o endereço.
   async function enviarVideoDaGravacao(file: File, onProgress: (pct: number) => void) {
-    await enviarVideo(id, file, "final", { contentTypeFallback: "video/mp4", comThumbnail: true, nomeArquivo: file.name, onProgress })
+    const url = await enviarVideo(id, file, "final", { contentTypeFallback: "video/mp4", comThumbnail: true, nomeArquivo: file.name, onProgress })
     await mutate()
+    return url
+  }
+
+  // "Trocar" no bloco de mídia: abre o campo no "Agora" e leva até ele.
+  function trocarNoAgora(qual: TrocaNoAgora) {
+    setTrocaNoAgora(qual)
+    requestAnimationFrame(() => document.getElementById("agora-da-gravacao")?.scrollIntoView({ behavior: "smooth", block: "center" }))
   }
 
   // O link público da gravação (o do Compartilhar): o vídeo subido abre para o
@@ -1321,6 +1334,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 onAtualizar={() => mutate()}
                 onEnviarVideo={enviarVideoDaGravacao}
                 onLinkPublico={garantirLinkPublico}
+                troca={trocaNoAgora}
+                onTroca={setTrocaNoAgora}
                 rodape={<>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
@@ -1899,7 +1914,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
           <Recolhivel ativo={ehCobertura} titulo="Arquivos">
-          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          {/* ── Mídia da gravação (só leitura) ─────────────────────────────
+              Gravação externa: a mídia entra só pelo "Agora" (Giovani,
+              04/11/2026). Aqui fica o que chegou, num bloco só, com as pastas
+              antigas; "Trocar" abre o campo no "Agora". */}
+          {ehCobertura ? (
+            <MidiaDaGravacao
+              job={demanda}
+              podeEditar={podeEditar}
+              referencias={demanda.referencia}
+              onTocar={setPlayerUrl}
+              onTrocar={trocarNoAgora}
+            />
+          ) : (
+          /* ── Arquivos da produção (Demandas) ──────────────────────────── */
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
               <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
@@ -1963,6 +1991,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          )}
 
           {/* ── Documentos anexados ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2026,7 +2055,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           {/* ── Pastas de Cobertura ──────────────────────────────────────── */}
-          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+          {/* Na gravação externa as pastas antigas aparecem na "Mídia da gravação", só para ler. */}
+          {!ehCobertura && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
               <div className={surface.sectionHead}>
                 <h2 className={surface.sectionTitle}><FolderOpen aria-hidden /> Pastas da cobertura</h2>

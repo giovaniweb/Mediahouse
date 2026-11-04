@@ -25,6 +25,8 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import { PRESETS } from "@/lib/permissoes"
 import { PATCH as registrarVideo } from "@/app/api/demandas/[id]/upload-video/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
+import { PUT as editarCard } from "@/app/api/demandas/[id]/route"
+import { patchDosBrutos, statusAoGravarMaterial } from "@/lib/etapas-da-gravacao"
 import { GET as acompanhar } from "@/app/api/publico/demanda/[token]/route"
 import { GET as eu } from "@/app/api/me/route"
 import { podeLerMidia } from "@/lib/midia-acesso"
@@ -186,5 +188,77 @@ describe("vídeo final subido no card da gravação", () => {
     const res = await eu()
     expect(res.status).toBe(200)
     expect((await res.json()).permissoes).toMatchObject({ editarDemanda: false })
+  })
+})
+
+// Giovani, 04/11/2026: "2 lugar para anexar a midia, temos que simplificar".
+// A mídia entra só pelo "Agora", que grava pelas mesmas rotas do card: o PUT
+// do link e, se completou o material, o PATCH do status (avancarGravacao).
+describe("um lugar só para a mídia: o \"Agora\"", () => {
+  const editar = (id: string, corpo: object) => editarCard(
+    new NextRequest(`http://localhost/api/demandas/${id}`, { method: "PUT", body: JSON.stringify(corpo) }), params(id))
+
+  /** Gravou; falta o que o videomaker entrega. */
+  async function noMaterial(edicaoPor: "equipe" | "sem_edicao" | "videomaker", extra: { linkBrutos?: string } = {}) {
+    const id = `${p}-${randomUUID().slice(0, 6)}`
+    await db.demanda.create({ data: {
+      id, organizacaoId: org, codigo: id, titulo: "Gravação na clínica", descricao: "Entrega de equipamento.",
+      area: "audiovisual", departamento: "eventos", tipoVideo: "cobertura_evento", cidade: "Curitiba",
+      solicitanteId: admin, videomakerId: vm, edicaoPor, statusInterno: "captacao_realizada", statusVisivel: "producao",
+      ...extra,
+    } })
+    return id
+  }
+
+  /** O que o "Agora" faz ao salvar um link (PassoDaGravacao: gravar). */
+  async function gravarNoAgora(id: string, patch: { linkBrutos?: string; linkFinal?: string }) {
+    const job = await db.demanda.findUniqueOrThrow({ where: { id } })
+    const status = statusAoGravarMaterial(job, patch)
+    expect((await editar(id, patch)).status).toBe(200)
+    if (status) expect((await moverPara(id, status)).status).toBe(200)
+    return db.demanda.findUniqueOrThrow({ where: { id } })
+  }
+
+  it("os brutos colados no \"Agora\" ficam no card e a gravação vai para a edição", async () => {
+    const id = await noMaterial("equipe")
+    como(admin, "admin")
+    const d = await gravarNoAgora(id, patchDosBrutos({ edicaoPor: "equipe" }, "https://drive.example/brutos"))
+    expect(d).toMatchObject({ linkBrutos: "https://drive.example/brutos", linkFinal: null, statusInterno: "brutos_enviados" })
+  })
+
+  it("sem edição, os brutos viram o vídeo final e a gravação vai direto para o envio", async () => {
+    const id = await noMaterial("sem_edicao")
+    como(admin, "admin")
+    const d = await gravarNoAgora(id, patchDosBrutos({ edicaoPor: "sem_edicao" }, "https://drive.example/brutos"))
+    expect(d).toMatchObject({ linkBrutos: "https://drive.example/brutos", linkFinal: "https://drive.example/brutos", statusInterno: "aprovado" })
+  })
+
+  it("edição do videomaker: o vídeo pronto subido no material completa a entrega", async () => {
+    const id = await noMaterial("videomaker", { linkBrutos: "https://drive.example/brutos" })
+    const url = subido(id)
+    como(admin, "admin")
+    expect((await registrar(id, { url, tipo: "final", nomeArquivo: "pronto.mp4" })).status).toBe(200)
+    const job = await db.demanda.findUniqueOrThrow({ where: { id } })
+    // O "Agora" decide pelo card de antes do envio (sem o vídeo) e o endereço devolvido.
+    expect(statusAoGravarMaterial({ ...job, linkFinal: null }, { linkFinal: url })).toBe("aprovado")
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ linkFinal: url, statusInterno: "aprovado" })
+  })
+
+  it("\"Trocar\" fora do material só troca o link: o passo fica onde está", async () => {
+    const { id } = await naEdicao()
+    como(admin, "admin")
+    const d = await gravarNoAgora(id, patchDosBrutos({ edicaoPor: "equipe" }, "https://drive.example/brutos-certos"))
+    expect(d).toMatchObject({ linkBrutos: "https://drive.example/brutos-certos", statusInterno: "editando" })
+  })
+
+  it("\"Editar\" e salvar o card da gravação não mexe nos links (eles não têm campo ali)", async () => {
+    const { id } = await naEdicao()
+    const url = subido(id)
+    como(admin, "admin")
+    expect((await registrar(id, { url, tipo: "final" })).status).toBe(200)
+    // O corpo do salvar() do card na gravação externa: sem linkBrutos e linkFinal.
+    expect((await editar(id, { cidade: "Londrina", dataLimite: null, videomakerId: vm, editorId: null, localGravacao: null, classificacao: null, produtoId: null })).status).toBe(200)
+    expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ cidade: "Londrina", linkBrutos: "https://drive.example/brutos", linkFinal: url })
   })
 })
