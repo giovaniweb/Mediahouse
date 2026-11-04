@@ -71,6 +71,8 @@ export function FichaDoJob({
   onAvancar,
   onConfirmarVideomaker,
   onAtualizar,
+  onEnviarVideo,
+  onLinkPublico,
   rodape,
   children,
 }: {
@@ -84,6 +86,10 @@ export function FichaDoJob({
   onConfirmarVideomaker: (aceite: boolean) => void
   /** Recarrega o card depois de agir na nota. */
   onAtualizar: () => Promise<unknown> | void
+  /** Sobe o vídeo final no passo da edição ou do envio (o envio de Demandas). */
+  onEnviarVideo?: (file: File, onProgress: (pct: number) => void) => Promise<void>
+  /** Garante o link público e devolve o token (o vídeo subido abre com ele). */
+  onLinkPublico?: () => Promise<string | null>
   /** Linha final (de quem é a vez). A etapa já está na trilha. */
   rodape?: ReactNode
   children?: ReactNode
@@ -117,6 +123,8 @@ export function FichaDoJob({
             onAvancar={onAvancar}
             onConfirmarVideomaker={onConfirmarVideomaker}
             onEscalar={onEscalar}
+            onEnviarVideo={onEnviarVideo}
+            onLinkPublico={onLinkPublico}
           />
           <EntregasDoVideomaker job={job} podeEditar={podeEditar} onSalvar={onSalvar} onAvancar={onAvancar} onAtualizar={onAtualizar} />
           {children}

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
-import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Loader2, MinusCircle, Send } from "lucide-react"
+import { useRef, useState, type ReactNode } from "react"
+import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, Download, ExternalLink, Film, Loader2, MinusCircle, Send, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
@@ -10,6 +10,7 @@ import {
   etapaDaGravacao,
   faltaOMaterial,
   foiCancelada,
+  linkDoVideoParaOCliente,
   linkValido,
   materialCompleto,
   passoDaGravacao,
@@ -20,6 +21,8 @@ import {
   type PagamentoDoCard,
   type PassoDaTrilha,
 } from "@/lib/etapas-da-gravacao"
+import { LIMITE_VIDEO_NA_TELA_MB } from "@/lib/upload-video"
+import { cn } from "@/lib/utils"
 import surface from "@/components/demandas/DemandSurface.module.css"
 import styles from "./FichaDoJob.module.css"
 import { TAG_DA_NOTA } from "./etiquetas"
@@ -55,6 +58,11 @@ export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais" | "custos"> &
   notasFiscais?: { status: string; token?: string | null; url?: string | null }[] | null
   /** O convite do videomaker nesta gravação: o link dele para entregar (lib/entrega-da-gravacao.ts). */
   conviteEntrega?: { token: string } | null
+  /** O link público (Compartilhar, /d/<token>): é com ele que o vídeo subido abre para o cliente. */
+  publicToken?: string | null
+  publicTokenAtivo?: boolean | null
+  /** Os arquivos do card: o nome do vídeo final subido vem daqui. */
+  arquivos?: { tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo?: string | null }[] | null
 }
 
 const primeiroNome = (nome?: string | null) => nome?.trim().split(/\s+/)[0] ?? "o videomaker"
@@ -88,6 +96,12 @@ function copiar(texto: string, aviso: string) {
   navigator.clipboard.writeText(texto).then(() => toast.success(aviso), () => toast.error("Não foi possível copiar."))
 }
 
+/** O nome do arquivo do vídeo final, quando ele foi subido (o link colado não tem nome). */
+function nomeDoVideoFinal(job: GravacaoDoPasso): string | null {
+  if (!job.linkFinal) return null
+  return job.arquivos?.find((a) => a.tipoArquivo === "final" && (a.url === job.linkFinal || a.originalUrl === job.linkFinal))?.nomeArquivo ?? null
+}
+
 /** O passo da vez: título, uma frase e só o campo e os botões que cabem agora. */
 export function AgoraDaGravacao({
   job,
@@ -95,6 +109,8 @@ export function AgoraDaGravacao({
   onAvancar,
   onConfirmarVideomaker,
   onEscalar,
+  onEnviarVideo,
+  onLinkPublico,
 }: {
   job: GravacaoDoPasso
   podeEditar: boolean
@@ -103,10 +119,22 @@ export function AgoraDaGravacao({
   onConfirmarVideomaker: (aceite: boolean) => void
   /** Leva a "Equipe e contexto", onde se escala o videomaker. */
   onEscalar: () => void
+  /**
+   * Sobe o vídeo final pelo envio de Demandas (lib/upload-video) e recarrega o
+   * card: o linkFinal passa a ser o arquivo. Lança com a frase para a tela.
+   */
+  onEnviarVideo?: (file: File, onProgress: (pct: number) => void) => Promise<void>
+  /** Garante o link público (o do Compartilhar) e devolve o token dele. */
+  onLinkPublico?: () => Promise<string | null>
 }) {
   const passo = passoDaGravacao(job)
   const [link, setLink] = useState("")
   const [salvando, setSalvando] = useState<string | null>(null)
+  // O vídeo final entra por uma de duas portas, como no envio de Demandas.
+  const [porta, setPorta] = useState<"arquivo" | "link">("arquivo")
+  const [enviando, setEnviando] = useState<{ nome: string; pct: number } | null>(null)
+  const [trocando, setTrocando] = useState(false)
+  const arquivoRef = useRef<HTMLInputElement>(null)
   const vm = primeiroNome(job.videomaker?.nome)
 
   async function avancar(chave: string, statusInterno: string, patch?: Record<string, unknown>) {
@@ -121,11 +149,43 @@ export function AgoraDaGravacao({
     }
   }
 
+  async function enviarArquivo(file: File) {
+    if (!onEnviarVideo) return
+    setEnviando({ nome: file.name, pct: 0 })
+    try {
+      await onEnviarVideo(file, (pct) => setEnviando({ nome: file.name, pct }))
+      toast.success("Vídeo final enviado.")
+      setTrocando(false)
+      setLink("")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível enviar o vídeo.")
+    } finally {
+      setEnviando(null)
+      if (arquivoRef.current) arquivoRef.current.value = ""
+    }
+  }
+
+  // O link que vai para o cliente. O vídeo subido só abre sem login com o
+  // token do link público; sem ele, gera o link (como o Compartilhar faz).
+  async function copiarLinkDoVideo() {
+    const origem = window.location.origin
+    let destino = linkDoVideoParaOCliente(job.linkFinal, job.publicTokenAtivo ? job.publicToken : null, origem)
+    if (!destino && onLinkPublico) {
+      try {
+        destino = linkDoVideoParaOCliente(job.linkFinal, await onLinkPublico(), origem)
+      } catch (e) {
+        return toast.error(e instanceof Error ? e.message : "Não foi possível gerar o link do vídeo.")
+      }
+    }
+    if (!destino) return toast.error("Não foi possível gerar o link do vídeo.")
+    copiar(destino, "Link do vídeo copiado — abre sem login")
+  }
+
   const botao = (chave: string, rotulo: string, acao: () => void, principal = false, precisaLink = false) => (
     <button
       type="button"
       onClick={acao}
-      disabled={salvando !== null || (precisaLink && !link.trim())}
+      disabled={salvando !== null || enviando !== null || (precisaLink && !link.trim())}
       className={principal ? surface.btnPrimary : surface.btn}
     >
       {salvando === chave ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}
@@ -143,6 +203,57 @@ export function AgoraDaGravacao({
       value={link}
       onChange={(e) => setLink(e.target.value)}
     />
+  )
+
+  // O vídeo final que já está no card: o nome do arquivo subido, ou "Vídeo final" para o link colado.
+  const videoAtual = job.linkFinal ? (
+    <div className={cn(surface.fileRow, "w-full")}>
+      <span className={surface.fileBadge}><Film className="w-4 h-4" aria-hidden /></span>
+      <span className={surface.fileName}>
+        <span>{nomeDoVideoFinal(job) ?? "Vídeo final"}</span>
+        <span>Vídeo final</span>
+      </span>
+      <a className={surface.linkBtn} href={job.linkFinal} target="_blank" rel="noopener noreferrer">Abrir <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
+    </div>
+  ) : null
+
+  // "Enviar arquivo" | "Colar link": as abas da janela de envio de Demandas.
+  const portasDoVideo = (
+    <div className="w-full flex flex-col gap-3">
+      {onEnviarVideo && (
+        <div className={surface.segmented} style={{ margin: 0 }}>
+          <button type="button" aria-pressed={porta === "arquivo"} onClick={() => { setPorta("arquivo"); setLink("") }} disabled={enviando !== null}>Enviar arquivo</button>
+          <button type="button" aria-pressed={porta === "link"} onClick={() => setPorta("link")} disabled={enviando !== null}>Colar link</button>
+        </div>
+      )}
+      {onEnviarVideo && porta === "arquivo" ? (
+        <>
+          <input
+            ref={arquivoRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            aria-label="Arquivo do vídeo final"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void enviarArquivo(f) }}
+          />
+          {enviando ? (
+            <div className={surface.fileRow} role="status" aria-live="polite">
+              <span className={surface.fileBadge}><Loader2 className="w-4 h-4 animate-spin" aria-hidden /></span>
+              <span className={surface.fileName}>
+                <span>{enviando.nome}</span>
+                <span>Enviando… {enviando.pct}%</span>
+              </span>
+            </div>
+          ) : (
+            <button type="button" className={surface.dropzone} onClick={() => arquivoRef.current?.click()} disabled={salvando !== null}>
+              <Upload className="w-5 h-5" aria-hidden />
+              <span>Escolher arquivo</span>
+              <span className={surface.hint}>mp4, mov, avi, webm · até {LIMITE_VIDEO_NA_TELA_MB} MB</span>
+            </button>
+          )}
+        </>
+      ) : campoDoLink("Link do vídeo final")}
+    </div>
   )
 
   let titulo = ""
@@ -185,12 +296,21 @@ export function AgoraDaGravacao({
 
     case "edicao":
       titulo = job.editor?.nome ? `Na edição com ${primeiroNome(job.editor.nome)}` : "Na edição"
-      dica = "Com o vídeo final pronto, cole o link."
+      dica = onEnviarVideo ? "Com o vídeo final pronto, suba o arquivo ou cole o link." : "Com o vídeo final pronto, cole o link."
+      // Subido o arquivo, o vídeo já está no card: "Pronto" libera sem pedir link.
       if (podeEditar) conteudo = (
         <>
           {job.linkBrutos && <a className={surface.linkBtn} href={job.linkBrutos} target="_blank" rel="noopener noreferrer">Abrir o material <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>}
-          {campoDoLink("Link do vídeo final")}
-          <div>{botao("pronto", "Pronto para enviar ao cliente", () => avancar("pronto", "aprovado", { linkFinal: link.trim() }), true, true)}</div>
+          {videoAtual && !trocando && !enviando ? (
+            <>
+              {videoAtual}
+              <button type="button" className={surface.linkBtn} onClick={() => setTrocando(true)}>Trocar o vídeo</button>
+            </>
+          ) : portasDoVideo}
+          <div className="flex flex-wrap gap-2">
+            {botao("pronto", "Pronto para enviar ao cliente", () => avancar("pronto", "aprovado", link.trim() ? { linkFinal: link.trim() } : undefined), true, !job.linkFinal)}
+            {trocando && !enviando && <button type="button" className={surface.btn} onClick={() => { setTrocando(false); setLink("") }}>Cancelar</button>}
+          </div>
         </>
       )
       break
@@ -203,9 +323,9 @@ export function AgoraDaGravacao({
           {job.linkFinal ? (
             <div className="flex flex-wrap items-center gap-3">
               <a className={surface.linkBtn} href={job.linkFinal} target="_blank" rel="noopener noreferrer">Abrir o vídeo <ExternalLink className="w-3.5 h-3.5" aria-hidden /></a>
-              <button type="button" className={surface.linkBtn} onClick={() => copiar(job.linkFinal!, "Link do vídeo copiado")}>Copiar link <Copy className="w-3.5 h-3.5" aria-hidden /></button>
+              <button type="button" className={surface.linkBtn} onClick={() => void copiarLinkDoVideo()}>Copiar link <Copy className="w-3.5 h-3.5" aria-hidden /></button>
             </div>
-          ) : campoDoLink("Link do vídeo final")}
+          ) : portasDoVideo}
           <div>
             {botao("enviado", "Marcar como enviado", () => avancar("enviado", "entregue_cliente", link.trim() ? { linkFinal: link.trim() } : undefined), true, !job.linkFinal)}
           </div>

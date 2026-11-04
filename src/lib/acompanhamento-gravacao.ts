@@ -66,6 +66,13 @@ export type AcompanhamentoDaGravacao = {
   tom: "andamento" | "ok" | "alerta"
   /** null quando não há caminho a mostrar (recusado ou encerrado). */
   trilha: PassoDaTrilha[] | null
+  /**
+   * O vídeo final já pode aparecer na página: do "Enviar ao cliente" em
+   * diante, como em Demandas ele aparece no "Aprovado". Antes de 04/11/2026 só
+   * aparecia depois de enviado, e o cliente que abria o link mandado pela
+   * Débora antes de ela marcar "enviado" não via o vídeo.
+   */
+  videoPronto: boolean
 }
 
 const SITUACAO: Record<ReturnType<typeof passoDaGravacao>, string> = {
@@ -90,9 +97,9 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
   }
 
   // Recusado na aprovação: encerrado sem nunca sair da entrada.
-  if (g.statusInterno === "encerrado" && g.statusVisivel === "entrada") return { ...base, situacao: "Pedido não aprovado", tom: "alerta", trilha: null }
+  if (g.statusInterno === "encerrado" && g.statusVisivel === "entrada") return { ...base, situacao: "Pedido não aprovado", tom: "alerta", trilha: null, videoPronto: false }
   // Encerrada depois da entrega segue o caminho normal ("Enviado ao cliente").
-  if (foiCancelada(g)) return { ...base, situacao: "Gravação cancelada", tom: "alerta", trilha: null }
+  if (foiCancelada(g)) return { ...base, situacao: "Gravação cancelada", tom: "alerta", trilha: null, videoPronto: false }
 
   const trilha = trilhaDoVideo(g, hoje).map((p): PassoDaTrilha => {
     // As palavras de dentro viram as de quem acompanha de fora.
@@ -104,12 +111,12 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
 
   if (AGUARDANDO_APROVACAO.includes(g.statusInterno as StatusInterno)) {
     return {
-      ...base, situacao: "Pedido em análise", tom: "andamento",
+      ...base, situacao: "Pedido em análise", tom: "andamento", videoPronto: false,
       trilha: trilha.map((p) => (p.id === "pedido" ? { ...p, estado: "agora", detalhe: "em análise" } : { ...p, estado: "depois", detalhe: null })),
     }
   }
 
   const passo = passoDaGravacao(g)
   const situacao = passo === "material" && faltaOMaterial(g, hoje) ? "Gravado, esperando o material" : SITUACAO[passo]
-  return { ...base, situacao, tom: passo === "concluido" ? "ok" : "andamento", trilha }
+  return { ...base, situacao, tom: passo === "concluido" ? "ok" : "andamento", trilha, videoPronto: passo === "enviar" || passo === "concluido" }
 }

@@ -444,3 +444,34 @@ export function linkValido(v: string | null | undefined): boolean {
     return false
   }
 }
+
+// ── O vídeo final para o cliente ─────────────────────────────────────────────
+//
+// Desde 04/11/2026 (pedido do Giovani) o vídeo final pode ser subido no card,
+// além de colado como link. O arquivo subido mora no bucket privado: o endereço
+// dele (/api/midia/...) só abre com login. Para o cliente, ele vai com o token
+// do link público da gravação — o mesmo do Compartilhar e da página
+// /d/<token>, que lib/midia-acesso já aceita para o vídeo final daquela demanda.
+
+/** O vídeo foi subido no NuFlow (bucket privado), e não colado como link de fora. */
+export function videoNoNuflow(url: string | null | undefined): boolean {
+  return !!url?.trim().startsWith("/api/midia/")
+}
+
+/**
+ * O link do vídeo final que abre para o cliente, sem login. Link de fora
+ * (Drive) segue como está; o arquivo subido ganha o endereço completo e o token
+ * do link público. Sem link público ativo, o arquivo subido não tem como abrir
+ * para quem não tem conta: null (nada de mandar um link que pede login).
+ */
+export function linkDoVideoParaOCliente(
+  linkFinal: string | null | undefined,
+  tokenPublico: string | null | undefined,
+  base: string,
+): string | null {
+  const video = linkFinal?.trim()
+  if (!video) return null
+  if (!videoNoNuflow(video)) return video
+  if (!tokenPublico) return null
+  return `${base.trim().replace(/\/$/, "")}${video}?token=${encodeURIComponent(tokenPublico)}`
+}
