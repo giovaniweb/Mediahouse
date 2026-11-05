@@ -61,28 +61,46 @@ describe("Pools no banco real", () => {
     expect(pico.banco).toBeLessThanOrEqual(LIMITE_POOL.app + LIMITE_POOL.auth + LIMITE_POOL.admin)
   })
 
-  // O padrão que o `auditar:transacoes` barra. Trava com qualquer teto (com o
-  // Pool antigo de 10 também); o que se garante aqui é que termina, com erro, no
-  // timeout da transação, e que o Pool volta a atender depois.
-  it("transação que pede uma segunda conexão do próprio cliente falha em tempo limitado e o Pool se recupera", async () => {
+  // O padrão que o `auditar:transacoes` barra: cada transação segura a sua
+  // conexão e pede outra do mesmo Pool. Com o Pool cheio delas, ninguém anda até
+  // vencer um relógio — o da transação ou o da espera por conexão do Pool, o que
+  // vier primeiro. Trava com qualquer teto (com o Pool antigo de 10 também).
+  //
+  // Depois do relógio o travamento se desfaz em cascata: a primeira a falhar
+  // devolve a conexão, e a vizinha cujo relógio ainda não venceu pode terminar.
+  // QUANTAS falham depende de milissegundos entre os relógios — o CI do #131
+  // pegou uma vizinha terminando (05/11). Não se conta falha. Prova-se o que não
+  // depende de sorte: ninguém termina antes do relógio, há falha e ela é a desse
+  // relógio, tudo termina logo depois dele e o Pool volta a atender.
+  it.each([
+    { quem: "o timeout da transação", timeout: 5_000, relogio: 5_000, erro: "Transaction API error" },
+    { quem: "a espera máxima do Pool", timeout: 20_000, relogio: TEMPOS_POOL.connectionTimeoutMillis, erro: "timeout exceeded when trying to connect" },
+  ])("transação que pede uma segunda conexão do próprio cliente: $quem desfaz o travamento e o Pool se recupera", async ({ timeout, relogio, erro }) => {
     // Barreira: todas seguram a sua conexão antes de pedir a segunda, senão a
-    // primeira a chegar ainda acha conexão livre e o teste vira loteria.
+    // primeira a chegar ainda acha conexão livre e não há travamento.
     let dentro = 0
     let soltar = () => {}
     const todasDentro = new Promise<void>(r => { soltar = r })
-    const inicio = Date.now()
-    const r = await Promise.allSettled(Array.from({ length: LIMITE_POOL.app }, () =>
+    const inicio = performance.now()
+    const fim = await Promise.all(Array.from({ length: LIMITE_POOL.app }, () =>
       prismaBase.$transaction(async tx => {
         await tx.$queryRaw`SELECT 1`
         if (++dentro === LIMITE_POOL.app) soltar()
         await todasDentro
         return prismaBase.usuario.count()
-      }),
+      }, { timeout }).then(
+        () => ({ em: performance.now() - inicio, erro: null }),
+        (e: Error) => ({ em: performance.now() - inicio, erro: e.message }),
+      ),
     ))
-    expect(r.every(x => x.status === "rejected")).toBe(true)
-    expect(Date.now() - inicio).toBeLessThan(TEMPOS_POOL.connectionTimeoutMillis)
+    const tempos = fim.map(f => f.em)
+    const falhas = fim.flatMap(f => (f.erro ? [f.erro] : []))
+    expect(Math.min(...tempos)).toBeGreaterThanOrEqual(relogio - 50)
+    expect(falhas.length).toBeGreaterThan(0)
+    for (const f of falhas) expect(f).toContain(erro)
+    expect(Math.max(...tempos)).toBeLessThan(relogio + 2_000)
     await expect(prismaBase.organizacao.count()).resolves.toBeTypeOf("number")
-  }, 20_000)
+  }, 30_000)
 
   it("conexão ociosa fecha sozinha depois de 5 s", async () => {
     await Promise.all([prismaBase.$queryRaw`SELECT 1`, prismaAuth.$queryRaw`SELECT 1`, prismaAdmin.$queryRaw`SELECT 1`])
