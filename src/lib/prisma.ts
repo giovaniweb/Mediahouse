@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
-import { conexaoBanco } from "@/lib/banco-conexao"
+import { adapterDoBanco } from "@/lib/banco-pool"
 import { comRls } from "@/lib/prisma-rls"
 
 const globalForPrisma = globalThis as unknown as {
@@ -9,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: conexaoBanco("app") })
+  const adapter = adapterDoBanco("app")
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
