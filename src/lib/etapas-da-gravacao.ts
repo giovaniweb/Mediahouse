@@ -545,7 +545,7 @@ export function midiaDaGravacao(j: {
     const igual = itens.find((i) => mesmoLink(i.url, u))
     if (igual) {
       // Sem edição, os brutos são o vídeo final: uma linha que diz as duas coisas.
-      if (qual === "video" && !antigo && !igual.toca) Object.assign(igual, { rotulo: "Brutos e vídeo final", toca: true })
+      if (qual === "video" && !antigo && !igual.antigo && !igual.toca) Object.assign(igual, { rotulo: "Brutos e vídeo final", toca: true })
       return
     }
     // A pasta antiga é pasta, não vídeo: abre, não toca.
@@ -563,9 +563,12 @@ export function midiaDaGravacao(j: {
       antigo,
     })
   }
+  // O que vale hoje entra antes das pastas antigas: uma pasta antiga com o
+  // mesmo link do vídeo final não pode "engolir" o vídeo (revisão do #134,
+  // 05/11/2026). O vídeo ficava preso numa linha "pasta antiga" sem "Trocar".
   por("brutos", "Brutos", j.linkBrutos, false)
-  por("brutos", "Pasta do material bruto", j.linkFolderBrutos, true)
   por("video", "Vídeo final", j.linkFinal, false)
+  por("brutos", "Pasta do material bruto", j.linkFolderBrutos, true)
   por("video", "Pasta do material pronto", j.linkFolderFinal, true)
   return itens
 }

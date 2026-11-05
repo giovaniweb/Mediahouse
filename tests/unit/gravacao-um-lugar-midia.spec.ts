@@ -53,6 +53,11 @@ describe("a mídia do card, num bloco só", () => {
     expect(itens).toEqual([expect.objectContaining({ qual: "brutos", rotulo: "Brutos e vídeo final", toca: true })])
   })
 
+  it("a pasta antiga dos brutos com o link do vídeo final não engole o vídeo (revisão do #134)", () => {
+    const itens = midiaDaGravacao({ linkFolderBrutos: `${drive}/?usp=sharing`, linkFinal: drive })
+    expect(itens).toEqual([expect.objectContaining({ qual: "video", rotulo: "Vídeo final", toca: true, antigo: false })])
+  })
+
   it("a pasta antiga igual aos brutos não vira vídeo: fica a linha dos brutos", () => {
     expect(midiaDaGravacao({ linkBrutos: drive, linkFolderFinal: drive }))
       .toEqual([expect.objectContaining({ rotulo: "Brutos", toca: false })])
@@ -239,5 +244,19 @@ describe("o bloco \"Arquivos\": o lugar único de ver e de mandar", () => {
     expect(leitor).not.toContain(">Adicionar<")
     expect(leitor).not.toContain(">Trocar<")
     expect(leitor).not.toContain("Enviar instruções")
+  })
+})
+
+describe("pasta antiga com o mesmo link do vídeo (revisão do #134)", () => {
+  const drive = "https://drive.google.com/drive/folders/pasta-unica"
+  it("sem edição: o vídeo chegou e pode ser trocado", () => {
+    const video = itensDosArquivos({ statusInterno: "aprovado", edicaoPor: "sem_edicao", linkFolderBrutos: drive, linkFinal: drive }, "2026-11-05")
+      .find((i) => i.qual === "video" && i.situacao !== "pasta antiga")
+    expect(video).toMatchObject({ estado: "feito", situacao: "chegou", podeMandar: true })
+  })
+  it("nós editamos: o vídeo chegou, não fica como falta", () => {
+    const video = itensDosArquivos({ statusInterno: "aprovado", edicaoPor: "equipe", linkBrutos: "https://drive.google.com/brutos", linkFolderBrutos: drive, linkFinal: drive }, "2026-11-05")
+      .find((i) => i.qual === "video" && i.situacao !== "pasta antiga")
+    expect(video).toMatchObject({ estado: "feito", situacao: "chegou", podeMandar: true })
   })
 })
