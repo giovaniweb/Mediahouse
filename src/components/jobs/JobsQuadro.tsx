@@ -1,9 +1,8 @@
 "use client"
 
 import type { DropResult } from "@hello-pangea/dnd"
-import { estaAtrasada } from "@/lib/status"
 import { ETAPAS, etapaDaGravacao, type EtapaDaGravacao } from "@/lib/etapas-da-gravacao"
-import { momentoDoJob } from "@/lib/ficha-do-job"
+import { ordenarColuna } from "@/lib/vencimento-no-quadro"
 import { QuadroArrastavel, type ColunaQuadro } from "@/components/kanban/QuadroArrastavel"
 import { JobCard, type JobDoQuadro } from "./JobCard"
 
@@ -31,11 +30,6 @@ const COLUNAS: ColunaQuadro[] = ETAPAS.map((e) => ({
   id: e.id, label: e.rotulo, dica: e.dica, color: CORES[e.id].borda, dot: CORES[e.id].ponto,
 }))
 
-// Antes da gravação, a pergunta é "qual é a próxima": ordem do dia marcado,
-// sem data por último. Depois dela, o que queima primeiro.
-const PELA_DATA: EtapaDaGravacao[] = ["a_agendar", "agendado"]
-const diaDe = (j: JobDoQuadro) => momentoDoJob(j)?.dia ?? "9999-12-31"
-
 export function JobsQuadro({
   jobs,
   onAbrir,
@@ -49,25 +43,12 @@ export function JobsQuadro({
   /** Abre o Concluído: a pendência filtrada (nota, pagamento) tem cards lá. */
   abrirConcluido?: boolean
 }) {
-  // Atrasadas no topo, depois urgentes, depois o prazo mais perto. Quem abre o
-  // quadro precisa ver o que queima; por isso aqui não há ordem manual, e
-  // soltar o card na mesma coluna não muda nada.
+  // O que vence primeiro fica em cima (Giovani, 05/11/2026): antes da gravação,
+  // o dia e a hora dela; depois, o prazo; atrasado no topo; sem data no fim
+  // (lib/vencimento-no-quadro.ts). Quem abre o quadro precisa ver o que queima;
+  // por isso aqui não há ordem manual, e soltar o card na mesma coluna não muda nada.
   const daColuna = (coluna: string) =>
-    jobs
-      .filter((j) => etapaDaGravacao(j) === coluna)
-      .sort((a, b) => {
-        if (PELA_DATA.includes(coluna as EtapaDaGravacao)) {
-          const da = diaDe(a), db = diaDe(b)
-          if (da !== db) return da < db ? -1 : 1
-        }
-        const atrA = estaAtrasada(a), atrB = estaAtrasada(b)
-        if (atrA !== atrB) return atrA ? -1 : 1
-        const urgA = a.prioridade === "urgente", urgB = b.prioridade === "urgente"
-        if (urgA !== urgB) return urgA ? -1 : 1
-        const pa = a.dataLimite ? new Date(a.dataLimite).getTime() : Infinity
-        const pb = b.dataLimite ? new Date(b.dataLimite).getTime() : Infinity
-        return pa - pb
-      })
+    ordenarColuna(jobs.filter((j) => etapaDaGravacao(j) === coluna), coluna as EtapaDaGravacao)
 
   function soltar(r: DropResult) {
     if (!r.destination || r.destination.droppableId === r.source.droppableId) return

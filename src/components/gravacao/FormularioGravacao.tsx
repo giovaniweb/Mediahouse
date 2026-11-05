@@ -45,6 +45,7 @@ import { TIPOS_DE_GRAVACAO, perguntaBrinde } from "@/lib/etapas-da-gravacao"
 import { ModalFormulario } from "@/components/demandas/ModalFormulario"
 import { BannerRascunho } from "@/components/demandas/BannerRascunho"
 import { Seta } from "@/components/demandas/campos-formulario"
+import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 import { CampoBrutos, CampoReferencias, ZonaAnexos, juntarReferencias } from "@/components/demandas/SecaoArquivos"
 import { SeletorProdutos, type Produto } from "@/components/demandas/SeletorProdutos"
 
@@ -497,15 +498,16 @@ function NovoJob({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (criado
 
         <Bloco id="job-quem-grava" titulo="Quem grava" dica="Videomakers externos da empresa. Sem ninguém, a gravação entra para escalar depois.">
           <Campo id="videomaker" label="Videomaker (opcional)">
-            <div className="relative">
-              <select id="videomaker" value={videomaker} onChange={e => setVideomaker(e.target.value)} className={selectClass}>
-                <option value="">Escalar depois</option>
-                {videomakers.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}</option>
-                ))}
-              </select>
-              <Seta />
-            </div>
+            {/* Com busca por nome ou cidade (Giovani, 05/11/2026), a mesma lista da ficha. */}
+            <EscolhaComBusca
+              id="videomaker"
+              value={videomaker}
+              onChange={setVideomaker}
+              grupos={[{ opcoes: videomakers.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null })) }]}
+              vazio="Escalar depois"
+              ariaLabel="Videomaker"
+              className={inputClass}
+            />
           </Campo>
         </Bloco>
 

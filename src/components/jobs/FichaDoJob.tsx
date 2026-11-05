@@ -15,8 +15,9 @@ import {
   situacaoDaEquipe,
   telefoneLegivel,
 } from "@/lib/ficha-do-job"
-import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
-import { AgoraDaGravacao, EntregasDoVideomaker, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
+import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { AgoraDaGravacao, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
+import { ArquivosDaGravacao } from "./ArquivosDaGravacao"
 import { CancelarGravacao } from "./CancelarGravacao"
 import styles from "./FichaDoJob.module.css"
 
@@ -24,9 +25,10 @@ import styles from "./FichaDoJob.module.css"
  * A ficha da gravação externa: o card aberto inteiro gira em torno dela.
  *
  * Pedido do Giovani (28 e 29/10/2026): o card estava confuso. Agora é a linha
- * do tempo no topo; à esquerda o que pede ação — "Agora" (o único lugar para
- * mandar mídia, desde 04/11) e as entregas do videomaker (brutos, vídeo
- * pronto, nota: só o que chegou); à direita os dados da gravação, na
+ * do tempo no topo e, logo abaixo, a faixa "Agora" (a frase e o botão da
+ * etapa). Desde 05/11, à esquerda fica o bloco "Arquivos" — o lugar único de
+ * ver e mandar o material, com o que o videomaker entregou e os documentos —
+ * e à direita os dados da gravação, na
  * ordem da mensagem que chega no WhatsApp: tipo, equipamento, cliente, quando,
  * onde, e depois quem vai, edição e o que levar. Tudo edita ali mesmo; faltando,
  * diz que falta (em âmbar) em vez de esconder.
@@ -53,6 +55,8 @@ export type JobDaFicha = Omit<GravacaoDoPasso, "statusInterno" | "videomaker" | 
   videomaker?: Pessoa | null
   responsaveis?: { usuario?: { nome?: string | null } | null }[] | null
   produtos?: { produto?: { nome?: string | null } | null }[] | null
+  /** As referências do pedido, uma por linha (mostradas em "Arquivos"). */
+  referencia?: string | null
 }
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
@@ -72,10 +76,10 @@ export function FichaDoJob({
   onAvancar,
   onConfirmarVideomaker,
   onAtualizar,
-  onEnviarVideo,
+  onEnviarArquivo,
   onLinkPublico,
-  troca,
-  onTroca,
+  onTocar,
+  documentos,
   rodape,
   children,
 }: {
@@ -89,13 +93,14 @@ export function FichaDoJob({
   onConfirmarVideomaker: (aceite: boolean) => void
   /** Recarrega o card depois de agir na nota. */
   onAtualizar: () => Promise<unknown> | void
-  /** Sobe o vídeo final no "Agora" (o envio de Demandas) e devolve o endereço dele. */
-  onEnviarVideo?: (file: File, onProgress: (pct: number) => void) => Promise<string>
+  /** Sobe os brutos ou o vídeo final em "Arquivos" (o envio de Demandas) e devolve o endereço. */
+  onEnviarArquivo?: (tipo: "brutos" | "final", file: File, onProgress: (pct: number) => void) => Promise<string>
   /** Garante o link público e devolve o token (o vídeo subido abre com ele). */
   onLinkPublico?: () => Promise<string | null>
-  /** O link que está sendo trocado no "Agora" (o "Trocar" do bloco de Arquivos abre lá). */
-  troca?: TrocaNoAgora | null
-  onTroca?: (troca: TrocaNoAgora | null) => void
+  /** Toca o vídeo no player do card. */
+  onTocar?: (url: string) => void
+  /** Os documentos do card, com o "Anexar", no fim do bloco "Arquivos". */
+  documentos?: ReactNode
   /** Linha final (de quem é a vez). A etapa já está na trilha. */
   rodape?: ReactNode
   children?: ReactNode
@@ -121,21 +126,28 @@ export function FichaDoJob({
     <section aria-label="Ficha da gravação" className={styles.ficha}>
       <TrilhaDoVideo job={job} />
 
+      <AgoraDaGravacao
+        job={job}
+        podeEditar={podeEditar}
+        onAvancar={onAvancar}
+        onConfirmarVideomaker={onConfirmarVideomaker}
+        onEscalar={onEscalar}
+        onLinkPublico={onLinkPublico}
+      />
+
       <div className={styles.colunas}>
         <div className={styles.principal}>
-          <AgoraDaGravacao
+          <ArquivosDaGravacao
             job={job}
             podeEditar={podeEditar}
             onSalvar={onSalvar}
             onAvancar={onAvancar}
-            onConfirmarVideomaker={onConfirmarVideomaker}
-            onEscalar={onEscalar}
-            onEnviarVideo={onEnviarVideo}
-            onLinkPublico={onLinkPublico}
-            troca={troca}
-            onTroca={onTroca}
+            onAtualizar={onAtualizar}
+            onEnviarArquivo={onEnviarArquivo}
+            onTocar={onTocar}
+            documentos={documentos}
+            referencias={job.referencia}
           />
-          <EntregasDoVideomaker job={job} podeEditar={podeEditar} onAtualizar={onAtualizar} />
           {children}
         </div>
 
