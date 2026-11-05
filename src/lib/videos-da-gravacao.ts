@@ -143,3 +143,25 @@ export function videosDaGravacao<A extends VideoParaMostrar>(linkFinal: string |
   if (finais.some((a) => a.url === link || a.originalUrl === link)) return finais
   return [{ id: null, url: link, nomeArquivo: null, thumbnailUrl: null }]
 }
+
+/**
+ * "Adicionar outro vídeo" com o link colado antes, que não virou Arquivo: ele
+ * vira registro primeiro. Sem isso, o vídeo novo passava a ser o linkFinal e o
+ * antigo sumia do card e da página de quem pediu (revisão do #135). No "Trocar",
+ * nada: o antigo é o que sai.
+ */
+export function linkAntigoParaGuardar(videos: VideoParaMostrar[], trocando: VideoParaMostrar | null): string | null {
+  if (trocando) return null
+  return videos.find((v) => !v.id)?.url ?? null
+}
+
+/**
+ * Depois do "Trocar", sai o registro do trocado, menos quando o novo é o mesmo
+ * vídeo: o envio não duplica o registro (lib/arquivo-registro devolve o que já
+ * existe), e apagar o trocado apagaria o próprio vídeo (revisão do #135).
+ */
+export function trocadoSai(trocando: VideoParaMostrar | null, novo: string): trocando is VideoParaMostrar & { id: string } {
+  if (!trocando?.id) return false
+  const n = novo.trim()
+  return trocando.url !== n && trocando.originalUrl !== n
+}

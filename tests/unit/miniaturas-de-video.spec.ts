@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 // Giovani, 05/11/2026: "crie uma thumbnail para a pessoa saber que tem um vídeo
 // ali anexado ... se tiver mais de um vídeo, coloca mais de uma thumbnail ... um
 // íconezinho de play ... abrir ali ampliado no sistema".
-import { capaDoVideo, comoTocar, idDoDrive, idDoYoutube, nomeDoVideo, provedorDoVideo, videosDaGravacao } from "@/lib/videos-da-gravacao"
+import { capaDoVideo, comoTocar, idDoDrive, idDoYoutube, linkAntigoParaGuardar, nomeDoVideo, provedorDoVideo, trocadoSai, videosDaGravacao } from "@/lib/videos-da-gravacao"
 import { MiniaturasDeVideo } from "@/components/video/MiniaturasDeVideo"
 import { ArquivosDaGravacao } from "@/components/jobs/ArquivosDaGravacao"
 import { AgoraDaGravacao, type GravacaoDoPasso } from "@/components/jobs/PassoDaGravacao"
@@ -139,5 +139,32 @@ describe("no bloco \"Arquivos\": as miniaturas do vídeo final", () => {
     }))
     expect(faixa(job({ statusInterno: "aprovado", ...dois }))).toContain("Copiar link dos vídeos")
     expect(faixa(job({ statusInterno: "aprovado", linkFinal: subido, arquivos: [dois.arquivos[0]] }))).toContain("Copiar link do vídeo")
+  })
+})
+
+describe("somar e trocar sem perder vídeo (revisão do #135)", () => {
+  const registrado = { id: "arq-1", url: subido, originalUrl: "/api/midia/org/org-1/videos/dem-1/original.mov" }
+  const linkAntigo = { id: null, url: drive }
+
+  it("\"Adicionar outro vídeo\" sobre o link antigo sem registro guarda o antigo antes", () => {
+    expect(linkAntigoParaGuardar(videosDaGravacao(drive, []), null)).toBe(drive)
+  })
+
+  it("no \"Trocar\" o antigo sai, e com tudo registrado não há o que guardar", () => {
+    expect(linkAntigoParaGuardar([linkAntigo], linkAntigo)).toBeNull()
+    expect(linkAntigoParaGuardar([registrado], null)).toBeNull()
+    expect(linkAntigoParaGuardar([], null)).toBeNull()
+  })
+
+  it("trocar pelo mesmo vídeo não apaga o registro, nem pelo original de antes da conversão", () => {
+    expect(trocadoSai(registrado, subido)).toBe(false)
+    expect(trocadoSai(registrado, ` ${subido} `)).toBe(false)
+    expect(trocadoSai(registrado, registrado.originalUrl)).toBe(false)
+  })
+
+  it("trocar por outro vídeo tira o registro do trocado; o link sem registro não tem o que tirar", () => {
+    expect(trocadoSai(registrado, subido2)).toBe(true)
+    expect(trocadoSai(linkAntigo, subido2)).toBe(false)
+    expect(trocadoSai(null, subido2)).toBe(false)
   })
 })

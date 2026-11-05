@@ -15,7 +15,7 @@ import {
   type TrocaNoAgora,
 } from "@/lib/etapas-da-gravacao"
 import { paraDownload } from "@/lib/midia-download"
-import { nomeDoVideo, provedorDoVideo, videosDaGravacao, type VideoParaMostrar } from "@/lib/videos-da-gravacao"
+import { linkAntigoParaGuardar, nomeDoVideo, provedorDoVideo, trocadoSai, videosDaGravacao, type VideoParaMostrar } from "@/lib/videos-da-gravacao"
 import { MiniaturasDeVideo } from "@/components/video/MiniaturasDeVideo"
 import { LightboxDeVideo, type VideoDoLightbox } from "@/components/video/LightboxDeVideo"
 import { LIMITE_VIDEO_NA_TELA_MB } from "@/lib/upload-video"
@@ -122,10 +122,17 @@ export function ArquivosDaGravacao({
   }
 
   // Trocou um vídeo: o novo já está registrado; sai o registro do trocado (o
-  // arquivo continua guardado). O link antigo sem registro sai sozinho, porque
-  // o linkFinal passou a ser o novo.
-  async function tirarOTrocado() {
-    if (trocando?.id && onRemoverVideo) await onRemoverVideo(trocando.id)
+  // arquivo continua guardado), menos quando o novo é o mesmo vídeo. O link
+  // antigo sem registro sai sozinho, porque o linkFinal passou a ser o novo.
+  async function tirarOTrocado(novo: string) {
+    if (onRemoverVideo && trocadoSai(trocando, novo)) await onRemoverVideo(trocando.id)
+  }
+
+  // Somou um vídeo a um link antigo sem registro: o antigo vira registro antes,
+  // para não sumir quando o linkFinal passar a ser o novo.
+  async function guardarOLinkAntigo() {
+    const antigo = linkAntigoParaGuardar(videos, trocando)
+    if (antigo && onRegistrarVideo) await onRegistrarVideo(antigo)
   }
 
   async function removerVideo(v: VideoParaMostrar) {
@@ -162,9 +169,10 @@ export function ArquivosDaGravacao({
       if (qual === "video" && onRegistrarVideo) {
         // O link do vídeo vira um registro do card, como o arquivo subido: dá
         // para ter mais de um, e cada um tem miniatura.
+        await guardarOLinkAntigo()
         await onRegistrarVideo(valor)
         andou = await gravar(qual, { linkFinal: valor }, { linkFinal: valor })
-        await tirarOTrocado()
+        await tirarOTrocado(valor)
       } else {
         andou = await gravar(qual, qual === "brutos" ? patchDosBrutos(job, valor) : { linkFinal: valor })
       }
@@ -181,11 +189,12 @@ export function ArquivosDaGravacao({
     if (!onEnviarArquivo) return
     setEnviando({ qual, nome: file.name, pct: 0 })
     try {
+      if (qual === "video") await guardarOLinkAntigo()
       const url = await onEnviarArquivo(qual === "brutos" ? "brutos" : "final", file, (pct) => setEnviando({ qual, nome: file.name, pct }))
       // O registro do envio já gravou o link do arquivo; sem edição, o vídeo final segue os brutos.
       const patch = qual === "brutos" ? patchDosBrutos(job, url) : { linkFinal: url }
       const andou = await gravar(qual, patch, qual === "brutos" ? { linkBrutos: url } : { linkFinal: url })
-      if (qual === "video") await tirarOTrocado()
+      if (qual === "video") await tirarOTrocado(url)
       if (!andou) toast.success(qual === "brutos" ? "Brutos enviados." : "Vídeo final enviado.")
       fechar(qual)
     } catch (e) {
