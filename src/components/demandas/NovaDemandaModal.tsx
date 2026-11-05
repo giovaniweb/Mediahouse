@@ -24,6 +24,7 @@ import { ModalFormulario } from "./ModalFormulario"
 import { BannerRascunho } from "./BannerRascunho"
 import { SecaoArquivos, juntarReferencias } from "./SecaoArquivos"
 import { SeletorProdutos, type Produto } from "./SeletorProdutos"
+import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 
 
 interface OpcaoEquipe { value: string; label: string; subtitle?: string }
@@ -750,41 +751,28 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
               existe justamente para isso. */}
           <Secao icone={Users} titulo="Equipe">
             <Campo label="Videomaker da gravação" opcional>
-              <div className="relative">
-                <select
-                  value={videomakerId}
-                  onChange={e => setVideomakerId(e.target.value)}
-                  className={cn(selectClass, "pl-10")}
-                >
-                  <option value="">Definir na triagem</option>
-                  {opcoesCaptacao.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Seta />
-              </div>
+              {/* Com busca por nome ou cidade, a mesma lista da ficha do card. */}
+              <EscolhaComBusca
+                value={videomakerId}
+                onChange={setVideomakerId}
+                grupos={[{ opcoes: opcoesCaptacao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null })) }]}
+                vazio="Definir na triagem"
+                ariaLabel="Videomaker da gravação"
+                icone={<Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" aria-hidden />}
+                className={cn(inputClass, "pl-10")}
+              />
             </Campo>
 
             <Campo label="Videomaker editor" opcional>
-              <div className="relative">
-                <select
-                  value={editorId}
-                  onChange={e => setEditorId(e.target.value)}
-                  className={cn(selectClass, "pl-10")}
-                >
-                  <option value="">Definir na triagem</option>
-                  {opcoesEdicao.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Seta />
-              </div>
+              <EscolhaComBusca
+                value={editorId}
+                onChange={setEditorId}
+                grupos={[{ opcoes: opcoesEdicao.map((o) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null })) }]}
+                vazio="Definir na triagem"
+                ariaLabel="Videomaker editor"
+                icone={<Users className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" aria-hidden />}
+                className={cn(inputClass, "pl-10")}
+              />
             </Campo>
 
             <p className="text-xs text-zinc-600">

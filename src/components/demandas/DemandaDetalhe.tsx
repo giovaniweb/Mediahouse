@@ -43,6 +43,8 @@ import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { MidiaDaGravacao } from "@/components/jobs/MidiaDaGravacao"
+import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
+import type { GrupoDaLista } from "@/lib/busca-na-lista"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
 import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
@@ -373,6 +375,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     requestAnimationFrame(() => document.getElementById(`equipe-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }))
   }
 
+  // "Escalar videomaker" no "Agora" da gravação: leva à equipe e já abre a
+  // lista de videomakers com a busca (EscolhaComBusca).
+  const [abrirListaVm, setAbrirListaVm] = useState(0)
+  function escalarVideomaker() {
+    irParaAcao("equipe")
+    setAbrirListaVm((n) => n + 1)
+  }
+
   // Listas atuais para os campos de múltipla escolha. A M2M já vinha no GET —
   // só nunca era renderizada, então a tela mostrava um valor onde havia vários.
   const responsaveisAtuais: string[] = (
@@ -402,6 +412,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   }>(isGrowth ? "/api/growth/linhas-projetos?incluirInativas=1" : null, fetcher)
   const opcoesCaptacao = dataOpcoesCaptacao?.opcoes ?? []
   const opcoesEdicao = dataOpcoesEdicao?.opcoes ?? []
+  // As listas com busca de videomaker e editor (EscolhaComBusca): os mesmos
+  // grupos e o mesmo "Nome · Cidade" do <select> que elas substituem.
+  const paraOpcao = (o: EquipeOpcao, extra?: string | null) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null, extra })
+  const gruposCaptacao: GrupoDaLista[] = [
+    { rotulo: "Externos (freelance)", opcoes: opcoesCaptacao.filter((o) => o.tipoContrato === "externo").map((o) => paraOpcao(o)) },
+    { rotulo: "Internos / Social", opcoes: opcoesCaptacao.filter((o) => o.tipoContrato !== "externo")
+      .map((o) => paraOpcao(o, o.origem === "user" ? " (usuário)" : o.origem === "ed" ? " (editor)" : null)) },
+  ].filter((g) => g.opcoes.length > 0)
+  const gruposEdicao: GrupoDaLista[] = [
+    { rotulo: "Internos (equipe)", opcoes: opcoesEdicao.filter((o) => o.tipoContrato === "interno").map((o) => paraOpcao(o, o.origem === "user" ? " (usuário)" : null)) },
+    { rotulo: "Externos (freelance)", opcoes: opcoesEdicao.filter((o) => o.tipoContrato !== "interno").map((o) => paraOpcao(o, o.origem === "vm" ? " (videomaker)" : null)) },
+  ].filter((g) => g.opcoes.length > 0)
   const produtos = dataProdutos?.produtos ?? []
   const papelAtual = String(dataMe?.membership?.papel ?? dataMe?.tipo ?? "").toLowerCase()
   // Espelhamento cross-tenant: de que lado da mesa esta empresa está neste card.
@@ -1328,7 +1350,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 job={demanda}
                 podeEditar={podeEditar}
                 onSalvar={salvarCampo}
-                onEscalar={() => irParaAcao("equipe")}
+                onEscalar={escalarVideomaker}
                 onAvancar={avancarGravacao}
                 onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
                 onAtualizar={() => mutate()}
@@ -1689,34 +1711,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
                   <Clapperboard className="w-3.5 h-3.5" /> Videomaker (Captação)
                 </label>
-                <select
+                <EscolhaComBusca
                   disabled={!podeEditar}
                   value={editMode ? videomakerId : (demanda.videomaker ? `vm:${demanda.videomaker.id}` : "")}
-                  onChange={e => {
-                    if (editMode) {
-                      setVideomakerId(e.target.value)
-                    } else {
-                      atribuirRapido("videomakerId", e.target.value)
-                    }
+                  onChange={(v) => {
+                    if (editMode) setVideomakerId(v)
+                    else atribuirRapido("videomakerId", v)
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">— Sem videomaker —</option>
-                  {opcoesCaptacao.filter(o => o.tipoContrato === "externo").length > 0 && (
-                    <optgroup label="Externos (freelance)">
-                      {opcoesCaptacao.filter(o => o.tipoContrato === "externo").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").length > 0 && (
-                    <optgroup label="Internos / Social">
-                      {opcoesCaptacao.filter(o => o.tipoContrato !== "externo").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " (usuário)" : o.origem === "ed" ? " (editor)" : ""}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                  grupos={gruposCaptacao}
+                  vazio="— Sem videomaker —"
+                  rotuloAtual={demanda.videomaker?.nome}
+                  ariaLabel="Videomaker (Captação)"
+                  abrirSinal={abrirListaVm}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                />
                 {demanda.videomaker && !editMode && (
                   <div className="mt-1.5 space-y-1">
                     <p className="text-xs text-green-400 flex items-center gap-1">
@@ -1738,34 +1746,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 <label className="block text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
                   <Film className="w-3.5 h-3.5" /> Editor (Pós-produção)
                 </label>
-                <select
+                <EscolhaComBusca
                   disabled={!podeEditar}
                   value={editMode ? editorId : (demanda.editor ? `ed:${demanda.editor.id}` : "")}
-                  onChange={e => {
-                    if (editMode) {
-                      setEditorId(e.target.value)
-                    } else {
-                      atribuirRapido("editorId", e.target.value)
-                    }
+                  onChange={(v) => {
+                    if (editMode) setEditorId(v)
+                    else atribuirRapido("editorId", v)
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">— Sem editor —</option>
-                  {opcoesEdicao.filter(o => o.tipoContrato === "interno").length > 0 && (
-                    <optgroup label="Internos (equipe)">
-                      {opcoesEdicao.filter(o => o.tipoContrato === "interno").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "user" ? " (usuário)" : ""}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {opcoesEdicao.filter(o => o.tipoContrato !== "interno").length > 0 && (
-                    <optgroup label="Externos (freelance)">
-                      {opcoesEdicao.filter(o => o.tipoContrato !== "interno").map(o => (
-                        <option key={o.value} value={o.value}>{o.label}{o.subtitle ? ` · ${o.subtitle}` : ""}{o.origem === "vm" ? " (videomaker)" : ""}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                  grupos={gruposEdicao}
+                  vazio="— Sem editor —"
+                  rotuloAtual={demanda.editor?.nome}
+                  ariaLabel="Editor (Pós-produção)"
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                />
                 {demanda.editor && !editMode && (
                   <div className="mt-1.5 space-y-1">
                     <p className="text-xs text-green-400 flex items-center gap-1">
