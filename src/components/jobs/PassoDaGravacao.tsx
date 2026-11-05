@@ -15,6 +15,7 @@ import {
   type PagamentoDoCard,
   type PassoDaTrilha,
 } from "@/lib/etapas-da-gravacao"
+import { videosDaGravacao } from "@/lib/videos-da-gravacao"
 import surface from "@/components/demandas/DemandSurface.module.css"
 import styles from "./FichaDoJob.module.css"
 
@@ -54,7 +55,7 @@ export type GravacaoDoPasso = Omit<PagamentoDoCard, "notasFiscais" | "custos"> &
   publicToken?: string | null
   publicTokenAtivo?: boolean | null
   /** Os arquivos do card: o nome do vídeo final subido vem daqui. */
-  arquivos?: { tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo?: string | null }[] | null
+  arquivos?: { id?: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo?: string | null; thumbnailUrl?: string | null }[] | null
   /** As pastas de antes do bloco "Arquivos": só aparecem, não têm campo. */
   linkFolderBrutos?: string | null
   linkFolderFinal?: string | null
@@ -123,6 +124,9 @@ export function AgoraDaGravacao({
   const [salvando, setSalvando] = useState<string | null>(null)
   const vm = primeiroNome(job.videomaker?.nome)
   const temVideo = !!job.linkFinal?.trim()
+  // Mais de um vídeo: o link que vai ao cliente é o da página de acompanhamento
+  // (/d/<token>), que mostra todos com as miniaturas.
+  const variosVideos = videosDaGravacao(job.linkFinal, (job.arquivos ?? []).filter((a) => a.tipoArquivo === "final")).length > 1
 
   async function avancar(chave: string, statusInterno: string) {
     setSalvando(chave)
@@ -139,6 +143,15 @@ export function AgoraDaGravacao({
   // token do link público; sem ele, gera o link (como o Compartilhar faz).
   async function copiarLinkDoVideo() {
     const origem = window.location.origin
+    if (variosVideos) {
+      try {
+        const token = job.publicTokenAtivo && job.publicToken ? job.publicToken : await onLinkPublico?.()
+        if (!token) return toast.error("Não foi possível gerar o link dos vídeos.")
+        return copiar(`${origem}/d/${token}`, "Link dos vídeos copiado — abre sem login")
+      } catch (e) {
+        return toast.error(e instanceof Error ? e.message : "Não foi possível gerar o link dos vídeos.")
+      }
+    }
     let destino = linkDoVideoParaOCliente(job.linkFinal, job.publicTokenAtivo ? job.publicToken : null, origem)
     if (!destino && onLinkPublico) {
       try {
@@ -208,7 +221,7 @@ export function AgoraDaGravacao({
       dica = temVideo ? "Mande o vídeo ao cliente e marque aqui." : "Falta o vídeo final em “Arquivos”."
       if (podeEditar) acoes = (
         <>
-          {temVideo && <button type="button" className={surface.btn} onClick={() => void copiarLinkDoVideo()}><Copy className="w-3.5 h-3.5" aria-hidden />Copiar link do vídeo</button>}
+          {temVideo && <button type="button" className={surface.btn} onClick={() => void copiarLinkDoVideo()}><Copy className="w-3.5 h-3.5" aria-hidden />{variosVideos ? "Copiar link dos vídeos" : "Copiar link do vídeo"}</button>}
           {botao("enviado", "Marcar como enviado", () => void avancar("enviado", "entregue_cliente"), true, !temVideo, "Falta o vídeo final em “Arquivos”")}
         </>
       )

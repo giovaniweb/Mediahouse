@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState, type ReactNode } from "react"
-import { CheckCircle2, Circle, Copy, Download, ExternalLink, Film, FolderOpen, Loader2, MinusCircle, Play, Send, Upload } from "lucide-react"
+import { CheckCircle2, Circle, Copy, Download, ExternalLink, Film, FolderOpen, Loader2, MinusCircle, Play, Plus, Send, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import {
@@ -15,6 +15,9 @@ import {
   type TrocaNoAgora,
 } from "@/lib/etapas-da-gravacao"
 import { paraDownload } from "@/lib/midia-download"
+import { nomeDoVideo, provedorDoVideo, videosDaGravacao, type VideoParaMostrar } from "@/lib/videos-da-gravacao"
+import { MiniaturasDeVideo } from "@/components/video/MiniaturasDeVideo"
+import { LightboxDeVideo, type VideoDoLightbox } from "@/components/video/LightboxDeVideo"
 import { LIMITE_VIDEO_NA_TELA_MB } from "@/lib/upload-video"
 import { cn } from "@/lib/utils"
 import surface from "@/components/demandas/DemandSurface.module.css"
@@ -64,7 +67,8 @@ export function ArquivosDaGravacao({
   onAvancar,
   onAtualizar,
   onEnviarArquivo,
-  onTocar,
+  onRegistrarVideo,
+  onRemoverVideo,
   documentos,
   referencias,
 }: {
@@ -78,8 +82,10 @@ export function ArquivosDaGravacao({
   onAtualizar: () => Promise<unknown> | void
   /** Sobe o arquivo pelo envio de Demandas (lib/upload-video) e devolve o endereço. */
   onEnviarArquivo?: (tipo: "brutos" | "final", file: File, onProgress: (pct: number) => void) => Promise<string>
-  /** Toca o vídeo no player do card. */
-  onTocar?: (url: string) => void
+  /** Registra um link colado como vídeo do card (vira Arquivo, como o arquivo subido). */
+  onRegistrarVideo?: (url: string) => Promise<void>
+  /** Tira um vídeo do card: o registro (por id) ou, no link antigo sem registro, o linkFinal. */
+  onRemoverVideo?: (arquivoId: string | null) => Promise<void>
   /** Os documentos do card (PDF, Word, planilha), com o "Anexar" deles. */
   documentos?: ReactNode
   /** As referências do pedido, uma por linha. */
@@ -94,11 +100,46 @@ export function ArquivosDaGravacao({
   const [agindo, setAgindo] = useState<string | null>(null)
   const [plano, setPlano] = useState<string | null>(null)
   const arquivoRef = useRef<Partial<Record<TrocaNoAgora, HTMLInputElement | null>>>({})
-  const ocupado = salvando !== null || enviando !== null
+  // Os vídeos do card (lib/videos-da-gravacao): um ou mais. Trocar um deles
+  // sobe o novo e tira o registro do trocado; "Adicionar outro vídeo" só soma.
+  const videos: VideoParaMostrar[] = videosDaGravacao(job.linkFinal,
+    (job.arquivos ?? []).filter((a) => a.tipoArquivo === "final").map((a) => ({
+      id: a.id ?? null, url: a.url, originalUrl: a.originalUrl, nomeArquivo: a.nomeArquivo, thumbnailUrl: a.thumbnailUrl,
+    })))
+  const [trocando, setTrocando] = useState<VideoParaMostrar | null>(null)
+  const [removendo, setRemovendo] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ videos: VideoDoLightbox[]; inicio: number } | null>(null)
+  const ocupado = salvando !== null || enviando !== null || removendo !== null
+  const paraLightbox = (lista: VideoParaMostrar[]): VideoDoLightbox[] => lista.map((v, i) => ({
+    url: v.url, nome: nomeDoVideo(v, i + 1), thumbnailUrl: v.thumbnailUrl,
+    download: provedorDoVideo(v.url) === "nuflow" ? paraDownload(v.originalUrl ?? v.url) : null,
+  }))
 
   const fechar = (qual: TrocaNoAgora) => {
     setAbertos((a) => ({ ...a, [qual]: false }))
     setLinks((l) => ({ ...l, [qual]: "" }))
+    if (qual === "video") setTrocando(null)
+  }
+
+  // Trocou um vídeo: o novo já está registrado; sai o registro do trocado (o
+  // arquivo continua guardado). O link antigo sem registro sai sozinho, porque
+  // o linkFinal passou a ser o novo.
+  async function tirarOTrocado() {
+    if (trocando?.id && onRemoverVideo) await onRemoverVideo(trocando.id)
+  }
+
+  async function removerVideo(v: VideoParaMostrar) {
+    if (!onRemoverVideo) return
+    if (!confirm(`Tirar "${nomeDoVideo(v)}" do card? O arquivo continua guardado.`)) return
+    setRemovendo(v.id ?? v.url)
+    try {
+      await onRemoverVideo(v.id ?? null)
+      toast.success("Vídeo tirado do card.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível tirar o vídeo.")
+    } finally {
+      setRemovendo(null)
+    }
   }
 
   // O link ou o arquivo que completa o material anda a gravação junto, como
@@ -117,7 +158,16 @@ export function ArquivosDaGravacao({
     if (!linkValido(valor)) return void toast.error("Cole um link que comece com https://")
     setSalvando(qual)
     try {
-      const andou = await gravar(qual, qual === "brutos" ? patchDosBrutos(job, valor) : { linkFinal: valor })
+      let andou: boolean
+      if (qual === "video" && onRegistrarVideo) {
+        // O link do vídeo vira um registro do card, como o arquivo subido: dá
+        // para ter mais de um, e cada um tem miniatura.
+        await onRegistrarVideo(valor)
+        andou = await gravar(qual, { linkFinal: valor }, { linkFinal: valor })
+        await tirarOTrocado()
+      } else {
+        andou = await gravar(qual, qual === "brutos" ? patchDosBrutos(job, valor) : { linkFinal: valor })
+      }
       if (!andou) toast.success(qual === "brutos" ? "Link dos brutos salvo." : "Link do vídeo salvo.")
       fechar(qual)
     } catch (e) {
@@ -135,6 +185,7 @@ export function ArquivosDaGravacao({
       // O registro do envio já gravou o link do arquivo; sem edição, o vídeo final segue os brutos.
       const patch = qual === "brutos" ? patchDosBrutos(job, url) : { linkFinal: url }
       const andou = await gravar(qual, patch, qual === "brutos" ? { linkBrutos: url } : { linkFinal: url })
+      if (qual === "video") await tirarOTrocado()
       if (!andou) toast.success(qual === "brutos" ? "Brutos enviados." : "Vídeo final enviado.")
       fechar(qual)
     } catch (e) {
@@ -214,8 +265,8 @@ export function ArquivosDaGravacao({
           <span>{detalhe}</span>
         </span>
         <span className={surface.fileActions}>
-          {m.toca && onTocar && (
-            <button type="button" onClick={() => onTocar(m.url)} title="Tocar" aria-label={`Tocar ${item.rotulo}`} className={surface.iconBtn}><Play aria-hidden /></button>
+          {m.toca && (
+            <button type="button" onClick={() => setLightbox({ videos: paraLightbox([{ id: null, url: m.url, originalUrl: m.originalUrl, nomeArquivo: m.nomeArquivo }]), inicio: 0 })} title="Tocar" aria-label={`Tocar ${item.rotulo}`} className={surface.iconBtn}><Play aria-hidden /></button>
           )}
           {m.noNuflow && (
             <a href={paraDownload(m.originalUrl ?? m.url) ?? m.url} target="_blank" rel="noopener noreferrer"
@@ -291,7 +342,54 @@ export function ArquivosDaGravacao({
     )
   }
 
+  // A linha do vídeo final: uma miniatura por vídeo (Giovani, 05/11/2026), o
+  // play abre o lightbox; embaixo de cada uma, baixar, trocar e tirar.
+  const linhaDosVideos = (item: ItemDosArquivos) => {
+    const mandar = podeEditar && item.podeMandar
+    const campoAberto = mandar && abertos.video
+    const situacao = videos.length > 1 ? `${videos.length} vídeos` : item.situacao
+    return (
+      <li key="video" className={styles.itemArquivo} data-estado={item.estado}>
+        <div className={styles.itemTopo}>
+          <span className={styles.entregaRotulo}>{ICONE_DO_ESTADO[item.estado]}{videos.length > 1 ? (item.rotulo === "Vídeo pronto" ? "Vídeos prontos" : "Vídeos finais") : item.rotulo}</span>
+          <span className={surface.hint}>{situacao}</span>
+        </div>
+        <MiniaturasDeVideo
+          videos={videos}
+          onAbrir={(i) => setLightbox({ videos: paraLightbox(videos), inicio: i })}
+          acoes={(v) => (
+            <>
+              {provedorDoVideo(v.url) === "nuflow" && (
+                <a className={surface.linkBtn} href={paraDownload(v.originalUrl ?? v.url) ?? v.url} target="_blank" rel="noopener noreferrer">Baixar</a>
+              )}
+              {mandar && (
+                <button type="button" className={surface.linkBtn} disabled={ocupado}
+                  onClick={() => { setTrocando(v); setAbertos((a) => ({ ...a, video: true })) }}>Trocar</button>
+              )}
+              {mandar && onRemoverVideo && (
+                <button type="button" className={surface.linkBtn} data-perigo disabled={ocupado} onClick={() => void removerVideo(v)}>
+                  {removendo === (v.id ?? v.url) ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}Tirar
+                </button>
+              )}
+            </>
+          )}
+        />
+        {campoAberto ? (
+          <>
+            <span className={surface.hint}>{trocando ? `Trocar “${nomeDoVideo(trocando)}”: o novo entra no lugar dele.` : "Outro vídeo: os que já estão continuam."}</span>
+            {campoDeEnvio({ ...item, midia: item.midia, agora: false })}
+          </>
+        ) : mandar && (
+          <button type="button" className={surface.linkBtn} disabled={ocupado} onClick={() => { setTrocando(null); setAbertos((a) => ({ ...a, video: true })) }}>
+            <Plus className="w-3.5 h-3.5" aria-hidden />Adicionar outro vídeo
+          </button>
+        )}
+      </li>
+    )
+  }
+
   const linha = (item: ItemDosArquivos) => {
+    if (item.qual === "video" && !item.midia?.antigo && videos.length > 0) return linhaDosVideos(item)
     const mandar = podeEditar && item.podeMandar
     const campoAberto = mandar && (abertos[item.qual] || (item.agora && !item.midia))
     return (
@@ -372,6 +470,8 @@ export function ArquivosDaGravacao({
       </ul>
 
       {documentos && <div className={styles.documentos}>{documentos}</div>}
+
+      {lightbox && <LightboxDeVideo videos={lightbox.videos} inicio={lightbox.inicio} onFechar={() => setLightbox(null)} />}
 
       {refs.length > 0 && (
         <div className={styles.documentos}>

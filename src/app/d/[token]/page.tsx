@@ -1,15 +1,19 @@
 "use client"
 
+import { useState } from "react"
 import useSWR from "swr"
 import { useParams } from "next/navigation"
 import { Loader2, CalendarDays, CheckCircle2, Clock, Film, Sparkles, Download, Minus } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { formatarData } from "@/lib/datas"
+import { nomeDoVideo, type VideoParaMostrar } from "@/lib/videos-da-gravacao"
+import { MiniaturasDeVideo } from "@/components/video/MiniaturasDeVideo"
+import { LightboxDeVideo } from "@/components/video/LightboxDeVideo"
 
 // Acompanhamento público de uma demanda (somente leitura). Quem abre não tem
 // conta no sistema — vê o andamento e o material final, nada além disso.
 
-type Arquivo = { url: string; urlDownload?: string | null; nomeArquivo: string | null; sequencia: number | null }
+type Arquivo = { url: string; urlDownload?: string | null; nomeArquivo: string | null; sequencia: number | null; thumbnailUrl?: string | null }
 type Demanda = {
   codigo: string
   titulo: string
@@ -125,7 +129,7 @@ export default function DemandaPublicaPage() {
         </div>
       </header>
 
-      {g ? <AcompanhamentoDaGravacao d={d} g={g} finais={finais} /> : <div className="max-w-3xl mx-auto px-5 py-8">
+      {g ? <AcompanhamentoDaGravacao d={d} g={g} /> : <div className="max-w-3xl mx-auto px-5 py-8">
         {/* O estado atual é a resposta que a pessoa veio buscar: vem primeiro,
             antes de título e descrição. */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -251,7 +255,13 @@ export default function DemandaPublicaPage() {
 // Gravação externa: quem pediu o videomaker quer saber se alguém vai, quando,
 // e quando o vídeo chega. Mesma página, mesmas peças; as etapas são as do card
 // aberto da gravação, com as palavras de quem acompanha de fora.
-function AcompanhamentoDaGravacao({ d, g, finais }: { d: Demanda; g: Gravacao; finais: string[] }) {
+function AcompanhamentoDaGravacao({ d, g }: { d: Demanda; g: Gravacao }) {
+  // Os vídeos da gravação: a rota já mandou só os do card (lib/acompanhamento-gravacao);
+  // sem arquivo, o link colado. Baixa-se o original.
+  const videos: (VideoParaMostrar & { download: string | null })[] = d.arquivos.length > 0
+    ? d.arquivos.map((a) => ({ url: a.url, nomeArquivo: a.nomeArquivo, thumbnailUrl: a.thumbnailUrl, download: a.urlDownload ?? null }))
+    : d.linkFinal ? [{ url: d.linkFinal, download: null }] : []
+  const [aberto, setAberto] = useState<number | null>(null)
   const trilha = g.trilha ?? []
   const contam = trilha.filter((p) => p.estado !== "pulado")
   const progresso = contam.length ? Math.round((contam.filter((p) => p.estado === "feito").length / contam.length) * 100) : 0
@@ -280,18 +290,27 @@ function AcompanhamentoDaGravacao({ d, g, finais }: { d: Demanda; g: Gravacao; f
         ))}
       </dl>
 
-      {(g.videoPronto ?? entregue) && finais.length > 0 && (
+      {(g.videoPronto ?? entregue) && videos.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Vídeo</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {finais.map((url, i) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer"
-                className="group flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 hover:border-emerald-500/50 transition-colors">
-                <Download className="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400 transition-colors shrink-0" />
-                <span className="text-xs text-zinc-300 truncate">{d.arquivos[i]?.nomeArquivo ?? `Arquivo ${i + 1}`}</span>
+          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">{videos.length > 1 ? "Vídeos" : "Vídeo"}</h2>
+          {/* Uma miniatura por vídeo, com o play; o clique abre o vídeo aqui mesmo,
+              ampliado, e fechar volta para o andamento (Giovani, 05/11/2026). */}
+          <MiniaturasDeVideo
+            videos={videos}
+            onAbrir={setAberto}
+            acoes={(v) => v.download ? (
+              <a href={v.download} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-emerald-400">
+                <Download className="w-3.5 h-3.5" aria-hidden />Baixar
               </a>
-            ))}
-          </div>
+            ) : null}
+          />
+          {aberto !== null && (
+            <LightboxDeVideo
+              videos={videos.map((v, i) => ({ url: v.url, nome: nomeDoVideo(v, i + 1), download: v.download, thumbnailUrl: v.thumbnailUrl }))}
+              inicio={aberto}
+              onFechar={() => setAberto(null)}
+            />
+          )}
         </section>
       )}
 

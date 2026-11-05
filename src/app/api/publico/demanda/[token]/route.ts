@@ -74,7 +74,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       arquivos: {
         where: { tipoArquivo: "final" },
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
-        select: { url: true, originalUrl: true, nomeArquivo: true, sequencia: true },
+        select: { url: true, originalUrl: true, nomeArquivo: true, sequencia: true, thumbnailUrl: true },
       },
     },
   })
@@ -110,8 +110,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     videomakerId, videomaker: videomaker ? { nome: videomaker.nome } : null, dataCaptacao, dataEvento: publico.dataEvento,
     localGravacao, localEvento, createdAt: publico.createdAt, finalizadaEm: publico.finalizadaEm, linkFinal: publico.linkFinal, historicos,
   }, hojeEmSaoPaulo()) : null
-  // Na gravação, o vídeo de quem pediu é o do linkFinal: depois de um "Trocar",
-  // o arquivo anterior continua guardado e não pode voltar a aparecer aqui.
+  // Na gravação, os vídeos de quem pediu são os do card (lib/acompanhamento-gravacao.ts):
+  // link colado antes, que não virou Arquivo, vale sozinho.
   const arquivos = ehGravacao ? arquivosDoVideoDaGravacao(publico.linkFinal, publico.arquivos) : publico.arquivos
   // Mesma regra da aprovação: o token é a credencial de quem não tem conta, e
   // passa a valer também para a thumbnail que vive no bucket privado.
@@ -121,7 +121,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
       linkFinal: comToken(publico.linkFinal, token),
       // Baixa-se o original; a prévia convertida é só para assistir.
       arquivos: arquivos.map(({ originalUrl, ...a }) => ({ ...a, url: comToken(a.url, token),
-        urlDownload: paraDownload(comToken(originalUrl ?? a.url, token)) })),
+        urlDownload: paraDownload(comToken(originalUrl ?? a.url, token)),
+        // A miniatura vive no bucket privado: abre com o mesmo token (lib/midia-acesso).
+        thumbnailUrl: comToken(a.thumbnailUrl, token) })),
       thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
       organizacao,
       gravacao,
