@@ -47,7 +47,7 @@ const papelDe: Record<keyof typeof pessoas, TipoUsuario> = {
   admin: "admin", solicitante: "solicitante", videomaker: "videomaker", editor: "editor", designer: "designer", eventos: "gestor_eventos",
 }
 const perfis = { vm: `${p}-vm`, ed: `${p}-ed`, des: `${p}-des` }
-const cards = { alheio: `${p}-alheio`, doSolicitante: `${p}-do-solic`, arte: `${p}-arte` }
+const cards = { alheio: `${p}-alheio`, doSolicitante: `${p}-do-solic`, arte: `${p}-arte`, misto: `${p}-misto` }
 
 function como(quem: keyof typeof pessoas) {
   const papel = papelDe[quem]
@@ -106,6 +106,8 @@ beforeAll(async () => {
     { ...card, id: cards.alheio, codigo: cards.alheio, titulo: "Vídeo do treinamento", solicitanteId: pessoas.admin, editorId: perfis.ed },
     // O pedido do solicitante, gravado pelo videomaker externo.
     { ...card, id: cards.doSolicitante, codigo: cards.doSolicitante, titulo: "Vídeo da clínica", solicitanteId: pessoas.solicitante, videomakerId: perfis.vm },
+    // Outro pedido do solicitante, já com vídeo final, brutos e um anexo.
+    { ...card, id: cards.misto, codigo: cards.misto, titulo: "Vídeo do congresso", solicitanteId: pessoas.solicitante, editorId: perfis.ed },
     // A arte do designer, no Growth.
     { ...card, id: cards.arte, codigo: cards.arte, titulo: "Arte do convite", area: "design", tipoVideo: "post_estatico", departamento: "growth",
       solicitanteId: pessoas.admin, designerId: perfis.des },
@@ -118,6 +120,14 @@ beforeAll(async () => {
   await db.arquivo.createMany({ data: [
     { demandaId: cards.alheio, tipoArquivo: "final", url: finalAlheio, nomeArquivo: "final-v1.mp4", sequencia: 1 },
     { demandaId: cards.alheio, tipoArquivo: "documento", url: docAlheio, nomeArquivo: "roteiro.pdf", sequencia: 1 },
+  ] })
+
+  const finalMisto = video(cards.misto, "final.mp4"), brutoMisto = video(cards.misto, "brutos.zip")
+  await db.demanda.update({ where: { id: cards.misto }, data: { linkFinal: finalMisto, linkBrutos: brutoMisto } })
+  await db.arquivo.createMany({ data: [
+    { id: `${cards.misto}-final`, demandaId: cards.misto, tipoArquivo: "final", url: finalMisto, nomeArquivo: "final.mp4", sequencia: 1 },
+    { id: `${cards.misto}-bruto`, demandaId: cards.misto, tipoArquivo: "bruto", url: brutoMisto, nomeArquivo: "brutos.zip", sequencia: 1 },
+    { id: `${cards.misto}-doc`, demandaId: cards.misto, tipoArquivo: "documento", url: doc(cards.misto), nomeArquivo: "briefing.pdf", sequencia: 1 },
   ] })
 })
 
@@ -241,5 +251,42 @@ describe("arquivo da demanda: quem sobe, troca e apaga", () => {
     expect((await gravar(cards.arte, { url: arte, tipo: "final", nomeArquivo: "arte.png" })).status).toBe(200)
     expect((await aprovacao(cards.arte, arte)).status).toBe(200)
     expect((await retrato(cards.arte)).linkFinal).toBe(arte)
+  })
+
+  // Revisão do PR #132 (05/11/2026): a guarda confere o tipo DECLARADO, e o
+  // delete por id não conferia o tipo do arquivo. O solicitante, liberado para
+  // "documento" no próprio pedido, apagava o vídeo final mandando o id dele.
+  it("o solicitante não apaga o vídeo do próprio pedido passando o id dele como documento", async () => {
+    const antes = await retrato(cards.misto)
+    como("solicitante")
+    expect((await gravar(cards.misto, { url: null, tipo: "documento", arquivoId: `${cards.misto}-final` })).status).toBe(404)
+    expect((await gravar(cards.misto, { url: null, tipo: "documento", arquivoId: `${cards.misto}-bruto` })).status).toBe(404)
+    // Um objeto no lugar do id viraria filtro do Prisma e casaria com todos.
+    expect((await gravar(cards.misto, { url: null, tipo: "documento", arquivoId: { not: "" } })).status).toBe(400)
+    expect(await retrato(cards.misto)).toEqual(antes)
+
+    // O anexo do próprio pedido ele continua apagando, e só ele sai.
+    expect((await gravar(cards.misto, { url: null, tipo: "documento", arquivoId: `${cards.misto}-doc` })).status).toBe(200)
+    const depois = await retrato(cards.misto)
+    expect(depois.arquivos.map((a) => a.tipoArquivo).sort()).toEqual(["bruto", "final"])
+    expect(depois.linkFinal).toBe(antes.linkFinal)
+    expect(depois.linkBrutos).toBe(antes.linkBrutos)
+  })
+
+  it("pelo caminho do vídeo não se apaga documento, e a gestão segue apagando o anexo e o vídeo", async () => {
+    const anexo = `${cards.misto}-doc2`
+    await db.arquivo.create({ data: { id: anexo, demandaId: cards.misto, tipoArquivo: "documento", url: doc(cards.misto), nomeArquivo: "roteiro.pdf", sequencia: 2 } })
+    const antes = await retrato(cards.misto)
+    como("admin")
+    expect((await gravar(cards.misto, { url: null, tipo: "final", arquivoId: anexo })).status).toBe(404)
+    expect((await gravar(cards.misto, { url: null, tipo: "brutos", arquivoId: `${cards.misto}-final` })).status).toBe(404)
+    expect(await retrato(cards.misto)).toEqual(antes)
+
+    expect((await gravar(cards.misto, { url: null, tipo: "documento", arquivoId: anexo })).status).toBe(200)
+    expect((await gravar(cards.misto, { url: null, tipo: "final", arquivoId: `${cards.misto}-final` })).status).toBe(200)
+    const depois = await retrato(cards.misto)
+    expect(depois.arquivos.map((a) => a.tipoArquivo)).toEqual(["bruto"])
+    expect(depois.linkFinal).toBeNull()
+    expect(depois.linkBrutos).toBe(antes.linkBrutos)
   })
 })

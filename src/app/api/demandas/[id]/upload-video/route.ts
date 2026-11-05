@@ -37,6 +37,14 @@ const EXT_MAPA: Record<string, string> = {
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
+// O tipo DECLARADO no corpo é o que a guarda confere (lib/quem-envia-arquivo).
+// Por isso, o arquivo apagado por `arquivoId` precisa ser DESSE tipo. Antes, o
+// delete era só pelo id, e a revisão do PR #132 (05/11/2026) achou o furo: o
+// solicitante, liberado para "documento" no próprio pedido, mandava o id do
+// vídeo final e o apagava. Pelo caminho do vídeo, um documento sumia e o
+// linkFinal era recalculado com outro tipo.
+const TIPO_NO_BANCO = { final: "final", brutos: "bruto", documento: "documento" } as const
+
 // PATCH: recebe { url, tipo, arquivoId? } após upload direto do browser ao Supabase
 // url pode ser null para deletar (por arquivoId específico ou por tipo)
 export async function PATCH(req: NextRequest, { params }: Params) {
@@ -56,6 +64,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (body.url === undefined || !tipo || !TIPOS_VALIDOS.includes(tipo as TipoVideo)) {
     return NextResponse.json({ error: "tipo obrigatório; url pode ser null para limpar" }, { status: 400 })
+  }
+  // Um objeto no lugar do id viraria filtro do Prisma ({ "not": "" } casa com
+  // todos os arquivos do card). Só texto.
+  if (arquivoId !== undefined && typeof arquivoId !== "string") {
+    return NextResponse.json({ error: "arquivoId inválido" }, { status: 400 })
   }
   // Gravar, trocar e apagar: o card tem de ser da pessoa, e ela, de quem sobe
   // arquivo nele (lib/quem-envia-arquivo). A empresa sozinha não basta.
@@ -79,7 +92,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // ── Documento: cria/deleta Arquivo, sem tocar em linkFinal/linkBrutos ─────
   if (tipo === "documento") {
     if (url === null && arquivoId) {
-      await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id } })
+      const { count } = await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id, tipoArquivo: TIPO_NO_BANCO.documento } })
+      // Outro tipo, ou id que não é deste card: nada apagado, como se não existisse.
+      if (count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
       return NextResponse.json({ ok: true, deleted: true })
     }
     if (url) {
@@ -96,7 +111,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // ── Delete por arquivoId específico (multi-vídeo) ─────────────────────────
   if (url === null && arquivoId) {
-    await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id } })
+    const { count } = await prisma.arquivo.deleteMany({ where: { id: arquivoId, demandaId: id, tipoArquivo: TIPO_NO_BANCO[tipo as "final" | "brutos"] } })
+    if (count === 0) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
     // Atualiza linkFinal/linkBrutos para o vídeo mais recente restante (ou null)
     const ultimo = await prisma.arquivo.findFirst({
       where: { demandaId: id, tipoArquivo: tipo === "final" ? "final" : "bruto" },
