@@ -182,7 +182,7 @@ const agora = (j: GravacaoDoPasso, podeEditar = true) => renderToStaticMarkup(cr
   job: j, podeEditar, onAvancar: nada, onConfirmarVideomaker: () => {}, onEscalar: () => {},
 }))
 const arquivos = (j: GravacaoDoPasso, podeEditar = true) => renderToStaticMarkup(createElement(ArquivosDaGravacao, {
-  job: j, podeEditar, onSalvar: nada, onAvancar: nada, onAtualizar: nada, onEnviarArquivo: async () => subido, onTocar: () => {},
+  job: j, podeEditar, onSalvar: nada, onAvancar: nada, onAtualizar: nada, onEnviarArquivo: async () => subido, onRegistrarVideo: nada, onRemoverVideo: nada,
   documentos: createElement("p", null, "DOCUMENTOS-AQUI"), referencias: "https://exemplo.test/ref",
 }))
 
@@ -228,7 +228,8 @@ describe("o bloco \"Arquivos\": o lugar único de ver e de mandar", () => {
     const html = arquivos(job({ statusInterno: "aprovado", linkBrutos: drive, linkFinal: subido,
       arquivos: [{ tipoArquivo: "final", url: subido, nomeArquivo: "Dr Carlos final.mp4" }] }))
     expect(html).toContain("Dr Carlos final.mp4")
-    expect(html).toContain('aria-label="Tocar Vídeo final"')
+    // O vídeo final virou miniatura com play (05/11/2026): o clique abre o lightbox.
+    expect(html).toContain('aria-label="Assistir Dr Carlos final.mp4"')
     expect(html).toContain(`href="${subido}?download=1"`)
     expect(html).toContain('aria-label="Abrir Brutos"')
     expect(html.match(/>Trocar</g)).toHaveLength(2)

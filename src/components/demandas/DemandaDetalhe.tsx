@@ -43,6 +43,8 @@ import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
+import { LightboxDeVideo } from "@/components/video/LightboxDeVideo"
+import { nomeDoVideo, provedorDoVideo } from "@/lib/videos-da-gravacao"
 import type { GrupoDaLista } from "@/lib/busca-na-lista"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
 import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
@@ -222,7 +224,7 @@ function getDemandCopy(growth: boolean) {
 }
 
 interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
-interface ArquivoVideo { id: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo: string; sequencia: number | null; createdAt: string }
+interface ArquivoVideo { id: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo: string; sequencia: number | null; createdAt: string; thumbnailUrl?: string | null }
 
 /**
  * Avisa que o link de aprovação morreu — e oferece a renovação num clique.
@@ -592,6 +594,35 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     const url = await enviarVideo(id, file, tipo, { contentTypeFallback: "video/mp4", comThumbnail: tipo === "final", nomeArquivo: file.name, onProgress })
     await mutate()
     return url
+  }
+
+  // Um link colado como vídeo da gravação vira Arquivo "final", como o subido:
+  // dá para ter mais de um, cada um com miniatura (Giovani, 05/11/2026). O
+  // nome é o do provedor ("Vídeo no Drive"), não o fim da URL ("view").
+  async function registrarVideoDaGravacao(url: string) {
+    const res = await fetch(`/api/demandas/${id}/upload-video`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, tipo: "final", nomeArquivo: nomeDoVideo({ url }) }),
+    })
+    if (!res.ok) throw await erroDaResposta(res, "Não foi possível registrar o link do vídeo.")
+    await mutate()
+  }
+
+  // Tira um vídeo da gravação: o registro (o arquivo continua guardado; o
+  // linkFinal passa ao último que ficou) ou, no link antigo sem registro, o linkFinal.
+  async function removerVideoDaGravacao(arquivoId: string | null) {
+    if (arquivoId) {
+      const res = await fetch(`/api/demandas/${id}/upload-video`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: null, tipo: "final", arquivoId }),
+      })
+      if (!res.ok) throw await erroDaResposta(res, "Não foi possível tirar o vídeo.")
+      await mutate()
+    } else {
+      await salvarCampo({ linkFinal: null })
+    }
   }
 
   // O link público da gravação (o do Compartilhar): o vídeo subido abre para o
@@ -1019,30 +1050,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     }
   }
 
-  // ── Helper para player de vídeo ──────────────────────────────────────────
-  function getEmbedUrl(url: string): { type: "video" | "image" | "youtube" | "drive" | "external"; embedUrl: string } {
-    if (isImageUrl(url)) {
-      return { type: "image", embedUrl: url }
-    }
-    if (url.includes("youtu.be/")) {
-      const id = url.split("youtu.be/")[1]?.split("?")[0]
-      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
-    }
-    if (url.includes("youtube.com/watch")) {
-      const id = new URLSearchParams(url.split("?")[1] ?? "").get("v") ?? ""
-      return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${id}` }
-    }
-    if (url.includes("drive.google.com")) {
-      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
-      if (match) return { type: "drive", embedUrl: `https://drive.google.com/file/d/${match[1]}/preview` }
-      return { type: "external", embedUrl: url }
-    }
-    if (/\.(mp4|mov|webm|avi)(\?|$)/i.test(url) || url.includes("supabase")) {
-      return { type: "video", embedUrl: url }
-    }
-    return { type: "external", embedUrl: url }
-  }
-
   // ── Não abriu ─────────────────────────────────────────────────────────────
   // Card apagado, ou fora do escopo da pessoa: a API responde 404 nos dois casos,
   // e antes a tela ficava girando para sempre.
@@ -1415,7 +1422,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 onAtualizar={() => mutate()}
                 onEnviarArquivo={enviarArquivoDaGravacao}
                 onLinkPublico={garantirLinkPublico}
-                onTocar={setPlayerUrl}
+                onRegistrarVideo={registrarVideoDaGravacao}
+                onRemoverVideo={removerVideoDaGravacao}
                 documentos={documentosDoCard(true)}
                 rodape={<>
                   <span>
@@ -1905,7 +1913,16 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                             const nome = externo ? "Link externo" : nomeParaMostrar(arq.nomeArquivo, i + 1)
                             return (
                               <div key={arq.id} className={surface.fileRow}>
-                                <span className={surface.fileBadge}>{String(arq.sequencia ?? 0).padStart(3, "0")}</span>
+                                {/* A capa do vídeo, quando o envio gerou (Giovani, 05/11/2026); o clique abre o vídeo. */}
+                                {arq.thumbnailUrl ? (
+                                  <button type="button" onClick={() => setPlayerUrl(arq.url)} aria-label={`${copy.viewAction}: ${nome}`} className="relative shrink-0">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={arq.thumbnailUrl} alt="" className={surface.fileThumb} loading="lazy" />
+                                    <span className="absolute inset-0 flex items-center justify-center"><Play className="w-4 h-4 text-white drop-shadow" aria-hidden /></span>
+                                  </button>
+                                ) : (
+                                  <span className={surface.fileBadge}>{String(arq.sequencia ?? 0).padStart(3, "0")}</span>
+                                )}
                                 <span className={surface.fileName}>
                                   <span title={arq.url}>{nome}</span>
                                   {externo && <span>{arq.url.replace(/^https?:\/\//, "")}</span>}
@@ -2507,36 +2524,19 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
       )}
 
       {/* ── Player de vídeo ─────────────────────────────────────────────── */}
+      {/* O vídeo ampliado no próprio sistema (components/video/LightboxDeVideo):
+          fecha no X, no Esc e no clique fora, e o card fica onde estava. */}
       {playerUrl && (() => {
-        const { type, embedUrl } = getEmbedUrl(playerUrl)
+        const arq = (demanda.arquivos as ArquivoVideo[] | undefined)?.find((a) => a.url === playerUrl || a.originalUrl === playerUrl)
         return (
-          <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4"
-            onClick={() => setPlayerUrl(null)}
-          >
-            <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setPlayerUrl(null)}
-                className="absolute -top-9 right-0 text-white/70 hover:text-white flex items-center gap-1.5 text-sm transition-colors"
-              >
-                <X className="w-4 h-4" /> Fechar
-              </button>
-              {type === "video" ? (
-                <video src={embedUrl} controls autoPlay className="w-full rounded-xl bg-black max-h-[80vh]" />
-              ) : type === "image" ? (
-                <img src={embedUrl} alt={copy.finalSingleLabel} className="max-h-[80vh] w-full object-contain rounded-xl bg-black" />
-              ) : type === "youtube" || type === "drive" ? (
-                <iframe src={embedUrl} className="w-full aspect-video rounded-xl border-0" allowFullScreen />
-              ) : (
-                <div className="text-center text-white p-12 bg-zinc-900 rounded-xl">
-                  <p className="mb-4 text-zinc-400">{copy.noInline}</p>
-                  <a href={playerUrl} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
-                    Abrir em nova aba →
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
+          <LightboxDeVideo
+            videos={[{
+              url: playerUrl,
+              nome: arq ? nomeDoVideo({ url: arq.url, nomeArquivo: nomeParaMostrar(arq.nomeArquivo, 1) }) : nomeDoVideo({ url: playerUrl }),
+              download: provedorDoVideo(playerUrl) === "nuflow" ? paraDownload(arq?.originalUrl ?? playerUrl) : null,
+            }]}
+            onFechar={() => setPlayerUrl(null)}
+          />
         )
       })()}
     </>

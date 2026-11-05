@@ -122,15 +122,15 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
 }
 
 /**
- * O vídeo que a página de quem pediu oferece (05/11/2026): o do linkFinal.
+ * Os vídeos que a página de quem pediu oferece: os mesmos do card.
  *
- * O "Trocar" do card grava o linkFinal novo e deixa o arquivo anterior
- * guardado, sem apagar (o card mostra só o do linkFinal). Sem este recorte, a
- * página seguia oferecendo o vídeo velho e, na troca por link, nem mostrava o
- * novo: ela só cai no linkFinal quando não há arquivo. O arquivo vale pelo
- * endereço que serve (`url`) ou pelo original de antes da conversão
- * (`originalUrl`), o mesmo critério do card. Sem linkFinal, valem os arquivos,
- * como antes.
+ * 05/11/2026 (07f6783): o "Trocar" deixava o arquivo anterior registrado, e a
+ * página passou a oferecer só o do linkFinal. Desde as miniaturas (Giovani,
+ * 05/11: "tem projetos que vai ter mais de um vídeo"), o "Trocar" apaga o
+ * registro do vídeo trocado, e os Arquivos "final" que ficam são todos vídeos
+ * do card: a página mostra todos. Link colado antes, que não virou Arquivo,
+ * vale sozinho — nenhum arquivo sai e a página cai no linkFinal. Sem linkFinal,
+ * valem os arquivos. A regra é a do card (lib/videos-da-gravacao.ts).
  */
 export function arquivosDoVideoDaGravacao<A extends { url: string; originalUrl?: string | null }>(
   linkFinal: string | null | undefined,
@@ -138,5 +138,5 @@ export function arquivosDoVideoDaGravacao<A extends { url: string; originalUrl?:
 ): A[] {
   const link = linkFinal?.trim()
   if (!link) return arquivos
-  return arquivos.filter((a) => a.url === link || a.originalUrl === link)
+  return arquivos.some((a) => a.url === link || a.originalUrl === link) ? arquivos : []
 }
