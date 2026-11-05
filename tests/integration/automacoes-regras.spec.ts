@@ -96,6 +96,39 @@ describe("O04 sem LLM",()=>{
     await db.demanda.update({where:{id:d.id},data:{statusVisivel:"finalizado"}})
     await processarSaidas(a);expect(fetch).not.toHaveBeenCalled()
   })
+  // Gravação externa tem os avisos dela (rotina "gravacoes", tabela de 29/10): o
+  // "prazos" não manda "Sem atualização…" ao videomaker, uma mensagem por gravação.
+  it("prazos: gravação externa fica só no alerta da central; a demanda comum continua com o WhatsApp",async()=>{
+    const comum=await db.demanda.create({data:demanda(`${p}-comum`)})
+    const gravacao={statusInterno:"captacao_agendada" as const,statusVisivel:"producao" as const}
+    const externas=[
+      {...demanda(`${p}-cobertura`),...gravacao,departamento:"eventos",tipoVideo:"cobertura_evento"},
+      {...demanda(`${p}-tipo`),...gravacao,tipoGravacao:"entrega_equipamento" as const},
+    ]
+    await db.demanda.createMany({data:externas})
+    const r=await executarRotina(a,"prazos")
+    expect(r.intencoesCriadas).toBe(1)
+    expect(r.semDestinatario).toBe(0)
+    const saidas=await db.saidaWhatsapp.findMany({where:{organizacaoId:a},select:{referencia:true,regraContexto:true}})
+    expect(saidas).toEqual([{referencia:comum.id,regraContexto:expect.objectContaining({tipo:"demanda",regra:"prazo_vencido"})}])
+    for(const {id} of externas) {
+      const alertas=await db.alertaIA.findMany({where:{organizacaoId:a,demandaId:id,status:"ativo"},select:{tipoAlerta:true}})
+      expect(alertas.map(x=>x.tipoAlerta).sort()).toEqual(["regra_prazo_vencido","regra_sem_movimento"])
+    }
+    // Rodar de novo (seg, qua, sex) também não manda.
+    expect((await executarRotina(a,"prazos")).intencoesCriadas).toBe(0)
+    expect(await db.saidaWhatsapp.count({where:{organizacaoId:a,referencia:{in:externas.map(x=>x.id)}}})).toBe(0)
+  })
+  it("aviso de prazo que já estava na fila não sai quando a demanda é gravação externa",async()=>{
+    const d=await db.demanda.create({data:demanda(`${p}-na-fila`)})
+    expect((await executarRotina(a,"prazos")).intencoesCriadas).toBe(1)
+    // Como a fila que ficou de antes da mudança: mesma revisão (updatedAt), agora gravação externa.
+    await db.demanda.update({where:{id:d.id},data:{departamento:"eventos",tipoVideo:"cobertura_evento",updatedAt:d.updatedAt}})
+    expect((await db.demanda.findUniqueOrThrow({where:{id:d.id}})).updatedAt).toEqual(d.updatedAt)
+    await processarSaidas(a)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await db.saidaWhatsapp.findFirstOrThrow({where:{organizacaoId:a},select:{estado:true,motivo:true}})).toEqual({estado:"cancelado",motivo:"regra_resolvida"})
+  })
   it("empresa vazia, pausada ou de teste não gera execução comercial",async()=>{
     expect(await executarRotina(a,"vistoria")).toHaveProperty("ignorada","sem_atividade")
     await db.demanda.create({data:demanda(`${p}-teste`)})

@@ -4,12 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
-import { contextoRegraValido, cobrancaValida, hashRegra, regrasDemanda, revisaoEvento, type ContextoRegra, type RegraDemanda } from "@/lib/regras-operacionais"
+import { contextoRegraValido, cobrancaValida, ehGravacaoExterna, hashRegra, regrasDemanda, revisaoEvento, type ContextoRegra, type RegraDemanda } from "@/lib/regras-operacionais"
 import { dataEmSaoPaulo, somarDias } from "@/lib/datas"
 import { recorteMetricas } from "@/lib/metricas-recorte"
 import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio"
 import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
-import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { dadosDaGravacao, telefonesDaGestao, telefonesDaOperacao } from "@/lib/avisos-gravacao"
 import { mensagensDaRegra, regrasDaGravacao } from "@/lib/avisos-gravacao-textos"
 
@@ -87,8 +86,9 @@ async function demandas(org:string,rotina:Rotina,r:Resumo) {
         }
       }
       // Um aviso prioritário por demanda/dia/revisão; aprovação é trabalho do gestor, não cobrança ao prestador.
-      // Gravação externa tem a véspera dela, com hora, endereço e o que levar (rotina "gravacoes").
-      const regra=rotina==="lembretes" ? (ehGravacaoExterna(d) ? undefined : regras.find(v=>v==="captacao")) : rotina==="prazos" ? regras.find(v=>["prazo_vencido","prazo_proximo","sem_movimento"].includes(v)) : undefined
+      // Gravação externa não recebe nem a captação nem os prazos: os avisos dela (véspera com
+      // hora e endereço, colinha, material, pagamento) são da rotina "gravacoes"; o alerta acima fica.
+      const regra=ehGravacaoExterna(d) ? undefined : rotina==="lembretes" ? regras.find(v=>v==="captacao") : rotina==="prazos" ? regras.find(v=>["prazo_vencido","prazo_proximo","sem_movimento"].includes(v)) : undefined
       if(!regra) return
       const destinos=await telefones(tx,org,d)
       if(!destinos.length) r.semDestinatario++
@@ -163,9 +163,6 @@ async function relatorios(org:string,r:Resumo) {
     })
   }
 }
-/** Só iniciar rotinas com objetos elegíveis ou pendências que precisam ser encerradas. */
-const ehGravacaoExterna = (d:{tipoGravacao?:string|null;tipoVideo?:string|null;departamento?:string|null}) =>
-  !!d.tipoGravacao || ehSolicitacaoDeCobertura(d)
 // Ativa: ainda anda no quadro, ou já foi entregue mas a nota recebida não foi
 // para compras — o aviso de nota parada vale depois da entrega também.
 const GRAVACAO_ATIVA:Prisma.DemandaWhereInput = {
@@ -196,6 +193,7 @@ async function gravacoes(org:string,r:Resumo) {
     }
   })
 }
+/** Só iniciar rotinas com objetos elegíveis ou pendências que precisam ser encerradas. */
 async function atividadeElegivel(org:string,rotina:Rotina) {
   if(await prisma.saidaWhatsapp.count({where:{organizacaoId:org,origem:"regra",estado:"aguardando"}})) return true
   if(rotina==="gravacoes") return !!await prisma.demanda.count({where:{organizacaoId:org,...GRAVACAO_ATIVA}})
