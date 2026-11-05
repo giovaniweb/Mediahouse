@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { acompanhamentoDaGravacao, type GravacaoParaAcompanhar } from "@/lib/acompanhamento-gravacao"
+import { acompanhamentoDaGravacao, arquivosDoVideoDaGravacao, type GravacaoParaAcompanhar } from "@/lib/acompanhamento-gravacao"
 
 // A página de quem pediu o videomaker. Quinta, 29/10/2026; 16:00Z = 13:00 em SP.
 const hoje = "2026-10-29"
@@ -63,5 +63,26 @@ describe("o que quem pediu vê", () => {
     // Antiga, sem histórico, com o vídeo no link: entregue, como antes.
     expect(acompanhamentoDaGravacao(g({ statusInterno: "encerrado", statusVisivel: "finalizado", linkFinal: "https://drive/v" }), hoje))
       .toMatchObject({ situacao: "Enviado ao cliente" })
+  })
+})
+
+// O "Trocar" do card grava o linkFinal novo e deixa o arquivo anterior guardado.
+// A página de quem pediu oferece só o vídeo do linkFinal (05/11/2026).
+describe("o vídeo que a página oferece depois de um Trocar", () => {
+  const velho = { url: "https://s/videos/d1/final-1.mp4", originalUrl: null, nomeArquivo: "corte 1.mp4" }
+  const novo = { url: "https://s/videos/d1/final-2.mp4", originalUrl: null, nomeArquivo: "corte 2.mp4" }
+  it("troca por arquivo: só o novo, nunca o velho", () => {
+    expect(arquivosDoVideoDaGravacao(novo.url, [velho, novo])).toEqual([novo])
+  })
+  it("troca por link: nenhum arquivo, e a página cai no linkFinal novo", () => {
+    expect(arquivosDoVideoDaGravacao("https://drive.google.com/file/d/abc", [velho, novo])).toEqual([])
+  })
+  it("arquivo convertido vale pelo original que o linkFinal guardou", () => {
+    const convertido = { url: "https://s/videos/d1/final-2-web.mp4", originalUrl: novo.url, nomeArquivo: "corte 2.mp4" }
+    expect(arquivosDoVideoDaGravacao(novo.url, [velho, convertido])).toEqual([convertido])
+  })
+  it("sem linkFinal, valem os arquivos, como antes", () => {
+    expect(arquivosDoVideoDaGravacao(null, [velho, novo])).toEqual([velho, novo])
+    expect(arquivosDoVideoDaGravacao("  ", [velho])).toEqual([velho])
   })
 })

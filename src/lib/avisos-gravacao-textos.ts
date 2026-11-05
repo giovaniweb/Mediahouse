@@ -17,7 +17,7 @@
 // que fazer, no máximo um emoji, o código junto do nome, o link sozinho.
 import { diasEntre, somarDias } from "./datas"
 import { momentoDoJob, rotuloDoMomento } from "./ficha-do-job"
-import { etapaDaGravacao, levarDaGravacao, materialChegouAgora } from "./etapas-da-gravacao"
+import { etapaDaGravacao, levarDaGravacao, materialChegouAgora, videoNoNuflow } from "./etapas-da-gravacao"
 
 export type EventoDaGravacao =
   | "entrou" | "confirmada" | "recusada" | "material" | "nota_recebida" | "pronta" | "concluida" | "nota_paga"
@@ -48,6 +48,11 @@ export type DadosDoAviso = {
   colinha?: string | null
   /** A página de acompanhamento de quem pediu (lib/acompanhamento-gravacao.ts). */
   linkAcompanhamento?: string | null
+  /**
+   * O vídeo final que abre para o cliente sem login (linkDoVideoParaOCliente):
+   * o arquivo subido no card vai com o token do link público.
+   */
+  linkVideoCliente?: string | null
 }
 
 const cliente = (d: DadosDoAviso) => d.clienteFinalNome?.trim() || d.titulo
@@ -58,6 +63,9 @@ const quando = (d: DadosDoAviso) => {
   return m ? rotuloDoMomento(m) : "data a confirmar"
 }
 const onde = (d: DadosDoAviso) => d.localGravacao?.trim() || d.localEvento?.trim() || null
+// O link que vai para o cliente. O endereço do arquivo subido (/api/midia/...)
+// pede login e nem tem o domínio: sem o link pronto para ele, não vai link.
+const videoDoCliente = (d: DadosDoAviso) => d.linkVideoCliente?.trim() || (videoNoNuflow(d.linkFinal) ? null : d.linkFinal?.trim() || null)
 
 export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Mensagens {
   switch (evento) {
@@ -86,7 +94,7 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
       return { operacao: `🎬 Vídeo pronto: ${ref(d)}.\n\nEnvie ao cliente e marque como enviado.` }
     case "concluida":
       return {
-        ...(d.linkFinal ? { cliente: `Olá! O vídeo da sua gravação está pronto:\n${d.linkFinal}` } : {}),
+        ...(videoDoCliente(d) ? { cliente: `Olá! O vídeo da sua gravação está pronto:\n${videoDoCliente(d)}` } : {}),
         solicitante: [`✔️ Gravação entregue ao cliente: ${ref(d)}.`, d.linkAcompanhamento && `Acompanhamento:\n${d.linkAcompanhamento}`].filter(Boolean).join("\n\n"),
       }
     case "nota_paga":

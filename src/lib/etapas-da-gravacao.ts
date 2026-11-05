@@ -444,3 +444,150 @@ export function linkValido(v: string | null | undefined): boolean {
     return false
   }
 }
+
+// ── O vídeo final para o cliente ─────────────────────────────────────────────
+//
+// Desde 04/11/2026 (pedido do Giovani) o vídeo final pode ser subido no card,
+// além de colado como link. O arquivo subido mora no bucket privado: o endereço
+// dele (/api/midia/...) só abre com login. Para o cliente, ele vai com o token
+// do link público da gravação — o mesmo do Compartilhar e da página
+// /d/<token>, que lib/midia-acesso já aceita para o vídeo final daquela demanda.
+
+/** O vídeo foi subido no NuFlow (bucket privado), e não colado como link de fora. */
+export function videoNoNuflow(url: string | null | undefined): boolean {
+  return !!url?.trim().startsWith("/api/midia/")
+}
+
+/**
+ * O link do vídeo final que abre para o cliente, sem login. Link de fora
+ * (Drive) segue como está; o arquivo subido ganha o endereço completo e o token
+ * do link público. Sem link público ativo, o arquivo subido não tem como abrir
+ * para quem não tem conta: null (nada de mandar um link que pede login).
+ */
+export function linkDoVideoParaOCliente(
+  linkFinal: string | null | undefined,
+  tokenPublico: string | null | undefined,
+  base: string,
+): string | null {
+  const video = linkFinal?.trim()
+  if (!video) return null
+  if (!videoNoNuflow(video)) return video
+  if (!tokenPublico) return null
+  return `${base.trim().replace(/\/$/, "")}${video}?token=${encodeURIComponent(tokenPublico)}`
+}
+
+// ── Um lugar só para a mídia ─────────────────────────────────────────────────
+//
+// Giovani, 04/11/2026: "2 lugar para anexar a midia, temos que simplificar".
+// Na gravação externa a mídia entra só pelo "Agora": os brutos no passo do
+// material, o vídeo final na edição (e o vídeo pronto, quando a edição é do
+// videomaker, junto com os brutos). Embaixo, em "Arquivos", fica um bloco só,
+// de leitura, com o que já chegou — inclusive as pastas antigas
+// (linkFolderBrutos e linkFolderFinal), que não têm mais campo no card. O mesmo
+// link aparece uma vez. Corrigir é o "Trocar", que reabre o campo no "Agora".
+
+/** O que o "Trocar" reabre no "Agora". */
+export type TrocaNoAgora = "brutos" | "video"
+
+export type ItemDeMidia = {
+  /** O campo que o "Trocar" reabre. Pasta antiga não tem troca. */
+  qual: TrocaNoAgora
+  rotulo: string
+  url: string
+  /** É o vídeo final (não a pasta antiga): toca no player do card. */
+  toca: boolean
+  /** Subido no NuFlow (bucket privado): baixa por aqui. */
+  noNuflow: boolean
+  nomeArquivo: string | null
+  /** O original enviado, quando houve conversão: é o que se baixa. */
+  originalUrl: string | null
+  /** Pasta de antes do "Agora" (linkFolderBrutos/linkFolderFinal): só leitura. */
+  antigo: boolean
+}
+
+type ArquivoDoCard = { tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo?: string | null }
+
+/** O endereço sem o que muda à toa (o "?usp=sharing" do Drive, a barra no fim). */
+function chaveDoLink(url: string): string {
+  const t = url.trim()
+  try {
+    const u = new URL(t)
+    u.searchParams.delete("usp")
+    return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`
+  } catch {
+    return t.replace(/\/+$/, "")
+  }
+}
+
+export function mesmoLink(a: string | null | undefined, b: string | null | undefined): boolean {
+  return !!a?.trim() && !!b?.trim() && chaveDoLink(a) === chaveDoLink(b)
+}
+
+/** O registro do vídeo final subido (nome e original), se o linkFinal é um arquivo do card. */
+export function arquivoDoVideoFinal(j: { linkFinal?: string | null; arquivos?: ArquivoDoCard[] | null }): ArquivoDoCard | null {
+  const link = j.linkFinal?.trim()
+  if (!link) return null
+  return j.arquivos?.find((a) => a.tipoArquivo === "final" && (a.url === link || a.originalUrl === link)) ?? null
+}
+
+/** A mídia do card, na ordem em que chega: brutos, depois o vídeo final. */
+export function midiaDaGravacao(j: {
+  linkBrutos?: string | null
+  linkFolderBrutos?: string | null
+  linkFinal?: string | null
+  linkFolderFinal?: string | null
+  arquivos?: ArquivoDoCard[] | null
+}): ItemDeMidia[] {
+  const itens: ItemDeMidia[] = []
+  const arquivo = arquivoDoVideoFinal(j)
+  const por = (qual: TrocaNoAgora, rotulo: string, url: string | null | undefined, antigo: boolean) => {
+    const u = url?.trim()
+    if (!u) return
+    const igual = itens.find((i) => mesmoLink(i.url, u))
+    if (igual) {
+      // Sem edição, os brutos são o vídeo final: uma linha que diz as duas coisas.
+      if (qual === "video" && !antigo && !igual.toca) Object.assign(igual, { rotulo: "Brutos e vídeo final", toca: true })
+      return
+    }
+    // A pasta antiga é pasta, não vídeo: abre, não toca.
+    const ehVideo = qual === "video" && !antigo
+    itens.push({
+      qual,
+      rotulo,
+      url: u,
+      toca: ehVideo,
+      noNuflow: videoNoNuflow(u),
+      nomeArquivo: ehVideo ? arquivo?.nomeArquivo?.trim() || null : null,
+      originalUrl: ehVideo ? arquivo?.originalUrl ?? null : null,
+      antigo,
+    })
+  }
+  por("brutos", "Brutos", j.linkBrutos, false)
+  por("brutos", "Pasta do material bruto", j.linkFolderBrutos, true)
+  por("video", "Vídeo final", j.linkFinal, false)
+  por("video", "Pasta do material pronto", j.linkFolderFinal, true)
+  return itens
+}
+
+/**
+ * O que gravar quando chegam os brutos. Sem edição, os brutos são o vídeo
+ * final: o link vai junto, enquanto o vídeo final for o dos brutos.
+ */
+export function patchDosBrutos(
+  j: { edicaoPor?: string | null; linkBrutos?: string | null; linkFinal?: string | null },
+  valor: string,
+): { linkBrutos: string; linkFinal?: string } {
+  const segue = j.edicaoPor === "sem_edicao" && (!j.linkFinal?.trim() || mesmoLink(j.linkFinal, j.linkBrutos))
+  return { linkBrutos: valor, ...(segue ? { linkFinal: valor } : {}) }
+}
+
+/**
+ * Completou o material agora? Então a gravação anda junto, como na entrega
+ * pelo link do convite (lib/entrega-da-gravacao.ts). Senão, null: só grava.
+ */
+export function statusAoGravarMaterial(
+  job: { statusInterno: string; edicaoPor?: string | null; linkBrutos?: string | null; linkFinal?: string | null },
+  patch: { linkBrutos?: string | null; linkFinal?: string | null },
+): StatusInterno | null {
+  return esperaMaterial(job) && materialCompleto({ ...job, ...patch }) ? statusDoMaterial(job.edicaoPor) : null
+}

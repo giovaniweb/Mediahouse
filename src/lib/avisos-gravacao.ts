@@ -9,6 +9,7 @@ import { telefoneCompleto } from "@/lib/whatsapp-identidade"
 import { momentoDoJob } from "@/lib/ficha-do-job"
 import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
+import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import {
   mensagemDaNotaEmLote,
   mensagensDoEvento,
@@ -84,6 +85,8 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
     ...d,
     linkEntrega,
     linkAcompanhamento: d.publicToken && d.publicTokenAtivo ? linkPublicoDaDemanda(d.publicToken) : null,
+    // O vídeo subido no card abre para o cliente com o token do link público.
+    linkVideoCliente: linkDoVideoParaOCliente(d.linkFinal, d.publicTokenAtivo ? d.publicToken : null, base),
     colinha: colinha?.texto ? preencherColinha(colinha.texto, {
       cliente: d.clienteFinalNome?.trim() || d.titulo, hora: quando?.hora ?? null,
       endereco: d.localGravacao || d.localEvento, link: linkEntrega,

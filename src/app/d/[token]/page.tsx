@@ -39,6 +39,8 @@ type Gravacao = {
   situacao: string
   tom: "andamento" | "ok" | "alerta"
   trilha: PassoDaTrilha[] | null
+  /** Do "Enviar ao cliente" em diante o vídeo já aparece (lib/acompanhamento-gravacao.ts). */
+  videoPronto?: boolean
 }
 
 const PILULA: Record<Gravacao["tom"], string> = {
@@ -278,7 +280,7 @@ function AcompanhamentoDaGravacao({ d, g, finais }: { d: Demanda; g: Gravacao; f
         ))}
       </dl>
 
-      {entregue && finais.length > 0 && (
+      {(g.videoPronto ?? entregue) && finais.length > 0 && (
         <section className="mb-8">
           <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Vídeo</h2>
           <div className="grid gap-3 sm:grid-cols-2">

@@ -6,7 +6,7 @@ import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { contratoEfetivo, quadroDoCard } from "@/lib/quadro-do-card"
 import { selectContrato } from "@/lib/quadro-do-card-server"
-import { acompanhamentoDaGravacao } from "@/lib/acompanhamento-gravacao"
+import { acompanhamentoDaGravacao, arquivosDoVideoDaGravacao } from "@/lib/acompanhamento-gravacao"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 
 type Params = { params: Promise<{ token: string }> }
@@ -110,6 +110,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     videomakerId, videomaker: videomaker ? { nome: videomaker.nome } : null, dataCaptacao, dataEvento: publico.dataEvento,
     localGravacao, localEvento, createdAt: publico.createdAt, finalizadaEm: publico.finalizadaEm, linkFinal: publico.linkFinal, historicos,
   }, hojeEmSaoPaulo()) : null
+  // Na gravação, o vídeo de quem pediu é o do linkFinal: depois de um "Trocar",
+  // o arquivo anterior continua guardado e não pode voltar a aparecer aqui.
+  const arquivos = ehGravacao ? arquivosDoVideoDaGravacao(publico.linkFinal, publico.arquivos) : publico.arquivos
   // Mesma regra da aprovação: o token é a credencial de quem não tem conta, e
   // passa a valer também para a thumbnail que vive no bucket privado.
   return NextResponse.json({
@@ -117,7 +120,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       ...publico,
       linkFinal: comToken(publico.linkFinal, token),
       // Baixa-se o original; a prévia convertida é só para assistir.
-      arquivos: publico.arquivos.map(({ originalUrl, ...a }) => ({ ...a, url: comToken(a.url, token),
+      arquivos: arquivos.map(({ originalUrl, ...a }) => ({ ...a, url: comToken(a.url, token),
         urlDownload: paraDownload(comToken(originalUrl ?? a.url, token)) })),
       thumbnailUrl: comToken(publico.thumbnailUrl, token) ?? publico.thumbnailUrl,
       organizacao,

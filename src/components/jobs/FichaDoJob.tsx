@@ -15,7 +15,7 @@ import {
   situacaoDaEquipe,
   telefoneLegivel,
 } from "@/lib/ficha-do-job"
-import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
 import { AgoraDaGravacao, EntregasDoVideomaker, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
 import { CancelarGravacao } from "./CancelarGravacao"
 import styles from "./FichaDoJob.module.css"
@@ -24,8 +24,9 @@ import styles from "./FichaDoJob.module.css"
  * A ficha da gravação externa: o card aberto inteiro gira em torno dela.
  *
  * Pedido do Giovani (28 e 29/10/2026): o card estava confuso. Agora é a linha
- * do tempo no topo; à esquerda o que pede ação — "Agora" e as entregas do
- * videomaker (brutos, vídeo pronto, nota); à direita os dados da gravação, na
+ * do tempo no topo; à esquerda o que pede ação — "Agora" (o único lugar para
+ * mandar mídia, desde 04/11) e as entregas do videomaker (brutos, vídeo
+ * pronto, nota: só o que chegou); à direita os dados da gravação, na
  * ordem da mensagem que chega no WhatsApp: tipo, equipamento, cliente, quando,
  * onde, e depois quem vai, edição e o que levar. Tudo edita ali mesmo; faltando,
  * diz que falta (em âmbar) em vez de esconder.
@@ -71,6 +72,10 @@ export function FichaDoJob({
   onAvancar,
   onConfirmarVideomaker,
   onAtualizar,
+  onEnviarVideo,
+  onLinkPublico,
+  troca,
+  onTroca,
   rodape,
   children,
 }: {
@@ -84,6 +89,13 @@ export function FichaDoJob({
   onConfirmarVideomaker: (aceite: boolean) => void
   /** Recarrega o card depois de agir na nota. */
   onAtualizar: () => Promise<unknown> | void
+  /** Sobe o vídeo final no "Agora" (o envio de Demandas) e devolve o endereço dele. */
+  onEnviarVideo?: (file: File, onProgress: (pct: number) => void) => Promise<string>
+  /** Garante o link público e devolve o token (o vídeo subido abre com ele). */
+  onLinkPublico?: () => Promise<string | null>
+  /** O link que está sendo trocado no "Agora" (o "Trocar" do bloco de Arquivos abre lá). */
+  troca?: TrocaNoAgora | null
+  onTroca?: (troca: TrocaNoAgora | null) => void
   /** Linha final (de quem é a vez). A etapa já está na trilha. */
   rodape?: ReactNode
   children?: ReactNode
@@ -114,11 +126,16 @@ export function FichaDoJob({
           <AgoraDaGravacao
             job={job}
             podeEditar={podeEditar}
+            onSalvar={onSalvar}
             onAvancar={onAvancar}
             onConfirmarVideomaker={onConfirmarVideomaker}
             onEscalar={onEscalar}
+            onEnviarVideo={onEnviarVideo}
+            onLinkPublico={onLinkPublico}
+            troca={troca}
+            onTroca={onTroca}
           />
-          <EntregasDoVideomaker job={job} podeEditar={podeEditar} onSalvar={onSalvar} onAvancar={onAvancar} onAtualizar={onAtualizar} />
+          <EntregasDoVideomaker job={job} podeEditar={podeEditar} onAtualizar={onAtualizar} />
           {children}
         </div>
 

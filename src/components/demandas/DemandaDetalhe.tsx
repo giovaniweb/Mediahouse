@@ -12,7 +12,7 @@ import { ptBR } from "date-fns/locale"
 import { Header } from "@/components/layout/Header"
 import { InlineEdit } from "./InlineEdit"
 import { ArteViewer } from "@/components/aprovacao/ArteViewer"
-import { analisarVideoDoUpload } from "@/lib/video-compat"
+import { enviarVideo } from "@/lib/upload-video"
 import { paraDownload } from "@/lib/midia-download"
 import { AprovacaoEntrega } from "@/components/aprovacao/AprovacaoEntrega"
 import { TextoComMomentos, irPara } from "@/components/aprovacao/Momentos"
@@ -42,8 +42,9 @@ import {
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { MidiaDaGravacao } from "@/components/jobs/MidiaDaGravacao"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
-import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -306,6 +307,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [compartilhando, setCompartilhando] = useState(false)
   // null = ainda não mexemos nesta sessão; a origem da verdade é a demanda.
   const [linkPublicoLocal, setLinkPublicoLocal] = useState<string | null | undefined>(undefined)
+  // Gravação externa: o link que está sendo trocado no "Agora" (o único lugar
+  // de envio). O "Trocar" do bloco "Mídia da gravação" abre o campo lá.
+  const [trocaNoAgora, setTrocaNoAgora] = useState<TrocaNoAgora | null>(null)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -514,8 +518,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           dataCaptacao: diaComHorarioMantido(demanda?.dataCaptacao, dataCaptacao),
           videomakerId: videomakerId || null,
           editorId: editorId || null,
-          linkBrutos: linkBrutos || null,
-          linkFinal: linkFinal || null,
+          // Na gravação externa os links não têm campo neste formulário: entram
+          // e trocam pelo "Agora". Reenviá-los daqui gravaria um valor velho.
+          ...(ehCobertura ? {} : { linkBrutos: linkBrutos || null, linkFinal: linkFinal || null }),
           localGravacao: localGravacao || null,
           classificacao: classificacao || null,
           produtoId: produtoId || null,
@@ -561,6 +566,34 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     await mutate()
   }
 
+  // O vídeo final da gravação, subido no card (Giovani, 04/11/2026): o mesmo
+  // envio de Demandas, com o nome do arquivo para quem baixa. Grava o linkFinal
+  // e o Arquivo; o passo anda depois, no "Pronto" ou no "Marcar como enviado"
+  // (ou já, se era o vídeo pronto que faltava no material). Devolve o endereço.
+  async function enviarVideoDaGravacao(file: File, onProgress: (pct: number) => void) {
+    const url = await enviarVideo(id, file, "final", { contentTypeFallback: "video/mp4", comThumbnail: true, nomeArquivo: file.name, onProgress })
+    await mutate()
+    return url
+  }
+
+  // "Trocar" no bloco de mídia: abre o campo no "Agora" e leva até ele.
+  function trocarNoAgora(qual: TrocaNoAgora) {
+    setTrocaNoAgora(qual)
+    requestAnimationFrame(() => document.getElementById("agora-da-gravacao")?.scrollIntoView({ behavior: "smooth", block: "center" }))
+  }
+
+  // O link público da gravação (o do Compartilhar): o vídeo subido abre para o
+  // cliente com o token dele. Já ativo, só devolve; senão gera, como o botão.
+  async function garantirLinkPublico(): Promise<string | null> {
+    if (demanda?.publicTokenAtivo && demanda.publicToken) return demanda.publicToken
+    const res = await fetch(`/api/demandas/${id}/compartilhar`, { method: "POST" })
+    const j = await res.json().catch(() => ({})) as { link?: string; error?: string }
+    if (!res.ok || !j.link) throw new Error(j.error ?? "Não foi possível gerar o link público.")
+    setLinkPublicoLocal(j.link)
+    await mutate()
+    return new URL(j.link).pathname.split("/d/")[1] ?? null
+  }
+
   async function excluirDemanda() {
     if (!confirm(`Tem certeza que deseja excluir a demanda ${demanda.codigo}? Esta ação não pode ser desfeita.`)) return
     try {
@@ -596,122 +629,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   }
 
   // ── Upload via URL presigned (bypass limite 4.5MB do Vercel) ────────────
-  // Captura primeiro frame de um arquivo de vídeo (client-side Canvas)
-  async function captureVideoThumbnail(file: File): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const video = document.createElement("video")
-      video.preload = "metadata"
-      video.muted = true
-      video.playsInline = true
-      const objectUrl = URL.createObjectURL(file)
-      video.src = objectUrl
-      const cleanup = () => URL.revokeObjectURL(objectUrl)
-
-      video.addEventListener("loadedmetadata", () => {
-        video.currentTime = Math.min(1, (video.duration || 2) * 0.1)
-      }, { once: true })
-
-      video.addEventListener("seeked", () => {
-        cleanup()
-        try {
-          const w = Math.min(video.videoWidth || 640, 800)
-          const h = Math.round(w * (video.videoHeight || 360) / (video.videoWidth || 640))
-          const canvas = document.createElement("canvas")
-          canvas.width = w; canvas.height = h
-          canvas.getContext("2d")?.drawImage(video, 0, 0, w, h)
-          canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.8)
-        } catch { resolve(null) }
-      }, { once: true })
-
-      video.addEventListener("error", () => { cleanup(); resolve(null) }, { once: true })
-    })
-  }
-
-  async function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
-    const contentType = file.type || copy.contentTypeFallback
-
-    // Confere ANTES de subir se o vídeo abre no navegador de quem aprova.
-    //
-    // Não adianta testar o player daqui: quem envia costuma estar no Mac, onde
-    // o Safari toca HEVC sem reclamar — o videomaker vê o vídeo perfeito e sobe
-    // tranquilo, e o cliente abre no Chrome e vê preto. Por isso a checagem
-    // olha os bytes do arquivo, não o navegador.
-    if (tipo === "final") {
-      const compat = await analisarVideoDoUpload(file)
-      if (!compat.compativel) {
-        const seguir = window.confirm(
-          `${compat.motivo}\n\n${compat.comoResolver}\n\nEnviar mesmo assim?`
-        )
-        if (!seguir) throw new Error("Envio cancelado — exporte em H.264 / MP4 e tente de novo.")
-      }
-    }
-
-    // Valida tamanho (Supabase Pro suporta até 5 GB após configurar no dashboard)
-    const MAX_UPLOAD_MB = 490
-    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-      const fileMb = (file.size / (1024 * 1024)).toFixed(0)
-      throw new Error(
-        `Arquivo muito grande (${fileMb} MB). Limite máximo: ${MAX_UPLOAD_MB} MB.`
-      )
-    }
-
-    // 1. Busca URL presigned do servidor
-    const urlRes = await fetch(
-      `/api/demandas/${id}/upload-url?tipo=${tipo}&contentType=${encodeURIComponent(contentType)}`
-    )
-    if (!urlRes.ok) {
-      const err = await urlRes.json().catch(() => ({ error: "Erro ao gerar URL de upload" }))
-      throw new Error(err.error ?? "Erro ao gerar URL de upload")
-    }
-    const { uploadUrl, publicUrl } = await urlRes.json() as { uploadUrl: string; publicUrl: string }
-
-    // 2. Upload direto do browser para o Supabase (sem passar pelo servidor)
-    const uploadRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-    })
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text().catch(() => "")
-      // Tenta extrair mensagem legível do JSON de erro do Supabase
-      let msg = `HTTP ${uploadRes.status}`
-      if (errText) {
-        try { msg = (JSON.parse(errText) as { message?: string }).message ?? errText } catch { msg = errText }
-      }
-      throw new Error(`Falha no upload: ${msg}`)
-    }
-
-    // 3. Para vídeos finais: captura thumbnail e faz upload separado para Supabase
-    let thumbnailUrl: string | undefined
-    if (!isGrowth && tipo === "final" && file.type.startsWith("video/")) {
-      try {
-        const thumbBlob = await captureVideoThumbnail(file)
-        if (thumbBlob) {
-          const thumbUrlRes = await fetch(
-            `/api/demandas/${id}/upload-url?tipo=thumbnail&contentType=image%2Fjpeg`
-          )
-          if (thumbUrlRes.ok) {
-            const { uploadUrl: thumbUploadUrl, publicUrl: thumbPublicUrl } = await thumbUrlRes.json() as { uploadUrl: string; publicUrl: string }
-            const thumbUpRes = await fetch(thumbUploadUrl, {
-              method: "PUT",
-              headers: { "Content-Type": "image/jpeg" },
-              body: thumbBlob,
-            })
-            if (thumbUpRes.ok) thumbnailUrl = thumbPublicUrl
-          }
-        }
-      } catch { /* falha silenciosa — thumbnail não é crítica */ }
-    }
-
-    // 4. Salva a URL na demanda (+ thumbnailUrl se disponível)
-    const salvo = await fetch(`/api/demandas/${id}/upload-video`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: publicUrl, tipo, ...(thumbnailUrl ? { thumbnailUrl } : {}) }),
-    })
-    if (!salvo.ok) throw new Error("Não foi possível registrar o arquivo. Tente novamente.")
-
-    return publicUrl
+  // O envio é o de lib/upload-video, o mesmo que o card da gravação externa usa.
+  // A capa sai do vídeo final, menos no Growth (arte não tem quadro).
+  function uploadPresigned(file: File, tipo: "brutos" | "final"): Promise<string> {
+    return enviarVideo(id, file, tipo, { contentTypeFallback: copy.contentTypeFallback, comThumbnail: !isGrowth })
   }
 
   // ── Upload de documentos (PDF, Word, Excel…) via Supabase presigned URL ───
@@ -1411,6 +1332,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 onAvancar={avancarGravacao}
                 onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
                 onAtualizar={() => mutate()}
+                onEnviarVideo={enviarVideoDaGravacao}
+                onLinkPublico={garantirLinkPublico}
+                troca={trocaNoAgora}
+                onTroca={setTrocaNoAgora}
                 rodape={<>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
@@ -1989,7 +1914,20 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
           <Recolhivel ativo={ehCobertura} titulo="Arquivos">
-          {/* ── Arquivos da produção ─────────────────────────────────────── */}
+          {/* ── Mídia da gravação (só leitura) ─────────────────────────────
+              Gravação externa: a mídia entra só pelo "Agora" (Giovani,
+              04/11/2026). Aqui fica o que chegou, num bloco só, com as pastas
+              antigas; "Trocar" abre o campo no "Agora". */}
+          {ehCobertura ? (
+            <MidiaDaGravacao
+              job={demanda}
+              podeEditar={podeEditar}
+              referencias={demanda.referencia}
+              onTocar={setPlayerUrl}
+              onTrocar={trocarNoAgora}
+            />
+          ) : (
+          /* ── Arquivos da produção (Demandas) ──────────────────────────── */
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
               <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
@@ -2053,6 +1991,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
+          )}
 
           {/* ── Documentos anexados ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -2116,7 +2055,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
 
           {/* ── Pastas de Cobertura ──────────────────────────────────────── */}
-          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+          {/* Na gravação externa as pastas antigas aparecem na "Mídia da gravação", só para ler. */}
+          {!ehCobertura && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
               <div className={surface.sectionHead}>
                 <h2 className={surface.sectionTitle}><FolderOpen aria-hidden /> Pastas da cobertura</h2>
