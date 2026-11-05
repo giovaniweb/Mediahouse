@@ -4,7 +4,9 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vites
 import { randomUUID, createHash } from "node:crypto"
 import { NextRequest } from "next/server"
 const estado = vi.hoisted(() => ({ org: "", url: "" }))
-vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: "teste" } }) }))
+// Quem chama é a gestão: a régua de quem sobe arquivo (lib/quem-envia-arquivo)
+// tem teste próprio (envio-arquivo-por-pessoa); aqui o assunto é o registro.
+vi.mock("@/lib/auth", () => ({ auth: async () => ({ user: { id: "teste", papel: "admin" } }) }))
 vi.mock("@/lib/org", () => ({ requireDemandaOrg: async () => ({ organizacaoId: estado.org }) }))
 vi.mock("@/lib/midia", async importOriginal => ({ ...await importOriginal<object>(), subirArquivo: vi.fn(async () => estado.url) }))
 // A conferência de tamanho e tipo no Storage tem teste próprio (tests/unit/onda1-portas); aqui não há Storage.
