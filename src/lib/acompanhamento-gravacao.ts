@@ -120,3 +120,23 @@ export function acompanhamentoDaGravacao(g: GravacaoParaAcompanhar, hoje: string
   const situacao = passo === "material" && faltaOMaterial(g, hoje) ? "Gravado, esperando o material" : SITUACAO[passo]
   return { ...base, situacao, tom: passo === "concluido" ? "ok" : "andamento", trilha, videoPronto: passo === "enviar" || passo === "concluido" }
 }
+
+/**
+ * O vídeo que a página de quem pediu oferece (05/11/2026): o do linkFinal.
+ *
+ * O "Trocar" do card grava o linkFinal novo e deixa o arquivo anterior
+ * guardado, sem apagar (o card mostra só o do linkFinal). Sem este recorte, a
+ * página seguia oferecendo o vídeo velho e, na troca por link, nem mostrava o
+ * novo: ela só cai no linkFinal quando não há arquivo. O arquivo vale pelo
+ * endereço que serve (`url`) ou pelo original de antes da conversão
+ * (`originalUrl`), o mesmo critério do card. Sem linkFinal, valem os arquivos,
+ * como antes.
+ */
+export function arquivosDoVideoDaGravacao<A extends { url: string; originalUrl?: string | null }>(
+  linkFinal: string | null | undefined,
+  arquivos: A[],
+): A[] {
+  const link = linkFinal?.trim()
+  if (!link) return arquivos
+  return arquivos.filter((a) => a.url === link || a.originalUrl === link)
+}
