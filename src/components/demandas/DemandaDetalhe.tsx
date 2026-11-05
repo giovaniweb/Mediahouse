@@ -42,11 +42,10 @@ import {
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
-import { MidiaDaGravacao } from "@/components/jobs/MidiaDaGravacao"
 import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 import type { GrupoDaLista } from "@/lib/busca-na-lista"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
-import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao, type TrocaNoAgora } from "@/lib/etapas-da-gravacao"
+import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
@@ -309,9 +308,6 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const [compartilhando, setCompartilhando] = useState(false)
   // null = ainda não mexemos nesta sessão; a origem da verdade é a demanda.
   const [linkPublicoLocal, setLinkPublicoLocal] = useState<string | null | undefined>(undefined)
-  // Gravação externa: o link que está sendo trocado no "Agora" (o único lugar
-  // de envio). O "Trocar" do bloco "Mídia da gravação" abre o campo lá.
-  const [trocaNoAgora, setTrocaNoAgora] = useState<TrocaNoAgora | null>(null)
   // ── Campos editáveis ──────────────────────────────────────────────────────
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -588,20 +584,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     await mutate()
   }
 
-  // O vídeo final da gravação, subido no card (Giovani, 04/11/2026): o mesmo
-  // envio de Demandas, com o nome do arquivo para quem baixa. Grava o linkFinal
-  // e o Arquivo; o passo anda depois, no "Pronto" ou no "Marcar como enviado"
-  // (ou já, se era o vídeo pronto que faltava no material). Devolve o endereço.
-  async function enviarVideoDaGravacao(file: File, onProgress: (pct: number) => void) {
-    const url = await enviarVideo(id, file, "final", { contentTypeFallback: "video/mp4", comThumbnail: true, nomeArquivo: file.name, onProgress })
+  // Os brutos ou o vídeo final da gravação, subidos no bloco "Arquivos"
+  // (Giovani, 04 e 05/11/2026): o mesmo envio de Demandas, com o nome do
+  // arquivo para quem baixa. Grava o link e o Arquivo; o passo anda depois, no
+  // "Agora" (ou já, se o arquivo completou o material). Devolve o endereço.
+  async function enviarArquivoDaGravacao(tipo: "brutos" | "final", file: File, onProgress: (pct: number) => void) {
+    const url = await enviarVideo(id, file, tipo, { contentTypeFallback: "video/mp4", comThumbnail: tipo === "final", nomeArquivo: file.name, onProgress })
     await mutate()
     return url
-  }
-
-  // "Trocar" no bloco de mídia: abre o campo no "Agora" e leva até ele.
-  function trocarNoAgora(qual: TrocaNoAgora) {
-    setTrocaNoAgora(qual)
-    requestAnimationFrame(() => document.getElementById("agora-da-gravacao")?.scrollIntoView({ behavior: "smooth", block: "center" }))
   }
 
   // O link público da gravação (o do Compartilhar): o vídeo subido abre para o
@@ -686,6 +676,74 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
     })
     if (res.ok) { toast.success("Documento removido"); mutate() }
     else toast.error("Erro ao remover")
+  }
+
+  // Os documentos do card (PDF, Word, planilha, imagem), com o "Anexar". Na
+  // gravação externa vão para o fim do bloco "Arquivos" da ficha (compacto);
+  // em Demandas, ficam na aba de arquivos, como sempre.
+  function documentosDoCard(compacto = false) {
+    const docs: ArquivoVideo[] = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
+    return (
+      <>
+        <div className={compacto ? "mb-2 flex items-center justify-between gap-2" : surface.sectionHead}>
+          {compacto ? (
+            <p className={cn(surface.subTitle, "mb-0")}>
+              Documentos{docs.length > 0 && <span className={surface.count}>{docs.length}</span>}
+            </p>
+          ) : (
+            <h2 className={surface.sectionTitle}>
+              <FileText aria-hidden /> Documentos
+              {docs.length > 0 && <span className={surface.count}>{docs.length}</span>}
+            </h2>
+          )}
+          <button type="button" onClick={() => fileRefDoc.current?.click()} disabled={uploadingDoc} className={surface.btn}>
+            {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />}
+            {uploadingDoc ? `${docUploadProgress}%` : "Anexar"}
+          </button>
+          <input
+            ref={fileRefDoc}
+            type="file"
+            className="hidden"
+            accept={ACCEPT_DOCUMENTOS}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
+          />
+        </div>
+        {docs.length === 0 ? (
+          <p className={surface.empty}>
+            Nenhum anexo. Use &quot;Anexar&quot; para PDF, Word, Excel ou imagem (PNG, JPEG), até 25 MB cada.
+          </p>
+        ) : (
+          <div className={surface.fileList}>
+            {docs.map((arq: ArquivoVideo, i: number) => {
+              const ext = extensaoDe(arq.nomeArquivo || arq.url.split("?")[0]).toUpperCase() || "?"
+              const nome = nomeParaMostrar(arq.nomeArquivo, i + 1)
+              const imagem = extensaoDe(arq.nomeArquivo) ? ehImagem(arq.nomeArquivo) : isImageUrl(arq.url)
+              return (
+                <div key={arq.id} className={surface.fileRow}>
+                  {imagem
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={arq.url} alt="" className={surface.fileThumb} loading="lazy" />
+                    : <span className={surface.fileBadge}>{ext}</span>}
+                  <span className={surface.fileName}>
+                    <a href={arq.url} target="_blank" rel="noopener noreferrer" title={arq.nomeArquivo}>{nome}</a>
+                    <span>{ext}{arq.createdAt ? ` · ${formatarData(arq.createdAt)}` : ""}</span>
+                  </span>
+                  <span className={surface.fileActions}>
+                    <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar" aria-label={`Baixar ${nome}`} className={surface.iconBtn}>
+                      <Download aria-hidden />
+                    </a>
+                    <button type="button" onClick={() => deletarDocumento(arq.id)} title="Remover" aria-label={`Remover ${nome}`} className={surface.iconBtn} data-perigo>
+                      <Trash2 aria-hidden />
+                    </button>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </>
+    )
+  
   }
 
   // ── Atribuição rápida (sem entrar em edit mode) ───────────────────────────
@@ -1343,9 +1401,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 aberto={moverAberto}
                 onFechar={() => setMoverAberto(false)}
               />
-              {/* A ficha da gravação: linha do tempo, o passo da vez, a nota
-                  do videomaker e quando, onde, quem vai e para quem — antes do
-                  briefing. A etapa está na trilha; o rodapé diz de quem é a vez. */}
+              {/* A ficha da gravação: linha do tempo, a faixa "Agora", o bloco
+                  "Arquivos" (o material, a nota do videomaker e os documentos) e
+                  quando, onde, quem vai e para quem — antes do briefing. A etapa
+                  está na trilha; o rodapé diz de quem é a vez. */}
               <FichaDoJob
                 job={demanda}
                 podeEditar={podeEditar}
@@ -1354,10 +1413,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 onAvancar={avancarGravacao}
                 onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
                 onAtualizar={() => mutate()}
-                onEnviarVideo={enviarVideoDaGravacao}
+                onEnviarArquivo={enviarArquivoDaGravacao}
                 onLinkPublico={garantirLinkPublico}
-                troca={trocaNoAgora}
-                onTroca={setTrocaNoAgora}
+                onTocar={setPlayerUrl}
+                documentos={documentosDoCard(true)}
                 rodape={<>
                   <span>
                     <span className="text-zinc-600">Vez de </span>
@@ -1389,7 +1448,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               </div>
             </>
           ) : (
-          <Recolhivel ativo={ehCobertura} titulo="Descrição do pedido">
+          <Recolhivel ativo={ehCobertura} titulo="Descrição do pedido" aberto>
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-6 space-y-5">
             <Briefing key={demanda.id} texto={demanda.descricao ?? ""} podeEditar={podeEditar} onSalvar={(v) => salvarCampo({ descricao: v })} />
 
@@ -1905,22 +1964,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           </div>
           )}
           </div>
-          <div hidden={!ehCobertura && detailTab !== "arquivos"} className={surface.tabSection}>
-          <Recolhivel ativo={ehCobertura} titulo="Arquivos">
-          {/* ── Mídia da gravação (só leitura) ─────────────────────────────
-              Gravação externa: a mídia entra só pelo "Agora" (Giovani,
-              04/11/2026). Aqui fica o que chegou, num bloco só, com as pastas
-              antigas; "Trocar" abre o campo no "Agora". */}
-          {ehCobertura ? (
-            <MidiaDaGravacao
-              job={demanda}
-              podeEditar={podeEditar}
-              referencias={demanda.referencia}
-              onTocar={setPlayerUrl}
-              onTrocar={trocarNoAgora}
-            />
-          ) : (
-          /* ── Arquivos da produção (Demandas) ──────────────────────────── */
+          {/* Na gravação externa o material e os documentos ficam no bloco
+              "Arquivos" da ficha (Giovani, 05/11/2026): esta aba é de Demandas. */}
+          {!ehCobertura && (
+          <div hidden={detailTab !== "arquivos"} className={surface.tabSection}>
+          {/* ── Arquivos da produção ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
             <div className={surface.sectionHead}>
               <h2 className={surface.sectionTitle}><Link2 aria-hidden /> {copy.productionTitle}</h2>
@@ -1984,72 +2032,14 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
               )}
             </div>
           </div>
-          )}
 
           {/* ── Documentos anexados ─────────────────────────────────────── */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
-            {(() => {
-              const docs: ArquivoVideo[] = (demanda.arquivos ?? []).filter((a: ArquivoVideo) => a.tipoArquivo === "documento")
-              return (
-                <>
-                  <div className={surface.sectionHead}>
-                    <h2 className={surface.sectionTitle}>
-                      <FileText aria-hidden /> Documentos
-                      {docs.length > 0 && <span className={surface.count}>{docs.length}</span>}
-                    </h2>
-                    <button type="button" onClick={() => fileRefDoc.current?.click()} disabled={uploadingDoc} className={surface.btn}>
-                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />}
-                      {uploadingDoc ? `${docUploadProgress}%` : "Anexar"}
-                    </button>
-                    <input
-                      ref={fileRefDoc}
-                      type="file"
-                      className="hidden"
-                      accept={ACCEPT_DOCUMENTOS}
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) { uploadDocumento(f); e.target.value = "" } }}
-                    />
-                  </div>
-                  {docs.length === 0 ? (
-                    <p className={surface.empty}>
-                      Nenhum anexo. Use &quot;Anexar&quot; para PDF, Word, Excel ou imagem (PNG, JPEG), até 25 MB cada.
-                    </p>
-                  ) : (
-                    <div className={surface.fileList}>
-                      {docs.map((arq: ArquivoVideo, i: number) => {
-                        const ext = extensaoDe(arq.nomeArquivo || arq.url.split("?")[0]).toUpperCase() || "?"
-                        const nome = nomeParaMostrar(arq.nomeArquivo, i + 1)
-                        const imagem = extensaoDe(arq.nomeArquivo) ? ehImagem(arq.nomeArquivo) : isImageUrl(arq.url)
-                        return (
-                          <div key={arq.id} className={surface.fileRow}>
-                            {imagem
-                              // eslint-disable-next-line @next/next/no-img-element
-                              ? <img src={arq.url} alt="" className={surface.fileThumb} loading="lazy" />
-                              : <span className={surface.fileBadge}>{ext}</span>}
-                            <span className={surface.fileName}>
-                              <a href={arq.url} target="_blank" rel="noopener noreferrer" title={arq.nomeArquivo}>{nome}</a>
-                              <span>{ext}{arq.createdAt ? ` · ${formatarData(arq.createdAt)}` : ""}</span>
-                            </span>
-                            <span className={surface.fileActions}>
-                              <a href={arq.url} target="_blank" rel="noopener noreferrer" title="Baixar" aria-label={`Baixar ${nome}`} className={surface.iconBtn}>
-                                <Download aria-hidden />
-                              </a>
-                              <button type="button" onClick={() => deletarDocumento(arq.id)} title="Remover" aria-label={`Remover ${nome}`} className={surface.iconBtn} data-perigo>
-                                <Trash2 aria-hidden />
-                              </button>
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </>
-              )
-            })()}
+            {documentosDoCard()}
           </div>
 
           {/* ── Pastas de Cobertura ──────────────────────────────────────── */}
-          {/* Na gravação externa as pastas antigas aparecem na "Mídia da gravação", só para ler. */}
-          {!ehCobertura && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
+          {demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
             <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
               <div className={surface.sectionHead}>
                 <h2 className={surface.sectionTitle}><FolderOpen aria-hidden /> Pastas da cobertura</h2>
@@ -2134,8 +2124,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             </div>
           )}
 
-          </Recolhivel>
           </div>
+          )}
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* ── Converter em Evento ──────────────────────────────────────── */}
           {temEventos && demanda.tipoVideo?.toLowerCase().includes("cobertura") && (
@@ -2643,10 +2633,11 @@ function LinkField({ label, value, editMode, onChange }: {
  * descrição antiga, arquivos, conversa, histórico) fica recolhido no fim, à
  * mão para consulta. Fora dela, não muda nada.
  */
-function Recolhivel({ ativo, titulo, children }: { ativo: boolean; titulo: string; children: ReactNode }) {
+function Recolhivel({ ativo, titulo, aberto = false, children }: { ativo: boolean; titulo: string; aberto?: boolean; children: ReactNode }) {
   if (!ativo) return <>{children}</>
+  // `aberto`: já vem aberto (a descrição do pedido, Giovani 05/11/2026); fecha no clique.
   return (
-    <details className={surface.recolhivel}>
+    <details className={surface.recolhivel} open={aberto || undefined}>
       <summary>{titulo}</summary>
       <div className={surface.recolhivelCorpo}>{children}</div>
     </details>

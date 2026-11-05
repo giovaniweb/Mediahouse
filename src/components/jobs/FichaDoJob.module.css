@@ -35,9 +35,22 @@
 .trilha li[data-estado="feito"] .trilhaRotulo svg { color:#86d9a8; }
 .trilha li[data-estado="agora"] .trilhaRotulo svg { color:#c7b6f5; }
 
-/* Agora: o passo da vez e só o campo dele. */
-.agora { display:flex; flex-direction:column; gap:8px; padding:16px; border:1px solid #b398ff44; border-radius:12px; background:#b398ff0d; }
-.passoAcoes { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin-top:4px; }
+/* Agora: uma faixa entre a trilha e as colunas — a frase da etapa e o botão dela.
+   O material entra pelo bloco "Arquivos". */
+.faixaAgora { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; padding:12px 16px; border:1px solid #b398ff44; border-radius:12px; background:#b398ff0d; }
+.faixaTexto { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 260px; }
+.faixaAcoes { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+
+/* Arquivos: uma linha por coisa (brutos, vídeo, pastas antigas, nota), com o
+   que chegou e o campo de mandar ou trocar; depois os documentos. */
+.itemArquivo { display:flex; flex-direction:column; gap:8px; padding:12px 0; border-top:1px solid #262838; color:#e6e4f0; font-size:14px; }
+.itemArquivo:first-child { border-top:0; padding-top:4px; }
+.itemTopo { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; }
+.itemArquivo .entregaRotulo svg { width:16px; height:16px; flex-shrink:0; color:#6f7084; }
+.itemArquivo[data-estado="feito"] .entregaRotulo svg { color:#86d9a8; }
+.itemArquivo[data-estado="falta"] .entregaRotulo svg { color:#f0c27a; }
+.itemArquivo[data-estado="pulado"] { color:#8d8ca3; }
+.documentos { padding-top:14px; border-top:1px solid #262838; }
 
 /* Entregas do videomaker: brutos, vídeo pronto e nota, uma por linha. */
 .entregas { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid #303342; border-radius:12px; background:#14151c; }

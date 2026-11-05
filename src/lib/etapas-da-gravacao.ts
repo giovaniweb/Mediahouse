@@ -539,7 +539,6 @@ export function midiaDaGravacao(j: {
   arquivos?: ArquivoDoCard[] | null
 }): ItemDeMidia[] {
   const itens: ItemDeMidia[] = []
-  const arquivo = arquivoDoVideoFinal(j)
   const por = (qual: TrocaNoAgora, rotulo: string, url: string | null | undefined, antigo: boolean) => {
     const u = url?.trim()
     if (!u) return
@@ -551,14 +550,16 @@ export function midiaDaGravacao(j: {
     }
     // A pasta antiga é pasta, não vídeo: abre, não toca.
     const ehVideo = qual === "video" && !antigo
+    // O arquivo subido (brutos ou vídeo) dá o nome e o original para baixar.
+    const arquivo = antigo ? null : arquivoDoLink(j.arquivos, qual === "video" ? "final" : "bruto", u)
     itens.push({
       qual,
       rotulo,
       url: u,
       toca: ehVideo,
       noNuflow: videoNoNuflow(u),
-      nomeArquivo: ehVideo ? arquivo?.nomeArquivo?.trim() || null : null,
-      originalUrl: ehVideo ? arquivo?.originalUrl ?? null : null,
+      nomeArquivo: arquivo?.nomeArquivo?.trim() || null,
+      originalUrl: arquivo?.originalUrl ?? null,
       antigo,
     })
   }
@@ -590,4 +591,108 @@ export function statusAoGravarMaterial(
   patch: { linkBrutos?: string | null; linkFinal?: string | null },
 ): StatusInterno | null {
   return esperaMaterial(job) && materialCompleto({ ...job, ...patch }) ? statusDoMaterial(job.edicaoPor) : null
+}
+
+// ── O bloco "Arquivos" da ficha ──────────────────────────────────────────────
+//
+// Giovani, 05/11/2026: "colocar os anexar links de arquivos como na interface
+// ... a aba la embaixo de arquivo pode remover pq vamos subir para cima". O
+// bloco "Arquivos" sobe para a coluna da esquerda da ficha: é o lugar único de
+// VER e de MANDAR o material, e cada linha diz também o que as "Entregas do
+// videomaker" diziam (chegou, falta, depois da gravação). Uma linha por coisa:
+// os brutos, o vídeo (final ou pronto) e as pastas antigas que não repetem um
+// link já mostrado (midiaDaGravacao). A nota fiscal fica no componente.
+
+export type ItemDosArquivos = {
+  /** O campo que a linha manda ou troca. */
+  qual: TrocaNoAgora
+  rotulo: string
+  estado: "feito" | "falta" | "depois" | "pulado"
+  /** A frase curta da direita: "chegou", "falta", "depois da gravação"... */
+  situacao: string
+  /** O que chegou: link ou arquivo. null = ainda não. */
+  midia: ItemDeMidia | null
+  /** Oferece mandar (o que falta) ou trocar (o que chegou). Pasta antiga: não. */
+  podeMandar: boolean
+  /** A etapa espera esta linha agora: o campo já vem aberto. */
+  agora: boolean
+}
+
+export function itensDosArquivos(
+  job: {
+    statusInterno: string
+    edicaoPor?: string | null
+    linkBrutos?: string | null
+    linkFolderBrutos?: string | null
+    linkFinal?: string | null
+    linkFolderFinal?: string | null
+    dataCaptacao?: string | Date | null
+    dataEvento?: string | Date | null
+    historicos?: HistoricoDaGravacao[] | null
+    arquivos?: ArquivoDoCard[] | null
+  },
+  hoje: string,
+): ItemDosArquivos[] {
+  const midia = midiaDaGravacao(job)
+  const etapa = etapaDaGravacao(job)
+  const cancelada = foiCancelada(job)
+  const material = esperaMaterial(job)
+  // Antes do dia da gravação nada falta ainda (faltaOMaterial).
+  const antes = etapa === "a_agendar" || (material && !faltaOMaterial(job, hoje))
+  const brutos = midia.find((m) => m.qual === "brutos" && !m.antigo) ?? null
+  const video = midia.find((m) => m.qual === "video" && !m.antigo) ?? null
+  // Sem edição, os brutos são o vídeo final: uma linha só.
+  const juntos = !!brutos?.toca
+  const itens: ItemDosArquivos[] = []
+
+  if (brutos || !cancelada) itens.push({
+    qual: "brutos",
+    rotulo: juntos ? "Brutos e vídeo final" : "Brutos",
+    estado: brutos ? "feito" : antes ? "depois" : "falta",
+    situacao: brutos ? "chegou" : antes ? "depois da gravação" : "falta",
+    midia: brutos,
+    podeMandar: !!brutos || (!cancelada && etapa !== "a_agendar"),
+    agora: !brutos && material && !antes,
+  })
+
+  if (!juntos) {
+    const rotulo = job.edicaoPor === "videomaker" ? "Vídeo pronto" : "Vídeo final"
+    if (video) {
+      itens.push({ qual: "video", rotulo, estado: "feito", situacao: "chegou", midia: video, podeMandar: true, agora: false })
+    } else if (!cancelada) {
+      if (job.edicaoPor === "sem_edicao") {
+        itens.push({ qual: "video", rotulo, estado: "pulado", situacao: "sem edição: vão os brutos", midia: null, podeMandar: false, agora: false })
+      } else if (job.edicaoPor === "videomaker") {
+        // A edição é dele: o vídeo pronto chega com os brutos, no material.
+        itens.push({
+          qual: "video", rotulo, estado: antes ? "depois" : "falta", situacao: antes ? "depois da gravação" : "falta",
+          midia: null, podeMandar: etapa !== "a_agendar", agora: material && !antes,
+        })
+      } else {
+        const depoisDaEdicao = etapa === "em_edicao" || etapa === "para_enviar" || etapa === "concluido"
+        itens.push({
+          qual: "video", rotulo,
+          estado: depoisDaEdicao ? "falta" : "depois",
+          situacao: depoisDaEdicao ? "falta" : job.edicaoPor === "equipe" ? "nós editamos, depois da edição" : "depois da edição",
+          midia: null, podeMandar: depoisDaEdicao, agora: etapa === "em_edicao" || etapa === "para_enviar",
+        })
+      }
+    }
+  }
+
+  for (const m of midia.filter((x) => x.antigo)) {
+    itens.push({ qual: m.qual, rotulo: m.rotulo, estado: "feito", situacao: "pasta antiga", midia: m, podeMandar: false, agora: false })
+  }
+  return itens
+}
+
+/** O registro do arquivo subido para este link (brutos ou vídeo), se o link é um arquivo do card. */
+export function arquivoDoLink(
+  arquivos: ArquivoDoCard[] | null | undefined,
+  tipo: "bruto" | "final",
+  link: string | null | undefined,
+): ArquivoDoCard | null {
+  const l = link?.trim()
+  if (!l) return null
+  return arquivos?.find((a) => a.tipoArquivo === tipo && (a.url === l || a.originalUrl === l)) ?? null
 }
