@@ -168,3 +168,12 @@ export const EVENTO_CUTFLOW_PUXADO = "cutflow_puxado"
 // Nota do videomaker de gravação externa (29/10/2026): enviada para compras e
 // paga. Fato do card, não etapa — a etapa do vídeo não muda por isso.
 export const EVENTO_NOTA = "nota_videomaker"
+
+// Convite do videomaker (11/11/2026): reenviado (link novo) ou o videomaker
+// avisado de que a data ou o local mudaram. Fato do card, não etapa.
+export const EVENTO_CONVITE = "convite_videomaker"
+
+// "Enviar para um WhatsApp" (11/11/2026): o link de entrega (/d/<token>) ou o
+// de aprovação (/aprovar/<token>) mandado a um número digitado na hora. A
+// observação diz para quem e por quem.
+export const EVENTO_WHATSAPP_MANUAL = "whatsapp_manual"

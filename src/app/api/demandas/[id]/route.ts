@@ -1,6 +1,6 @@
 import { ehEdicaoDaGravacao, ehTipoDeGravacao } from "@/lib/etapas-da-gravacao"
 import { veNotaDoVideomaker } from "@/lib/permissoes-server"
-import { emitirConvite, ConviteInvalido } from "@/lib/convites"
+import { emitirConvite, ConviteInvalido, substituirConvites } from "@/lib/convites"
 import { requireAcesso } from "@/lib/acesso"
 import { marcadorConclusao } from "@/lib/job-transicoes"
 import { NextRequest, NextResponse } from "next/server"
@@ -532,7 +532,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
         await tx.$queryRaw`SELECT id FROM demandas WHERE id=${id} AND "organizacaoId"=${guard.organizacaoId} FOR UPDATE`
         const atual = await tx.demanda.findUniqueOrThrow({where:{id,organizacaoId:guard.organizacaoId}})
         if(atual.updatedAt.getTime()!==antesDaEdicao?.updatedAt.getTime()) throw new ConviteInvalido("O job mudou. Atualize a página antes de atribuir.")
-        if(atual.videomakerId!==body.videomakerId) await tx.conviteVideomaker.updateMany({where:{demandaId:id,status:"pendente"},data:{status:"substituido"}})
+        // Trocou: os convites de antes viram "substituido" e quem saiu é avisado (lib/convites.ts).
+        if(atual.videomakerId!==body.videomakerId) await substituirConvites(tx,guard.organizacaoId,id,(body.videomakerId as string|null)||null)
       }
       const d = await tx.demanda.update({ where: { id }, data: updateData })
       if(autoStatusVideomakerNotificado) await emitirConvite(tx,{organizacaoId:guard.organizacaoId,usuarioId:session.user.id},id,body.videomakerId)

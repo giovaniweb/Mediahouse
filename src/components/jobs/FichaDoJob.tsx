@@ -12,13 +12,14 @@ import {
   ondeDoJob,
   paraCampoDataHora,
   rotuloDoMomento,
-  situacaoDaEquipe,
   telefoneLegivel,
 } from "@/lib/ficha-do-job"
 import { EDICAO, TIPOS_DE_GRAVACAO, perguntaBrinde, rotuloDaEdicao, rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
 import { AgoraDaGravacao, TrilhaDoVideo, type GravacaoDoPasso } from "./PassoDaGravacao"
 import { ArquivosDaGravacao } from "./ArquivosDaGravacao"
 import { CancelarGravacao } from "./CancelarGravacao"
+import { QuemVaiDaGravacao } from "./QuemVaiDaGravacao"
+import type { GrupoDaLista } from "@/lib/busca-na-lista"
 import styles from "./FichaDoJob.module.css"
 
 /**
@@ -73,6 +74,10 @@ export function FichaDoJob({
   podeEditar,
   onSalvar,
   onEscalar,
+  podeGerenciar = false,
+  gruposVideomaker,
+  onTrocarVideomaker,
+  onEnviarWhatsapp,
   onAvancar,
   onConfirmarVideomaker,
   onAtualizar,
@@ -89,6 +94,14 @@ export function FichaDoJob({
   onSalvar: (patch: Record<string, unknown>) => Promise<void>
   /** Leva a "Equipe e contexto", onde se escala o videomaker. */
   onEscalar: () => void
+  /** Gestão (admin/gestor): troca, reenvia e avisa o videomaker na linha "Quem vai". */
+  podeGerenciar?: boolean
+  /** As opções de videomaker, as mesmas de "Equipe e contexto". */
+  gruposVideomaker?: GrupoDaLista[]
+  /** Grava outro videomaker (o PUT da demanda substitui o convite e avisa). */
+  onTrocarVideomaker?: (valor: string) => Promise<void>
+  /** Abre o "Enviar para um WhatsApp" do link de entrega, no passo "Enviar ao cliente". */
+  onEnviarWhatsapp?: () => void
   /** Grava os campos do passo (se houver) e muda o status. */
   onAvancar: (statusInterno: string, patch?: Record<string, unknown>) => Promise<void>
   onConfirmarVideomaker: (aceite: boolean) => void
@@ -113,12 +126,9 @@ export function FichaDoJob({
   const ondeTexto = [endereco, cidade].filter(Boolean).join(" · ")
   // Mapa só com endereço: a cidade sozinha ("Remoto", "Curitiba") não leva a lugar nenhum.
   const mapa = endereco ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ondeTexto)}` : null
-  const situacao = situacaoDaEquipe(job.statusInterno, !!job.videomaker)
   const equipamentos = (job.produtos ?? []).map((p) => p.produto?.nome?.trim()).filter((n): n is string => !!n)
   const telCliente = telefoneLegivel(job.clienteFinalTelefone)
   const zapCliente = linkWhatsapp(job.clienteFinalTelefone)
-  const telVm = telefoneLegivel(job.videomaker?.telefone)
-  const zapVm = linkWhatsapp(job.videomaker?.telefone)
   const pedidoPor = job.nomeSolicitante?.trim() || job.solicitante?.nome?.trim() || null
   const telPedido = telefoneLegivel(job.telefoneSolicitante)
   const mostraBrinde = perguntaBrinde(job.tipoGravacao) || !!job.temBrinde
@@ -136,6 +146,7 @@ export function FichaDoJob({
         onConfirmarVideomaker={onConfirmarVideomaker}
         onEscalar={onEscalar}
         onLinkPublico={onLinkPublico}
+        onEnviarWhatsapp={onEnviarWhatsapp}
       />
 
       <div className={styles.colunas}>
@@ -217,13 +228,7 @@ export function FichaDoJob({
               )}
             </Linha>
             <Linha rotulo="Quem vai">
-              {job.videomaker ? job.videomaker.nome : falta(situacao.texto)}
-              {job.videomaker && (
-                <span className={styles.detalhe}>
-                  <span className={styles.situacao} data-tom={situacao.tom}>{situacao.texto}</span>
-                  {telVm && <> · {zapVm ? <a href={zapVm} target="_blank" rel="noopener noreferrer">{telVm}</a> : telVm}</>}
-                </span>
-              )}
+              <QuemVaiDaGravacao job={job} podeGerenciar={podeGerenciar} grupos={gruposVideomaker} onTrocar={onTrocarVideomaker} />
             </Linha>
             {job.videomaker && (
               <Linha rotulo="Edição">

@@ -29,6 +29,24 @@ async function destinoCliente(tx:Tx,organizacaoId:string,demandaId:string,telefo
   const d=await tx.demanda.findFirst({where:{id:demandaId,organizacaoId},select:{clienteFinalTelefone:true}})
   return d && telefoneCompleto(d.clienteFinalTelefone)===telefone ? {tipo:"cliente",id:demandaId} : null
 }
+/**
+ * "Enviar para um WhatsApp" (11/11/2026): o link de entrega ou de aprovação a
+ * um número digitado na hora, de quem não é pessoa cadastrada (muitos cards não
+ * têm o telefone de quem pediu). É a única porta para um número externo e vale
+ * só para aquele envio: a rota (api/demandas/[id]/enviar-whatsapp), depois de
+ * conferir quem pode mexer no card, grava um LogAutomacao
+ * "whatsapp_envio_manual" com o hash do número; aqui o número só passa se esse
+ * registro existe, é desta empresa, tem o mesmo hash e menos de 24h. Conferido
+ * na criação e de novo no envio (destinoContinuaValido).
+ */
+export const AUTOMACAO_ENVIO_MANUAL="whatsapp_envio_manual"
+export const VALIDADE_ENVIO_MANUAL_MS=24*3600_000
+async function destinoEnvioManual(tx:Tx,organizacaoId:string,logId:string,telefone:string) {
+  const log=await tx.logAutomacao.findFirst({where:{id:logId,automacao:AUTOMACAO_ENVIO_MANUAL,
+    createdAt:{gt:new Date(Date.now()-VALIDADE_ENVIO_MANUAL_MS)},demanda:{organizacaoId}},select:{outputJson:true}})
+  const hash=(log?.outputJson as {telefoneHash?:unknown}|null)?.telefoneHash
+  return typeof hash==="string" && hash===hashTelefone(telefone) ? {tipo:"envio_manual",id:logId} : null
+}
 async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
   await enfileirar(tx,{organizacaoId:s.organizacaoId,tipo:TIPO,referencia:s.id,
     chave:`${s.id}:${s.revisao}:${s.tentativas}`,payload:{revisao:s.revisao},agendadoPara,expiraEm:s.expiraEm})
@@ -36,7 +54,9 @@ async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
 /** Intenção + negócio no mesmo tx. Autoridade do produtor é validada na fronteira. */
 export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado"|"regra";regraContexto?:ContextoRegra;referencia:string;telefone:string;texto:string;expiraEm:Date;
   /** Só aviso manual ao cliente da gravação: o id dela (destinoCliente). */
-  clienteDe?:string}) {
+  clienteDe?:string
+  /** Só o "Enviar para um WhatsApp": o id do LogAutomacao que autoriza este número (destinoEnvioManual). */
+  envioManual?:string}) {
   const telefone=telefoneCompleto(e.telefone)
   if(!telefone || !e.texto.trim() || e.texto.length>4096 || !e.chave || e.chave.length>128 || !e.referencia || e.referencia.length>128 ||
     !Number.isFinite(e.expiraEm.getTime()) || e.expiraEm<=new Date()) throw new Error("Intenção de saída inválida")
@@ -48,6 +68,9 @@ export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;orig
       const c=JSON.parse(decryptSecret(inbox.conteudoCifrado)) as ConteudoEntrada
       if(jidRecebidoVerificado(c.remoteJid,c.remoteJidAlt)?.telefone===telefone) destino={tipo:"inbox",id:e.referencia}
     }
+  } else if(e.envioManual) {
+    if(e.origem!=="manual") throw new Error("Envio manual só por origem manual")
+    destino=await destinoEnvioManual(tx,e.organizacaoId,e.envioManual,telefone)
   } else if(e.clienteDe) {
     if(e.origem!=="manual") throw new Error("Cliente só por aviso manual")
     destino=await destinoCliente(tx,e.organizacaoId,e.clienteDe,telefone)
@@ -71,6 +94,7 @@ async function destinoContinuaValido(tx:Tx,s:SaidaWhatsapp,telefone:string,insta
     return jidRecebidoVerificado(c.remoteJid,c.remoteJidAlt)?.telefone===telefone
   }
   if(s.destinatarioTipo==="cliente") return !!await destinoCliente(tx,s.organizacaoId,s.destinatarioId,telefone)
+  if(s.destinatarioTipo==="envio_manual") return !!await destinoEnvioManual(tx,s.organizacaoId,s.destinatarioId,telefone)
   const d=await destinoAutorizado(tx,s.organizacaoId,telefone)
   return d?.tipo===s.destinatarioTipo && d.id===s.destinatarioId
 }

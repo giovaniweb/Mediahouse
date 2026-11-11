@@ -65,7 +65,7 @@ function KitNaPagina({ kit }: { kit?: KitDaPagina }) {
 
 type ErroState = {
   mensagem: string
-  statusConvite?: "aceito" | "recusado" | "expirado"
+  statusConvite?: "aceito" | "recusado" | "expirado" | "substituido"
 }
 
 export default function ConvitePage() {
@@ -85,7 +85,7 @@ export default function ConvitePage() {
       .then(async r => {
         const data = await r.json()
         if (!r.ok) {
-          const statusConvite = ["aceito", "recusado", "expirado"].includes(data.status) ? data.status : undefined
+          const statusConvite = ["aceito", "recusado", "expirado", "substituido"].includes(data.status) ? data.status : undefined
           throw { mensagem: data.error || "Não foi possível carregar o convite.", statusConvite }
         }
         return data
@@ -123,6 +123,7 @@ export default function ConvitePage() {
       aceito: ["Participação confirmada.", "Sua resposta está registrada. Combine os próximos passos com a equipe responsável pela produção."],
       recusado: ["Convite recusado.", "Sua resposta está registrada. A equipe poderá seguir com a organização da produção."],
       expirado: ["Este convite expirou.", "O prazo para responder terminou. Entre em contato com a equipe para solicitar um novo convite."],
+      substituido: ["Este convite foi substituído.", "A gravação seguiu com outra pessoa, ou a equipe mandou um link novo para você. Use o link mais recente que chegou no WhatsApp."],
     }
     return <SystemState label="CONVITE DE PRODUÇÃO" title={textos[status][0]} description={textos[status][1]}><a href="/login">Entrar no NuFlow</a></SystemState>
   }

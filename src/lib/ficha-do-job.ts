@@ -179,3 +179,51 @@ export function origemDaConversao(observacao: string | null | undefined): { depa
   if (departamento === "—" || tipoVideo === "—") return null
   return { departamento, tipoVideo }
 }
+
+// ── "Quem vai": trocar, reenviar o convite, avisar mudança (11/11/2026) ──────
+
+/** Os estados em que o videomaker ainda está sendo convidado (lib/convites.ts usa os mesmos). */
+export const ESTADOS_DO_CONVITE = ["pedido_criado", "aguardando_triagem", "planejamento", "urgencia_aprovada", "videomaker_notificado", "videomaker_recusou"]
+/** Confirmado e antes de gravar: é quando mudar data ou local importa a ele. */
+export const ESTADOS_DE_AVISO = ["videomaker_aceitou", "captacao_agendada"]
+
+export type ConviteDaLinha = { status: string; createdAt: string; expiresAt: string; respondidoEm?: string | null; videomaker?: { id: string } | null }
+
+function horas(ms: number): string {
+  const h = Math.round(ms / 3600_000)
+  if (h < 1) return "menos de 1h"
+  if (h <= 48) return `${h}h`
+  return `${Math.round(h / 24)} dias`
+}
+
+/**
+ * O que a linha "Quem vai" oferece, e a frase do convite. Pura: a tela só
+ * desenha. `convites` é o que GET /api/convites devolve (mais novo primeiro).
+ */
+export function acoesDoQuemVai(e: {
+  statusInterno: string
+  videomakerId?: string | null
+  convites?: ConviteDaLinha[] | null
+  agora?: Date
+}): { trocar: "Escalar" | "Trocar" | null; reenviar: boolean; avisar: boolean; convite: string | null } {
+  const agora = (e.agora ?? new Date()).getTime()
+  const antesDeGravar = ESTADOS_DO_CONVITE.includes(e.statusInterno) || ESTADOS_DE_AVISO.includes(e.statusInterno)
+  const temVm = !!e.videomakerId
+  const dele = (e.convites ?? []).find((c) => c.videomaker?.id === e.videomakerId) ?? null
+  const aceitou = dele?.status === "aceito"
+  let convite: string | null = null
+  if (temVm && dele) {
+    const vence = new Date(dele.expiresAt).getTime() - agora
+    if (dele.status === "pendente") convite = vence > 0
+      ? `Convite enviado há ${horas(agora - new Date(dele.createdAt).getTime())} · vence em ${horas(vence)}`
+      : "Convite vencido, sem resposta"
+    else if (aceitou) convite = "Aceitou pelo link do convite"
+    else if (dele.status === "recusado") convite = "Recusou pelo link do convite"
+  }
+  return {
+    trocar: antesDeGravar ? (temVm ? "Trocar" : "Escalar") : null,
+    reenviar: temVm && ESTADOS_DO_CONVITE.includes(e.statusInterno) && !aceitou,
+    avisar: temVm && ESTADOS_DE_AVISO.includes(e.statusInterno),
+    convite,
+  }
+}
