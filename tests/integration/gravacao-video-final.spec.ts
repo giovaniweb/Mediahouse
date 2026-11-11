@@ -25,7 +25,7 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import { PRESETS } from "@/lib/permissoes"
 import { PATCH as registrarVideo } from "@/app/api/demandas/[id]/upload-video/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
-import { PUT as editarCard } from "@/app/api/demandas/[id]/route"
+import { GET as abrirCard, PUT as editarCard } from "@/app/api/demandas/[id]/route"
 import { patchDosBrutos, statusAoGravarMaterial } from "@/lib/etapas-da-gravacao"
 import { GET as acompanhar } from "@/app/api/publico/demanda/[token]/route"
 import { GET as eu } from "@/app/api/me/route"
@@ -260,5 +260,67 @@ describe("um lugar só para a mídia: o \"Agora\"", () => {
     // O corpo do salvar() do card na gravação externa: sem linkBrutos e linkFinal.
     expect((await editar(id, { cidade: "Londrina", dataLimite: null, videomakerId: vm, editorId: null, localGravacao: null, classificacao: null, produtoId: null })).status).toBe(200)
     expect(await db.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ cidade: "Londrina", linkBrutos: "https://drive.example/brutos", linkFinal: url })
+  })
+})
+
+// Giovani, 05/11/2026: "crie uma thumbnail ... se tiver mais de um vídeo, coloca
+// mais de uma thumbnail ... abrir ali ampliado no sistema". O card e a página de
+// quem pediu mostram uma miniatura por vídeo; a capa vem do envio e abre, na
+// página, com o mesmo token do link público.
+describe("as miniaturas: mais de um vídeo no card", () => {
+  const capa = (id: string, nome: string) => `/api/midia/org/${org}/thumbnails/${id}/${nome}`
+  const abrir = async (id: string) => {
+    const res = await abrirCard(new NextRequest(`http://localhost/api/demandas/${id}`), params(id))
+    expect(res.status).toBe(200)
+    return (await res.json()).demanda as { linkFinal: string | null; arquivos: { id: string; tipoArquivo: string; url: string; nomeArquivo: string; thumbnailUrl: string | null }[] }
+  }
+
+  it("dois vídeos: o card traz a capa de cada um e a página de quem pediu mostra os dois, com a capa que abre com o token", async () => {
+    const { id, token } = await naEdicao()
+    como(admin, "admin")
+    expect((await registrar(id, { url: subido(id, "corte-1.mp4"), tipo: "final", nomeArquivo: "corte 1.mp4", thumbnailUrl: capa(id, "c1.jpg") })).status).toBe(200)
+    expect((await registrar(id, { url: subido(id, "corte-2.mp4"), tipo: "final", nomeArquivo: "corte 2.mp4", thumbnailUrl: capa(id, "c2.jpg") })).status).toBe(200)
+    const card = await abrir(id)
+    expect(card.arquivos.filter((a) => a.tipoArquivo === "final").map((a) => [a.nomeArquivo, a.thumbnailUrl]))
+      .toEqual([["corte 1.mp4", capa(id, "c1.jpg")], ["corte 2.mp4", capa(id, "c2.jpg")]])
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+
+    estado.sessao = null
+    const d = await pagina(token)
+    expect(d.arquivos.map((a) => a.nomeArquivo)).toEqual(["corte 1.mp4", "corte 2.mp4"])
+    const comCapa = d.arquivos as unknown as { thumbnailUrl: string }[]
+    expect(comCapa.map((a) => a.thumbnailUrl)).toEqual([`${capa(id, "c1.jpg")}?token=${token}`, `${capa(id, "c2.jpg")}?token=${token}`])
+    expect(await podeLerMidia(caminho(capa(id, "c2.jpg")), token)).toBe(true)
+    expect(await podeLerMidia(caminho(capa(id, "c2.jpg")), null)).toBe(false)
+  })
+
+  it("trocar ou tirar um vídeo apaga o registro dele: o card e a página param de mostrar, e o linkFinal vai para o que ficou", async () => {
+    const { id, token } = await naEdicao()
+    como(admin, "admin")
+    await registrar(id, { url: subido(id, "velho.mp4"), tipo: "final", nomeArquivo: "velho.mp4" })
+    await registrar(id, { url: subido(id, "novo.mp4"), tipo: "final", nomeArquivo: "novo.mp4" })
+    const velho = (await abrir(id)).arquivos.find((a) => a.nomeArquivo === "velho.mp4")!
+    // O que o card faz no "Trocar" (depois de subir o novo) e no "Tirar".
+    expect((await registrar(id, { url: null, tipo: "final", arquivoId: velho.id })).status).toBe(200)
+    const card = await abrir(id)
+    expect(card.arquivos.filter((a) => a.tipoArquivo === "final").map((a) => a.nomeArquivo)).toEqual(["novo.mp4"])
+    expect(card.linkFinal).toBe(subido(id, "novo.mp4"))
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+    estado.sessao = null
+    expect((await pagina(token)).arquivos.map((a) => a.nomeArquivo)).toEqual(["novo.mp4"])
+  })
+
+  it("link do Drive colado vira vídeo do card, com o nome do Drive (não \"view\") e o link que abre", async () => {
+    const { id, token } = await naEdicao()
+    const linkDrive = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing"
+    como(admin, "admin")
+    // O que o card manda ao colar o link (DemandaDetalhe: registrarVideoDaGravacao).
+    expect((await registrar(id, { url: linkDrive, tipo: "final", nomeArquivo: "Vídeo no Drive" })).status).toBe(200)
+    const card = await abrir(id)
+    expect(card.linkFinal).toBe(linkDrive)
+    expect(card.arquivos.filter((a) => a.tipoArquivo === "final").map((a) => [a.url, a.nomeArquivo])).toEqual([[linkDrive, "Vídeo no Drive"]])
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+    estado.sessao = null
+    expect((await pagina(token)).arquivos.map((a) => a.url)).toEqual([linkDrive])
   })
 })

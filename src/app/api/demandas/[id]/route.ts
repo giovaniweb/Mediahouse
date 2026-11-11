@@ -74,7 +74,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       linhaProjetoRef: { select: { id: true, nome: true } },
       arquivos: {
         orderBy: [{ sequencia: "asc" }, { createdAt: "asc" }],
-        select: { id: true, tipoArquivo: true, url: true, originalUrl: true, nomeArquivo: true, sequencia: true, createdAt: true },
+        // thumbnailUrl: a miniatura do vídeo final no card (Giovani, 05/11/2026).
+        select: { id: true, tipoArquivo: true, url: true, originalUrl: true, nomeArquivo: true, sequencia: true, createdAt: true, thumbnailUrl: true },
       },
       historicos: {
         include: { usuario: { select: { id: true, nome: true } } },

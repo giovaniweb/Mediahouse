@@ -66,20 +66,22 @@ describe("o que quem pediu vê", () => {
   })
 })
 
-// O "Trocar" do card grava o linkFinal novo e deixa o arquivo anterior guardado.
-// A página de quem pediu oferece só o vídeo do linkFinal (05/11/2026).
-describe("o vídeo que a página oferece depois de um Trocar", () => {
+// Os vídeos que a página de quem pediu oferece: os mesmos do card. Desde as
+// miniaturas (05/11/2026) o "Trocar" apaga o registro do vídeo trocado; o link
+// colado antes, que não virou Arquivo, continua valendo sozinho.
+describe("os vídeos que a página oferece", () => {
   const velho = { url: "https://s/videos/d1/final-1.mp4", originalUrl: null, nomeArquivo: "corte 1.mp4" }
   const novo = { url: "https://s/videos/d1/final-2.mp4", originalUrl: null, nomeArquivo: "corte 2.mp4" }
-  it("troca por arquivo: só o novo, nunca o velho", () => {
-    expect(arquivosDoVideoDaGravacao(novo.url, [velho, novo])).toEqual([novo])
+  it("mais de um vídeo no card: todos aparecem (o \"Trocar\" apaga o registro do trocado)", () => {
+    expect(arquivosDoVideoDaGravacao(novo.url, [velho, novo])).toEqual([velho, novo])
   })
   it("troca por link: nenhum arquivo, e a página cai no linkFinal novo", () => {
     expect(arquivosDoVideoDaGravacao("https://drive.google.com/file/d/abc", [velho, novo])).toEqual([])
   })
   it("arquivo convertido vale pelo original que o linkFinal guardou", () => {
     const convertido = { url: "https://s/videos/d1/final-2-web.mp4", originalUrl: novo.url, nomeArquivo: "corte 2.mp4" }
-    expect(arquivosDoVideoDaGravacao(novo.url, [velho, convertido])).toEqual([convertido])
+    expect(arquivosDoVideoDaGravacao(novo.url, [convertido])).toEqual([convertido])
+    expect(arquivosDoVideoDaGravacao(novo.url, [velho, convertido])).toEqual([velho, convertido])
   })
   it("sem linkFinal, valem os arquivos, como antes", () => {
     expect(arquivosDoVideoDaGravacao(null, [velho, novo])).toEqual([velho, novo])

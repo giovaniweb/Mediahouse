@@ -78,7 +78,8 @@ export function FichaDoJob({
   onAtualizar,
   onEnviarArquivo,
   onLinkPublico,
-  onTocar,
+  onRegistrarVideo,
+  onRemoverVideo,
   documentos,
   rodape,
   children,
@@ -97,8 +98,10 @@ export function FichaDoJob({
   onEnviarArquivo?: (tipo: "brutos" | "final", file: File, onProgress: (pct: number) => void) => Promise<string>
   /** Garante o link público e devolve o token (o vídeo subido abre com ele). */
   onLinkPublico?: () => Promise<string | null>
-  /** Toca o vídeo no player do card. */
-  onTocar?: (url: string) => void
+  /** Registra um link colado como vídeo do card (vira Arquivo). */
+  onRegistrarVideo?: (url: string) => Promise<void>
+  /** Tira um vídeo do card (o registro; ou o linkFinal, no link antigo sem registro). */
+  onRemoverVideo?: (arquivoId: string | null) => Promise<void>
   /** Os documentos do card, com o "Anexar", no fim do bloco "Arquivos". */
   documentos?: ReactNode
   /** Linha final (de quem é a vez). A etapa já está na trilha. */
@@ -144,7 +147,8 @@ export function FichaDoJob({
             onAvancar={onAvancar}
             onAtualizar={onAtualizar}
             onEnviarArquivo={onEnviarArquivo}
-            onTocar={onTocar}
+            onRegistrarVideo={onRegistrarVideo}
+            onRemoverVideo={onRemoverVideo}
             documentos={documentos}
             referencias={job.referencia}
           />
