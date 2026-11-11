@@ -93,6 +93,7 @@ export const TIPOS_FATO = [
   "demanda_externa",
   "demanda_email",
   "nf_recebida",
+  "material_recebido",
   "mencao_comentario",
   "whatsapp_reconectou",
 ]

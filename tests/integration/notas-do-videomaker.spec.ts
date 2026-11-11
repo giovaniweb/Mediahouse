@@ -94,7 +94,7 @@ describe("minhas notas fiscais", () => {
     expect(new Set(notas.map((n) => n.url)).size).toBe(1)
     expect(notas[0].url).toMatch(new RegExp(`^/api/midia/org/${org}/nf/lote-`))
     expect((await db.custoVideomaker.findMany({ where: { organizacaoId: org, demandaId: { in: [a, b] } } })).map((c) => c.statusPagamento)).toEqual(["nf_enviada", "nf_enviada"])
-    expect(tarefas).toEqual(["aviso-gravacao"])
+    expect(tarefas).toEqual(["aviso-gravacao", "aviso-nota-videomaker"])
   })
 
   it("pedido antigo não some atrás de muitas gravações recentes; uma nota cobre até 50", async () => {

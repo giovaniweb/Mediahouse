@@ -3,8 +3,6 @@ import { Prisma } from "@prisma/client"
 import { registrarAuditoria } from "@/lib/auditoria"
 import { ConviteInvalido } from "@/lib/convites"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
-import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
-import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
 import {
   esperaMaterial,
   etapaDaGravacao,
@@ -41,7 +39,7 @@ export async function entregarMaterial(tx: Tx, e: {
   token: string
   linkBrutos?: string
   linkVideo?: string
-}): Promise<{ completo: boolean; mudouEtapa: boolean }> {
+}): Promise<{ completo: boolean; mudouEtapa: boolean; demandaId: string; chegouAgora: boolean; parte: "brutos" | "video" }> {
   const { convite, liberado } = await conviteDaEntrega(tx, e.organizacaoId, e.token)
   if (!liberado) throw new ConviteInvalido("Este link ainda não está liberado para entrega.", 403)
   if (e.linkBrutos !== undefined && !linkValido(e.linkBrutos)) throw new ConviteInvalido("Confira o link dos brutos: precisa começar com https://", 400)
@@ -88,10 +86,7 @@ export async function entregarMaterial(tx: Tx, e: {
     acao: "convite.entregar", recurso: "convite", recursoId: convite.id, correlationId: randomUUID(),
   })
 
-  if (chegouAgora) {
-    // A operação fica sabendo (lib/avisos-gravacao.ts).
-    const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
-    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: "material", mensagens: mensagensDoEvento("material", g) })
-  }
-  return { completo, mudouEtapa: !!novo }
+  // Os avisos (WhatsApp, e-mail, sino) saem depois do commit, pela rota: um
+  // aviso que falha não pode desfazer a entrega (lib/avisos-entrega-videomaker.ts).
+  return { completo, mudouEtapa: !!novo, demandaId: d.id, chegouAgora, parte: e.linkVideo !== undefined ? "video" : "brutos" }
 }

@@ -20,7 +20,7 @@ import { momentoDoJob, rotuloDoMomento } from "./ficha-do-job"
 import { etapaDaGravacao, levarDaGravacao, materialChegouAgora, videoNoNuflow } from "./etapas-da-gravacao"
 
 export type EventoDaGravacao =
-  | "entrou" | "confirmada" | "recusada" | "material" | "nota_recebida" | "pronta" | "concluida" | "nota_paga"
+  | "entrou" | "confirmada" | "recusada" | "material" | "material_parcial" | "nota_recebida" | "pronta" | "concluida" | "nota_paga"
 export type RegraDaGravacao = "vespera" | "dia" | "sem_material" | "material_travado" | "sem_videomaker" | "nota_parada"
 export type PapelDoAviso = "operacao" | "gestao" | "videomaker" | "cliente" | "solicitante"
 export type Mensagens = Partial<Record<PapelDoAviso, string>>
@@ -53,6 +53,15 @@ export type DadosDoAviso = {
    * o arquivo subido no card vai com o token do link público.
    */
   linkVideoCliente?: string | null
+  /** O card no NuFlow, para a operação abrir direto (/jobs/<id>). */
+  linkCard?: string | null
+  /** Os brutos que o videomaker mandou (o drive dele). */
+  linkBrutos?: string | null
+  /**
+   * A nota fiscal do videomaker: o arquivo pelo nosso endereço, com a
+   * credencial daquele envio (comToken) — abre sem login e sem expor o bucket.
+   */
+  linkNota?: string | null
 }
 
 const cliente = (d: DadosDoAviso) => d.clienteFinalNome?.trim() || d.titulo
@@ -66,6 +75,47 @@ const onde = (d: DadosDoAviso) => d.localGravacao?.trim() || d.localEvento?.trim
 // O link que vai para o cliente. O endereço do arquivo subido (/api/midia/...)
 // pede login e nem tem o domínio: sem o link pronto para ele, não vai link.
 const videoDoCliente = (d: DadosDoAviso) => d.linkVideoCliente?.trim() || (videoNoNuflow(d.linkFinal) ? null : d.linkFinal?.trim() || null)
+
+// O link que a operação abre: só http(s) de verdade. O arquivo nosso
+// (/api/midia/...) não vai cru — ela abre pelo card.
+const linkDeFora = (v: string | null | undefined) => {
+  const t = v?.trim()
+  return t && /^https?:\/\//i.test(t) ? t : null
+}
+
+/**
+ * Os links de uma entrega do videomaker, na ordem em que a operação usa: os
+ * brutos, o vídeo pronto (quando é outro link) e o card. Serve ao WhatsApp e
+ * ao e-mail (lib/avisos-entrega-videomaker.ts).
+ */
+export function linksDaEntrega(d: DadosDoAviso): { rotulo: string; url: string }[] {
+  const brutos = linkDeFora(d.linkBrutos)
+  const video = d.edicaoPor === "videomaker" ? linkDeFora(d.linkFinal) : null
+  return [
+    brutos && { rotulo: "Brutos", url: brutos },
+    video && video !== brutos && { rotulo: "Vídeo pronto", url: video },
+    linkDeFora(d.linkCard) && { rotulo: "No NuFlow", url: d.linkCard!.trim() },
+  ].filter((l): l is { rotulo: string; url: string } => !!l)
+}
+
+/** Os links da nota: o arquivo e o card. */
+export function linksDaNota(d: DadosDoAviso): { rotulo: string; url: string }[] {
+  return [
+    linkDeFora(d.linkNota) && { rotulo: "Nota fiscal", url: d.linkNota!.trim() },
+    linkDeFora(d.linkCard) && { rotulo: "No NuFlow", url: d.linkCard!.trim() },
+  ].filter((l): l is { rotulo: string; url: string } => !!l)
+}
+
+// Cada link na própria linha, com o rótulo em cima (regra de lib/whatsapp.ts).
+const comLinks = (texto: string, links: { rotulo: string; url: string }[]) =>
+  [texto, ...links.map((l) => `${l.rotulo}:\n${l.url}`)].join("\n\n")
+
+/** O que ainda falta da entrega do videomaker, ou null quando nada falta. */
+export function faltaDaEntrega(d: DadosDoAviso): string | null {
+  if (!d.linkBrutos?.trim()) return "os brutos"
+  if (d.edicaoPor === "videomaker" && !d.linkFinal?.trim()) return "o vídeo pronto"
+  return null
+}
 
 export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Mensagens {
   switch (evento) {
@@ -86,10 +136,16 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
     }
     case "material":
       return {
-        operacao: `📁 Material recebido de ${ref(d)}. ${d.statusInterno === "aprovado" ? "Pronto para enviar ao cliente." : "Vai para a edição."}`,
+        operacao: comLinks(`📁 Material recebido de ${ref(d)}. ${d.statusInterno === "aprovado" ? "Pronto para enviar ao cliente." : "Vai para a edição."}`, linksDaEntrega(d)),
       }
+    case "material_parcial": {
+      // Uma parte da entrega (a edição é dele e ainda falta a outra): a
+      // operação sabe na hora, com o link do que chegou.
+      const falta = faltaDaEntrega(d)
+      return { operacao: comLinks(`📁 ${nome1(d)} mandou material de ${ref(d)}.${falta ? ` Falta ${falta}.` : ""}`, linksDaEntrega(d)) }
+    }
     case "nota_recebida":
-      return { operacao: `🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nEnvie para compras no NuFlow.` }
+      return { operacao: comLinks(`🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nEnvie para compras no NuFlow.`, linksDaNota(d)) }
     case "pronta":
       return { operacao: `🎬 Vídeo pronto: ${ref(d)}.\n\nEnvie ao cliente e marque como enviado.` }
     case "concluida":
@@ -205,6 +261,6 @@ export function eventoDaMudanca(de: string, para: string): EventoDaGravacao | nu
  * A nota de um videomaker que cobre várias gravações (Minhas notas fiscais):
  * um aviso só para a operação, com a lista, em vez de um por gravação.
  */
-export function mensagemDaNotaEmLote(videomaker: string, gravacoes: string[]): Mensagens {
-  return { operacao: `🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nEnvie para compras no NuFlow.` }
+export function mensagemDaNotaEmLote(videomaker: string, gravacoes: string[], linkNota?: string | null): Mensagens {
+  return { operacao: comLinks(`🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nEnvie para compras no NuFlow.`, linksDaNota({ codigo: "", titulo: "", statusInterno: "", linkNota })) }
 }

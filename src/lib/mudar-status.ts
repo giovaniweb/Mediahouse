@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { materialChegouAgora } from "@/lib/etapas-da-gravacao"
+import { avisarEntregaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { eventoDaMudanca } from "@/lib/avisos-gravacao-textos"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
@@ -55,7 +56,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   const demandaAtual = await prisma.demanda.findUnique({
     where: { id },
     include: {
-      videomaker: { select: { nome: true, telefone: true } },
+      videomaker: { select: { nome: true, telefone: true, usuarioId: true } },
       solicitante: { select: { nome: true, telefone: true } },
       editor: { select: { nome: true, telefone: true, whatsapp: true } },
       // Executores do Growth. Faltavam aqui, e por isso quem ia fazer o
@@ -362,6 +363,12 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
     // material, pronta, concluída. Quem mexeu não recebe o aviso do que fez.
     const evento = ehGravacao ? eventoDaMudanca(demandaAtual.statusInterno, statusInterno) : null
     if (evento) emSegundoPlano(() => avisarGravacao(organizacaoId, id, evento, session.user.id), "aviso-gravacao")
+    // O material que o próprio videomaker marcou como entregue (logado, pelo
+    // card): a operação recebe também e-mail e sino. Se foi a equipe que
+    // moveu, ela já sabe — fica só o WhatsApp de cima para os outros.
+    if (evento === "material" && demandaAtual.videomaker?.usuarioId && demandaAtual.videomaker.usuarioId === session.user.id) {
+      emSegundoPlano(() => avisarEntregaDoVideomaker(organizacaoId, id, { completo: true, autorUsuarioId: session.user.id }), "aviso-entrega-videomaker")
+    }
 
     return NextResponse.json(demanda)
   } catch (e) {
