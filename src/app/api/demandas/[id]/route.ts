@@ -23,6 +23,8 @@ import { selectContrato } from "@/lib/quadro-do-card-server"
 import { podeAprovarEntrega } from "@/lib/quem-aprova"
 import { ehGestor } from "@/lib/papel"
 import { demandaNoEscopo } from "@/lib/escopo-demanda"
+import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
+import { avisarMaterialSalvoNoCard } from "@/lib/avisos-entrega-videomaker"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -541,6 +543,21 @@ export async function PUT(req: NextRequest, { params }: Params) {
   } catch(e) {
     if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
     throw e
+  }
+
+  // O próprio videomaker da gravação salvou os brutos ou o vídeo pronto na
+  // ficha, sem mudar a etapa: a operação é avisada como em qualquer entrega
+  // (lib/avisos-entrega-videomaker.ts). Link novo, não o mesmo regravado; se
+  // foi a equipe que editou, ela já sabe — nada sai.
+  if (antesDaEdicao?.videomakerId && (ehSolicitacaoDeCobertura(antesDaEdicao) || !!antesDaEdicao.tipoGravacao)) {
+    const novo = (campo: "linkBrutos" | "linkFinal") => body[campo] !== undefined && !!demanda[campo]?.trim() && demanda[campo]?.trim() !== antesDaEdicao[campo]?.trim()
+    const partes = [novo("linkBrutos") && "brutos" as const, novo("linkFinal") && "video" as const].filter((x): x is "brutos" | "video" => !!x)
+    if (partes.length) {
+      const vm = await prisma.videomaker.findUnique({ where: { id: antesDaEdicao.videomakerId }, select: { usuarioId: true } })
+      if (vm?.usuarioId && vm.usuarioId === session.user.id) {
+        emSegundoPlano(() => avisarMaterialSalvoNoCard(guard.organizacaoId, id, partes, session.user.id), "aviso-entrega-videomaker")
+      }
+    }
   }
 
   // Responsáveis: vale tanto para `responsavelId` (singular) quanto para

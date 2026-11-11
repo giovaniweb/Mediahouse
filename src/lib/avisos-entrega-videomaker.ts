@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { sendEmailAvisoDaOperacao, type AvisoDaOperacaoEmail } from "@/lib/email"
-import { dadosDaGravacao } from "@/lib/avisos-gravacao"
+import { avisarGravacao, dadosDaGravacao } from "@/lib/avisos-gravacao"
 import { faltaDaEntrega, linksDaEntrega, linksDaNota, type DadosDoAviso } from "@/lib/avisos-gravacao-textos"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 
@@ -53,7 +53,9 @@ export function sinoDaEntrega(d: DadosDoAviso, completo: boolean): string {
 /** O e-mail do material, sem banco (testável e para a prévia). */
 export function emailDaEntrega(d: DadosDoAviso, completo: boolean): { assunto: string; dados: AvisoDaOperacaoEmail } {
   const falta = completo ? null : faltaDaEntrega(d)
+  // Sem mudar de etapa (link salvo na ficha), o completo não diz para onde vai.
   const situacao = falta ? `Falta ${falta}`
+    : !completo ? "Material completo"
     : d.statusInterno === "aprovado" ? "Pronto para enviar ao cliente" : "Vai para a edição"
   const q = quando(d)
   return {
@@ -159,4 +161,17 @@ export async function avisarNotaDoVideomaker(
     console.error("[Avisos de entrega] nota falhou", { demandaIds, erro: err instanceof Error ? err.message : String(err) })
     return { emails: 0 }
   }
+}
+
+/**
+ * O videomaker logado salvou o link dos brutos ou do vídeo pronto direto na
+ * ficha (PUT /api/demandas/[id]), sem mudar a etapa. É entrega como as outras:
+ * WhatsApp com os links (chave própria por parte, não repete no dia), e-mail
+ * e sino. Para chamar em segundo plano; nunca lança.
+ */
+export async function avisarMaterialSalvoNoCard(
+  organizacaoId: string, demandaId: string, partes: ("brutos" | "video")[], autorUsuarioId: string,
+) {
+  await avisarGravacao(organizacaoId, demandaId, "material_parcial", autorUsuarioId, `material:${partes.join("+")}`)
+  return avisarEntregaDoVideomaker(organizacaoId, demandaId, { completo: false, autorUsuarioId })
 }

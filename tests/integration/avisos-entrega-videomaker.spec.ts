@@ -34,6 +34,7 @@ import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { POST as entregar } from "@/app/api/convites/[token]/entrega/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
+import { PUT as salvarFicha } from "@/app/api/demandas/[id]/route"
 import { POST as uploadNF } from "@/app/api/nf-upload/[token]/route"
 import { decryptSecret } from "@/lib/secret-crypto"
 
@@ -196,6 +197,53 @@ describe("material marcado no card", () => {
     expect((await moverPara(id, { statusInterno: "brutos_enviados" })).status).toBe(200)
     expect(await rodarSegundoPlano()).not.toContain("aviso-entrega-videomaker")
     expect(await sinos(id)).toEqual([])
+    expect(emails.chamadas).toEqual([])
+  })
+})
+
+describe("links salvos na ficha, sem mudar a etapa", () => {
+  const salvar = (id: string, corpo: object) => salvarFicha(
+    new NextRequest(`http://localhost/api/demandas/${id}`, { method: "PUT", body: JSON.stringify(corpo) }),
+    { params: Promise.resolve({ id }) },
+  )
+
+  it("o videomaker salva os brutos e depois o vídeo pronto: a operação é avisada nas duas; o mesmo link de novo, não", async () => {
+    const { id } = await gravacao("videomaker")
+    await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento" } })
+    estado.sessao = { user: { id: gente.vmLogin.id, organizacaoId: org, tipo: "videomaker", papel: "videomaker", name: "João" } }
+
+    expect((await salvar(id, { linkBrutos: "https://drive.example/ficha-b" })).status).toBe(200)
+    expect(await rodarSegundoPlano()).toContain("aviso-entrega-videomaker")
+    expect((await db.demanda.findUniqueOrThrow({ where: { id } })).statusInterno).toBe("captacao_agendada")
+    expect((await sinos(id)).map((s) => s.usuarioId)).toEqual([gente.debora.id])
+    expect((await sinos(id))[0].mensagem).toContain("Falta o vídeo pronto")
+    let zap = await whatsapps(id)
+    expect(zap.map((z) => z.para)).toEqual([gente.debora.id])
+    expect(zap[0].texto).toContain("Brutos:\nhttps://drive.example/ficha-b")
+    expect(emails.chamadas.map((e) => e.para)).toEqual([[gente.debora.email]])
+
+    expect((await salvar(id, { linkFinal: "https://drive.example/ficha-pronto" })).status).toBe(200)
+    await rodarSegundoPlano()
+    zap = await whatsapps(id)
+    expect(zap).toHaveLength(2)
+    expect(zap.some((z) => z.texto.includes("Vídeo pronto:\nhttps://drive.example/ficha-pronto"))).toBe(true)
+    expect(emails.chamadas[1].html).toContain("Material completo")
+    expect(await sinos(id)).toHaveLength(2)
+
+    // Regravar o mesmo link não é entrega nova.
+    expect((await salvar(id, { linkFinal: "https://drive.example/ficha-pronto" })).status).toBe(200)
+    expect(await rodarSegundoPlano()).not.toContain("aviso-entrega-videomaker")
+    expect(await sinos(id)).toHaveLength(2)
+  })
+
+  it("a equipe salva o link na ficha: ninguém é avisado", async () => {
+    const { id } = await gravacao("equipe")
+    await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento" } })
+    estado.sessao = { user: { id: gente.admin.id, organizacaoId: org, tipo: "admin", papel: "admin", name: "Gestão" } }
+    expect((await salvar(id, { linkBrutos: "https://drive.example/equipe" })).status).toBe(200)
+    expect(await rodarSegundoPlano()).not.toContain("aviso-entrega-videomaker")
+    expect(await sinos(id)).toEqual([])
+    expect(await whatsapps(id)).toEqual([])
     expect(emails.chamadas).toEqual([])
   })
 })
