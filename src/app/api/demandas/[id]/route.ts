@@ -1,4 +1,5 @@
-import { ehEdicaoDaGravacao, ehTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { ehEdicaoDaGravacao, ehTipoDeGravacao, statusAoGravarMaterial } from "@/lib/etapas-da-gravacao"
+import { ACOES_DO_VIDEOMAKER } from "@/lib/job-transicoes"
 import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import { emitirConvite, ConviteInvalido } from "@/lib/convites"
 import { requireAcesso } from "@/lib/acesso"
@@ -552,7 +553,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (antesDaEdicao?.videomakerId && (ehSolicitacaoDeCobertura(antesDaEdicao) || !!antesDaEdicao.tipoGravacao)) {
     const novo = (campo: "linkBrutos" | "linkFinal") => body[campo] !== undefined && !!demanda[campo]?.trim() && demanda[campo]?.trim() !== antesDaEdicao[campo]?.trim()
     const partes = [novo("linkBrutos") && "brutos" as const, novo("linkFinal") && "video" as const].filter((x): x is "brutos" | "video" => !!x)
-    if (partes.length) {
+    // Revisão do #136: quando o link completa o material, a ficha anda a etapa
+    // logo depois (ArquivosDaGravacao → avancarGravacao → PATCH /status), e a
+    // mudança de etapa já avisa (mudar-status.ts: WhatsApp, e-mail e sino, com
+    // os links). Avisar aqui também daria dois avisos do mesmo envio. Só
+    // quando o videomaker PODE dar esse passo (job-transicoes: brutos_enviados
+    // sim, "aprovado" não): se a etapa vai ser recusada, este é o único aviso.
+    const alvo = statusAoGravarMaterial(antesDaEdicao, { linkBrutos: demanda.linkBrutos, linkFinal: demanda.linkFinal })
+    const etapaVaiAvisar = !!alvo && ACOES_DO_VIDEOMAKER.includes(alvo)
+    if (partes.length && !etapaVaiAvisar) {
       const vm = await prisma.videomaker.findUnique({ where: { id: antesDaEdicao.videomakerId }, select: { usuarioId: true } })
       if (vm?.usuarioId && vm.usuarioId === session.user.id) {
         emSegundoPlano(() => avisarMaterialSalvoNoCard(guard.organizacaoId, id, partes, session.user.id), "aviso-entrega-videomaker")

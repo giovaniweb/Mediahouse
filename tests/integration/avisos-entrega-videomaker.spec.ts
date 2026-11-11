@@ -236,6 +236,45 @@ describe("links salvos na ficha, sem mudar a etapa", () => {
     expect(await sinos(id)).toHaveLength(2)
   })
 
+  it("o link que completa o material e anda a etapa (nossa edição): um aviso só, o da etapa", async () => {
+    const { id } = await gravacao("equipe")
+    await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento" } })
+    estado.sessao = { user: { id: gente.vmLogin.id, organizacaoId: org, tipo: "videomaker", papel: "videomaker", name: "João" } }
+
+    // O que a ficha faz (avancarGravacao): grava o link e anda a etapa.
+    expect((await salvar(id, { linkBrutos: "https://drive.example/completa" })).status).toBe(200)
+    const andar = await mover(
+      new NextRequest(`http://localhost/api/demandas/${id}/status`, { method: "PATCH", body: JSON.stringify({ statusInterno: "brutos_enviados", origem: "manual" }) }),
+      { params: Promise.resolve({ id }) },
+    )
+    expect(andar.status).toBe(200)
+    await rodarSegundoPlano()
+
+    expect((await sinos(id)).map((s) => s.usuarioId)).toEqual([gente.debora.id])
+    expect(emails.chamadas.map((e) => e.para)).toEqual([[gente.debora.email]])
+    // O videomaker recebe à parte o pedido da nota (o de sempre); a operação, um aviso só.
+    const zap = (await whatsapps(id)).filter((z) => z.para !== vm)
+    expect(zap.map((z) => z.para)).toEqual([gente.debora.id])
+    expect(zap[0].texto).toContain("Material recebido")
+    expect(zap[0].texto).toContain("Brutos:\nhttps://drive.example/completa")
+  })
+
+  it("edição dele: o videomaker não anda para \"pronto\", então o aviso da ficha é o único", async () => {
+    const { id } = await gravacao("videomaker")
+    await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento", linkBrutos: "https://drive.example/b0" } })
+    estado.sessao = { user: { id: gente.vmLogin.id, organizacaoId: org, tipo: "videomaker", papel: "videomaker", name: "João" } }
+    expect((await salvar(id, { linkFinal: "https://drive.example/pronto-dele" })).status).toBe(200)
+    const andar = await mover(
+      new NextRequest(`http://localhost/api/demandas/${id}/status`, { method: "PATCH", body: JSON.stringify({ statusInterno: "aprovado", origem: "manual" }) }),
+      { params: Promise.resolve({ id }) },
+    )
+    expect(andar.status).toBe(403)
+    await rodarSegundoPlano()
+    expect(await sinos(id)).toHaveLength(1)
+    expect(emails.chamadas).toHaveLength(1)
+    expect(await whatsapps(id)).toHaveLength(1)
+  })
+
   it("a equipe salva o link na ficha: ninguém é avisado", async () => {
     const { id } = await gravacao("equipe")
     await db.demanda.update({ where: { id }, data: { tipoGravacao: "entrega_equipamento" } })
