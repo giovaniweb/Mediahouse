@@ -177,3 +177,13 @@ export const EVENTO_CONVITE = "convite_videomaker"
 // de aprovação (/aprovar/<token>) mandado a um número digitado na hora. A
 // observação diz para quem e por quem.
 export const EVENTO_WHATSAPP_MANUAL = "whatsapp_manual"
+
+/**
+ * Os eventos do histórico que se descrevem pela observação, não por um rótulo
+ * de etapa. A tela de Demandas (não cobertura) mostra a observação deles; sem
+ * isto, o envio pelo WhatsApp aparecia como "whatsapp_manual" (11/11/2026).
+ */
+export const EVENTOS_DESCRITOS_PELA_OBSERVACAO = [EVENTO_EDICAO, EVENTO_RESPONSAVEL, EVENTO_CONVITE, EVENTO_WHATSAPP_MANUAL, EVENTO_NOTA]
+export function eventoDescritoPelaObservacao(statusNovo: string): boolean {
+  return EVENTOS_DESCRITOS_PELA_OBSERVACAO.includes(statusNovo)
+}

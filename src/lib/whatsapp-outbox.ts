@@ -259,6 +259,20 @@ export async function tentarNovamente(organizacaoId:string,id:string,usuarioId:s
   }))
 }
 
+/**
+ * Tira da fila o que ainda não saiu (aguardando ou falhou, que pode ser
+ * reenviado à mão) e que deixou de valer — o convite trocado ou reenviado
+ * (11/11/2026): sem isso, a mensagem antiga ainda entregava um link morto.
+ * A revisão sobe, então um job já agendado acha a saída mudada e não envia; o
+ * que já começou a ir para a rede ("desconhecido") não se desfaz.
+ */
+export async function cancelarSaidasPendentes(tx:Tx,organizacaoId:string,filtro:{chaves?:string[];prefixo?:string},motivo:string) {
+  const ondeChave=[...(filtro.chaves?.length ? [{chave:{in:filtro.chaves}}] : []),...(filtro.prefixo ? [{chave:{startsWith:filtro.prefixo}}] : [])]
+  if(!ondeChave.length) return 0
+  const r=await tx.saidaWhatsapp.updateMany({where:{organizacaoId,estado:{in:["aguardando","falhou"]},OR:ondeChave},
+    data:{estado:"cancelado",pausada:false,motivo,proximaTentativa:null,revisao:{increment:1}}})
+  return r.count
+}
 /** Serializado com a preparação do worker; nenhuma ação depois do início da rede. */
 export async function controlarSaida(organizacaoId:string,id:string,usuarioId:string,acao:"pausar"|"retomar"|"cancelar") {
   return comOrg(organizacaoId,()=>prisma.$transaction(async tx=>{

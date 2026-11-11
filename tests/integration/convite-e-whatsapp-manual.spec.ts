@@ -204,6 +204,57 @@ describe("Quem vai: reenviar o convite", () => {
   })
 })
 
+describe("Quem vai: a mensagem do convite que perdeu a validade sai da fila", () => {
+  // Revisão do PR #137: reenviar ou trocar invalidava o token, mas a mensagem
+  // antiga, ainda aguardando ou em falha (reenviável), entregava um link morto.
+  it("reenviar cancela a saída antiga (aguardando ou em falha) e deixa só a nova", async () => {
+    const id = await card({ videomakerId: vm1 })
+    const c = await emitir(id, vm1)
+    const [antiga] = await saidas(`convite:${c.id}`)
+    expect(antiga.estado).toBe("aguardando")
+    como("admin")
+    expect((await convite(id, "reenviar")).status).toBe(200)
+    expect(await db.saidaWhatsapp.findUniqueOrThrow({ where: { id: antiga.id } })).toMatchObject({ estado: "cancelado", motivo: "convite_substituido", revisao: antiga.revisao + 1 })
+    const novo = await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id, status: "pendente" } })
+    // Uma em falha (o operador poderia reenviar) também sai.
+    const [nova] = await saidas(`convite:${novo.id}`)
+    expect(nova.estado).toBe("aguardando")
+    await db.saidaWhatsapp.update({ where: { id: nova.id }, data: { estado: "falhou", motivo: "http_500" } })
+    expect((await convite(id, "reenviar")).status).toBe(200)
+    expect((await db.saidaWhatsapp.findUniqueOrThrow({ where: { id: nova.id } })).estado).toBe("cancelado")
+    // O que já foi para a rede não se desfaz.
+    const terceiro = await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id, status: "pendente" } })
+    const [ida] = await saidas(`convite:${terceiro.id}`)
+    await db.saidaWhatsapp.update({ where: { id: ida.id }, data: { estado: "desconhecido" } })
+    expect((await convite(id, "reenviar")).status).toBe(200)
+    expect((await db.saidaWhatsapp.findUniqueOrThrow({ where: { id: ida.id } })).estado).toBe("desconhecido")
+  })
+
+  it("a fila não manda a mensagem cancelada, mesmo com o job já agendado", async () => {
+    const id = await card({ videomakerId: vm1 })
+    const c = await emitir(id, vm1)
+    como("admin")
+    expect((await convite(id, "reenviar")).status).toBe(200)
+    const [antiga] = await saidas(`convite:${c.id}`)
+    await db.jobAutomacao.deleteMany({ where: { organizacaoId: org, NOT: { referencia: antiga.id } } })
+    await processarSaidas(org)
+    expect(http).not.toHaveBeenCalled()
+    expect((await db.saidaWhatsapp.findUniqueOrThrow({ where: { id: antiga.id } })).estado).toBe("cancelado")
+  })
+
+  it("trocar cancela o convite e o aviso de mudança ainda na fila de quem saiu", async () => {
+    const id = await card({ videomakerId: vm1, statusInterno: "captacao_agendada", localGravacao: "Rua A, 10" })
+    await db.conviteVideomaker.create({ data: { demandaId: id, videomakerId: vm1, status: "aceito", respondidoEm: new Date(), expiresAt: new Date(Date.now() + 3600_000) } })
+    como("admin")
+    expect((await convite(id, "avisar-mudanca")).status).toBe(200)
+    const [mudanca] = await saidas(`convite-mudanca:${id}:`)
+    expect((await put(id, { videomakerId: vm2 })).status).toBe(200)
+    expect(await db.saidaWhatsapp.findUniqueOrThrow({ where: { id: mudanca.id } })).toMatchObject({ estado: "cancelado", motivo: "convite_substituido" })
+    const novo = await db.conviteVideomaker.findFirstOrThrow({ where: { demandaId: id, videomakerId: vm2 } })
+    expect((await saidas(`convite:${novo.id}`))[0].estado).toBe("aguardando")
+  })
+})
+
 describe("Quem vai: avisar mudança", () => {
   it("manda a data e o local de agora uma vez por conteúdo; mudou de novo, sai de novo", async () => {
     const id = await card({ videomakerId: vm1, statusInterno: "captacao_agendada",

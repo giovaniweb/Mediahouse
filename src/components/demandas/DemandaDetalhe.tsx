@@ -55,7 +55,7 @@ import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
 import { Briefing } from "@/components/demandas/Briefing"
 import { MarcarPostado } from "@/components/demandas/MarcarPostado"
-import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
+import { EVENTO_EDICAO, eventoDescritoPelaObservacao } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { SelecaoChips } from "@/components/demandas/SelecaoChips"
@@ -2386,7 +2386,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 // Edição e troca de responsável não são status: entram no mesmo
                 // histórico com um marcador próprio, e o que descreve o evento é a
                 // observação ("Editou título e prazo"), não o rótulo de coluna.
-                const ehEvento = h.statusNovo === EVENTO_EDICAO || h.statusNovo === EVENTO_RESPONSAVEL
+                // O envio pelo WhatsApp e o convite (11/11/2026) seguem a mesma regra.
+                const ehEvento = eventoDescritoPelaObservacao(h.statusNovo)
                 return (
                 <div key={h.id} className="flex items-start gap-2">
                   <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0",
@@ -2401,7 +2402,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                           segue mandando no resto, intocado. */}
                       {ehCobertura
                         ? rotuloDeEvento(h.statusNovo, h.observacao)
-                        : ehEvento ? (h.observacao ?? "Editou a demanda") : statusLabel(h.statusNovo, isGrowth)}
+                        : ehEvento ? (h.observacao ?? (h.statusNovo === EVENTO_EDICAO ? "Editou a demanda" : rotuloDeEvento(h.statusNovo, null))) : statusLabel(h.statusNovo, isGrowth)}
                     </p>
                     <p className="text-[10px] text-zinc-500">
                       {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
-import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
+import { cancelarSaidasPendentes, criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
 import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
 import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
@@ -145,6 +145,12 @@ export async function substituirConvites(tx: Tx, organizacaoId: string, demandaI
     include: { videomaker: { select: { nome: true, telefone: true } } },
     orderBy: { createdAt: "desc" },
   })
+  // A mensagem do convite que perde a validade sai da fila (link morto), e o
+  // aviso de mudança ainda não enviado para quem sai, também.
+  await cancelarSaidasPendentes(tx, organizacaoId, { chaves: antigos.filter((c) => c.status === "pendente").map((c) => `convite:${c.id}`) }, "convite_substituido")
+  if (antigos.some((c) => c.videomakerId !== novoVideomakerId)) {
+    await cancelarSaidasPendentes(tx, organizacaoId, { prefixo: `convite-mudanca:${demandaId}:` }, "convite_substituido")
+  }
   await tx.conviteVideomaker.updateMany({ where: { demandaId, status: "pendente" }, data: { status: "substituido" } })
   const aceitosDeOutros = antigos.filter((c) => c.status === "aceito" && c.videomakerId !== novoVideomakerId).map((c) => c.id)
   if (aceitosDeOutros.length) await tx.conviteVideomaker.updateMany({ where: { id: { in: aceitosDeOutros } }, data: { status: "substituido" } })
@@ -183,6 +189,8 @@ export async function reenviarConvite(tx: Tx, ator: AtorAuditoria, demandaId: st
   if (!telefone || !await destinoAutorizado(tx, ator.organizacaoId, telefone)) {
     throw new ConviteInvalido(`${v.videomaker.nome} não tem um WhatsApp válido no cadastro. Confira o número antes de reenviar.`)
   }
+  const pendentes = await tx.conviteVideomaker.findMany({ where: { demandaId, status: "pendente" }, select: { id: true } })
+  await cancelarSaidasPendentes(tx, ator.organizacaoId, { chaves: pendentes.map((c) => `convite:${c.id}`) }, "convite_substituido")
   await tx.conviteVideomaker.updateMany({ where: { demandaId, status: "pendente" }, data: { status: "substituido" } })
   if (d.statusInterno !== "videomaker_notificado") {
     await tx.demanda.update({ where: { id: d.id, organizacaoId: ator.organizacaoId },
