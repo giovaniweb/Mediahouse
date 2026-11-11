@@ -13,6 +13,7 @@ import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { LIMITE_POR_NOTA, estadoDaNotaDoVideomaker, pedeNota } from "@/lib/notas-do-videomaker"
 import { emSegundoPlano } from "@/lib/notificar"
 import { avisarGravacao, avisarNotaEmLote } from "@/lib/avisos-gravacao"
+import { avisarNotaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
 
 // "Minhas notas fiscais" do videomaker logado (lib/notas-do-videomaker.ts):
 // GET lista as gravações externas dele que esperam a nota e as já enviadas;
@@ -114,6 +115,8 @@ export async function POST(req: NextRequest) {
     emSegundoPlano(() => demandaIds.length === 1
       ? avisarGravacao(organizacaoId, demandaIds[0], "nota_recebida", usuarioId)
       : avisarNotaEmLote(organizacaoId, demandaIds, usuarioId), "aviso-gravacao")
+    // E um e-mail só, com o link da nota (lib/avisos-entrega-videomaker.ts).
+    emSegundoPlano(() => avisarNotaDoVideomaker(organizacaoId, demandaIds, usuarioId), "aviso-nota-videomaker")
     return resposta({ mensagem: demandaIds.length === 1 ? "Nota enviada." : `Nota enviada para ${demandaIds.length} gravações.` })
   } catch (e) {
     if (e instanceof PagamentoInvalido) return resposta({ error: e.message }, e.status)

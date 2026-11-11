@@ -10,6 +10,7 @@ import { momentoDoJob } from "@/lib/ficha-do-job"
 import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
+import { comToken } from "@/lib/midia"
 import {
   mensagemDaNotaEmLote,
   mensagensDoEvento,
@@ -81,9 +82,18 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
     where: { organizacaoId, tipo: "colinha" }, select: { id: true, titulo: true, tipo: true, texto: true, tipoGravacao: true },
   }), d.tipoGravacao)
   const quando = momentoDoJob(d)
+  // A nota mais recente deste videomaker, pelo nosso endereço e com a
+  // credencial daquele envio: abre sem login e sem expor o bucket.
+  const nf = d.videomakerId ? await tx.notaFiscalUpload.findFirst({
+    where: { demandaId: d.id, videomakerId: d.videomakerId, url: { not: null } },
+    orderBy: { updatedAt: "desc" }, select: { url: true, token: true },
+  }) : null
+  const nota = nf ? comToken(nf.url, nf.token) : null
   return {
     ...d,
     linkEntrega,
+    linkCard: `${base}/jobs/${d.id}`,
+    linkNota: nota ? (nota.startsWith("/") ? `${base}${nota}` : nota) : null,
     linkAcompanhamento: d.publicToken && d.publicTokenAtivo ? linkPublicoDaDemanda(d.publicToken) : null,
     // O vídeo subido no card abre para o cliente com o token do link público.
     linkVideoCliente: linkDoVideoParaOCliente(d.linkFinal, d.publicTokenAtivo ? d.publicToken : null, base),
@@ -152,12 +162,16 @@ export async function enfileirarAvisos(tx: Tx, e: {
  * Avisa um evento da gravação. Para chamar em segundo plano (emSegundoPlano):
  * abre a própria transação e nunca lança.
  */
-export async function avisarGravacao(organizacaoId: string, demandaId: string, evento: EventoDaGravacao, autorUsuarioId?: string | null) {
+export async function avisarGravacao(
+  organizacaoId: string, demandaId: string, evento: EventoDaGravacao, autorUsuarioId?: string | null,
+  /** A chave de não repetir, quando o evento acontece mais de uma vez no dia (as partes do material). */
+  motivo: string = evento,
+) {
   try {
     const n = await comOrg(organizacaoId, () => prisma.$transaction(async (tx) => {
       const g = await dadosDaGravacao(tx, organizacaoId, demandaId)
       if (!g) return 0
-      return enfileirarAvisos(tx, { organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId })
+      return enfileirarAvisos(tx, { organizacaoId, gravacao: g, motivo, mensagens: mensagensDoEvento(evento, g), autorUsuarioId })
     }))
     if (n > 0) {
       try { after(async () => { await processarSaidas(organizacaoId).catch(() => undefined) }) } catch { /* o consumidor da fila retoma */ }
@@ -179,7 +193,7 @@ export async function avisarNotaEmLote(organizacaoId: string, demandaIds: string
       const nome = g.videomaker?.nome?.trim().split(/\s+/)[0] ?? "O videomaker"
       return enfileirarAvisos(tx, {
         organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId,
-        mensagens: mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`)),
+        mensagens: mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`), g.linkNota),
       })
     }))
     if (n > 0) {

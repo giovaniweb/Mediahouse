@@ -268,6 +268,48 @@ export async function sendEmailNotaParaCompras(
   })
 }
 
+// Aviso para a operação das Gravações Externas (Giovani, 11/11/2026): "toda
+// vez que o videomaker anexar o link ou anexar a nota fiscal o sistema manda
+// para o email". Quem recebe e o que vai dentro são de
+// lib/avisos-entrega-videomaker.ts; aqui só a forma, no molde do e-mail de
+// compras. Tudo o que é de usuário passa por escaparHtml / linkSeguro.
+export type AvisoDaOperacaoEmail = {
+  titulo: string
+  intro: string
+  linhas: [rotulo: string, valor: string][]
+  /** O primeiro vira o botão; os outros, links abaixo dele. */
+  links: { rotulo: string; url: string }[]
+}
+
+export function templateAvisoDaOperacao(d: AvisoDaOperacaoEmail) {
+  const linha = ([rotulo, valor]: [string, string]) =>
+    `<tr><td style="padding:10px 0;color:#71717a;font-size:13px;width:40%;vertical-align:top">${escaparHtml(rotulo)}</td><td style="color:#18181b;font-weight:600">${escaparHtml(valor)}</td></tr>`
+  const links = d.links.filter((l) => linkSeguro(l.url))
+  const [principal, ...outros] = links
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
+  <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">🎬 NuFlow</div></div>
+  <div style="padding:32px">
+    <h2 style="margin:0 0 4px;color:#18181b">${escaparHtml(d.titulo)}</h2>
+    <p style="color:#71717a;font-size:14px">${escaparHtml(d.intro)}</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+      ${d.linhas.map(linha).join("\n      ")}
+    </table>
+    ${principal ? `<a href="${linkSeguro(principal.url)}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">${escaparHtml(principal.rotulo)} →</a>` : ""}
+    ${outros.map((l) => `<p style="margin:16px 0 0;font-size:13px"><a href="${linkSeguro(l.url)}" style="color:#2563eb">${escaparHtml(l.rotulo)} →</a></p>`).join("\n    ")}
+  </div>
+</div></body></html>`
+}
+
+export async function sendEmailAvisoDaOperacao(
+  destinatarios: (string | null | undefined)[], assunto: string, dados: AvisoDaOperacaoEmail, evento: string,
+): Promise<ResultadoEmail> {
+  const para = [...new Set(destinatarios.map(emailNormalizado).filter((e): e is string => Boolean(e)))]
+  if (!para.length) return { ok: false, error: "Nenhum destinatário válido" }
+  return enviarEmail({ destinatarios: para, assunto: `[NuFlow] ${assunto}`, html: templateAvisoDaOperacao(dados), evento })
+}
+
 export async function sendEmailVideomakerNFRecebida(
   email: string, nomeVideomaker: string, diasPrazo = 15
 ): Promise<ResultadoEmail> {

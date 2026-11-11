@@ -8,6 +8,7 @@ import { PagamentoInvalido, receberNotaFiscal } from "@/lib/pagamentos"
 import { validarArquivoNF } from "@/lib/nota-fiscal-arquivo"
 import { emSegundoPlano } from "@/lib/notificar"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { avisarNotaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
 const resposta=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store"}})
 type Params={params:Promise<{token:string}>}
 async function carregar(token:string,organizacaoId:string) {
@@ -46,6 +47,8 @@ export async function POST(req:NextRequest,{params}:Params) {
       await prisma.$transaction(tx=>receberNotaFiscal(tx,{organizacaoId:org,notaId:nf.id,url,nomeArquivo:file.name.slice(0,255),ator:{organizacaoId:org,tecnico:`nf:${nf.id}`}}))
       // A operação fica sabendo que a nota chegou (lib/avisos-gravacao.ts).
       emSegundoPlano(()=>avisarGravacao(org,nf.demandaId,"nota_recebida"),"aviso-gravacao")
+      // E o e-mail com o link da nota (lib/avisos-entrega-videomaker.ts).
+      emSegundoPlano(()=>avisarNotaDoVideomaker(org,[nf.demandaId]),"aviso-nota-videomaker")
       return resposta({success:true})
     }catch(e){
       if(e instanceof PagamentoInvalido)return resposta({error:e.message},e.status)
