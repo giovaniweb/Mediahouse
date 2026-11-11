@@ -10,6 +10,7 @@ import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import type { FamiliaArte } from "@/lib/avisos-arte"
 
 export type AcaoAprovacao = "aprovar" | "feedback"
 
@@ -129,7 +130,8 @@ export async function responderAprovacao(p: {
         ? `🔄 *Ajuste Pedido!*\n\n${titulo}\n👤 Pedido por: ${usuario.nome}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
         : `🔄 *Cliente Pediu Ajustes!*\n\n${titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
 
-    emSegundoPlano(() => notificarGestores(msgBase, demanda.organizacaoId), "gestores-aprovacao")
+    const arte: FamiliaArte = acao === "aprovar" ? "aprovado" : "ajuste"
+    emSegundoPlano(() => notificarGestores(msgBase, demanda.organizacaoId, arte), "gestores-aprovacao")
     // A demanda mudou de estado — o que estava pendente por causa do estado
     // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
     emSegundoPlano(() => resolverAlertas(demanda.organizacaoId, demanda.id), "resolver-alertas")
@@ -137,7 +139,7 @@ export async function responderAprovacao(p: {
     // Quem faz a peça precisa saber do ajuste: o editor no vídeo, o designer na arte.
     for (const [quemFez, rotulo] of [[demanda.editor, "wa-editor-aprovacao"], [demanda.designer, "wa-designer-aprovacao"]] as const) {
       const tel = quemFez?.whatsapp || quemFez?.telefone
-      if (tel) emSegundoPlano(() => sendWhatsappMessage(tel, msgBase, demanda.id, demanda.organizacaoId), rotulo)
+      if (tel) emSegundoPlano(() => sendWhatsappMessage(tel, msgBase, demanda.id, demanda.organizacaoId, { arte }), rotulo)
     }
 
     const telVm = demanda.videomaker?.telefone
@@ -145,7 +147,7 @@ export async function responderAprovacao(p: {
       emSegundoPlano(() => sendWhatsappMessage(
         telVm,
         `✅ *Vídeo Aprovado!*\n\n${titulo}\n\nParabéns! ${usuario ? `${usuario.nome} aprovou` : "O cliente aprovou"} o vídeo. 🎬`,
-        demanda.id, demanda.organizacaoId
+        demanda.id, demanda.organizacaoId, { arte: "aprovado" }
       ), "wa-videomaker-aprovado")
     }
   }
@@ -153,12 +155,12 @@ export async function responderAprovacao(p: {
   return { ok: true, status: novoStatus }
 }
 
-async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte }).catch(() => null)
       }
     }
   } catch (e) {

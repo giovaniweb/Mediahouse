@@ -4,6 +4,10 @@ import {NextRequest} from "next/server"
 const {sessao}=vi.hoisted(()=>({sessao:{user:null as null|{id:string;organizacaoId:string;tipo:string}}}))
 vi.mock("@/lib/auth",()=>({auth:async()=>sessao.user ? {user:sessao.user} : null}))
 vi.mock("next/headers",()=>({cookies:async()=>({get:()=>undefined})}))
+// O desenho da arte (next/og) tem teste próprio em tests/unit/avisos-arte.spec.ts;
+// aqui o fetch é falso e o next/og depende dele para carregar o WASM.
+const {desenhar}=vi.hoisted(()=>({desenhar:vi.fn(async(familia:string)=>({base64:"iVBORw0KGgo=",mimetype:"image/png",nomeArquivo:`nuflow-${familia}.png`}))}))
+vi.mock("@/lib/avisos-arte-imagem",()=>({imagemDoAviso:desenhar}))
 import {prismaBase as db} from "@/lib/prisma"
 import {prismaAuth} from "@/lib/prisma-auth"
 import {criarSaida,processarSaidas,tentarNovamente} from "@/lib/whatsapp-outbox"
@@ -230,4 +234,57 @@ describe("outbox e recibos WhatsApp",()=>{
     expect(await comOrg(a,()=>contarFalhasDeEntrega(a))).toBe(2)
     expect(await comOrg(b,()=>contarFalhasDeEntrega(b))).toBe(0)
   })
+})
+
+describe("arte nos avisos (WHATSAPP_ARTES)",()=>{
+  const corpo=(i:number)=>JSON.parse(String((http.mock.calls[i][1] as RequestInit).body))
+  const rota=(i:number)=>String(http.mock.calls[i][0])
+  beforeEach(()=>vi.stubEnv("WHATSAPP_ARTES","ligado"))
+  afterAll(()=>vi.stubEnv("WHATSAPP_ARTES",""))
+  it("aviso da equipe sai como uma imagem só, com o texto de legenda",async()=>{
+    const s=await criar(`arte:fila:${randomUUID()}`);await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(1)
+    expect(rota(0)).toContain("/message/sendMedia/")
+    expect(corpo(0)).toMatchObject({number:telefone,mediatype:"image",mimetype:"image/png",caption:"CONTEUDO-PRIVADO-SINTETICO"})
+    expect(Buffer.from(corpo(0).media,"base64").subarray(1,4).toString()).toBe("PNG")
+    expect((await ler(s.id)).estado).toBe("aceito")
+  },30_000)
+  it("desligado ou sem arte: só o texto, como antes",async()=>{
+    vi.stubEnv("WHATSAPP_ARTES","")
+    await criar(`arte:fila:${randomUUID()}`);await processarSaidas(a)
+    vi.stubEnv("WHATSAPP_ARTES","ligado")
+    await criar(randomUUID());await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(2)
+    expect(rota(0)).toContain("/message/sendText/");expect(rota(1)).toContain("/message/sendText/")
+  })
+  it("Evolution recusa a imagem: manda o texto na hora, uma mensagem só aceita",async()=>{
+    http.mockResolvedValueOnce(Response.json({error:"midia"},{status:400}))
+    const s=await criar(`arte:ajuste:${randomUUID()}`);await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(2)
+    expect(rota(0)).toContain("/message/sendMedia/");expect(rota(1)).toContain("/message/sendText/")
+    expect(corpo(1)).toEqual({number:telefone,text:"CONTEUDO-PRIVADO-SINTETICO"})
+    const final=await ler(s.id);expect(final.estado).toBe("aceito");expect(final.tentativas).toBe(1)
+  },30_000)
+  it("se a arte não desenhar, vai só o texto sem ter tentado a imagem",async()=>{
+    desenhar.mockRejectedValueOnce(new Error("sem cena"))
+    const s=await criar(`arte:nota:${randomUUID()}`);await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(1);expect(rota(0)).toContain("/message/sendText/")
+    expect((await ler(s.id)).estado).toBe("aceito")
+  })
+  it("resposta incerta da imagem não manda o texto (nada de mensagem dupla)",async()=>{
+    http.mockRejectedValueOnce(new Error("timeout"))
+    const s=await criar(`arte:ruim:${randomUUID()}`);await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(1)
+    expect((await ler(s.id)).estado).toBe("desconhecido")
+  },30_000)
+  it("limite do provedor (429) espera e a nova tentativa vai só com o texto",async()=>{
+    http.mockResolvedValueOnce(Response.json({error:"limite"},{status:429}))
+    const s=await criar(`arte:cobranca:${randomUUID()}`);await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(1)
+    expect((await ler(s.id)).estado).toBe("aguardando")
+    await db.saidaWhatsapp.update({where:{id:s.id},data:{proximaTentativa:new Date()}})
+    await db.jobAutomacao.updateMany({where:{organizacaoId:a,referencia:s.id},data:{agendadoPara:new Date()}})
+    await processarSaidas(a)
+    expect(http).toHaveBeenCalledTimes(2);expect(rota(1)).toContain("/message/sendText/")
+  },30_000)
 })

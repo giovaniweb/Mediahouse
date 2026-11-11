@@ -451,7 +451,7 @@ async function notificarGestoresNovaDemanda(
 
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId).catch(() => null)
+        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId, { arte: "fila" }).catch(() => null)
       }
     }
   } catch (e) {

@@ -8,6 +8,7 @@ import { identidadeWhatsApp, telefoneCompleto, jidRecebidoVerificado } from "@/l
 import { objeto, type ConteudoEntrada } from "@/lib/whatsapp-inbox-contrato"
 
 import { contextoRegraValido, type ContextoRegra } from "@/lib/regras-operacionais"
+import { artesLigadas, familiaDaSaida } from "@/lib/avisos-arte"
 
 type Tx=Prisma.TransactionClient
 const TIPO="whatsapp.saida"
@@ -134,11 +135,17 @@ export async function registrarRecibos(tx:Tx,organizacaoId:string,instanceId:str
   return registrados
 }
 type RespostaEnvio={estado:"aceito"|"falhou"|"aguardando"|"desconhecido";motivo:string|null;httpStatus?:number;providerMessageId?:string;esperaMs?:number}
-export async function enviarEvolution(config:{instanceUrl:string;instanceId:string;apiKey:string},telefone:string,texto:string):Promise<RespostaEnvio> {
+type ConfigEnvio={instanceUrl:string;instanceId:string;apiKey:string}
+export type ImagemEnvio={base64:string;mimetype:string;nomeArquivo:string}
+export async function enviarEvolution(config:ConfigEnvio,telefone:string,texto:string,imagem?:ImagemEnvio):Promise<RespostaEnvio> {
+  // Com imagem: uma mensagem só, a arte com o texto de legenda (sendMedia da Evolution 2.3.7).
+  const rota=imagem ? "sendMedia" : "sendText"
+  const corpo=imagem ? {number:telefone,mediatype:"image",mimetype:imagem.mimetype,caption:texto,media:imagem.base64,fileName:imagem.nomeArquivo}
+    : {number:telefone,text:texto}
   try {
-    const r=await fetch(`${config.instanceUrl.replace(/\/$/,"")}/message/sendText/${encodeURIComponent(config.instanceId)}`,{
+    const r=await fetch(`${config.instanceUrl.replace(/\/$/,"")}/message/${rota}/${encodeURIComponent(config.instanceId)}`,{
       method:"POST",headers:{"Content-Type":"application/json",apikey:config.apiKey},
-      body:JSON.stringify({number:telefone,text:texto}),signal:AbortSignal.timeout(15_000),redirect:"error",
+      body:JSON.stringify(corpo),signal:AbortSignal.timeout(imagem ? 25_000 : 15_000),redirect:"error",
     })
     const body=objeto(await r.json().catch(()=>null)),key=objeto(body.key)
     const providerMessageId=typeof key.id==="string" && key.id.length>0 && key.id.length<=128 ? key.id : undefined
@@ -152,6 +159,37 @@ export async function enviarEvolution(config:{instanceUrl:string;instanceId:stri
     }
     return {estado:"falhou",motivo:"rejeitado_provedor",httpStatus:r.status}
   } catch { return {estado:"desconhecido",motivo:"timeout_ou_rede"} }
+}
+
+/**
+ * Manda o aviso com a arte da turma do NuFlow (lib/avisos-arte.ts) quando ela
+ * está ligada e o aviso tem uma; senão, só o texto, como sempre foi.
+ *
+ * A arte nunca pode custar o aviso nem duplicá-lo:
+ * - só na primeira tentativa; uma nova tentativa já vai só com o texto;
+ * - se desenhar a arte falhar, vai só o texto, sem ter tocado a rede;
+ * - se a Evolution RECUSAR a imagem (resposta HTTP de erro, fora o 429), manda o
+ *   texto na mesma hora — recusa clara quer dizer que nada foi entregue;
+ * - se a resposta for incerta (tempo esgotado, rede), NÃO manda o texto: a
+ *   imagem pode ter chegado, e aí sairiam duas mensagens. Fica "desconhecido",
+ *   como qualquer envio incerto.
+ */
+async function enviarComArte(cfg:ConfigEnvio,s:SaidaWhatsapp,telefone:string,texto:string):Promise<RespostaEnvio> {
+  const familia=artesLigadas() && s.tentativas===0 ? familiaDaSaida(s) : null
+  if(!familia) return enviarEvolution(cfg,telefone,texto)
+  let imagem:ImagemEnvio
+  try {
+    const {imagemDoAviso}=await import("@/lib/avisos-arte-imagem")
+    imagem=await imagemDoAviso(familia,s.id)
+  } catch (e) {
+    console.error("[WhatsApp] Arte do aviso não desenhada, vai só o texto:",e instanceof Error ? e.message : e)
+    return enviarEvolution(cfg,telefone,texto)
+  }
+  const comArte=await enviarEvolution(cfg,telefone,texto,imagem)
+  const recusada=comArte.httpStatus!==undefined && comArte.httpStatus!==429 && (comArte.estado==="falhou" || comArte.estado==="aguardando")
+  if(!recusada) return comArte
+  console.error(`[WhatsApp] Evolution recusou a arte (HTTP ${comArte.httpStatus}), vai só o texto`)
+  return enviarEvolution(cfg,telefone,texto)
 }
 
 export async function processarSaidas(organizacaoId:string) {
@@ -214,7 +252,7 @@ export async function processarSaidas(organizacaoId:string) {
       }
       envioIniciado=true
       // Rede fora da transação. Nunca alternar número como reação a HTTP/timeout.
-      const resposta=await enviarEvolution(preparado.cfg,preparado.telefone,preparado.texto)
+      const resposta=await enviarComArte(preparado.cfg,preparado.s,preparado.telefone,preparado.texto)
       const salvo=await fila.concluirLocal(lease,async tx=>{
         const atual=await tx.saidaWhatsapp.findFirstOrThrow({where:{id:preparado.s.id,organizacaoId}})
         const proxima=new Date(Date.now()+Math.max(resposta.esperaMs??0,30_000*2**(atual.tentativas-1)))

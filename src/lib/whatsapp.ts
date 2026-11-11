@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { after } from "next/server"
 import { comOrg } from "@/lib/org-contexto"
 import { criarSaida, processarSaidas } from "@/lib/whatsapp-outbox"
+import { chaveComArte, type FamiliaArte } from "@/lib/avisos-arte"
 /**
  * WhatsApp service via Evolution API
  */
@@ -59,11 +60,13 @@ export function alternar9oDigito(numero: string): string | null {
 /** Adaptador legado: persiste intenção. "aguardando" NÃO significa entrega.
  * Regras O04 devem fornecer chave própria na mesma transação do fato.
  */
-export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null) {
+export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null,
+  /** `arte`: a família da arte que acompanha o aviso (lib/avisos-arte.ts). Só vale para a equipe. */
+  opcoes?: { arte?: FamiliaArte | null }) {
   const orgId=await resolverOrgEnvio(demandaId,organizacaoId)
   if(!orgId) return null
   try {
-    const chave=createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex")
+    const chave=chaveComArte(opcoes?.arte,createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex"))
     const saida=await comOrg(orgId,()=>prisma.$transaction(tx=>criarSaida(tx,{
       organizacaoId:orgId,chave,origem:"legado",referencia:demandaId??"aviso",telefone,texto:mensagem,expiraEm:new Date(Date.now()+86400_000),
     })))

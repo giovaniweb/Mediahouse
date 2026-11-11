@@ -7,6 +7,7 @@
 // executor do Growth nunca recebeu nada — que foi exatamente o que aconteceu.
 
 import { variar } from "@/lib/variacao"
+import { arteDoKanban, type FamiliaArte } from "@/lib/avisos-arte"
 
 export type DestinatarioKanban =
   | "videomaker" | "solicitante" | "gestor" | "editor" | "executor"
@@ -224,6 +225,8 @@ export interface AvisoDestinatario {
   telefone: string
   mensagem: string
   papel: DestinatarioKanban | "social"
+  /** Arte que acompanha o aviso (lib/avisos-arte.ts); null para quem pediu. */
+  arte: FamiliaArte | null
 }
 
 /**
@@ -254,7 +257,7 @@ export function destinatariosDoAviso(d: DadosAvisoKanban): AvisoDestinatario[] {
     if (k === autorChave) return   // não avisar quem acabou de fazer a mudança
     if (jaAvisado.has(k)) return   // mesma pessoa em dois papéis
     jaAvisado.add(k)
-    saida.push({ telefone, mensagem, papel })
+    saida.push({ telefone, mensagem, papel, arte: arteDoKanban(statusNovo, papel, d.isGrowth ?? false) })
   }
 
   const texto = (papel: DestinatarioKanban) =>

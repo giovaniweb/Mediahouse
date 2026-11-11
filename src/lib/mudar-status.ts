@@ -261,7 +261,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
               `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
               `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +
               `_O pagamento é processado em até 15 dias após o recebimento da NF._`
-            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId)
+            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId, { arte: "nota" })
           }
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)
@@ -413,7 +413,7 @@ async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGe
     })
 
     await Promise.allSettled(
-      destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId))
+      destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId, { arte: d.arte }))
     )
   } catch (e) {
     console.error("[Kanban Notify]", e)
