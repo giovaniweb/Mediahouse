@@ -87,7 +87,7 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
     "Subiu! (Esqueceram de olhar o CAC.)", "Disparo feito. Que a caixa de spam tenha piedade."],
     frasesDaCena: { 6: ["Prompt: “faz viralizar”. Pronto, estratégia feita."] } },
   // Relatórios: uma cena por área e situação; quem escolhe é o número do dia.
-  rel_av_ok: { arquivo: "17", cenas: 1, frases: ["Nada atrasado. Alguém conferiu duas vezes?", "Semana limpa. Desconfie."] },
+  rel_av_ok: { arquivo: "17", cenas: 1, frases: ["Nada atrasado. Alguém conferiu duas vezes?", "Tudo limpo. Desconfie."] },
   rel_av_cansado: { arquivo: "18", cenas: 1, frases: ["Muita coisa vencendo. Café em dose dupla.", "A turma está viva. Por pouco."] },
   rel_av_apuros: { arquivo: "19", cenas: 1, frases: ["Tem prazo pegando fogo. Literalmente.", "Calma. Ou não."] },
   rel_gr_ok: { arquivo: "20", cenas: 1, frases: ["Tudo em dia. O gráfico até sorriu.", "Growth sem atraso. Print pro LinkedIn."] },
