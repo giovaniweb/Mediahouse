@@ -21,6 +21,7 @@ export const CADENCIAS_PADRAO: Record<string, number> = {
   "agentes:limpeza": 1440,
   "agentes:prazos": 3 * 1440, // seg, qua e sex: de sexta a segunda são 3 dias
   "agentes:vistoria": 7 * 1440,
+  "agentes:fim-do-dia": 3 * 1440, // seg a sex às 18h: de sexta a segunda são 3 dias
 }
 
 /** Sem rodada nenhuma registrada, só a do WhatsApp é problema: as outras podem não ter tido o que fazer ainda. */

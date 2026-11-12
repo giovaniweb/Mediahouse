@@ -18,6 +18,8 @@ import { filtrarEmails, podeAvisar } from "@/lib/preferencias-aviso"
 import type { CategoriaAviso } from "@/lib/avisos-categorias"
 import { estadoDoPerfil } from "@/lib/avisos-perfis"
 import { spawnSync } from "node:child_process"
+import { resumoDoFimDoDia } from "@/lib/resumo-fim-do-dia"
+import { decryptSecret } from "@/lib/secret-crypto"
 import { GET as lerAvisos, PUT as salvarAvisos } from "@/app/api/avisos-por-pessoa/route"
 import { GET as sino } from "@/app/api/notificacoes/route"
 
@@ -238,6 +240,48 @@ describe("script dos perfis da Contourline", () => {
       await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: orgS } })
       await db.organizacao.delete({ where: { id: orgS } })
       await db.usuario.deleteMany({ where: { id: { in: ids } } })
+    }
+  })
+})
+
+describe("resumo do fim do dia", () => {
+  it("cada pessoa configurada recebe o do recorte dela; sem configuração ou sem movimento, nada", async () => {
+    entrar("giovani")
+    await salvar("thalisson", estadoDoPerfil("setor", "growth").map((e) => ({ ...e, travada: false })))
+    await salvar("luisa", estadoDoPerfil("so_resumo").map((e) => ({ ...e, travada: false })).map((e) =>
+      e.categoria === "andamento" || e.categoria === "gravacoes" ? { ...e, recorte: "pedi" } : e))
+    await salvar("debora", estadoDoPerfil("pedi").map((e) => ({ ...e, travada: false })))
+    await db.historicoStatus.createMany({ data: [
+      { demandaId: cardGrowthDaLuisa, statusNovo: "aprovado" },
+      { demandaId: cardDosOutros, statusNovo: "ajuste_solicitado" },
+    ] })
+    try {
+      const r = await comOrg(org, () => resumoDoFimDoDia(org))
+      const saidas = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, chave: { startsWith: "fimdodia:" } } })
+      const de = (q: keyof typeof gente) => saidas.find((s) => s.destinatarioId === gente[q].id)
+      // Giovani não tem configuração: segue como hoje, sem resumo novo.
+      expect(de("giovani")).toBeUndefined()
+      // Débora só com o que pediu, e não pediu nada: dia sem movimento.
+      expect(de("debora")).toBeUndefined()
+      expect(r).toMatchObject({ pessoas: 3, whatsapp: 2, semMovimento: 1 })
+      const textoThal = decryptSecret(de("thalisson")!.conteudoCifrado!)
+      expect(textoThal).toContain("GR-03 — Arte da campanha (aprovado)")
+      expect(textoThal).toContain("AV-d1") // card dele, de outro setor, entrou hoje
+      expect(textoThal).not.toContain("AV-d2")
+      // Luisa está em "Só o resumo do dia": o WhatsApp do andamento está desligado, mas o resumo chega.
+      const textoLuisa = decryptSecret(de("luisa")!.conteudoCifrado!)
+      expect(textoLuisa).toContain("GR-03")
+      expect(textoLuisa).not.toContain("AV-d")
+      // Rodar de novo no mesmo dia não manda outro.
+      await comOrg(org, () => resumoDoFimDoDia(org))
+      expect(await db.saidaWhatsapp.count({ where: { organizacaoId: org, chave: { startsWith: "fimdodia:" } } })).toBe(2)
+      // Quem desliga "Resumos" no WhatsApp não recebe.
+      await db.saidaWhatsapp.deleteMany({ where: { organizacaoId: org } })
+      await db.preferenciaAviso.create({ data: { organizacaoId: org, usuarioId: gente.thalisson.id, categoria: "resumos", whatsapp: false, email: false } })
+      await comOrg(org, () => resumoDoFimDoDia(org))
+      expect(await db.saidaWhatsapp.count({ where: { organizacaoId: org, destinatarioId: gente.thalisson.id } })).toBe(0)
+    } finally {
+      await db.historicoStatus.deleteMany({ where: { demandaId: { in: [cardGrowthDaLuisa, cardDosOutros] } } })
     }
   })
 })
