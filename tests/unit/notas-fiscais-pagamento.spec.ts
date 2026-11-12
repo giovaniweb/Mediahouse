@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
-import { finalDaChave, linhasDoPagamento, pagamentoDe, pixResumido, resumoDoPagamento, rotuloDoValor, tipoDaChavePix } from "@/lib/pagamento-do-videomaker"
+import { finalDaChave, linhasDoPagamento, pagamentoDe, pixResumido, rotuloDoValor, tipoDaChavePix } from "@/lib/pagamento-do-videomaker"
 import { estadoNoPainel, retratoDasNotas } from "@/lib/notas-fiscais-painel"
 import { emailDaNota, sinoDaNota } from "@/lib/avisos-entrega-videomaker"
 import { templateAvisoDaOperacao } from "@/lib/email"
@@ -34,7 +34,7 @@ describe("valor e linhas do pagamento", () => {
     expect(rotuloDoValor(pagamentoDe([{ valor: 0, valorConfirmadoEm: null }], 600, f))).toBe("R$ 600,00 (diária combinada, a confirmar)")
     expect(rotuloDoValor(pagamentoDe([], null, f))).toBe("A confirmar")
   })
-  it("linhas completas para o e-mail; resumo sem a chave para sino e WhatsApp", () => {
+  it("linhas completas para o e-mail e o WhatsApp", () => {
     const p = pagamentoDe([], 600, f)
     expect(linhasDoPagamento(p)).toEqual([
       ["Valor", "R$ 600,00 (diária combinada, a confirmar)"],
@@ -42,8 +42,6 @@ describe("valor e linhas do pagamento", () => {
       ["CNPJ da nota", "12.345.678/0001-95"],
       ["Razão social", "JM Filmes"],
     ])
-    expect(resumoDoPagamento(p)).toBe("Valor: R$ 600,00 (diária combinada, a confirmar) · PIX CPF final 4725")
-    expect(resumoDoPagamento(p)).not.toContain("529.982")
     expect(linhasDoPagamento(pagamentoDe([], 600, null))).toContainEqual(["PIX", "Não cadastrado — peça ao videomaker"])
   })
 })
@@ -76,10 +74,8 @@ describe("e-mail da nota", () => {
     expect(html).toContain("R$ 1.200,00")
     expect(html).toContain("Gravação 2 de 2")
   })
-  it("sino: com pagamento, só o resumo", () => {
-    expect(sinoDaNota(g, p)).toContain("PIX CPF final 4725")
-    expect(sinoDaNota(g, p)).not.toContain("529.982")
-    expect(sinoDaNota(g)).not.toContain("PIX")
+  it("sino: nunca valor nem PIX (o texto fica em alertas_ia, lido por outros)", () => {
+    expect(sinoDaNota(g)).toBe("🧾 João mandou a nota de Dra. Ana Lima (VOP-26-2001).")
   })
 })
 

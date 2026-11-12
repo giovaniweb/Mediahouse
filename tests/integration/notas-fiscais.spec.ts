@@ -45,6 +45,7 @@ import { familiaDaSaida } from "@/lib/avisos-arte"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { registrarServicoPendente } from "@/lib/custo-servico"
+import { GET as lerAlertas } from "@/app/api/alertas/route"
 
 const p = `notasfisc-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
@@ -160,12 +161,14 @@ describe("aviso da nota com os dados de pagamento", () => {
     expect(completo.html).toContain(`href="https://nuflow.space/jobs/${id}"`)
     expect(completo.html).toContain("Abrir a nota fiscal")
 
-    // Sino direcionado: um por pessoa da operação, com o resumo (nunca a chave inteira).
-    const sinos = await db.alertaIA.findMany({ where: { organizacaoId: org, demandaId: id, tipoAlerta: "nf_recebida" }, select: { usuarioId: true, mensagem: true } })
+    // Sino direcionado: um por pessoa da operação, SEM valor nem PIX (o texto
+    // fica em alertas_ia, que a central de alertas mostra a outros; revisão do #145).
+    const sinos = await db.alertaIA.findMany({ where: { organizacaoId: org, demandaId: id, tipoAlerta: "nf_recebida" }, select: { usuarioId: true, mensagem: true, acaoSugerida: true } })
     expect(sinos.map((x) => x.usuarioId).sort()).toEqual([gente.financeira.id, gente.operadora.id].sort())
     for (const x of sinos) {
-      expect(x.mensagem).toContain("PIX CPF final 4725")
-      expect(x.mensagem).not.toContain(PIX)
+      expect(x.mensagem).toBe("🧾 João mandou a nota de Dra. Ana Lima (VOP-" + id.slice(-6) + ").")
+      expect(`${x.mensagem} ${x.acaoSugerida}`).not.toMatch(/4725|R\$|529\.982/)
+      expect(x.acaoSugerida).toContain("/notas-fiscais")
     }
     expect(await db.alertaIA.count({ where: { organizacaoId: org, demandaId: id, usuarioId: null } })).toBe(0)
 
@@ -209,7 +212,7 @@ describe("aviso da nota com os dados de pagamento", () => {
       const sinoAvisada = sinos.find((x) => x.usuarioId === gente.avisada.id)!.mensagem
       expect(sinoAvisada).not.toContain("PIX")
       expect(sinoAvisada).not.toContain("R$")
-      expect(sinos.find((x) => x.usuarioId === gente.admin.id)!.mensagem).toContain("PIX CPF final 4725")
+      expect(sinos.find((x) => x.usuarioId === gente.admin.id)!.mensagem).not.toContain("PIX")
 
       const zap = await whatsapps(id)
       const zapAvisada = zap.find((z) => z.para === gente.avisada.id)!.texto
@@ -304,6 +307,48 @@ describe("videomaker interno nunca entra na nota (12/11/2026)", () => {
     const j = await (await listar(new NextRequest("http://localhost/api/notas-fiscais"))).json() as { linhas: { demandaId: string }[]; videomakers: { id: string }[] }
     expect(j.linhas.map((l) => l.demandaId)).not.toContain(interno)
     expect(j.videomakers.map((v) => v.id)).not.toContain(vmInterno)
+  })
+})
+
+describe("revisão do #145", () => {
+  it("a central de alertas mostra o sino da nota a quem vê todas as demandas sem ver o financeiro: o texto não leva valor nem PIX", async () => {
+    // A avisada passa a ver alertas e todas as demandas, sem ver custos.
+    await db.permissaoUsuario.update({ where: { usuarioId_organizacaoId: { usuarioId: gente.avisada.id, organizacaoId: org } }, data: { verAlertas: true, verTodasDemandas: true, verCustos: false } })
+    try {
+      const { id } = await notaEnviada()
+      await rodarSegundoPlano()
+      entrar(gente.avisada)
+      const r = await lerAlertas(new NextRequest("http://localhost/api/alertas?tipo=nf_recebida"))
+      expect(r.status).toBe(200)
+      const j = await r.json() as { alertas: { usuarioId: string | null; demanda: { id: string } | null; mensagem: string; acaoSugerida: string | null }[] }
+      // Ela enxerga os sinos direcionados às pessoas da operação…
+      const daNota = j.alertas.filter((x) => x.demanda?.id === id)
+      expect(daNota.map((x) => x.usuarioId).sort()).toEqual([gente.financeira.id, gente.operadora.id].sort())
+      // …e nada de valor nem de PIX neles.
+      expect(JSON.stringify(daNota)).not.toMatch(/4725|R\$|529\.982|52998224725/)
+    } finally {
+      await db.permissaoUsuario.update({ where: { usuarioId_organizacaoId: { usuarioId: gente.avisada.id, organizacaoId: org } }, data: { verAlertas: false, verTodasDemandas: false } })
+    }
+  })
+
+  it("gravação externa sem tipoGravacao entra na página e nos totais; a do interno continua fora", async () => {
+    const card = async (videomakerId: string) => {
+      const id = `${p}-${randomUUID().slice(0, 6)}`
+      await db.demanda.create({ data: {
+        id, organizacaoId: org, codigo: `VOP-EXT-${id.slice(-6)}`, titulo: "Cobertura antiga", descricao: "Teste.",
+        area: "audiovisual", departamento: "eventos", tipoVideo: "cobertura_evento", cidade: "Curitiba",
+        solicitanteId: gente.admin.id, videomakerId, statusInterno: "entregue_cliente", statusVisivel: "finalizado",
+        dataCaptacao: new Date("2026-09-14T13:00:00Z"),
+      } })
+      await db.custoVideomaker.create({ data: { organizacaoId: org, demandaId: id, videomakerId, valor: 0, dataReferencia: new Date(), statusPagamento: "pendente_nf" } })
+      return id
+    }
+    const externo = await card(vm), interno = await card(vmInterno)
+    entrar(gente.financeira)
+    const j = await (await listar(new NextRequest("http://localhost/api/notas-fiscais"))).json() as { linhas: { demandaId: string; estado: string }[]; retrato: Record<string, number> }
+    expect(j.linhas.find((l) => l.demandaId === externo)?.estado).toBe("pendente")
+    expect(j.linhas.map((l) => l.demandaId)).not.toContain(interno)
+    expect(j.retrato.pendente).toBe(j.linhas.filter((l) => l.estado === "pendente").length)
   })
 })
 

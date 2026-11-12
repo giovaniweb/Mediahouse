@@ -4,7 +4,7 @@ import { comOrg } from "@/lib/org-contexto"
 import { destinatariosNotasFiscais, sendEmailAvisoDaOperacao, type AvisoDaOperacaoEmail } from "@/lib/email"
 import { avisarGravacao, dadosDaGravacao, type GravacaoDoAviso } from "@/lib/avisos-gravacao"
 import { rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
-import { dadosDePagamento, linhasDoPagamento, quemVeDadosDePagamento, resumoDoPagamento, rotuloDoValor, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
+import { dadosDePagamento, linhasDoPagamento, quemVeDadosDePagamento, rotuloDoValor, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import { faltaDaEntrega, linksDaEntrega, linksDaNota, type DadosDoAviso } from "@/lib/avisos-gravacao-textos"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 
@@ -147,10 +147,13 @@ export function emailDaNota(gravacoes: DadosDoAviso[], pagamentos?: DadosDePagam
   }
 }
 
-/** A frase do sino da nota. Com o pagamento, só o resumo (sem a chave inteira). */
-export function sinoDaNota(d: DadosDoAviso, pagamento?: DadosDePagamento | null): string {
-  const base = `🧾 ${nomeDoVideomaker(d).split(/\s+/)[0]} mandou a nota de ${cliente(d)} (${d.codigo}).`
-  return pagamento ? `${base} ${resumoDoPagamento(pagamento)}.` : base
+/**
+ * A frase do sino da nota. Nunca leva valor nem PIX: o texto fica em
+ * alertas_ia, que outros leitores (central de alertas, painéis, assistente)
+ * mostram a quem não vê o financeiro.
+ */
+export function sinoDaNota(d: DadosDoAviso): string {
+  return `🧾 ${nomeDoVideomaker(d).split(/\s+/)[0]} mandou a nota de ${cliente(d)} (${d.codigo}).`
 }
 
 async function usuarioDoVideomaker(tx: Pick<Tx, "videomaker">, videomakerId: string | null | undefined) {
@@ -194,9 +197,9 @@ export async function avisarEntregaDoVideomaker(
  * A nota chegou (de uma gravação ou de várias). Para chamar em segundo plano;
  * nunca lança.
  *
- *   - Sino, direcionado, para cada pessoa da operação (uma por gravação). Quem
- *     vê os dados de pagamento (financeiro ou operação) recebe o valor e o PIX
- *     resumido (tipo e final).
+ *   - Sino, direcionado, para cada pessoa da operação (uma por gravação), sem
+ *     valor nem PIX (ver sinoDaNota); quem vê os dados de pagamento recebe o
+ *     caminho da página Notas fiscais.
  *   - E-mail para a operação: quem vê os dados de pagamento recebe o completo
  *     (trabalho e dados de pagamento, PIX inteiro); os outros, o de antes.
  *   - E-mail das notas da empresa (Configurações → E-mail; a Débora): sempre o
@@ -220,10 +223,13 @@ export async function avisarNotaDoVideomaker(
       const precisa = financeiro.size > 0 || paraNotas.length > 0
       const pagamentos = precisa ? await Promise.all(gravacoes.map((g) => dadosDePagamento(tx, organizacaoId, g.id, vm))) : null
       if (pessoas.length) {
-        await tx.alertaIA.createMany({ data: pessoas.flatMap((p) => gravacoes.map((g, i) => ({
+        await tx.alertaIA.createMany({ data: pessoas.flatMap((p) => gravacoes.map((g) => ({
           organizacaoId, demandaId: g.id, usuarioId: p.id, tipoAlerta: "nf_recebida",
-          mensagem: sinoDaNota(g, financeiro.has(p.id) ? pagamentos?.[i] : null), severidade: "aviso" as const,
-          acaoSugerida: financeiro.has(p.id) ? "Os dados completos estão em Notas fiscais e no e-mail." : "Abra o card e marque quando a nota for cadastrada para pagamento.",
+          // Sem valor nem PIX no texto gravado: a central de alertas, os painéis
+          // e o assistente leem alertas_ia de outras pessoas sem olhar o
+          // financeiro (revisão do #145). Quem vê o financeiro recebe o caminho.
+          mensagem: sinoDaNota(g), severidade: "aviso" as const,
+          acaoSugerida: financeiro.has(p.id) ? "Valor e PIX em Notas fiscais (/notas-fiscais) e no e-mail." : "Abra o card e marque quando a nota for cadastrada para pagamento.",
         }))) })
       }
       return { gravacoes, pessoas, financeiro, pagamentos }
