@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   updateManyVinculo: vi.fn(),
   updateManyDesigner: vi.fn(),
   findManyVinculo: vi.fn(),
+  aceite: vi.fn(),
+  auditoria: vi.fn(),
 }))
 
 vi.mock("@/lib/acesso", () => ({ requireAcesso: (...a: unknown[]) => mocks.acesso(...a) }))
@@ -22,6 +24,12 @@ vi.mock("@/lib/limite-formulario", () => ({ barrarExcesso: async () => null }))
 vi.mock("@/lib/videomaker-dados", () => ({ cifrarOuNulo: (v: unknown) => (typeof v === "string" && v ? `cifrado(${v})` : null) }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    // A transação do cadastro: perfil e aceite juntos.
+    $transaction: (fn: (tx: unknown) => unknown) => fn({
+      designer: { create: mocks.create },
+      aceiteTermos: { create: mocks.aceite },
+      eventoAuditoria: { createMany: mocks.auditoria },
+    }),
     designer: { create: mocks.create, updateMany: mocks.updateManyDesigner },
     designerOrganizacao: { findFirst: mocks.findFirstVinculo, updateMany: mocks.updateManyVinculo, findMany: mocks.findManyVinculo },
     designerDadosFiscais: { findFirst: mocks.findFirstFiscal },
@@ -37,6 +45,7 @@ const corpo = {
   nome: "Ana Designer", cpfCnpj: "12345678901", email: "ana@estudio.test", telefone: "(31) 97777-6666",
   cidade: "Belo Horizonte", estado: "mg", chavePix: "ana@pix", dadosBancarios: "Banco 1, ag 2, cc 3",
   portfolio: "behance.net/ana", areasAtuacao: ["Motion"], redesSociais: ["@ana", ""], valorDiaria: 400,
+  aceiteTermos: true,
 }
 const post = (c: unknown) => POST(new NextRequest("http://localhost/api/publico/designer?org=clinica-b", {
   method: "POST", body: JSON.stringify(c), headers: { "content-type": "application/json" },
@@ -51,6 +60,7 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: "d1" })
   mocks.findFirstVinculo.mockResolvedValue(null)
   mocks.findFirstFiscal.mockResolvedValue(null)
+  mocks.aceite.mockResolvedValue({ id: "ac1" })
 })
 
 describe("POST /api/publico/designer", () => {
@@ -64,6 +74,25 @@ describe("POST /api/publico/designer", () => {
     expect(data.vinculos.create).toEqual({ organizacaoId: "org-B", status: "pendente", valorDiaria: 400, observacoes: null })
     expect(data.fiscais.create).toMatchObject({ organizacaoId: "org-B", cpfCnpj: "12345678901", chavePix: "cifrado(ana@pix)", dadosBancarios: "cifrado(Banco 1, ag 2, cc 3)" })
     expect(mocks.alerta).toHaveBeenCalledWith({ data: expect.objectContaining({ organizacaoId: "org-B", tipoAlerta: "novo_designer_pendente" }) })
+  })
+
+  it("sem o aceite dos termos não há cadastro", async () => {
+    const { aceiteTermos: _sem, ...semAceite } = corpo
+    expect((await post(semAceite)).status).toBe(400)
+    expect((await post({ ...corpo, aceiteTermos: false })).status).toBe(400)
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.aceite).not.toHaveBeenCalled()
+  })
+
+  it("grava a prova do aceite (documentos e versão) e o evento de auditoria na empresa", async () => {
+    expect((await post(corpo)).status).toBe(201)
+    expect(mocks.aceite).toHaveBeenCalledWith({
+      data: expect.objectContaining({ organizacaoId: "org-B", titularTipo: "designer", titularId: "d1", origem: "cadastro_designer", documentos: ["profissionais@1.0", "privacidade@1.0"] }),
+      select: { id: true },
+    })
+    const evento = mocks.auditoria.mock.calls[0][0].data
+    expect(evento).toMatchObject({ organizacaoId: "org-B", acao: "termos.aceite", recurso: "designer", recursoId: "d1", atorTipo: "tecnico" })
+    expect(evento.depois).toEqual({ documentos: ["privacidade@1.0", "profissionais@1.0"], origem: "cadastro_designer" })
   })
 
   it("duplicidade é conferida só nesta empresa e devolve 409 sem criar nada", async () => {

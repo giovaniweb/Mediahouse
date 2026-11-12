@@ -21,6 +21,7 @@ import { VideomakerPerformance } from "@/components/VideomakerPerformance"
 import { mensagemDeErro } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
 import { ConviteAvaliacao } from "@/components/pessoas/ConviteAvaliacao"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -666,6 +667,7 @@ export default function EditorDetalhePage() {
             <textarea
               value={comentarioAvaliacao}
               onChange={(e) => setComentarioAvaliacao(e.target.value)}
+              maxLength={LIMITE_COMENTARIO_AVALIACAO}
               placeholder="Comentario (opcional)..."
               rows={2}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 resize-none outline-none focus:ring-1 focus:ring-zinc-500 mb-3"

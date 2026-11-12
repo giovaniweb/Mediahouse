@@ -101,7 +101,7 @@ export default function ConvitePage() {
     setRespondendo(true); setErroResposta("")
     try {
       const r = await fetch(`/api/convites/${encodeURIComponent(token)}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, versao: convite?.versao }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, versao: convite?.versao, ...(acao === "aceitar" ? { aceiteTermos: true } : {}) }),
       })
       if (!r.ok) {
         const data = await r.json()
@@ -154,6 +154,9 @@ export default function ConvitePage() {
           <button disabled={respondendo} onClick={() => responder("recusar")}><X size={18}/>Recusar convite</button>
         </div>
         {erroResposta && <button className={styles.refresh} disabled={respondendo} onClick={() => setRetry(r => r + 1)}>Conferir estado do convite</button>}
+        {/* Onda 3: o videomaker cadastrado pela equipe (sem passar pelo cadastro
+            público) vê aqui os termos que regem o trabalho pela plataforma. */}
+        <p className={styles.termos}>Ao aceitar, você concorda com os <a href="/profissionais/termos" target="_blank" rel="noopener">Termos do Profissional</a> e a <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</p>
       </section>
       <p className={styles.footer}>Recebeu este link por engano? Confirme com a equipe que enviou o convite.</p>
     </div>

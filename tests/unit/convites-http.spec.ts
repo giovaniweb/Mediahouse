@@ -51,3 +51,14 @@ it("capacidade de edição sozinha não autoriza emissão por profissional",asyn
   expect((await POST(req({demandaId:"d",videomakerId:"v"}))).status).toBe(403)
   expect(m.emitir).not.toHaveBeenCalled()
 })
+it("Onda 3: a página manda o aceite dos termos junto do Aceitar; recusa e corpo sem o campo não geram prova",async()=>{
+  m.responder.mockResolvedValue({status:"aceito",demandaId:"d"})
+  await responder(req({acao:"aceitar",versao:1,aceiteTermos:true}),params)
+  // ipHash pode ser null sem cabeçalho de IP; o que importa é a prova ir junto.
+  expect(m.responder.mock.calls[0][1]).toMatchObject({acao:"aceitar"});expect(m.responder.mock.calls[0][1]).toHaveProperty("aceiteTermos.ipHash")
+  await responder(req({acao:"aceitar",versao:1}),params)
+  expect(m.responder.mock.calls[1][1]).not.toHaveProperty("aceiteTermos")
+  await responder(req({acao:"recusar",versao:1,aceiteTermos:true}),params)
+  expect(m.responder.mock.calls[2][1]).not.toHaveProperty("aceiteTermos")
+  expect((await responder(req({acao:"aceitar",aceiteTermos:false}),params)).status).toBe(400)
+})

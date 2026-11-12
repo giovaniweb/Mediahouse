@@ -1,0 +1,26 @@
+.tela {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: radial-gradient(900px 520px at 85% -120px, #6d4fd633, transparent 70%), #0b0c11;
+  color: #f3f2f9;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+}
+.cartao { width: min(520px, 100%); padding: 32px 28px; border-radius: 20px; border: 1px solid #262a39; background: #161822; display: grid; gap: 16px; }
+.marca { font-size: 20px; }
+.cartao h1 { margin: 8px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+.lead { margin: 0; color: #a7a9be; font-size: 15px; line-height: 1.6; }
+.docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.docs li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid #262a39; background: #10111a; font-size: 14px; }
+.docs a { color: #c2abff; text-decoration: underline; text-underline-offset: 3px; font-weight: 500; }
+.docs span { color: #7e8098; font-size: 12px; white-space: nowrap; }
+.minuta { margin: -6px 0 0; font-size: 12px; color: #f3c565; }
+.caixa { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; line-height: 1.5; cursor: pointer; }
+.caixa input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #8b5cf6; cursor: pointer; }
+.erro { margin: 0; padding: 10px 12px; border-radius: 10px; background: #ff95901a; border: 1px solid #ff959040; color: #ffb3ae; font-size: 14px; }
+.botao { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border: 0; border-radius: 12px; background: #f3f2f9; color: #0b0c11; font: inherit; font-weight: 600; cursor: pointer; }
+.botao:disabled { opacity: .4; cursor: not-allowed; }
+.botao:focus-visible, .caixa input:focus-visible, .sair:focus-visible, .docs a:focus-visible { outline: 2px solid #b9a2ff; outline-offset: 3px; }
+.rodape { margin: 0; font-size: 12px; color: #7e8098; line-height: 1.6; }
+.sair { border: 0; background: none; padding: 0; color: #a7a9be; font: inherit; text-decoration: underline; cursor: pointer; }

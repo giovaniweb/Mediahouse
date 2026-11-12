@@ -2320,6 +2320,8 @@ model Organizacao {
   espelhosConcedidos DemandaCompartilhamento[] @relation("CompartilhamentoOrigem")
   espelhosRecebidos  DemandaCompartilhamento[] @relation("CompartilhamentoDestino")
 
+  aceitesTermos AceiteTermos[]
+
   @@map("organizacoes")
 }
 
@@ -2936,3 +2938,26 @@ model MaterialVideomaker {
   @@map("materiais_videomaker")
 }
 
+/// Prova de que alguém aceitou os documentos jurídicos (Onda 3): quem, quais
+/// documentos em qual versão, quando e de onde. A aplicação só INSERE e LÊ —
+/// aceite não se edita nem se apaga (migration 20261111120000).
+model AceiteTermos {
+  id            String   @id @default(cuid())
+  organizacaoId String
+  /// usuario | videomaker | designer
+  titularTipo   String   @db.VarChar(16)
+  titularId     String   @db.VarChar(128)
+  /// "slug@versao" de cada documento aceito, ex. ["termos@1.0", "privacidade@1.0"].
+  documentos    String[]
+  /// cadastro_videomaker | cadastro_designer | primeiro_acesso | nova_versao | convite_videomaker
+  origem        String   @db.VarChar(32)
+  /// HMAC do IP com segredo do servidor (lib/limite-publico.ts) — prova "de onde"
+  /// sem guardar o IP puro.
+  ipHash        String?  @map("ip_hash")
+  createdAt     DateTime @default(now())
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+
+  @@index([organizacaoId, titularTipo, titularId, createdAt])
+  @@map("aceites_termos")
+}

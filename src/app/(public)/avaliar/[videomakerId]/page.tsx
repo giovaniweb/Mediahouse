@@ -4,6 +4,7 @@ import { useState, use, useEffect, useRef } from "react"
 import { Star, Send, CheckCircle2, AlertCircle, Film } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
 interface Params {
   videomakerId: string
@@ -240,10 +241,10 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
                 placeholder="Conte um pouco sobre sua experiência com este profissional..."
                 rows={4}
                 className="w-full px-4 py-3 rounded-xl border border-zinc-700 bg-zinc-800 text-zinc-200 placeholder:text-zinc-500 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500 transition-colors"
-                maxLength={500}
+                maxLength={LIMITE_COMENTARIO_AVALIACAO}
               />
               <div className="flex justify-end mt-1">
-                <span className="text-xs text-zinc-600">{comentario.length}/500</span>
+                <span className="text-xs text-zinc-600">{comentario.length}/{LIMITE_COMENTARIO_AVALIACAO}</span>
               </div>
             </div>
 
@@ -276,6 +277,11 @@ export default function AvaliarVideomakerPage({ params }: { params: Promise<Para
                 </>
               )}
             </button>
+            {/* Onda 3: quem avalia por link aceita a Política de Avaliações ao enviar. */}
+            <p className="text-center text-xs text-zinc-500">
+              Ao enviar, você aceita a{" "}
+              <a href="/profissionais/avaliacoes" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-zinc-300">Política de Avaliações</a>.
+            </p>
           </form>
         </div>
 

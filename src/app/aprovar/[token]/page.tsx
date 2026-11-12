@@ -7,6 +7,7 @@
 import { useParams } from "next/navigation"
 import { LogoNuFlow } from "@/components/marca/Marca"
 import { CorpoAprovacao, useAprovacao } from "@/components/aprovacao/AprovacaoEntrega"
+import { LinksJuridicos } from "@/components/juridico/LinksJuridicos"
 
 export default function AprovarPage() {
   const params = useParams()
@@ -36,6 +37,7 @@ export default function AprovarPage() {
       <footer className="border-t border-zinc-800 py-6 mt-8">
         <div className="max-w-5xl mx-auto px-6 text-center text-xs text-zinc-500">
           <p>NuFlow — {ehArte ? "Aprovação de criativo" : "Plataforma de Produção Audiovisual"}</p>
+          <LinksJuridicos className="mt-2 justify-center" apenas={["privacidade"]} />
         </div>
       </footer>
     </div>

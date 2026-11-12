@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Star, CheckCircle2, Smile, ThumbsUp, Send, Loader2 } from "lucide-react"
 import Image from "next/image"
 import { LinkIndisponivel } from "@/components/publico/LinkIndisponivel"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
 interface Editor {
   id: string
@@ -213,6 +214,7 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
             <textarea
               value={comentario}
               onChange={e => setComentario(e.target.value)}
+              maxLength={LIMITE_COMENTARIO_AVALIACAO}
               rows={3}
               placeholder="Compartilhe sua experiência..."
               className="w-full border border-zinc-700 bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
@@ -232,10 +234,15 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
             )}
             {enviando ? "Enviando..." : "Enviar Avaliação"}
           </button>
+          {/* Onda 3: quem avalia por link aceita a Política de Avaliações ao enviar. */}
+          <p className="mt-3 text-center text-xs text-zinc-500">
+            Ao enviar, você aceita a{" "}
+            <a href="/profissionais/avaliacoes" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-zinc-300">Política de Avaliações</a>.
+          </p>
         </div>
 
         <p className="text-center text-xs text-zinc-600">
-          Sua avaliação é anônima e ajuda a melhorar a qualidade do time.
+          O editor não vê quem avaliou. Sua avaliação ajuda a melhorar a qualidade do time.
         </p>
       </div>
     </div>

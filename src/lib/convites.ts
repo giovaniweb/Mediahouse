@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
+import { registrarAceite } from "@/lib/juridico/aceite-servidor"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { cancelarSaidasPendentes, criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
@@ -74,6 +75,10 @@ export async function responderConvite(tx: Tx, e: {
   organizacaoId: string; token: string; acao: "aceitar" | "recusar";
   videomakerId?: string; versao?: number; recebidoEm?: Date; origem: "automacao" | "whatsapp" | "manual";
   usuarioId?: string;
+  /** Só a página do convite manda: o videomaker clicou em Aceitar com a linha
+   *  dos Termos do Profissional e da Privacidade à vista, Onda 3. WhatsApp e
+   *  resposta manual não mostram os termos, então não geram aceite. */
+  aceiteTermos?: { ipHash: string | null };
 }) {
   const inicial = await tx.conviteVideomaker.findFirst({ where: { token: e.token, demanda: { organizacaoId: e.organizacaoId } } })
   if (!inicial) throw new ConviteInvalido("Convite não encontrado", 404)
@@ -102,6 +107,14 @@ export async function responderConvite(tx: Tx, e: {
   const ator: AtorAuditoria = e.usuarioId ? { organizacaoId: e.organizacaoId, usuarioId: e.usuarioId }
     : { organizacaoId: e.organizacaoId, tecnico: `convite:${c.id}` }
   await registrarAuditoria(tx, ator, { acao: "convite.responder", recurso: "convite", recursoId: c.id, correlationId: randomUUID() })
+  // A prova do aceite entra na mesma transação da resposta: aceite do convite
+  // sem a prova dos termos (ou o contrário) não existe.
+  if (status === "aceito" && e.aceiteTermos) {
+    await registrarAceite(tx, ator, {
+      organizacaoId: e.organizacaoId, titularTipo: "videomaker", titularId: c.videomakerId,
+      documentos: ["profissionais", "privacidade"], origem: "convite_videomaker", ipHash: e.aceiteTermos.ipHash,
+    })
+  }
   // Os avisos da gravação (lib/avisos-gravacao.ts): aceito avisa a operação e o
   // cliente; recusado avisa a operação e a gestão. Convite que já não mexe na
   // gravação (o job seguiu com outro) não avisa ninguém.

@@ -6,6 +6,7 @@ import { empresaDoPortal } from "@/lib/portal"
 import { linksDaAreaNoServidor } from "@/lib/area-servidor"
 import { linkNaArea } from "@/lib/subdominio"
 import "@/components/layout/Montserrat.css"
+import { LinksJuridicos } from "@/components/juridico/LinksJuridicos"
 import styles from "@/components/publico/Portal.module.css"
 import { LogoNuFlow } from "@/components/marca/Marca"
 
@@ -104,6 +105,7 @@ export default async function AreaDaEmpresa({ params }: Props) {
 
       <footer className={styles.rodape}>
         <span>Os dados enviados aqui ficam com {empresa.nome}.</span>
+        <LinksJuridicos apenas={["privacidade", "termos", "profissionais"]} />
         <span>Feito com <LogoNuFlow /></span>
       </footer>
     </main>

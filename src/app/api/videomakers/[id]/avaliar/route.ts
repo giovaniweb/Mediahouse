@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
 // Avaliação INTERNA de videomaker — quem contratou dando a nota.
 //
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const valor = parseInt(nota)
   if (!Number.isInteger(valor) || valor < 1 || valor > 5) {
     return NextResponse.json({ error: "Nota deve ser entre 1 e 5" }, { status: 400 })
+  }
+  if (comentario != null && (typeof comentario !== "string" || comentario.length > LIMITE_COMENTARIO_AVALIACAO)) {
+    return NextResponse.json({ error: `Comentário com até ${LIMITE_COMENTARIO_AVALIACAO} caracteres.` }, { status: 400 })
   }
 
   const vm = await prisma.videomaker.findUnique({ where: { id }, select: { id: true } })

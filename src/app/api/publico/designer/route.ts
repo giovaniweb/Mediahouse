@@ -6,6 +6,8 @@ import { barrarExcesso } from "@/lib/limite-formulario"
 import { declararOrg } from "@/lib/org-contexto"
 import { cifrarOuNulo } from "@/lib/videomaker-dados"
 import { linkDePortfolio } from "@/lib/cadastro-profissional"
+import { hashDoIp } from "@/lib/limite-publico"
+import { registrarAceite } from "@/lib/juridico/aceite-servidor"
 
 // POST /api/publico/designer — "Quer ser um designer?", na área da empresa.
 //
@@ -33,6 +35,8 @@ const schema = z.object({
     .refine(t => !t?.trim() || linkDePortfolio(t) !== null, "URL do portfólio inválida"),
   areasAtuacao: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   observacoes: z.string().max(2000).optional(),
+  // Aceite dos Termos do Profissional e da Política de Privacidade (Onda 3).
+  aceiteTermos: z.literal(true, { message: "É preciso aceitar os Termos do Profissional e a Política de Privacidade." }),
 })
 
 const vazioViraNulo = (t: string | undefined) => t?.trim() || null
@@ -67,35 +71,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Já existe um cadastro com este e-mail ou CNPJ/CPF." }, { status: 409 })
   }
 
-  const designer = await prisma.designer.create({
-    data: {
-      nome: data.nome,
-      email: data.email,
-      telefone: data.telefone,
-      whatsapp: data.telefone,
-      cidade: data.cidade,
-      estado: data.estado,
-      redesSociais: data.redesSociais.filter(r => r.trim()),
-      portfolio: linkDePortfolio(data.portfolio),
-      especialidade: data.areasAtuacao,
-      status: "pendente",
-      vinculos: {
-        create: { organizacaoId, status: "pendente", valorDiaria: data.valorDiaria ?? null, observacoes: vazioViraNulo(data.observacoes) },
-      },
-      fiscais: {
-        create: {
-          organizacaoId,
-          cpfCnpj: data.cpfCnpj,
-          razaoSocial: vazioViraNulo(data.razaoSocial),
-          nomeFantasia: vazioViraNulo(data.nomeFantasia),
-          representante: vazioViraNulo(data.representante),
-          endereco: vazioViraNulo(data.endereco),
-          chavePix: cifrarOuNulo(data.chavePix?.trim()),
-          dadosBancarios: cifrarOuNulo(data.dadosBancarios?.trim()),
+  // Perfil e aceite na mesma transação: cadastro sem a prova do aceite não existe.
+  const designer = await prisma.$transaction(async tx => {
+    const criado = await tx.designer.create({
+      data: {
+        nome: data.nome,
+        email: data.email,
+        telefone: data.telefone,
+        whatsapp: data.telefone,
+        cidade: data.cidade,
+        estado: data.estado,
+        redesSociais: data.redesSociais.filter(r => r.trim()),
+        portfolio: linkDePortfolio(data.portfolio),
+        especialidade: data.areasAtuacao,
+        status: "pendente",
+        vinculos: {
+          create: { organizacaoId, status: "pendente", valorDiaria: data.valorDiaria ?? null, observacoes: vazioViraNulo(data.observacoes) },
+        },
+        fiscais: {
+          create: {
+            organizacaoId,
+            cpfCnpj: data.cpfCnpj,
+            razaoSocial: vazioViraNulo(data.razaoSocial),
+            nomeFantasia: vazioViraNulo(data.nomeFantasia),
+            representante: vazioViraNulo(data.representante),
+            endereco: vazioViraNulo(data.endereco),
+            chavePix: cifrarOuNulo(data.chavePix?.trim()),
+            dadosBancarios: cifrarOuNulo(data.dadosBancarios?.trim()),
+          },
         },
       },
-    },
-    select: { id: true },
+      select: { id: true },
+    })
+    await registrarAceite(tx, { organizacaoId, tecnico: "cadastro.publico" }, {
+      organizacaoId, titularTipo: "designer", titularId: criado.id,
+      documentos: ["profissionais", "privacidade"], origem: "cadastro_designer", ipHash: hashDoIp(req.headers),
+    })
+    return criado
   })
 
   await prisma.alertaIA.create({

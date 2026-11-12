@@ -1,0 +1,67 @@
+/* Documentos jurídicos: o mesmo escuro e lilás da landing, numa coluna de
+   leitura. Texto longo pede linha curta (68ch) e entrelinha folgada. */
+
+.pagina {
+  --fundo: #0b0c11;
+  --superficie: #161822;
+  --linha: #262a39;
+  --texto: #f3f2f9;
+  --suave: #a7a9be;
+  --apagado: #7e8098;
+  --lilas: #b9a2ff;
+  --aviso: #f3c565;
+  min-height: 100vh;
+  background: radial-gradient(900px 520px at 85% -120px, #6d4fd626, transparent 70%), var(--fundo);
+  color: var(--texto);
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.pagina a { color: var(--lilas); text-underline-offset: 3px; }
+.pagina :is(a, button):focus-visible { outline: 2px solid var(--lilas); outline-offset: 3px; border-radius: 6px; }
+
+.topo { border-bottom: 1px solid var(--linha); }
+.topoInterno { max-width: 1080px; margin: 0 auto; padding: 18px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.topoInterno > a { text-decoration: none; color: var(--texto); }
+.marca { font-size: 20px; }
+.outros { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.outros a { color: var(--suave); text-decoration: none; }
+.outros a:hover { color: var(--texto); }
+
+.corpo { max-width: 760px; margin: 0 auto; padding: 40px 16px 72px; }
+.corpo h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 600; letter-spacing: -.03em; line-height: 1.15; margin: 6px 0 8px; text-wrap: balance; }
+
+.minuta { margin: 0 0 28px; padding: 14px 16px; border-radius: 14px; border: 1px solid #f3c56566; background: #f3c5651a; color: #f8dfa3; font-size: 14px; }
+.minuta strong { color: var(--aviso); }
+.rotulo { margin: 0; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; color: var(--lilas); }
+.versao { margin: 0; color: var(--apagado); font-size: 14px; }
+
+.resumo { margin-top: 28px; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--linha); background: var(--superficie); }
+.resumo h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.resumo ul { margin: 0; padding-left: 20px; color: var(--suave); display: grid; gap: 6px; }
+.resumo p { margin: 12px 0 0; font-size: 13px; color: var(--apagado); }
+
+.indice { margin-top: 24px; font-size: 14px; }
+.indice > p { margin: 0 0 6px; font-weight: 600; color: var(--suave); }
+.indice ol { margin: 0; padding-left: 22px; columns: 2 240px; column-gap: 32px; }
+.indice li { break-inside: avoid; }
+.indice a { color: var(--suave); text-decoration: none; }
+.indice a:hover { color: var(--texto); text-decoration: underline; }
+
+.texto { margin-top: 12px; }
+.texto h2 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; margin: 40px 0 10px; scroll-margin-top: 16px; }
+.texto p { margin: 0 0 14px; color: #dcdbe8; max-width: 68ch; }
+.texto :is(ul, ol) { margin: 0 0 16px; padding-left: 22px; color: #dcdbe8; display: grid; gap: 6px; max-width: 68ch; }
+.texto strong { color: var(--texto); font-weight: 600; }
+
+.preencher { background: #f3c56533; color: #ffe2a0; border-radius: 4px; padding: 0 4px; font-weight: 600; }
+
+.rodape { border-top: 1px solid var(--linha); }
+.rodapeInterno { max-width: 1080px; margin: 0 auto; padding: 24px 16px 36px; display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--apagado); }
+
+/* Rodapé reaproveitado fora daqui (landing, login, área da empresa): herda a cor
+   de quem usa e só define o espaçamento. */
+.links { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; }
+.links a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #ffffff40; }
+.links a:hover { text-decoration-color: currentColor; }
