@@ -101,7 +101,7 @@ export default function ConvitePage() {
     setRespondendo(true); setErroResposta("")
     try {
       const r = await fetch(`/api/convites/${encodeURIComponent(token)}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, versao: convite?.versao }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, versao: convite?.versao, ...(acao === "aceitar" ? { aceiteTermos: true } : {}) }),
       })
       if (!r.ok) {
         const data = await r.json()

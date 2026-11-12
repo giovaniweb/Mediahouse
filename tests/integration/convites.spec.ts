@@ -110,3 +110,19 @@ it("WhatsApp usa o convite formal e registra sua resposta, sem escolher entre do
     await adminDb.videomaker.update({where:{id:vm},data:{telefone:null}})
   }
 })
+it("Onda 3: aceitar pela página grava a prova dos termos na mesma transação; WhatsApp e recusa não gravam",async()=>{
+  const pela=await job();const c=await emitir(pela.id)
+  await comOrg(org,()=>db.$transaction(tx=>responderConvite(tx,{organizacaoId:org,token:c.token,acao:"aceitar",origem:"automacao",videomakerId:vm,aceiteTermos:{ipHash:"hash-sintetico"}})))
+  const provas=await adminDb.aceiteTermos.findMany({where:{organizacaoId:org,titularTipo:"videomaker",titularId:vm}})
+  expect(provas).toHaveLength(1)
+  expect(provas[0]).toMatchObject({origem:"convite_videomaker",documentos:["profissionais@1.0","privacidade@1.0"],ipHash:"hash-sintetico"})
+  expect(await adminDb.eventoAuditoria.count({where:{organizacaoId:org,acao:"termos.aceite",recursoId:vm}})).toBe(1)
+  // Reenvio do mesmo aceite não duplica a prova.
+  await comOrg(org,()=>db.$transaction(tx=>responderConvite(tx,{organizacaoId:org,token:c.token,acao:"aceitar",origem:"automacao",videomakerId:vm,aceiteTermos:{ipHash:"hash-sintetico"}})))
+  expect(await adminDb.aceiteTermos.count({where:{organizacaoId:org,titularId:vm}})).toBe(1)
+  // Aceite pelo WhatsApp (sem a linha dos termos à vista) e recusa não geram prova.
+  const zap=await job();const z=await emitir(zap.id,vm2);await responder(z.token,"aceitar",org,vm2)
+  const nao=await job();const n=await emitir(nao.id,vm2)
+  await comOrg(org,()=>db.$transaction(tx=>responderConvite(tx,{organizacaoId:org,token:n.token,acao:"recusar",origem:"automacao",videomakerId:vm2,aceiteTermos:{ipHash:null}})))
+  expect(await adminDb.aceiteTermos.count({where:{organizacaoId:org,titularId:vm2}})).toBe(0)
+})

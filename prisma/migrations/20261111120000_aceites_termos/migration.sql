@@ -22,7 +22,7 @@ CREATE TABLE "aceites_termos" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "aceites_termos_organizacaoId_fkey" FOREIGN KEY ("organizacaoId") REFERENCES "organizacoes"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "aceites_termos_titularTipo_check" CHECK ("titularTipo" IN ('usuario', 'videomaker', 'designer')),
-  CONSTRAINT "aceites_termos_origem_check" CHECK ("origem" IN ('cadastro_videomaker', 'cadastro_designer', 'primeiro_acesso', 'nova_versao')),
+  CONSTRAINT "aceites_termos_origem_check" CHECK ("origem" IN ('cadastro_videomaker', 'cadastro_designer', 'primeiro_acesso', 'nova_versao', 'convite_videomaker')),
   CONSTRAINT "aceites_termos_documentos_check" CHECK (cardinality("documentos") BETWEEN 1 AND 10)
 );
 CREATE INDEX "aceites_termos_organizacaoId_titularTipo_titularId_createdA_idx"

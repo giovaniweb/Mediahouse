@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z, ZodError } from "zod"
 import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { hashDoIp } from "@/lib/limite-publico"
 import { conviteDaEntrega } from "@/lib/entrega-da-gravacao"
 import { colinhaDaGravacao, materiaisDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { momentoDoJob } from "@/lib/ficha-do-job"
@@ -113,9 +114,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const organizacaoId = await orgPorCredencial("convite", token)
   if (!organizacaoId) return resposta({ error: "Convite não encontrado" }, 404)
   try {
-    const e = z.object({ acao: z.enum(["aceitar", "recusar"]), versao: z.number().int().positive().optional() }).strict().parse(await req.json())
+    const { aceiteTermos, ...e } = z.object({
+      acao: z.enum(["aceitar", "recusar"]), versao: z.number().int().positive().optional(),
+      // A página manda junto do Aceitar: a linha dos termos estava à vista (Onda 3).
+      aceiteTermos: z.literal(true).optional(),
+    }).strict().parse(await req.json())
     return resposta(await comOrg(organizacaoId, () => prisma.$transaction(tx => responderConvite(tx, {
       organizacaoId, token, ...e, origem: "automacao",
+      ...(aceiteTermos && e.acao === "aceitar" ? { aceiteTermos: { ipHash: hashDoIp(req.headers) } } : {}),
     }))))
   } catch (e) {
     if (e instanceof ConviteInvalido) return resposta({ error: e.message }, e.status)

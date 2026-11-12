@@ -2,7 +2,7 @@
 // (aceite-servidor.ts) e os testes usam as mesmas.
 import { DOCUMENTOS, marcaDeVersao, type SlugDocumento } from "@/lib/juridico/documentos"
 
-export type OrigemAceite = "cadastro_videomaker" | "cadastro_designer" | "primeiro_acesso" | "nova_versao"
+export type OrigemAceite = "cadastro_videomaker" | "cadastro_designer" | "primeiro_acesso" | "nova_versao" | "convite_videomaker"
 
 /** O que a pessoa é NA EMPRESA ativa — o vínculo, não o cadastro global. */
 export type PerfilDoAceite = { papel: string | null; categoria: string | null }
