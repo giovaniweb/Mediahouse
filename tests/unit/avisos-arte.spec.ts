@@ -76,6 +76,16 @@ describe("artes dos avisos: catálogo", () => {
     expect(artesLigadas()).toBe(true)
   })
 
+  it("a arte do cliente tem chave própria: ligar a da equipe não liga a dele", () => {
+    vi.stubEnv("WHATSAPP_ARTES", "ligado")
+    vi.stubEnv("WHATSAPP_ARTES_CLIENTE", "")
+    expect(artesLigadas("5511911112222", "cliente")).toBe(false)
+    expect(artesLigadas("5511911112222")).toBe(true)
+    vi.stubEnv("WHATSAPP_ARTES_CLIENTE", "teste:5511911112222")
+    expect(artesLigadas("5511911112222", "cliente")).toBe(true)
+    expect(artesLigadas("5511955556666", "cliente")).toBe(false)
+  })
+
   it("modo teste liga só para os números da lista", () => {
     vi.stubEnv("WHATSAPP_ARTES", "teste:5511911112222, 5521933334444")
     expect(artesLigadas("5511911112222")).toBe(true)
@@ -96,13 +106,23 @@ describe("artes dos avisos: quem recebe qual", () => {
     expect(familiaDaSaida(saida("arte:inventada:abc"))).toBeNull()
   })
 
-  it("cliente, inbox e quem não é da equipe nunca recebem arte", () => {
+  it("o médico recebe arte séria só na confirmação e no vídeo pronto (12/11/2026)", () => {
+    expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-12:cliente:abc", "cliente", "manual"))).toBe("medico_confirmada")
+    expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-12:cliente:abc", "cliente", "manual"))).toBe("medico_video")
+    // Nenhum outro aviso dele, nem uma chave arte: forjada, nem um contato do inbox.
+    expect(familiaDaSaida(saida("grav:g1:cancelada:2026-11-12:cliente:abc", "cliente", "manual"))).toBeNull()
+    expect(familiaDaSaida(saida(chaveComArte("medico_video", "x"), "inbox"))).toBeNull()
+    expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-12:cliente:abc", "inbox", "manual"))).toBeNull()
+    // A frase dele é sem sarcasmo: nada de "nota 2" nem meme de IA.
+    for (const f of ["medico_confirmada", "medico_video"] as const)
+      for (const fr of FAMILIAS_ARTE[f].frases) expect(fr).not.toMatch(/nota 2|\bIA\b|Claude|vaca|galo/)
+  })
+
+  it("cliente, inbox e quem não é da equipe nunca recebem arte da equipe", () => {
     expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "cliente"))).toBeNull()
     expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "inbox"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-11:cliente:abc"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:solicitante:abc"))).toBeNull()
-    // O aviso de vídeo enviado ao cliente (concluída), pela fila: nunca com arte.
-    expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:cliente:abc", "cliente", "manual"))).toBeNull()
     expect(familiaDaSaida(saida("abc123"))).toBeNull()
     expect(familiaDaSaida(saida("manual:uuid", "usuario", "manual"))).toBeNull()
   })

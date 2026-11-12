@@ -32,6 +32,7 @@ export type FamiliaArte =
   | "rel_so_ok" | "rel_so_cansado" | "rel_so_apuros"
   | "parabens_capivara" | "parabens_polvo" | "parabens_camaleao" | "parabens_coelho" | "parabens_papagaio"
   | "nota_recebida" | "nota_cadastrada" | "nota_paga"
+  | "medico_confirmada" | "medico_video"
 
 /**
  * `frasesDaCena`: frases próprias de uma cena (número 1…cenas, contado a partir
@@ -153,6 +154,14 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
     "Carimbado: entrou para pagamento.", "Cadastrada. O galo já bateu o carimbo."] },
   nota_paga: { arquivo: "11", primeira: 4, cenas: 2, frases: [
     "Pagamento feito. Pode gastar.", "Caiu. O galo conferiu moeda por moeda."] },
+  // O médico (cliente final) recebe arte em tom sério: sem sarcasmo e sem meme,
+  // é a cara da MediaHouse para quem paga (Giovani, 12/11/2026).
+  medico_confirmada: { arquivo: "31", cenas: 3, frases: [
+    "Gravação confirmada. Nossa equipe estará aí.", "Tudo pronto para a sua gravação.",
+    "Agenda confirmada. Até breve na sua clínica.", "Equipe confirmada para a sua gravação."] },
+  medico_video: { arquivo: "32", cenas: 2, frases: [
+    "Seu vídeo está pronto.", "Prontinho: o seu vídeo chegou.",
+    "Seu vídeo ficou pronto. Bom proveito!", "Vídeo entregue. Obrigado pela confiança."] },
   ruim: { arquivo: "12", cenas: 6, frasesDaCena: { 6: ["Prazo? Pede pra IA. Ela também trava em 99%."] }, frases: [
     "O prazo venceu. A vaca já sabia.", "Respira. Depois corre. Corre muito.",
     "Ninguém entra em pânico. Exceto a vaca.", "Atrasou. Mas com estilo."] },
@@ -247,8 +256,10 @@ const ehFamilia = (v: unknown): v is FamiliaArte => typeof v === "string" && FAM
  * liga só para esses números, para conferir o envio real antes de soltar para todos.
  * A comparação usa os 8 últimos dígitos, para não depender do 9º dígito nem do DDI.
  */
-export function artesLigadas(telefone?: string | null): boolean {
-  const valor = process.env.WHATSAPP_ARTES?.trim() ?? ""
+export function artesLigadas(telefone?: string | null, publico: "equipe" | "cliente" = "equipe"): boolean {
+  // O cliente (médico) tem chave própria, WHATSAPP_ARTES_CLIENTE, com os mesmos
+  // valores: ligar a arte da equipe não liga a dele.
+  const valor = (publico === "cliente" ? process.env.WHATSAPP_ARTES_CLIENTE : process.env.WHATSAPP_ARTES)?.trim() ?? ""
   if (valor === "ligado") return true
   if (!valor.startsWith("teste:") || !telefone) return false
   const fim = (t: string) => t.replace(/\D/g, "").slice(-8)
@@ -287,11 +298,14 @@ const ARTE_REGRA: Record<string, FamiliaArte> = {
   nota_fiscal_pendente: "nota",
 }
 
-/** Papéis da gravação externa que nunca recebem arte: o cliente e quem pediu. */
+/** Papéis da gravação externa que nunca recebem a arte da equipe: o cliente e quem pediu. */
 const PAPEIS_SEM_ARTE = new Set(["cliente", "solicitante"])
 
-/** Quem pode receber arte: só gente da equipe cadastrada. */
-const DESTINOS_COM_ARTE = new Set(["usuario", "editor", "videomaker"])
+/** O cliente (o médico) só recebe estas, em tom sério: a confirmação e o vídeo pronto. */
+const ARTE_DO_CLIENTE: Record<string, FamiliaArte> = { confirmada: "medico_confirmada", concluida: "medico_video" }
+
+/** Quem pode receber arte: gente da equipe cadastrada e, só nas artes dele, o cliente. */
+const DESTINOS_COM_ARTE = new Set(["usuario", "editor", "videomaker", "cliente"])
 
 /**
  * A família de arte de uma saída já gravada, ou null para mandar só o texto.
@@ -301,6 +315,10 @@ const DESTINOS_COM_ARTE = new Set(["usuario", "editor", "videomaker"])
 export function familiaDaSaida(s: { chave: string; destinatarioTipo: string; origem: string; regraContexto?: unknown }): FamiliaArte | null {
   if (!DESTINOS_COM_ARTE.has(s.destinatarioTipo)) return null
   const partes = s.chave.split(":")
+  if (s.destinatarioTipo === "cliente") {
+    // Cliente: só a arte séria dele, e só na gravação externa (grav:<id>:<motivo>:<dia>:cliente:<hash>).
+    return partes[0] === "grav" && partes[4] === "cliente" ? ARTE_DO_CLIENTE[partes[2] ?? ""] ?? null : null
+  }
   if (partes[0] === "arte") return ehFamilia(partes[1]) ? partes[1] : null
   if (partes[0] === "grav") {
     // O motivo da nota em lote leva ":" ("nota_lote:3"), o que empurra o papel
