@@ -59,9 +59,9 @@ export function alternar9oDigito(numero: string): string | null {
 
 /** Adaptador legado: persiste intenção. "aguardando" NÃO significa entrega.
  * Regras O04 devem fornecer chave própria na mesma transação do fato.
+ * `opcoes.arte`: a família da arte que acompanha o aviso, de lib/avisos-arte.ts. Só vale para a equipe.
  */
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null,
-  /** `arte`: a família da arte que acompanha o aviso (lib/avisos-arte.ts). Só vale para a equipe. */
   opcoes?: { arte?: FamiliaArte | null }) {
   const orgId=await resolverOrgEnvio(demandaId,organizacaoId)
   if(!orgId) return null
