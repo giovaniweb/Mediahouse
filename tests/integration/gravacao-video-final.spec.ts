@@ -31,6 +31,7 @@ import { GET as acompanhar } from "@/app/api/publico/demanda/[token]/route"
 import { GET as eu } from "@/app/api/me/route"
 import { podeLerMidia } from "@/lib/midia-acesso"
 import { decryptSecret } from "@/lib/secret-crypto"
+import { artesLigadas, familiaDaSaida } from "@/lib/avisos-arte"
 
 const p = `video-final-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const admin = `${p}-admin`, vm = `${p}-vm`, vmLogin = `${p}-vm-login`
@@ -179,6 +180,48 @@ describe("vídeo final subido no card da gravação", () => {
     expect((await moverPara(id, "entregue_cliente")).status).toBe(200)
     await rodarSegundoPlano()
     expect(await doCliente(id)).toEqual([expect.stringContaining("https://drive.example/final")])
+  })
+
+  // Card com dois ou mais vídeos finais (as miniaturas do #135): o aviso de
+  // vídeo enviado levava o link de um vídeo só. Leva a página de acompanhamento,
+  // onde a página mostra todos. Nunca com arte, nem com as artes ligadas (#138).
+  it("dois vídeos finais: o cliente recebe a página com os dois, sem arte", async () => {
+    vi.stubEnv("WHATSAPP_ARTES", "ligado")
+    const { id, token } = await naEdicao()
+    como(admin, "admin")
+    expect((await registrar(id, { url: subido(id, "1730000000001.mp4"), tipo: "final", nomeArquivo: "parte 1.mp4" })).status).toBe(200)
+    expect((await registrar(id, { url: subido(id, "1730000000002.mp4"), tipo: "final", nomeArquivo: "parte 2.mp4" })).status).toBe(200)
+    // A página que vai ao cliente mostra os dois.
+    expect((await pagina(token)).arquivos.map((a) => a.nomeArquivo)).toEqual(["parte 1.mp4", "parte 2.mp4"])
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+    expect((await moverPara(id, "entregue_cliente")).status).toBe(200)
+    await rodarSegundoPlano()
+
+    const [texto, ...outros] = await doCliente(id)
+    expect(outros).toEqual([])
+    expect(texto).toBe(`Olá! Os 2 vídeos da sua gravação estão prontos:\nhttps://nuflow.test/d/${token}`)
+    expect(texto).not.toContain("/api/midia/")
+    const saidas = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: id, destinatarioTipo: "cliente" }, select: { chave: true, destinatarioTipo: true, origem: true, regraContexto: true } })
+    expect(saidas).toHaveLength(1)
+    expect(artesLigadas(telCliente)).toBe(true)
+    expect(familiaDaSaida(saidas[0])).toBeNull()
+    vi.unstubAllEnvs()
+    vi.stubEnv("NEXTAUTH_SECRET", "segredo-so-do-teste")
+    vi.stubEnv("NEXTAUTH_URL", "https://nuflow.test/")
+  })
+
+  it("trocado um dos dois, sobra um: volta o link do vídeo, como antes", async () => {
+    const { id, token } = await naEdicao()
+    como(admin, "admin")
+    expect((await registrar(id, { url: subido(id, "1730000000001.mp4"), tipo: "final" })).status).toBe(200)
+    expect((await registrar(id, { url: subido(id, "1730000000002.mp4"), tipo: "final" })).status).toBe(200)
+    await db.arquivo.deleteMany({ where: { demandaId: id, url: subido(id, "1730000000001.mp4") } })
+    expect((await moverPara(id, "aprovado")).status).toBe(200)
+    expect((await moverPara(id, "entregue_cliente")).status).toBe(200)
+    await rodarSegundoPlano()
+    const [texto] = await doCliente(id)
+    expect(texto).toContain(`https://nuflow.test${subido(id, "1730000000002.mp4")}?token=${encodeURIComponent(token)}`)
+    expect(texto).not.toContain("/d/")
   })
 
   it("o videomaker externo não ganha o envio: o card só oferece a quem edita a demanda", async () => {

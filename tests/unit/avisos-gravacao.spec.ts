@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  avisoDoVideoAoCliente,
   eventoDaMudanca,
   mensagensDaRegra,
   mensagensDoCancelamento,
@@ -37,6 +38,24 @@ describe("quem recebe cada evento", () => {
   it("concluída: cliente recebe o link; sem link, só quem pediu", () => {
     expect(mensagensDoEvento("concluida", { ...g, linkFinal: "https://drive/final" }).cliente).toContain("https://drive/final")
     expect(papeis(mensagensDoEvento("concluida", g))).toEqual(["solicitante"])
+  })
+  it("concluída com dois ou mais vídeos: o cliente recebe a página com todos, não um vídeo só", () => {
+    const d = { ...g, linkFinal: "https://drive/v2", linkVideoCliente: "https://nuflow.space/api/midia/v2?t=x", linkAcompanhamento: "https://nuflow.space/d/abc", videosFinais: 3 }
+    const m = mensagensDoEvento("concluida", d)
+    expect(m.cliente).toBe("Olá! Os 3 vídeos da sua gravação estão prontos:\nhttps://nuflow.space/d/abc")
+    expect(m.cliente).not.toContain("v2")
+    expect(avisoDoVideoAoCliente(d)).toBe(m.cliente)
+  })
+  it("concluída com um vídeo só: segue o link do vídeo, como antes", () => {
+    const d = { ...g, linkVideoCliente: "https://nuflow.space/api/midia/v1?t=x", linkAcompanhamento: "https://nuflow.space/d/abc" }
+    expect(mensagensDoEvento("concluida", { ...d, videosFinais: 1 }).cliente).toBe("Olá! O vídeo da sua gravação está pronto:\nhttps://nuflow.space/api/midia/v1?t=x")
+    expect(mensagensDoEvento("concluida", { ...d, videosFinais: 0 }).cliente).toContain("/api/midia/v1")
+    expect(mensagensDoEvento("concluida", d).cliente).toContain("/api/midia/v1")
+  })
+  it("concluída com vários vídeos e sem página ativa: vai o vídeo, nunca aviso vazio", () => {
+    const d = { ...g, linkVideoCliente: "https://nuflow.space/api/midia/v1?t=x", videosFinais: 2, linkAcompanhamento: null }
+    expect(mensagensDoEvento("concluida", d).cliente).toContain("/api/midia/v1")
+    expect(papeis(mensagensDoEvento("concluida", { ...g, videosFinais: 2 }))).toEqual(["solicitante"])
   })
   it("quem pediu recebe a página de acompanhamento junto da entrega", () => {
     expect(mensagensDoEvento("concluida", { ...g, linkAcompanhamento: "https://nuflow.space/d/abc" }).solicitante).toContain("https://nuflow.space/d/abc")
