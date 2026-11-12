@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { quemRecebeTudo } from "@/lib/notificados"
 import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
+import type { FamiliaArte } from "@/lib/avisos-arte"
 import { getOrgId, semOrg, requireDemandaOrg } from "@/lib/org"
 import { guardaDoEnvio } from "@/lib/quem-envia-arquivo"
 
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
     // Notifica admin/gestor que link foi gerado
     emSegundoPlano(() => notificarGestores(
       `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`,
-      demanda.organizacaoId
+      demanda.organizacaoId, "aguardando"
     ), "gestores-link-aprovacao")
 
     return NextResponse.json({ ok: true, token: aprovacao.token, link })
@@ -124,12 +125,12 @@ export async function POST(req: NextRequest) {
 /**
  * Notifica gestores/admins via WhatsApp
  */
-async function notificarGestores(mensagem: string, organizacaoId?: string | null) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte }).catch(() => null)
       }
     }
   } catch (e) {
