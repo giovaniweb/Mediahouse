@@ -169,7 +169,7 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
     }
     case "nota_recebida":
       return {
-        operacao: comLinks(`🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nEnvie para compras no NuFlow.`, linksDaNota(d)),
+        operacao: comLinks(`🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nCadastre para pagamento e marque no NuFlow.`, linksDaNota(d)),
         // O videomaker sabe que a nota chegou certa (Giovani, 12/11/2026).
         videomaker: `✅ Recebemos a sua nota fiscal: gravação ${ref(d)}.\n\nAvisamos aqui quando ela for cadastrada para pagamento.`,
       }
@@ -211,7 +211,7 @@ export function mensagensDoCancelamento(d: DadosDoAviso, c: { motivo: string; av
 export function regrasDaGravacao(
   d: DadosDoAviso,
   hoje: string,
-  /** Quando a nota chegou e ainda não foi para compras (dia em São Paulo). */
+  /** Quando a nota chegou e ainda não foi cadastrada para pagamento (dia em São Paulo). */
   notaRecebidaEm?: string | null,
 ): RegraDaGravacao[] {
   const etapa = etapaDaGravacao(d)
@@ -268,7 +268,7 @@ export function mensagensDaRegra(regra: RegraDaGravacao, d: DadosDoAviso, hoje: 
     case "sem_videomaker":
       return { gestao: `⚠️ Gravação sem videomaker: ${ref(d)}, ${quando(d)}.` }
     case "nota_parada":
-      return { gestao: `⚠️ Nota parada: a nota de ${nome1(d)} (${ref(d)}) chegou há 5 dias e não foi para compras.` }
+      return { gestao: `⚠️ Nota parada: a nota de ${nome1(d)} (${ref(d)}) chegou há 5 dias e não foi cadastrada para pagamento.` }
   }
 }
 
@@ -292,7 +292,7 @@ export function eventoDaMudanca(de: string, para: string): EventoDaGravacao | nu
  */
 export function mensagemDaNotaEmLote(videomaker: string, gravacoes: string[], linkNota?: string | null): Mensagens {
   return {
-    operacao: comLinks(`🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nEnvie para compras no NuFlow.`, linksDaNota({ codigo: "", titulo: "", statusInterno: "", linkNota })),
+    operacao: comLinks(`🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nCadastre para pagamento e marque no NuFlow.`, linksDaNota({ codigo: "", titulo: "", statusInterno: "", linkNota })),
     videomaker: `✅ Recebemos a sua nota fiscal de ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nAvisamos aqui quando ela for cadastrada para pagamento.`,
   }
 }

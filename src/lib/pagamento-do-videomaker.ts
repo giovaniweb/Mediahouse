@@ -7,14 +7,15 @@ import { valorConhecido } from "@/lib/pagamentos"
 // 12/11/2026: "as notificações da nota fiscal têm que vir com os dados de
 // pagamento, por exemplo o pix").
 //
-// Dado sensível. Regras:
-//   - Quem vê: só quem vê o financeiro — a mesma porta de /api/custos-videomaker
-//     (`verCustos`, que a gestão tem pelo papel). Quem só aprova (`verAprovacoes`)
-//     continua sem PIX nem valor, como no hotfix de 02/10/2026 (PR #73).
-//   - Onde vai inteiro: no e-mail. No sino e no WhatsApp vai só o tipo e o final
-//     da chave: os dois gravam o texto em claro no banco (alertas_ia,
-//     saidas_whatsapp), e a chave é guardada cifrada justamente para não ficar
-//     legível em consulta direta. A chave inteira fica na página Notas fiscais.
+// Dado sensível. Regras (Giovani, 12/11/2026):
+//   - Quem vê: quem é do financeiro (`verCustos`, que a gestão tem pelo papel —
+//     a porta de /api/custos-videomaker) ou da operação ("Opera Gravações
+//     Externas"). Quem só aprova (`verAprovacoes`) continua sem PIX nem valor,
+//     como no hotfix de 02/10/2026 (PR #73).
+//   - Onde vai inteiro: e-mail e WhatsApp (a mensagem fica cifrada na fila e
+//     some na retenção). No sino vai só o tipo e o final da chave: o sino grava
+//     o texto em claro (alertas_ia), e a chave é guardada cifrada justamente
+//     para não ficar legível em consulta direta. A página Notas fiscais mostra.
 //   - Nunca em log: nada aqui escreve no console.
 
 type Tx = Prisma.TransactionClient
@@ -93,7 +94,7 @@ export function linhasDoPagamento(p: DadosDePagamento): [string, string][] {
   return linhas
 }
 
-/** Uma linha curta, sem a chave inteira: sino e WhatsApp. */
+/** Uma linha curta, sem a chave inteira: o sino. */
 export function resumoDoPagamento(p: DadosDePagamento): string {
   const pix = pixResumido(p)
   return [`Valor: ${rotuloDoValor(p)}`, pix ? `PIX ${pix}` : p.dadosBancarios ? "Pagamento por dados bancários" : "PIX não cadastrado"].join(" · ")
@@ -137,6 +138,29 @@ export async function dadosDePagamento(
   return pagamentoDe(custos, vinculo?.valorDiaria, f ? {
     chavePix: decifrar(f.chavePix), dadosBancarios: decifrar(f.dadosBancarios), cpfCnpj: f.cpfCnpj, razaoSocial: f.razaoSocial,
   } : null)
+}
+
+/** O bloco do pagamento no WhatsApp: as linhas completas, uma por linha. */
+export function pagamentoNoWhatsapp(p: DadosDePagamento): string {
+  return ["💰 Pagamento", ...linhasDoPagamento(p).map(([r, v]) => `${r}: ${v}`)].join("\n")
+}
+
+/**
+ * Destes usuários, quem vê os dados de pagamento da nota: quem vê o
+ * financeiro ou quem é da operação ("Opera Gravações Externas") nesta empresa.
+ */
+export async function quemVeDadosDePagamento(
+  tx: Pick<Tx, "usuarioOrganizacao" | "permissaoUsuario">, organizacaoId: string, usuarioIds: string[],
+): Promise<Set<string>> {
+  const ids = [...new Set(usuarioIds)]
+  if (!ids.length) return new Set()
+  const [financeiro, operam] = await Promise.all([
+    quemVeFinanceiro(tx, organizacaoId, ids),
+    tx.usuarioOrganizacao.findMany({
+      where: { organizacaoId, usuarioId: { in: ids }, operaGravacoes: true, usuario: { status: "ativo" } }, select: { usuarioId: true },
+    }),
+  ])
+  return new Set([...financeiro, ...operam.map((o) => o.usuarioId)])
 }
 
 /**

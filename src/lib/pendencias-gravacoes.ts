@@ -92,15 +92,15 @@ export function pendenciasDasGravacoes(lista: GravacaoComPendencia[], hoje: stri
   // Nota e pagamento: só quando a lista trouxe custos e notas.
   if (lista.some((g) => Array.isArray(g.custos) && Array.isArray(g.notasFiscais))) {
     const naNota = (etapa: string) => lista.filter((g) => situacaoDaNota(g)?.etapa === etapa).sort(porData)
-    // Na ordem do caminho da nota: pedida, recebida, em compras, paga.
+    // Na ordem do caminho da nota: pedida, recebida, cadastrada para pagamento, paga.
     pendencias.push(
       { id: "nota_falta", titulo: "Falta a nota", acao: "Cobrar a nota do videomaker.", tom: "atencao",
         itens: naNota("falta").map((g) => item(g, vm(g))) },
       { id: "nota_refazer", titulo: "Nota a refazer", acao: "Pedir a nota corrigida ao videomaker.", tom: "urgente",
         itens: naNota("contestada").map((g) => item(g, vm(g))) },
-      { id: "nota_compras", titulo: "Nota para compras", acao: "Encaminhar a nota ao setor de compras.", tom: "urgente",
+      { id: "nota_compras", titulo: "Nota para cadastrar", acao: "Cadastrar a nota para pagamento e marcar no NuFlow.", tom: "urgente",
         itens: naNota("recebida").map((g) => item(g, vm(g))) },
-      { id: "pagamento", titulo: "Pagamento a fazer", acao: "Compras ainda não pagou: marcar como paga quando pagar.", tom: "atencao",
+      { id: "pagamento", titulo: "Pagamento a fazer", acao: "Cadastrada e ainda não paga: marcar como paga quando pagar.", tom: "atencao",
         itens: naNota("compras").map((g) => item(g, vm(g))) },
     )
   }

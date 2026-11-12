@@ -21,7 +21,7 @@ type Linha = {
   demandaId: string; codigo: string; cliente: string; tipo: string | null; dia: string | null; local: string | null
   videomaker: { id: string; nome: string } | null
   estado: EstadoNoPainel
-  notaUrl: string | null; enviadaEm: string | null; emComprasEm: string | null
+  notaUrl: string | null; enviadaEm: string | null
   cadastrada: Marca; paga: Marca
   pagamento: { valor: string; chavePix: string | null; tipoPix: string | null; dadosBancarios: string | null; cpfCnpj: string | null } | null
 }
@@ -164,9 +164,9 @@ export default function NotasFiscaisPage() {
                   {l.pagamento && <Pix p={l.pagamento} />}
                   {l.pagamento?.cpfCnpj && <p className="text-zinc-500">CPF/CNPJ {l.pagamento.cpfCnpj}</p>}
                   <p className="text-zinc-500">
-                    {l.paga ? `Paga — ${quemQuando(l.paga)}`
-                      : l.cadastrada ? `Cadastrada — ${quemQuando(l.cadastrada)}`
-                      : l.enviadaEm ? `Nota enviada em ${data(l.enviadaEm)}${l.emComprasEm ? ` · em compras desde ${data(l.emComprasEm)}` : ""}`
+                    {l.paga ? `Paga${quemQuando(l.paga) ? ` — ${quemQuando(l.paga)}` : ""}`
+                      : l.estado === "cadastrada" ? `Cadastrada${quemQuando(l.cadastrada) ? ` — ${quemQuando(l.cadastrada)}` : ""}`
+                      : l.enviadaEm ? `Nota enviada em ${data(l.enviadaEm)}`
                       : l.estado === "pendente" ? "O videomaker ainda não mandou a nota." : null}
                   </p>
                 </div>

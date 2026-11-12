@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
         videomaker: { select: { id: true, nome: true } },
         custos: {
           select: {
-            id: true, videomakerId: true, valor: true, valorConfirmadoEm: true, statusPagamento: true, pago: true, notaFiscalUrl: true, emailFinanceiroAt: true,
+            id: true, videomakerId: true, valor: true, valorConfirmadoEm: true, statusPagamento: true, pago: true, notaFiscalUrl: true,
             cadastradoPagamentoEm: true, dataPagamento: true,
             cadastradoPagamentoPor: { select: { nome: true } }, pagoPor: { select: { nome: true } },
           },
@@ -92,7 +92,6 @@ export async function GET(req: NextRequest) {
         estado,
         notaUrl: custo?.notaFiscalUrl ?? enviada?.url ?? null,
         enviadaEm: enviada?.updatedAt ?? null,
-        emComprasEm: custo?.emailFinanceiroAt ?? null,
         cadastrada: custo?.cadastradoPagamentoEm ? { em: custo.cadastradoPagamentoEm, por: nomeCurto(custo.cadastradoPagamentoPor?.nome) } : null,
         paga: custo && (custo.pago || custo.statusPagamento === "pago") ? { em: custo.dataPagamento, por: nomeCurto(custo.pagoPor?.nome) } : null,
         pagamento: pagamento ? {

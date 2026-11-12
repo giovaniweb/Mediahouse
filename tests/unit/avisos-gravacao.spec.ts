@@ -104,7 +104,7 @@ describe("avisos de calendário", () => {
     expect(regrasDaGravacao(semVm, "2026-10-29")).toEqual(["sem_videomaker"])
     expect(regrasDaGravacao(semVm, "2026-10-31")).toEqual(["sem_videomaker"])
   })
-  it("nota parada no quinto dia sem ir para compras", () => {
+  it("nota parada no quinto dia sem ser cadastrada para pagamento", () => {
     expect(regrasDaGravacao({ ...g, statusInterno: "editando" }, "2026-11-06", "2026-11-01")).toEqual(["nota_parada"])
     expect(regrasDaGravacao({ ...g, statusInterno: "editando" }, "2026-11-05", "2026-11-01")).toEqual([])
   })

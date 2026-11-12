@@ -85,14 +85,15 @@ describe("e-mail da nota", () => {
 
 describe("estado na página Notas fiscais", () => {
   const base = { statusInterno: "brutos_enviados", videomakerId: "vm" }
-  const custo = (c: Partial<{ statusPagamento: string; pago: boolean; cadastradoPagamentoEm: string | null }>) => ({ statusPagamento: "nf_enviada", pago: false, cadastradoPagamentoEm: null, ...c })
+  const custo = (c: Partial<{ statusPagamento: string; pago: boolean }>) => ({ statusPagamento: "nf_enviada", pago: false, ...c })
   it("pendente, enviada, cadastrada, paga e sem pedido", () => {
     expect(estadoNoPainel({ ...base, custos: [], notasFiscais: [{ status: "pendente" }] })).toBe("pendente")
     expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "contestado" })], notasFiscais: [] })).toBe("pendente")
     expect(estadoNoPainel({ ...base, custos: [custo({})], notasFiscais: [{ status: "enviada" }] })).toBe("enviada")
-    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "aguardando_pagamento" })], notasFiscais: [] })).toBe("enviada")
-    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "aguardando_pagamento", cadastradoPagamentoEm: "2026-11-12" })], notasFiscais: [] })).toBe("cadastrada")
-    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "pago", pago: true, cadastradoPagamentoEm: "2026-11-12" })], notasFiscais: [] })).toBe("paga")
+    // "Enviada para compras" virou "cadastrada para pagamento" (12/11/2026).
+    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "aguardando_pagamento" })], notasFiscais: [] })).toBe("cadastrada")
+    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "aguardando_pagamento" })], notasFiscais: [] })).toBe("cadastrada")
+    expect(estadoNoPainel({ ...base, custos: [custo({ statusPagamento: "pago", pago: true })], notasFiscais: [] })).toBe("paga")
     expect(estadoNoPainel({ ...base, statusInterno: "encerrado", custos: [], notasFiscais: [] })).toBe("sem_pedido")
   })
   it("o retrato conta cada estado", () => {

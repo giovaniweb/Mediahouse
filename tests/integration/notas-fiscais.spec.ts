@@ -49,10 +49,12 @@ const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
 const PIX = "529.982.247-25"
 const DEBORA = `debora@${p}.test`
 // operadora: opera as gravações, sem financeiro. financeira: opera e vê custos.
+// avisada: só "recebe todos os avisos" (gestão), sem financeiro nem operação.
 const gente = {
-  operadora: { id: `${p}-op`, papel: "solicitante", opera: true, verCustos: false },
-  financeira: { id: `${p}-fin`, papel: "solicitante", opera: true, verCustos: true },
-  admin: { id: `${p}-admin`, papel: "admin", opera: false, verCustos: true },
+  operadora: { id: `${p}-op`, papel: "solicitante", opera: true, verCustos: false, todos: false },
+  financeira: { id: `${p}-fin`, papel: "solicitante", opera: true, verCustos: true, todos: false },
+  admin: { id: `${p}-admin`, papel: "admin", opera: false, verCustos: true, todos: false },
+  avisada: { id: `${p}-av`, papel: "solicitante", opera: false, verCustos: false, todos: true },
 }
 const vm = `${p}-vm`
 const email = (id: string) => `${id}@${p}.test`
@@ -99,7 +101,7 @@ beforeAll(async () => {
   await db.organizacao.create({ data: { id: org, nome: p, slug: p } })
   for (const g of Object.values(gente)) {
     await db.usuario.create({ data: { id: g.id, nome: `Pessoa ${g.id.slice(-3)}`, email: email(g.id), tipo: g.papel as "admin", telefone: tel(), senhaHash: "sem-login" } })
-    await db.usuarioOrganizacao.create({ data: { usuarioId: g.id, organizacaoId: org, papel: g.papel as "admin", operaGravacoes: g.opera, areas: ["audiovisual"] } })
+    await db.usuarioOrganizacao.create({ data: { usuarioId: g.id, organizacaoId: org, papel: g.papel as "admin", operaGravacoes: g.opera, recebeTodosAvisos: g.todos, areas: ["audiovisual"] } })
     if (g.papel !== "admin") await db.permissaoUsuario.create({ data: { usuarioId: g.id, organizacaoId: org, ...PRESETS[g.papel], verCustos: g.verCustos } })
   }
   await db.videomaker.create({ data: { id: vm, nome: "João Martins", telefone: tel() } })
@@ -131,17 +133,15 @@ afterAll(async () => {
 })
 
 describe("aviso da nota com os dados de pagamento", () => {
-  it("o PIX inteiro vai só no e-mail de quem vê o financeiro e no e-mail das notas; quem não é do financeiro não recebe PIX nem valor", async () => {
+  it("a operação e o financeiro recebem o PIX inteiro no e-mail e no WhatsApp; o sino só o final; nada em log", async () => {
     const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "info"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")]
     const { id } = await notaEnviada()
     expect(await rodarSegundoPlano()).toEqual(["aviso-gravacao", "aviso-nota-videomaker"])
 
-    // E-mail: dois envios — o completo (financeira + Débora) e o simples (operadora).
-    expect(emails.chamadas).toHaveLength(2)
-    const completo = emails.chamadas.find((c) => c.para.includes(DEBORA))!
-    const simples = emails.chamadas.find((c) => c.para.includes(email(gente.operadora.id)))!
-    expect(completo.para).toEqual([DEBORA, email(gente.financeira.id)].sort())
-    expect(simples.para).toEqual([email(gente.operadora.id)])
+    // E-mail: um só, o completo — Débora (e-mail das notas) e as duas da operação.
+    expect(emails.chamadas).toHaveLength(1)
+    const [completo] = emails.chamadas
+    expect(completo.para).toEqual([DEBORA, email(gente.financeira.id), email(gente.operadora.id)].sort())
     expect(completo.html).toContain(PIX)
     expect(completo.html).toContain("R$ 600,00 (diária combinada, a confirmar)")
     expect(completo.html).toContain("PIX (CPF)")
@@ -152,45 +152,68 @@ describe("aviso da nota com os dados de pagamento", () => {
     expect(completo.html).toContain(`VOP-${id.slice(-6)}`)
     expect(completo.html).toContain(`href="https://nuflow.space/jobs/${id}"`)
     expect(completo.html).toContain("Abrir a nota fiscal")
-    expect(simples.html).not.toContain(PIX)
-    expect(simples.html).not.toContain("4725")
-    expect(simples.html).not.toContain("R$")
 
-    // Sino direcionado: um por pessoa da operação; o resumo só para a financeira.
+    // Sino direcionado: um por pessoa da operação, com o resumo (nunca a chave inteira).
     const sinos = await db.alertaIA.findMany({ where: { organizacaoId: org, demandaId: id, tipoAlerta: "nf_recebida" }, select: { usuarioId: true, mensagem: true } })
-    expect(sinos.map((s) => s.usuarioId).sort()).toEqual([gente.financeira.id, gente.operadora.id].sort())
-    const sinoFin = sinos.find((s) => s.usuarioId === gente.financeira.id)!.mensagem
-    const sinoOp = sinos.find((s) => s.usuarioId === gente.operadora.id)!.mensagem
-    expect(sinoFin).toContain("PIX CPF final 4725")
-    expect(sinoFin).toContain("R$ 600,00")
-    expect(sinoFin).not.toContain(PIX)
-    expect(sinoOp).not.toContain("PIX")
-    expect(sinoOp).not.toContain("R$")
-    // Nenhum sino para todos (usuarioId nulo) com a nota.
+    expect(sinos.map((x) => x.usuarioId).sort()).toEqual([gente.financeira.id, gente.operadora.id].sort())
+    for (const x of sinos) {
+      expect(x.mensagem).toContain("PIX CPF final 4725")
+      expect(x.mensagem).not.toContain(PIX)
+    }
     expect(await db.alertaIA.count({ where: { organizacaoId: org, demandaId: id, usuarioId: null } })).toBe(0)
 
-    // WhatsApp: final da chave e valor só para a financeira; nunca a chave inteira.
+    // WhatsApp: a operação (as duas) com o PIX inteiro e o valor (decisão de 12/11/2026).
     const zap = await whatsapps(id)
     expect(zap.map((z) => z.para).sort()).toEqual([gente.financeira.id, gente.operadora.id, vm].sort())
-    const zapFin = zap.find((z) => z.para === gente.financeira.id)!.texto
-    const zapOp = zap.find((z) => z.para === gente.operadora.id)!.texto
-    expect(zapFin).toContain("PIX CPF final 4725")
-    expect(zapFin).toContain("https://nuflow.space/notas-fiscais")
-    expect(zapFin).not.toContain(PIX)
-    expect(zapOp).not.toContain("PIX")
-    expect(zapOp).not.toContain("R$")
-
+    for (const quem of [gente.financeira.id, gente.operadora.id]) {
+      const t = zap.find((z) => z.para === quem)!.texto
+      expect(t).toContain("💰 Pagamento\nValor: R$ 600,00 (diária combinada, a confirmar)\nPIX (CPF): 529.982.247-25")
+      expect(t).toContain("https://nuflow.space/notas-fiscais")
+    }
     // O videomaker recebe a confirmação, com a arte do galo conferindo — sem valor nem PIX.
     const vmZap = await doVideomaker(id)
     expect(vmZap.map((z) => [z.motivo, z.arte])).toEqual([["nota_recebida", "nota_recebida"]])
     expect(vmZap[0].texto).toContain("✅ Recebemos a sua nota fiscal: gravação Dra. Ana Lima")
     expect(vmZap[0].texto).not.toContain("R$")
+    expect(vmZap[0].texto).not.toContain(PIX)
 
     // Nada de PIX em log.
     const escrito = logs.flatMap((l) => l.mock.calls).map((c) => JSON.stringify(c)).join("\n")
     expect(escrito).not.toContain(PIX)
     expect(escrito).not.toContain("52998224725")
     logs.forEach((l) => l.mockRestore())
+  })
+
+  it("sem ninguém na operação, a gestão faz o papel: quem não é do financeiro nem da operação não recebe PIX nem valor", async () => {
+    await db.usuarioOrganizacao.updateMany({ where: { organizacaoId: org }, data: { operaGravacoes: false } })
+    try {
+      const { id } = await notaEnviada()
+      await rodarSegundoPlano()
+      // Gestão aqui: o admin (vê o financeiro) e a avisada (recebe todos, sem financeiro).
+      const completo = emails.chamadas.find((c) => c.para.includes(DEBORA))!
+      const simples = emails.chamadas.find((c) => c.para.includes(email(gente.avisada.id)))!
+      expect(completo.para).toEqual([DEBORA, email(gente.admin.id)].sort())
+      expect(simples.para).toEqual([email(gente.avisada.id)])
+      expect(simples.html).not.toContain(PIX)
+      expect(simples.html).not.toContain("4725")
+      expect(simples.html).not.toContain("R$")
+
+      const sinos = await db.alertaIA.findMany({ where: { organizacaoId: org, demandaId: id, tipoAlerta: "nf_recebida" }, select: { usuarioId: true, mensagem: true } })
+      const sinoAvisada = sinos.find((x) => x.usuarioId === gente.avisada.id)!.mensagem
+      expect(sinoAvisada).not.toContain("PIX")
+      expect(sinoAvisada).not.toContain("R$")
+      expect(sinos.find((x) => x.usuarioId === gente.admin.id)!.mensagem).toContain("PIX CPF final 4725")
+
+      const zap = await whatsapps(id)
+      const zapAvisada = zap.find((z) => z.para === gente.avisada.id)!.texto
+      expect(zapAvisada).not.toContain("PIX")
+      expect(zapAvisada).not.toContain("R$")
+      expect(zap.find((z) => z.para === gente.admin.id)!.texto).toContain(`PIX (CPF): ${PIX}`)
+    } finally {
+      for (const g of Object.values(gente)) {
+        await db.usuarioOrganizacao.updateMany({ where: { organizacaoId: org, usuarioId: g.id }, data: { operaGravacoes: g.opera } })
+      }
+    }
   })
 })
 
@@ -217,7 +240,7 @@ describe("confirmação ao videomaker que manda a nota pela área dele", () => {
 
 describe("página Notas fiscais", () => {
   it("quem não é do financeiro não entra (e não vê PIX)", async () => {
-    entrar(gente.operadora)
+    entrar(gente.avisada)
     const r = await listar(new NextRequest("http://localhost/api/notas-fiscais"))
     expect(r.status).toBe(403)
     expect(await r.text()).not.toContain(PIX)
@@ -248,7 +271,6 @@ describe("página Notas fiscais", () => {
       new NextRequest(`http://localhost/api/jobs/${id}/nota`, { method: "POST", body: JSON.stringify({ acao }) }),
       { params: Promise.resolve({ id }) },
     )
-    // Paga antes de cadastrada: a régua de sempre não deixa pular.
     expect((await marcar("marcar_cadastrada")).status).toBe(200)
     j = await ler()
     linha = j.linhas.find((l) => l.demandaId === id)!
@@ -257,6 +279,7 @@ describe("página Notas fiscais", () => {
     // Marcar de novo não muda quem marcou.
     entrar(gente.admin)
     expect((await marcar("marcar_cadastrada")).status).toBe(200)
+    expect((await marcar("enviar_compras")).status).toBe(200)
     const custo = await db.custoVideomaker.findFirstOrThrow({ where: { organizacaoId: org, demandaId: id } })
     expect(custo.cadastradoPagamentoPorId).toBe(gente.financeira.id)
     expect(custo.statusPagamento).toBe("aguardando_pagamento")

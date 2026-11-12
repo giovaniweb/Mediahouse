@@ -1,8 +1,10 @@
 -- VOLTA da migration 20261126000000_notas_fiscais_pagamento.
 --
--- Tira o e-mail de notas por empresa e as marcas de "cadastrada para pagamento"
--- e "quem marcou paga". O estado do pagamento (statusPagamento, pago,
--- dataPagamento) não muda: só se perde QUEM marcou e QUANDO foi cadastrada.
+-- Tira o e-mail de notas por empresa (com o da Débora que a migration pôs) e
+-- as marcas de "cadastrada para pagamento" e "quem marcou paga". O estado do
+-- pagamento (statusPagamento, pago, dataPagamento) não muda: só se perde QUEM
+-- marcou e QUANDO foi cadastrada. Com o código antigo de volta,
+-- aguardando_pagamento volta a se chamar "enviada para compras".
 -- Volte o código antes (ele lê estas colunas).
 --
 -- Escrita em produção: roda só com o sim do Giovani, numa transação única

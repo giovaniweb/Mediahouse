@@ -11,7 +11,7 @@ import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { arquivosDoVideoDaGravacao, linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import { comToken } from "@/lib/midia"
-import { dadosDePagamento, quemVeFinanceiro, resumoDoPagamento, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
+import { dadosDePagamento, pagamentoNoWhatsapp, quemVeDadosDePagamento, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import {
   mensagemDaNotaEmLote,
   mensagensDoEvento,
@@ -59,8 +59,9 @@ export async function telefonesDaOperacao(tx: Pick<Tx, "usuario">, organizacaoId
 }
 
 /**
- * Dos telefones da operação, os de quem vê o financeiro (`verCustos`): só eles
- * recebem o valor e o final do PIX no aviso da nota (12/11/2026).
+ * Dos telefones da operação, os de quem vê os dados de pagamento (financeiro
+ * ou operação): só eles recebem o valor e o PIX no aviso da nota (Giovani,
+ * 12/11/2026). Na gestão que faz as vezes da operação, só quem vê o financeiro.
  */
 async function telefonesDoFinanceiroNaOperacao(tx: Tx, organizacaoId: string): Promise<Set<string>> {
   const select = { id: true, telefone: true }
@@ -71,15 +72,19 @@ async function telefonesDoFinanceiroNaOperacao(tx: Tx, organizacaoId: string): P
     where: { status: "ativo", telefone: { not: null },
       organizacoes: { some: { organizacaoId, OR: [{ papel: { in: ["admin", "gestor"] } }, { recebeTodosAvisos: true }] } } }, select,
   })
-  const veem = await quemVeFinanceiro(tx, organizacaoId, lista.map((u) => u.id))
+  const veem = await quemVeDadosDePagamento(tx, organizacaoId, lista.map((u) => u.id))
   return new Set(telefones(lista.filter((u) => veem.has(u.id))))
 }
 
-/** O aviso da nota para quem vê o financeiro: o de todos, mais valor e PIX resumido. */
+/**
+ * O aviso da nota para quem vê os dados de pagamento: o de todos, mais valor e
+ * PIX inteiros (decisão do Giovani, 12/11/2026). O texto vai cifrado para a
+ * fila e nunca para o log.
+ */
 function comPagamento(texto: string, pagamento: DadosDePagamento | null): string {
   if (!pagamento) return texto
   const base = process.env.NEXTAUTH_URL?.trim().replace(/\/$/, "") || "https://nuflow.space"
-  return `${texto}\n\n💰 ${resumoDoPagamento(pagamento)}\n\nPIX completo no e-mail e em Notas fiscais:\n${base}/notas-fiscais`
+  return `${texto}\n\n${pagamentoNoWhatsapp(pagamento)}\n\nNotas fiscais:\n${base}/notas-fiscais`
 }
 
 export type GravacaoDoAviso = DadosDoAviso & {

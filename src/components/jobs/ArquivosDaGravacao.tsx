@@ -98,7 +98,6 @@ export function ArquivosDaGravacao({
   const [salvando, setSalvando] = useState<TrocaNoAgora | null>(null)
   const [enviando, setEnviando] = useState<{ qual: TrocaNoAgora; nome: string; pct: number } | null>(null)
   const [agindo, setAgindo] = useState<string | null>(null)
-  const [plano, setPlano] = useState<string | null>(null)
   const arquivoRef = useRef<Partial<Record<TrocaNoAgora, HTMLInputElement | null>>>({})
   // Os vídeos do card (lib/videos-da-gravacao): um ou mais. Trocar um deles
   // sobe o novo e tira o registro do trocado; "Adicionar outro vídeo" só soma.
@@ -212,7 +211,9 @@ export function ArquivosDaGravacao({
   const linkDaNota = tokenNota ? `${typeof window === "undefined" ? "" : window.location.origin}/nf-upload/${tokenNota}` : null
   const arquivoDaNota = job.custos?.find((c) => c.notaFiscalUrl)?.notaFiscalUrl ?? job.notasFiscais?.find((n) => n.url)?.url ?? null
 
-  async function agirNaNota(acao: "enviar_compras" | "marcar_enviada" | "marcar_paga") {
+  // Nota recebida → cadastrada para pagamento → paga (Giovani, 12/11/2026:
+  // "cadastrada para pagamento" substitui o "enviar para compras").
+  async function agirNaNota(acao: "marcar_cadastrada" | "marcar_paga") {
     setAgindo(acao)
     try {
       const res = await fetch(`/api/jobs/${job.id}/nota`, {
@@ -222,12 +223,9 @@ export function ArquivosDaGravacao({
       })
       const json = await res.json().catch(() => ({})) as { mensagem?: string; error?: string }
       if (!res.ok) {
-        // O e-mail não saiu: o plano B fica na tela, não só no toast.
-        if (acao === "enviar_compras") setPlano(json.error ?? "O e-mail para compras não saiu.")
         toast.error(json.error ?? "Não foi possível concluir.")
         return
       }
-      setPlano(null)
       toast.success(json.mensagem ?? "Feito.")
       await onAtualizar()
     } catch {
@@ -251,7 +249,7 @@ export function ArquivosDaGravacao({
     }
   }
 
-  const botaoNota = (acao: "enviar_compras" | "marcar_enviada" | "marcar_paga", rotulo: string, principal: boolean) => (
+  const botaoNota = (acao: "marcar_cadastrada" | "marcar_paga", rotulo: string, principal: boolean) => (
     <button type="button" className={principal ? surface.btnPrimary : surface.btn} onClick={() => void agirNaNota(acao)} disabled={agindo !== null}>
       {agindo === acao ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : null}
       {rotulo}
@@ -453,19 +451,10 @@ export function ArquivosDaGravacao({
             {nota?.etapa === "recebida" && (
               <>
                 <div className="flex flex-wrap gap-2">
-                  {botaoNota("enviar_compras", "Enviar nota para compras", true)}
+                  {botaoNota("marcar_cadastrada", "Cadastrada para pagamento", true)}
                   {baixarNota}
                 </div>
-                <span className={surface.hint}>O e-mail vai com a nota e com cópia para você.</span>
-                {plano && (
-                  <div className={surface.notice} role="alert">
-                    <p>{plano}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {baixarNota}
-                      {botaoNota("marcar_enviada", "Já mandei por fora", false)}
-                    </div>
-                  </div>
-                )}
+                <span className={surface.hint}>Marque quando a nota estiver cadastrada no sistema de pagamento. O videomaker é avisado.</span>
               </>
             )}
             {nota?.etapa === "compras" && (

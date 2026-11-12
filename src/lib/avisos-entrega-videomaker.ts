@@ -4,7 +4,7 @@ import { comOrg } from "@/lib/org-contexto"
 import { destinatariosNotasFiscais, sendEmailAvisoDaOperacao, type AvisoDaOperacaoEmail } from "@/lib/email"
 import { avisarGravacao, dadosDaGravacao, type GravacaoDoAviso } from "@/lib/avisos-gravacao"
 import { rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
-import { dadosDePagamento, linhasDoPagamento, quemVeFinanceiro, resumoDoPagamento, rotuloDoValor, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
+import { dadosDePagamento, linhasDoPagamento, quemVeDadosDePagamento, resumoDoPagamento, rotuloDoValor, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import { faltaDaEntrega, linksDaEntrega, linksDaNota, type DadosDoAviso } from "@/lib/avisos-gravacao-textos"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 
@@ -138,7 +138,7 @@ export function emailDaNota(gravacoes: DadosDoAviso[], pagamentos?: DadosDePagam
     assunto,
     dados: {
       titulo: "Nota fiscal recebida",
-      intro: `${nome} mandou a nota fiscal. Confira e envie para compras no NuFlow.`,
+      intro: `${nome} mandou a nota fiscal. Confira e marque no NuFlow quando ela for cadastrada para pagamento.`,
       linhas: varias
         ? [["Videomaker", nome], ...gravacoes.map((d) => ["Gravação", `${cliente(d)} (${d.codigo})`] as [string, string])]
         : [["Videomaker", nome], ["Cliente", cliente(g)], ...(q ? [["Gravação", q] as [string, string]] : []), ["Código", g.codigo]],
@@ -195,9 +195,10 @@ export async function avisarEntregaDoVideomaker(
  * nunca lança.
  *
  *   - Sino, direcionado, para cada pessoa da operação (uma por gravação). Quem
- *     vê o financeiro recebe o valor e o PIX resumido (tipo e final).
- *   - E-mail para a operação: quem vê o financeiro recebe o completo (trabalho
- *     e dados de pagamento, PIX inteiro); os outros, o de antes, sem valores.
+ *     vê os dados de pagamento (financeiro ou operação) recebe o valor e o PIX
+ *     resumido (tipo e final).
+ *   - E-mail para a operação: quem vê os dados de pagamento recebe o completo
+ *     (trabalho e dados de pagamento, PIX inteiro); os outros, o de antes.
  *   - E-mail das notas da empresa (Configurações → E-mail; a Débora): sempre o
  *     completo. Quem já está nele não recebe o da operação de novo.
  */
@@ -215,14 +216,14 @@ export async function avisarNotaDoVideomaker(
       const vm = gravacoes[0]?.videomakerId
       if (!gravacoes.length || !vm) return null
       const pessoas = await pessoasDaOperacao(tx, organizacaoId, [autorUsuarioId, await usuarioDoVideomaker(tx, vm)])
-      const financeiro = await quemVeFinanceiro(tx, organizacaoId, pessoas.map((p) => p.id))
+      const financeiro = await quemVeDadosDePagamento(tx, organizacaoId, pessoas.map((p) => p.id))
       const precisa = financeiro.size > 0 || paraNotas.length > 0
       const pagamentos = precisa ? await Promise.all(gravacoes.map((g) => dadosDePagamento(tx, organizacaoId, g.id, vm))) : null
       if (pessoas.length) {
         await tx.alertaIA.createMany({ data: pessoas.flatMap((p) => gravacoes.map((g, i) => ({
           organizacaoId, demandaId: g.id, usuarioId: p.id, tipoAlerta: "nf_recebida",
           mensagem: sinoDaNota(g, financeiro.has(p.id) ? pagamentos?.[i] : null), severidade: "aviso" as const,
-          acaoSugerida: financeiro.has(p.id) ? "Os dados completos estão em Notas fiscais e no e-mail." : "Abra o card e envie a nota para compras.",
+          acaoSugerida: financeiro.has(p.id) ? "Os dados completos estão em Notas fiscais e no e-mail." : "Abra o card e marque quando a nota for cadastrada para pagamento.",
         }))) })
       }
       return { gravacoes, pessoas, financeiro, pagamentos }

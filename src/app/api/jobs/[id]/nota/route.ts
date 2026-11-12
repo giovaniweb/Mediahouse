@@ -9,9 +9,9 @@ import { agirNaNota } from "@/lib/nota-da-gravacao"
 
 type Params = { params: Promise<{ id: string }> }
 
-// A nota do videomaker na ficha da gravação: enviar para compras (e-mail com
-// cópia para quem clicou), marcar como enviada por fora, cadastrada para
-// pagamento (12/11/2026) e paga.
+// A nota do videomaker na ficha da gravação e na página Notas fiscais: marcar
+// como cadastrada para pagamento e como paga (12/11/2026; "enviar_compras" e
+// "marcar_enviada" ainda são aceitos e valem "cadastrada").
 // Quem age é quem vê a nota: gestão, quem vê custos ou quem aprova pagamentos.
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()

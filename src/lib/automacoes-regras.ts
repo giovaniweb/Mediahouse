@@ -170,7 +170,7 @@ async function relatorios(org:string,r:Resumo) {
   }
 }
 // Ativa: ainda anda no quadro, ou já foi entregue mas a nota recebida não foi
-// para compras — o aviso de nota parada vale depois da entrega também.
+// cadastrada para pagamento — o aviso de nota parada vale depois da entrega também.
 const GRAVACAO_ATIVA:Prisma.DemandaWhereInput = {
   OR:[{tipoGravacao:{not:null}},{tipoVideo:"cobertura_evento"},{departamento:"eventos"}],
   AND:[{OR:[

@@ -100,7 +100,7 @@ describe("linha da nota no card", () => {
     const comCusto = (statusPagamento: string, pago = false) => situacaoDaNota({ ...base, statusInterno: "editando", custos: [{ statusPagamento, pago }] })?.texto
     expect(comCusto("pendente_nf")).toBe("Falta a nota")
     expect(comCusto("nf_enviada")).toBe("Nota recebida")
-    expect(comCusto("aguardando_pagamento")).toBe("Enviada para compras")
+    expect(comCusto("aguardando_pagamento")).toBe("Cadastrada para pagamento")
     expect(comCusto("contestado")).toBe("Nota a refazer")
     expect(comCusto("pendente_nf", true)).toBe("Nota paga")
     expect(comCusto("pago")).toBe("Nota paga")

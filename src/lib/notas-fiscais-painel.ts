@@ -5,7 +5,7 @@
 // Uma linha por gravação externa com videomaker que já passou do agendado
 // (material entregue ou concluída). O estado sai do que já existe — custo do
 // videomaker (statusPagamento, pago) e o pedido de nota (notas_fiscais) — pela
-// mesma régua da ficha (situacaoDaNota), mais o "cadastrada para pagamento".
+// mesma régua da ficha (situacaoDaNota).
 //
 // "sem_pedido": gravação concluída em que a nota nunca foi pedida (as 40
 // importadas da planilha em 04/11 são assim). Fica fora da lista por padrão,
@@ -27,7 +27,7 @@ export const ORDEM_NO_PAINEL: EstadoNoPainel[] = ["pendente", "enviada", "cadast
 export type GravacaoNoPainel = {
   statusInterno: string
   videomakerId: string | null
-  custos: { statusPagamento: string; pago: boolean; cadastradoPagamentoEm: Date | string | null }[]
+  custos: { statusPagamento: string; pago: boolean }[]
   notasFiscais: { status: string }[]
 }
 
@@ -37,7 +37,8 @@ export function estadoNoPainel(g: GravacaoNoPainel): EstadoNoPainel {
   if (!s) return "sem_pedido"
   if (s.etapa === "paga") return "paga"
   if (s.etapa === "falta" || s.etapa === "contestada") return "pendente"
-  if (g.custos.some((c) => c.cadastradoPagamentoEm && !c.pago && c.statusPagamento !== "pago")) return "cadastrada"
+  // `aguardando_pagamento` é "cadastrada para pagamento" desde 12/11/2026.
+  if (s.etapa === "compras") return "cadastrada"
   return "enviada"
 }
 
