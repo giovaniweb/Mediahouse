@@ -1,6 +1,7 @@
 import { ConviteInvalido, responderConvite } from "@/lib/convites"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { materialChegouAgora } from "@/lib/etapas-da-gravacao"
 import { avisarEntregaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
@@ -245,6 +246,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       // WhatsApp que ela dispara são dela.
       emSegundoPlano(() => comOrg(organizacaoId, async () => {
         try {
+          // Só videomaker externo manda nota (12/11/2026): interno não recebe pedido nem link.
+          if (!await videomakerPedeNota(prisma, organizacaoId, demandaAtual.videomakerId)) return
           const nfExistente = await prisma.notaFiscalUpload.findFirst({
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
           })
@@ -261,7 +264,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
               `✅ Seus arquivos foram recebidos pela equipe. Obrigado!\n\n` +
               `Agora envie sua *Nota Fiscal* pelo link abaixo:\n${nfLink}\n\n` +
               `_O pagamento é processado em até 15 dias após o recebimento da NF._`
-            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId, { arte: "nota" })
+            await sendWhatsappMessage(demandaAtual.videomaker.telefone, msg, id, organizacaoId, { arte: "material" })
           }
         } catch (e) {
           console.error("[Status] Erro ao criar NF/enviar WA:", e)

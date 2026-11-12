@@ -71,8 +71,11 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
     frasesDaCena: { 6: ["Funcionário do mês: Claude. De novo.", "Entregue. O mérito? O Claude já pegou."] } },
   material: { arquivo: "10", cenas: 5, frases: [
     "200 GB de \"acho que tem coisa boa\".", "Material entregue. Agora é problema da edição.", "Caixa enorme. Take bom: um."] },
-  nota: { arquivo: "11", cenas: 5, frases: [
-    "Nota recebida. O galo vai conferir cada vírgula.", "Sem nota, sem dinheiro. Com nota, talvez.", "Pagamento feito. Pode gastar."] },
+  // Nota que chegou ou que falta (operação, cobrança): o galo conferindo e
+  // carimbando (11-1 a 11-3). A moeda (11-4, 11-5) e "Pagamento feito" são só
+  // do nota_paga — antes caíam em qualquer aviso de nota (12/11/2026).
+  nota: { arquivo: "11", cenas: 3, frases: [
+    "Nota recebida. O galo vai conferir cada vírgula.", "Sem nota, sem dinheiro. Com nota, talvez.", "Chegou nota. O carimbo já está quente."] },
   // Os três avisos da nota ao videomaker (Giovani, 12/11/2026), cada um com a
   // cena que combina: o galo conferindo a nota (11-1), carimbando (11-2, 11-3)
   // e com a moeda na mão (11-4, 11-5). Frase do momento certo: no "nota" da
@@ -175,7 +178,7 @@ export function chaveComArte(familia: FamiliaArte | null | undefined, chave: str
 /** Gravação externa: a chave é grav:<id>:<motivo>:<dia>:<papel>:<hash>. */
 const ARTE_GRAVACAO: Record<string, FamiliaArte> = {
   entrou: "fila", confirmada: "confirmou", recusada: "recusou", material: "material", material_parcial: "material",
-  nota_recebida: "nota", nota_lote: "nota", nota_cadastrada: "nota", nota_paga: "nota", pronta: "finalizou", concluida: "finalizou",
+  nota_recebida: "nota", nota_lote: "nota", nota_cadastrada: "nota_cadastrada", nota_paga: "nota_paga", pronta: "finalizou", concluida: "finalizou",
   cancelada: "ruim", kit: "gravacao", vespera: "gravacao", dia: "gravacao",
   sem_material: "cobranca", material_travado: "ruim", sem_videomaker: "ruim", nota_parada: "cobranca",
 }

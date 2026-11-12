@@ -10,6 +10,7 @@ import { momentoDoJob } from "@/lib/ficha-do-job"
 import { estadoNoPainel, retratoDasNotas } from "@/lib/notas-fiscais-painel"
 import { pagamentoDe, rotuloDoValor } from "@/lib/pagamento-do-videomaker"
 import { diariasDaEmpresa, fiscaisDaEmpresaEmLote } from "@/lib/videomaker-vinculo"
+import { whereVideomakerPedeNota } from "@/lib/videomaker-pede-nota"
 
 // GET /api/notas-fiscais — a página "Notas fiscais" (12/11/2026).
 //
@@ -50,6 +51,8 @@ export async function GET(req: NextRequest) {
         organizacaoId,
         tipoGravacao: { not: null },
         videomakerId: videomakerId ?? { not: null },
+        // Videomaker interno não manda nota (12/11/2026): nunca entra aqui.
+        videomaker: whereVideomakerPedeNota(organizacaoId),
         statusInterno: { in: STATUS_DO_PAINEL },
         ...(comPeriodo ? { OR: [{ dataCaptacao: periodo }, { dataCaptacao: null, dataEvento: periodo }] } : {}),
       },
@@ -105,7 +108,7 @@ export async function GET(req: NextRequest) {
 
   // A lista do filtro não encolhe com o próprio filtro: todos os videomakers das gravações da página.
   const comGravacao = await comOrg(organizacaoId, () => prisma.demanda.findMany({
-    where: { organizacaoId, tipoGravacao: { not: null }, videomakerId: { not: null }, statusInterno: { in: STATUS_DO_PAINEL } },
+    where: { organizacaoId, tipoGravacao: { not: null }, videomakerId: { not: null }, videomaker: whereVideomakerPedeNota(organizacaoId), statusInterno: { in: STATUS_DO_PAINEL } },
     select: { videomaker: { select: { id: true, nome: true } } }, distinct: ["videomakerId"],
   }))
   const videomakers = comGravacao.flatMap((d) => d.videomaker ? [d.videomaker] : []).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))

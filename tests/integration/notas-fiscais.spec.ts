@@ -43,6 +43,8 @@ import { decryptSecret, encryptSecret } from "@/lib/secret-crypto"
 import { PRESETS } from "@/lib/permissoes"
 import { familiaDaSaida } from "@/lib/avisos-arte"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
+import { registrarServicoPendente } from "@/lib/custo-servico"
 
 const p = `notasfisc-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
@@ -57,6 +59,9 @@ const gente = {
   avisada: { id: `${p}-av`, papel: "solicitante", opera: false, verCustos: false, todos: true },
 }
 const vm = `${p}-vm`
+// O interno: contrato "interno" no vínculo com a empresa, "externo" no cadastro
+// global — exatamente o caso do Giovani em produção (12/11/2026).
+const vmInterno = `${p}-vmint`
 const email = (id: string) => `${id}@${p}.test`
 const entrar = (g: { id: string; papel: string }) => {
   estado.sessao = { user: { id: g.id, organizacaoId: org, tipo: g.papel, papel: g.papel, name: g.id } }
@@ -107,6 +112,8 @@ beforeAll(async () => {
   await db.videomaker.create({ data: { id: vm, nome: "João Martins", telefone: tel() } })
   await db.videomakerOrganizacao.create({ data: { organizacaoId: org, videomakerId: vm, tipoContrato: "externo", valorDiaria: 600 } })
   await db.videomakerDadosFiscais.create({ data: { organizacaoId: org, videomakerId: vm, cpfCnpj: "529.982.247-25", chavePix: encryptSecret(PIX) } })
+  await db.videomaker.create({ data: { id: vmInterno, nome: "Giovani Interno", telefone: tel(), tipoContrato: "externo" } })
+  await db.videomakerOrganizacao.create({ data: { organizacaoId: org, videomakerId: vmInterno, tipoContrato: "interno" } })
   await db.configEmail.create({ data: { organizacaoId: org, emailsFinanceiro: [], emailsNotasFiscais: [DEBORA] } })
 })
 
@@ -124,7 +131,7 @@ afterAll(async () => {
   await db.configEmail.deleteMany({ where: { organizacaoId: org } })
   await db.videomakerDadosFiscais.deleteMany({ where: { organizacaoId: org } })
   await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org } })
-  await db.videomaker.deleteMany({ where: { id: vm } })
+  await db.videomaker.deleteMany({ where: { id: { in: [vm, vmInterno] } } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: org } })
   await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: org } })
   await db.organizacao.delete({ where: { id: org } }).catch(() => undefined)
@@ -235,6 +242,68 @@ describe("confirmação ao videomaker que manda a nota pela área dele", () => {
     } finally {
       await db.usuario.delete({ where: { id: vmUsuario } })
     }
+  })
+})
+
+describe("videomaker interno nunca entra na nota (12/11/2026)", () => {
+  const moverPara = (id: string, statusInterno: string) => mover(
+    new NextRequest(`http://localhost/api/demandas/${id}/status`, { method: "PATCH", body: JSON.stringify({ origem: "kanban", statusInterno, linkBrutos: "https://drive.example/brutos" }) }),
+    { params: Promise.resolve({ id }) },
+  )
+  async function card(videomakerId: string) {
+    const id = `${p}-${randomUUID().slice(0, 6)}`
+    await db.demanda.create({ data: {
+      id, organizacaoId: org, codigo: `VOP-${id.slice(-6)}`, titulo: "Video Juliana", descricao: "Teste.",
+      area: "audiovisual", departamento: "eventos", tipoVideo: "cobertura_evento", cidade: "Curitiba",
+      solicitanteId: gente.admin.id, videomakerId, statusInterno: "captacao_realizada", statusVisivel: "producao",
+    } })
+    return id
+  }
+  const saidasDoVm = async (demandaId: string, videomakerId: string) => (await db.saidaWhatsapp.findMany({
+    where: { organizacaoId: org, referencia: demandaId }, select: { chave: true, destinatarioTipo: true, destinatarioId: true, origem: true, conteudoCifrado: true },
+  })).filter((x) => x.destinatarioId === videomakerId).map((x) => ({ chave: x.chave, arte: familiaDaSaida(x), texto: decryptSecret(x.conteudoCifrado!) }))
+
+  it("material recebido: o externo recebe o pedido da nota com a arte do material (nunca a do pagamento); o interno, nada", async () => {
+    entrar(gente.admin)
+    const externo = await card(vm), interno = await card(vmInterno)
+    expect((await moverPara(externo, "brutos_enviados")).status).toBe(200)
+    expect((await moverPara(interno, "brutos_enviados")).status).toBe(200)
+    await rodarSegundoPlano()
+
+    const ext = (await saidasDoVm(externo, vm)).filter((x) => x.texto.includes("Material recebido"))
+    expect(ext).toHaveLength(1)
+    expect(ext[0].texto).toContain("/nf-upload/")
+    expect(ext[0].arte).toBe("material")
+    expect(await db.notaFiscalUpload.count({ where: { demandaId: externo } })).toBe(1)
+
+    expect((await saidasDoVm(interno, vmInterno)).filter((x) => /nota|nf-upload/i.test(x.texto))).toEqual([])
+    expect(await db.notaFiscalUpload.count({ where: { demandaId: interno } })).toBe(0)
+  })
+
+  it("link antigo de nota do interno não abre nem recebe; sem custo 'aguardando nota'; sem aviso de nota; fora da página", async () => {
+    const interno = await card(vmInterno)
+    await db.demanda.update({ where: { id: interno }, data: { statusInterno: "brutos_enviados", linkBrutos: "https://drive.example/b", tipoGravacao: "conteudo", dataCaptacao: new Date("2026-11-10T13:00:00Z") } })
+    const nf = await db.notaFiscalUpload.create({ data: { demandaId: interno, videomakerId: vmInterno } })
+    const form = new FormData()
+    form.set("arquivo", new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52])], "nota.pdf", { type: "application/pdf" }))
+    const r = await uploadNF(new NextRequest("http://localhost/api/nf-upload/x", { method: "POST", body: form }), { params: Promise.resolve({ token: nf.token }) })
+    expect(r.status).toBe(404)
+    expect((await db.notaFiscalUpload.findUniqueOrThrow({ where: { id: nf.id } })).status).toBe("pendente")
+
+    // Concluir não cria custo "aguardando nota" para o interno.
+    await db.demanda.update({ where: { id: interno }, data: { statusVisivel: "finalizado" } })
+    expect(await registrarServicoPendente(db, org, interno, vmInterno)).toBeNull()
+    expect(await db.custoVideomaker.count({ where: { demandaId: interno } })).toBe(0)
+
+    // Nenhum aviso de nota ao interno, nem se alguém marcar algo por outro caminho.
+    for (const ev of ["nota_recebida", "nota_cadastrada", "nota_paga"] as const) await avisarGravacao(org, interno, ev)
+    expect(await saidasDoVm(interno, vmInterno)).toEqual([])
+
+    // A página das notas não mostra o interno, nem no filtro de videomakers.
+    entrar(gente.financeira)
+    const j = await (await listar(new NextRequest("http://localhost/api/notas-fiscais"))).json() as { linhas: { demandaId: string }[]; videomakers: { id: string }[] }
+    expect(j.linhas.map((l) => l.demandaId)).not.toContain(interno)
+    expect(j.videomakers.map((v) => v.id)).not.toContain(vmInterno)
   })
 })
 

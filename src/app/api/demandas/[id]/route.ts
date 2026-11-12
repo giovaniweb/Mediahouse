@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { registrarServicoPendente } from "@/lib/custo-servico"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
@@ -286,7 +287,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       }),
     ])
 
-    // Quando finalizar → auto-criar custo se videomaker externo
+    // Quando finalizar → auto-criar custo se videomaker externo (a regra está em registrarServicoPendente)
     if (body.statusVisivel === "finalizado" && demandaAtual?.videomakerId) {
       try {
         await registrarServicoPendente(prisma, guard.organizacaoId, id, demandaAtual.videomakerId)
@@ -315,7 +316,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     // Quando mover para edição (brutos enviados) → criar link de NF e notificar videomaker
-    if (body.statusVisivel === "edicao" && demandaAtual?.videomakerId) {
+    if (body.statusVisivel === "edicao" && demandaAtual?.videomakerId && await videomakerPedeNota(prisma, guard.organizacaoId, demandaAtual.videomakerId)) {
       try {
         const nf = await prisma.notaFiscalUpload.create({
           data: {

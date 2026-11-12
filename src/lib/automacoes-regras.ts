@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { resolverAlertas } from "@/lib/alertas"
 import { prisma } from "@/lib/prisma"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { comOrg } from "@/lib/org-contexto"
 import { criarSaida, destinoAutorizado } from "@/lib/whatsapp-outbox"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
@@ -132,6 +133,8 @@ async function cobrancas(org:string,r:Resumo) {
       if(!c) return
       r.analisados++;await cancelarAntigas(tx,org,c.id)
       if(!cobrancaValida(c,new Date())) return
+      // Interno não manda nota (12/11/2026): não se cobra nota dele.
+      if(!await videomakerPedeNota(tx,org,c.videomakerId)) return
       await agendar(tx,org,{tipo:"custo",id:c.id,revisao:c.updatedAt.toISOString(),regra:"nota_fiscal_pendente"},c.videomaker.telefone,
         "Há uma nota fiscal pendente no Flow. Confira os detalhes e envie a documentação pelo sistema.",new Date(Date.now()+86400_000),r)
     })

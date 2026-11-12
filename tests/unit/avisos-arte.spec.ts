@@ -97,6 +97,31 @@ describe("artes dos avisos: quem recebe qual", () => {
     }
   })
 
+  it("cada aviso da gravação tem a família certa — e só o 'paga' leva a moeda (12/11/2026)", () => {
+    const esperado: [motivo: string, papel: string, destino: string, familia: string][] = [
+      ["material", "operacao", "usuario", "material"], ["material_parcial", "operacao", "usuario", "material"],
+      ["nota_recebida", "operacao", "usuario", "nota"], ["nota_lote:2", "operacao", "usuario", "nota"],
+      ["nota_recebida", "videomaker", "videomaker", "nota_recebida"], ["nota_lote:2", "videomaker", "videomaker", "nota_recebida"],
+      ["nota_cadastrada", "videomaker", "videomaker", "nota_cadastrada"], ["nota_paga", "videomaker", "videomaker", "nota_paga"],
+      ["nota_parada", "gestao", "usuario", "cobranca"], ["sem_material", "videomaker", "videomaker", "cobranca"],
+    ]
+    for (const [motivo, papel, destino, familia] of esperado) {
+      expect(familiaDaSaida(saida(`grav:g1:${motivo}:2026-11-12:${papel}:abc`, destino)), `${motivo}/${papel}`).toBe(familia)
+    }
+    // A regra de cobrança da nota pendente usa a família "nota" (sem moeda).
+    expect(familiaDaSaida(saida("regra:v1:h", "videomaker", "regra", { tipo: "custo", id: "c", revisao: "r", regra: "nota_fiscal_pendente" }))).toBe("nota")
+    // A cena da moeda e "Pagamento feito" só saem da família nota_paga.
+    for (const f of FAMILIAS) {
+      for (let i = 0; i < 40; i++) {
+        const e = escolherArte(f, `s${i}`)
+        const pagamento = e.arquivo === "11-4.jpg" || e.arquivo === "11-5.jpg" || /Pagamento feito/.test(e.frase)
+        expect(pagamento && f !== "nota_paga", `${f}: ${e.arquivo} "${e.frase}"`).toBe(false)
+      }
+    }
+    // O material nunca usa cena da nota.
+    for (let i = 0; i < 40; i++) expect(escolherArte("material", `m${i}`).arquivo.startsWith("10-")).toBe(true)
+  })
+
   it("gravação externa, convite e regras da rotina", () => {
     expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-11:operacao:abc"))).toBe("confirmou")
     expect(familiaDaSaida(saida("grav:g1:nota_lote:3:2026-11-11:operacao:abc"))).toBe("nota")

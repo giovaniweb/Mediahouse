@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client"
 import { comOrg } from "@/lib/org-contexto"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { decryptSecret, encryptSecret } from "@/lib/secret-crypto"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 
 type Tx = Prisma.TransactionClient
 export class PagamentoInvalido extends Error {
@@ -55,6 +56,8 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
   const d=await tx.demanda.findFirst({where:{id:nf.demandaId,organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId}})
   const vinculo=await tx.videomakerOrganizacao.findFirst({where:{organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId,status:{in:["ativo","preferencial"]},emListaNegra:false,videomaker:{OR:[{usuarioId:null},{usuario:{status:"ativo"}}]}}})
   if(!d || !vinculo) throw new PagamentoInvalido("Profissional não está autorizado para esta gravação",403)
+  // Só videomaker externo manda nota (12/11/2026): o link antigo de um interno não vale.
+  if(!await videomakerPedeNota(tx,e.organizacaoId,nf.videomakerId)) throw new PagamentoInvalido("Videomaker interno não envia nota fiscal.",403)
   if(!d.linkBrutos && !d.linkFolderBrutos && !["brutos_enviados","editor_atribuido","fila_edicao","editando","edicao_finalizada","revisao_pendente","ajuste_solicitado","aprovado","postagem_pendente","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado","expirado","encerrado"].includes(d.statusInterno)) throw new PagamentoInvalido("Registre a entrega do material antes de enviar a nota fiscal.")
   const atual=await tx.notaFiscalUpload.findUniqueOrThrow({where:{id:nf.id}})
   if(atual.status!=="pendente") throw new PagamentoInvalido("Nota fiscal já enviada. Solicite revisão à equipe.")

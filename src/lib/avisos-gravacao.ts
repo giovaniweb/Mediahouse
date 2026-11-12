@@ -11,6 +11,7 @@ import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { arquivosDoVideoDaGravacao, linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import { comToken } from "@/lib/midia"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { dadosDePagamento, pagamentoNoWhatsapp, quemVeDadosDePagamento, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import {
   mensagemDaNotaEmLote,
@@ -207,6 +208,8 @@ export async function enfileirarAvisos(tx: Tx, e: {
   return n
 }
 
+const EVENTOS_DA_NOTA = new Set<EventoDaGravacao>(["nota_recebida", "nota_cadastrada", "nota_paga"])
+
 /**
  * Avisa um evento da gravação. Para chamar em segundo plano (emSegundoPlano):
  * abre a própria transação e nunca lança.
@@ -221,6 +224,8 @@ export async function avisarGravacao(
       const g = await dadosDaGravacao(tx, organizacaoId, demandaId)
       if (!g) return 0
       const mensagens = mensagensDoEvento(evento, g)
+      // Nota é só do videomaker externo (12/11/2026): interno não recebe aviso de nota.
+      if (EVENTOS_DA_NOTA.has(evento) && !await videomakerPedeNota(tx, organizacaoId, g.videomakerId)) delete mensagens.videomaker
       const pagamento = evento === "nota_recebida" && g.videomakerId && mensagens.operacao
         ? await dadosDePagamento(tx, organizacaoId, g.id, g.videomakerId) : null
       return enfileirarAvisos(tx, {
@@ -248,6 +253,7 @@ export async function avisarNotaEmLote(organizacaoId: string, demandaIds: string
       const lista = await tx.demanda.findMany({ where: { id: { in: demandaIds }, organizacaoId }, select: { codigo: true, titulo: true, clienteFinalNome: true } })
       const nome = g.videomaker?.nome?.trim().split(/\s+/)[0] ?? "O videomaker"
       const mensagens = mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`), g.linkNota)
+      if (!await videomakerPedeNota(tx, organizacaoId, g.videomakerId)) delete mensagens.videomaker
       // O valor da nota em lote é a soma; sem o valor de alguma, fica "a confirmar".
       let pagamento: DadosDePagamento | null = null
       if (g.videomakerId) {
