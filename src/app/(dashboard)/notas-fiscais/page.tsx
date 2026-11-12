@@ -92,21 +92,42 @@ export default function NotasFiscaisPage() {
 
   async function darBaixa() {
     setAgindo("baixa")
+    // Em lotes de 200 (o teto da rota) até acabar; sai da seleção só o que de
+    // fato ficou pago — o que não deu continua marcado (revisão do #148).
+    const ids = escolhidas.map((l) => l.demandaId)
+    const total = { baixadas: 0, jaPagas: 0, recusadas: [] as { codigo: string; motivo: string }[], resolvidas: [] as string[] }
+    let erro: string | null = null
     try {
-      const res = await fetch("/api/notas-fiscais/baixa", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demandaIds: escolhidas.slice(0, 200).map((l) => l.demandaId) }),
-      })
-      const json = await res.json().catch(() => ({})) as { mensagem?: string; error?: string; recusadas?: unknown[] }
-      if (!res.ok) throw new Error(json.error ?? "Não foi possível dar baixa.")
-      if (json.recusadas?.length) toast.warning(json.mensagem ?? "Algumas não deram.")
-      else toast.success(json.mensagem ?? "Pronto.")
-      setMarcadas(new Set()); setConfirmando(false)
-      await mutate()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não foi possível dar baixa.")
-    } finally { setAgindo(null) }
+      for (let i = 0; i < ids.length; i += 200) {
+        const res = await fetch("/api/notas-fiscais/baixa", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ demandaIds: ids.slice(i, i + 200) }),
+        })
+        const json = await res.json().catch(() => ({})) as { error?: string; baixadas?: string[]; jaPagas?: string[]; recusadas?: { codigo: string; motivo: string }[]; resolvidas?: string[] }
+        if (!res.ok) { erro = json.error ?? "Não foi possível dar baixa."; break }
+        total.baixadas += json.baixadas?.length ?? 0
+        total.jaPagas += json.jaPagas?.length ?? 0
+        total.recusadas.push(...(json.recusadas ?? []))
+        total.resolvidas.push(...(json.resolvidas ?? []))
+      }
+    } catch {
+      erro = "Sem conexão. Tente de novo."
+    }
+    const feitas = new Set(total.resolvidas)
+    setMarcadas((atual) => new Set([...atual].filter((id) => !feitas.has(id))))
+    setConfirmando(false)
+    const partes = [
+      total.baixadas && `${total.baixadas} ${total.baixadas === 1 ? "nota baixada" : "notas baixadas"}`,
+      total.jaPagas && `${total.jaPagas} já ${total.jaPagas === 1 ? "estava paga" : "estavam pagas"}`,
+      total.recusadas.length && `${total.recusadas.length} não ${total.recusadas.length === 1 ? "deu" : "deram"} (${total.recusadas.map((x) => `${x.codigo}: ${x.motivo}`).join("; ")})`,
+    ].filter(Boolean).join(", ")
+    if (erro) toast.error(partes ? `${partes}. Parou: ${erro} As que faltam continuam marcadas.` : erro)
+    else if (total.recusadas.length) toast.warning(`${partes}. Ninguém foi avisado.`)
+    else toast.success(`${partes}. Ninguém foi avisado.`)
+    setAgindo(null)
+    await mutate()
   }
+
 
   async function marcar(l: Linha, acao: "marcar_cadastrada" | "marcar_paga") {
     setAgindo(`${l.demandaId}:${acao}`)

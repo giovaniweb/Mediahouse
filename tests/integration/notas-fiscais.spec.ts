@@ -355,7 +355,7 @@ describe("revisão do #145", () => {
 
 describe("baixa nas notas (12/11/2026)", () => {
   const darBaixa = (demandaIds: string[]) => baixa(new NextRequest("http://localhost/api/notas-fiscais/baixa", { method: "POST", body: JSON.stringify({ demandaIds }) }))
-  async function antiga(videomakerId: string, custo?: "pendente_nf" | "nf_enviada" | "pago") {
+  async function antiga(videomakerId: string, custo?: "pendente_nf" | "nf_enviada" | "aguardando_pagamento" | "pago") {
     const id = `${p}-${randomUUID().slice(0, 6)}`
     await db.demanda.create({ data: {
       id, organizacaoId: org, codigo: `VOP-EXT-${id.slice(-6)}`, titulo: "Cobertura do mês", descricao: "Teste.",
@@ -409,6 +409,47 @@ describe("baixa nas notas (12/11/2026)", () => {
     const de_novo = await (await darBaixa([comCusto])).json() as { jaPagas: string[] }
     expect(de_novo.jaPagas).toHaveLength(1)
     expect((await db.custoVideomaker.findFirstOrThrow({ where: { demandaId: comCusto } })).pagoPorId).toBe(gente.financeira.id)
+  })
+
+  it("se o botão 'Paga' confirmar no meio da baixa, a baixa não muda quem pagou nem a data (revisão do #148)", async () => {
+    const id = await antiga(vm, "aguardando_pagamento")
+    const c = await db.custoVideomaker.findFirstOrThrow({ where: { demandaId: id } })
+    const quando = new Date("2026-11-10T12:00:00Z")
+    // O "Paga" de outra pessoa segura a linha do custo enquanto a baixa corre.
+    let soltar!: () => void
+    const segurando = new Promise<void>((ok) => { soltar = ok })
+    let travou!: () => void
+    const travado = new Promise<void>((ok) => { travou = ok })
+    const paga = db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM custos_videomaker WHERE id=${c.id} FOR UPDATE`
+      travou()
+      await segurando
+      // O mesmo UPDATE condicional do botão "Paga" (lib/nota-da-gravacao.ts).
+      await tx.custoVideomaker.updateMany({
+        where: { id: c.id, statusPagamento: "aguardando_pagamento", pago: false },
+        data: { statusPagamento: "pago", pago: true, dataPagamento: quando, pagoPorId: gente.admin.id },
+      })
+    }, { timeout: 20_000 })
+    await travado
+
+    entrar(gente.financeira)
+    const baixaPromessa = darBaixa([id])
+    // Espera a baixa ficar parada na trava do custo (ela já leu o custo sem pagamento).
+    for (let i = 0; i < 100; i++) {
+      const [{ n }] = await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`
+      if (n > 0) break
+      await new Promise((ok) => setTimeout(ok, 50))
+    }
+    soltar()
+    await paga
+    const j = await (await baixaPromessa).json() as { baixadas: string[]; jaPagas: string[]; resolvidas: string[] }
+    expect(j.baixadas).toEqual([])
+    expect(j.jaPagas).toHaveLength(1)
+    expect(j.resolvidas).toEqual([id])
+    const depois = await db.custoVideomaker.findUniqueOrThrow({ where: { id: c.id } })
+    expect(depois).toMatchObject({ pago: true, statusPagamento: "pago", pagoPorId: gente.admin.id })
+    expect(depois.dataPagamento?.toISOString()).toBe(quando.toISOString())
+    expect(await db.historicoStatus.count({ where: { demandaId: id, observacao: { startsWith: "Baixa na nota" } } })).toBe(0)
   })
 
   it("quem não é da gestão nem do financeiro não dá baixa", async () => {

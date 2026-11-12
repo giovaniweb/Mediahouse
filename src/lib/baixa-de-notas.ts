@@ -24,13 +24,17 @@ export const LIMITE_DA_BAIXA = 200
 
 type Ator = { organizacaoId: string; usuarioId: string }
 export type ResultadoDaBaixa = {
+  /** Códigos das que tiveram baixa agora. */
   baixadas: string[]
+  /** Códigos das que já estavam pagas (quem pagou não muda). */
   jaPagas: string[]
   recusadas: { codigo: string; motivo: string }[]
+  /** As gravações que agora estão pagas (baixadas + já pagas): a tela tira da seleção só estas. */
+  resolvidas: string[]
 }
 
 export async function darBaixaNasNotas(ator: Ator, demandaIds: string[]): Promise<ResultadoDaBaixa> {
-  const r: ResultadoDaBaixa = { baixadas: [], jaPagas: [], recusadas: [] }
+  const r: ResultadoDaBaixa = { baixadas: [], jaPagas: [], recusadas: [], resolvidas: [] }
   for (const demandaId of [...new Set(demandaIds)]) {
     // Uma transação por gravação: uma que não passa não desfaz as outras.
     const s = await comOrg(ator.organizacaoId, () => prisma.$transaction(async (tx) => {
@@ -43,15 +47,24 @@ export async function darBaixaNasNotas(ator: Ator, demandaIds: string[]): Promis
       const custos = await tx.custoVideomaker.findMany({ where: { organizacaoId: ator.organizacaoId, demandaId: d.id, videomakerId: d.videomakerId }, take: 2 })
       if (custos.length > 1) return { estado: "recusada" as const, codigo: d.codigo, motivo: "Há vários lançamentos nesta gravação. Resolva em Custos." }
       const [c] = custos
-      if (c && (c.pago || c.statusPagamento === "pago")) return { estado: "jaPaga" as const, codigo: d.codigo }
+      if (c && (c.pago || c.statusPagamento === "pago")) return { estado: "jaPaga" as const, codigo: d.codigo, id: d.id }
 
       const agora = new Date()
       const pago = {
         statusPagamento: "pago" as const, pago: true, dataPagamento: agora, pagoPorId: ator.usuarioId,
         cadastradoPagamentoEm: c?.cadastradoPagamentoEm ?? agora, cadastradoPagamentoPorId: c?.cadastradoPagamentoPorId ?? ator.usuarioId,
       }
+      // Condicional: o botão "Paga" pode confirmar o pagamento entre a leitura
+      // acima e esta gravação (ele não trava o card). Só grava se ainda não
+      // está paga; se já está, quem pagou não muda (revisão do #148).
+      if (c) {
+        const n = await tx.custoVideomaker.updateMany({
+          where: { id: c.id, organizacaoId: ator.organizacaoId, pago: false, statusPagamento: { not: "pago" } }, data: pago,
+        })
+        if (n.count === 0) return { estado: "jaPaga" as const, codigo: d.codigo, id: d.id }
+      }
       const custo = c
-        ? await tx.custoVideomaker.update({ where: { id: c.id, organizacaoId: ator.organizacaoId }, data: pago })
+        ? c
         : await tx.custoVideomaker.create({ data: {
             organizacaoId: ator.organizacaoId, demandaId: d.id, videomakerId: d.videomakerId, fatoOrigem: `baixa:${d.id}:${d.videomakerId}`,
             tipo: "projeto", valor: 0, valorConfirmadoEm: null, descricao: `Valor a confirmar — ${d.codigo} (baixa na nota)`,
@@ -69,11 +82,12 @@ export async function darBaixaNasNotas(ator: Ator, demandaIds: string[]): Promis
         acao: "manutencao.custos", recurso: "custo", recursoId: custo.id, correlationId: randomUUID(),
         depois: { operacao: c ? "editar" : "criar", alterados: 1, decisao: "finalizado" },
       })
-      return { estado: "baixada" as const, codigo: d.codigo }
+      return { estado: "baixada" as const, codigo: d.codigo, id: d.id }
     }))
+    if (s.estado === "recusada") { r.recusadas.push({ codigo: s.codigo, motivo: s.motivo }); continue }
     if (s.estado === "baixada") r.baixadas.push(s.codigo)
-    else if (s.estado === "jaPaga") r.jaPagas.push(s.codigo)
-    else r.recusadas.push({ codigo: s.codigo, motivo: s.motivo })
+    else r.jaPagas.push(s.codigo)
+    r.resolvidas.push(s.id)
   }
   return r
 }
