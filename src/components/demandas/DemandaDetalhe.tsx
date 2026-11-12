@@ -42,6 +42,7 @@ import {
 import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
+import { EnviarParaWhatsapp } from "@/components/demandas/EnviarParaWhatsapp"
 import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 import { LightboxDeVideo } from "@/components/video/LightboxDeVideo"
 import { nomeDoVideo, provedorDoVideo } from "@/lib/videos-da-gravacao"
@@ -54,7 +55,7 @@ import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
 import { Briefing } from "@/components/demandas/Briefing"
 import { MarcarPostado } from "@/components/demandas/MarcarPostado"
-import { EVENTO_EDICAO, EVENTO_RESPONSAVEL } from "@/lib/status"
+import { EVENTO_EDICAO, eventoDescritoPelaObservacao } from "@/lib/status"
 import { enviarDocumento, documentoMuitoGrande, ACCEPT_DOCUMENTOS } from "@/lib/upload-documento"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
 import { SelecaoChips } from "@/components/demandas/SelecaoChips"
@@ -376,6 +377,9 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   // "Escalar videomaker" no "Agora" da gravação: leva à equipe e já abre a
   // lista de videomakers com a busca (EscolhaComBusca).
   const [abrirListaVm, setAbrirListaVm] = useState(0)
+  // "Enviar para um WhatsApp" (11/11/2026): o link de entrega ou o de aprovação
+  // para um número digitado. Guarda qual dos dois está aberto.
+  const [envioWhatsapp, setEnvioWhatsapp] = useState<"entrega" | "aprovacao" | null>(null)
   function escalarVideomaker() {
     irParaAcao("equipe")
     setAbrirListaVm((n) => n + 1)
@@ -1408,6 +1412,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 aberto={moverAberto}
                 onFechar={() => setMoverAberto(false)}
               />
+              {envioWhatsapp === "entrega" && (
+                <EnviarParaWhatsapp aberto onFechar={() => setEnvioWhatsapp(null)} demandaId={demanda.id} link="entrega"
+                  telefoneDoCard={demanda.clienteFinalTelefone} nomeDoCard={demanda.clienteFinalNome} onEnviado={() => mutate()} />
+              )}
               {/* A ficha da gravação: linha do tempo, a faixa "Agora", o bloco
                   "Arquivos" (o material, a nota do videomaker e os documentos) e
                   quando, onde, quem vai e para quem — antes do briefing. A etapa
@@ -1417,6 +1425,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 podeEditar={podeEditar}
                 onSalvar={salvarCampo}
                 onEscalar={escalarVideomaker}
+                podeGerenciar={podeGerenciar}
+                gruposVideomaker={gruposCaptacao}
+                onTrocarVideomaker={(v) => atribuirRapido("videomakerId", v)}
+                onEnviarWhatsapp={() => setEnvioWhatsapp("entrega")}
                 onAvancar={avancarGravacao}
                 onConfirmarVideomaker={(aceite) => void confirmarVideomaker(aceite)}
                 onAtualizar={() => mutate()}
@@ -2291,6 +2303,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           </div>
           <div hidden={detailTab !== "aprovacao"} className={surface.tabSection}>
+          {envioWhatsapp === "aprovacao" && (
+            <EnviarParaWhatsapp aberto onFechar={() => setEnvioWhatsapp(null)} demandaId={demanda.id} link="aprovacao"
+              telefoneDoCard={demanda.telefoneSolicitante || demanda.solicitante?.telefone}
+              nomeDoCard={demanda.nomeSolicitante || demanda.solicitante?.nome} onEnviado={() => mutate()} />
+          )}
           {/* Link do cliente — para quem é de fora do NuFlow. A aprovação em si
               (prévia, Aprovar, Pedir ajuste) está embutida ao lado, na coluna
               principal; aqui fica só o caminho para mandar ao cliente. */}
@@ -2304,6 +2321,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             >
               {copiado ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copiado ? "Copiado" : "Copiar link para o cliente"}
             </button>
+            {(podeEditar || souResponsavel) && (
+              <button type="button" onClick={() => setEnvioWhatsapp("aprovacao")} className={surface.btn}>
+                <MessageCircle className="w-4 h-4" aria-hidden /> Enviar para um WhatsApp
+              </button>
+            )}
             <Link href={demanda.linkCliente} target="_blank" className={surface.linkBtn}>
               <ExternalLink className="w-3.5 h-3.5" aria-hidden /> Ver como o cliente vê
             </Link>
@@ -2364,7 +2386,8 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                 // Edição e troca de responsável não são status: entram no mesmo
                 // histórico com um marcador próprio, e o que descreve o evento é a
                 // observação ("Editou título e prazo"), não o rótulo de coluna.
-                const ehEvento = h.statusNovo === EVENTO_EDICAO || h.statusNovo === EVENTO_RESPONSAVEL
+                // O envio pelo WhatsApp e o convite (11/11/2026) seguem a mesma regra.
+                const ehEvento = eventoDescritoPelaObservacao(h.statusNovo)
                 return (
                 <div key={h.id} className="flex items-start gap-2">
                   <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0",
@@ -2379,7 +2402,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                           segue mandando no resto, intocado. */}
                       {ehCobertura
                         ? rotuloDeEvento(h.statusNovo, h.observacao)
-                        : ehEvento ? (h.observacao ?? "Editou a demanda") : statusLabel(h.statusNovo, isGrowth)}
+                        : ehEvento ? (h.observacao ?? (h.statusNovo === EVENTO_EDICAO ? "Editou a demanda" : rotuloDeEvento(h.statusNovo, null))) : statusLabel(h.statusNovo, isGrowth)}
                     </p>
                     <p className="text-[10px] text-zinc-500">
                       {format(new Date(h.createdAt), "dd/MM HH:mm", { locale: ptBR })}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, ExternalLink, Loader2, MinusCircle } from "lucide-react"
+import { ArrowRight, CheckCircle2, Circle, CircleDot, Copy, ExternalLink, Loader2, MessageCircle, MinusCircle } from "lucide-react"
 import { toast } from "sonner"
 import { hojeEmSaoPaulo } from "@/lib/datas"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
@@ -109,6 +109,7 @@ export function AgoraDaGravacao({
   onConfirmarVideomaker,
   onEscalar,
   onLinkPublico,
+  onEnviarWhatsapp,
 }: {
   job: GravacaoDoPasso
   podeEditar: boolean
@@ -119,6 +120,8 @@ export function AgoraDaGravacao({
   onEscalar: () => void
   /** Garante o link público (o do Compartilhar) e devolve o token dele. */
   onLinkPublico?: () => Promise<string | null>
+  /** "Enviar para um WhatsApp": o link de entrega a um número digitado (o card nem sempre tem o do cliente). */
+  onEnviarWhatsapp?: () => void
 }) {
   const passo = passoDaGravacao(job)
   const [salvando, setSalvando] = useState<string | null>(null)
@@ -222,6 +225,7 @@ export function AgoraDaGravacao({
       if (podeEditar) acoes = (
         <>
           {temVideo && <button type="button" className={surface.btn} onClick={() => void copiarLinkDoVideo()}><Copy className="w-3.5 h-3.5" aria-hidden />{variosVideos ? "Copiar link dos vídeos" : "Copiar link do vídeo"}</button>}
+          {temVideo && onEnviarWhatsapp && <button type="button" className={surface.btn} onClick={onEnviarWhatsapp}><MessageCircle className="w-3.5 h-3.5" aria-hidden />Enviar para um WhatsApp</button>}
           {botao("enviado", "Marcar como enviado", () => void avancar("enviado", "entregue_cliente"), true, !temVideo, "Falta o vídeo final em “Arquivos”")}
         </>
       )

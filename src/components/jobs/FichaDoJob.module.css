@@ -80,3 +80,11 @@
   .ficha { padding:16px; }
   .trilha { grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:12px; }
 }
+
+/* "Quem vai": as ações do videomaker na própria linha (11/11/2026). */
+.acoesDaLinha { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; }
+.acaoDaLinha { display:inline-flex; align-items:center; gap:5px; padding:2px 0; color:#c7b6f5; font-size:12.5px; font-weight:600; text-decoration:underline; text-underline-offset:3px; text-decoration-color:#c7b6f566; }
+.acaoDaLinha:hover { color:#ece6ff; }
+.acaoDaLinha:disabled { opacity:.5; cursor:not-allowed; }
+.acaoDaLinha svg { width:12px; height:12px; }
+.escolhaDaLinha { display:block; margin-top:8px; }
