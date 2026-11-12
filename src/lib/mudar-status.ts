@@ -13,7 +13,7 @@ import { comOrg } from "@/lib/org-contexto"
 import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
 import { emSegundoPlano } from "@/lib/notificar"
 import { resolverAlertas } from "@/lib/alertas"
-import { destinatariosDoAviso, type DadosAvisoKanban } from "@/lib/kanban-avisos"
+import { chaveDoParabens, destinatariosDoAviso, parabensDoJob, type DadosAvisoKanban } from "@/lib/kanban-avisos"
 import { registrarServicoPendente } from "@/lib/custo-servico"
 import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
@@ -344,6 +344,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       autorTelefone: autor?.telefone ?? null,
       autorNome: (autor?.nome ?? "Alguém").split(" ")[0],
       autorEhGestor: autor?.tipo === "admin" || autor?.tipo === "gestor",
+      autorEhSocial: autor?.tipo === "social",
       // `extra` vira observação OU link final — nessa ordem: um motivo de
       // impedimento escrito à mão é mais útil que um link que a mensagem
       // do papel já carrega quando precisa.
@@ -416,6 +417,12 @@ async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGe
 
     await Promise.allSettled(
       destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId, { arte: d.arte }))
+    )
+    // Parabéns de job finalizado, para quem executou (lib/kanban-avisos.ts). A
+    // gravação externa tem o dela, na conclusão (lib/avisos-gravacao-textos.ts).
+    if (!soEditor) await Promise.allSettled(
+      parabensDoJob({ ...dados, telefonesGestores: [], telefonesSocial: [] }).map((p) =>
+        sendWhatsappMessage(p.telefone, p.mensagem, demandaId, organizacaoId, { arte: p.arte, chave: chaveDoParabens(demandaId, p.telefone) }))
     )
   } catch (e) {
     console.error("[Kanban Notify]", e)

@@ -35,9 +35,10 @@ describe("quem recebe cada evento", () => {
   it("recusa é trava: operação e gestão", () => {
     expect(papeis(mensagensDoEvento("recusada", g))).toEqual(["gestao", "operacao"])
   })
-  it("concluída: cliente recebe o link; sem link, só quem pediu", () => {
+  it("concluída: cliente recebe o link; sem link, só quem pediu (e o parabéns do videomaker)", () => {
     expect(mensagensDoEvento("concluida", { ...g, linkFinal: "https://drive/final" }).cliente).toContain("https://drive/final")
-    expect(papeis(mensagensDoEvento("concluida", g))).toEqual(["solicitante"])
+    expect(papeis(mensagensDoEvento("concluida", g))).toEqual(["solicitante", "videomaker"])
+    expect(mensagensDoEvento("concluida", g).videomaker).toMatch(/^🏆 Parabéns!/)
   })
   it("concluída com dois ou mais vídeos: o cliente recebe a página com todos, não um vídeo só", () => {
     const d = { ...g, linkFinal: "https://drive/v2", linkVideoCliente: "https://nuflow.space/api/midia/v2?t=x", linkAcompanhamento: "https://nuflow.space/d/abc", videosFinais: 3 }
@@ -55,7 +56,7 @@ describe("quem recebe cada evento", () => {
   it("concluída com vários vídeos e sem página ativa: vai o vídeo, nunca aviso vazio", () => {
     const d = { ...g, linkVideoCliente: "https://nuflow.space/api/midia/v1?t=x", videosFinais: 2, linkAcompanhamento: null }
     expect(mensagensDoEvento("concluida", d).cliente).toContain("/api/midia/v1")
-    expect(papeis(mensagensDoEvento("concluida", { ...g, videosFinais: 2 }))).toEqual(["solicitante"])
+    expect(papeis(mensagensDoEvento("concluida", { ...g, videosFinais: 2 }))).toEqual(["solicitante", "videomaker"])
   })
   it("quem pediu recebe a página de acompanhamento junto da entrega", () => {
     expect(mensagensDoEvento("concluida", { ...g, linkAcompanhamento: "https://nuflow.space/d/abc" }).solicitante).toContain("https://nuflow.space/d/abc")

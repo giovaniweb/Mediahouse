@@ -1,3 +1,4 @@
+import { chaveDoParabens, parabensDoJob } from "@/lib/kanban-avisos"
 import { describe, it, expect } from "vitest"
 import {
   destinatariosDoAviso, mensagemKanban, STATUS_COM_AVISO_KANBAN,
@@ -342,9 +343,9 @@ describe("variação de texto", () => {
 
   it("toda variante de celebração identifica a demanda", () => {
     for (const cod of ["A-1", "B-2", "C-3", "D-4", "E-5", "F-6", "G-7", "H-8"]) {
-      for (const st of ["aprovado", "postado", "entregue_cliente"]) {
-        expect(mensagemKanban(st, cod, "Título", "executor")).toContain(cod)
-      }
+      expect(mensagemKanban("aprovado", cod, "Título", "executor")).toContain(cod)
+      // postado e entregue_cliente: quem fez recebe o parabéns (parabensDoJob).
+      expect(mensagemKanban("postado", cod, "Título", "executor")).toBeNull()
     }
   })
 })
@@ -366,5 +367,37 @@ describe("dica de bem-estar", () => {
         expect(m).not.toMatch(/Bebe água|alonga|Almoça|dorme/i)
       }
     }
+  })
+})
+
+describe("parabéns de job finalizado", () => {
+  const base = {
+    statusNovo: "postado", codigo: "VOP-9", titulo: "Corte", telefoneVideomaker: "5511911110001", telefoneEditor: "5511911110002",
+    telefonesExecutores: [] as string[], telefoneSolicitanteSistema: "5511911110003", telefoneSolicitanteWhatsapp: "5511911110005",
+    telefonesGestores: ["5511911110004"], telefonesSocial: ["5511911110006"], autorTelefone: "5511911110002", autorNome: "Ana", autorEhGestor: false,
+  }
+  it("audiovisual postado: videomaker e editor, cada um com o seu personagem; quem mexeu também ganha", () => {
+    const p = parabensDoJob(base)
+    expect(p.map(x => [x.papel, x.arte])).toEqual([["videomaker", "parabens_polvo"], ["editor", "parabens_capivara"]])
+    expect(p[0].mensagem).toBe("🏆 Parabéns! Corte (VOP-9) foi aprovado e está no ar. Obrigado pelo trabalho!")
+  })
+  it("quem pediu, cliente, gestão e social que não postou ficam de fora", () => {
+    const tels = parabensDoJob(base).map(x => x.telefone)
+    for (const t of ["5511911110003", "5511911110005", "5511911110004", "5511911110006"]) expect(tels).not.toContain(t)
+  })
+  it("social que marcou postado ganha o papagaio", () => {
+    const p = parabensDoJob({ ...base, autorTelefone: "5511911110006", autorEhSocial: true })
+    expect(p.at(-1)).toMatchObject({ papel: "social", arte: "parabens_papagaio" })
+  })
+  it("Growth: peça visual é camaleão, o resto é coelho; só na coluna final", () => {
+    const g = { ...base, statusNovo: "entregue_cliente", telefoneVideomaker: null, telefoneEditor: null, telefonesExecutores: ["5511911110007"], isGrowth: true }
+    expect(parabensDoJob({ ...g, tipoEntrega: "carrossel" })[0].arte).toBe("parabens_camaleao")
+    expect(parabensDoJob({ ...g, tipoEntrega: "email_marketing" })[0].arte).toBe("parabens_coelho")
+    expect(parabensDoJob({ ...g, tipoEntrega: "carrossel" })[0].mensagem).toContain("foi aprovado e entregue")
+    for (const st of ["aprovado", "editando", "edicao_finalizada", "revisao_pendente"]) expect(parabensDoJob({ ...base, statusNovo: st })).toEqual([])
+  })
+  it("mesma pessoa em dois papéis recebe um parabéns só; chave sem data", () => {
+    expect(parabensDoJob({ ...base, telefoneEditor: "551111110001" })).toHaveLength(1)
+    expect(chaveDoParabens("d1", "+55 (11) 91111-0001")).toBe("parabens:d1:11110001")
   })
 })

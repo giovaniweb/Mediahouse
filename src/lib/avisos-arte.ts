@@ -30,6 +30,7 @@ export type FamiliaArte =
   | "rel_av_ok" | "rel_av_cansado" | "rel_av_apuros"
   | "rel_gr_ok" | "rel_gr_cansado" | "rel_gr_apuros"
   | "rel_so_ok" | "rel_so_cansado" | "rel_so_apuros"
+  | "parabens_capivara" | "parabens_polvo" | "parabens_camaleao" | "parabens_coelho" | "parabens_papagaio"
 
 /**
  * `frasesDaCena`: frases próprias de uma cena (número 1…cenas). As cenas de meme
@@ -96,6 +97,30 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
   rel_so_ok: { arquivo: "23", cenas: 1, frases: ["Calendário em dia. O algoritmo agradece.", "Nada atrasado. Alguém postou isso?"] },
   rel_so_cansado: { arquivo: "24", cenas: 1, frases: ["Muito post vencendo. O papagaio já perdeu pena.", "Stories demais, horas de menos."] },
   rel_so_apuros: { arquivo: "25", cenas: 1, frases: ["Calendário com buraco. Os comentários perceberam.", "Crise nos comentários. Respira e responde."] },
+  // Parabéns de job finalizado: o personagem de quem fez, com troféu.
+  parabens_capivara: { arquivo: "26", cenas: 3, frases: [
+    "Parabéns! Nem o cliente achou defeito.", "Entregou. A capivara aplaude (devagar).", "Corte final de verdade. Sem _v2."] },
+  parabens_polvo: { arquivo: "27", cenas: 3, frases: [
+    "Parabéns! Oito braços, zero take perdido.", "Gravou, entregou, aprovaram. Raro.", "Troféu merecido. Os tentáculos agradecem."] },
+  parabens_camaleao: { arquivo: "28", cenas: 2, frases: [
+    "Parabéns! Aprovado sem aumentar a logo.", "Arte no ar. O camaleão ficou até dourado.", "Pixel perfeito. Desta vez é sério."] },
+  parabens_coelho: { arquivo: "29", cenas: 2, frases: [
+    "Parabéns! Entregue. Agora é só multiplicar.", "Job fechado. Os coelhinhos comemoram.", "Foi pro ar. O CAC que lute."] },
+  parabens_papagaio: { arquivo: "30", cenas: 2, frases: [
+    "Parabéns! Postado e aprovado. Algoritmo, faz a tua parte.", "No ar. Agora é torcer pelo engajamento.", "Mais um post entregue. Troféu de curtida."] },
+}
+
+/**
+ * Parabéns de job finalizado: o personagem da função de quem executou. Editor é a
+ * capivara, videomaker o polvo, social o papagaio; no Growth, peça visual é do
+ * camaleão e o resto do coelho. Quem pediu, cliente e gestão não ganham parabéns.
+ */
+export function arteDoParabens(papel: string, isGrowth = false, pecaVisual = true): FamiliaArte | null {
+  if (papel === "editor") return "parabens_capivara"
+  if (papel === "videomaker") return "parabens_polvo"
+  if (papel === "social") return "parabens_papagaio"
+  if (papel === "executor") return isGrowth && !pecaVisual ? "parabens_coelho" : "parabens_camaleao"
+  return null
 }
 
 /** As três situações do relatório, da melhor para a pior. */
@@ -191,6 +216,8 @@ export function familiaDaSaida(s: { chave: string; destinatarioTipo: string; ori
     // O motivo da nota em lote leva ":" ("nota_lote:3"), o que empurra o papel
     // uma posição; procurar nas partes seguintes cobre os dois formatos.
     if (partes.slice(3).some(p => PAPEIS_SEM_ARTE.has(p))) return null
+    // Gravação concluída: o videomaker ganha o parabéns dele.
+    if (partes[2] === "concluida" && partes.slice(3).includes("videomaker")) return "parabens_polvo"
     return ARTE_GRAVACAO[partes[2] ?? ""] ?? null
   }
   if (partes[0] === "convite") return "gravacao"

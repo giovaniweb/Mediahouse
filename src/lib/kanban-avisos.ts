@@ -8,7 +8,7 @@
 
 import { entregaPecaVisual } from "@/lib/growth-conteudo"
 import { variar } from "@/lib/variacao"
-import { arteDoKanban, type FamiliaArte } from "@/lib/avisos-arte"
+import { arteDoKanban, arteDoParabens, type FamiliaArte } from "@/lib/avisos-arte"
 
 export type DestinatarioKanban =
   | "videomaker" | "solicitante" | "gestor" | "editor" | "executor"
@@ -28,6 +28,14 @@ export const STATUS_COM_AVISO_KANBAN = [
 
 // Variantes de celebração — só para quem PRODUZIU. Quem pediu e a gestão
 // continuam com texto fixo: para eles o aviso é informação, não reconhecimento.
+// Edição pronta (edicao_finalizada): quem fez entregou a parte dele.
+const ENTREGUE_QUEM_FEZ = (ref: string) => [
+  `🎉 ${ref} entregue. Valeu!`,
+  `✔️ ${ref} fechada. Uma a menos na lista 😉`,
+  `🙌 Entrega de ${ref} concluída. Obrigado!`,
+  `📦 ${ref} entregue e fora da sua fila.`,
+]
+
 const APROVADO_QUEM_FEZ = (ref: string) => [
   `🏆 O cliente aprovou ${ref}. Ótimo trabalho!`,
   `✅ Aprovado! ${ref} passou sem ajuste. Mandou bem 👏`,
@@ -35,19 +43,6 @@ const APROVADO_QUEM_FEZ = (ref: string) => [
   `💚 O cliente gostou de ${ref}. Valeu pelo capricho!`,
 ]
 
-const PUBLICADO_QUEM_FEZ = (ref: string) => [
-  `🎉 ${ref} foi publicado. Obrigado pelo trabalho!`,
-  `🚀 ${ref} está no ar. Seu trabalho já está rodando por aí!`,
-  `📢 Publicado: ${ref}. Mais uma entregue 👊`,
-  `✨ ${ref} saiu do forno e foi pro ar. Valeu!`,
-]
-
-const ENTREGUE_QUEM_FEZ = (ref: string) => [
-  `🎉 ${ref} entregue. Valeu!`,
-  `✔️ ${ref} fechada. Uma a menos na lista 😉`,
-  `🙌 Entrega de ${ref} concluída. Obrigado!`,
-  `📦 ${ref} entregue e fora da sua fila.`,
-]
 
 /**
  * Texto do aviso para um papel, ou null quando esse papel não precisa saber
@@ -160,17 +155,14 @@ export function mensagemKanban(
       editor: `🔄 O cliente pediu ajustes em ${ref}${extra ? `:\n\n_"${extra}"_` : "."}\n\nO retorno completo está no sistema.`,
       executor: `🔄 O cliente pediu ajustes em ${ref}${extra ? `:\n\n_"${extra}"_` : "."}\n\nO retorno completo está no sistema.`,
     },
+    // Quem fez recebe o parabéns (parabensDoJob, abaixo), não este aviso.
     postado: {
-      videomaker: v(PUBLICADO_QUEM_FEZ(ref)),
       solicitante: `🎉 ${ref} está no ar!`,
-      editor: v(PUBLICADO_QUEM_FEZ(ref)),
-      executor: v(PUBLICADO_QUEM_FEZ(ref)),
     },
     // "Finalizado" no kanban do Growth — a coluna onde o card morre. Sem isto,
     // encerrar uma demanda de Growth não avisava ninguém.
     entregue_cliente: {
       solicitante: `✅ ${ref} foi finalizada e entregue. Obrigado!`,
-      executor: v(ENTREGUE_QUEM_FEZ(ref)),
     },
     impedimento: {
       solicitante: `⚠️ Travamos em ${ref} e precisamos falar com você. Nossa equipe entra em contato em breve.`,
@@ -215,6 +207,8 @@ export interface DadosAvisoKanban {
   autorTelefone: string | null
   autorNome: string
   autorEhGestor: boolean
+  /** Quem mexeu é da Social Media: ao marcar postado, ganha o parabéns do papagaio. */
+  autorEhSocial?: boolean
   extra?: string | null
   /** Demanda de Growth: o aviso fala em arte, não em vídeo. */
   isGrowth?: boolean
@@ -288,4 +282,48 @@ export function destinatariosDoAviso(d: DadosAvisoKanban): AvisoDestinatario[] {
   }
 
   return saida
+}
+
+// ─── Parabéns de job finalizado ───────────────────────────────────────────────
+//
+// Pedido do Giovani (12/11/2026): a cada job aprovado e finalizado, quem executou
+// recebe um parabéns com o meme do personagem da função dele. "Finalizado" é a
+// coluna onde o card termina: postado (audiovisual) ou entregue_cliente (Growth).
+// Substitui os "obrigado/publicado/entregue" que quem fez recebia nessas colunas,
+// então não sai mensagem a mais.
+//
+// Diferente dos outros avisos, aqui QUEM MEXEU também recebe: quem finaliza o
+// próprio card fez o trabalho. Quem pediu, cliente e gestão não entram (a não ser
+// que a mesma pessoa também tenha executado). Sai uma vez na vida por pessoa e
+// job: o envio usa chaveDoParabens, que não muda de um dia para o outro.
+
+export const STATUS_DE_PARABENS = ["postado", "entregue_cliente"] as const
+
+export function parabensDoJob(d: DadosAvisoKanban): AvisoDestinatario[] {
+  if (!(STATUS_DE_PARABENS as readonly string[]).includes(d.statusNovo)) return []
+  const ref = `${d.titulo} (${d.codigo})`
+  const fim = d.statusNovo === "postado" ? "foi aprovado e está no ar" : "foi aprovado e entregue"
+  const mensagem = `🏆 Parabéns! ${ref} ${fim}. Obrigado pelo trabalho!`
+  const pecaVisual = d.tipoEntrega === undefined || entregaPecaVisual(d.tipoEntrega)
+  const chave = (t: string) => t.replace(/\D/g, "").slice(-8)
+  const ja = new Set<string>()
+  const saida: AvisoDestinatario[] = []
+  const add = (telefone: string | null | undefined, papel: AvisoDestinatario["papel"]) => {
+    const k = telefone ? chave(telefone) : ""
+    if (!telefone || k.length < 8 || ja.has(k)) return
+    const arte = arteDoParabens(papel, d.isGrowth ?? false, pecaVisual)
+    if (!arte) return
+    ja.add(k)
+    saida.push({ telefone, mensagem, papel, arte })
+  }
+  add(d.telefoneVideomaker, "videomaker")
+  add(d.telefoneEditor, "editor")
+  for (const tel of d.telefonesExecutores) add(tel, "executor")
+  if (d.statusNovo === "postado" && d.autorEhSocial) add(d.autorTelefone, "social")
+  return saida
+}
+
+/** Uma vez na vida por job e pessoa: sem data, para não repetir se o card voltar e avançar de novo. */
+export function chaveDoParabens(demandaId: string, telefone: string): string {
+  return `parabens:${demandaId}:${telefone.replace(/\D/g, "").slice(-8)}`
 }
