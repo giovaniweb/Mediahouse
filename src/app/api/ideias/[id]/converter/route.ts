@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { criarComCodigoUnico } from "@/lib/codigo-demanda"
+import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
+import { departamentoValido } from "@/lib/departamentos"
 
 export async function POST(
   req: NextRequest,
@@ -30,6 +32,15 @@ export async function POST(
     descricao += `\n\nReferência: ${ideia.linkReferencia}`
   }
 
+  // A ideia vira pedido de vídeo ao Audiovisual: o departamento é o do
+  // "Nova demanda" (lib/departamento-do-pedido.ts). Antes caía em "growth", o
+  // do quadro de arte, porque a tela de Ideias manda o corpo vazio. Um
+  // departamento mandado de propósito vale se a empresa o aceita.
+  const tipoVideo: string = body.tipoVideo || "social_media"
+  const departamento = typeof body.departamento === "string" && await departamentoValido(body.departamento, organizacaoId)
+    ? body.departamento
+    : departamentoDoPedido(tipoVideo === "cobertura_evento" ? "cobertura" : "video")
+
   // Mesmo código das demandas internas (VOP-AA-####). O "próximo VID-####"
   // de antes lia a última demanda criada, de qualquer prefixo — quase sempre
   // VOP-… —, o parseInt dava NaN e o código saía "VID-0NaN". A primeira
@@ -40,8 +51,8 @@ export async function POST(
       codigo,
       titulo: body.titulo || ideia.titulo,
       descricao,
-      departamento: body.departamento || "growth",
-      tipoVideo: body.tipoVideo || "social_media",
+      departamento,
+      tipoVideo,
       cidade: body.cidade || "Remoto",
       prioridade: "normal",
       classificacao: ideia.classificacao || null,

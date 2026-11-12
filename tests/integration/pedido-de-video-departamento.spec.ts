@@ -15,6 +15,7 @@ vi.mock("@/lib/notificar", () => ({ emSegundoPlano: () => undefined }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET, POST } from "@/app/api/demandas/route"
+import { POST as converterIdeia } from "@/app/api/ideias/[id]/converter/route"
 import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
 
 const p = `pedido-dep-${randomUUID().slice(0, 8)}`, org = `${p}-org`
@@ -66,6 +67,7 @@ afterAll(async () => {
   await db.demandaResponsavel.deleteMany({ where: { demandaId: { in: ids } } })
   await db.saidaWhatsapp.deleteMany({ where: { organizacaoId: org } })
   await db.eventoAuditoria.deleteMany({ where: { organizacaoId: org } }).catch(() => undefined)
+  await db.ideiaVideo.deleteMany({ where: { organizacaoId: org } })
   await db.demanda.deleteMany({ where: { organizacaoId: org } })
   await db.configParametro.deleteMany({ where: { organizacaoId: org } })
   await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: org } })
@@ -93,5 +95,31 @@ describe("pedido de vídeo pelo Nova demanda", () => {
       dataLimite: new Date(Date.now() + 10 * 86_400_000).toISOString(),
     })
     expect((await db.demanda.findUniqueOrThrow({ where: { id }, select: { departamento: true } })).departamento).toBe("eventos")
+  })
+})
+
+// A tela de Ideias converte com o corpo vazio, e a rota caía em "growth".
+describe("ideia convertida em demanda", () => {
+  async function converter(corpo: object) {
+    const ideia = await db.ideiaVideo.create({ data: { organizacaoId: org, titulo: `Ideia ${randomUUID().slice(0, 6)}` } })
+    const res = await converterIdeia(
+      new NextRequest(`http://localhost/api/ideias/${ideia.id}/converter`, { method: "POST", body: JSON.stringify(corpo) }),
+      { params: Promise.resolve({ id: ideia.id }) },
+    )
+    expect(res.status).toBeLessThan(300)
+    const { demandaId: id } = (await res.json()) as { demandaId: string }
+    return db.demanda.findUniqueOrThrow({ where: { id }, select: { departamento: true, area: true, tipoVideo: true } })
+  }
+
+  it("pela tela (corpo vazio): Audiovisual, não Growth", async () => {
+    sessao(pessoas.admin, "admin")
+    expect(await converter({})).toEqual({ departamento: "audiovisual", area: "audiovisual", tipoVideo: "social_media" })
+  })
+
+  it("cobertura vai para Eventos; departamento mandado de propósito vale se a empresa aceita", async () => {
+    sessao(pessoas.admin, "admin")
+    expect((await converter({ tipoVideo: "cobertura_evento" })).departamento).toBe("eventos")
+    expect((await converter({ departamento: "rh" })).departamento).toBe("rh")
+    expect((await converter({ departamento: "inventado" })).departamento).toBe("audiovisual")
   })
 })
