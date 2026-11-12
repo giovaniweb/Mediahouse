@@ -13,9 +13,9 @@ import { valorConhecido } from "@/lib/pagamentos"
 //     Externas"). Quem só aprova (`verAprovacoes`) continua sem PIX nem valor,
 //     como no hotfix de 02/10/2026 (PR #73).
 //   - Onde vai inteiro: e-mail e WhatsApp (a mensagem fica cifrada na fila e
-//     some na retenção). No sino vai só o tipo e o final da chave: o sino grava
-//     o texto em claro (alertas_ia), e a chave é guardada cifrada justamente
-//     para não ficar legível em consulta direta. A página Notas fiscais mostra.
+//     some na retenção). No sino, nada: o texto fica em claro em alertas_ia, e
+//     a central de alertas, os painéis e o assistente leem alertas de outras
+//     pessoas sem olhar o financeiro (revisão do #145). A página Notas fiscais mostra.
 //   - Nunca em log: nada aqui escreve no console.
 
 type Tx = Prisma.TransactionClient
@@ -92,12 +92,6 @@ export function linhasDoPagamento(p: DadosDePagamento): [string, string][] {
   if (p.cpfCnpj) linhas.push([soDigitos(p.cpfCnpj).length === 14 ? "CNPJ da nota" : "CPF da nota", p.cpfCnpj])
   if (p.razaoSocial) linhas.push(["Razão social", p.razaoSocial])
   return linhas
-}
-
-/** Uma linha curta, sem a chave inteira: o sino. */
-export function resumoDoPagamento(p: DadosDePagamento): string {
-  const pix = pixResumido(p)
-  return [`Valor: ${rotuloDoValor(p)}`, pix ? `PIX ${pix}` : p.dadosBancarios ? "Pagamento por dados bancários" : "PIX não cadastrado"].join(" · ")
 }
 
 function decifrar(v: string | null | undefined): string | null {

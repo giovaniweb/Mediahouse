@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
     const demandas = await prisma.demanda.findMany({
       where: {
         organizacaoId,
-        tipoGravacao: { not: null },
+        // Gravação externa = videomaker externo escalado (a régua de Jobs ×
+        // Demandas), com ou sem tipoGravacao: os cards antigos de cobertura não
+        // têm o campo e também pedem nota (revisão do #145).
         videomakerId: videomakerId ?? { not: null },
         // Videomaker interno não manda nota (12/11/2026): nunca entra aqui.
         videomaker: whereVideomakerPedeNota(organizacaoId),
@@ -108,7 +110,7 @@ export async function GET(req: NextRequest) {
 
   // A lista do filtro não encolhe com o próprio filtro: todos os videomakers das gravações da página.
   const comGravacao = await comOrg(organizacaoId, () => prisma.demanda.findMany({
-    where: { organizacaoId, tipoGravacao: { not: null }, videomakerId: { not: null }, videomaker: whereVideomakerPedeNota(organizacaoId), statusInterno: { in: STATUS_DO_PAINEL } },
+    where: { organizacaoId, videomakerId: { not: null }, videomaker: whereVideomakerPedeNota(organizacaoId), statusInterno: { in: STATUS_DO_PAINEL } },
     select: { videomaker: { select: { id: true, nome: true } } }, distinct: ["videomakerId"],
   }))
   const videomakers = comGravacao.flatMap((d) => d.videomaker ? [d.videomaker] : []).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
