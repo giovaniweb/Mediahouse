@@ -113,6 +113,11 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
   }
 }
 
+/** O parabéns de gravação concluída, para o videomaker (lib/avisos-gravacao-textos.ts). */
+export function ehParabensDaGravacao(motivo: string, papel: string): boolean {
+  return motivo === "concluida" && papel === "videomaker"
+}
+
 // O primeiro papel que alcança um telefone é o que fala com ele.
 const ORDEM: PapelDoAviso[] = ["videomaker", "cliente", "operacao", "gestao", "solicitante"]
 
@@ -123,14 +128,14 @@ export async function enfileirarAvisos(tx: Tx, e: {
   /** O que é este aviso (evento ou regra), para a chave de não repetir. */
   motivo: string
   mensagens: Mensagens
-  /** Quem fez a mudança: não recebe o aviso dela. */
+  /** Quem fez a mudança: não recebe o aviso dela (o parabéns é a exceção). */
   autorUsuarioId?: string | null
 }): Promise<number> {
   const g = e.gravacao
   const autor = e.autorUsuarioId
     ? telefoneCompleto((await tx.usuario.findUnique({ where: { id: e.autorUsuarioId }, select: { telefone: true } }))?.telefone)
     : null
-  const ja = new Set<string>(autor ? [autor] : [])
+  const ja = new Set<string>()
   const destinos: Record<PapelDoAviso, () => Promise<string[]>> = {
     videomaker: async () => (g.videomakerTelefone ? [g.videomakerTelefone] : []),
     cliente: async () => (g.clienteTelefone ? [g.clienteTelefone] : []),
@@ -143,13 +148,19 @@ export async function enfileirarAvisos(tx: Tx, e: {
   for (const papel of ORDEM) {
     const texto = e.mensagens[papel]
     if (!texto) continue
+    const parabens = ehParabensDaGravacao(e.motivo, papel)
     for (const telefone of await destinos[papel]()) {
       if (ja.has(telefone)) continue
+      // O parabéns vai também para quem concluiu a própria gravação, como no kanban.
+      if (telefone === autor && !parabens) continue
       ja.add(telefone)
       // Quem não é pessoa cadastrada não recebe — a fila recusa número solto.
       if (papel !== "cliente" && !await destinoAutorizado(tx, e.organizacaoId, telefone)) continue
       const hash = createHash("sha256").update(telefone).digest("hex").slice(0, 12)
-      const chave = `grav:${g.id}:${e.motivo}:${dia}:${papel}:${hash}`.slice(0, 128)
+      // O parabéns sai uma vez na vida por gravação e pessoa: no lugar do dia vai
+      // "unico", e reabrir e concluir de novo outro dia não repete. O formato
+      // grav:<id>:concluida:…:videomaker é o que a categoria "parabens" reconhece.
+      const chave = `grav:${g.id}:${e.motivo}:${parabens ? "unico" : dia}:${papel}:${hash}`.slice(0, 128)
       // Já saiu hoje: não repete, e não conta como enviado.
       if (await tx.saidaWhatsapp.findUnique({ where: { organizacaoId_chave: { organizacaoId: e.organizacaoId, chave } }, select: { id: true } })) continue
       await criarSaida(tx, {

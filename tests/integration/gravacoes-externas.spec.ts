@@ -440,6 +440,41 @@ describe("avisos das gravações", () => {
     }
   })
 
+  const chaves = async (demandaId: string) => (await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: demandaId }, select: { chave: true, destinatarioTipo: true } }))
+
+  it("concluída: o parabéns do videomaker sai uma vez na vida, sem data na chave; os outros avisos seguem por dia", async () => {
+    const id = await gravacao("captacao_realizada")
+    await avisarGravacao(org, id, "concluida")
+    await avisarGravacao(org, id, "concluida") // reaberta e concluída de novo
+    const parabens = (await chaves(id)).filter((x) => x.destinatarioTipo === "videomaker")
+    expect(parabens).toHaveLength(1)
+    expect(parabens[0].chave).toMatch(new RegExp(`^grav:${id}:concluida:unico:videomaker:`))
+    // Prova contrária: um aviso comum (pronta) leva o dia na chave e pode repetir amanhã.
+    const outra = await gravacao("captacao_realizada")
+    await avisarGravacao(org, outra, "pronta")
+    expect((await chaves(outra))[0].chave).toContain(`:pronta:${hojeEmSaoPaulo()}:`)
+  })
+
+  it("o videomaker que conclui a própria gravação também ganha o parabéns; nos outros avisos o autor fica de fora", async () => {
+    const vmLogin = `${p}-vm-autor`
+    await db.usuario.create({ data: { id: vmLogin, nome: "Matheus", tipo: "videomaker", telefone: telVm, senhaHash: "sem-login" } })
+    await db.videomaker.update({ where: { id: vm }, data: { usuarioId: vmLogin } })
+    try {
+      const id = await gravacao("captacao_realizada")
+      await avisarGravacao(org, id, "concluida", vmLogin)
+      expect((await chaves(id)).some((x) => x.destinatarioTipo === "videomaker")).toBe(true)
+      // Prova contrária: o mesmo videomaker, autor de "nota_paga", não recebe o aviso da própria ação.
+      const outra = await gravacao("captacao_realizada")
+      await avisarGravacao(org, outra, "nota_paga", vmLogin)
+      expect(await chaves(outra)).toEqual([])
+      await avisarGravacao(org, outra, "nota_paga")
+      expect((await chaves(outra)).map((x) => x.destinatarioTipo)).toEqual(["videomaker"])
+    } finally {
+      await db.videomaker.update({ where: { id: vm }, data: { usuarioId: null } })
+      await db.usuario.delete({ where: { id: vmLogin } })
+    }
+  })
+
   it("rotina diária: véspera para o videomaker e gravação sem videomaker para a gestão", async () => {
     const amanha = somarDias(hojeEmSaoPaulo(), 1)
     const vespera = await gravacao("captacao_agendada")
