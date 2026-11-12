@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { areaDoGestor, arteDoKanban, arteDoRelatorio, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, humorDoBriefing, humorDoSemanal, type FamiliaArte } from "@/lib/avisos-arte"
+import { combinacoesDaFamilia, areaDoGestor, arteDoKanban, arteDoRelatorio, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, humorDoBriefing, humorDoSemanal, type FamiliaArte } from "@/lib/avisos-arte"
 import { destinatariosDoAviso, STATUS_COM_AVISO_KANBAN } from "@/lib/kanban-avisos"
 import { imagemDoAviso } from "@/lib/avisos-arte-imagem"
 
@@ -15,8 +15,12 @@ afterEach(() => vi.unstubAllEnvs())
 describe("artes dos avisos: catálogo", () => {
   it("toda cena que o sorteio pode escolher existe em public/avisos/cenas", () => {
     for (const f of FAMILIAS) {
-      const { arquivo, cenas } = FAMILIAS_ARTE[f]
-      for (let k = 1; k <= cenas; k++) expect(existsSync(join("public/avisos/cenas", `${arquivo}-${k}.jpg`)), `${arquivo}-${k}`).toBe(true)
+      const { arquivo, cenas, arquivos } = FAMILIAS_ARTE[f]
+      if (arquivos) expect(arquivos.length, f).toBe(cenas)
+      for (let k = 1; k <= cenas; k++) {
+        const nome = arquivos?.[k - 1] ?? `${arquivo}-${k}`
+        expect(existsSync(join("public/avisos/cenas", `${nome}.jpg`)), nome).toBe(true)
+      }
       expect(FAMILIAS_ARTE[f].frases.length).toBeGreaterThan(1)
     }
   })
@@ -27,6 +31,27 @@ describe("artes dos avisos: catálogo", () => {
     expect(escolhas.size).toBeGreaterThan(5)
     const cenas = new Set(Array.from({ length: 60 }, (_, i) => escolherArte("design", `d${i}`).arquivo))
     expect(cenas.size).toBe(7)
+  })
+
+  it("parabéns: centenas de combinações, colegas de outra área de visita falando por si", () => {
+    for (const f of ["parabens_capivara", "parabens_polvo", "parabens_camaleao", "parabens_coelho", "parabens_papagaio"] as const)
+      expect(combinacoesDaFamilia(f), f).toBeGreaterThanOrEqual(100)
+    const vistos = new Map<string, Set<string>>()
+    for (let i = 0; i < 400; i++) {
+      const e = escolherArte("parabens_coelho", `p${i}`)
+      if (!vistos.has(e.arquivo)) vistos.set(e.arquivo, new Set())
+      vistos.get(e.arquivo)!.add(e.frase)
+      // A cena do polvo (27-*) só sai com fala do polvo; a do próprio coelho (29-*), nunca com fala de visita.
+      if (e.arquivo.startsWith("27-")) expect(e.frase).toMatch(/polvo|videomaker|audiovisual|Paraaaa-béns|Parabéns!/)
+      if (e.arquivo.startsWith("29-")) expect(e.frase).not.toMatch(/Vim lá do|Até o|aprovou\. E/)
+    }
+    expect([...vistos.keys()].some(k => k.startsWith("27-"))).toBe(true) // o polvo foi até o Growth
+    expect([...vistos.keys()].some(k => k.startsWith("29-"))).toBe(true)
+    expect(FAMILIAS_ARTE.parabens_coelho.frases).toContain("Parabéns! Nota 2. Mas é um 2 bonito.")
+    const visitaDoPolvo = FAMILIAS_ARTE.parabens_coelho.frasesDaCena![FAMILIAS_ARTE.parabens_coelho.arquivos!.indexOf("27-1") + 1]
+    expect(visitaDoPolvo).toContain("Paraaaa-béns! Tão bom que podia ser até um videomaker.")
+    for (const f of FAMILIAS) for (const fr of [...FAMILIAS_ARTE[f].frases, ...Object.values(FAMILIAS_ARTE[f].frasesDaCena ?? {}).flat()])
+      expect(fr.length, fr).toBeLessThanOrEqual(64)
   })
 
   it("cena de meme de IA só sai com a frase dela", () => {
