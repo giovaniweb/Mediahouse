@@ -241,9 +241,21 @@ export function projetarPorForma(valor: unknown, forma: FormaDaProjecao): unknow
  * para a parceira, o pedido é da EMPRESA, não da pessoa da dona. As relações
  * que a tela espera como lista voltam vazias, para o formato não mudar.
  */
-export function projecaoDoEspelho(demanda: object, nomeDona: string): Record<string, unknown> {
+export function projecaoDoEspelho(
+  demanda: object,
+  nomeDona: string,
+  opcoes: { paraExecutor?: boolean } = {}
+): Record<string, unknown> {
+  const projetado = projetarPorForma(demanda, FORMA_DO_ESPELHO) as Record<string, unknown>
+  // Quem só FAZ a gravação pela parceira (o X) vê o que o videomaker vê no link
+  // do convite: data, local, briefing, kit, links. A conversa entre as duas
+  // empresas fica com a gestão da parceira.
+  if (opcoes.paraExecutor) {
+    delete projetado.comentarios
+    if (projetado._count && typeof projetado._count === "object") projetado._count = { arquivos: (projetado._count as { arquivos?: number }).arquivos }
+  }
   return {
-    ...(projetarPorForma(demanda, FORMA_DO_ESPELHO) as Record<string, unknown>),
+    ...projetado,
     solicitante: { id: "", nome: nomeDona, email: null },
     responsaveis: [],
     produtos: [],

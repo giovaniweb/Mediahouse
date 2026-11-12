@@ -326,3 +326,47 @@ describe("projecaoDoEspelho — o que a parceira lê do card da dona", () => {
   })
 })
 
+// ─────────────────────────────────────────────────────────────────────────────
+describe("o X: quem a parceira escolheu para a gravação (12/11/2026)", () => {
+  const JOB = {
+    videomakerId: "vm-gabriel", editorId: null,
+    linkBrutos: null, linkFolderBrutos: null, linkFinal: null, motivoImpedimento: null,
+  }
+  const x = (opcoes: { executorDoEspelho?: boolean; origem?: "dona" | "espelho" } = {}) => ({
+    id: "u-x", papel: "videomaker", videomakerId: "vm-x", origem: opcoes.origem ?? "espelho" as const,
+    executorDoEspelho: opcoes.executorDoEspelho ?? true,
+    permissoes: permissaoEfetiva({
+      membro: { papel: "videomaker", organizacaoId: "org-gh", statusUsuario: "ativo" },
+      organizacaoId: "org-gh",
+    }),
+  })
+  const guardar = (novoStatus: string, usuario = x(), statusAtual: StatusInterno = "videomaker_aceitou", entrada = {}) =>
+    podeTransicionar({ statusAtual, novoStatus, usuario, demanda: JOB, entrada })
+
+  it("capta e entrega: finalizar a captação e mandar os brutos", () => {
+    expect(guardar("captacao_realizada").ok).toBe(true)
+    expect(guardar("brutos_enviados", x(), "captacao_realizada", { linkBrutos: "https://drive/x" }).ok).toBe(true)
+  })
+
+  it("não aceita nem recusa a gravação: isso é de quem a dona escalou", () => {
+    for (const alvo of ["videomaker_aceitou", "videomaker_recusou"]) {
+      const r = guardar(alvo, x(), "videomaker_notificado")
+      expect(r.ok, alvo).toBe(false)
+      expect(r.codigo).toBe("fora_do_seu_papel")
+    }
+  })
+
+  it("não aprova, não edita e não entrega ao cliente", () => {
+    for (const alvo of ["editando", "aprovado", "entregue_cliente", "encerrado"]) expect(guardar(alvo).ok, alvo).toBe(false)
+  })
+
+  it("sem ter sido escolhido, o card não é dele", () => {
+    const r = guardar("captacao_realizada", x({ executorDoEspelho: false }))
+    expect(r.ok).toBe(false)
+    expect(r.codigo).toBe("nao_e_seu_job")
+  })
+
+  it("a marca de executor não vale fora do espelho", () => {
+    expect(guardar("captacao_realizada", x({ origem: "dona" })).ok).toBe(false)
+  })
+})

@@ -23,6 +23,9 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
   "termos.aceite": "Termos e Política de Privacidade aceitos",
   "espelho.mover": "Card de empresa parceira movido",
+  "espelho.executor": "Escolhido quem faz o card de empresa parceira",
+  "espelho.captacao": "Captação iniciada em card de empresa parceira",
+  "espelho.entrega": "Material entregue em card de empresa parceira",
 }
 const resultados: Record<string,string> = { intencao: "iniciada", sucesso: "concluída", falha: "falhou", negado: "negada" }
 

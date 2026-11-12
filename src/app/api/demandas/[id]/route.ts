@@ -29,6 +29,7 @@ import { demandaNoEscopo } from "@/lib/escopo-demanda"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { avisarMaterialSalvoNoCard } from "@/lib/avisos-entrega-videomaker"
 import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
+import { executorDaPessoa } from "@/lib/executor-espelho"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -167,9 +168,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     : null
 
   const completo = { ...demanda, videomaker: demanda.videomaker ? videomaker : null, ...pagamento, conviteEntrega }
+  // A pessoa é quem a parceira escolheu para fazer o card (o X da GH)? A tela
+  // mostra a ela as ações de captação e entrega.
+  const souExecutorDoEspelho = !ehDona && !!(await executorDaPessoa(session.user.id, acesso.organizacaoId, id))
   return NextResponse.json({
     // A parceira lê o card pela lista branca (lib/compartilhamento.ts), nunca inteiro.
-    demanda: ehDona ? completo : projecaoDoEspelho(completo, acesso.nomeContraparte ?? "Empresa parceira"),
+    // Quem só faz a gravação pela parceira (não é gestão dela) não vê a conversa
+    // entre as duas empresas.
+    demanda: ehDona ? completo : projecaoDoEspelho(completo, acesso.nomeContraparte ?? "Empresa parceira", { paraExecutor: !ehGestor(session) }),
     quadro: quadroDoCard({ ...demanda, contratoVideomaker, espelhoAutomatico: acesso.papel === "espelho" && !!acesso.porVideomakerId }),
     contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
@@ -177,6 +183,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     // ele que a rota já usou para autorizar.
     espelho: espelhoDoCard(demanda.compartilhamentos, acesso.organizacaoId),
     papelNoCard: acesso.papel,
+    souExecutorDoEspelho,
     ultimaEntrega,
     podeAprovarEntrega: podeAprovar,
   })

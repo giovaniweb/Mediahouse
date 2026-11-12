@@ -11,6 +11,7 @@ import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { requireDemandaAcesso, projecaoDoEspelho } from "@/lib/compartilhamento"
 import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
+import { executorDaPessoa, autorNaDona } from "@/lib/executor-espelho"
 import { comOrg } from "@/lib/org-contexto"
 import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -83,7 +84,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   //
   // Ver src/lib/job-transicoes.ts para por que a sequência é REGISTRADA e não
   // recusada: `TRANSICOES_VALIDAS` bloquearia 84,5% da operação real.
-  const [vinculo, perfilVideomaker] = await Promise.all([
+  const [vinculo, perfilVideomaker, executorDoEspelho] = await Promise.all([
     // Permissão EFETIVA: registro explícito vence; sem registro, preset do
     // papel na empresa; sem como determinar, `null` — e `null` nega.
     // Devolve também o papel LIDO DO BANCO: a sessão não serve como autoridade
@@ -93,6 +94,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
     // null, que a guarda trata como "não determinável" e NEGA.
     permissoesEfetivas(session.user.id, acesso.organizacaoId),
     prisma.videomaker.findFirst({ where: { usuarioId: session.user.id }, select: { id: true } }).catch(() => null),
+    // Quem a parceira escolheu para fazer o card (o X da GH): capta e entrega.
+    papelNoCard === "espelho" ? executorDaPessoa(session.user.id, acesso.organizacaoId, id) : Promise.resolve(null),
   ])
 
   const veredito = podeTransicionar({
@@ -104,6 +107,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       permissoes: vinculo?.permissoes ?? null,
       videomakerId: perfilVideomaker?.id ?? null,
       origem: papelNoCard,
+      executorDoEspelho: !!executorDoEspelho,
     },
     demanda: {
       videomakerId: demandaAtual.videomakerId,
@@ -214,7 +218,9 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           demandaId: id,
           statusAnterior: demandaAtual.statusInterno,
           statusNovo: statusInterno,
-          usuarioId: doEspelho ? null : session.user.id,
+          // Na dona: quem ela escalou, no espelho automático (o Gabriel, "pela
+          // GH"); ninguém na terceirização manual (lib/executor-espelho.ts).
+          usuarioId: autorNaDona(acesso, session.user.id, demandaAtual),
           origem,
           observacao: observacaoNaDona,
         },
@@ -393,7 +399,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
     // O material que o próprio videomaker marcou como entregue (logado, pelo
     // card): a operação recebe também e-mail e sino. Se foi a equipe que
     // moveu, ela já sabe — fica só o WhatsApp de cima para os outros.
-    if (evento === "material" && demandaAtual.videomaker?.usuarioId && demandaAtual.videomaker.usuarioId === session.user.id) {
+    if (evento === "material" && demandaAtual.videomaker?.usuarioId && (demandaAtual.videomaker.usuarioId === session.user.id || executorDoEspelho)) {
       emSegundoPlano(() => avisarEntregaDoVideomaker(organizacaoId, id, { completo: true, autorUsuarioId: session.user.id }), "aviso-entrega-videomaker")
     }
 

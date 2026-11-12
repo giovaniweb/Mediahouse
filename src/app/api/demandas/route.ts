@@ -252,7 +252,7 @@ export async function GET(req: NextRequest) {
     const espelho = espelhoDoCard(compartilhamentos, organizacaoId)
     const card = { ...d, estadoHistorico: estadoHistorico(d.statusVisivel, d.finalizadaEm) }
     if (d.organizacaoId === organizacaoId) return { ...card, espelho }
-    return { ...projecaoDoEspelho(card, espelho?.contraparte ?? "Empresa parceira"), espelho }
+    return { ...projecaoDoEspelho(card, espelho?.contraparte ?? "Empresa parceira", { paraExecutor: !ehGestor(session) }), espelho }
   })
 
   return NextResponse.json({ demandas: comEspelho, ...(usePagination ? { total } : {}) })
