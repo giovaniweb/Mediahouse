@@ -196,6 +196,9 @@ const ESCALARES_DO_ESPELHO = [
   "objetivo", "plataforma", "dataEvento", "localEvento", "cobertura", "mensagemPrincipal", "detalhesEntrega",
   "linkBrutos", "linkFinal", "linkFolderBrutos", "linkFolderFinal",
   "localGravacao", "edicaoPor", "tipoGravacao", "temBrinde", "brinde", "levar", "referencia",
+  // Só o NOME de quem recebe a gravação, como no link do convite. Telefone e
+  // e-mail do cliente final ficam com a dona.
+  "clienteFinalNome",
   "motivoImpedimento", "thumbnailUrl", "posicaoKanban",
   "videomakerId", "editorId",
   "dataLimite", "dataCaptacao", "createdAt", "updatedAt", "finalizadaEm",
