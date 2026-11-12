@@ -60,13 +60,15 @@ export function alternar9oDigito(numero: string): string | null {
 /** Adaptador legado: persiste intenção. "aguardando" NÃO significa entrega.
  * Regras O04 devem fornecer chave própria na mesma transação do fato.
  * `opcoes.arte`: a família da arte que acompanha o aviso, de lib/avisos-arte.ts. Só vale para a equipe.
+ * `opcoes.chave`: chave própria para o aviso sair uma vez só na vida (o parabéns
+ * de um job), em vez da de hoje, que repete no dia seguinte.
  */
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null,
-  opcoes?: { arte?: FamiliaArte | null }) {
+  opcoes?: { arte?: FamiliaArte | null; chave?: string }) {
   const orgId=await resolverOrgEnvio(demandaId,organizacaoId)
   if(!orgId) return null
   try {
-    const chave=chaveComArte(opcoes?.arte,createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex"))
+    const chave=chaveComArte(opcoes?.arte,opcoes?.chave ?? createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex"))
     const saida=await comOrg(orgId,()=>prisma.$transaction(tx=>criarSaida(tx,{
       organizacaoId:orgId,chave,origem:"legado",referencia:demandaId??"aviso",telefone,texto:mensagem,expiraEm:new Date(Date.now()+86400_000),
     })))

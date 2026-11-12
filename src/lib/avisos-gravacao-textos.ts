@@ -181,6 +181,8 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
       return {
         ...(avisoDoVideoAoCliente(d) ? { cliente: avisoDoVideoAoCliente(d)! } : {}),
         solicitante: [`✔️ Gravação entregue ao cliente: ${ref(d)}.`, d.linkAcompanhamento && `Acompanhamento:\n${d.linkAcompanhamento}`].filter(Boolean).join("\n\n"),
+        // Parabéns de job finalizado (12/11/2026): vai com a arte do polvo.
+        videomaker: `🏆 Parabéns! A gravação ${ref(d)} foi concluída e entregue ao cliente. Obrigado pelo trabalho!`,
       }
     case "nota_paga":
       return { videomaker: `💸 Pagamento feito: gravação ${ref(d)}. Obrigado pelo trabalho!` }

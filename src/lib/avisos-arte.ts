@@ -30,6 +30,7 @@ export type FamiliaArte =
   | "rel_av_ok" | "rel_av_cansado" | "rel_av_apuros"
   | "rel_gr_ok" | "rel_gr_cansado" | "rel_gr_apuros"
   | "rel_so_ok" | "rel_so_cansado" | "rel_so_apuros"
+  | "parabens_capivara" | "parabens_polvo" | "parabens_camaleao" | "parabens_coelho" | "parabens_papagaio"
   | "nota_recebida" | "nota_cadastrada" | "nota_paga"
 
 /**
@@ -39,7 +40,73 @@ export type FamiliaArte =
  * `primeira`: a primeira cena da família (1 quando não dito), para uma família
  * usar só parte das cenas de outra (NN-<primeira> … NN-<primeira + cenas - 1>).
  */
-type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; primeira?: number }
+/**
+ * `arquivos`: lista explícita das cenas (NN-K sem .jpg), quando a família usa
+ * cenas de outras famílias — o parabéns sorteia também os personagens de visita.
+ * Sem ela, as cenas são `${arquivo}-1` … `${arquivo}-${cenas}`.
+ */
+type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; arquivos?: string[]; primeira?: number }
+
+// ─── Parabéns de job finalizado ───────────────────────────────────────────────
+//
+// O personagem de quem fez, com troféu, e de vez em quando um colega de outra
+// área "de visita" dando os parabéns ("o polvo foi até o Growth"). As frases são
+// sarcásticas e se combinam com as cenas: são centenas de combinações por
+// pessoa, para quase nunca repetir, sem precisar de imagem nova.
+
+type Personagem = "capivara" | "polvo" | "camaleao" | "coelho" | "papagaio"
+const ELENCO: Record<Personagem, { cenas: string[]; o: string; nome: string; um: string; area: string; proprias: string[] }> = {
+  capivara: { cenas: ["26-1", "26-2", "26-3"], o: "a", nome: "capivara", um: "uma editora", area: "audiovisual", proprias: [
+    "Parabéns! Nem o cliente achou defeito.", "Entregou. A capivara aplaude (devagar).", "Corte final de verdade. Sem _v2."] },
+  polvo: { cenas: ["27-1", "27-2", "27-3"], o: "o", nome: "polvo", um: "um videomaker", area: "audiovisual", proprias: [
+    "Parabéns! Oito braços, zero take perdido.", "Gravou, entregou, aprovaram. Raro.", "Troféu merecido. Os tentáculos agradecem."] },
+  camaleao: { cenas: ["28-1", "28-2"], o: "o", nome: "camaleão", um: "um designer", area: "Growth", proprias: [
+    "Parabéns! Aprovado sem aumentar a logo.", "Arte no ar. O camaleão ficou até dourado.", "Pixel perfeito. Desta vez é sério."] },
+  coelho: { cenas: ["29-1", "29-2"], o: "o", nome: "coelho", um: "alguém do Growth", area: "Growth", proprias: [
+    "Parabéns! Entregue. Agora é só multiplicar.", "Job fechado. Os coelhinhos comemoram.", "Foi pro ar. O CAC que lute."] },
+  papagaio: { cenas: ["30-1", "30-2"], o: "o", nome: "papagaio", um: "um social media", area: "Social", proprias: [
+    "Parabéns! Postado e aprovado. Algoritmo, faz a tua parte.", "No ar. Agora é torcer pelo engajamento.", "Mais um post entregue. Troféu de curtida."] },
+}
+
+/** Sarcasmo que serve a qualquer um. */
+const PARABENS_SARCASTICOS = [
+  "Parabéns! Nota 2. Mas é um 2 bonito.", "Parabéns! Nota 7. De 7 pra cima é festa.",
+  "Parabéns! O cliente nem pediu ajuste. Estranho.", "Parabéns! Agora faz de novo, mais rápido.",
+  "Parabéns! Vai pro portfólio. Ou não.", "Parabéns! Aumento? Boa piada.",
+  "Parabéns! Troféu simbólico. Bem simbólico.", "Parabéns! Ninguém viu, mas a gente viu.",
+  "Parabéns! Já pode pegar o próximo.", "Parabéns! O chefe disse “ok”. Emoção.",
+  "Paraaaa-béns! Quase não atrasou.", "Parabéns! O troféu é de plástico. O mérito, não.",
+  "Parabéns! Entregou e ninguém chorou.", "Parabéns! Pode se achar por 5 minutos.",
+]
+
+/** O colega de outra área de visita: a frase sai da boca dele. */
+function frasesDaVisita(v: (typeof ELENCO)[Personagem]): string[] {
+  const O = v.o.toUpperCase()
+  return [
+    `Paraaaa-béns! Tão bom que podia ser até ${v.um}.`,
+    `Vim lá do ${v.area} só pra isso: parabéns!`,
+    `${O} ${v.nome} aprovou. E ${v.o} ${v.nome} não aprova nada.`,
+    `Parabéns! Quase tão bom quanto ${v.um}. Quase.`,
+    `Até ${v.o} ${v.nome} largou tudo pra aplaudir.`,
+    `Nota 2? Brincadeira. ${O} ${v.nome} deu 10.`,
+  ]
+}
+
+function familiaDoParabens(quem: Personagem) {
+  const proprio = ELENCO[quem]
+  // As cenas do próprio personagem entram duas vezes: ele aparece mais que as visitas.
+  const arquivos: string[] = [...proprio.cenas, ...proprio.cenas]
+  const frasesDaCena: Record<number, string[]> = {}
+  for (const outro of Object.keys(ELENCO) as Personagem[]) {
+    if (outro === quem) continue
+    for (const c of ELENCO[outro].cenas) {
+      arquivos.push(c)
+      frasesDaCena[arquivos.length] = frasesDaVisita(ELENCO[outro])
+    }
+  }
+  return { arquivo: proprio.cenas[0].slice(0, 2), cenas: arquivos.length, arquivos, frasesDaCena,
+    frases: [...proprio.proprias, ...PARABENS_SARCASTICOS] }
+}
 
 /** `arquivo` é o prefixo dos arquivos em public/avisos/cenas (NN-1.jpg …; ver `primeira`). */
 export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
@@ -113,6 +180,24 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
   rel_so_ok: { arquivo: "23", cenas: 1, frases: ["Calendário em dia. O algoritmo agradece.", "Nada atrasado. Alguém postou isso?"] },
   rel_so_cansado: { arquivo: "24", cenas: 1, frases: ["Muito post vencendo. O papagaio já perdeu pena.", "Stories demais, horas de menos."] },
   rel_so_apuros: { arquivo: "25", cenas: 1, frases: ["Calendário com buraco. Os comentários perceberam.", "Crise nos comentários. Respira e responde."] },
+  parabens_capivara: familiaDoParabens("capivara"),
+  parabens_polvo: familiaDoParabens("polvo"),
+  parabens_camaleao: familiaDoParabens("camaleao"),
+  parabens_coelho: familiaDoParabens("coelho"),
+  parabens_papagaio: familiaDoParabens("papagaio"),
+}
+
+/**
+ * Parabéns de job finalizado: o personagem da função de quem executou. Editor é a
+ * capivara, videomaker o polvo, social o papagaio; no Growth, peça visual é do
+ * camaleão e o resto do coelho. Quem pediu, cliente e gestão não ganham parabéns.
+ */
+export function arteDoParabens(papel: string, isGrowth = false, pecaVisual = true): FamiliaArte | null {
+  if (papel === "editor") return "parabens_capivara"
+  if (papel === "videomaker") return "parabens_polvo"
+  if (papel === "social") return "parabens_papagaio"
+  if (papel === "executor") return isGrowth && !pecaVisual ? "parabens_coelho" : "parabens_camaleao"
+  return null
 }
 
 /** As três situações do relatório, da melhor para a pior. */
@@ -147,6 +232,14 @@ export function areaDoGestor(v: { areas?: readonly string[]; funcaoProfissional?
 }
 
 const FAMILIAS = new Set(Object.keys(FAMILIAS_ARTE))
+
+/** Todas as combinações de cena e frase de uma família (para conferir a variedade). */
+export function combinacoesDaFamilia(familia: FamiliaArte): number {
+  const f = FAMILIAS_ARTE[familia]
+  let n = 0
+  for (let k = 1; k <= f.cenas; k++) n += (f.frasesDaCena?.[k] ?? f.frases).length
+  return n
+}
 const ehFamilia = (v: unknown): v is FamiliaArte => typeof v === "string" && FAMILIAS.has(v)
 
 /**
@@ -213,6 +306,8 @@ export function familiaDaSaida(s: { chave: string; destinatarioTipo: string; ori
     // O motivo da nota em lote leva ":" ("nota_lote:3"), o que empurra o papel
     // uma posição; procurar nas partes seguintes cobre os dois formatos.
     if (partes.slice(3).some(p => PAPEIS_SEM_ARTE.has(p))) return null
+    // Gravação concluída: o videomaker ganha o parabéns dele.
+    if (partes[2] === "concluida" && partes.slice(3).includes("videomaker")) return "parabens_polvo"
     if (partes.slice(3).includes("videomaker") && ARTE_NOTA_DO_VIDEOMAKER[partes[2] ?? ""]) return ARTE_NOTA_DO_VIDEOMAKER[partes[2]]
     return ARTE_GRAVACAO[partes[2] ?? ""] ?? null
   }
@@ -263,5 +358,6 @@ export function escolherArte(familia: FamiliaArte, semente: string): EscolhaArte
   const h = createHash("sha256").update(`${familia}:${semente}`).digest()
   const n = h.readUInt32BE(0) % f.cenas
   const frases = f.frasesDaCena?.[n + 1] ?? f.frases
-  return { familia, arquivo: `${f.arquivo}-${n + (f.primeira ?? 1)}.jpg`, frase: frases[h.readUInt32BE(4) % frases.length] }
+  const arquivo = f.arquivos?.[n] ?? `${f.arquivo}-${n + (f.primeira ?? 1)}`
+  return { familia, arquivo: `${arquivo}.jpg`, frase: frases[h.readUInt32BE(4) % frases.length] }
 }
