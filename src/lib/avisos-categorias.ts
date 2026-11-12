@@ -26,7 +26,7 @@ export const ehSetor = (v: unknown): v is Setor => v === "audiovisual" || v === 
 
 export type CategoriaAviso =
   | "pedidos" | "andamento" | "comentarios" | "gravacoes"
-  | "social" | "eventos" | "prazos" | "resumos" | "sistema"
+  | "social" | "parabens" | "eventos" | "prazos" | "resumos" | "sistema"
 
 type Info = {
   titulo: string
@@ -69,6 +69,12 @@ export const CATEGORIAS_AVISO: Record<CategoriaAviso, Info> = {
     descricao: "Vídeo pronto para postar e cobranças do quadro da social.",
     exemplo: "📱 Vídeo do lançamento (AV-231) foi aprovado e está pronto para postar.",
     temRecorte: true,
+  },
+  parabens: {
+    titulo: "Parabéns por job finalizado",
+    descricao: "O recado com arte da turma quando um job em que a pessoa trabalhou é finalizado.",
+    exemplo: "🎉 Parabéns! O Vídeo do lançamento (AV-231) foi finalizado. Mandou bem!",
+    temRecorte: false,
   },
   eventos: {
     titulo: "Eventos",
@@ -237,6 +243,10 @@ export function categoriaDaSaida(s: {
   if (s.origem === "inbox") return null
   if (s.explicita) return s.explicita
   const prefixo = s.chave.split(":")[0]
+  // Parabéns por job finalizado (conversa das artes, 12/11/2026):
+  // arte:parabens_<personagem>:parabens:<demandaId>:<tel8>.
+  const [, familia, tipo] = s.chave.split(":")
+  if (prefixo === "arte" && (tipo === "parabens" || familia?.startsWith("parabens_"))) return "parabens"
   if (prefixo === "grav") {
     // O aviso ao próprio videomaker (kit, nota paga, cancelada) é o trabalho
     // dele, não acompanhamento: não se corta. O cliente nem é pessoa da equipe.

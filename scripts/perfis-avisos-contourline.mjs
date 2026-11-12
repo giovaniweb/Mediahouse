@@ -18,7 +18,7 @@
 import { randomUUID } from "node:crypto"
 import { pathToFileURL } from "node:url"
 
-const CATEGORIAS = ["pedidos", "andamento", "comentarios", "gravacoes", "social", "eventos", "prazos", "resumos", "sistema"]
+const CATEGORIAS = ["pedidos", "andamento", "comentarios", "gravacoes", "social", "parabens", "eventos", "prazos", "resumos", "sistema"]
 const ligado = (recorte, setor = null) => ({ sino: true, email: true, whatsapp: true, recorte, setor })
 const desligado = () => ({ sino: false, email: false, whatsapp: false, recorte: "tudo", setor: null })
 
@@ -31,10 +31,10 @@ function porCategoria(perfil, c, setor) {
     case "setor":
       if (!setor) throw new Error("O perfil \"Tudo do meu setor\" precisa do setor")
       if (c === "eventos") return desligado()
-      if (c === "resumos" || c === "sistema") return ligado("tudo")
+      if (c === "resumos" || c === "sistema" || c === "parabens") return ligado("tudo")
       return ligado("setor", setor)
     case "pedi":
-      if (c === "resumos") return ligado("tudo")
+      if (c === "resumos" || c === "parabens") return ligado("tudo")
       if (c === "eventos" || c === "sistema") return desligado()
       return ligado("pedi")
     case "videomaker":

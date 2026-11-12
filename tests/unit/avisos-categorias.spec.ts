@@ -61,6 +61,11 @@ describe("qual categoria é cada aviso", () => {
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:kit:2026-11-12:videomaker:abc" })).toBeNull()
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:confirmada:2026-11-12:cliente:abc" })).toBeNull()
   })
+  it("parabéns por job finalizado tem categoria própria, que a pessoa pode desligar", () => {
+    expect(categoriaDaSaida({ origem: "legado", chave: "arte:parabens_capivara:parabens:d1:12345678" })).toBe("parabens")
+    expect(categoriaDaSaida({ origem: "legado", chave: "arte:parabens_polvo:hash" })).toBe("parabens")
+    expect(categoriaDaSaida({ origem: "legado", chave: "arte:aprovado:hash" })).toBeNull()
+  })
   it("convite, envio à mão e resposta automática ficam sem categoria (sempre saem)", () => {
     expect(categoriaDaSaida({ origem: "manual", chave: "convite:c1" })).toBeNull()
     expect(categoriaDaSaida({ origem: "manual", chave: "envio-manual:x" })).toBeNull()

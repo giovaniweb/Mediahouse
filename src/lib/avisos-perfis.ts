@@ -67,10 +67,10 @@ function porCategoria(perfil: PerfilAviso, c: CategoriaAviso, setor: Setor | nul
     case "setor":
       if (!setor) throw new Error("O perfil \"Tudo do meu setor\" precisa do setor")
       if (c === "eventos") return desligado()
-      if (c === "resumos" || c === "sistema") return ligado("tudo")
+      if (c === "resumos" || c === "sistema" || c === "parabens") return ligado("tudo")
       return ligado("setor", setor)
     case "pedi":
-      if (c === "resumos") return ligado("tudo")
+      if (c === "resumos" || c === "parabens") return ligado("tudo")
       if (c === "eventos" || c === "sistema") return desligado()
       return ligado("pedi")
     case "videomaker":

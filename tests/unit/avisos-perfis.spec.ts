@@ -42,6 +42,11 @@ describe("perfis prontos", () => {
     expect(decidirAviso(p.get("resumos"), "whatsapp", null)).toBe(true)
     expect(decidirAviso(p.get("sistema"), "sino", null)).toBe(false)
   })
+  it("parabéns fica ligado em todo perfil, menos no 'só o resumo do dia'", () => {
+    expect(de("setor", "growth").get("parabens")).toMatchObject({ whatsapp: true, recorte: "tudo" })
+    expect(de("pedi").get("parabens")).toMatchObject({ whatsapp: true, recorte: "tudo" })
+    expect(de("so_resumo").get("parabens")).toMatchObject({ whatsapp: false })
+  })
   it("videomaker e 'como antes' não cortam nada", () => {
     for (const perfil of ["videomaker", "padrao"] as const) {
       for (const e of estadoDoPerfil(perfil)) expect(decidirAviso(e, "whatsapp", card({}))).toBe(true)
