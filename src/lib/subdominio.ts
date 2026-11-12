@@ -40,6 +40,14 @@ export const SUBDOMINIOS_RESERVADOS = new Set([
 /** Páginas da área que precisam da sessão do domínio principal (o cookie do login é por host). */
 const SO_NO_PRINCIPAL = ["/entrar", "/painel"]
 
+/**
+ * Páginas do NuFlow que valem em qualquer endereço: os documentos jurídicos
+ * (Onda 3). No subdomínio elas passam como estão, sem virar /c/<slug>/..., que
+ * não existe — era o 404 dos links do cadastro de profissional aberto pela área
+ * da empresa. Mesma lista de lib/juridico/documentos.ts (um teste confere).
+ */
+export const PAGINAS_GLOBAIS = ["/termos", "/privacidade", "/dpa", "/profissionais"]
+
 function semPorta(host: string) {
   return host.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "")
 }
@@ -165,6 +173,7 @@ export function desvioDoSubdominio(p: Pedido, opcoes: { ligado?: boolean; raiz?:
     if (comPrefixo) {
       return { tipo: "redirecionar", url: `${origemDaArea(slug, p.protocolo, porta, raiz)}${caminho}${p.busca}`, status: 308 }
     }
+    if (PAGINAS_GLOBAIS.some(t => caminho === t || caminho.startsWith(`${t}/`))) return null
     return { tipo: "reescrever", caminho: `${prefixo}${caminho === "/" ? "" : caminho}` }
   }
 

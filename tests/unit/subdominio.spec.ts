@@ -101,3 +101,19 @@ describe("link na área (o na() da página da empresa)", () => {
     expect(linkNaArea(antigo)).toBe("/c/contourline")
   })
 })
+
+describe("documentos jurídicos no subdomínio (Onda 3, revisão do #139)", () => {
+  it("passam como estão, sem virar /c/<slug>/… (que dava 404)", async () => {
+    const { DOCUMENTOS } = await import("@/lib/juridico/documentos")
+    for (const { caminho } of Object.values(DOCUMENTOS)) {
+      expect(desvioDoSubdominio(pedido("contourline.nuflow.space", caminho), desligado), caminho).toBeNull()
+    }
+  })
+  it("com o prefixo velho, perdem o prefixo e ficam no subdomínio", () => {
+    expect(desvioDoSubdominio(pedido("contourline.nuflow.space", "/c/contourline/termos"), desligado))
+      .toEqual({ tipo: "redirecionar", url: "https://contourline.nuflow.space/termos", status: 308 })
+  })
+  it("o resto da área segue reescrito", () => {
+    expect(desvioDoSubdominio(pedido("contourline.nuflow.space", "/termos-x"), desligado)).toEqual({ tipo: "reescrever", caminho: "/c/contourline/termos-x" })
+  })
+})
