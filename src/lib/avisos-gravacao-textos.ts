@@ -8,8 +8,9 @@
 //     entrou para agendar, confirmou, recusou, material, nota, pronta;
 //   gestão (admin, gestor, quem recebe tudo): só quando trava — recusa,
 //     sem videomaker perto da data, material atrasado, nota parada;
-//   videomaker: véspera, a colinha no dia (do kit), cobrança do material,
-//     pagamento feito;
+//   videomaker: véspera, a colinha no dia (do kit), cobrança do material, e a
+//     nota dele: recebida, cadastrada para pagamento e paga (12/11/2026, com a
+//     arte de cada momento — lib/avisos-arte.ts);
 //   cliente: confirmou o agendamento e o vídeo pronto;
 //   quem pediu: entregue.
 //
@@ -20,7 +21,7 @@ import { momentoDoJob, rotuloDoMomento } from "./ficha-do-job"
 import { etapaDaGravacao, levarDaGravacao, materialChegouAgora, videoNoNuflow } from "./etapas-da-gravacao"
 
 export type EventoDaGravacao =
-  | "entrou" | "confirmada" | "recusada" | "material" | "material_parcial" | "nota_recebida" | "pronta" | "concluida" | "nota_paga"
+  | "entrou" | "confirmada" | "recusada" | "material" | "material_parcial" | "nota_recebida" | "pronta" | "concluida" | "nota_cadastrada" | "nota_paga"
 export type RegraDaGravacao = "vespera" | "dia" | "sem_material" | "material_travado" | "sem_videomaker" | "nota_parada"
 export type PapelDoAviso = "operacao" | "gestao" | "videomaker" | "cliente" | "solicitante"
 export type Mensagens = Partial<Record<PapelDoAviso, string>>
@@ -39,6 +40,8 @@ export type DadosDoAviso = {
   dataEvento?: string | Date | null
   localGravacao?: string | null
   localEvento?: string | null
+  /** A cidade da demanda (vai na descrição do trabalho do e-mail da nota). */
+  cidade?: string | null
   linkFinal?: string | null
   videomakerId?: string | null
   videomaker?: { nome: string } | null
@@ -165,7 +168,13 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
       return { operacao: comLinks(`📁 ${nome1(d)} mandou material de ${ref(d)}.${falta ? ` Falta ${falta}.` : ""}`, linksDaEntrega(d)) }
     }
     case "nota_recebida":
-      return { operacao: comLinks(`🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nEnvie para compras no NuFlow.`, linksDaNota(d)) }
+      return {
+        operacao: comLinks(`🧾 A nota de ${nome1(d)} chegou: ${ref(d)}.\n\nCadastre para pagamento e marque no NuFlow.`, linksDaNota(d)),
+        // O videomaker sabe que a nota chegou certa (Giovani, 12/11/2026).
+        videomaker: `✅ Recebemos a sua nota fiscal: gravação ${ref(d)}.\n\nAvisamos aqui quando ela for cadastrada para pagamento.`,
+      }
+    case "nota_cadastrada":
+      return { videomaker: `🗂️ Sua nota foi cadastrada para pagamento: gravação ${ref(d)}.\n\nAvisamos aqui quando o pagamento sair.` }
     case "pronta":
       return { operacao: `🎬 Vídeo pronto: ${ref(d)}.\n\nEnvie ao cliente e marque como enviado.` }
     case "concluida":
@@ -204,7 +213,7 @@ export function mensagensDoCancelamento(d: DadosDoAviso, c: { motivo: string; av
 export function regrasDaGravacao(
   d: DadosDoAviso,
   hoje: string,
-  /** Quando a nota chegou e ainda não foi para compras (dia em São Paulo). */
+  /** Quando a nota chegou e ainda não foi cadastrada para pagamento (dia em São Paulo). */
   notaRecebidaEm?: string | null,
 ): RegraDaGravacao[] {
   const etapa = etapaDaGravacao(d)
@@ -261,7 +270,7 @@ export function mensagensDaRegra(regra: RegraDaGravacao, d: DadosDoAviso, hoje: 
     case "sem_videomaker":
       return { gestao: `⚠️ Gravação sem videomaker: ${ref(d)}, ${quando(d)}.` }
     case "nota_parada":
-      return { gestao: `⚠️ Nota parada: a nota de ${nome1(d)} (${ref(d)}) chegou há 5 dias e não foi para compras.` }
+      return { gestao: `⚠️ Nota parada: a nota de ${nome1(d)} (${ref(d)}) chegou há 5 dias e não foi cadastrada para pagamento.` }
   }
 }
 
@@ -284,5 +293,8 @@ export function eventoDaMudanca(de: string, para: string): EventoDaGravacao | nu
  * um aviso só para a operação, com a lista, em vez de um por gravação.
  */
 export function mensagemDaNotaEmLote(videomaker: string, gravacoes: string[], linkNota?: string | null): Mensagens {
-  return { operacao: comLinks(`🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nEnvie para compras no NuFlow.`, linksDaNota({ codigo: "", titulo: "", statusInterno: "", linkNota })) }
+  return {
+    operacao: comLinks(`🧾 A nota de ${videomaker} chegou para ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nCadastre para pagamento e marque no NuFlow.`, linksDaNota({ codigo: "", titulo: "", statusInterno: "", linkNota })),
+    videomaker: `✅ Recebemos a sua nota fiscal de ${gravacoes.length} gravações: ${gravacoes.join(", ")}.\n\nAvisamos aqui quando ela for cadastrada para pagamento.`,
+  }
 }

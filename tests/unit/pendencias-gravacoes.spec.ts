@@ -48,7 +48,7 @@ describe("pendências do quadro", () => {
 })
 
 describe("pendências de nota e pagamento", () => {
-  it("falta a nota, nota para compras, a refazer e pagamento a fazer", () => {
+  it("falta a nota, nota para cadastrar, a refazer e pagamento a fazer", () => {
     const comNota = [
       g({ statusInterno: "editando", custos: [], notasFiscais: [] }),
       g({ statusInterno: "entregue_cliente", custos: [], notasFiscais: [{ status: "enviada" }] }),

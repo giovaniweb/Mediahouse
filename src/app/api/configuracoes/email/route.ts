@@ -23,7 +23,7 @@ export async function GET() {
   const config = await prisma.configEmail.findFirst({
     where: { organizacaoId },
     orderBy: { createdAt: "desc" },
-    select: { emailsFinanceiro: true },
+    select: { emailsFinanceiro: true, emailsNotasFiscais: true },
   })
   const global = statusEmailGlobal()
 
@@ -34,6 +34,7 @@ export async function GET() {
       senderEmail: global.senderEmail,
       senderNome: global.senderNome,
       emailsFinanceiro: config?.emailsFinanceiro ?? [],
+      emailsNotasFiscais: config?.emailsNotasFiscais ?? [],
       ativo: global.ativo,
     },
   })
@@ -63,21 +64,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(resultado)
   }
 
-  // A única preferência por organização é quem recebe os avisos financeiros.
-  // Credencial e remetente vêm exclusivamente das variáveis globais da Vercel.
-  const emails = "emailsFinanceiro" in body ? emailsValidos(body.emailsFinanceiro) : null
-  if (!emails) {
+  // As preferências por organização são só destinatários: quem recebe os avisos
+  // financeiros (compras) e quem recebe cada nota fiscal de videomaker com os
+  // dados de pagamento (12/11/2026). Credencial e remetente vêm das variáveis
+  // globais da Vercel. Campo ausente no corpo = não muda.
+  const temFinanceiro = "emailsFinanceiro" in body, temNotas = "emailsNotasFiscais" in body
+  const emails = temFinanceiro ? emailsValidos(body.emailsFinanceiro) : null
+  const notas = temNotas ? emailsValidos(body.emailsNotasFiscais) : null
+  if ((!temFinanceiro && !temNotas) || (temFinanceiro && !emails) || (temNotas && !notas)) {
     return NextResponse.json({ error: "Informe até 20 e-mails válidos, separados por vírgula" }, { status: 400 })
   }
 
+  const igual = (a: string[], b: string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
   await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`email:${organizacaoId}`}, 0))`
     const existing = await tx.configEmail.findFirst({ where: { organizacaoId } })
-    if (existing && JSON.stringify([...existing.emailsFinanceiro].sort()) === JSON.stringify([...emails].sort())) return
+    const data = { ...(emails ? { emailsFinanceiro: emails } : {}), ...(notas ? { emailsNotasFiscais: notas } : {}) }
+    const campos = [
+      ...(emails && !igual(existing?.emailsFinanceiro ?? [], emails) ? ["emailsFinanceiro"] : []),
+      ...(notas && !igual(existing?.emailsNotasFiscais ?? [], notas) ? ["emailsNotasFiscais"] : []),
+    ]
+    if (existing && !campos.length) return
     const atual = existing
-      ? await tx.configEmail.update({ where: { id: existing.id }, data: { emailsFinanceiro: emails } })
-      : await tx.configEmail.create({ data: { organizacaoId, emailsFinanceiro: emails } })
-    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_email", recursoId: atual.id, correlationId: correlacaoAuditoria(), depois: { campos: ["emailsFinanceiro"] } })
+      ? await tx.configEmail.update({ where: { id: existing.id }, data })
+      : await tx.configEmail.create({ data: { organizacaoId, emailsFinanceiro: emails ?? [], emailsNotasFiscais: notas ?? [] } })
+    await registrarAuditoria(tx, acesso, { acao: "configuracao.alterada", recurso: "config_email", recursoId: atual.id, correlationId: correlacaoAuditoria(), depois: { campos: campos.length ? campos : Object.keys(data) } })
   }))
 
   return NextResponse.json({ ok: true, ...statusEmailGlobal() })

@@ -352,6 +352,7 @@ export const PERMISSAO_HREF_MAP: Record<string, PermissaoKey> = {
   "/videomakers": "verVideomakers",
   "/equipe": "verEquipe",
   "/custos": "verCustos",
+  "/notas-fiscais": "verCustos",
   "/ia": "verAlertas",
   "/alertas": "verAlertas",
   "/relatorios": "verRelatorios",

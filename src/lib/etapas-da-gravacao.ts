@@ -175,16 +175,16 @@ export type EtapaDaNota = "falta" | "contestada" | "recebida" | "compras" | "pag
 export type SituacaoDaNota = { etapa: EtapaDaNota; texto: string; tom: "falta" | "andamento" | "ok" | "alerta" }
 
 /**
- * Em que pé está a nota. O caminho é o da casa (Giovani, 29/10/2026): o
- * videomaker manda a nota, a Débora encaminha ao setor de compras, compras
- * paga. `aguardando_pagamento` é "enviada para compras" — não há aprovação de
- * pagamento no meio, nem valor ou PIX a conferir aqui.
+ * Em que pé está a nota. O caminho é o da casa: o videomaker manda a nota, a
+ * Débora cadastra para pagamento, e ela é paga. `aguardando_pagamento` é
+ * "cadastrada para pagamento" (Giovani, 12/11/2026: substituiu o "enviada
+ * para compras" de 29/10). A etapa continua com o id "compras" por dentro.
  */
 export function situacaoDaNota(job: PagamentoDoCard): SituacaoDaNota | null {
   if (!job.custos || !job.notasFiscais || !job.videomakerId) return null
   const custos = job.custos, notas = job.notasFiscais
   if (custos.some((c) => c.pago || c.statusPagamento === "pago")) return { etapa: "paga", texto: "Nota paga", tom: "ok" }
-  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) return { etapa: "compras", texto: "Enviada para compras", tom: "andamento" }
+  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) return { etapa: "compras", texto: "Cadastrada para pagamento", tom: "andamento" }
   if (custos.some((c) => c.statusPagamento === "contestado")) return { etapa: "contestada", texto: "Nota a refazer", tom: "alerta" }
   if (custos.some((c) => c.statusPagamento === "nf_enviada") || notas.some((n) => n.status === "enviada" || n.status === "aprovada")) {
     return { etapa: "recebida", texto: "Nota recebida", tom: "andamento" }
@@ -334,7 +334,7 @@ export function trilhaDaNota(job: JobDaLinha): PassoDaTrilha[] | null {
   return [
     { id: "pedida", rotulo: "Pedida", estado: "feito", detalhe: "WhatsApp" },
     { id: "recebida", rotulo: "Recebida", estado: estado(1), detalhe: nota.etapa === "contestada" ? "a refazer" : null },
-    { id: "compras", rotulo: "Enviada para compras", estado: estado(2), detalhe: null },
+    { id: "compras", rotulo: "Cadastrada para pagamento", estado: estado(2), detalhe: null },
     { id: "paga", rotulo: "Paga", estado: estado(3), detalhe: null },
   ]
 }

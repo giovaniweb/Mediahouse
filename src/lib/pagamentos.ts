@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client"
 import { comOrg } from "@/lib/org-contexto"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { decryptSecret, encryptSecret } from "@/lib/secret-crypto"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 
 type Tx = Prisma.TransactionClient
 export class PagamentoInvalido extends Error {
@@ -35,7 +36,9 @@ export async function decidirPagamento(db: PrismaClient, ator: AtorAuditoria, cu
       if(!chavePix) throw new PagamentoInvalido("Cadastre uma chave PIX válida nesta empresa antes de aprovar.",422)
       fiscais={chavePix,cpfCnpj:f?.cpfCnpj ?? null}
     }
-    const atualizado=await tx.custoVideomaker.update({where:{id:c.id,organizacaoId:ator.organizacaoId},data:{statusPagamento:alvo,emailFinanceiroAt:null}})
+    const atualizado=await tx.custoVideomaker.update({where:{id:c.id,organizacaoId:ator.organizacaoId},data:{statusPagamento:alvo,emailFinanceiroAt:null,
+      // aguardando_pagamento é "cadastrada para pagamento" (12/11/2026): quem aprovou cadastrou.
+      ...(alvo==="aguardando_pagamento" ? {cadastradoPagamentoEm:new Date(),cadastradoPagamentoPorId:"usuarioId" in ator ? ator.usuarioId : null} : {cadastradoPagamentoEm:null,cadastradoPagamentoPorId:null})}})
     await registrarAuditoria(tx,ator,{acao:"manutencao.custos",recurso:"custo",recursoId:c.id,correlationId:randomUUID(),depois:{operacao:"editar",alterados:1,decisao:acao==="aprovar_pagamento" ? "aprovado" : "reprovado"}})
     if(c.demandaId) await tx.alertaIA.updateMany({where:{organizacaoId:ator.organizacaoId,demandaId:c.demandaId,status:"ativo",tipoAlerta:{in:["pagamento_pendente","nf_recebida"]}},data:{status:"resolvido",resolvedAt:new Date()}})
     return {alterado:true,custo:{...c,...atualizado},fiscais}
@@ -53,6 +56,8 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
   const d=await tx.demanda.findFirst({where:{id:nf.demandaId,organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId}})
   const vinculo=await tx.videomakerOrganizacao.findFirst({where:{organizacaoId:e.organizacaoId,videomakerId:nf.videomakerId,status:{in:["ativo","preferencial"]},emListaNegra:false,videomaker:{OR:[{usuarioId:null},{usuario:{status:"ativo"}}]}}})
   if(!d || !vinculo) throw new PagamentoInvalido("Profissional não está autorizado para esta gravação",403)
+  // Só videomaker externo manda nota (12/11/2026): o link antigo de um interno não vale.
+  if(!await videomakerPedeNota(tx,e.organizacaoId,nf.videomakerId)) throw new PagamentoInvalido("Videomaker interno não envia nota fiscal.",403)
   if(!d.linkBrutos && !d.linkFolderBrutos && !["brutos_enviados","editor_atribuido","fila_edicao","editando","edicao_finalizada","revisao_pendente","ajuste_solicitado","aprovado","postagem_pendente","postado","entregue_cliente","contagem_15_dias_iniciada","lembrete_15_dias_enviado","expirado","encerrado"].includes(d.statusInterno)) throw new PagamentoInvalido("Registre a entrega do material antes de enviar a nota fiscal.")
   const atual=await tx.notaFiscalUpload.findUniqueOrThrow({where:{id:nf.id}})
   if(atual.status!=="pendente") throw new PagamentoInvalido("Nota fiscal já enviada. Solicite revisão à equipe.")
@@ -63,7 +68,7 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
     c=await tx.custoVideomaker.findUniqueOrThrow({where:{id:c.id,organizacaoId:e.organizacaoId}})
     conferirPagamentoAberto(c)
     if(!["pendente_nf","contestado"].includes(c.statusPagamento)) throw new PagamentoInvalido("A nota fiscal deste custo já está em análise ou aprovada.")
-    c=await tx.custoVideomaker.update({where:{id:c.id,organizacaoId:e.organizacaoId},data:{notaFiscalUrl:e.url,statusPagamento:"nf_enviada",emailFinanceiroAt:null}})
+    c=await tx.custoVideomaker.update({where:{id:c.id,organizacaoId:e.organizacaoId},data:{notaFiscalUrl:e.url,statusPagamento:"nf_enviada",emailFinanceiroAt:null,cadastradoPagamentoEm:null,cadastradoPagamentoPorId:null}})
   } else {
     c=await tx.custoVideomaker.create({data:{organizacaoId:e.organizacaoId,demandaId:d.id,videomakerId:nf.videomakerId,
       fatoOrigem:`nf:${nf.id}`,tipo:"projeto",valor:0,valorConfirmadoEm:null,notaFiscalUrl:e.url,statusPagamento:"nf_enviada",dataReferencia:d.finalizadaEm ?? new Date(),descricao:`Valor a confirmar — ${d.codigo}`}})
@@ -74,6 +79,7 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
   }
   await tx.notaFiscalUpload.update({where:{id:nf.id},data:{url:e.url,nomeArquivo:e.nomeArquivo,status:"enviada"}})
   await registrarAuditoria(tx,e.ator,{acao:"manutencao.custos",recurso:"nota_fiscal",recursoId:nf.id,correlationId:randomUUID(),depois:{operacao:"editar",alterados:1,decisao:"enviado"}})
-  await tx.alertaIA.create({data:{organizacaoId:e.organizacaoId,demandaId:d.id,tipoAlerta:"nf_recebida",mensagem:`Nota fiscal recebida para ${d.codigo}. Confira o valor e aprove o pagamento.`,severidade:"aviso",acaoSugerida:"Aprovações → Pagamentos"}})
+  // O sino da nota (`nf_recebida`) sai depois do commit, direcionado à operação
+  // e com os dados de pagamento para quem vê o financeiro: lib/avisos-entrega-videomaker.ts.
   return c
 }

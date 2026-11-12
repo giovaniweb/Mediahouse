@@ -296,12 +296,14 @@ function TabWhatsapp() {
 
 function TabEmail() {
   const { data, mutate } = useSWR<{ config: {
-    senderEmail: string; senderNome: string; emailsFinanceiro: string[]; ativo: boolean
+    senderEmail: string; senderNome: string; emailsFinanceiro: string[]; emailsNotasFiscais?: string[]; ativo: boolean
   } | null }>("/api/configuracoes/email", fetcher)
 
   const cfg = data?.config
   const [emailsFinanceiroEditados, setEmailsFinanceiroEditados] = useState<string | null>(null)
   const emailsFinanceiro = emailsFinanceiroEditados ?? (cfg?.emailsFinanceiro || []).join(", ")
+  const [emailsNotasEditados, setEmailsNotasEditados] = useState<string | null>(null)
+  const emailsNotas = emailsNotasEditados ?? (cfg?.emailsNotasFiscais || []).join(", ")
   const [loading, setLoading] = useState(false)
   const [testEmail, setTestEmail] = useState("")
   const [loadingTest, setLoadingTest] = useState(false)
@@ -309,14 +311,14 @@ function TabEmail() {
   async function salvar() {
     setLoading(true)
     try {
-      const emails = emailsFinanceiro.split(",").map(e => e.trim()).filter(Boolean)
+      const lista = (v: string) => v.split(",").map(e => e.trim()).filter(Boolean)
       const res = await fetch("/api/configuracoes/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailsFinanceiro: emails }),
+        body: JSON.stringify({ emailsFinanceiro: lista(emailsFinanceiro), emailsNotasFiscais: lista(emailsNotas) }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success("Destinatários do financeiro salvos!")
+      toast.success("Destinatários salvos!")
       mutate()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro")
@@ -387,6 +389,17 @@ function TabEmail() {
             onChange={e => setEmailsFinanceiroEditados(e.target.value)}
             placeholder="financeiro@empresa.com, contador@empresa.com" />
           <p className="text-[11px] text-zinc-600 mt-1">Separe por vírgula. Receberão as solicitações de pagamento.</p>
+        </div>
+        {/* E-mail das notas fiscais dos videomakers (12/11/2026) */}
+        <div>
+          <label className="text-xs text-zinc-400 block mb-1">E-mail para as notas fiscais dos videomakers</label>
+          <input className={inp} type="text" value={emailsNotas}
+            onChange={e => setEmailsNotasEditados(e.target.value)}
+            placeholder="financeiro@empresa.com" />
+          <p className="text-[11px] text-zinc-600 mt-1">
+            Recebe cada nota que um videomaker manda, com a descrição do trabalho e os dados de pagamento (PIX inteiro).
+            Coloque só quem cuida do pagamento.
+          </p>
         </div>
       </div>
 

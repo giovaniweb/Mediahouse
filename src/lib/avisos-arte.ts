@@ -31,17 +31,21 @@ export type FamiliaArte =
   | "rel_gr_ok" | "rel_gr_cansado" | "rel_gr_apuros"
   | "rel_so_ok" | "rel_so_cansado" | "rel_so_apuros"
   | "parabens_capivara" | "parabens_polvo" | "parabens_camaleao" | "parabens_coelho" | "parabens_papagaio"
+  | "nota_recebida" | "nota_cadastrada" | "nota_paga"
 
 /**
- * `frasesDaCena`: frases próprias de uma cena (número 1…cenas). As cenas de meme
- * de IA só fazem sentido com a piada delas, então não sorteiam das frases gerais.
+ * `frasesDaCena`: frases próprias de uma cena (número 1…cenas, contado a partir
+ * de `primeira`). As cenas de meme de IA só fazem sentido com a piada delas,
+ * então não sorteiam das frases gerais.
+ * `primeira`: a primeira cena da família (1 quando não dito), para uma família
+ * usar só parte das cenas de outra (NN-<primeira> … NN-<primeira + cenas - 1>).
  */
 /**
  * `arquivos`: lista explícita das cenas (NN-K sem .jpg), quando a família usa
  * cenas de outras famílias — o parabéns sorteia também os personagens de visita.
  * Sem ela, as cenas são `${arquivo}-1` … `${arquivo}-${cenas}`.
  */
-type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; arquivos?: string[] }
+type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; arquivos?: string[]; primeira?: number }
 
 // ─── Parabéns de job finalizado ───────────────────────────────────────────────
 //
@@ -104,7 +108,7 @@ function familiaDoParabens(quem: Personagem) {
     frases: [...proprio.proprias, ...PARABENS_SARCASTICOS] }
 }
 
-/** `arquivo` é o prefixo dos arquivos em public/avisos/cenas (NN-1.jpg … NN-<cenas>.jpg). */
+/** `arquivo` é o prefixo dos arquivos em public/avisos/cenas (NN-1.jpg …; ver `primeira`). */
 export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
   fila: { arquivo: "01", cenas: 5, frases: [
     "Entrou na fila. Senta que lá vem demanda.", "Mais um na fila. A fila agradece.",
@@ -134,8 +138,21 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
     frasesDaCena: { 6: ["Funcionário do mês: Claude. De novo.", "Entregue. O mérito? O Claude já pegou."] } },
   material: { arquivo: "10", cenas: 5, frases: [
     "200 GB de \"acho que tem coisa boa\".", "Material entregue. Agora é problema da edição.", "Caixa enorme. Take bom: um."] },
-  nota: { arquivo: "11", cenas: 5, frases: [
-    "Nota recebida. O galo vai conferir cada vírgula.", "Sem nota, sem dinheiro. Com nota, talvez.", "Pagamento feito. Pode gastar."] },
+  // Nota que chegou ou que falta (operação, cobrança): o galo conferindo e
+  // carimbando (11-1 a 11-3). A moeda (11-4, 11-5) e "Pagamento feito" são só
+  // do nota_paga — antes caíam em qualquer aviso de nota (12/11/2026).
+  nota: { arquivo: "11", cenas: 3, frases: [
+    "Nota recebida. O galo vai conferir cada vírgula.", "Sem nota, sem dinheiro. Com nota, talvez.", "Chegou nota. O carimbo já está quente."] },
+  // Os três avisos da nota ao videomaker (Giovani, 12/11/2026), cada um com a
+  // cena que combina: o galo conferindo a nota (11-1), carimbando (11-2, 11-3)
+  // e com a moeda na mão (11-4, 11-5). Frase do momento certo: no "nota" da
+  // operação, "Pagamento feito" podia sair na nota recém-chegada.
+  nota_recebida: { arquivo: "11", cenas: 1, frases: [
+    "Nota recebida. O galo já está conferindo.", "Chegou certinho. Agora é com a gente."] },
+  nota_cadastrada: { arquivo: "11", primeira: 2, cenas: 2, frases: [
+    "Carimbado: entrou para pagamento.", "Cadastrada. O galo já bateu o carimbo."] },
+  nota_paga: { arquivo: "11", primeira: 4, cenas: 2, frases: [
+    "Pagamento feito. Pode gastar.", "Caiu. O galo conferiu moeda por moeda."] },
   ruim: { arquivo: "12", cenas: 6, frasesDaCena: { 6: ["Prazo? Pede pra IA. Ela também trava em 99%."] }, frases: [
     "O prazo venceu. A vaca já sabia.", "Respira. Depois corre. Corre muito.",
     "Ninguém entra em pânico. Exceto a vaca.", "Atrasou. Mas com estilo."] },
@@ -254,9 +271,14 @@ export function chaveComArte(familia: FamiliaArte | null | undefined, chave: str
 /** Gravação externa: a chave é grav:<id>:<motivo>:<dia>:<papel>:<hash>. */
 const ARTE_GRAVACAO: Record<string, FamiliaArte> = {
   entrou: "fila", confirmada: "confirmou", recusada: "recusou", material: "material", material_parcial: "material",
-  nota_recebida: "nota", nota_lote: "nota", nota_paga: "nota", pronta: "finalizou", concluida: "finalizou",
+  nota_recebida: "nota", nota_lote: "nota", nota_cadastrada: "nota_cadastrada", nota_paga: "nota_paga", pronta: "finalizou", concluida: "finalizou",
   cancelada: "ruim", kit: "gravacao", vespera: "gravacao", dia: "gravacao",
   sem_material: "cobranca", material_travado: "ruim", sem_videomaker: "ruim", nota_parada: "cobranca",
+}
+
+/** O que o VIDEOMAKER recebe da nota dele: a arte do momento, não a da operação. */
+const ARTE_NOTA_DO_VIDEOMAKER: Record<string, FamiliaArte> = {
+  nota_recebida: "nota_recebida", nota_lote: "nota_recebida", nota_cadastrada: "nota_cadastrada", nota_paga: "nota_paga",
 }
 
 /** Regras da rotina (automacoes-regras): o nome da regra vem no contexto. */
@@ -286,6 +308,7 @@ export function familiaDaSaida(s: { chave: string; destinatarioTipo: string; ori
     if (partes.slice(3).some(p => PAPEIS_SEM_ARTE.has(p))) return null
     // Gravação concluída: o videomaker ganha o parabéns dele.
     if (partes[2] === "concluida" && partes.slice(3).includes("videomaker")) return "parabens_polvo"
+    if (partes.slice(3).includes("videomaker") && ARTE_NOTA_DO_VIDEOMAKER[partes[2] ?? ""]) return ARTE_NOTA_DO_VIDEOMAKER[partes[2]]
     return ARTE_GRAVACAO[partes[2] ?? ""] ?? null
   }
   if (partes[0] === "convite") return "gravacao"
@@ -333,8 +356,8 @@ export type EscolhaArte = { familia: FamiliaArte; arquivo: string; frase: string
 export function escolherArte(familia: FamiliaArte, semente: string): EscolhaArte {
   const f = FAMILIAS_ARTE[familia]
   const h = createHash("sha256").update(`${familia}:${semente}`).digest()
-  const cena = h.readUInt32BE(0) % f.cenas + 1
-  const frases = f.frasesDaCena?.[cena] ?? f.frases
-  const arquivo = f.arquivos?.[cena - 1] ?? `${f.arquivo}-${cena}`
+  const n = h.readUInt32BE(0) % f.cenas
+  const frases = f.frasesDaCena?.[n + 1] ?? f.frases
+  const arquivo = f.arquivos?.[n] ?? `${f.arquivo}-${n + (f.primeira ?? 1)}`
   return { familia, arquivo: `${arquivo}.jpg`, frase: frases[h.readUInt32BE(4) % frases.length] }
 }

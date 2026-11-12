@@ -33,6 +33,6 @@ export const ROTULO_DA_NOTA: Record<EstadoDaNotaDoVideomaker, string> = {
   falta: "Falta a nota",
   refazer: "Nota a refazer",
   recebida: "Nota recebida",
-  compras: "Em compras",
+  compras: "Cadastrada para pagamento",
   paga: "Paga",
 }

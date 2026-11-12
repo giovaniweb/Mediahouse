@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { PrismaClient } from "@prisma/client"
 import { comOrg } from "@/lib/org-contexto"
 import { registrarAuditoria } from "@/lib/auditoria"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 
 /** Fato de conclusão não comprova quantidade de diárias nem total contratado.
  * Cria pendência rastreável, sem converter diária atual em preço do serviço.
@@ -12,6 +13,8 @@ export async function registrarServicoPendente(db: PrismaClient, organizacaoId: 
     await tx.$queryRaw`SELECT id FROM demandas WHERE id=${demandaId} AND "organizacaoId"=${organizacaoId} FOR UPDATE`
     const d = await tx.demanda.findFirst({where:{id:demandaId,organizacaoId,videomakerId,statusVisivel:"finalizado"}})
     if(!d) return null
+    // Interno não manda nota nem recebe por serviço (12/11/2026): sem custo "aguardando nota".
+    if(!await videomakerPedeNota(tx,organizacaoId,videomakerId)) return null
     const fatoOrigem=`conclusao:${demandaId}:${videomakerId}`
     const anterior=await tx.custoVideomaker.findFirst({where:{organizacaoId,demandaId,videomakerId}})
     if(anterior) return anterior

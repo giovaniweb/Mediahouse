@@ -9,6 +9,7 @@ import { validarArquivoNF } from "@/lib/nota-fiscal-arquivo"
 import { emSegundoPlano } from "@/lib/notificar"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { avisarNotaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 const resposta=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store"}})
 type Params={params:Promise<{token:string}>}
 async function carregar(token:string,organizacaoId:string) {
@@ -16,7 +17,8 @@ async function carregar(token:string,organizacaoId:string) {
   const nf=await prisma.notaFiscalUpload.findFirst({where:{token,demanda:{organizacaoId}},include:{videomaker:{select:{nome:true,usuario:{select:{status:true}}}},demanda:{select:{codigo:true,titulo:true,videomakerId:true}}}})
   if(!nf || nf.demanda.videomakerId!==nf.videomakerId || (nf.videomaker.usuario && nf.videomaker.usuario.status!=="ativo"))return null
   const vinculo=await prisma.videomakerOrganizacao.findFirst({where:{organizacaoId,videomakerId:nf.videomakerId,status:{in:["ativo","preferencial"]},emListaNegra:false},select:{id:true}})
-  return vinculo ? nf : null
+  // Só videomaker externo manda nota (12/11/2026): o link de um interno não abre.
+  return vinculo && await videomakerPedeNota(prisma,organizacaoId,nf.videomakerId) ? nf : null
 }
 export async function GET(_req:NextRequest,{params}:Params) {
   const {token}=await params,org=await orgPorCredencial("nota_fiscal",token)
