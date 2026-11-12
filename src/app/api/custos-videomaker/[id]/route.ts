@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       pago: body.pago ?? custo.pago,
       ...(body.pago===true ? { statusPagamento: "pago" as const } : {}),
       // Alterar valor/tipo/documento de um aprovado exige nova decisão.
-      ...((body.valor!==undefined || body.tipo!==undefined) && custo.statusPagamento==="aguardando_pagamento" ? {statusPagamento:"nf_enviada" as const,emailFinanceiroAt:null} : {}),
+      ...((body.valor!==undefined || body.tipo!==undefined) && custo.statusPagamento==="aguardando_pagamento" ? {statusPagamento:"nf_enviada" as const,emailFinanceiroAt:null,cadastradoPagamentoEm:null,cadastradoPagamentoPorId:null} : {}),
       ...(valorLido.presente && valorLido.valor !== null ? { valorConfirmadoEm: new Date() } : {}),
       dataPagamento: body.dataPagamento ? new Date(body.dataPagamento) : body.pago===true ? new Date() : custo.dataPagamento,
       comprovante: body.comprovante ?? custo.comprovante,

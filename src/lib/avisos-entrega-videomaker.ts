@@ -1,8 +1,10 @@
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
-import { sendEmailAvisoDaOperacao, type AvisoDaOperacaoEmail } from "@/lib/email"
-import { avisarGravacao, dadosDaGravacao } from "@/lib/avisos-gravacao"
+import { destinatariosNotasFiscais, sendEmailAvisoDaOperacao, type AvisoDaOperacaoEmail } from "@/lib/email"
+import { avisarGravacao, dadosDaGravacao, type GravacaoDoAviso } from "@/lib/avisos-gravacao"
+import { rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
+import { dadosDePagamento, linhasDoPagamento, quemVeDadosDePagamento, resumoDoPagamento, rotuloDoValor, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import { faltaDaEntrega, linksDaEntrega, linksDaNota, type DadosDoAviso } from "@/lib/avisos-gravacao-textos"
 import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 
@@ -16,8 +18,9 @@ import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 //   - operação: quem tem "Opera Gravações Externas"; sem ninguém marcado, a
 //     gestão (admin, gestor, quem recebe todos os avisos);
 //   - nunca quem fez a mudança, nem o próprio videomaker.
-// Sino só do material: a nota já acende o sino (`nf_recebida`, em
-// lib/pagamentos.ts receberNotaFiscal) — outro seria o mesmo aviso duas vezes.
+// Sino do material e da nota (`nf_recebida`), direcionados. Até 12/11/2026 o da
+// nota era um sino para todos, criado em lib/pagamentos.ts receberNotaFiscal;
+// passou para cá para levar os dados de pagamento só a quem vê o financeiro.
 //
 // Roda depois do commit (emSegundoPlano) e nunca lança: a entrega e a nota já
 // estão gravadas, e um e-mail que falha não pode desfazer isso.
@@ -75,27 +78,79 @@ export function emailDaEntrega(d: DadosDoAviso, completo: boolean): { assunto: s
   }
 }
 
-/** O e-mail da nota: uma gravação ou a nota que cobre várias. */
-export function emailDaNota(gravacoes: DadosDoAviso[]): { assunto: string; dados: AvisoDaOperacaoEmail } {
+/** A descrição do trabalho de uma gravação, para quem paga (e-mail da nota). */
+export function trabalhoDaGravacao(d: DadosDoAviso): [string, string][] {
+  const tipo = rotuloDoTipoDeGravacao(d.tipoGravacao)
+  const q = quando(d)
+  const local = [d.localGravacao?.trim() || d.localEvento?.trim(), d.cidade?.trim()].filter(Boolean).join(" — ")
+  return [
+    ["Trabalho", tipo ? `Gravação — ${tipo}` : "Gravação"],
+    ...(q ? [["Data", q] as [string, string]] : []),
+    ...(local ? [["Local", local] as [string, string]] : []),
+    ["Médico / cliente", cliente(d)],
+    ["Código do card", d.codigo],
+  ]
+}
+
+/**
+ * O e-mail da nota: uma gravação ou a nota que cobre várias.
+ *
+ * Com `pagamentos` (um por gravação, na mesma ordem), é o e-mail de quem vê o
+ * financeiro e do e-mail das notas da empresa (a Débora): leva a descrição do
+ * trabalho e os dados de pagamento completos, PIX inclusive. Sem, é o de antes,
+ * para a operação que não vê valores.
+ */
+export function emailDaNota(gravacoes: DadosDoAviso[], pagamentos?: DadosDePagamento[]): { assunto: string; dados: AvisoDaOperacaoEmail } {
   const [g] = gravacoes
   const nome = nomeDoVideomaker(g)
   const nota = linksDaNota(g).find((l) => l.rotulo === "Nota fiscal")
   const varias = gravacoes.length > 1
   const q = quando(g)
+  const links = [
+    ...(nota ? [{ rotulo: "Abrir a nota fiscal", url: nota.url }] : []),
+    ...gravacoes.flatMap((d) => d.linkCard ? [{ rotulo: varias ? `Abrir ${d.codigo} no NuFlow` : `Abrir o card ${d.codigo}`, url: d.linkCard }] : []),
+  ]
+  const assunto = varias ? `Nota fiscal de ${nome} — ${gravacoes.length} gravações` : `Nota fiscal de ${nome} — ${cliente(g)} (${g.codigo})`
+  if (pagamentos?.length === gravacoes.length) {
+    const [p] = pagamentos
+    const total = pagamentos.every((x) => x.valor !== null) ? pagamentos.reduce((s, x) => s + (x.valor ?? 0), 0) : null
+    const aConfirmar = pagamentos.some((x) => x.origemValor !== "custo")
+    const pagamento = linhasDoPagamento(varias ? { ...p, valor: total, origemValor: aConfirmar ? "diaria" : "custo" } : p)
+    if (varias) pagamento[0] = ["Valor total", pagamento[0][1]]
+    return {
+      assunto,
+      dados: {
+        titulo: "Nota fiscal para pagamento",
+        intro: `${nome} mandou a nota fiscal${varias ? ` de ${gravacoes.length} gravações` : ""}. O trabalho e os dados de pagamento estão abaixo.`,
+        linhas: [["Videomaker", nome]],
+        blocos: [
+          ...gravacoes.map((d, i) => ({
+            titulo: varias ? `Gravação ${i + 1} de ${gravacoes.length}` : "O trabalho",
+            linhas: [...trabalhoDaGravacao(d), ...(varias ? [["Valor", rotuloDoValor(pagamentos[i])] as [string, string]] : [])],
+          })),
+          { titulo: "Dados de pagamento", linhas: pagamento },
+        ],
+        links,
+      },
+    }
+  }
   return {
-    assunto: varias ? `Nota fiscal de ${nome} — ${gravacoes.length} gravações` : `Nota fiscal de ${nome} — ${cliente(g)} (${g.codigo})`,
+    assunto,
     dados: {
       titulo: "Nota fiscal recebida",
-      intro: `${nome} mandou a nota fiscal. Confira e envie para compras no NuFlow.`,
+      intro: `${nome} mandou a nota fiscal. Confira e marque no NuFlow quando ela for cadastrada para pagamento.`,
       linhas: varias
         ? [["Videomaker", nome], ...gravacoes.map((d) => ["Gravação", `${cliente(d)} (${d.codigo})`] as [string, string])]
         : [["Videomaker", nome], ["Cliente", cliente(g)], ...(q ? [["Gravação", q] as [string, string]] : []), ["Código", g.codigo]],
-      links: [
-        ...(nota ? [{ rotulo: "Abrir a nota fiscal", url: nota.url }] : []),
-        ...gravacoes.flatMap((d) => d.linkCard ? [{ rotulo: varias ? `Abrir ${d.codigo} no NuFlow` : "Abrir no NuFlow", url: d.linkCard }] : []),
-      ],
+      links,
     },
   }
+}
+
+/** A frase do sino da nota. Com o pagamento, só o resumo (sem a chave inteira). */
+export function sinoDaNota(d: DadosDoAviso, pagamento?: DadosDePagamento | null): string {
+  const base = `🧾 ${nomeDoVideomaker(d).split(/\s+/)[0]} mandou a nota de ${cliente(d)} (${d.codigo}).`
+  return pagamento ? `${base} ${resumoDoPagamento(pagamento)}.` : base
 }
 
 async function usuarioDoVideomaker(tx: Pick<Tx, "videomaker">, videomakerId: string | null | undefined) {
@@ -135,31 +190,66 @@ export async function avisarEntregaDoVideomaker(
   }
 }
 
-/** A nota chegou (de uma gravação ou de várias): um e-mail para a operação, com o link do arquivo. */
+/**
+ * A nota chegou (de uma gravação ou de várias). Para chamar em segundo plano;
+ * nunca lança.
+ *
+ *   - Sino, direcionado, para cada pessoa da operação (uma por gravação). Quem
+ *     vê os dados de pagamento (financeiro ou operação) recebe o valor e o PIX
+ *     resumido (tipo e final).
+ *   - E-mail para a operação: quem vê os dados de pagamento recebe o completo
+ *     (trabalho e dados de pagamento, PIX inteiro); os outros, o de antes.
+ *   - E-mail das notas da empresa (Configurações → E-mail; a Débora): sempre o
+ *     completo. Quem já está nele não recebe o da operação de novo.
+ */
 export async function avisarNotaDoVideomaker(
   organizacaoId: string, demandaIds: string[], autorUsuarioId?: string | null,
-): Promise<{ emails: number }> {
+): Promise<{ emails: number; sinos: number }> {
   try {
+    const paraNotas = await destinatariosNotasFiscais(organizacaoId)
     const r = await comOrg(organizacaoId, () => prisma.$transaction(async (tx) => {
-      const gravacoes = []
+      const gravacoes: GravacaoDoAviso[] = []
       for (const id of demandaIds) {
         const g = await dadosDaGravacao(tx, organizacaoId, id)
         if (g) gravacoes.push(g)
       }
-      if (!gravacoes.length) return null
-      const pessoas = await pessoasDaOperacao(tx, organizacaoId, [autorUsuarioId, await usuarioDoVideomaker(tx, gravacoes[0].videomakerId)])
-      return { gravacoes, pessoas }
+      const vm = gravacoes[0]?.videomakerId
+      if (!gravacoes.length || !vm) return null
+      const pessoas = await pessoasDaOperacao(tx, organizacaoId, [autorUsuarioId, await usuarioDoVideomaker(tx, vm)])
+      const financeiro = await quemVeDadosDePagamento(tx, organizacaoId, pessoas.map((p) => p.id))
+      const precisa = financeiro.size > 0 || paraNotas.length > 0
+      const pagamentos = precisa ? await Promise.all(gravacoes.map((g) => dadosDePagamento(tx, organizacaoId, g.id, vm))) : null
+      if (pessoas.length) {
+        await tx.alertaIA.createMany({ data: pessoas.flatMap((p) => gravacoes.map((g, i) => ({
+          organizacaoId, demandaId: g.id, usuarioId: p.id, tipoAlerta: "nf_recebida",
+          mensagem: sinoDaNota(g, financeiro.has(p.id) ? pagamentos?.[i] : null), severidade: "aviso" as const,
+          acaoSugerida: financeiro.has(p.id) ? "Os dados completos estão em Notas fiscais e no e-mail." : "Abra o card e marque quando a nota for cadastrada para pagamento.",
+        }))) })
+      }
+      return { gravacoes, pessoas, financeiro, pagamentos }
     }))
-    if (!r) return { emails: 0 }
-    const emails = r.pessoas.map((p) => p.email).filter((x): x is string => !!x)
-    if (!emails.length) return { emails: 0 }
-    const { assunto, dados } = emailDaNota(r.gravacoes)
-    const env = await sendEmailAvisoDaOperacao(emails, assunto, dados, "nota-do-videomaker")
-    if (!env.ok) console.error("[Avisos de entrega] e-mail da nota não saiu", { demandaIds, erro: env.error })
-    return { emails: env.ok ? emails.length : 0 }
+    if (!r) return { emails: 0, sinos: 0 }
+    const sinos = r.pessoas.length * r.gravacoes.length
+    const jaNasNotas = new Set(paraNotas)
+    const emailDe = (p: Pessoa) => p.email?.trim().toLowerCase() || null
+    const completos = [...paraNotas, ...r.pessoas.filter((p) => r.financeiro.has(p.id)).map(emailDe)].filter((e): e is string => !!e)
+    const simples = r.pessoas.filter((p) => !r.financeiro.has(p.id)).map(emailDe).filter((e): e is string => !!e && !jaNasNotas.has(e))
+    let emails = 0
+    const enviar = async (para: string[], completo: boolean) => {
+      const lista = [...new Set(para)]
+      if (!lista.length) return
+      const { assunto, dados } = emailDaNota(r.gravacoes, completo ? r.pagamentos ?? undefined : undefined)
+      const env = await sendEmailAvisoDaOperacao(lista, assunto, dados, completo ? "nota-do-videomaker-pagamento" : "nota-do-videomaker")
+      // Só o erro do envio: nem destinatário nem dado de pagamento vão para o log.
+      if (!env.ok) console.error("[Avisos de entrega] e-mail da nota não saiu", { demandaIds, completo, erro: env.error })
+      else emails += lista.length
+    }
+    if (r.pagamentos) await enviar(completos, true)
+    await enviar(simples, false)
+    return { emails, sinos }
   } catch (err) {
     console.error("[Avisos de entrega] nota falhou", { demandaIds, erro: err instanceof Error ? err.message : String(err) })
-    return { emails: 0 }
+    return { emails: 0, sinos: 0 }
   }
 }
 

@@ -30,9 +30,10 @@ describe("em que pé está a nota do videomaker", () => {
 })
 
 describe("aviso da nota que cobre várias gravações", () => {
-  it("um aviso só, para a operação, com a lista", () => {
+  it("um aviso só para a operação, com a lista, e a confirmação para o videomaker", () => {
     const m = mensagemDaNotaEmLote("Gabriel", ["Clínica A (VOP-1)", "Clínica B (VOP-2)"])
-    expect(Object.keys(m)).toEqual(["operacao"])
+    expect(Object.keys(m)).toEqual(["operacao", "videomaker"])
+    expect(m.videomaker).toContain("Recebemos a sua nota fiscal de 2 gravações: Clínica A (VOP-1), Clínica B (VOP-2).")
     expect(m.operacao).toContain("A nota de Gabriel chegou para 2 gravações: Clínica A (VOP-1), Clínica B (VOP-2).")
   })
 })

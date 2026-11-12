@@ -47,12 +47,14 @@ it("outra empresa e estados pagos ou conflitantes não podem ser alterados",asyn
  await expect(decidirPagamento(db,ator,c.id,"contestar")).rejects.toThrow("registrado")
  const conflito=await custo({pago:false,statusPagamento:"pago"});await expect(decidirPagamento(db,ator,conflito.id,"aprovar_pagamento")).rejects.toThrow("conflito")
 })
-it("NF concorrente persiste uma submissão, um custo e um alerta",async()=>{
+// O sino da nota saiu da transação em 12/11/2026: vai direcionado, depois do
+// commit (lib/avisos-entrega-videomaker.ts). Aqui não nasce sino nenhum.
+it("NF concorrente persiste uma submissão e um custo, sem sino para todos",async()=>{
  const d=await job(),nf=await adminDb.notaFiscalUpload.create({data:{demandaId:d.id,videomakerId:vm}})
  const r=await Promise.allSettled([receber(nf.id),receber(nf.id)])
  expect(r.filter(x=>x.status==="fulfilled")).toHaveLength(1)
  expect(await adminDb.custoVideomaker.count({where:{demandaId:d.id}})).toBe(1)
- expect(await adminDb.alertaIA.count({where:{demandaId:d.id,tipoAlerta:"nf_recebida"}})).toBe(1)
+ expect(await adminDb.alertaIA.count({where:{demandaId:d.id,tipoAlerta:"nf_recebida"}})).toBe(0)
  expect(await adminDb.custoVideomaker.findFirstOrThrow({where:{demandaId:d.id}})).toMatchObject({valor:0,valorConfirmadoEm:null,statusPagamento:"nf_enviada"})
 })
 it("não substitui documentos pagos nem escolhe arbitrariamente entre parcelas",async()=>{

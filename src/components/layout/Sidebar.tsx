@@ -82,6 +82,8 @@ const sections = [
       { href: "/videomakers", label: "Videomakers Externos", icon: Camera },
       { href: "/equipe", label: "Videomakers Internos", icon: Users },
       { href: "/custos", label: "Custos", icon: DollarSign },
+      // Gestão e financeiro (verCustos): quem mandou a nota e se já foi paga (12/11/2026).
+      { href: "/notas-fiscais", label: "Notas Fiscais", icon: FileText },
       { href: "/historico/audiovisual", label: "Histórico", icon: Archive },
     ],
   },
@@ -323,7 +325,7 @@ export function Sidebar() {
                   </button>
                 <div id={`menu-${section.label.replaceAll(" ", "-")}`} hidden={expandedLabel !== section.label} className="space-y-0.5">
                   {(() => {
-                    const teamHrefs = ["/videomakers", "/equipe", "/custos"]
+                    const teamHrefs = ["/videomakers", "/equipe", "/custos", "/notas-fiscais"]
                     const teamItems = section.label === "Audiovisual" ? visibleItems.filter(item => teamHrefs.includes(item.href)) : []
                     const mainItems = visibleItems.filter(item => !teamItems.includes(item))
                     const renderItem = (item: typeof visibleItems[number]) => {

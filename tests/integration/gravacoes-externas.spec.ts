@@ -7,10 +7,9 @@ import { NextRequest } from "next/server"
 // pagamentos, e a nota é pedida quando o material chega — bruto ou já editado
 // pelo videomaker. Rotas reais, banco real; só a sessão e os avisos são
 // simulados (as tarefas de segundo plano ficam guardadas para o teste rodar).
-const { estado, tarefas, emailParaCompras } = vi.hoisted(() => ({
+const { estado, tarefas } = vi.hoisted(() => ({
   estado: { sessao: null as null | { user: { id: string; organizacaoId: string; tipo: string; papel: string; name: string } } },
   tarefas: [] as { rotulo: string; tarefa: () => Promise<unknown> }[],
-  emailParaCompras: { resultado: { ok: false, error: "simulado" } as { ok: boolean; error?: string }, chamadas: [] as unknown[][] },
 }))
 vi.mock("@/lib/auth", () => ({ auth: async () => estado.sessao }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
@@ -18,11 +17,6 @@ vi.mock("@/lib/notificar", () => ({ emSegundoPlano: (tarefa: () => Promise<unkno
 // Sem armazenamento no teste: a conferência de tamanho e tipo do arquivo do kit
 // tem teste próprio (tests/unit/onda1-portas).
 vi.mock("@/lib/midia-limite", () => ({ recusarUploads: async () => null }))
-// Nenhum e-mail sai do teste: o resultado do envio para compras é escolhido aqui.
-vi.mock("@/lib/email", async (original) => ({
-  ...await original<typeof import("@/lib/email")>(),
-  sendEmailNotaParaCompras: async (...args: unknown[]) => { emailParaCompras.chamadas.push(args); return emailParaCompras.resultado },
-}))
 
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
@@ -199,7 +193,7 @@ describe("quem edita a gravação", () => {
   })
 })
 
-describe("nota do videomaker até compras", () => {
+describe("nota do videomaker: cadastrada para pagamento e paga", () => {
   async function comNotaRecebida() {
     const id = await gravacao("captacao_realizada")
     await db.demanda.update({ where: { id }, data: { statusInterno: "editando", statusVisivel: "edicao", clienteFinalNome: "Clínica Teste" } })
@@ -213,56 +207,37 @@ describe("nota do videomaker até compras", () => {
   )
   const custoDe = async (id: string) => db.custoVideomaker.findFirstOrThrow({ where: { demandaId: id } })
 
-  it("e-mail que falha não muda nada e diz o plano B; \"já mandei por fora\" anda sem e-mail", async () => {
-    const id = await comNotaRecebida()
-    como(pessoas.admin, "admin")
-    emailParaCompras.resultado = { ok: false, error: "Nenhum e-mail de compras configurado" }
-    const falha = await agir(id, "enviar_compras")
-    expect(falha.status).toBe(502)
-    expect((await falha.json()).error).toMatch(/Baixe a nota, mande por fora e marque como enviada/)
-    expect((await custoDe(id)).statusPagamento).toBe("nf_enviada")
-
-    expect((await agir(id, "marcar_enviada")).status).toBe(200)
-    expect(await custoDe(id)).toMatchObject({ statusPagamento: "aguardando_pagamento", emailFinanceiroAt: null })
-    const historico = await db.historicoStatus.findMany({ where: { demandaId: id, statusNovo: "nota_videomaker" } })
-    expect(historico.map((h) => h.observacao)).toContain("Nota enviada para compras (por fora)")
-  })
-
-  it("e-mail que sai vai com cópia para quem clicou; depois, marcar como paga", async () => {
+  // "Cadastrada para pagamento" substituiu o "enviar para compras" (12/11/2026).
+  it("cadastrada para pagamento grava quem e quando, sem e-mail para compras, e avisa o videomaker", async () => {
     const id = await comNotaRecebida()
     como(pessoas.financeiro, "solicitante")
-    emailParaCompras.resultado = { ok: true }
-    emailParaCompras.chamadas.length = 0
-    expect((await agir(id, "enviar_compras")).status).toBe(200)
-    expect(emailParaCompras.chamadas[0][2]).toEqual([`${pessoas.financeiro}@exemplo.test`])
-    expect((emailParaCompras.chamadas[0][0] as { cliente: string }).cliente).toBe("Clínica Teste")
-    expect((await custoDe(id)).statusPagamento).toBe("aguardando_pagamento")
-    expect((await custoDe(id)).emailFinanceiroAt).not.toBeNull()
+    tarefas.length = 0
+    const r = await agir(id, "marcar_cadastrada")
+    expect(r.status).toBe(200)
+    expect((await r.json()).mensagem).toBe("Nota marcada como cadastrada para pagamento. O videomaker foi avisado.")
+    const c = await custoDe(id)
+    expect(c).toMatchObject({ statusPagamento: "aguardando_pagamento", cadastradoPagamentoPorId: pessoas.financeiro, emailFinanceiroAt: null })
+    expect(c.cadastradoPagamentoEm).not.toBeNull()
+    expect(tarefas.map((t) => t.rotulo)).toEqual(["aviso-gravacao"])
+    const historico = await db.historicoStatus.findMany({ where: { demandaId: id, statusNovo: "nota_videomaker" } })
+    expect(historico.map((h) => h.observacao)).toEqual(["Nota cadastrada para pagamento"])
+    // Marcar de novo não muda nada.
+    expect((await (await agir(id, "marcar_cadastrada")).json()).mensagem).toBe("A nota já estava cadastrada para pagamento.")
 
     expect((await agir(id, "marcar_paga")).status).toBe(200)
-    expect(await custoDe(id)).toMatchObject({ statusPagamento: "pago", pago: true })
+    expect(await custoDe(id)).toMatchObject({ statusPagamento: "pago", pago: true, pagoPorId: pessoas.financeiro })
   })
 
-  it("a nota que veio pelo link do videomaker vai a compras com endereço completo e credencial de leitura", async () => {
-    vi.stubEnv("NEXTAUTH_URL", "https://nuflow.test/")
-    const id = await gravacao("captacao_realizada")
-    await db.demanda.update({ where: { id }, data: { statusInterno: "editando", statusVisivel: "edicao" } })
-    const url = `/api/midia/org/${org}/nf/${id}/nota.pdf`
-    const nf = await db.notaFiscalUpload.create({ data: { demandaId: id, videomakerId: vm, status: "enviada", url } })
-    await db.custoVideomaker.create({ data: { organizacaoId: org, demandaId: id, videomakerId: vm, valor: 0, dataReferencia: new Date(), statusPagamento: "nf_enviada", notaFiscalUrl: url } })
+  it("os nomes de antes (enviar_compras, marcar_enviada) valem \"cadastrada\"", async () => {
     como(pessoas.admin, "admin")
-    emailParaCompras.resultado = { ok: true }
-    emailParaCompras.chamadas.length = 0
-    expect((await agir(id, "enviar_compras")).status).toBe(200)
-    const link = (emailParaCompras.chamadas[0][0] as { notaFiscalUrl: string }).notaFiscalUrl
-    expect(link).toBe(`https://nuflow.test${url}?token=${encodeURIComponent(nf.token)}`)
-    // Quem recebe o e-mail não tem conta: a credencial do link basta para ler a nota.
-    estado.sessao = null
-    expect(await podeLerMidia(`org/${org}/nf/${id}/nota.pdf`, nf.token)).toBe(true)
-    vi.unstubAllEnvs()
+    for (const acao of ["enviar_compras", "marcar_enviada"]) {
+      const id = await comNotaRecebida()
+      expect((await agir(id, acao)).status).toBe(200)
+      expect(await custoDe(id)).toMatchObject({ statusPagamento: "aguardando_pagamento", cadastradoPagamentoPorId: pessoas.admin, emailFinanceiroAt: null })
+    }
   })
 
-  it("pagar antes de mandar para compras é recusado; quem não vê custos não age", async () => {
+  it("pagar antes de cadastrar é recusado; quem não vê custos não age", async () => {
     const id = await comNotaRecebida()
     como(pessoas.admin, "admin")
     const cedo = await agir(id, "marcar_paga")

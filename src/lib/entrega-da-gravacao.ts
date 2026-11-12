@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { registrarAuditoria } from "@/lib/auditoria"
+import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { ConviteInvalido } from "@/lib/convites"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import {
@@ -77,8 +78,9 @@ export async function entregarMaterial(tx: Tx, e: {
       observacao: novo ? "Material entregue pelo videomaker no link do convite" : "Videomaker atualizou o material no link do convite",
     },
   })
-  if (chegouAgora) {
-    // O pedido da nota nasce junto com o material, como no caminho de dentro.
+  if (chegouAgora && await videomakerPedeNota(tx, e.organizacaoId, convite.videomakerId)) {
+    // O pedido da nota nasce junto com o material, como no caminho de dentro
+    // (só para videomaker externo).
     const nf = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId: convite.videomakerId } })
     if (!nf) await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: convite.videomakerId } })
   }
