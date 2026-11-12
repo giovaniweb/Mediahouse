@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recalcularMediaEditor } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
+import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { z } from "zod"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
 // Avaliação INTERNA de editor — quem trabalhou com ele dando a nota.
 //
@@ -21,7 +23,7 @@ import { z } from "zod"
 // middleware.
 const schema = z.object({
   nota: z.number().min(1).max(5),
-  comentario: z.string().optional(),
+  comentario: z.string().max(LIMITE_COMENTARIO_AVALIACAO).optional(),
   atendeuDemandas: z.boolean().optional(),
   foiAtencioso: z.boolean().optional(),
   contratariaNovamente: z.boolean().optional(),
@@ -75,9 +77,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 // por QR público, que não tem dono.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+
+  // Quem vê a lista é quem gerencia a equipe (a tela /equipe pede o mesmo).
+  // Sem isso, qualquer pessoa logada — o próprio editor inclusive — lia as
+  // avaliações por este endereço. A página de avaliação promete "o editor não
+  // vê quem avaliou" (Onda 3, 11/11/2026).
+  const acesso = await permissoesEfetivas(session.user.id, organizacaoId)
+  if (!acesso?.permissoes.verEquipe) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
 
   const { id: editorId } = await params
 
@@ -95,6 +104,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
       orderBy: { createdAt: "desc" },
       take: 50,
+      // Sem avaliadorId nem demandaId: a lista não diz quem avaliou.
+      select: {
+        id: true, nota: true, comentario: true, atendeuDemandas: true, foiAtencioso: true,
+        contratariaNovamente: true, origem: true, createdAt: true,
+      },
     }),
     prisma.avaliacaoEditor.aggregate({ where: { editorId }, _avg: { nota: true }, _count: true }),
   ])

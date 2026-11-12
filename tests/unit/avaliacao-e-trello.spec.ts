@@ -125,3 +125,42 @@ describe("allowlist de tenancy", () => {
     }
   })
 })
+
+// ── Onda 3 (11/11/2026): comentário de até 1.000 e editor sem ver quem avaliou ──
+describe("avaliação: 1.000 caracteres em todas as entradas, como a Política", () => {
+  it("o limite é 1.000", async () => {
+    const { LIMITE_COMENTARIO_AVALIACAO } = await import("@/lib/avaliacao-limite")
+    expect(LIMITE_COMENTARIO_AVALIACAO).toBe(1000)
+  })
+  for (const f of [
+    "src/app/api/publico/avaliar/route.ts",
+    "src/app/api/publico/avaliar-editor/route.ts",
+    "src/app/api/editores/[id]/avaliar/route.ts",
+    "src/app/api/videomakers/[id]/avaliar/route.ts",
+    "src/app/(public)/avaliar/[videomakerId]/page.tsx",
+    "src/app/(public)/avaliar-editor/[editorId]/page.tsx",
+    "src/app/(dashboard)/videomakers/[id]/page.tsx",
+    "src/app/(dashboard)/equipe/[id]/page.tsx",
+  ]) {
+    it(`${f} usa o limite comum`, () => {
+      const src = ler(f)
+      expect(src).toContain("LIMITE_COMENTARIO_AVALIACAO")
+      expect(src).not.toMatch(/max\(2000\)|maxLength=\{500\}/)
+    })
+  }
+})
+
+describe("avaliação de editor: o editor não vê quem avaliou", () => {
+  it("a lista exige verEquipe e não devolve avaliador nem serviço", () => {
+    const src = ler("src/app/api/editores/[id]/avaliar/route.ts")
+    const get = src.slice(src.indexOf("export async function GET"))
+    expect(get).toContain("permissoes.verEquipe")
+    expect(get).toContain("select: {")
+    expect(get).not.toMatch(/avaliadorId: true|demandaId: true/)
+  })
+  it("a página pública diz isso, e não que é anônima", () => {
+    const src = ler("src/app/(public)/avaliar-editor/[editorId]/page.tsx")
+    expect(src).toContain("O editor não vê quem avaliou")
+    expect(src).not.toContain("anônima")
+  })
+})

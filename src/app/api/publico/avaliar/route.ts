@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
+import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 import { prisma } from "@/lib/prisma"
 import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 import { lerConvite, MSG_CONVITE } from "@/lib/convite-avaliacao"
@@ -14,7 +15,7 @@ import { barrarAvaliacao, servicoJaAvaliado } from "@/lib/avaliacao-publica"
 const schema = z.object({
   convite: z.string().max(600).optional(),
   nota: z.coerce.number().int().min(1).max(5),
-  comentario: z.string().max(2000).optional().nullable(),
+  comentario: z.string().max(LIMITE_COMENTARIO_AVALIACAO).optional().nullable(),
   checklist: z.object({
     atendeuDemandas: z.string().optional(),
     foiPontual: z.string().optional(),
