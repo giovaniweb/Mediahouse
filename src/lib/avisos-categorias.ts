@@ -208,7 +208,7 @@ const ALERTA_PARA_CATEGORIA: Record<string, CategoriaAviso> = {
   urgencia_pendente: "pedidos", aprovacao_pendente: "pedidos",
   video_aprovado: "andamento", ajuste_solicitado: "andamento", espelho_movimentou: "andamento",
   mencao_comentario: "comentarios",
-  material_recebido: "gravacoes", nf_recebida: "gravacoes",
+  material_recebido: "gravacoes", nf_recebida: "gravacoes", gravacao_pendente: "gravacoes",
   novo_videomaker_pendente: "gravacoes", novo_designer_pendente: "gravacoes",
   cobranca_social: "social",
   whatsapp_desconectado: "sistema", whatsapp_reconectou: "sistema", financeiro_email_pendente: "sistema",

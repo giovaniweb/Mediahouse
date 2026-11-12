@@ -51,7 +51,9 @@ export const COMBINADO = [
   { nome: "helaine", perfil: "pedi" },
   { nome: "fernanda normando", perfil: "pedi" },
   { nome: "caroline tinos", perfil: "pedi" },
-  { nome: "debora", perfil: "pedi" },
+  // Débora opera as Gravações Externas (Giovani, 12/11): tudo de gravações,
+  // videomaker e notas, inclusive gravação nova; o resto, só o que ela pediu.
+  { nome: "debora", perfil: "pedi", manter: ["gravacoes"] },
   { nome: "luisa ayusso", perfil: "pedi" },
 ]
 

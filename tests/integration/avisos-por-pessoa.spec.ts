@@ -228,7 +228,11 @@ describe("script dos perfis da Contourline", () => {
       expect(luisa.find((l) => l.categoria === "sistema")).toMatchObject({ sino: false, whatsapp: false })
       // Rodar de novo não duplica.
       expect(rodar("--aplicar").status).toBe(0)
-      expect(await db.preferenciaAviso.count({ where: { organizacaoId: orgS } })).toBe(luisa.length * 5 + thal.length * 2)
+      // Débora mantém Gravações como hoje (sem linha): uma a menos que os outros do "pedi".
+      const debora = await db.preferenciaAviso.findMany({ where: { organizacaoId: orgS, usuarioId: ids[5] } })
+      expect(debora.find((l) => l.categoria === "gravacoes")).toBeUndefined()
+      expect(debora.find((l) => l.categoria === "andamento")).toMatchObject({ recorte: "pedi" })
+      expect(await db.preferenciaAviso.count({ where: { organizacaoId: orgS } })).toBe(luisa.length * 5 - 1 + thal.length * 2)
     } finally {
       await db.preferenciaAviso.deleteMany({ where: { organizacaoId: orgS } })
       await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: orgS } })
