@@ -84,8 +84,8 @@ export const CATEGORIAS_AVISO: Record<CategoriaAviso, Info> = {
   },
   resumos: {
     titulo: "Resumos do dia e da semana",
-    descricao: "O resumo da manhã (quantos alertas estão abertos) e o relatório semanal de cada área. O resumo do fim do dia, quando existir, entra aqui.",
-    exemplo: "☀️ Bom dia! O Flow tem 14 alertas ativos hoje.",
+    descricao: "O resumo do fim do dia (18h, de segunda a sexta, só do que é dela), o bom-dia da gestão e o relatório semanal de cada área.",
+    exemplo: "🌙 Thalisson, o resumo do seu dia: 3 andaram, 1 esperando você, 2 atrasados.",
     temRecorte: false,
   },
   sistema: {
