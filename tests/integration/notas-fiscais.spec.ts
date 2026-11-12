@@ -46,6 +46,7 @@ import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { registrarServicoPendente } from "@/lib/custo-servico"
 import { GET as lerAlertas } from "@/app/api/alertas/route"
+import { POST as baixa } from "@/app/api/notas-fiscais/baixa/route"
 
 const p = `notasfisc-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
@@ -349,6 +350,74 @@ describe("revisão do #145", () => {
     expect(j.linhas.find((l) => l.demandaId === externo)?.estado).toBe("pendente")
     expect(j.linhas.map((l) => l.demandaId)).not.toContain(interno)
     expect(j.retrato.pendente).toBe(j.linhas.filter((l) => l.estado === "pendente").length)
+  })
+})
+
+describe("baixa nas notas (12/11/2026)", () => {
+  const darBaixa = (demandaIds: string[]) => baixa(new NextRequest("http://localhost/api/notas-fiscais/baixa", { method: "POST", body: JSON.stringify({ demandaIds }) }))
+  async function antiga(videomakerId: string, custo?: "pendente_nf" | "nf_enviada" | "pago") {
+    const id = `${p}-${randomUUID().slice(0, 6)}`
+    await db.demanda.create({ data: {
+      id, organizacaoId: org, codigo: `VOP-EXT-${id.slice(-6)}`, titulo: "Cobertura do mês", descricao: "Teste.",
+      area: "audiovisual", departamento: "eventos", tipoVideo: "cobertura_evento", cidade: "Curitiba",
+      solicitanteId: gente.admin.id, videomakerId, statusInterno: "entregue_cliente", statusVisivel: "finalizado",
+      dataCaptacao: new Date("2026-09-14T13:00:00Z"),
+    } })
+    if (custo) await db.custoVideomaker.create({ data: { organizacaoId: org, demandaId: id, videomakerId, valor: 0, dataReferencia: new Date(), statusPagamento: custo, pago: custo === "pago" } })
+    return id
+  }
+
+  it("as marcadas ficam pagas no nome de quem deu baixa, de qualquer estado, e ninguém é avisado", async () => {
+    const comCusto = await antiga(vm, "pendente_nf"), semCusto = await antiga(vm), enviada = await antiga(vm, "nf_enviada"), jaPaga = await antiga(vm, "pago")
+    const nf = await db.notaFiscalUpload.create({ data: { demandaId: semCusto, videomakerId: vm } })
+    const interno = await antiga(vmInterno, "pendente_nf")
+    entrar(gente.financeira)
+    const r = await darBaixa([comCusto, semCusto, enviada, jaPaga, interno])
+    expect(r.status).toBe(200)
+    const j = await r.json() as { baixadas: string[]; jaPagas: string[]; recusadas: { codigo: string }[]; mensagem: string }
+    expect(j.baixadas).toHaveLength(3)
+    expect(j.jaPagas).toHaveLength(1)
+    expect(j.recusadas.map((x) => x.codigo)).toEqual([interno])
+    expect(j.mensagem).toContain("Ninguém foi avisado.")
+
+    for (const id of [comCusto, semCusto, enviada]) {
+      const c = await db.custoVideomaker.findFirstOrThrow({ where: { organizacaoId: org, demandaId: id, videomakerId: vm } })
+      expect(c).toMatchObject({ statusPagamento: "pago", pago: true, pagoPorId: gente.financeira.id })
+      expect(c.dataPagamento).not.toBeNull()
+      const h = await db.historicoStatus.findMany({ where: { demandaId: id, statusNovo: "nota_videomaker" } })
+      expect(h.map((x) => x.observacao)).toEqual(["Baixa na nota: resolvida por fora, sem aviso ao videomaker"])
+    }
+    // Nenhum aviso: nem WhatsApp, nem e-mail, nem tarefa de segundo plano.
+    expect(await db.saidaWhatsapp.count({ where: { organizacaoId: org, referencia: { in: [comCusto, semCusto, enviada] } } })).toBe(0)
+    expect(emails.chamadas).toEqual([])
+    expect(tarefas).toEqual([])
+
+    // A página mostra pagas; o link antigo da nota não aceita mais arquivo.
+    const pg = await (await listar(new NextRequest(`http://localhost/api/notas-fiscais?videomakerId=${vm}`))).json() as { linhas: { demandaId: string; estado: string; paga: { por: string } | null }[] }
+    for (const id of [comCusto, semCusto, enviada]) {
+      const l = pg.linhas.find((x) => x.demandaId === id)!
+      expect(l.estado).toBe("paga")
+      expect(l.paga?.por).toBe(`Pessoa ${gente.financeira.id.slice(-3)}`)
+    }
+    const form = new FormData()
+    form.set("arquivo", new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52])], "nota.pdf", { type: "application/pdf" }))
+    const up = await uploadNF(new NextRequest("http://localhost/api/nf-upload/x", { method: "POST", body: form }), { params: Promise.resolve({ token: nf.token }) })
+    expect(up.status).not.toBe(200)
+
+    // Dar baixa de novo não muda quem deu.
+    entrar(gente.admin)
+    const de_novo = await (await darBaixa([comCusto])).json() as { jaPagas: string[] }
+    expect(de_novo.jaPagas).toHaveLength(1)
+    expect((await db.custoVideomaker.findFirstOrThrow({ where: { demandaId: comCusto } })).pagoPorId).toBe(gente.financeira.id)
+  })
+
+  it("quem não é da gestão nem do financeiro não dá baixa", async () => {
+    const id = await antiga(vm, "pendente_nf")
+    entrar(gente.avisada)
+    expect((await darBaixa([id])).status).toBe(403)
+    expect((await db.custoVideomaker.findFirstOrThrow({ where: { demandaId: id } })).statusPagamento).toBe("pendente_nf")
+    entrar(gente.financeira)
+    expect((await darBaixa([])).status).toBe(400)
   })
 })
 
