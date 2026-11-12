@@ -25,7 +25,10 @@ const GRUPO_LABELS: Record<string, string> = {
   social: "Social Media",
 }
 
-export function ChecklistSection({ demandaId }: { demandaId: string }) {
+// `podeMexer`: criar e apagar item (gestão, "Editar Demanda" ou quem faz a
+// peça). `podeMarcar`: também o videomaker e o social do card. A rota confere
+// as duas (lib/quem-envia-arquivo); aqui é para não oferecer o que vai falhar.
+export function ChecklistSection({ demandaId, podeMexer = true, podeMarcar = true }: { demandaId: string; podeMexer?: boolean; podeMarcar?: boolean }) {
   const { data, mutate } = useSWR(`/api/demandas/${demandaId}/checklist`, fetcher)
   const [novoTexto, setNovoTexto] = useState("")
   const [novoGrupo, setNovoGrupo] = useState("geral")
@@ -101,6 +104,9 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
     setCollapsed(prev => ({ ...prev, [grupo]: !prev[grupo] }))
   }
 
+  // Sem itens e sem poder criar: não há o que mostrar.
+  if (total === 0 && !showAddForm && !podeMexer) return null
+
   if (total === 0 && !showAddForm) {
     return (
       <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-5">
@@ -108,6 +114,7 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
           <h2 className={surface.sectionTitle}>
             <CheckSquare aria-hidden /> Checklist
           </h2>
+          {podeMexer && (
           <button
             type="button"
             onClick={() => setShowAddForm(true)}
@@ -115,6 +122,7 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
           >
             <Plus className="w-4 h-4" aria-hidden /> Adicionar
           </button>
+          )}
         </div>
         <p className={surface.empty}>Nenhum item no checklist. Adicione itens ou aplique um template.</p>
       </div>
@@ -131,6 +139,7 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
             {concluidos}/{total}
           </span>
         </h2>
+        {podeMexer && (
         <button
           type="button"
           onClick={() => setShowAddForm(!showAddForm)}
@@ -138,6 +147,7 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
         >
           <Plus className="w-4 h-4" aria-hidden /> Adicionar
         </button>
+        )}
       </div>
 
       {/* Barra de progresso */}
@@ -177,7 +187,8 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
                     <div key={item.id} className="flex items-center gap-2 group py-1 px-1 rounded hover:bg-zinc-800/50">
                       <button
                         onClick={() => toggleItem(item.id, !item.concluido)}
-                        className="shrink-0"
+                        disabled={!podeMarcar}
+                        className="shrink-0 disabled:cursor-default"
                       >
                         {item.concluido ? (
                           <CheckSquare className="w-4 h-4 text-green-500" />
@@ -196,12 +207,12 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
                           {item.concluidoPor}
                         </span>
                       )}
-                      <button
+                      {podeMexer && <button
                         onClick={() => deleteItem(item.id)}
                         className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-opacity"
                       >
                         <Trash2 className="w-3 h-3" />
-                      </button>
+                      </button>}
                     </div>
                   ))}
                 </div>
@@ -212,7 +223,7 @@ export function ChecklistSection({ demandaId }: { demandaId: string }) {
       </div>
 
       {/* Form para adicionar */}
-      {showAddForm && (
+      {showAddForm && podeMexer && (
         <div className="mt-3 pt-3 border-t border-zinc-800 flex gap-2">
           <input
             value={novoTexto}

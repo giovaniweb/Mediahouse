@@ -6,7 +6,11 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
 import type { FamiliaArte } from "@/lib/avisos-arte"
 import { getOrgId, semOrg, requireDemandaOrg } from "@/lib/org"
-import { guardaDoEnvio } from "@/lib/quem-envia-arquivo"
+import { filtroFazAPeca, guardaDoEnvio } from "@/lib/quem-envia-arquivo"
+import { oQueAPessoaVe } from "@/lib/escopo-demanda"
+import { ehGestor } from "@/lib/papel"
+import { permissoesEfetivas } from "@/lib/permissoes-server"
+import type { Prisma } from "@prisma/client"
 
 // GET /api/aprovacao-video?status=pendente&area=audiovisual|design
 // Aprovações de entregável da organização logada. Existe porque a aba "Vídeos"
@@ -23,10 +27,31 @@ export async function GET(req: NextRequest) {
   const areaParam = sp.get("area")
   const area = areaParam === "design" || areaParam === "audiovisual" ? areaParam : undefined
 
+  // Até 12/11/2026 a lista era da empresa inteira para qualquer pessoa logada,
+  // com o link público de aprovação de cada vídeo. Agora vale o que a pessoa vê
+  // no quadro (oQueAPessoaVe: escopo e área) e, nele, a régua das outras rotas:
+  // gestão, "Editar Demanda" ou quem tem a tela de Aprovações da área (o
+  // auxiliar administrativo trabalha nela sem editar demandas) veem tudo o que
+  // enxergam; os demais, só os cards em que fazem a peça. O solicitante recebe
+  // o link do vídeo dele pelo WhatsApp, não por aqui.
+  //
+  // Só cards DESTA empresa: `oQueAPessoaVe` inclui os espelhados de outra
+  // (escopoComEspelho), e o token de cada aprovação é o link público do
+  // cliente da dona. Com o RLS desligado, a lista os entregava a quem só
+  // executa ou acompanha o card (revisão do #141). Antes desta mudança o
+  // filtro já era `organizacaoId`; o espelho não entra.
+  const filtros: Prisma.DemandaWhereInput[] = [{ organizacaoId }, await oQueAPessoaVe(session, organizacaoId)]
+  if (area) filtros.push({ area })
+  if (!ehGestor(session)) {
+    const p = (await permissoesEfetivas(session.user.id, organizacaoId))?.permissoes
+    const daTela = area === "design" ? p?.verAprovacoesGrowth : area === "audiovisual" ? p?.verAprovacoes : p?.verAprovacoes && p?.verAprovacoesGrowth
+    if (!p?.editarDemanda && !daTela) filtros.push(filtroFazAPeca(session.user.id))
+  }
+
   const aprovacoes = await prisma.aprovacaoVideo.findMany({
     where: {
       ...(status ? { status } : {}),
-      demanda: { organizacaoId, ...(area ? { area } : {}) },
+      demanda: { AND: filtros },
     },
     include: {
       demanda: { select: { id: true, codigo: true, titulo: true, area: true } },

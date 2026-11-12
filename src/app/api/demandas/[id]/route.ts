@@ -1,4 +1,5 @@
 import { ehEdicaoDaGravacao, ehTipoDeGravacao, statusAoGravarMaterial } from "@/lib/etapas-da-gravacao"
+import { guardaDoCard, podeTrocarLinksDoMaterial, SEM_PERMISSAO_DE_ENVIO } from "@/lib/quem-envia-arquivo"
 import { ACOES_DO_VIDEOMAKER } from "@/lib/job-transicoes"
 import { veNotaDoVideomaker } from "@/lib/permissoes-server"
 import { emitirConvite, ConviteInvalido, substituirConvites } from "@/lib/convites"
@@ -209,6 +210,17 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const guard = await assertDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
   const body = await req.json()
+  // Os links do material (12/11/2026): até aqui, quem tinha o card no escopo
+  // trocava o vídeo final e os brutos sem "Editar Demanda" — o solicitante no
+  // próprio pedido, o videomaker o vídeo final de uma edição que é da equipe.
+  // A régua é a das rotas de arquivo; o videomaker segue salvando o material
+  // dele na ficha (#136), como no link do convite (podeTrocarLinksDoMaterial).
+  if (body.linkBrutos !== undefined || body.linkFinal !== undefined) {
+    const campos = { linkBrutos: body.linkBrutos !== undefined, linkFinal: body.linkFinal !== undefined }
+    const negado = await guardaDoCard(session, guard.organizacaoId, id,
+      (u, d) => podeTrocarLinksDoMaterial(u, d, campos), SEM_PERMISSAO_DE_ENVIO)
+    if (negado) return negado
+  }
   if (body.videomakerId !== undefined) {
     const acesso = await requireAcesso("editarDemanda")
     if (acesso instanceof NextResponse) return acesso

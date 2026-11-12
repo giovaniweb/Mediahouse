@@ -1615,7 +1615,13 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
 
           {/* ── Checklist ─────────────────────────────────────────────────── */}
           {/* Na gravação externa, o que levar está na ficha ("Levar"). */}
-          {!ehCobertura && <ChecklistSection demandaId={id as string} />}
+          {!ehCobertura && (
+            <ChecklistSection
+              demandaId={id as string}
+              podeMexer={podeEditar || souResponsavel}
+              podeMarcar={podeEditar || souResponsavel || (!!dataMe?.id && (demanda.videomaker?.usuarioId === dataMe.id || demanda.socialId === dataMe.id))}
+            />
+          )}
           </div>
           {/* ── Equipe e contexto: deixou de ser aba, fica embaixo do Pedido ── */}
           <div id={`equipe-${id}`} hidden={detailTab !== "pedido"} className={cn(surface.tabSection, surface.grupo)}>
@@ -2184,6 +2190,7 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                   </p>
                   <button
                     type="button"
+                    hidden={!(podeEditar || souResponsavel)}
                     onClick={converterEmEvento}
                     disabled={convertendoEvento}
                     className={surface.btnPrimary}

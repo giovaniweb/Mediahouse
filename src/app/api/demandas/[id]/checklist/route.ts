@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
+import { fazAPeca, guardaDoCard, guardaDoEscopo, podeMarcarChecklist, SEM_PERMISSAO_NO_CARD } from "@/lib/quem-envia-arquivo"
+
+// Até 12/11/2026 estas rotas conferiam só a empresa: qualquer pessoa logada
+// nela lia, criava, marcava e apagava itens de qualquer card. Agora: ler, quem
+// tem o card no escopo (como a ficha); fora dele, 404. Criar, renomear e apagar,
+// a gestão, quem tem "Editar Demanda" ou quem faz a peça. Marcar, também o
+// videomaker e o social do card (lib/quem-envia-arquivo: podeMarcarChecklist).
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -13,6 +20,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  const fora = await guardaDoEscopo(session, guard.organizacaoId, id)
+  if (fora) return fora
   const itens = await prisma.checklistItem.findMany({
     where: { demandaId: id },
     orderBy: [{ grupo: "asc" }, { ordem: "asc" }],
@@ -40,6 +49,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  const negado = await guardaDoCard(session, guard.organizacaoId, id, fazAPeca, SEM_PERMISSAO_NO_CARD)
+  if (negado) return negado
   const body = await req.json()
   const { texto, grupo } = body
 
@@ -76,6 +87,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (guard instanceof NextResponse) return guard
   const body = await req.json()
   const { itemId, concluido, texto } = body
+  // Só marcar (sem trocar o texto) é a régua mais larga: o videomaker e o social do card também.
+  const soMarca = texto === undefined
+  const negado = await guardaDoCard(session, guard.organizacaoId, id, soMarca ? podeMarcarChecklist : fazAPeca, SEM_PERMISSAO_NO_CARD)
+  if (negado) return negado
 
   if (!itemId) return NextResponse.json({ error: "itemId obrigatório" }, { status: 400 })
 
@@ -108,6 +123,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  const negado = await guardaDoCard(session, guard.organizacaoId, id, fazAPeca, SEM_PERMISSAO_NO_CARD)
+  if (negado) return negado
   const body = await req.json()
   const { itemId } = body
 
