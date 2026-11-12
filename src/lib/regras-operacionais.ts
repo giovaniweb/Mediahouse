@@ -40,7 +40,8 @@ export function lembreteVigente(e: Pick<Evento,"inicio"|"lembreteMinutos"|"statu
 export function cobrancaValida(c: Pick<CustoVideomaker,"pago"|"statusPagamento"|"dataVencimento">, agora: Date) {
   return !c.pago && c.statusPagamento === "pendente_nf" && !!c.dataVencimento && dataCalendario(c.dataVencimento)! <= dataEmSaoPaulo(agora)
 }
-export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"|"gravacao"; id: string; revisao: string; regra: string }
+/** `arte`: família da arte do aviso (lib/avisos-arte.ts), quando depende dos números do dia. Fora da chave. */
+export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"|"gravacao"; id: string; revisao: string; regra: string; arte?: string }
 export async function contextoRegraValido(tx: Prisma.TransactionClient, org: string, c: ContextoRegra, agora: Date) {
   const empresa = await tx.organizacao.findUnique({where:{id:org},select:{ativo:true,ambienteTeste:true}})
   if (!empresa?.ativo || empresa.ambienteTeste) return false

@@ -351,6 +351,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       // Growth muda o substantivo do aviso: quem pediu uma arte recebia
       // "Seu vídeo está pronto".
       isGrowth: demandaAtual.area === "design",
+      // Só escolhe a arte (camaleão ou coelho); não trava nada.
+      tipoEntrega: demandaAtual.tipoVideo,
       // O que o solicitante abre. A página de aprovação primeiro; o arquivo
       // final como reserva. Sem nenhum dos dois, o aviso de "pronto para
       // revisão" não é enviado — ver revisao_pendente em lib/kanban-avisos.ts.
