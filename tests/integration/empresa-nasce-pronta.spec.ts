@@ -23,6 +23,12 @@ import { SENHA_PENDENTE } from "@/lib/convite-equipe"
 const p = `nasce-${randomUUID().slice(0, 8)}`
 const superAdmin = `${p}-super`
 const emailAdmin = `${p}-admin@gh.test`, emailEquipe = `${p}-social@gh.test`
+// Revisão do #142: conta antiga gravada com maiúscula, conta pendente de outra
+// empresa, duas grafias do mesmo e-mail e uma pessoa nova com e-mail que falha.
+const outraOrg = `${p}-outra`
+const emailMaiusculo = `${p}-Antigo@GH.test`, emailAlheio = `${p}-alheio@gh.test`
+const emailDuplo = `${p}-duplo@gh.test`, emailNovo = `${p}-novo@gh.test`
+const emailsRevisao = [emailMaiusculo, emailAlheio, emailDuplo, emailDuplo.toUpperCase(), emailNovo]
 const json = (url: string, body: unknown) => new NextRequest(`http://localhost${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
 let orgId = "", adminId = "", tokenAdmin = ""
 const tokenDoEmail = (n: number) => {
@@ -37,7 +43,8 @@ beforeAll(async () => {
 beforeEach(() => { estado.sessao = { user: { id: superAdmin, tipo: "admin" } } })
 afterAll(async () => {
   if (orgId) await db.organizacao.delete({ where: { id: orgId } })
-  await db.usuario.deleteMany({ where: { OR: [{ id: superAdmin }, { email: { in: [emailAdmin, emailEquipe] } }] } })
+  await db.organizacao.deleteMany({ where: { id: outraOrg } })
+  await db.usuario.deleteMany({ where: { OR: [{ id: superAdmin }, { email: { in: [emailAdmin, emailEquipe, ...emailsRevisao] } }] } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -119,5 +126,68 @@ describe("empresa nasce pronta", () => {
     expect(fim.itens.filter((i: { feito: boolean }) => !i.feito).map((i: { chave: string }) => i.chave)).toEqual(["whatsapp", "produtos"])
     await passo(json("/api/primeiros-passos", { acao: "dispensar" }))
     expect((await (await passos()).json()).mostrar).toBe(false)
+  })
+})
+
+describe("convite: e-mail com maiúscula e link só para quem nasceu agora (revisão do #142)", () => {
+  beforeAll(async () => {
+    await db.organizacao.create({ data: { id: outraOrg, nome: "Outra produtora", slug: outraOrg, ativo: true, prefixoCodigo: "OP" } })
+    // Conta antiga com maiúscula, com senha, em outra empresa.
+    await db.usuario.create({ data: { nome: "Antigo", email: emailMaiusculo, senhaHash: "$2b$10$" + "x".repeat(53), tipo: "editor",
+      organizacoes: { create: { organizacaoId: outraOrg, papel: "editor" } } } })
+    // Conta convidada pela outra empresa, ainda sem senha.
+    await db.usuario.create({ data: { nome: "Alheio", email: emailAlheio, senhaHash: SENHA_PENDENTE, tipo: "editor",
+      organizacoes: { create: { organizacaoId: outraOrg, papel: "editor" } } } })
+    // Duas grafias do mesmo e-mail (o índice único é sobre o texto exato).
+    await db.usuario.createMany({ data: [
+      { nome: "Duplo a", email: emailDuplo, senhaHash: "sem-login", tipo: "editor" },
+      { nome: "Duplo b", email: emailDuplo.toUpperCase(), senhaHash: "sem-login", tipo: "editor" },
+    ] })
+  })
+  beforeEach(() => { estado.sessao = { user: { id: adminId, organizacaoId: orgId, tipo: "admin" } } })
+
+  it("acha a conta antiga gravada com maiúscula: não cria segunda identidade", async () => {
+    const res = await convidar(json("/api/usuarios/convite", { email: emailMaiusculo.toLowerCase(), nome: "Antigo", papel: "social" }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).convite.jaTinhaConta).toBe(true)
+    const contas = await db.usuario.findMany({ where: { email: { equals: emailMaiusculo, mode: "insensitive" } }, include: { organizacoes: true } })
+    expect(contas).toHaveLength(1)
+    expect(contas[0].email).toBe(emailMaiusculo)
+    expect(contas[0].organizacoes.map((o) => o.organizacaoId).sort()).toEqual([orgId, outraOrg].sort())
+  })
+
+  it("duas grafias do mesmo e-mail: recusa em vez de escolher ou criar uma terceira", async () => {
+    const res = await convidar(json("/api/usuarios/convite", { email: emailDuplo, nome: "Duplo", papel: "social" }))
+    expect(res.status).toBe(409)
+    expect(await db.usuario.count({ where: { email: { equals: emailDuplo, mode: "insensitive" } } })).toBe(2)
+  })
+
+  it("e-mail falhou: conta pendente de outra empresa NÃO devolve o token a quem convida", async () => {
+    email.mockResolvedValueOnce({ ok: false, error: "fora do ar" } as never)
+    const res = await convidar(json("/api/usuarios/convite", { email: emailAlheio, papel: "social" }))
+    expect(res.status).toBe(201)
+    const corpo = await res.json()
+    expect(corpo.convite).toMatchObject({ enviado: false, link: null })
+    // O token existe (foi para o e-mail da pessoa), mas não saiu na resposta.
+    const tokens = await db.passwordResetToken.findMany({ where: { email: emailAlheio, usedAt: null } })
+    expect(tokens).toHaveLength(1)
+    expect(JSON.stringify(corpo)).not.toContain(tokens[0].token)
+  })
+
+  it("e-mail falhou no reenvio de alguém daqui: também sem link na resposta", async () => {
+    email.mockResolvedValueOnce({ ok: false, error: "fora do ar" } as never)
+    const res = await convidar(json("/api/usuarios/convite", { email: emailAlheio, papel: "social" }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).convite).toMatchObject({ enviado: false, reenvio: true, link: null })
+  })
+
+  it("e-mail falhou para pessoa nova criada agora: o link volta, para mandar por outro caminho", async () => {
+    email.mockResolvedValueOnce({ ok: false, error: "fora do ar" } as never)
+    const res = await convidar(json("/api/usuarios/convite", { email: emailNovo, nome: "Novo", papel: "social" }))
+    expect(res.status).toBe(201)
+    const { convite } = await res.json()
+    expect(convite.enviado).toBe(false)
+    const token = (await db.passwordResetToken.findFirstOrThrow({ where: { email: emailNovo, usedAt: null } })).token
+    expect(convite.link).toContain(token)
   })
 })

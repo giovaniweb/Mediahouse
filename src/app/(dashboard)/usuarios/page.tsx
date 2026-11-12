@@ -688,8 +688,13 @@ export default function PessoasAcessosPage() {
     if (!res.ok) throw new Error(json.error || "Não foi possível convidar")
     const c = json.convite as { enviado: boolean; reenvio: boolean; jaTinhaConta: boolean; erro: string | null; link: string | null }
     if (!c.enviado) {
-      toast.error(`O e-mail não saiu (${c.erro}). Copie o link e mande pelo WhatsApp.`)
-      if (c.link) setLinkManual({ nome: json.usuario.nome, link: c.link })
+      // O link só volta para quem nasceu agora por este convite (revisão do #142).
+      if (c.link) {
+        toast.error(`O e-mail não saiu (${c.erro}). Copie o link e mande pelo WhatsApp.`)
+        setLinkManual({ nome: json.usuario.nome, link: c.link })
+      } else {
+        toast.error(`O e-mail não saiu (${c.erro}). Tente reenviar mais tarde ou peça à pessoa para usar "Esqueci minha senha" com este e-mail.`)
+      }
     } else {
       toast.success(c.jaTinhaConta
         ? `${json.usuario.nome} já tinha conta no NuFlow e foi avisada por e-mail.`

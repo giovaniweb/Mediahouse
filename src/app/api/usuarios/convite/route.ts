@@ -7,7 +7,7 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import type { AreaAtuacao } from "@prisma/client"
 import { comOrg } from "@/lib/org-contexto"
 import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
-import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
+import { criarUsuarioComVinculo, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 import {
   SENHA_PENDENTE, convitePendente, ehPapelConvite, emailDoConvite, enviarEmailConvite, gerarTokenConvite, linkConvite,
 } from "@/lib/convite-equipe"
@@ -50,15 +50,29 @@ export async function POST(req: NextRequest) {
   let usuario: { id: string; nome: string }
   let pendente: boolean
   let reenvio = false
+  // Pessoa criada agora, nesta empresa, por este convite. Só para ela o link de
+  // primeiro acesso pode voltar na resposta (revisão do #142).
+  let criadaAgora = false
+  // O e-mail como está gravado: o token de senha casa o e-mail exato
+  // (redefinir_senha_por_token), então a conta antiga com maiúscula recebe o
+  // token com a grafia dela.
+  let emailDaConta = email
 
-  const existenteId = await usuarioIdPorEmail(email)
-  if (existenteId) {
-    // A identidade é lida pelo cliente de autenticação: a pessoa pode ainda não
-    // ser desta empresa, e aí o cliente normal não a enxerga.
-    const conta = await prismaAuth.usuario.findUnique({
-      where: { id: existenteId }, select: { id: true, nome: true, status: true, senhaHash: true },
-    })
-    if (!conta || conta.status === "inativo") {
+  // Sem diferença de maiúscula: o e-mail digitado é normalizado, mas há contas
+  // antigas gravadas com maiúscula (1 em produção em 12/11/2026). A busca exata
+  // não as achava e o convite criava uma segunda identidade. A identidade é lida
+  // pelo cliente de autenticação: a pessoa pode ainda não ser desta empresa.
+  const contas = await prismaAuth.usuario.findMany({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true, nome: true, email: true, status: true, senhaHash: true },
+    take: 2,
+  })
+  if (contas.length > 1) {
+    return NextResponse.json({ error: "Há mais de um cadastro com esse e-mail. Fale com o suporte do NuFlow para juntar antes de convidar." }, { status: 409 })
+  }
+  const conta = contas[0]
+  if (conta) {
+    if (conta.status === "inativo") {
       return NextResponse.json({ error: "Não foi possível convidar este e-mail. Fale com o suporte do NuFlow." }, { status: 409 })
     }
     const membro = await comOrg(organizacaoId, () => prisma.usuarioOrganizacao.findUnique({
@@ -75,6 +89,7 @@ export async function POST(req: NextRequest) {
     }
     reenvio = !!membro
     usuario = { id: conta.id, nome: conta.nome }
+    emailDaConta = conta.email ?? email
   } else {
     if (!nome) return NextResponse.json({ error: "Informe o nome da pessoa" }, { status: 400 })
     const telefone = typeof body.telefone === "string" && body.telefone.trim() ? body.telefone.trim().slice(0, 40) : null
@@ -89,24 +104,30 @@ export async function POST(req: NextRequest) {
       { id: true, nome: true }
     )
     pendente = true
+    criadaAgora = true
   }
 
-  const token = pendente ? await gerarTokenConvite(prismaAuth, email) : null
+  const token = pendente ? await gerarTokenConvite(prismaAuth, emailDaConta) : null
   const link = token ? linkConvite(token) : null
   await comOrg(organizacaoId, () => prisma.$transaction((tx) => registrarAuditoria(tx, { organizacaoId, usuarioId: quemConvida }, {
     acao: "convite.criar", recurso: "usuario", recursoId: usuario.id, correlationId: correlacaoAuditoria(),
   })))
-  const envio = await enviarEmailConvite({ para: email, nome: usuario.nome, empresa: empresa.nome, papel, link, convidadoPor: convidante?.nome })
+  const envio = await enviarEmailConvite({ para: emailDaConta, nome: usuario.nome, empresa: empresa.nome, papel, link, convidadoPor: convidante?.nome })
 
   return NextResponse.json({
-    usuario: { ...usuario, email },
+    usuario: { ...usuario, email: emailDaConta },
     convite: {
       enviado: envio.ok,
       reenvio,
       jaTinhaConta: !pendente,
       erro: envio.ok ? null : envio.error ?? "Falha ao enviar o e-mail",
-      // Só quando o e-mail não saiu: é para mandar o link por outro caminho.
-      link: envio.ok ? null : link,
+      // Só quando o e-mail não saiu e só para quem nasceu agora por este
+      // convite. Uma conta que já existia (pendente de outra empresa, ou o
+      // reenvio de alguém daqui) pode ser a mesma identidade de outra empresa:
+      // devolver o token a quem convida deixaria essa pessoa criar a senha da
+      // conta alheia e entrar como ela nas duas. Para essas, o link vai só ao
+      // e-mail da própria pessoa.
+      link: envio.ok || !criadaAgora ? null : link,
     },
   }, { status: reenvio ? 200 : 201 })
 }
