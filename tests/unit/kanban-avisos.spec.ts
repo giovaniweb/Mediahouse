@@ -396,6 +396,17 @@ describe("parabéns de job finalizado", () => {
     expect(parabensDoJob({ ...g, tipoEntrega: "carrossel" })[0].mensagem).toContain("foi aprovado e entregue")
     for (const st of ["aprovado", "editando", "edicao_finalizada", "revisao_pendente"]) expect(parabensDoJob({ ...base, statusNovo: st })).toEqual([])
   })
+  it("executor que também pediu, com outra pessoa finalizando: só o parabéns, nada do aviso de quem pediu", () => {
+    const g = { ...base, statusNovo: "entregue_cliente", telefoneVideomaker: null, telefoneEditor: null, isGrowth: true, tipoEntrega: "carrossel",
+      telefonesExecutores: ["5511911110003"], autorTelefone: "5511911110004", autorEhGestor: true }
+    expect(destinatariosDoAviso(g).map((x) => x.telefone)).not.toContain("5511911110003")
+    expect(parabensDoJob(g).map((x) => x.telefone)).toEqual(["5511911110003"])
+    // Prova contrária: o solicitante que não executou continua recebendo o "foi finalizada e entregue".
+    expect(destinatariosDoAviso(g).find((x) => x.telefone === "5511911110005")?.mensagem).toContain("foi finalizada e entregue")
+    // E fora da coluna final, a mesma pessoa segue recebendo como executor.
+    expect(destinatariosDoAviso({ ...g, statusNovo: "aprovado" }).find((x) => x.telefone === "5511911110003")?.papel).toBe("executor")
+  })
+
   it("mesma pessoa em dois papéis recebe um parabéns só; chave sem data", () => {
     expect(parabensDoJob({ ...base, telefoneEditor: "551111110001" })).toHaveLength(1)
     expect(chaveDoParabens("d1", "+55 (11) 91111-0001")).toBe("parabens:d1:11110001")

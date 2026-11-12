@@ -244,7 +244,9 @@ export function destinatariosDoAviso(d: DadosAvisoKanban): AvisoDestinatario[] {
 
   const chave = (t: string) => t.replace(/\D/g, "").slice(-8)
   const autorChave = d.autorTelefone ? chave(d.autorTelefone) : ""
-  const jaAvisado = new Set<string>()
+  // Na coluna final, quem executou recebe só o parabéns (parabensDoJob), mesmo
+  // que também seja quem pediu: nada do aviso de "está no ar" para solicitante.
+  const jaAvisado = new Set<string>(parabensDoJob(d).map((p) => chave(p.telefone)))
   const saida: AvisoDestinatario[] = []
 
   const add = (telefone: string | null | undefined, mensagem: string | null, papel: AvisoDestinatario["papel"]) => {
