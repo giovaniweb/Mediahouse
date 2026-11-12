@@ -8,6 +8,9 @@ import { videoDaDemanda } from "@/lib/midia-identidade"
 import { urlAssinadaDeLeitura, urlDeUpload, urlDaMidia } from "@/lib/midia"
 import { moduloAtivo } from "@/lib/modulos-org"
 import { dentroDaFranquia } from "@/lib/franquia"
+// Listar empresas acontece antes de haver empresa declarada (como nos crons).
+import { prismaAuth } from "@/lib/prisma-auth"
+import { escolherTrabalho } from "@/lib/midia-worker-escolha"
 
 const fila = criarFila(prisma)
 const segmento = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -156,15 +159,19 @@ export async function conversaoPermitida(organizacaoId: string): Promise<boolean
 
 /**
  * Um job de qualquer empresa. Na ordem da espera mais antiga; quem está com o
- * módulo desligado ou passou da franquia fica na fila (o job vence em 7 dias).
- * O teto de um trabalho de mídia por empresa continua: enquanto a empresa A
- * converte, a B é a próxima.
+ * módulo desligado ou passou da franquia fica na fila (o job vence em 7 dias)
+ * e o worker segue para a próxima, sem limite de quantas pular
+ * (src/lib/midia-worker-escolha.ts). O teto de um trabalho de mídia por
+ * empresa continua: enquanto a empresa A converte, a B é a próxima.
  */
 export async function reivindicarDeQualquerEmpresa() {
-  for (const org of await empresasComMidiaPendente()) {
-    if (!await conversaoPermitida(org)) continue
-    const job = await reivindicarConversao(org)
-    if (job) return job
-  }
-  return null
+  return escolherTrabalho({
+    pendentes: empresasComMidiaPendente,
+    ativas: async (depois, take) => (await prismaAuth.organizacao.findMany({
+      where: { ativo: true, ...(depois ? { id: { gt: depois } } : {}) },
+      select: { id: true }, orderBy: { id: "asc" }, take,
+    })).map((o) => o.id),
+    permitida: conversaoPermitida,
+    reivindicar: reivindicarConversao,
+  })
 }
