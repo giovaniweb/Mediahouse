@@ -307,9 +307,11 @@ describe("nota fiscal pelo link", () => {
     expect(emails.chamadas[0].html).toContain(`href="${link.replace(/&/g, "&amp;")}"`)
     expect(emails.chamadas[0].html).not.toContain("supabase")
 
+    // A operação recebe o link; o videomaker, a confirmação (12/11/2026), sem link de nota.
     const zap = await whatsapps(id)
-    expect(zap.map((z) => z.para)).toEqual([gente.debora.id])
-    expect(zap[0].texto).toContain(`Nota fiscal:\n${link}`)
+    expect(zap.map((z) => z.para).sort()).toEqual([gente.debora.id, vm].sort())
+    expect(zap.find((z) => z.para === gente.debora.id)!.texto).toContain(`Nota fiscal:\n${link}`)
+    expect(zap.find((z) => z.para === vm)!.texto).toContain("Recebemos a sua nota fiscal")
 
     const alertas = await db.alertaIA.findMany({ where: { organizacaoId: org, demandaId: id }, select: { tipoAlerta: true } })
     expect(alertas.map((a) => a.tipoAlerta)).toEqual(["nf_recebida"])

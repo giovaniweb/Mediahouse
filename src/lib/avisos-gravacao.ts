@@ -155,12 +155,17 @@ export async function enfileirarAvisos(tx: Tx, e: {
    * final do PIX). Os outros da operação recebem `mensagens.operacao`.
    */
   operacaoFinanceiro?: string | null
+  /**
+   * Papéis que recebem mesmo sendo quem fez a mudança: o videomaker que manda
+   * a nota pela área dele precisa da confirmação de que ela chegou.
+   */
+  autorRecebeComo?: PapelDoAviso[]
 }): Promise<number> {
   const g = e.gravacao
   const autor = e.autorUsuarioId
     ? telefoneCompleto((await tx.usuario.findUnique({ where: { id: e.autorUsuarioId }, select: { telefone: true } }))?.telefone)
     : null
-  const ja = new Set<string>(autor ? [autor] : [])
+  const ja = new Set<string>()
   const destinos: Record<PapelDoAviso, () => Promise<string[]>> = {
     videomaker: async () => (g.videomakerTelefone ? [g.videomakerTelefone] : []),
     cliente: async () => (g.clienteTelefone ? [g.clienteTelefone] : []),
@@ -176,6 +181,7 @@ export async function enfileirarAvisos(tx: Tx, e: {
     if (!padrao) continue
     for (const telefone of await destinos[papel]()) {
       const texto = papel === "operacao" && doFinanceiro.has(telefone) ? e.operacaoFinanceiro! : padrao
+      if (telefone === autor && !e.autorRecebeComo?.includes(papel)) continue
       if (ja.has(telefone)) continue
       ja.add(telefone)
       // Quem não é pessoa cadastrada não recebe — a fila recusa número solto.
@@ -214,6 +220,7 @@ export async function avisarGravacao(
         ? await dadosDePagamento(tx, organizacaoId, g.id, g.videomakerId) : null
       return enfileirarAvisos(tx, {
         organizacaoId, gravacao: g, motivo, mensagens, autorUsuarioId,
+        autorRecebeComo: evento === "nota_recebida" ? ["videomaker"] : undefined,
         operacaoFinanceiro: pagamento && mensagens.operacao ? comPagamento(mensagens.operacao, pagamento) : null,
       })
     }))
@@ -245,7 +252,7 @@ export async function avisarNotaEmLote(organizacaoId: string, demandaIds: string
         pagamento = { ...todos[0], valor: soma, origemValor: todos.every((p) => p.origemValor === "custo") ? "custo" : "diaria" }
       }
       return enfileirarAvisos(tx, {
-        organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId, mensagens,
+        organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId, mensagens, autorRecebeComo: ["videomaker"],
         operacaoFinanceiro: mensagens.operacao ? comPagamento(mensagens.operacao, pagamento) : null,
       })
     }))

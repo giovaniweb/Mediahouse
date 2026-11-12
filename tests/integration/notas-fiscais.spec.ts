@@ -41,6 +41,8 @@ import { POST as agir } from "@/app/api/jobs/[id]/nota/route"
 import { GET as lerConfig, POST as salvarConfig } from "@/app/api/configuracoes/email/route"
 import { decryptSecret, encryptSecret } from "@/lib/secret-crypto"
 import { PRESETS } from "@/lib/permissoes"
+import { familiaDaSaida } from "@/lib/avisos-arte"
+import { avisarGravacao } from "@/lib/avisos-gravacao"
 
 const p = `notasfisc-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const tel = () => `5541${Math.floor(10_000_000 + Math.random() * 89_999_999)}`
@@ -83,6 +85,12 @@ async function notaEnviada() {
 
 const whatsapps = async (demandaId: string) => (await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: demandaId }, select: { destinatarioId: true, conteudoCifrado: true } }))
   .map((s) => ({ para: s.destinatarioId, texto: decryptSecret(s.conteudoCifrado!) }))
+
+// O que saiu para o videomaker: motivo da chave, texto e a arte que a fila vai usar.
+const doVideomaker = async (demandaId: string) => (await db.saidaWhatsapp.findMany({
+  where: { organizacaoId: org, referencia: demandaId, destinatarioTipo: "videomaker" },
+  select: { chave: true, destinatarioTipo: true, origem: true, conteudoCifrado: true }, orderBy: { createdAt: "asc" },
+})).map((x) => ({ motivo: x.chave.split(":")[2], arte: familiaDaSaida(x), texto: decryptSecret(x.conteudoCifrado!) }))
 
 beforeAll(async () => {
   vi.stubEnv("NEXTAUTH_URL", "https://nuflow.space")
@@ -163,7 +171,7 @@ describe("aviso da nota com os dados de pagamento", () => {
 
     // WhatsApp: final da chave e valor só para a financeira; nunca a chave inteira.
     const zap = await whatsapps(id)
-    expect(zap.map((z) => z.para).sort()).toEqual([gente.financeira.id, gente.operadora.id].sort())
+    expect(zap.map((z) => z.para).sort()).toEqual([gente.financeira.id, gente.operadora.id, vm].sort())
     const zapFin = zap.find((z) => z.para === gente.financeira.id)!.texto
     const zapOp = zap.find((z) => z.para === gente.operadora.id)!.texto
     expect(zapFin).toContain("PIX CPF final 4725")
@@ -172,11 +180,38 @@ describe("aviso da nota com os dados de pagamento", () => {
     expect(zapOp).not.toContain("PIX")
     expect(zapOp).not.toContain("R$")
 
+    // O videomaker recebe a confirmação, com a arte do galo conferindo — sem valor nem PIX.
+    const vmZap = await doVideomaker(id)
+    expect(vmZap.map((z) => [z.motivo, z.arte])).toEqual([["nota_recebida", "nota_recebida"]])
+    expect(vmZap[0].texto).toContain("✅ Recebemos a sua nota fiscal: gravação Dra. Ana Lima")
+    expect(vmZap[0].texto).not.toContain("R$")
+
     // Nada de PIX em log.
     const escrito = logs.flatMap((l) => l.mock.calls).map((c) => JSON.stringify(c)).join("\n")
     expect(escrito).not.toContain(PIX)
     expect(escrito).not.toContain("52998224725")
     logs.forEach((l) => l.mockRestore())
+  })
+})
+
+describe("confirmação ao videomaker que manda a nota pela área dele", () => {
+  it("quem fez a mudança não recebe aviso dela — menos o videomaker, na confirmação da nota", async () => {
+    const { id } = await notaEnviada()
+    tarefas.length = 0
+    await db.saidaWhatsapp.deleteMany({ where: { organizacaoId: org, referencia: id } })
+    const vmUsuario = `${p}-vmlogin`
+    const telefone = (await db.videomaker.findUniqueOrThrow({ where: { id: vm } })).telefone
+    await db.usuario.create({ data: { id: vmUsuario, nome: "João Martins", email: email(vmUsuario), tipo: "videomaker", telefone, senhaHash: "sem-login" } })
+    try {
+      // Como a rota de "Minhas notas" chama: o autor é o próprio videomaker.
+      await avisarGravacao(org, id, "nota_recebida", vmUsuario)
+      expect((await doVideomaker(id)).map((z) => z.motivo)).toEqual(["nota_recebida"])
+      // Em outro evento, o autor continua sem receber o aviso do que fez.
+      await avisarGravacao(org, id, "nota_paga", vmUsuario)
+      expect((await doVideomaker(id)).map((z) => z.motivo)).toEqual(["nota_recebida"])
+    } finally {
+      await db.usuario.delete({ where: { id: vmUsuario } })
+    }
   })
 })
 
@@ -225,8 +260,18 @@ describe("página Notas fiscais", () => {
     const custo = await db.custoVideomaker.findFirstOrThrow({ where: { organizacaoId: org, demandaId: id } })
     expect(custo.cadastradoPagamentoPorId).toBe(gente.financeira.id)
     expect(custo.statusPagamento).toBe("aguardando_pagamento")
+    // Um aviso de "cadastrada" só, mesmo marcando duas vezes.
+    expect(await rodarSegundoPlano()).toEqual(["aviso-gravacao"])
 
     expect((await marcar("marcar_paga")).status).toBe(200)
+    expect(await rodarSegundoPlano()).toEqual(["aviso-gravacao"])
+    // O videomaker soube dos três momentos, cada um com a sua arte.
+    const vmZap = await doVideomaker(id)
+    expect(vmZap.map((z) => [z.motivo, z.arte])).toEqual([
+      ["nota_recebida", "nota_recebida"], ["nota_cadastrada", "nota_cadastrada"], ["nota_paga", "nota_paga"],
+    ])
+    expect(vmZap[1].texto).toContain("🗂️ Sua nota foi cadastrada para pagamento")
+    expect(vmZap[2].texto).toContain("💸 Pagamento feito")
     entrar(gente.financeira)
     linha = (await ler()).linhas.find((l) => l.demandaId === id)!
     expect(linha.estado).toBe("paga")

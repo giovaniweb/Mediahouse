@@ -23,7 +23,14 @@ describe("quem recebe cada evento", () => {
   it("o dia a dia vai para a operação", () => {
     expect(papeis(mensagensDoEvento("entrou", g))).toEqual(["operacao"])
     expect(papeis(mensagensDoEvento("material", g))).toEqual(["operacao"])
-    expect(papeis(mensagensDoEvento("nota_recebida", g))).toEqual(["operacao"])
+    expect(papeis(mensagensDoEvento("pronta", g))).toEqual(["operacao"])
+  })
+  it("a nota do videomaker: ele sabe que chegou, que foi cadastrada e que foi paga (12/11/2026)", () => {
+    const recebida = mensagensDoEvento("nota_recebida", g)
+    expect(papeis(recebida)).toEqual(["operacao", "videomaker"])
+    expect(recebida.videomaker).toBe("✅ Recebemos a sua nota fiscal: gravação Clínica Cristal (VOP-26-2001).\n\nAvisamos aqui quando ela for cadastrada para pagamento.")
+    expect(mensagensDoEvento("nota_cadastrada", g)).toEqual({ videomaker: "🗂️ Sua nota foi cadastrada para pagamento: gravação Clínica Cristal (VOP-26-2001).\n\nAvisamos aqui quando o pagamento sair." })
+    expect(papeis(mensagensDoEvento("nota_paga", g))).toEqual(["videomaker"])
     expect(papeis(mensagensDoEvento("pronta", g))).toEqual(["operacao"])
   })
   it("confirmou: operação e cliente, com dia, hora, videomaker e local", () => {

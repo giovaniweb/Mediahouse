@@ -98,7 +98,9 @@ export async function agirNaNota(ator: Ator, demandaId: string, acao: AcaoDaNota
         data: { status: "resolvido", resolvedAt: new Date() },
       })
       await registrar(ator, d.id, d.statusInterno, custo.id, "Nota cadastrada para pagamento", "enviado")
-      return { mensagem: "Nota marcada como cadastrada para pagamento." }
+      // O videomaker fica sabendo, com a arte do carimbo (lib/avisos-gravacao.ts).
+      emSegundoPlano(() => avisarGravacao(ator.organizacaoId, d.id, "nota_cadastrada", ator.usuarioId), "aviso-gravacao")
+      return { mensagem: "Nota marcada como cadastrada para pagamento. O videomaker foi avisado." }
     }
 
     if (custo.statusPagamento === "aguardando_pagamento") return { mensagem: "A nota já foi enviada para compras." }

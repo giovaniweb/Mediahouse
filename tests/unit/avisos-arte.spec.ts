@@ -15,8 +15,8 @@ afterEach(() => vi.unstubAllEnvs())
 describe("artes dos avisos: catálogo", () => {
   it("toda cena que o sorteio pode escolher existe em public/avisos/cenas", () => {
     for (const f of FAMILIAS) {
-      const { arquivo, cenas } = FAMILIAS_ARTE[f]
-      for (let k = 1; k <= cenas; k++) expect(existsSync(join("public/avisos/cenas", `${arquivo}-${k}.jpg`)), `${arquivo}-${k}`).toBe(true)
+      const { arquivo, cenas, primeira = 1 } = FAMILIAS_ARTE[f]
+      for (let k = primeira; k < primeira + cenas; k++) expect(existsSync(join("public/avisos/cenas", `${arquivo}-${k}.jpg`)), `${arquivo}-${k}`).toBe(true)
       expect(FAMILIAS_ARTE[f].frases.length).toBeGreaterThan(1)
     }
   })
@@ -80,6 +80,21 @@ describe("artes dos avisos: quem recebe qual", () => {
     expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:cliente:abc", "cliente", "manual"))).toBeNull()
     expect(familiaDaSaida(saida("abc123"))).toBeNull()
     expect(familiaDaSaida(saida("manual:uuid", "usuario", "manual"))).toBeNull()
+  })
+
+  it("a nota do videomaker tem a arte do momento: conferindo, carimbo, moeda (12/11/2026)", () => {
+    expect(familiaDaSaida(saida("grav:g1:nota_recebida:2026-11-12:videomaker:abc", "videomaker"))).toBe("nota_recebida")
+    expect(familiaDaSaida(saida("grav:g1:nota_lote:3:2026-11-12:videomaker:abc", "videomaker"))).toBe("nota_recebida")
+    expect(familiaDaSaida(saida("grav:g1:nota_cadastrada:2026-11-12:videomaker:abc", "videomaker"))).toBe("nota_cadastrada")
+    expect(familiaDaSaida(saida("grav:g1:nota_paga:2026-11-12:videomaker:abc", "videomaker"))).toBe("nota_paga")
+    // A operação continua com a família de sempre.
+    expect(familiaDaSaida(saida("grav:g1:nota_recebida:2026-11-12:operacao:abc"))).toBe("nota")
+    for (let i = 0; i < 30; i++) {
+      expect(escolherArte("nota_recebida", `s${i}`).arquivo).toBe("11-1.jpg")
+      expect(["11-2.jpg", "11-3.jpg"]).toContain(escolherArte("nota_cadastrada", `s${i}`).arquivo)
+      expect(["11-4.jpg", "11-5.jpg"]).toContain(escolherArte("nota_paga", `s${i}`).arquivo)
+      expect(escolherArte("nota_recebida", `s${i}`).frase).not.toContain("Pagamento")
+    }
   })
 
   it("gravação externa, convite e regras da rotina", () => {
