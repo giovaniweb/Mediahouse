@@ -19,7 +19,7 @@ vi.mock("@/lib/notificar", () => ({ emSegundoPlano: () => {} }))
 import { prismaBase as db } from "@/lib/prisma"
 import { prismaAuth } from "@/lib/prisma-auth"
 import { GET as listar } from "@/app/api/demandas/route"
-import { GET as abrir } from "@/app/api/demandas/[id]/route"
+import { GET as abrir, PUT as editar } from "@/app/api/demandas/[id]/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { GET as verEspelho, DELETE as revogar } from "@/app/api/demandas/[id]/espelhar/route"
 
@@ -28,7 +28,8 @@ const org = { dona: `${p}-contour`, gh: `${p}-gh`, outra: `${p}-outra` }
 const nomes = { dona: `Contourline-teste ${p}`, gh: `GH-teste ${p}`, outra: `Outra-teste ${p}` }
 const pessoas = { debora: `${p}-debora`, gabriel: `${p}-gabriel`, intrusa: `${p}-intrusa` }
 const vmGabriel = `${p}-vm-gabriel`
-const cards = { aberto: `${p}-aberto` }
+const vmOutro = `${p}-vm-outro`
+const cards = { aberto: `${p}-aberto`, trocado: `${p}-trocado` }
 const SEGREDOS = {
   publicToken: `${p}-tok-publico`, linkCliente: `https://cliente.example/${p}`,
   telefoneSolicitante: "5511900000001", clienteFinalTelefone: "5511900000002", clienteFinalEmail: `${p}@cliente.example`,
@@ -56,6 +57,8 @@ beforeAll(async () => {
   ] })
   await db.videomaker.create({ data: { id: vmGabriel, nome: "Gabriel", usuarioId: pessoas.gabriel, telefone: "5511900000003" } })
   await db.videomakerOrganizacao.create({ data: { organizacaoId: org.dona, videomakerId: vmGabriel, valorDiaria: 900 } })
+  await db.videomaker.create({ data: { id: vmOutro, nome: "Outro videomaker" } })
+  await db.videomakerOrganizacao.create({ data: { organizacaoId: org.dona, videomakerId: vmOutro } })
 
   await db.demanda.create({ data: {
     id: cards.aberto, codigo: cards.aberto, organizacaoId: org.dona, titulo: "Gravação na clínica", descricao: "Briefing.",
@@ -84,7 +87,7 @@ afterAll(async () => {
   await db.eventoAuditoria.deleteMany({ where: { organizacaoId: orgs } })
   await db.demanda.deleteMany({ where: { organizacaoId: orgs } })
   await db.parceriaOrganizacao.deleteMany({ where: { organizacaoConvidanteId: org.dona } })
-  await db.videomaker.deleteMany({ where: { id: vmGabriel } })
+  await db.videomaker.deleteMany({ where: { id: { in: [vmGabriel, vmOutro] } } })
   await db.organizacao.deleteMany({ where: { id: orgs } })
   await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
@@ -170,5 +173,56 @@ describe("Fase A — a parceira lê o card da dona pela lista branca", () => {
     expect(res.status).toBe(200)
     const aresta = await db.demandaCompartilhamento.findFirstOrThrow({ where: { demandaId: cards.aberto, organizacaoDestinoId: org.outra } })
     expect(aresta.revogadoEm).not.toBeNull()
+  })
+})
+
+describe("Fase B — os dados do videomaker que trabalha por uma empresa", () => {
+  it("só com o Gabriel admin ou gestor na GH a Contourline grava 'Empresa dele: GH'", async () => {
+    await expect(db.videomakerOrganizacao.update({
+      where: { organizacaoId_videomakerId: { organizacaoId: org.dona, videomakerId: vmOutro } },
+      data: { organizacaoExecutoraId: org.gh },
+    })).rejects.toThrow(/admin ou gestor/)
+    await db.videomakerOrganizacao.update({
+      where: { organizacaoId_videomakerId: { organizacaoId: org.dona, videomakerId: vmGabriel } },
+      data: { organizacaoExecutoraId: org.gh },
+    })
+  })
+
+  it("trocar o videomaker pela edição do card tira o card da GH, avisa a GH e apaga quem ia fazer", async () => {
+    await db.demanda.create({ data: {
+      id: cards.trocado, codigo: cards.trocado, organizacaoId: org.dona, titulo: "Outra gravação", descricao: "Briefing.",
+      cidade: "Curitiba", tipoVideo: "cobertura_evento", departamento: "eventos", cobertura: true, solicitanteId: pessoas.debora,
+      videomakerId: vmGabriel, statusInterno: "captacao_agendada", statusVisivel: "producao",
+    } })
+    await db.demandaCompartilhamento.create({ data: {
+      demandaId: cards.trocado, organizacaoOrigemId: org.dona, organizacaoDestinoId: org.gh,
+      nomeOrigem: "", nomeDestino: "", criadoPorId: pessoas.debora, porVideomakerId: vmGabriel,
+    } })
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: org.gh, videomakerId: vmOutro } })
+    await db.executorEspelho.create({ data: { organizacaoId: org.gh, demandaId: cards.trocado, videomakerId: vmOutro, escolhidoPorId: pessoas.gabriel } })
+
+    como(pessoas.gabriel, org.gh)
+    expect((await abrir(new NextRequest(`http://localhost/api/demandas/${cards.trocado}`), params(cards.trocado))).status).toBe(200)
+
+    como(pessoas.debora, org.dona)
+    const res = await editar(new NextRequest(`http://localhost/api/demandas/${cards.trocado}`, {
+      method: "PUT", body: JSON.stringify({ videomakerId: vmOutro }),
+    }), params(cards.trocado))
+    expect(res.status).toBe(200)
+
+    como(pessoas.gabriel, org.gh)
+    expect((await abrir(new NextRequest(`http://localhost/api/demandas/${cards.trocado}`), params(cards.trocado))).status).toBe(404)
+    expect(await db.executorEspelho.count({ where: { demandaId: cards.trocado } })).toBe(0)
+    const alerta = await db.alertaIA.findFirstOrThrow({ where: { organizacaoId: org.gh, tipoAlerta: "espelho_revogado" } })
+    expect(alerta.demandaId).toBeNull()
+    expect(alerta.mensagem).toContain(cards.trocado)
+    expect(await db.historicoStatus.count({ where: { demandaId: cards.trocado, statusNovo: "espelho_revogado" } })).toBe(1)
+  })
+
+  it("a terceirização manual (sem porVideomakerId) não é tocada pela troca de videomaker", async () => {
+    // A aresta da "Outra" no card aberto foi revogada na Fase A; a da GH é manual.
+    await db.demanda.update({ where: { id: cards.aberto }, data: { videomakerId: vmOutro } })
+    const daGh = await db.demandaCompartilhamento.findFirstOrThrow({ where: { demandaId: cards.aberto, organizacaoDestinoId: org.gh } })
+    expect(daGh.revogadoEm).toBeNull()
   })
 })

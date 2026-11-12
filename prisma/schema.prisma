@@ -283,6 +283,10 @@ model Videomaker {
   coberturaEquipe EventoCoberturaEquipe[]
   vinculos        VideomakerOrganizacao[]
   dadosFiscais    VideomakerDadosFiscais[]
+  /// Espelhos automáticos que nasceram por ele estar escalado (ver DemandaCompartilhamento.porVideomakerId).
+  espelhosPorEle  DemandaCompartilhamento[] @relation("EspelhoDoVideomaker")
+  /// Cards de outra empresa que a empresa dele mandou ele fazer (ExecutorEspelho).
+  execucoesEspelho ExecutorEspelho[]
 
   @@map("videomakers")
 }
@@ -311,11 +315,21 @@ model VideomakerOrganizacao {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
-  videomaker  Videomaker  @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+  /// "Empresa dele" (12/11/2026): a empresa pela qual este videomaker trabalha
+  /// para ESTA empresa (o Gabriel trabalha para a Contourline pela GH
+  /// Produção). Gravada só pela gestão desta empresa; o gatilho
+  /// `videomaker_empresa_executora_regras` exige que ele seja admin ou gestor
+  /// lá. Com parceria aceita entre as duas, todo card aberto escalado para ele
+  /// é espelhado para lá (src/lib/espelho-do-videomaker.ts).
+  organizacaoExecutoraId String?
+
+  organizacao          Organizacao  @relation("VideomakerVinculo", fields: [organizacaoId], references: [id], onDelete: Cascade)
+  organizacaoExecutora Organizacao? @relation("VideomakerEmpresaExecutora", fields: [organizacaoExecutoraId], references: [id], onDelete: SetNull)
+  videomaker           Videomaker   @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
 
   @@unique([organizacaoId, videomakerId])
   @@index([videomakerId])
+  @@index([organizacaoExecutoraId])
   @@map("videomaker_organizacao")
 }
 
@@ -691,6 +705,9 @@ model Demanda {
 
   /// Empresas que executam esta demanda por espelhamento. Ver ParceriaOrganizacao.
   compartilhamentos DemandaCompartilhamento[]
+  /// Quem da parceira faz o card. Dado da PARCEIRA: nunca incluir pelo lado da
+  /// dona; toda leitura filtra `organizacaoId` pela empresa ativa.
+  executoresEspelho ExecutorEspelho[]
 
   /// Computador do Cutflow que puxou o card para editar (trava contra edição dupla).
   cutflowPuxada CutflowPuxada?
@@ -2301,7 +2318,11 @@ model Organizacao {
   emailsEntrada      EmailEntrada[]
   linhasProjeto      LinhaProjeto[]
   socialLinhas       SocialLinha[]
-  videomakerVinculos VideomakerOrganizacao[]
+  videomakerVinculos VideomakerOrganizacao[] @relation("VideomakerVinculo")
+  /// Vínculos de outras empresas em que ESTA é a "Empresa dele" do videomaker.
+  videomakersQueExecuta VideomakerOrganizacao[] @relation("VideomakerEmpresaExecutora")
+  /// Quem desta empresa faz cada card recebido por espelho. Dado desta empresa.
+  executoresEspelho ExecutorEspelho[]
   editorVinculos     EditorOrganizacao[]
   editorFiscais      EditorDadosFiscais[]
   designerVinculos   DesignerOrganizacao[]
@@ -2476,7 +2497,14 @@ model DemandaCompartilhamento {
   revogadoEm    DateTime?
   revogadoPorId String?
 
-  demanda Demanda     @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  /// Espelho AUTOMÁTICO: nasceu porque este videomaker (o da dona, com "Empresa
+  /// dele" = destino) está escalado no card. Vazio = terceirização manual pela
+  /// rota /espelhar. Trocar o videomaker do card revoga o automático (gatilho
+  /// `demandas_videomaker_revoga_espelho`); a manual não é tocada.
+  porVideomakerId String?
+
+  demanda       Demanda     @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  porVideomaker Videomaker? @relation("EspelhoDoVideomaker", fields: [porVideomakerId], references: [id], onDelete: SetNull)
   origem  Organizacao @relation("CompartilhamentoOrigem", fields: [organizacaoOrigemId], references: [id], onDelete: Cascade)
   destino Organizacao @relation("CompartilhamentoDestino", fields: [organizacaoDestinoId], references: [id], onDelete: Cascade)
 
@@ -2484,6 +2512,35 @@ model DemandaCompartilhamento {
   @@index([organizacaoDestinoId, revogadoEm])
   @@index([demandaId])
   @@map("demanda_compartilhamento")
+}
+
+/// Quem da empresa PARCEIRA faz um card que ela recebeu por espelho (12/11/2026).
+///
+/// Dado da parceira: a GH escolhe o X para a gravação da Contourline, e a
+/// Contourline nunca enxerga esta tabela — para ela, quem faz continua sendo o
+/// Gabriel. Política `executor_espelho_por_org`, e o gatilho
+/// `executor_espelho_regras` exige espelho ativo para esta empresa e o X com
+/// vínculo nela. Revogar o espelho apaga a linha (gatilho da revogação).
+model ExecutorEspelho {
+  id             String   @id @default(cuid())
+  /// A empresa que executa (a GH). É ela a dona DESTA linha.
+  organizacaoId  String
+  demandaId      String
+  /// O X: videomaker com vínculo na `organizacaoId`.
+  videomakerId   String
+  /// `Usuario.id` de quem escolheu, sem FK (trilha, como em DemandaCompartilhamento).
+  escolhidoPorId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  demanda     Demanda     @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  videomaker  Videomaker  @relation(fields: [videomakerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, demandaId])
+  @@index([videomakerId])
+  @@index([demandaId])
+  @@map("executor_espelho")
 }
 
 // Módulo ligado ou desligado POR EMPRESA — a base dos planos.
