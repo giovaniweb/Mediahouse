@@ -45,6 +45,6 @@
  .surface [data-settings-panel] [class~="grid-cols-2"] {grid-template-columns:minmax(0,1fr);}
  .surface [data-settings-panel] [class~="col-span-2"] {grid-column:auto;}
 }
-@media(prefers-reduced-motion:reduce){.surface *, .surface *::before{transition:none!important;animation:none!important;scroll-behavior:auto!important;}}
+@media(prefers-reduced-motion:reduce){.surface *:not([data-rfd-draggable-id]):not([data-rfd-placeholder-context-id]), .surface *::before{transition:none!important;animation:none!important;scroll-behavior:auto!important;}}
 
 .surface [data-management-tabs],.surface [data-settings-nav] > div {scrollbar-width:thin;scrollbar-color:#44485b transparent;}
