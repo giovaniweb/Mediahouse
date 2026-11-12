@@ -11,6 +11,7 @@ import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
 import { DashboardGrowth, DashboardSocial, SeletorDepartamento } from "@/components/dashboard/DashboardDepartamento"
 import { departamentosVisiveis, lerDepartamento, type Departamento } from "@/lib/painel-departamento"
+import { PrimeirosPassos } from "@/components/dashboard/PrimeirosPassos"
 
 // O último departamento escolhido volta na próxima visita. Preferência de quem
 // olha, por isso no navegador e não no banco.
@@ -62,6 +63,7 @@ function InternalDashboard() {
 
   return <>
     <Header title="Dashboard" />
+    {me?.membership?.papel === "admin" && <PrimeirosPassos />}
     {departamento === "growth" ? <DashboardGrowth data={dados} loading={carregando} seletor={seletor} />
       : departamento === "social" ? <DashboardSocial data={dados} loading={carregando} seletor={seletor} />
       : <DashboardPreview data={dados} loading={carregando} b2c={kpiB2c} ideias={me?.modulos?.ideias ? kpiIdeias : undefined} seletor={seletor} />}

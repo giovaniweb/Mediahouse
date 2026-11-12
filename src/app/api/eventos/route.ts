@@ -7,8 +7,8 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { getPeca } from "@/lib/eventos-pecas"
 import { getPecaDesign } from "@/lib/design-pecas"
 import { checklistParaTipo } from "@/lib/eventos-checklist"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
+import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import type { Prioridade } from "@prisma/client"
 
 function gerarSlug(titulo: string): string {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     const inicio = new Date(dataInicio)
     const fim = dataFim ? new Date(dataFim) : inicio
 
-    const evento = await criarComCodigoUnico("VOP-EVT", (codigo) => prisma.eventoGestao.create({
+    const evento = await criarComCodigoDaEmpresa(organizacaoId, "EVT", (codigo) => prisma.eventoGestao.create({
       data: {
         organizacaoId,
         codigo,
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
 
       try {
         const peso = calcularPeso(peca.tipoVideo, "normal" as Prioridade)
-        const dem = await criarComCodigoUnico("VOP-DEM", (codigo) => prisma.demanda.create({
+        const dem = await criarComCodigoDaEmpresa(organizacaoId, "DEM", (codigo) => prisma.demanda.create({
           data: {
             organizacaoId,
             codigo,
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
       const peca = getPecaDesign(key)
       if (!peca) continue
       try {
-        const dem = await criarComCodigoUnico("VOP-ART", (codigo) => prisma.demanda.create({
+        const dem = await criarComCodigoDaEmpresa(organizacaoId, "ART", (codigo) => prisma.demanda.create({
           data: {
             organizacaoId,
             codigo,

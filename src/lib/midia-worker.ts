@@ -1,11 +1,16 @@
 import { z } from "zod"
 import type { Prisma, JobAutomacao, Arquivo } from "@prisma/client"
-import { prisma } from "@/lib/prisma"
+import { prisma, prismaBase } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
 import { criarFila, type LeaseJob } from "@/lib/fila-duravel"
 import { CONVERTER_MIDIA, PERFIL_PREVIEW, prepararMidias } from "@/lib/midia-fila"
 import { videoDaDemanda } from "@/lib/midia-identidade"
 import { urlAssinadaDeLeitura, urlDeUpload, urlDaMidia } from "@/lib/midia"
+import { moduloAtivo } from "@/lib/modulos-org"
+import { dentroDaFranquia } from "@/lib/franquia"
+// Listar empresas acontece antes de haver empresa declarada (como nos crons).
+import { prismaAuth } from "@/lib/prisma-auth"
+import { escolherTrabalho } from "@/lib/midia-worker-escolha"
 
 const fila = criarFila(prisma)
 const segmento = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)
@@ -125,5 +130,48 @@ export async function concluirConversao(organizacaoId: string, resultado: Result
       })
       return concluiu || await recibo(organizacaoId, r)
     } catch (e) { if (e instanceof FonteInvalida) return false; throw e }
+  })
+}
+
+// ── Todas as empresas (Onda 2A, 21/10/2026) ──────────────────────────────────
+// O worker não diz de que empresa é: ele pede trabalho e devolve resultado. A
+// empresa vem do próprio job, por funções do banco que devolvem só o id
+// (migration 20261112120000). `prismaBase` de propósito: são consultas de antes
+// de haver empresa declarada, como em src/lib/org-por-credencial.ts.
+
+/** Empresas ativas com mídia na fila, da espera mais antiga para a mais nova. */
+export async function empresasComMidiaPendente(limite = 20): Promise<string[]> {
+  const linhas = await prismaBase.$queryRaw<{ org: string }[]>`SELECT org FROM public.empresas_com_midia_pendente(${limite}::integer)`
+  return linhas.map((l) => l.org)
+}
+
+/** A empresa do job que o worker está renovando, falhando ou concluindo. */
+export async function orgDoJobMidia(jobId: string): Promise<string | null> {
+  const [l] = await prismaBase.$queryRaw<{ org: string | null }[]>`SELECT public.org_do_job_midia(${jobId}) AS org`
+  return l?.org ?? null
+}
+
+/** A empresa converte agora? Módulo ligado e abaixo da franquia. */
+export async function conversaoPermitida(organizacaoId: string): Promise<boolean> {
+  return comOrg(organizacaoId, async () =>
+    await moduloAtivo(organizacaoId, "conversao") && await dentroDaFranquia(organizacaoId))
+}
+
+/**
+ * Um job de qualquer empresa. Na ordem da espera mais antiga; quem está com o
+ * módulo desligado ou passou da franquia fica na fila (o job vence em 7 dias)
+ * e o worker segue para a próxima, sem limite de quantas pular
+ * (src/lib/midia-worker-escolha.ts). O teto de um trabalho de mídia por
+ * empresa continua: enquanto a empresa A converte, a B é a próxima.
+ */
+export async function reivindicarDeQualquerEmpresa() {
+  return escolherTrabalho({
+    pendentes: empresasComMidiaPendente,
+    ativas: async (depois, take) => (await prismaAuth.organizacao.findMany({
+      where: { ativo: true, ...(depois ? { id: { gt: depois } } : {}) },
+      select: { id: true }, orderBy: { id: "asc" }, take,
+    })).map((o) => o.id),
+    permitida: conversaoPermitida,
+    reivindicar: reivindicarConversao,
   })
 }

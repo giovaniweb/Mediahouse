@@ -170,7 +170,7 @@ export function PainelOrganizacoes() {
         ))}
       </div>
 
-      {criando && <ModalNovaEmpresa onClose={() => setCriando(false)} onCriada={() => { setCriando(false); mutate() }} />}
+      {criando && <ModalNovaEmpresa onClose={() => setCriando(false)} onCriada={() => mutate()} />}
       {aberta && <ModalPessoas org={aberta} onClose={() => { setAberta(null); mutate() }} />}
       {modulosDe && <ModalModulos org={modulosDe} onClose={() => setModulosDe(null)} />}
     </div>
@@ -178,41 +178,105 @@ export function PainelOrganizacoes() {
   )
 }
 
+type Criada = {
+  organizacao: { nome: string; slug: string; prefixoCodigo: string }
+  admin: { nome: string; email: string; jaTinhaConta: boolean }
+  convite: { enviado: boolean; erro: string | null; link: string | null }
+}
+
 function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada: () => void }) {
   const [nome, setNome] = useState("")
   const [slug, setSlug] = useState("")
+  const [prefixo, setPrefixo] = useState("")
+  // Admin: quem já tem conta é escolhido na busca; quem não tem, digita-se o
+  // e-mail e o nome, e a pessoa recebe o convite para criar a senha.
   const [adminTexto, setAdminTexto] = useState("")
   const [admin, setAdmin] = useState<PessoaAchada | null>(null)
+  const [adminNome, setAdminNome] = useState("")
   const [salvando, setSalvando] = useState(false)
+  const [criada, setCriada] = useState<Criada | null>(null)
+  const emailDigitado = !admin && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminTexto.trim())
+  const pronto = nome.trim() && (admin || (emailDigitado && adminNome.trim()))
 
   async function criar() {
-    if (!nome.trim() || salvando) return
+    if (!pronto || salvando) return
     setSalvando(true)
-    // Escolhida na lista vai pelo id; e-mail digitado sem escolher segue valendo.
-    const quem = admin ? { adminUsuarioId: admin.id } : adminTexto.trim() ? { adminEmail: adminTexto.trim() } : {}
     try {
       const res = await fetch("/api/admin/organizacoes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, ...(slug.trim() ? { slug: slug.trim() } : {}), ...quem }),
+        body: JSON.stringify({
+          nome,
+          ...(admin ? { adminUsuarioId: admin.id } : { adminEmail: adminTexto.trim(), adminNome }),
+          ...(slug.trim() ? { slug: slug.trim() } : {}),
+          ...(prefixo.trim() ? { prefixoCodigo: prefixo.trim() } : {}),
+        }),
       })
       if (!res.ok) throw await erroDaResposta(res)
-      const { membership, organizacao } = await res.json()
-      toast.success(
-        Object.keys(quem).length > 0 && !membership
-          ? "Empresa criada — mas essa pessoa não foi achada no sistema. Vincule em Pessoas."
-          : `Empresa criada em /c/${organizacao.slug}${admin ? `, com ${admin.nome} como admin` : ""}.`
-      )
+      setCriada(await res.json())
       onCriada()
     } catch (e) {
       toast.error(mensagemDeErro(e, "Não foi possível criar a empresa."))
+    } finally {
       setSalvando(false)
     }
   }
 
+  if (criada) {
+    return (
+      <Overlay titulo="Empresa criada" onClose={onClose}>
+        <p className="text-sm text-zinc-300">
+          <strong>{criada.organizacao.nome}</strong> já tem departamentos, tipos de demanda, checklists e a linha
+          &ldquo;Geral&rdquo;. Os códigos das demandas vão sair como <strong>{criada.organizacao.prefixoCodigo}-{String(new Date().getFullYear() % 100).padStart(2, "0")}-0001</strong>.
+        </p>
+        {criada.convite.enviado ? (
+          <p className="text-sm text-emerald-400">
+            {criada.admin.jaTinhaConta
+              ? `${criada.admin.nome} já tinha conta e recebeu o aviso por e-mail em ${criada.admin.email}.`
+              : `Convite enviado para ${criada.admin.email}. O link vale 7 dias.`}
+          </p>
+        ) : (
+          <p className="text-sm text-amber-400">O e-mail não saiu ({criada.convite.erro}). Mande o link abaixo pelo WhatsApp.</p>
+        )}
+        {criada.convite.link && (
+          <div className="flex gap-2">
+            <input readOnly value={criada.convite.link} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300" />
+            <button
+              onClick={() => { navigator.clipboard?.writeText(criada.convite.link!).then(() => toast.success("Link copiado")) }}
+              className="rounded-lg bg-zinc-700 px-3 py-2 text-xs text-zinc-100 hover:bg-zinc-600"
+            >
+              Copiar
+            </button>
+          </div>
+        )}
+        <div className="flex justify-end pt-2">
+          <button onClick={onClose} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Fechar</button>
+        </div>
+      </Overlay>
+    )
+  }
+
   return (
     <Overlay titulo="Nova empresa" onClose={onClose}>
-      <Campo rotulo="Nome" valor={nome} onChange={setNome} placeholder="Ex.: Contourline" />
+      <Campo rotulo="Nome" valor={nome} onChange={setNome} placeholder="Ex.: GH Produções" />
+      <BuscaPessoa
+        rotulo="Administrador da empresa"
+        texto={adminTexto}
+        onTexto={setAdminTexto}
+        escolhida={admin}
+        onEscolher={setAdmin}
+        ajuda="Escolha quem já tem conta no NuFlow (só recebe um aviso) ou digite o e-mail de quem vai receber o convite para criar a senha."
+      />
+      {emailDigitado && (
+        <Campo rotulo="Nome do administrador" valor={adminNome} onChange={setAdminNome} placeholder="Quem vai cuidar da empresa no NuFlow" />
+      )}
+      <Campo
+        rotulo="Prefixo do código (opcional)"
+        valor={prefixo}
+        onChange={(v) => setPrefixo(v.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5))}
+        placeholder="sugerido pelo nome"
+        ajuda="De 2 a 5 letras. As demandas saem como PREFIXO-26-0001."
+      />
       <Campo
         rotulo="Slug (opcional)"
         valor={slug}
@@ -220,22 +284,14 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
         placeholder="gerado a partir do nome"
         ajuda="Vira o endereço da área pública da empresa: /c/slug. Só minúsculas, números e hífen."
       />
-      <BuscaPessoa
-        rotulo="Admin da empresa (opcional)"
-        texto={adminTexto}
-        onTexto={setAdminTexto}
-        escolhida={admin}
-        onEscolher={setAdmin}
-        ajuda="Digite o nome ou o e-mail de quem já tem conta. Sem ninguém, a empresa nasce vazia."
-      />
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Cancelar</button>
         <button
           onClick={criar}
-          disabled={!nome.trim() || salvando}
+          disabled={!pronto || salvando}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
-          {salvando ? "Criando..." : "Criar"}
+          {salvando ? "Criando..." : "Criar e convidar"}
         </button>
       </div>
     </Overlay>

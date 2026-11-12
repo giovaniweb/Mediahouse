@@ -8,7 +8,7 @@ import {
   Users, Search, CheckCircle2, XCircle, Plus, X, GitMerge, AlertTriangle,
   KeyRound, Eye, EyeOff, AlertCircle, Trash2, ShieldCheck, ShieldOff,
   Download, MoreHorizontal, Pencil, UserCog, Power, ChevronLeft, ChevronRight,
-  Users2, IdCard, ArrowUpDown,
+  Users2, IdCard, ArrowUpDown, Mail, Send, Copy,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -17,6 +17,7 @@ import { fetcher } from "@/lib/fetcher"
 import { mensagemDeErro } from "@/lib/erro-cliente"
 import { PainelPessoa } from "@/components/pessoas/PainelPessoa"
 import { AbaEquipes } from "@/components/pessoas/AbaEquipes"
+import { PAPEIS_CONVITE, NOME_PAPEL } from "@/lib/papeis-convite"
 import { AbaPerfis } from "@/components/pessoas/AbaPerfis"
 import {
   type PessoaLista, type PerfilAcesso,
@@ -46,7 +47,7 @@ type Aba = "pessoas" | "equipes" | "perfis"
 
 const POR_PAGINA = 12
 
-type Usuario = PessoaLista
+type Usuario = PessoaLista & { convitePendente?: boolean }
 
 interface Profissional {
   id: string
@@ -542,8 +543,11 @@ export default function PessoasAcessosPage() {
   const [permUser, setPermUser] = useState<{ id: string; nome: string; tipo: string; areas?: string[] } | null>(null)
   const [mesclarModal, setMesclarModal] = useState<MesclarModal | null>(null)
 
-  // Nova pessoa
+  // Nova pessoa: por convite (padrão, Onda 2A) ou criada com senha digitada.
   const [showForm, setShowForm] = useState(false)
+  const [modoForm, setModoForm] = useState<"convite" | "manual">("convite")
+  const [papelConvite, setPapelConvite] = useState<string>("gestor")
+  const [linkManual, setLinkManual] = useState<{ nome: string; link: string } | null>(null)
   const [form, setForm] = useState({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "", categoria: "interna", funcaoProfissional: "", areas: [] as string[] })
   const toggleFormArea = (a: string) => setForm(f => ({ ...f, areas: f.areas.includes(a) ? f.areas.filter(x => x !== a) : [...f.areas, a] }))
   const [loading, setLoading] = useState(false)
@@ -672,6 +676,51 @@ export default function PessoasAcessosPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar pessoa")
     } finally { setLoading(false) }
+  }
+
+  async function convidar(dados: { email: string; nome?: string; papel: string; telefone?: string; areas?: string[] }) {
+    const res = await fetch("/api/usuarios/convite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dados),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || "Não foi possível convidar")
+    const c = json.convite as { enviado: boolean; reenvio: boolean; jaTinhaConta: boolean; erro: string | null; link: string | null }
+    if (!c.enviado) {
+      // O link só volta para quem nasceu agora por este convite (revisão do #142).
+      if (c.link) {
+        toast.error(`O e-mail não saiu (${c.erro}). Copie o link e mande pelo WhatsApp.`)
+        setLinkManual({ nome: json.usuario.nome, link: c.link })
+      } else {
+        toast.error(`O e-mail não saiu (${c.erro}). Tente reenviar mais tarde ou peça à pessoa para usar "Esqueci minha senha" com este e-mail.`)
+      }
+    } else {
+      toast.success(c.jaTinhaConta
+        ? `${json.usuario.nome} já tinha conta no NuFlow e foi avisada por e-mail.`
+        : c.reenvio ? `Convite reenviado para ${dados.email}.` : `Convite enviado para ${dados.email}. O link vale 7 dias.`)
+    }
+    mutate()
+  }
+
+  async function enviarConvite() {
+    setLoading(true)
+    try {
+      await convidar({ email: form.email, nome: form.nome, papel: papelConvite, telefone: form.telefone, areas: form.areas })
+      setShowForm(false)
+      setForm({ nome: "", email: "", senha: "", tipo: "operacao", telefone: "", categoria: "interna", funcaoProfissional: "", areas: [] })
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao convidar")
+    } finally { setLoading(false) }
+  }
+
+  async function reenviarConvite(p: Usuario) {
+    if (!p.email) return
+    try {
+      await convidar({ email: p.email, papel: PAPEIS_CONVITE.includes(p.tipo as never) ? p.tipo : "solicitante" })
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao reenviar")
+    }
   }
 
   async function adicionarEmailAoCadastroExistente() {
@@ -864,7 +913,7 @@ export default function PessoasAcessosPage() {
             </p>
           </div>
           <button
-            onClick={() => { setAba("pessoas"); setShowForm(v => !v) }}
+            onClick={() => { setAba("pessoas"); setModoForm("convite"); setShowForm(v => !v) }}
             className="shrink-0 flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold"
           >
             <Plus className="w-4 h-4" /> Nova pessoa
@@ -925,7 +974,17 @@ export default function PessoasAcessosPage() {
         {showForm && (
           <div className="border border-zinc-700 rounded-xl p-5 bg-zinc-900 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-zinc-100">Nova pessoa</p>
+              <div>
+                <p className="text-sm font-semibold text-zinc-100">{modoForm === "convite" ? "Convidar por e-mail" : "Criar com senha"}</p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {modoForm === "convite"
+                    ? "A pessoa recebe um link para criar a própria senha."
+                    : "Você define a senha e repassa para a pessoa."}{" "}
+                  <button type="button" onClick={() => setModoForm(m => m === "convite" ? "manual" : "convite")} className="text-purple-400 hover:text-purple-300 underline-offset-2 hover:underline">
+                    {modoForm === "convite" ? "Prefiro criar com senha" : "Voltar ao convite por e-mail"}
+                  </button>
+                </p>
+              </div>
               <button onClick={() => { setShowForm(false); setConflito(null) }} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
               </button>
@@ -941,6 +1000,15 @@ export default function PessoasAcessosPage() {
                 <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
               </div>
+              {modoForm === "convite" ? (
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Papel *</label>
+                <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
+                  value={papelConvite} onChange={e => setPapelConvite(e.target.value)}>
+                  {PAPEIS_CONVITE.map(t => <option key={t} value={t}>{NOME_PAPEL[t]}</option>)}
+                </select>
+              </div>
+              ) : (<>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Senha *</label>
                 <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
@@ -956,11 +1024,13 @@ export default function PessoasAcessosPage() {
                   {TIPO_OPTS.map(t => <option key={t} value={t}>{FUNCAO_LABEL[t] ?? t}</option>)}
                 </select>
               </div>
+              </>)}
               <div className="sm:col-span-2">
                 <label className="text-xs text-zinc-400 block mb-1">Telefone / WhatsApp</label>
                 <input className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} placeholder="+55 11 99999-9999" />
               </div>
+              {modoForm === "manual" && (<>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Categoria</label>
                 <select className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
@@ -973,6 +1043,7 @@ export default function PessoasAcessosPage() {
                 <SelectFuncao className="w-full border border-zinc-700 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-purple-500"
                   papel={form.tipo} funcao={form.funcaoProfissional} onChange={fn => setForm(f => ({ ...f, funcaoProfissional: fn }))} />
               </div>
+              </>)}
               <div className="sm:col-span-2">
                 <label className="text-xs text-zinc-400 block mb-1">Equipes</label>
                 <div className="flex flex-wrap gap-2">
@@ -1017,6 +1088,15 @@ export default function PessoasAcessosPage() {
             )}
 
             <div className="flex gap-2">
+              {modoForm === "convite" ? (
+              <button
+                onClick={enviarConvite}
+                disabled={loading || !form.nome.trim() || !form.email.trim()}
+                className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-colors"
+              >
+                <Send className="w-4 h-4" /> {loading ? "Enviando..." : "Enviar convite"}
+              </button>
+              ) : (
               <button
                 onClick={criarUsuario}
                 disabled={loading || !form.nome.trim() || !form.senha || !form.email}
@@ -1024,8 +1104,26 @@ export default function PessoasAcessosPage() {
               >
                 {loading ? "Criando..." : "Criar pessoa"}
               </button>
+              )}
               <button onClick={() => { setShowForm(false); setConflito(null) }} className="text-sm px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors">
                 Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {linkManual && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-amber-300">Link de primeiro acesso de {linkManual.nome}</p>
+              <button onClick={() => setLinkManual(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-xs text-zinc-300">O e-mail não saiu. Mande este link pelo WhatsApp; ele vale 7 dias e só serve para essa pessoa criar a senha.</p>
+            <div className="flex gap-2">
+              <input readOnly value={linkManual.link} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300" />
+              <button onClick={() => { navigator.clipboard?.writeText(linkManual.link).then(() => toast.success("Link copiado")) }}
+                className="flex items-center gap-1 rounded-lg bg-zinc-700 px-3 py-2 text-xs text-zinc-100 hover:bg-zinc-600">
+                <Copy className="w-3.5 h-3.5" /> Copiar
               </button>
             </div>
           </div>
@@ -1173,12 +1271,18 @@ export default function PessoasAcessosPage() {
                           </span>
                         </td>
                         <td data-column="Status" className="px-3 py-3">
+                          {p.convitePendente && ativo ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 whitespace-nowrap">
+                              <Mail className="w-3 h-3" /> Convite pendente
+                            </span>
+                          ) : (
                           <span className={cn(
                             "text-[11px] font-medium px-2 py-0.5 rounded-full",
                             ativo ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-500",
                           )}>
                             {ativo ? "Ativo" : "Inativo"}
                           </span>
+                          )}
                         </td>
                         <td data-column="Atividade" className="px-3 py-3">
                           <span className={cn("text-xs", p.ultimaAtividade ? "text-zinc-400" : "text-zinc-600 italic")}>
@@ -1190,6 +1294,9 @@ export default function PessoasAcessosPage() {
                             <MenuLinha itens={[
                               { label: "Editar pessoa", Icon: Pencil, run: () => setEditTarget(p) },
                               { label: "Editar permissões", Icon: ShieldCheck, run: () => setPermUser({ id: p.id, nome: p.nome, tipo: papelDe(p), areas: p.areas }) },
+                              ...(p.convitePendente && p.email
+                                ? [{ label: "Reenviar convite", Icon: Send, run: () => reenviarConvite(p) }]
+                                : []),
                               { label: "Redefinir senha", Icon: KeyRound, run: () => setResetTarget({ id: p.id, nome: p.nome, email: p.email }) },
                               ...(papelDe(p) === "solicitante"
                                 ? [{ label: "Promover", Icon: UserCog, run: () => setPromoverTarget({ id: p.id, nome: p.nome }) }]

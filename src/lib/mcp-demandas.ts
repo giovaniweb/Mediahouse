@@ -185,7 +185,9 @@ export async function lerDemanda(quem: QuemPergunta, idOuCodigo: string) {
   const d = await comOrg(organizacaoId, async () => {
     const escopo = await oQueAPessoaVe(quem.sessao, organizacaoId)
     return prisma.demanda.findFirst({
-      where: { AND: [escopo, { OR: [{ id: chave }, { codigo: chave }] }] },
+      // Código é único só dentro da empresa (Onda 2A): pelo código, só a própria
+      // empresa; card espelhado de parceira se lê pelo id.
+      where: { AND: [escopo, { OR: [{ id: chave }, { codigo: chave, organizacaoId }] }] },
       select: {
         ...SELECT_BASE,
         area: true,

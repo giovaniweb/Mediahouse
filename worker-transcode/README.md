@@ -8,14 +8,15 @@ O fluxo v2 está conectado localmente ao protocolo `/api/transcode/worker` e per
 
 ## Ativação coordenada (ainda não executada em produção)
 
-Aplicar primeiro a migração aditiva de recibo da prévia e homologar uma empresa de teste. O primeiro rollout é intencionalmente restrito a **uma empresa-piloto por configuração do app**; não oferece credenciais por empresa para múltiplos workers SaaS ainda.
+Aplicar primeiro a migração aditiva de recibo da prévia e homologar uma empresa de teste. Desde a Onda 2A (21/10/2026) o app atende **todas as empresas** com o mesmo worker: cada job carrega a própria empresa, e o app só entrega trabalho de empresa com o módulo "Conversão de vídeo" ligado e abaixo da franquia de armazenamento (`FRANQUIA_ARMAZENAMENTO_GB`, 10 GB se faltar). O worker não muda: ele nunca soube de empresa.
 
 No app:
 
 | Variável | Uso |
 | --- | --- |
-| `MIDIA_WORKER_V2_ATIVO=sim` | Habilita o protocolo e desliga disparos/callbacks legados na empresa configurada |
-| `MIDIA_WORKER_ORGANIZACAO_ID` | Empresa autorizada, escolhida no servidor, nunca pelo payload |
+| `MIDIA_WORKER_V2_ATIVO=sim` | Habilita o protocolo e desliga disparos/callbacks legados em todas as empresas |
+| `MIDIA_WORKER_ORGANIZACAO_ID` | Não é mais lida (Onda 2A). A empresa vem do job, escolhida no servidor, nunca pelo payload |
+| `FRANQUIA_ARMAZENAMENTO_GB` | Opcional. Acima dela a empresa não recebe versão leve nova (padrão 10) |
 | `MIDIA_WORKER_SECRET` | Segredo exclusivo deste protocolo; distinto de `TRANSCODE_SECRET` |
 | `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Configuração existente de storage usada somente no app para assinar |
 

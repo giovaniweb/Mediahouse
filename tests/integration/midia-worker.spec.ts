@@ -8,7 +8,7 @@ import { registrarArquivoDemanda } from "@/lib/arquivo-registro"
 import { reivindicarConversao, renovarConversao, concluirConversao, type ResultadoMidia } from "@/lib/midia-worker"
 import { POST } from "@/app/api/transcode/worker/route"
 import { POST as callbackLegado } from "@/app/api/transcode/callback/route"
-const p = `worker-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, d = `${p}-d`
+const p = `worker-${randomUUID()}`, a = `${p}-a`, b = `${p}-b`, d = `${p}-d`, d2 = `${p}-d2`
 const original = `/api/midia/org/${a}/videos/${d}/original.mov`
 const call = (body: object, auth = "Bearer teste-v2") => POST(new NextRequest("http://localhost/api/transcode/worker", { method: "POST", headers: { authorization: auth }, body: JSON.stringify(body) }))
 const criar = async (nome = "original.mov") => (await registrarArquivoDemanda({ organizacaoId: a, demandaId: d, tipo: "final", url: original.replace("original.mov", nome), nomeArquivo: nome })).arquivo
@@ -21,16 +21,18 @@ beforeAll(async () => {
   await db.organizacao.createMany({ data: [a,b].map(id => ({ id, nome: id, slug: id })) })
   await db.usuario.create({ data: { id: p, nome: p, tipo: "admin", senhaHash: "sem-login" } })
   await db.demanda.create({ data: { id: d, organizacaoId: a, solicitanteId: p, codigo: d, titulo: d, descricao: "teste", cidade: "Teste", departamento: "growth", tipoVideo: "reels" } })
+  await db.demanda.create({ data: { id: d2, organizacaoId: b, solicitanteId: p, codigo: d2, titulo: d2, descricao: "teste", cidade: "Teste", departamento: "growth", tipoVideo: "reels" } })
 })
 beforeEach(async () => {
-  vi.stubEnv("MIDIA_WORKER_V2_ATIVO", "sim"); vi.stubEnv("MIDIA_WORKER_SECRET", "teste-v2"); vi.stubEnv("MIDIA_WORKER_ORGANIZACAO_ID", a)
+  vi.stubEnv("MIDIA_WORKER_V2_ATIVO", "sim"); vi.stubEnv("MIDIA_WORKER_SECRET", "teste-v2"); vi.stubEnv("MIDIA_WORKER_ORGANIZACAO_ID", "")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://storage.test")
   vi.stubEnv("TRANSCODE_SECRET", "legado")
   mocks.leitura.mockReset().mockImplementation(async c => `https://storage.test/storage/v1/object/sign/midia/${c}?token=temporario`)
   mocks.upload.mockReset().mockImplementation(async c => ({ uploadUrl: `https://storage.test/storage/v1/object/upload/sign/midia/${c}?token=temporario`, url: `/api/midia/${c}` }))
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, headers: new Headers({ "content-type": "video/mp4", "content-length": "123" }) }))
-  await db.jobAutomacao.deleteMany({ where: { organizacaoId: a } })
-  await db.arquivo.deleteMany({ where: { demandaId: d } })
+  await db.jobAutomacao.deleteMany({ where: { organizacaoId: { in: [a, b] } } })
+  await db.arquivo.deleteMany({ where: { demandaId: { in: [d, d2] } } })
+  await db.moduloOrganizacao.deleteMany({ where: { organizacaoId: { in: [a, b] } } })
   await db.organizacao.update({ where: { id: a }, data: { ativo: true } })
   await db.demanda.update({ where: { id: d }, data: { linkFinal: null } })
 })
@@ -115,5 +117,40 @@ describe("protocolo do worker durável", () => {
     expect(await concluirConversao(a, resultado(j))).toBe(true)
     vi.stubEnv("MIDIA_WORKER_V2_ATIVO", "nao")
     expect((await chamar()).status).toBe(409)
+  })
+})
+
+describe("todas as empresas (Onda 2A)", () => {
+  const criarEmB = async () => (await registrarArquivoDemanda({ organizacaoId: b, demandaId: d2, tipo: "final",
+    url: `/api/midia/org/${b}/videos/${d2}/original.mov`, nomeArquivo: "original.mov" })).arquivo
+  const reivindicar = async () => (await (await call({ acao: "reivindicar" })).json()).job as { jobId: string; leaseToken: string; organizacaoId: string } | null
+
+  it("sem empresa na configuração, atende a empresa de cada job, uma por vez", async () => {
+    await criar(); await criarEmB()
+    const primeiro = await reivindicar()
+    const segundo = await reivindicar()
+    expect(new Set([primeiro?.organizacaoId, segundo?.organizacaoId])).toEqual(new Set([a, b]))
+    // As duas já estão no teto de um trabalho de mídia por empresa.
+    expect(await reivindicar()).toBeNull()
+    // Renovar e falhar acham a empresa pelo job, não pelo payload.
+    const deB = primeiro!.organizacaoId === b ? primeiro! : segundo!
+    expect((await call({ acao: "renovar", jobId: deB.jobId, leaseToken: deB.leaseToken })).status).toBe(200)
+    expect((await call({ acao: "renovar", jobId: "nao-existe", leaseToken: deB.leaseToken })).status).toBe(409)
+  })
+
+  it("empresa com a conversão desligada fica na fila", async () => {
+    await db.moduloOrganizacao.create({ data: { organizacaoId: b, modulo: "conversao", ativo: false } })
+    await criarEmB()
+    expect(await reivindicar()).toBeNull()
+    expect(await db.jobAutomacao.count({ where: { organizacaoId: b, estado: "pendente" } })).toBe(1)
+  })
+
+  it("empresa acima da franquia fica na fila", async () => {
+    vi.stubEnv("FRANQUIA_ARMAZENAMENTO_GB", String(500 / 1024 ** 3))
+    const arq = await criarEmB()
+    await db.arquivo.update({ where: { id: arq.id }, data: { tamanho: 1000 } })
+    expect(await reivindicar()).toBeNull()
+    vi.stubEnv("FRANQUIA_ARMAZENAMENTO_GB", "10")
+    expect((await reivindicar())?.organizacaoId).toBe(b)
   })
 })

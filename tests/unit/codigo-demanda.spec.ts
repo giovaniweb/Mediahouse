@@ -1,15 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { Prisma } from "@prisma/client"
 import {
-  criarComCodigoUnico,
+  criarComCodigoDaEmpresa,
   ehColisaoDeCodigo,
-  sortearCodigo,
+  montarCodigo,
+  sugerirPrefixo,
+  prefixoValido,
   TENTATIVAS_CODIGO,
 } from "@/lib/codigo-demanda"
 
-// O código da demanda (VOP-AA-####) é sorteado e a coluna é UNIQUE. Antes, o
-// sorteio que caía num número já usado virava 500 para quem estava criando a
-// demanda — aconteceu 2 vezes em ~12 criações no ensaio de 04/10/2026.
+// O código da demanda é por empresa desde a Onda 2A: prefixo da empresa e
+// número em sequência (PREFIXO-AA-####), único por (empresa, código). Quando o
+// número já foi usado (a Contourline passa pelos códigos sorteados antigos), o
+// banco recusa e o contador anda mais um.
 
 const AGORA = () => new Date(2026, 9, 4, 12)
 
@@ -24,7 +27,7 @@ type Forma = "rls" | "dono" | "classico"
  * - classico: motor antigo do Prisma, com meta.target.
  */
 function p2002(campo: string, forma: Forma = "rls") {
-  const indice = `demandas_${campo === "publicToken" ? "public_token" : campo}_key`
+  const indice = campo === "codigo" ? "demandas_organizacaoId_codigo_key" : `demandas_${campo === "publicToken" ? "public_token" : campo}_key`
   const causa = {
     originalCode: "23505",
     originalMessage: `duplicate key value violates unique constraint "${indice}"`,
@@ -60,13 +63,15 @@ function bancoCom(existentes: string[], forma: Forma = "rls") {
   return { criar, tentados }
 }
 
-/** Sorteio que devolve os números na ordem dada. */
-function sorteios(...numeros: number[]) {
-  let i = 0
-  return () => {
-    if (i >= numeros.length) throw new Error("o teste sorteou mais vezes do que previa")
-    return numeros[i++]
+/** Contador de mentira: devolve 1, 2, 3… a partir de `desde`. */
+function contador(desde = 1) {
+  let n = desde - 1
+  const chamadas: number[] = []
+  const numero = async (ano: number) => {
+    chamadas.push(ano)
+    return ++n
   }
+  return { numero, chamadas }
 }
 
 let aviso: ReturnType<typeof vi.spyOn>
@@ -77,53 +82,58 @@ afterEach(() => {
   aviso.mockRestore()
 })
 
-describe("sortearCodigo", () => {
-  it("monta PREFIXO-AA-#### com o ano em dois dígitos", () => {
-    expect(sortearCodigo("VOP", AGORA(), () => 4821)).toBe("VOP-26-4821")
-    expect(sortearCodigo("VOP-EXT", AGORA(), () => 1077)).toBe("VOP-EXT-26-1077")
+const opcoes = (prefixo: string, c: ReturnType<typeof contador>) => ({ agora: AGORA, prefixo: async () => prefixo, numero: c.numero })
+
+describe("montarCodigo e prefixo", () => {
+  it("monta PREFIXO[-TIPO]-AA-#### com o ano em dois dígitos", () => {
+    expect(montarCodigo("GH", "", 26, 1)).toBe("GH-26-0001")
+    expect(montarCodigo("VOP", "EXT", 26, 77)).toBe("VOP-EXT-26-0077")
+    // Sem teto: passou de 9999, ganha mais um dígito.
+    expect(montarCodigo("GH", "", 27, 12345)).toBe("GH-27-12345")
   })
 
-  it("o sorteio de verdade fica sempre entre 1000 e 9999", () => {
-    for (let i = 0; i < 5000; i++) {
-      const m = /^VOP-26-(\d{4})$/.exec(sortearCodigo("VOP", AGORA()))
-      expect(m).not.toBeNull()
-      const n = Number(m![1])
-      expect(n).toBeGreaterThanOrEqual(1000)
-      expect(n).toBeLessThanOrEqual(9999)
-    }
+  it("sugere o prefixo pelas iniciais, sem acento e sem 'Ltda'", () => {
+    expect(sugerirPrefixo("GH Produções")).toBe("GH")
+    expect(sugerirPrefixo("Gh Produções")).toBe("GP")
+    expect(sugerirPrefixo("Estúdio da Ana Ltda")).toBe("EA")
+    expect(sugerirPrefixo("Contourline")).toBe("CON")
+    expect(prefixoValido(sugerirPrefixo("123"))).toBe(true)
+  })
+
+  it("prefixo válido: só 2 a 5 letras maiúsculas", () => {
+    expect(prefixoValido("GH")).toBe(true)
+    expect(prefixoValido("VOP")).toBe(true)
+    expect(prefixoValido("gh")).toBe(false)
+    expect(prefixoValido("G")).toBe(false)
+    expect(prefixoValido("GH-1")).toBe(false)
+    expect(prefixoValido(null)).toBe(false)
   })
 })
 
-describe("criarComCodigoUnico", () => {
-  it("sem colisão, grava na primeira tentativa", async () => {
+describe("criarComCodigoDaEmpresa", () => {
+  it("empresa nova: começa em 0001 e segue em sequência", async () => {
     const banco = bancoCom([])
-    const r = await criarComCodigoUnico("VOP", banco.criar, { sortear: sorteios(4821), agora: AGORA })
-    expect(r.codigo).toBe("VOP-26-4821")
-    expect(banco.tentados).toEqual(["VOP-26-4821"])
+    const c = contador()
+    const a = await criarComCodigoDaEmpresa("org-gh", "", banco.criar, opcoes("GH", c))
+    const b = await criarComCodigoDaEmpresa("org-gh", "EXT", banco.criar, opcoes("GH", c))
+    expect(a.codigo).toBe("GH-26-0001")
+    expect(b.codigo).toBe("GH-EXT-26-0002")
+    expect(c.chamadas).toEqual([26, 26])
     expect(aviso).not.toHaveBeenCalled()
   })
 
-  it("código já usado: sorteia de novo e grava o primeiro livre (produção, com RLS)", async () => {
-    const banco = bancoCom(["VOP-26-1234", "VOP-26-2345"])
-    const r = await criarComCodigoUnico("VOP", banco.criar, { sortear: sorteios(1234, 2345, 3456), agora: AGORA })
-    expect(r.codigo).toBe("VOP-26-3456")
-    expect(banco.tentados).toEqual(["VOP-26-1234", "VOP-26-2345", "VOP-26-3456"])
-    // Cada colisão fica no log: é o que mostra quando o ano começar a encher.
+  it("número já usado por código antigo: o contador anda e grava o próximo livre (produção, com RLS)", async () => {
+    const banco = bancoCom(["VOP-26-1000", "VOP-26-1001"])
+    const r = await criarComCodigoDaEmpresa("org-contourline", "", banco.criar, opcoes("VOP", contador(1000)))
+    expect(r.codigo).toBe("VOP-26-1002")
+    expect(banco.tentados).toEqual(["VOP-26-1000", "VOP-26-1001", "VOP-26-1002"])
     expect(aviso).toHaveBeenCalledTimes(2)
   })
 
   it.each<Forma>(["dono", "classico"])("reconhece a colisão também no formato %s do erro", async (forma) => {
-    const banco = bancoCom(["VOP-26-1234"], forma)
-    const r = await criarComCodigoUnico("VOP", banco.criar, { sortear: sorteios(1234, 5678), agora: AGORA })
-    expect(r.codigo).toBe("VOP-26-5678")
-  })
-
-  it("vale para o formulário externo (VOP-EXT) sem misturar com o interno", async () => {
-    // O mesmo número com outro prefixo é outro código: não colide.
-    const banco = bancoCom(["VOP-26-1234", "VOP-EXT-26-2222"])
-    const r = await criarComCodigoUnico("VOP-EXT", banco.criar, { sortear: sorteios(2222, 1234), agora: AGORA })
-    expect(r.codigo).toBe("VOP-EXT-26-1234")
-    expect(banco.tentados).toEqual(["VOP-EXT-26-2222", "VOP-EXT-26-1234"])
+    const banco = bancoCom(["VOP-26-0001"], forma)
+    const r = await criarComCodigoDaEmpresa("org", "", banco.criar, opcoes("VOP", contador()))
+    expect(r.codigo).toBe("VOP-26-0002")
   })
 
   it.each<Forma>(["rls", "dono", "classico"])("não insiste quando o campo repetido é outro (%s)", async (forma) => {
@@ -131,28 +141,28 @@ describe("criarComCodigoUnico", () => {
     const criar = vi.fn(async () => {
       throw erro
     })
-    await expect(criarComCodigoUnico("VOP", criar, { sortear: sorteios(1234), agora: AGORA })).rejects.toBe(erro)
+    await expect(criarComCodigoDaEmpresa("org", "", criar, opcoes("GH", contador()))).rejects.toBe(erro)
     expect(criar).toHaveBeenCalledTimes(1)
   })
 
-  it("erro que não é de código sobe na hora, sem novo sorteio", async () => {
+  it("erro que não é de código sobe na hora, sem pedir outro número", async () => {
     const erro = new Error("Can't reach database server")
     const criar = vi.fn(async () => {
       throw erro
     })
-    await expect(criarComCodigoUnico("VOP", criar, { sortear: sorteios(1234), agora: AGORA })).rejects.toBe(erro)
+    await expect(criarComCodigoDaEmpresa("org", "", criar, opcoes("GH", contador()))).rejects.toBe(erro)
     expect(criar).toHaveBeenCalledTimes(1)
   })
 
   it(`desiste depois de ${TENTATIVAS_CODIGO} colisões seguidas, com erro que explica o motivo`, async () => {
-    const banco = bancoCom(["VOP-26-1234"])
-    const sempreOMesmo = () => 1234
-    const falha = await criarComCodigoUnico("VOP", banco.criar, { sortear: sempreOMesmo, agora: AGORA }).then(
+    const usados = Array.from({ length: TENTATIVAS_CODIGO }, (_, i) => montarCodigo("VOP", "", 26, i + 1))
+    const banco = bancoCom(usados)
+    const falha = await criarComCodigoDaEmpresa("org", "", banco.criar, opcoes("VOP", contador())).then(
       () => null,
       (e: unknown) => e as Error
     )
     expect(falha).toBeInstanceOf(Error)
-    expect(falha?.message).toMatch(/prefixo VOP em 5 tentativas/)
+    expect(falha?.message).toMatch(new RegExp(`em ${TENTATIVAS_CODIGO} tentativas`))
     expect((falha?.cause as { code?: string }).code).toBe("P2002")
     expect(banco.tentados).toHaveLength(TENTATIVAS_CODIGO)
   })
@@ -161,6 +171,8 @@ describe("criarComCodigoUnico", () => {
 describe("ehColisaoDeCodigo", () => {
   it("aceita o nome do índice no lugar da lista de campos", () => {
     expect(ehColisaoDeCodigo({ code: "P2002", meta: { target: "demandas_codigo_key" } })).toBe(true)
+    expect(ehColisaoDeCodigo({ code: "P2002", meta: { target: "demandas_organizacaoId_codigo_key" } })).toBe(true)
+    expect(ehColisaoDeCodigo({ code: "P2002", meta: { target: ["organizacaoId", "codigo"] } })).toBe(true)
     expect(
       ehColisaoDeCodigo({
         code: "P2002",

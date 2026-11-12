@@ -12,8 +12,8 @@ import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
-import { criarComCodigoUnico } from "@/lib/codigo-demanda"
 import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gravacao"
+import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
   // Gravação nasce com o link de acompanhamento de quem pediu (/d/<token>).
   const tokenPublico = isCobertura ? novoTokenPublico() : null
 
-  const demanda = await criarComCodigoUnico("VOP-EXT", (codigo) => prisma.demanda.create({
+  const demanda = await criarComCodigoDaEmpresa(organizacaoId, "EXT", (codigo) => prisma.demanda.create({
     data: {
       organizacaoId,
       codigo,

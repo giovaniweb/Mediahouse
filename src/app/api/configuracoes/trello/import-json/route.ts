@@ -139,9 +139,10 @@ function extractDriveLink(desc: string | undefined): string | null {
 
 // ─── Unique code generator (counter-based to avoid DB round-trip per card) ──
 
-async function getNextCodeStart(): Promise<number> {
+async function getNextCodeStart(organizacaoId: string): Promise<number> {
   const last = await prisma.demanda.findFirst({
-    where: { codigo: { startsWith: "TRL-" } },
+    // Código é único por empresa (Onda 2A): a busca leva a empresa.
+    where: { organizacaoId, codigo: { startsWith: "TRL-" } },
     orderBy: { codigo: "desc" },
     select: { codigo: true },
   })
@@ -255,7 +256,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Get next code starting number
-  let codeNum = await getNextCodeStart()
+  let codeNum = await getNextCodeStart(organizacaoId)
 
   let imported = 0
   let skipped = 0
