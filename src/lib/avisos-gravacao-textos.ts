@@ -53,6 +53,12 @@ export type DadosDoAviso = {
    * o arquivo subido no card vai com o token do link público.
    */
   linkVideoCliente?: string | null
+  /**
+   * Quantos vídeos finais a página de acompanhamento mostra (a mesma regra da
+   * página: arquivosDoVideoDaGravacao). Com dois ou mais, o cliente recebe a
+   * página, e não o link de um vídeo só.
+   */
+  videosFinais?: number | null
   /** O card no NuFlow, para a operação abrir direto (/jobs/<id>). */
   linkCard?: string | null
   /** Os brutos que o videomaker mandou (o drive dele). */
@@ -75,6 +81,20 @@ const onde = (d: DadosDoAviso) => d.localGravacao?.trim() || d.localEvento?.trim
 // O link que vai para o cliente. O endereço do arquivo subido (/api/midia/...)
 // pede login e nem tem o domínio: sem o link pronto para ele, não vai link.
 const videoDoCliente = (d: DadosDoAviso) => d.linkVideoCliente?.trim() || (videoNoNuflow(d.linkFinal) ? null : d.linkFinal?.trim() || null)
+
+// Card com mais de um vídeo final (as miniaturas do #135): o link de um vídeo
+// só deixava os outros de fora. A página de acompanhamento (/d/<token>) mostra
+// todos, então é ela que vai. Sem a página ativa, vai o vídeo, como antes.
+const paginaDosVideos = (d: DadosDoAviso) =>
+  (d.videosFinais ?? 0) >= 2 ? d.linkAcompanhamento?.trim() || null : null
+
+/** O aviso ao cliente de que o vídeo foi enviado; null quando não há link para ele. */
+export function avisoDoVideoAoCliente(d: DadosDoAviso): string | null {
+  const pagina = paginaDosVideos(d)
+  if (pagina) return `Olá! Os ${d.videosFinais} vídeos da sua gravação estão prontos:\n${pagina}`
+  const video = videoDoCliente(d)
+  return video ? `Olá! O vídeo da sua gravação está pronto:\n${video}` : null
+}
 
 // O link que a operação abre: só http(s) de verdade. O arquivo nosso
 // (/api/midia/...) não vai cru — ela abre pelo card.
@@ -150,7 +170,7 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
       return { operacao: `🎬 Vídeo pronto: ${ref(d)}.\n\nEnvie ao cliente e marque como enviado.` }
     case "concluida":
       return {
-        ...(videoDoCliente(d) ? { cliente: `Olá! O vídeo da sua gravação está pronto:\n${videoDoCliente(d)}` } : {}),
+        ...(avisoDoVideoAoCliente(d) ? { cliente: avisoDoVideoAoCliente(d)! } : {}),
         solicitante: [`✔️ Gravação entregue ao cliente: ${ref(d)}.`, d.linkAcompanhamento && `Acompanhamento:\n${d.linkAcompanhamento}`].filter(Boolean).join("\n\n"),
       }
     case "nota_paga":

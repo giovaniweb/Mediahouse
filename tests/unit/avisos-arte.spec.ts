@@ -63,6 +63,8 @@ describe("artes dos avisos: quem recebe qual", () => {
     expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "inbox"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-11:cliente:abc"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:solicitante:abc"))).toBeNull()
+    // O aviso de vídeo enviado ao cliente (concluída), pela fila: nunca com arte.
+    expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:cliente:abc", "cliente", "manual"))).toBeNull()
     expect(familiaDaSaida(saida("abc123"))).toBeNull()
     expect(familiaDaSaida(saida("manual:uuid", "usuario", "manual"))).toBeNull()
   })

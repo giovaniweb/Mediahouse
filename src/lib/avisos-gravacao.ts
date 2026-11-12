@@ -8,7 +8,7 @@ import { criarSaida, destinoAutorizado, processarSaidas } from "@/lib/whatsapp-o
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
 import { momentoDoJob } from "@/lib/ficha-do-job"
 import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
-import { linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
+import { arquivosDoVideoDaGravacao, linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import { comToken } from "@/lib/midia"
 import {
@@ -89,6 +89,11 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
     orderBy: { updatedAt: "desc" }, select: { url: true, token: true },
   }) : null
   const nota = nf ? comToken(nf.url, nf.token) : null
+  // Os vídeos finais que a página de acompanhamento mostra, pela mesma regra
+  // dela (api/publico/demanda/[token]): com dois ou mais, o cliente recebe a página.
+  const finais = await tx.arquivo.findMany({
+    where: { demandaId: d.id, tipoArquivo: "final" }, select: { url: true, originalUrl: true },
+  })
   return {
     ...d,
     linkEntrega,
@@ -97,6 +102,7 @@ export async function dadosDaGravacao(tx: Tx, organizacaoId: string, demandaId: 
     linkAcompanhamento: d.publicToken && d.publicTokenAtivo ? linkPublicoDaDemanda(d.publicToken) : null,
     // O vídeo subido no card abre para o cliente com o token do link público.
     linkVideoCliente: linkDoVideoParaOCliente(d.linkFinal, d.publicTokenAtivo ? d.publicToken : null, base),
+    videosFinais: arquivosDoVideoDaGravacao(d.linkFinal, finais).length,
     colinha: colinha?.texto ? preencherColinha(colinha.texto, {
       cliente: d.clienteFinalNome?.trim() || d.titulo, hora: quando?.hora ?? null,
       endereco: d.localGravacao || d.localEvento, link: linkEntrega,

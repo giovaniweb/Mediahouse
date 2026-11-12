@@ -25,6 +25,7 @@ import { BannerRascunho } from "./BannerRascunho"
 import { SecaoArquivos, juntarReferencias } from "./SecaoArquivos"
 import { SeletorProdutos, type Produto } from "./SeletorProdutos"
 import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
+import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
 
 
 interface OpcaoEquipe { value: string; label: string; subtitle?: string }
@@ -342,7 +343,8 @@ export function NovaDemandaModal({ open, onClose, prefill, social }: NovaDemanda
       // Pela social, a ideia é gravada antes: se o pedido falhar, nada se perde.
       const ideiaDoPedido = social ? await gravarIdeia() : undefined
       const referencia = juntarReferencias(referencias, novaReferencia)
-      const departamento = tipo === "cobertura" ? "eventos" : "growth"
+      // Vídeo é do Audiovisual; cobertura, de Eventos (lib/departamento-do-pedido.ts).
+      const departamento = departamentoDoPedido(tipo)
       const tipoVideoFinal = tipo === "cobertura" ? "cobertura_evento" : tipoVideo
 
       const body: Record<string, unknown> = {
