@@ -34,7 +34,13 @@ export async function GET(req: NextRequest) {
   // auxiliar administrativo trabalha nela sem editar demandas) veem tudo o que
   // enxergam; os demais, só os cards em que fazem a peça. O solicitante recebe
   // o link do vídeo dele pelo WhatsApp, não por aqui.
-  const filtros: Prisma.DemandaWhereInput[] = [await oQueAPessoaVe(session, organizacaoId)]
+  //
+  // Só cards DESTA empresa: `oQueAPessoaVe` inclui os espelhados de outra
+  // (escopoComEspelho), e o token de cada aprovação é o link público do
+  // cliente da dona. Com o RLS desligado, a lista os entregava a quem só
+  // executa ou acompanha o card (revisão do #141). Antes desta mudança o
+  // filtro já era `organizacaoId`; o espelho não entra.
+  const filtros: Prisma.DemandaWhereInput[] = [{ organizacaoId }, await oQueAPessoaVe(session, organizacaoId)]
   if (area) filtros.push({ area })
   if (!ehGestor(session)) {
     const p = (await permissoesEfetivas(session.user.id, organizacaoId))?.permissoes

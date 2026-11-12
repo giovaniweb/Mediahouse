@@ -32,6 +32,8 @@ import { GET as listarAprovacoes } from "@/app/api/aprovacao-video/route"
 import { PUT as editarDemanda } from "@/app/api/demandas/[id]/route"
 
 const p = `rotas-${randomUUID().slice(0, 8)}`, org = `${p}-org`
+// A empresa que espelha um card para `org` (a dona dele).
+const outra = `${p}-outra`, cardDaOutra = `${p}-da-outra`, adminDaOutra = `${p}-admin-outra`
 const pessoas = {
   admin: `${p}-admin`,
   solicitante: `${p}-solic`,
@@ -130,11 +132,31 @@ beforeAll(async () => {
     { demandaId: cards.doSolicitante, urlVideo: "https://drive.test/clinica", nomeVideo: "clínica", status: "pendente", expiresAt: new Date(Date.now() + 86400000) },
     { demandaId: cards.arte, urlVideo: "https://drive.test/arte.png", nomeVideo: "arte", status: "pendente", expiresAt: new Date(Date.now() + 86400000) },
   ] })
+
+  // Outra empresa espelha um card para esta (executa ou acompanha), com uma
+  // aprovação pendente: o token dela é o link público do cliente da outra.
+  await db.organizacao.create({ data: { id: outra, nome: `${p} outra`, slug: outra } })
+  await db.usuario.create({ data: { id: adminDaOutra, nome: "admin da outra", email: `${adminDaOutra}@exemplo.test`, tipo: "admin", senhaHash: "sem-login" } })
+  await db.usuarioOrganizacao.create({ data: { usuarioId: adminDaOutra, organizacaoId: outra, papel: "admin", areas: ["audiovisual"] } })
+  await db.demanda.create({ data: { ...card, id: cardDaOutra, codigo: cardDaOutra, organizacaoId: outra, titulo: "Vídeo da outra empresa", solicitanteId: adminDaOutra } })
+  await db.parceriaOrganizacao.create({ data: { id: `${p}-parceria`, organizacaoConvidanteId: outra, organizacaoConvidadaId: org,
+    nomeConvidante: "Outra", nomeConvidada: "Esta", status: "aceita", criadoPorId: adminDaOutra } })
+  await db.demandaCompartilhamento.create({ data: { id: `${p}-espelho`, demandaId: cardDaOutra, organizacaoOrigemId: outra, organizacaoDestinoId: org,
+    nomeOrigem: "Outra", nomeDestino: "Esta", criadoPorId: adminDaOutra } })
+  await db.aprovacaoVideo.create({ data: { demandaId: cardDaOutra, urlVideo: "https://drive.test/da-outra", nomeVideo: "da outra", status: "pendente",
+    expiresAt: new Date(Date.now() + 86400000) } })
 })
 
 beforeEach(() => { estado.sessao = null })
 
 afterAll(async () => {
+  await db.aprovacaoVideo.deleteMany({ where: { demandaId: cardDaOutra } })
+  await db.demandaCompartilhamento.deleteMany({ where: { demandaId: cardDaOutra } })
+  await db.demanda.deleteMany({ where: { organizacaoId: outra } })
+  await db.parceriaOrganizacao.deleteMany({ where: { id: `${p}-parceria` } })
+  await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: outra } })
+  await db.organizacao.delete({ where: { id: outra } })
+  await db.usuario.delete({ where: { id: adminDaOutra } })
   const ids = Object.values(cards)
   const coberturas = (await db.demanda.findMany({ where: { id: { in: ids } }, select: { coberturaId: true } }))
     .map((d) => d.coberturaId).filter((x): x is string => !!x)
@@ -297,6 +319,17 @@ describe("GET /api/aprovacao-video", () => {
     como("auxiliar")
     expect(await aprovacoes("audiovisual")).toEqual([cards.alheio, cards.doSolicitante].sort())
     expect(await aprovacoes("design")).toEqual([cards.arte])
+  })
+
+  // Revisão do #141 (Vercel): `oQueAPessoaVe` inclui os cards espelhados de
+  // outra empresa. Sem o RLS, a lista entregava à gestão daqui os tokens
+  // públicos de aprovação da empresa dona. A lista é só da empresa ativa.
+  it("o card espelhado de outra empresa não entra na lista, nem para a gestão", async () => {
+    como("admin")
+    expect(await aprovacoes("audiovisual")).not.toContain(cardDaOutra)
+    expect(await aprovacoes()).not.toContain(cardDaOutra)
+    como("auxiliar")
+    expect(await aprovacoes()).not.toContain(cardDaOutra)
   })
 })
 
