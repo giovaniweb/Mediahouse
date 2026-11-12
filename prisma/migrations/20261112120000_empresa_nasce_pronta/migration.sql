@@ -10,7 +10,8 @@
 -- muda.
 --
 -- 1) Prefixo e numeração por empresa. Quem já existe fica com VOP, que é o que
---    os códigos antigos usam. Empresa nova recebe o prefixo na criação.
+--    os códigos antigos usam, menos a GH Produção (gh-producao), que fica com
+--    GH. Empresa nova recebe o prefixo na criação.
 -- 2) Primeiros passos do painel. As empresas que já existem não veem a lista:
 --    ela é para empresa nova.
 -- 3) Unicidade de demandas.codigo por (organizacaoId, codigo).
@@ -24,6 +25,12 @@ ALTER TABLE "organizacoes" ADD COLUMN "prefixoCodigo" TEXT;
 ALTER TABLE "organizacoes" ADD CONSTRAINT "organizacoes_prefixoCodigo_check"
   CHECK ("prefixoCodigo" IS NULL OR "prefixoCodigo" ~ '^[A-Z]{2,5}$');
 UPDATE "organizacoes" SET "prefixoCodigo" = 'VOP';
+-- GH Produção (piloto da Onda 4) fica com GH, decisão do Giovani em 12/11/2026.
+-- Em 12/11 ela não tinha nenhuma demanda nem evento; se tivesse, os códigos
+-- VOP-... gravados continuariam como estão (só o próximo código muda). O
+-- contador nasce vazio, então a primeira sai GH-AA-0001. Sem a empresa (outro
+-- banco), o UPDATE não acha nada e segue.
+UPDATE "organizacoes" SET "prefixoCodigo" = 'GH' WHERE "slug" = 'gh-producao';
 
 CREATE TABLE "contadores_codigo" (
   "organizacaoId" TEXT NOT NULL,

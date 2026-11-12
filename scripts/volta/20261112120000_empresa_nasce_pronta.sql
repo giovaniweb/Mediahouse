@@ -11,7 +11,10 @@
 --   SELECT codigo, count(*) FROM demandas GROUP BY 1 HAVING count(*) > 1;
 --
 -- Os contadores (contadores_codigo) somem; os códigos já gravados nas demandas
--- ficam como estão.
+-- ficam como estão. O prefixo (VOP para todas, GH para a gh-producao) some com
+-- a coluna: não há UPDATE a desfazer à parte. Os códigos GH-... que a GH
+-- Produção tiver criado continuam nas demandas dela; o código antigo volta a
+-- sortear VOP-AA-#### para todas as empresas, inclusive a GH.
 --
 -- Escrita em produção: roda só com o sim do Giovani, numa transação única
 -- (`psql -1`). Não mexe em _prisma_migrations.
