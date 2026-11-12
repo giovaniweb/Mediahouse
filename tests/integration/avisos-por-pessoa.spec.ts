@@ -114,6 +114,8 @@ describe("sem configuração, nada muda", () => {
       { organizacaoId: org, tipoAlerta: "nova_demanda_audiovisual", mensagem: "pedido" },
       { organizacaoId: org, tipoAlerta: "material_recebido", mensagem: "material" },
       { organizacaoId: org, tipoAlerta: "regra_prazo_vencido", mensagem: "prazo", demandaId: cardDosOutros },
+      // Fora do sino para todos (pedido do Giovani): é ruído, continua em Alertas.
+      { organizacaoId: org, tipoAlerta: "whatsapp_reconectou", mensagem: "reconectou" },
     ] })
     entrar("thalisson")
     expect(await alertasDoSino()).toEqual(["material", "pedido", "prazo"])

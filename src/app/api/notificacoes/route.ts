@@ -5,6 +5,8 @@ import { getOrgId, semOrg } from "@/lib/org"
 import type { Prisma } from "@prisma/client"
 import { filtroDoSino } from "@/lib/preferencias-aviso"
 
+const TIPOS_FORA_DO_SINO = ["whatsapp_reconectou"]
+
 // GET /api/notificacoes — alertas não lidos: broadcast (usuarioId null) +
 // direcionados ao usuário logado, da empresa ativa.
 //
@@ -32,6 +34,10 @@ export async function GET() {
     lida: false,
     organizacaoId,
     OR: [{ usuarioId: null }, { usuarioId: session.user.id }],
+    // "WhatsApp reconectou" é ruído (179 em 30 dias, 12/11/2026): o Giovani pediu
+    // fora do sino de todo mundo. Continua em Alertas; o "desconectou", que pede
+    // ação, segue no sino.
+    NOT: { tipoAlerta: { in: TIPOS_FORA_DO_SINO } },
     ...(cortes.length ? { AND: cortes } : {}),
   }
 
