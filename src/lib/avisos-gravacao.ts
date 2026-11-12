@@ -11,6 +11,7 @@ import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { arquivosDoVideoDaGravacao, linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import { comToken } from "@/lib/midia"
+import { dadosDePagamento, quemVeFinanceiro, resumoDoPagamento, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import {
   mensagemDaNotaEmLote,
   mensagensDoEvento,
@@ -57,7 +58,31 @@ export async function telefonesDaOperacao(tx: Pick<Tx, "usuario">, organizacaoId
   return operam.length ? operam : telefonesDaGestao(tx, organizacaoId)
 }
 
-type GravacaoDoAviso = DadosDoAviso & {
+/**
+ * Dos telefones da operação, os de quem vê o financeiro (`verCustos`): só eles
+ * recebem o valor e o final do PIX no aviso da nota (12/11/2026).
+ */
+async function telefonesDoFinanceiroNaOperacao(tx: Tx, organizacaoId: string): Promise<Set<string>> {
+  const select = { id: true, telefone: true }
+  const operam = await tx.usuario.findMany({
+    where: { status: "ativo", telefone: { not: null }, organizacoes: { some: { organizacaoId, operaGravacoes: true } } }, select,
+  })
+  const lista = operam.length ? operam : await tx.usuario.findMany({
+    where: { status: "ativo", telefone: { not: null },
+      organizacoes: { some: { organizacaoId, OR: [{ papel: { in: ["admin", "gestor"] } }, { recebeTodosAvisos: true }] } } }, select,
+  })
+  const veem = await quemVeFinanceiro(tx, organizacaoId, lista.map((u) => u.id))
+  return new Set(telefones(lista.filter((u) => veem.has(u.id))))
+}
+
+/** O aviso da nota para quem vê o financeiro: o de todos, mais valor e PIX resumido. */
+function comPagamento(texto: string, pagamento: DadosDePagamento | null): string {
+  if (!pagamento) return texto
+  const base = process.env.NEXTAUTH_URL?.trim().replace(/\/$/, "") || "https://nuflow.space"
+  return `${texto}\n\n💰 ${resumoDoPagamento(pagamento)}\n\nPIX completo no e-mail e em Notas fiscais:\n${base}/notas-fiscais`
+}
+
+export type GravacaoDoAviso = DadosDoAviso & {
   id: string
   videomakerTelefone: string | null
   clienteTelefone: string | null
@@ -125,6 +150,11 @@ export async function enfileirarAvisos(tx: Tx, e: {
   mensagens: Mensagens
   /** Quem fez a mudança: não recebe o aviso dela. */
   autorUsuarioId?: string | null
+  /**
+   * O texto da operação para quem vê o financeiro (aviso da nota, com valor e o
+   * final do PIX). Os outros da operação recebem `mensagens.operacao`.
+   */
+  operacaoFinanceiro?: string | null
 }): Promise<number> {
   const g = e.gravacao
   const autor = e.autorUsuarioId
@@ -139,11 +169,13 @@ export async function enfileirarAvisos(tx: Tx, e: {
     solicitante: async () => g.solicitanteTelefones,
   }
   const dia = dataEmSaoPaulo(new Date())
+  const doFinanceiro = e.operacaoFinanceiro && e.mensagens.operacao ? await telefonesDoFinanceiroNaOperacao(tx, e.organizacaoId) : new Set<string>()
   let n = 0
   for (const papel of ORDEM) {
-    const texto = e.mensagens[papel]
-    if (!texto) continue
+    const padrao = e.mensagens[papel]
+    if (!padrao) continue
     for (const telefone of await destinos[papel]()) {
+      const texto = papel === "operacao" && doFinanceiro.has(telefone) ? e.operacaoFinanceiro! : padrao
       if (ja.has(telefone)) continue
       ja.add(telefone)
       // Quem não é pessoa cadastrada não recebe — a fila recusa número solto.
@@ -177,7 +209,13 @@ export async function avisarGravacao(
     const n = await comOrg(organizacaoId, () => prisma.$transaction(async (tx) => {
       const g = await dadosDaGravacao(tx, organizacaoId, demandaId)
       if (!g) return 0
-      return enfileirarAvisos(tx, { organizacaoId, gravacao: g, motivo, mensagens: mensagensDoEvento(evento, g), autorUsuarioId })
+      const mensagens = mensagensDoEvento(evento, g)
+      const pagamento = evento === "nota_recebida" && g.videomakerId && mensagens.operacao
+        ? await dadosDePagamento(tx, organizacaoId, g.id, g.videomakerId) : null
+      return enfileirarAvisos(tx, {
+        organizacaoId, gravacao: g, motivo, mensagens, autorUsuarioId,
+        operacaoFinanceiro: pagamento && mensagens.operacao ? comPagamento(mensagens.operacao, pagamento) : null,
+      })
     }))
     if (n > 0) {
       try { after(async () => { await processarSaidas(organizacaoId).catch(() => undefined) }) } catch { /* o consumidor da fila retoma */ }
@@ -197,9 +235,18 @@ export async function avisarNotaEmLote(organizacaoId: string, demandaIds: string
       if (!g) return 0
       const lista = await tx.demanda.findMany({ where: { id: { in: demandaIds }, organizacaoId }, select: { codigo: true, titulo: true, clienteFinalNome: true } })
       const nome = g.videomaker?.nome?.trim().split(/\s+/)[0] ?? "O videomaker"
+      const mensagens = mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`), g.linkNota)
+      // O valor da nota em lote é a soma; sem o valor de alguma, fica "a confirmar".
+      let pagamento: DadosDePagamento | null = null
+      if (g.videomakerId) {
+        const vm = g.videomakerId
+        const todos = await Promise.all(demandaIds.map((id) => dadosDePagamento(tx, organizacaoId, id, vm)))
+        const soma = todos.every((p) => p.valor !== null) ? todos.reduce((s, p) => s + (p.valor ?? 0), 0) : null
+        pagamento = { ...todos[0], valor: soma, origemValor: todos.every((p) => p.origemValor === "custo") ? "custo" : "diaria" }
+      }
       return enfileirarAvisos(tx, {
-        organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId,
-        mensagens: mensagemDaNotaEmLote(nome, lista.map((d) => `${d.clienteFinalNome?.trim() || d.titulo} (${d.codigo})`), g.linkNota),
+        organizacaoId, gravacao: g, motivo: `nota_lote:${demandaIds.length}`, autorUsuarioId, mensagens,
+        operacaoFinanceiro: mensagens.operacao ? comPagamento(mensagens.operacao, pagamento) : null,
       })
     }))
     if (n > 0) {

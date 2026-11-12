@@ -39,6 +39,8 @@ export type DadosDoAviso = {
   dataEvento?: string | Date | null
   localGravacao?: string | null
   localEvento?: string | null
+  /** A cidade da demanda (vai na descrição do trabalho do e-mail da nota). */
+  cidade?: string | null
   linkFinal?: string | null
   videomakerId?: string | null
   videomaker?: { nome: string } | null

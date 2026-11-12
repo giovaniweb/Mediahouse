@@ -279,6 +279,8 @@ export type AvisoDaOperacaoEmail = {
   linhas: [rotulo: string, valor: string][]
   /** O primeiro vira o botão; os outros, links abaixo dele. */
   links: { rotulo: string; url: string }[]
+  /** Quadros com título abaixo das linhas (ex.: "Dados de pagamento", 12/11/2026). */
+  blocos?: { titulo: string; linhas: [rotulo: string, valor: string][] }[]
 }
 
 export function templateAvisoDaOperacao(d: AvisoDaOperacaoEmail) {
@@ -296,6 +298,10 @@ export function templateAvisoDaOperacao(d: AvisoDaOperacaoEmail) {
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
       ${d.linhas.map(linha).join("\n      ")}
     </table>
+    ${(d.blocos ?? []).filter((b) => b.linhas.length).map((b) => `<div style="background:#f4f4f5;border-radius:8px;padding:12px 16px;margin-bottom:24px">
+      <div style="color:#18181b;font-size:13px;font-weight:700;margin-bottom:4px">${escaparHtml(b.titulo)}</div>
+      <table style="width:100%;border-collapse:collapse">${b.linhas.map(linha).join("")}</table>
+    </div>`).join("\n    ")}
     ${principal ? `<a href="${linkSeguro(principal.url)}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">${escaparHtml(principal.rotulo)} →</a>` : ""}
     ${outros.map((l) => `<p style="margin:16px 0 0;font-size:13px"><a href="${linkSeguro(l.url)}" style="color:#2563eb">${escaparHtml(l.rotulo)} →</a></p>`).join("\n    ")}
   </div>
@@ -308,6 +314,18 @@ export async function sendEmailAvisoDaOperacao(
   const para = [...new Set(destinatarios.map(emailNormalizado).filter((e): e is string => Boolean(e)))]
   if (!para.length) return { ok: false, error: "Nenhum destinatário válido" }
   return enviarEmail({ destinatarios: para, assunto: `[NuFlow] ${assunto}`, html: templateAvisoDaOperacao(dados), evento })
+}
+
+/**
+ * Quem recebe por e-mail cada nota fiscal de videomaker, com os dados de
+ * pagamento e a descrição do trabalho (Configurações → E-mail, "E-mail para as
+ * notas fiscais"; na Contourline, a Débora — Giovani, 12/11/2026).
+ */
+export async function destinatariosNotasFiscais(organizacaoId: string): Promise<string[]> {
+  const config = await prisma.configEmail.findFirst({
+    where: { organizacaoId }, orderBy: { createdAt: "desc" }, select: { emailsNotasFiscais: true },
+  })
+  return [...new Set((config?.emailsNotasFiscais ?? []).map(emailNormalizado).filter((e): e is string => Boolean(e)))]
 }
 
 export async function sendEmailVideomakerNFRecebida(

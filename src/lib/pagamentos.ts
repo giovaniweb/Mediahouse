@@ -74,6 +74,7 @@ export async function receberNotaFiscal(tx:Tx, e:{organizacaoId:string;notaId:st
   }
   await tx.notaFiscalUpload.update({where:{id:nf.id},data:{url:e.url,nomeArquivo:e.nomeArquivo,status:"enviada"}})
   await registrarAuditoria(tx,e.ator,{acao:"manutencao.custos",recurso:"nota_fiscal",recursoId:nf.id,correlationId:randomUUID(),depois:{operacao:"editar",alterados:1,decisao:"enviado"}})
-  await tx.alertaIA.create({data:{organizacaoId:e.organizacaoId,demandaId:d.id,tipoAlerta:"nf_recebida",mensagem:`Nota fiscal recebida para ${d.codigo}. Confira o valor e aprove o pagamento.`,severidade:"aviso",acaoSugerida:"Aprovações → Pagamentos"}})
+  // O sino da nota (`nf_recebida`) sai depois do commit, direcionado à operação
+  // e com os dados de pagamento para quem vê o financeiro: lib/avisos-entrega-videomaker.ts.
   return c
 }

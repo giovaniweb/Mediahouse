@@ -204,6 +204,8 @@ model Usuario {
   oauthDriveEstados   OAuthDriveEstado[]
   organizacoes        UsuarioOrganizacao[]
   demandasCriadas     Demanda[]               @relation("Solicitante")
+  custosCadastrados   CustoVideomaker[]       @relation("CustoCadastradoPor")
+  custosPagos         CustoVideomaker[]       @relation("CustoPagoPor")
   demandasGeridas     Demanda[]               @relation("Gestor")
   demandasResponsavel Demanda[]               @relation("Responsavel")
   responsavelEm       DemandaResponsavel[]
@@ -1106,11 +1108,19 @@ model CustoVideomaker {
   dataVencimento    DateTime? // TDAH: prazo para cobrança automática
   ultimaCobrancaEm  DateTime? // TDAH: última vez que enviou cobrança WA
   qtdCobranças     Int             @default(0) // TDAH: quantas cobranças já foram enviadas
+  // Página "Notas fiscais" (12/11/2026): quem marcou e quando. A nota foi
+  // cadastrada no sistema de pagamento (compras) e foi paga. `dataPagamento`
+  // continua sendo o "quando" do pago.
+  cadastradoPagamentoEm    DateTime?
+  cadastradoPagamentoPorId String?
+  pagoPorId                String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   videomaker Videomaker @relation(fields: [videomakerId], references: [id])
   demanda    Demanda?   @relation(fields: [demandaId], references: [id])
+  cadastradoPagamentoPor Usuario? @relation("CustoCadastradoPor", fields: [cadastradoPagamentoPorId], references: [id], onDelete: SetNull)
+  pagoPor                Usuario? @relation("CustoPagoPor", fields: [pagoPorId], references: [id], onDelete: SetNull)
 
   organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
@@ -1163,6 +1173,9 @@ model ConfigEmail {
   senderEmail      String   @default("onboarding@resend.dev")
   senderNome       String   @default("VideoOps")
   emailsFinanceiro String[] // destinatários financeiro
+  // Quem recebe por e-mail cada nota fiscal de videomaker, com os dados de
+  // pagamento e a descrição do trabalho (na Contourline, a Débora). Vazio = ninguém.
+  emailsNotasFiscais String[] @default([])
   ativo            Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -167,7 +167,7 @@ export function rotuloDaEdicao(v: string | null | undefined): string | null {
 export type PagamentoDoCard = {
   statusInterno: string
   videomakerId?: string | null
-  custos?: { statusPagamento: string; pago: boolean }[] | null
+  custos?: { statusPagamento: string; pago: boolean; cadastradoPagamentoEm?: Date | string | null }[] | null
   notasFiscais?: { status: string }[] | null
 }
 
@@ -184,7 +184,9 @@ export function situacaoDaNota(job: PagamentoDoCard): SituacaoDaNota | null {
   if (!job.custos || !job.notasFiscais || !job.videomakerId) return null
   const custos = job.custos, notas = job.notasFiscais
   if (custos.some((c) => c.pago || c.statusPagamento === "pago")) return { etapa: "paga", texto: "Nota paga", tom: "ok" }
-  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) return { etapa: "compras", texto: "Enviada para compras", tom: "andamento" }
+  if (custos.some((c) => c.statusPagamento === "aguardando_pagamento")) {
+    return { etapa: "compras", texto: custos.some((c) => c.cadastradoPagamentoEm) ? "Cadastrada para pagamento" : "Enviada para compras", tom: "andamento" }
+  }
   if (custos.some((c) => c.statusPagamento === "contestado")) return { etapa: "contestada", texto: "Nota a refazer", tom: "alerta" }
   if (custos.some((c) => c.statusPagamento === "nf_enviada") || notas.some((n) => n.status === "enviada" || n.status === "aprovada")) {
     return { etapa: "recebida", texto: "Nota recebida", tom: "andamento" }

@@ -11,7 +11,7 @@ const booleanos = new Set([...Object.keys(BASE_FALSE), "habilitada", "publicado"
 const motivos = new Set(["config_corrigida","provedor_normalizado","destinatario_revalidado","autorizacao_invalida", "recusado", "sem_credenciais", "erro_token", "erro_conta", "erro_conexao"])
 const contadores = new Set(["processados", "pulados", "erros", "alterados"])
 // Somente nomes de campos, jamais valores fiscais/contato/credenciais.
-const campos = new Set(["url", "departamento", "tipoVideo", "linkExterno", "observacoes", "prazo", "cnpj", "razaoSocial", "nomeFantasia", "endereco", "bairro", "cidade", "estado", "cep", "email", "telefone", "pixKey", "pixTipo", "observacoesNF", "googleDriveFolderId", "nome", "status", "senhaHash", "categoria", "funcaoProfissional", "areas", "papel", "liderAudiovisual", "recebeTodosAvisos", "boardId", "credenciais", "emailsFinanceiro", "label", "ordem", "ativo", "grupo", "valor"])
+const campos = new Set(["url", "departamento", "tipoVideo", "linkExterno", "observacoes", "prazo", "cnpj", "razaoSocial", "nomeFantasia", "endereco", "bairro", "cidade", "estado", "cep", "email", "telefone", "pixKey", "pixTipo", "observacoesNF", "googleDriveFolderId", "nome", "status", "senhaHash", "categoria", "funcaoProfissional", "areas", "papel", "liderAudiovisual", "recebeTodosAvisos", "boardId", "credenciais", "emailsFinanceiro", "emailsNotasFiscais", "label", "ordem", "ativo", "grupo", "valor"])
 export function payloadAuditoria(entrada?: Record<string, unknown>): Prisma.InputJsonObject {
   const saida: Record<string, boolean | number | string | string[]> = {}
   for (const [k,v] of Object.entries(entrada ?? {})) {

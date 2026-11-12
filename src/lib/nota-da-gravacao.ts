@@ -19,7 +19,9 @@ import { comToken } from "@/lib/midia"
 // muda e a frase diz o plano B — baixar a nota, mandar por fora e marcar como
 // enviada (`marcar_enviada`). Erro do sistema não trava o fluxo.
 
-export type AcaoDaNota = "enviar_compras" | "marcar_enviada" | "marcar_paga"
+// "marcar_cadastrada" (12/11/2026, página Notas fiscais): compras cadastrou a
+// nota no sistema de pagamento. Guarda quem marcou e quando, como o "paga".
+export type AcaoDaNota = "enviar_compras" | "marcar_enviada" | "marcar_cadastrada" | "marcar_paga"
 
 type Ator = { organizacaoId: string; usuarioId: string }
 
@@ -70,13 +72,33 @@ export async function agirNaNota(ator: Ator, demandaId: string, acao: AcaoDaNota
       if (custo.statusPagamento !== "aguardando_pagamento") throw new PagamentoInvalido("Marque como paga depois de enviar a nota para compras.")
       const r = await prisma.custoVideomaker.updateMany({
         where: { id: custo.id, organizacaoId: ator.organizacaoId, statusPagamento: "aguardando_pagamento", pago: false },
-        data: { statusPagamento: "pago", pago: true, dataPagamento: new Date() },
+        data: { statusPagamento: "pago", pago: true, dataPagamento: new Date(), pagoPorId: ator.usuarioId },
       })
       if (r.count === 0) throw new PagamentoInvalido("A nota mudou enquanto isso. Atualize a página.")
       await registrar(ator, d.id, d.statusInterno, custo.id, "Nota do videomaker paga", "finalizado")
       // O videomaker fica sabendo do pagamento (lib/avisos-gravacao.ts).
       emSegundoPlano(() => avisarGravacao(ator.organizacaoId, d.id, "nota_paga", ator.usuarioId), "aviso-gravacao")
       return { mensagem: "Nota marcada como paga. O videomaker foi avisado." }
+    }
+
+    if (acao === "marcar_cadastrada") {
+      if (custo.cadastradoPagamentoEm) return { mensagem: "A nota já estava cadastrada para pagamento." }
+      if (!["nf_enviada", "aguardando_pagamento"].includes(custo.statusPagamento) || !custo.notaFiscalUrl) {
+        throw new PagamentoInvalido("A nota do videomaker ainda não chegou.")
+      }
+      // Cadastrada para pagamento implica que chegou a compras: se ainda estava
+      // só "recebida", passa a "enviada para compras" junto (por fora).
+      const r = await prisma.custoVideomaker.updateMany({
+        where: { id: custo.id, organizacaoId: ator.organizacaoId, statusPagamento: { in: ["nf_enviada", "aguardando_pagamento"] }, pago: false, cadastradoPagamentoEm: null },
+        data: { statusPagamento: "aguardando_pagamento", cadastradoPagamentoEm: new Date(), cadastradoPagamentoPorId: ator.usuarioId },
+      })
+      if (r.count === 0) throw new PagamentoInvalido("A nota mudou enquanto isso. Atualize a página.")
+      await prisma.alertaIA.updateMany({
+        where: { organizacaoId: ator.organizacaoId, demandaId: d.id, status: "ativo", tipoAlerta: { in: ["pagamento_pendente", "nf_recebida"] } },
+        data: { status: "resolvido", resolvedAt: new Date() },
+      })
+      await registrar(ator, d.id, d.statusInterno, custo.id, "Nota cadastrada para pagamento", "enviado")
+      return { mensagem: "Nota marcada como cadastrada para pagamento." }
     }
 
     if (custo.statusPagamento === "aguardando_pagamento") return { mensagem: "A nota já foi enviada para compras." }
