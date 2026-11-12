@@ -28,6 +28,7 @@ import { ehGestor } from "@/lib/papel"
 import { demandaNoEscopo } from "@/lib/escopo-demanda"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { avisarMaterialSalvoNoCard } from "@/lib/avisos-entrega-videomaker"
+import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -90,8 +91,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
         include: { usuario: { select: { id: true, nome: true } } },
         orderBy: { createdAt: "desc" },
       },
+      // Só os alertas da empresa ATIVA: o card espelhado tem também os da
+      // parceira (o sino de quem ela escolheu), que não são assunto da dona.
       alertas: {
-        where: { status: "ativo" },
+        where: { status: "ativo", organizacaoId: acesso.organizacaoId },
         orderBy: { createdAt: "desc" },
       },
       produtos: {
@@ -167,7 +170,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({
     // A parceira lê o card pela lista branca (lib/compartilhamento.ts), nunca inteiro.
     demanda: ehDona ? completo : projecaoDoEspelho(completo, acesso.nomeContraparte ?? "Empresa parceira"),
-    quadro: quadroDoCard({ ...demanda, contratoVideomaker }),
+    quadro: quadroDoCard({ ...demanda, contratoVideomaker, espelhoAutomatico: acesso.papel === "espelho" && !!acesso.porVideomakerId }),
     contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
     // outra empresa não opera. `papel` vem do acesso, não do payload, porque é
@@ -566,6 +569,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
     throw e
   }
+
+  // Videomaker que trabalha por uma empresa: o card vai para lá sozinho
+  // (lib/espelho-do-videomaker.ts). Sair do card é o gatilho do banco que tira.
+  if (body.videomakerId !== undefined && demanda.videomakerId) await garantirEspelhoDoVideomaker(id)
 
   // O próprio videomaker da gravação salvou os brutos ou o vídeo pronto na
   // ficha, sem mudar a etapa: a operação é avisada como em qualquer entrega

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
 import type { Session } from "next-auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
@@ -295,6 +296,9 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   }))
 
   if (data.ideiaId) await ligarIdeiaAoPedido(data.ideiaId, demanda)
+
+  // Videomaker que trabalha por uma empresa: o card nasce lá também.
+  if (demanda.videomakerId) await garantirEspelhoDoVideomaker(demanda.id)
 
   // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
   const produtoIds = Array.from(new Set([

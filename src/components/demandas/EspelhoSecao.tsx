@@ -13,6 +13,8 @@ type Aresta = {
   nomeDestino: string
   escopo: "acompanhar" | "executar"
   criadoEm: string
+  /** Veio porque o videomaker trabalha por aquela empresa: sem botão de revogar. */
+  automatico?: boolean
 }
 type Resposta = {
   papel: "dona" | "espelho"
@@ -95,16 +97,18 @@ export function EspelhoSecao({ demandaId }: { demandaId: string }) {
               <span className="min-w-0">
                 <span className="block text-zinc-200 truncate">{a.nomeDestino}</span>
                 <span className="text-[11px] text-zinc-500">
-                  {a.escopo === "executar" ? "executa a produção" : "só acompanha"}
+                  {a.automatico
+                    ? "o videomaker faz pela empresa dele · sai se trocar o videomaker"
+                    : a.escopo === "executar" ? "executa a produção" : "só acompanha"}
                 </span>
               </span>
-              <button
+              {!a.automatico && <button
                 onClick={() => revogar(a)}
                 disabled={salvando}
                 className="text-xs text-zinc-400 hover:text-red-400 px-2 py-1 rounded hover:bg-zinc-800 disabled:opacity-50 shrink-0"
               >
                 Revogar
-              </button>
+              </button>}
             </li>
           ))}
         </ul>

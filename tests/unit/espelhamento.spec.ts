@@ -81,13 +81,18 @@ describe("espelhoDoCard — o chip de cada lado", () => {
 
   it("a dona vê para quem terceirizou", () => {
     expect(espelhoDoCard([aresta], "org-a")).toEqual({
-      papel: "origem", contraparte: "Produtora Parceira", escopo: "executar",
+      papel: "origem", contraparte: "Produtora Parceira", escopo: "executar", automatico: false,
     })
+  })
+
+  it("o espelho automático (videomaker que trabalha pela parceira) vem marcado", () => {
+    expect(espelhoDoCard([{ ...aresta, porVideomakerId: "vm-gabriel" }], "org-a")).toMatchObject({ papel: "origem", automatico: true })
+    expect(espelhoDoCard([{ ...aresta, porVideomakerId: "vm-gabriel" }], "org-b")).toMatchObject({ papel: "destino", automatico: true })
   })
 
   it("quem executa vê de quem é o card", () => {
     expect(espelhoDoCard([aresta], "org-b")).toEqual({
-      papel: "destino", contraparte: "Contourline", escopo: "executar",
+      papel: "destino", contraparte: "Contourline", escopo: "executar", automatico: false,
     })
   })
 
@@ -320,3 +325,4 @@ describe("projecaoDoEspelho — o que a parceira lê do card da dona", () => {
     expect(p.historicos[0].usuario).toEqual({ nome: "Débora" })
   })
 })
+

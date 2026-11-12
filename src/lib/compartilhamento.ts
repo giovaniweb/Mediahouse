@@ -39,6 +39,11 @@ export type AcessoDemanda = {
    * PRÓPRIA dona — a Contourline lia "Contourline moveu o card".
    */
   nomeProprio: string | null
+  /**
+   * Espelho AUTOMÁTICO (videomaker que trabalha pela empresa ativa): o id do
+   * videomaker da dona que trouxe o card. `null` na dona e na terceirização manual.
+   */
+  porVideomakerId: string | null
 }
 
 /**
@@ -63,6 +68,8 @@ export type EspelhoDoCard = {
   papel: "origem" | "destino"
   contraparte: string
   escopo: EscopoCompartilhamento
+  /** O card está lá porque o videomaker da dona trabalha por aquela empresa. */
+  automatico: boolean
 }
 
 /**
@@ -81,17 +88,18 @@ export function espelhoDoCard(
     nomeDestino: string
     escopo: EscopoCompartilhamento
     revogadoEm: Date | null
+    porVideomakerId?: string | null
   }> | undefined,
   organizacaoId: string
 ): EspelhoDoCard | null {
   const ativos = (compartilhamentos ?? []).filter((c) => c.revogadoEm === null)
   // Do lado de quem executa a resposta é única — a aresta que aponta para mim.
   const meu = ativos.find((c) => c.organizacaoDestinoId === organizacaoId)
-  if (meu) return { papel: "destino", contraparte: meu.nomeOrigem, escopo: meu.escopo }
+  if (meu) return { papel: "destino", contraparte: meu.nomeOrigem, escopo: meu.escopo, automatico: !!meu.porVideomakerId }
   // Do lado da dona pode haver mais de uma no futuro; hoje o chip mostra a
   // primeira, e o detalhe do card lista todas.
   const dela = ativos.find((c) => c.organizacaoOrigemId === organizacaoId)
-  if (dela) return { papel: "origem", contraparte: dela.nomeDestino, escopo: dela.escopo }
+  if (dela) return { papel: "origem", contraparte: dela.nomeDestino, escopo: dela.escopo, automatico: !!dela.porVideomakerId }
   return null
 }
 
@@ -103,6 +111,7 @@ export const SELECT_ESPELHO = {
   nomeDestino: true,
   escopo: true,
   revogadoEm: true,
+  porVideomakerId: true,
 } as const
 
 const naoEncontrado = () => NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -139,12 +148,12 @@ export async function requireDemandaAcesso(
   if (!demanda) return naoEncontrado()
 
   if (demanda.organizacaoId === organizacaoId) {
-    return { organizacaoId, papel: "dona", donaId: organizacaoId, escopo: null, nomeContraparte: null, nomeProprio: null }
+    return { organizacaoId, papel: "dona", donaId: organizacaoId, escopo: null, nomeContraparte: null, nomeProprio: null, porVideomakerId: null }
   }
 
   const aresta = await prisma.demandaCompartilhamento.findFirst({
     where: { demandaId, organizacaoDestinoId: organizacaoId, revogadoEm: null },
-    select: { escopo: true, organizacaoOrigemId: true, nomeOrigem: true, nomeDestino: true },
+    select: { escopo: true, organizacaoOrigemId: true, nomeOrigem: true, nomeDestino: true, porVideomakerId: true },
   })
   if (!aresta) return naoEncontrado()
 
@@ -162,6 +171,7 @@ export async function requireDemandaAcesso(
     escopo: aresta.escopo,
     nomeContraparte: aresta.nomeOrigem,
     nomeProprio: aresta.nomeDestino,
+    porVideomakerId: aresta.porVideomakerId,
   }
 }
 

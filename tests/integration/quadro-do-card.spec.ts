@@ -51,7 +51,8 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await db.demanda.deleteMany({ where: { organizacaoId: org } })
+  await db.demanda.deleteMany({ where: { organizacaoId: { in: [org, outra] } } })
+  await db.parceriaOrganizacao.deleteMany({ where: { organizacaoConvidanteId: outra } })
   await db.organizacao.deleteMany({ where: { id: { in: [org, outra] } } })
   await db.videomaker.deleteMany({ where: { id: { in: Object.values(vm) } } })
   await db.usuario.deleteMany({ where: { id: usuario } })
@@ -98,5 +99,31 @@ describe("em que quadro o card mora", () => {
     expect(await onde("reels", vm.globalExterno)).toBe("jobs")
     // O contrato é o desta empresa, não o de outra.
     expect(await onde("reels", vm.internoNaOutra)).toBe("jobs")
+  })
+
+  it("espelho automático (o videomaker da dona trabalha por esta empresa) é sempre Gravação Externa aqui", async () => {
+    // A dona é a `outra`; o card chega na `org` porque o videomaker trabalha por
+    // ela. Ele é INTERNO na `org`, o que levaria o card para Demandas — mas o
+    // espelho automático é gravação externa, como para quem escalou.
+    await db.parceriaOrganizacao.create({ data: {
+      organizacaoConvidanteId: outra, organizacaoConvidadaId: org, nomeConvidante: "", nomeConvidada: "",
+      status: "aceita", criadoPorId: usuario,
+    } })
+    const card = await db.demanda.create({ data: {
+      organizacaoId: outra, codigo: `${p}-esp`, titulo: "Espelhado", descricao: "Teste", cidade: "Teste", tipoVideo: "reels",
+      departamento: "audiovisual", area: "audiovisual", solicitanteId: usuario, videomakerId: vm.interno,
+      statusInterno: "planejamento", statusVisivel: "producao",
+    } })
+    const naOrg = async () => (await db.demanda.count({ where: { AND: [{ id: card.id }, whereDoQuadro("jobs", org)] } })) ? "jobs" : "demandas"
+    await db.demandaCompartilhamento.create({ data: {
+      demandaId: card.id, organizacaoOrigemId: outra, organizacaoDestinoId: org, nomeOrigem: "", nomeDestino: "", criadoPorId: usuario,
+    } })
+    // Terceirização manual: vale o contrato da org (interno → Demandas).
+    expect(await naOrg()).toBe("demandas")
+    expect(quadroDoCard({ ...card, contratoVideomaker: "interno" })).toBe("demandas")
+    await db.demandaCompartilhamento.updateMany({ where: { demandaId: card.id }, data: { porVideomakerId: vm.interno } })
+    expect(await naOrg()).toBe("jobs")
+    expect(quadroDoCard({ ...card, contratoVideomaker: "interno", espelhoAutomatico: true })).toBe("jobs")
+    expect(await db.demanda.count({ where: { AND: [{ id: card.id }, whereDoQuadro("demandas", org)] } })).toBe(0)
   })
 })

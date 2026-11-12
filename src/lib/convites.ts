@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
 import { Prisma } from "@prisma/client"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { registrarAceite } from "@/lib/juridico/aceite-servidor"
@@ -103,6 +104,8 @@ export async function responderConvite(tx: Tx, e: {
     } })
     await tx.historicoStatus.create({ data: { demandaId: d.id, statusAnterior: d.statusInterno,
       statusNovo: novo, origem: e.origem, observacao: `Resposta registrada no convite ${c.id}` } })
+    // Aceitou e trabalha por uma empresa: o card vai para lá, no mesmo commit.
+    if (e.acao === "aceitar") await garantirEspelhoDoVideomaker(d.id, { db: tx })
   }
   const ator: AtorAuditoria = e.usuarioId ? { organizacaoId: e.organizacaoId, usuarioId: e.usuarioId }
     : { organizacaoId: e.organizacaoId, tecnico: `convite:${c.id}` }

@@ -4,6 +4,7 @@ import styles from "@/components/layout/TeamSurface.module.css"
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
+import { EmpresaDele } from "@/components/videomakers/EmpresaDele"
 import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Film, MapPin, Phone, Mail, Star, Edit2, Save, X,
@@ -530,6 +531,9 @@ export default function VideomakerDetalhePage() {
             </div>
           )}
         </div>
+
+        {/* Empresa dele: some para quem não é gestão (a rota responde 404). */}
+        <EmpresaDele videomakerId={id} />
 
         {/* Pode Editar */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
