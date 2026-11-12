@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     // Notifica admin/gestor que link foi gerado
     emSegundoPlano(() => notificarGestores(
       `🎬 *Link de Aprovação Gerado*\n\n📋 *${demanda.codigo}* — ${tituloMsg}\n👤 Enviado para: ${nomeSolicitante}\n🔗 ${link}`,
-      demanda.organizacaoId, "aguardando"
+      demanda.organizacaoId, "aguardando", demandaId as string
     ), "gestores-link-aprovacao")
 
     return NextResponse.json({ ok: true, token: aprovacao.token, link })
@@ -150,12 +150,12 @@ export async function POST(req: NextRequest) {
 /**
  * Notifica gestores/admins via WhatsApp
  */
-async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte, card?: string) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte }).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte, aviso: "andamento", card }).catch(() => null)
       }
     }
   } catch (e) {

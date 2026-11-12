@@ -131,7 +131,7 @@ export async function responderAprovacao(p: {
         : `🔄 *Cliente Pediu Ajustes!*\n\n${titulo}\n💬 "${comentario ?? "Ajuste solicitado"}"\n\nPor favor, revise e reenvie.`
 
     const arte: FamiliaArte = acao === "aprovar" ? "aprovado" : "ajuste"
-    emSegundoPlano(() => notificarGestores(msgBase, demanda.organizacaoId, arte), "gestores-aprovacao")
+    emSegundoPlano(() => notificarGestores(msgBase, demanda.organizacaoId, arte, demanda.id), "gestores-aprovacao")
     // A demanda mudou de estado — o que estava pendente por causa do estado
     // anterior deixa de valer. Sem isto o alerta ficava aberto para sempre.
     emSegundoPlano(() => resolverAlertas(demanda.organizacaoId, demanda.id), "resolver-alertas")
@@ -155,12 +155,12 @@ export async function responderAprovacao(p: {
   return { ok: true, status: novoStatus }
 }
 
-async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte) {
+async function notificarGestores(mensagem: string, organizacaoId?: string | null, arte?: FamiliaArte, card?: string) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte }).catch(() => null)
+        await sendWhatsappMessage(g.telefone, mensagem, undefined, organizacaoId, { arte, aviso: "andamento", card }).catch(() => null)
       }
     }
   } catch (e) {

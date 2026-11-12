@@ -71,7 +71,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const msg = templates.pedidoCobrado(quem, pedido.codigo, pedido.titulo, etapa, postagem ? formatarDataCurta(postagem) : null)
   const telefones = avisar.flatMap((p) => (p.telefone?.trim() ? [p.telefone] : []))
   emSegundoPlano(
-    () => Promise.allSettled(telefones.map((t) => sendWhatsappMessage(t, msg, id, escopo.organizacaoId, { arte: "cobranca" }))),
+    () => Promise.allSettled(telefones.map((t) => sendWhatsappMessage(t, msg, id, escopo.organizacaoId, { arte: "cobranca", aviso: "social" }))),
     "wa-cobranca-social",
   )
 

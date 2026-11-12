@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import type { Prisma } from "@prisma/client"
+import { filtroDoSino } from "@/lib/preferencias-aviso"
 
 // GET /api/notificacoes — alertas não lidos: broadcast (usuarioId null) +
 // direcionados ao usuário logado, da empresa ativa.
@@ -22,11 +23,16 @@ export async function GET() {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
+  // Avisos por pessoa (12/11/2026): o alerta de broadcast é um só para a
+  // empresa, então o que a pessoa desligou sai aqui, na leitura. Sem
+  // preferência, `cortes` vem vazio e a consulta é a de sempre.
+  const cortes = await filtroDoSino(prisma, organizacaoId, session.user.id)
   const where: Prisma.AlertaIAWhereInput = {
     status: "ativo",
     lida: false,
     organizacaoId,
     OR: [{ usuarioId: null }, { usuarioId: session.user.id }],
+    ...(cortes.length ? { AND: cortes } : {}),
   }
 
   const alertas = await prisma.alertaIA.findMany({
