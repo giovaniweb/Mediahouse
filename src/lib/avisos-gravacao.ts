@@ -11,6 +11,7 @@ import { colinhaDaGravacao, preencherColinha } from "@/lib/kit-videomaker"
 import { arquivosDoVideoDaGravacao, linkPublicoDaDemanda } from "@/lib/acompanhamento-gravacao"
 import { linkDoVideoParaOCliente } from "@/lib/etapas-da-gravacao"
 import { comToken } from "@/lib/midia"
+import { arteDoCliente, chaveComArte } from "@/lib/avisos-arte"
 import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { dadosDePagamento, pagamentoNoWhatsapp, quemVeDadosDePagamento, type DadosDePagamento } from "@/lib/pagamento-do-videomaker"
 import {
@@ -203,7 +204,10 @@ export async function enfileirarAvisos(tx: Tx, e: {
       // O parabéns sai uma vez na vida por gravação e pessoa: no lugar do dia vai
       // "unico", e reabrir e concluir de novo outro dia não repete. O formato
       // grav:<id>:concluida:…:videomaker é o que a categoria "parabens" reconhece.
-      const chave = `grav:${g.id}:${e.motivo}:${parabens ? "unico" : dia}:${papel}:${hash}`.slice(0, 128)
+      const base = `grav:${g.id}:${e.motivo}:${parabens ? "unico" : dia}:${papel}:${hash}`.slice(0, 128)
+      // O cliente leva na chave a arte dele (médico ou médica, pelo "Dr."/"Dra."
+      // do nome); ela só sai com WHATSAPP_ARTES_CLIENTE ligado (lib/avisos-arte).
+      const chave = papel === "cliente" ? chaveComArte(arteDoCliente(e.motivo, g.clienteFinalNome), base) : base
       // Já saiu hoje: não repete, e não conta como enviado.
       if (await tx.saidaWhatsapp.findUnique({ where: { organizacaoId_chave: { organizacaoId: e.organizacaoId, chave } }, select: { id: true } })) continue
       await criarSaida(tx, {
