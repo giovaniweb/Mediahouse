@@ -118,9 +118,11 @@ describe("auditoria do aceite", () => {
 })
 
 describe("POST /api/aceite-termos", () => {
-  const post = (corpo: unknown) => POST(new NextRequest("http://localhost/api/aceite-termos", {
-    method: "POST", body: JSON.stringify(corpo), headers: { "content-type": "application/json" },
+  // O corpo leva o que a tela exibiu: a empresa e as marcas "slug@versao".
+  const post = (corpo: Record<string, unknown>) => POST(new NextRequest("http://localhost/api/aceite-termos", {
+    method: "POST", body: JSON.stringify({ organizacaoId: "org-A", ...corpo }), headers: { "content-type": "application/json" },
   }))
+  const v = (...slugs: string[]) => slugs.map(s => `${s}@1.0`)
   beforeEach(() => {
     for (const m of Object.values(mocks)) m.mockReset()
     mocks.sessao.mockResolvedValue({ user: { id: "u1" } })
@@ -132,19 +134,19 @@ describe("POST /api/aceite-termos", () => {
 
   it("sem sessão: 401", async () => {
     mocks.sessao.mockResolvedValue(null)
-    expect((await post({ aceito: true, documentos: ["termos"] })).status).toBe(401)
+    expect((await post({ aceito: true, documentos: v("termos") })).status).toBe(401)
   })
   it("sem marcar a caixa: 400, nada gravado", async () => {
-    expect((await post({ aceito: false, documentos: ["termos", "dpa", "privacidade"] })).status).toBe(400)
+    expect((await post({ aceito: false, documentos: v("termos", "dpa", "privacidade") })).status).toBe(400)
     expect((await post({ aceito: true, documentos: ["inventado"] })).status).toBe(400)
     expect(mocks.criarAceite).not.toHaveBeenCalled()
   })
   it("tela velha (não mostrou tudo o que falta): 409 pede para recarregar", async () => {
-    expect((await post({ aceito: true, documentos: ["termos", "privacidade"] })).status).toBe(409)
+    expect((await post({ aceito: true, documentos: v("termos", "privacidade") })).status).toBe(409)
     expect(mocks.criarAceite).not.toHaveBeenCalled()
   })
   it("grava o que falta, na empresa ativa, com a versão atual e a auditoria do usuário", async () => {
-    const r = await post({ aceito: true, documentos: ["termos", "dpa", "privacidade"] })
+    const r = await post({ aceito: true, documentos: v("termos", "dpa", "privacidade") })
     expect(r.status).toBe(200)
     expect(mocks.aceites.mock.calls[0][0].where).toEqual({ organizacaoId: "org-A", titularTipo: "usuario", titularId: "u1" })
     expect(mocks.criarAceite.mock.calls[0][0].data).toMatchObject({
@@ -155,8 +157,23 @@ describe("POST /api/aceite-termos", () => {
   })
   it("já aceito: não grava de novo", async () => {
     mocks.aceites.mockResolvedValue([{ documentos: ["termos@1.0", "dpa@1.0", "privacidade@1.0"] }])
-    const r = await post({ aceito: true, documentos: ["termos"] })
+    const r = await post({ aceito: true, documentos: v("termos") })
     expect(await r.json()).toEqual({ ok: true, jaAceito: true })
+    expect(mocks.criarAceite).not.toHaveBeenCalled()
+  })
+  it("empresa ativa trocada em outra aba: 409, nada gravado na empresa nova", async () => {
+    const r = await post({ aceito: true, organizacaoId: "org-B", documentos: v("termos", "dpa", "privacidade") })
+    expect(r.status).toBe(409)
+    expect((await r.json()).error).toMatch(/empresa ativa mudou/)
+    expect(mocks.criarAceite).not.toHaveBeenCalled()
+    expect((await post({ aceito: true, organizacaoId: undefined, documentos: v("termos", "dpa", "privacidade") })).status).toBe(409)
+  })
+  it("versão nova publicada com a tela aberta: 409 pede para recarregar, nada gravado", async () => {
+    const r = await post({ aceito: true, documentos: ["termos@0.9", "dpa@1.0", "privacidade@1.0"] })
+    expect(r.status).toBe(409)
+    expect((await r.json()).error).toMatch(/Recarregue/)
+    // Tela de antes da regra, só com o slug: também desatualizada.
+    expect((await post({ aceito: true, documentos: ["termos", "dpa", "privacidade"] })).status).toBe(409)
     expect(mocks.criarAceite).not.toHaveBeenCalled()
   })
 })
@@ -172,7 +189,7 @@ describe("conferência do aceite no painel e no campo", () => {
 
   it("convidado que ainda não aceitou: pede os Termos do Profissional e a Privacidade", async () => {
     expect(await aceitePendenteDoPainel()).toEqual({
-      pendentes: ["profissionais", "privacidade"], empresa: "Empresa A", emNomeDaEmpresa: false, versaoNova: false,
+      pendentes: ["profissionais", "privacidade"], organizacaoId: "org-A", empresa: "Empresa A", emNomeDaEmpresa: false, versaoNova: false,
     })
   })
   it("falha aberta: banco fora ou tabela ausente não tranca ninguém fora", async () => {

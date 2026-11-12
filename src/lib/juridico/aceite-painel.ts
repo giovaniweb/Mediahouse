@@ -6,7 +6,9 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import type { SlugDocumento } from "@/lib/juridico/documentos"
 import { situacaoDoAceite } from "@/lib/juridico/aceite-servidor"
 
-export type AceitePendente = { pendentes: SlugDocumento[]; empresa: string; emNomeDaEmpresa: boolean; versaoNova: boolean }
+/** `organizacaoId` vai para a tela e volta no clique: o aceite fica preso à
+ *  empresa que a pessoa viu, mesmo que outra aba troque a empresa ativa. */
+export type AceitePendente = { pendentes: SlugDocumento[]; organizacaoId: string; empresa: string; emNomeDaEmpresa: boolean; versaoNova: boolean }
 
 /**
  * null quando não há nada a aceitar — e também quando a conferência falha.
@@ -26,6 +28,7 @@ export async function aceitePendenteDoPainel(): Promise<AceitePendente | null> {
     const org = await prismaAuth.organizacao.findUnique({ where: { id: organizacaoId }, select: { nome: true } })
     return {
       pendentes,
+      organizacaoId,
       empresa: org?.nome ?? "sua empresa",
       emNomeDaEmpresa: exigidos.includes("dpa"),
       versaoNova: anteriores > 0,

@@ -7,13 +7,14 @@ import { useRouter } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { Loader2 } from "lucide-react"
 import { LogoNuFlow } from "@/components/marca/Marca"
-import { DOCUMENTOS, MINUTA, type SlugDocumento } from "@/lib/juridico/documentos"
+import { DOCUMENTOS, MINUTA, marcaDeVersao, type SlugDocumento } from "@/lib/juridico/documentos"
 import { fraseDoAceite } from "@/lib/juridico/aceite"
 import "@/components/layout/Montserrat.css"
 import s from "./TelaAceite.module.css"
 
-export function TelaAceite({ pendentes, empresa, emNomeDaEmpresa, versaoNova }: {
+export function TelaAceite({ pendentes, organizacaoId, empresa, emNomeDaEmpresa, versaoNova }: {
   pendentes: SlugDocumento[]
+  organizacaoId: string
   empresa: string
   emNomeDaEmpresa: boolean
   versaoNova: boolean
@@ -30,7 +31,9 @@ export function TelaAceite({ pendentes, empresa, emNomeDaEmpresa, versaoNova }: 
     try {
       const r = await fetch("/api/aceite-termos", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aceito: true, documentos: pendentes }),
+                // O que a tela MOSTROU: a empresa e cada documento com a versão lida.
+        // A API recusa se a empresa ativa ou a versão atual mudaram desde então.
+        body: JSON.stringify({ aceito: true, organizacaoId, documentos: pendentes.map(marcaDeVersao) }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(typeof d.error === "string" ? d.error : "Não foi possível registrar o aceite. Tente de novo.")
