@@ -6,6 +6,7 @@
 // (tests/unit/kanban-avisos.spec.ts) em vez de descobrir em produção que o
 // executor do Growth nunca recebeu nada — que foi exatamente o que aconteceu.
 
+import { entregaPecaVisual } from "@/lib/growth-conteudo"
 import { variar } from "@/lib/variacao"
 import { arteDoKanban, type FamiliaArte } from "@/lib/avisos-arte"
 
@@ -217,6 +218,8 @@ export interface DadosAvisoKanban {
   extra?: string | null
   /** Demanda de Growth: o aviso fala em arte, não em vídeo. */
   isGrowth?: boolean
+  /** Tipo da demanda de Growth: decide se a arte é do camaleão (peça visual) ou do coelho. */
+  tipoEntrega?: string | null
   /** Página de aprovação (ou o arquivo final) — o que o solicitante abre. */
   linkAprovacao?: string | null
 }
@@ -257,7 +260,7 @@ export function destinatariosDoAviso(d: DadosAvisoKanban): AvisoDestinatario[] {
     if (k === autorChave) return   // não avisar quem acabou de fazer a mudança
     if (jaAvisado.has(k)) return   // mesma pessoa em dois papéis
     jaAvisado.add(k)
-    saida.push({ telefone, mensagem, papel, arte: arteDoKanban(statusNovo, papel, d.isGrowth ?? false) })
+    saida.push({ telefone, mensagem, papel, arte: arteDoKanban(statusNovo, papel, d.isGrowth ?? false, d.tipoEntrega === undefined || entregaPecaVisual(d.tipoEntrega)) })
   }
 
   const texto = (papel: DestinatarioKanban) =>

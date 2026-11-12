@@ -11,6 +11,7 @@ import { metricasRelatorio, snapshotDoRelatorio } from "@/lib/metricas-relatorio
 import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
 import { dadosDaGravacao, telefonesDaGestao, telefonesDaOperacao } from "@/lib/avisos-gravacao"
 import { mensagensDaRegra, regrasDaGravacao } from "@/lib/avisos-gravacao-textos"
+import { areaDoGestor, arteDoRelatorio, humorDoBriefing, humorDoSemanal } from "@/lib/avisos-arte"
 
 export const ROTINAS = ["alertas","monitor","prazos","lembretes","cobranca","briefing","vistoria","limpeza","gravacoes"] as const
 export type Rotina = typeof ROTINAS[number]
@@ -32,7 +33,10 @@ async function transacao<T>(org:string, efeito:(tx:Tx)=>Promise<T>) {
 async function agendar(tx:Tx,org:string,c:ContextoRegra,telefone:string|null,texto:string,expiraEm:Date,r:Resumo) {
   const tel=telefoneCompleto(telefone)
   if(!tel || !await destinoAutorizado(tx,org,tel)) {r.semDestinatario++;return}
-  const chave=`regra:v1:${hashRegra([c,tel,c.tipo==="evento" ? null : dataEmSaoPaulo(new Date())])}`
+  // A arte fica fora da chave: o bom-dia muda de cena quando os alertas mudam, e
+  // isso não pode virar um segundo bom-dia no mesmo dia.
+  const {arte:_arte,...semArte}=c
+  const chave=`regra:v1:${hashRegra([semArte,tel,c.tipo==="evento" ? null : dataEmSaoPaulo(new Date())])}`
   const ja=await tx.saidaWhatsapp.findUnique({where:{organizacaoId_chave:{organizacaoId:org,chave}},select:{id:true}})
   if(ja) return
   await criarSaida(tx,{organizacaoId:org,origem:"regra",regraContexto:c,referencia:c.id,chave,telefone:tel,texto,expiraEm})
@@ -135,12 +139,13 @@ async function cobrancas(org:string,r:Resumo) {
   }
 }
 async function gestores(tx:Tx,org:string) {
-  return tx.usuario.findMany({where:{status:"ativo",telefone:{not:null},organizacoes:{some:{organizacaoId:org,papel:{in:["admin","gestor"]}}}},select:{id:true,telefone:true}})
+  return tx.usuario.findMany({where:{status:"ativo",telefone:{not:null},organizacoes:{some:{organizacaoId:org,papel:{in:["admin","gestor"]}}}},select:{id:true,telefone:true,organizacoes:{where:{organizacaoId:org},select:{areas:true,funcaoProfissional:true}}}})
 }
 async function briefing(org:string,r:Resumo) {
   await transacao(org,async tx=>{
     const pendencias=await tx.alertaIA.count({where:{organizacaoId:org,status:"ativo"}})
-    for(const g of await gestores(tx,org)) await agendar(tx,org,{tipo:"gestor",id:g.id,revisao:dataEmSaoPaulo(new Date()),regra:"briefing"},g.telefone,
+    const humor=humorDoBriefing(pendencias)
+    for(const g of await gestores(tx,org)) await agendar(tx,org,{tipo:"gestor",id:g.id,revisao:dataEmSaoPaulo(new Date()),regra:"briefing",arte:arteDoRelatorio(areaDoGestor(g.organizacoes[0]),humor)},g.telefone,
       `O Flow tem ${pendencias} alertas ativos. Abra a central para conferir responsáveis e próximas ações.`,new Date(Date.now()+86400_000),r)
   })
 }
@@ -158,7 +163,8 @@ async function relatorios(org:string,r:Resumo) {
         conteudo:criarRelatorioV1({analise},{tipo:"semanal",periodo:`${recorte.de} a ${recorte.ate}`,area,origem:"agente",geradoEm:snapshot.metricas.geradoEm,inicio:recorte.inicio,fim:recorte.fim},snapshot)},skipDuplicates:true})
       r.relatoriosCriados+=criado.count
       if(!criado.count) return
-      for(const g of await gestores(tx,org)) await agendar(tx,org,{tipo:"gestor",id:g.id,revisao:hoje,regra:chaveRegra},g.telefone,
+      const arte=arteDoRelatorio(area==="design" ? "gr" : "av",humorDoSemanal(snapshot.demandasCriadas,snapshot.concluidas))
+      for(const g of await gestores(tx,org)) await agendar(tx,org,{tipo:"gestor",id:g.id,revisao:hoje,regra:chaveRegra,arte},g.telefone,
         `Resumo semanal de ${area} disponível no Flow (${recorte.de} a ${recorte.ate}).`,new Date(Date.now()+86400_000),r)
     })
   }

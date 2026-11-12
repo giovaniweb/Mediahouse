@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { arteDoKanban, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, type FamiliaArte } from "@/lib/avisos-arte"
+import { areaDoGestor, arteDoKanban, arteDoRelatorio, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, humorDoBriefing, humorDoSemanal, type FamiliaArte } from "@/lib/avisos-arte"
 import { destinatariosDoAviso, STATUS_COM_AVISO_KANBAN } from "@/lib/kanban-avisos"
 import { imagemDoAviso } from "@/lib/avisos-arte-imagem"
 
@@ -26,7 +26,20 @@ describe("artes dos avisos: catálogo", () => {
     const escolhas = new Set(Array.from({ length: 40 }, (_, i) => JSON.stringify(escolherArte("ajuste", `s${i}`))))
     expect(escolhas.size).toBeGreaterThan(5)
     const cenas = new Set(Array.from({ length: 60 }, (_, i) => escolherArte("design", `d${i}`).arquivo))
-    expect(cenas.size).toBe(6)
+    expect(cenas.size).toBe(7)
+  })
+
+  it("cena de meme de IA só sai com a frase dela", () => {
+    const especiais = FAMILIAS_ARTE.social.frasesDaCena![7]
+    let viu = false
+    for (let i = 0; i < 200; i++) {
+      const e = escolherArte("social", `s${i}`)
+      if (e.arquivo === "15-7.jpg") { viu = true; expect(especiais).toContain(e.frase) }
+      else expect(FAMILIAS_ARTE.social.frases).toContain(e.frase)
+    }
+    expect(viu).toBe(true)
+    for (const f of FAMILIAS) for (const k of Object.keys(FAMILIAS_ARTE[f].frasesDaCena ?? {}))
+      expect(Number(k), `${f}:${k}`).toBeLessThanOrEqual(FAMILIAS_ARTE[f].cenas)
   })
 
   it("liga só com WHATSAPP_ARTES=ligado", () => {
@@ -78,6 +91,33 @@ describe("artes dos avisos: quem recebe qual", () => {
     expect(familiaDaSaida(saida("regra:v1:h", "editor", "regra", { tipo: "demanda", id: "d", revisao: "r", regra: "prazo_vencido" }))).toBe("ruim")
     expect(familiaDaSaida(saida("regra:v1:h", "videomaker", "regra", { tipo: "gravacao", id: "g", revisao: "r", regra: "vespera" }))).toBe("gravacao")
     expect(familiaDaSaida(saida("regra:v1:h", "usuario", "regra", { tipo: "gestor", id: "g", revisao: "r", regra: "briefing" }))).toBeNull()
+  })
+
+  it("relatórios: a cena vem do contexto e depende da área e dos números", () => {
+    expect(humorDoBriefing(0)).toBe("ok")
+    expect(humorDoBriefing(3)).toBe("cansado")
+    expect(humorDoBriefing(12)).toBe("apuros")
+    expect(humorDoSemanal(10, 10)).toBe("ok")
+    expect(humorDoSemanal(10, 6)).toBe("cansado")
+    expect(humorDoSemanal(10, 2)).toBe("apuros")
+    expect(humorDoSemanal(0, 0)).toBe("ok")
+    expect(areaDoGestor({ areas: ["growth"] })).toBe("gr")
+    expect(areaDoGestor({ areas: ["growth", "audiovisual"] })).toBe("av")
+    expect(areaDoGestor({ areas: [], funcaoProfissional: "Social Media" })).toBe("so")
+    expect(areaDoGestor(undefined)).toBe("av")
+    const arte = arteDoRelatorio("so", "apuros")
+    expect(familiaDaSaida(saida("regra:v1:h", "usuario", "regra", { tipo: "gestor", id: "g", revisao: "r", regra: "briefing", arte }))).toBe("rel_so_apuros")
+    expect(familiaDaSaida(saida("regra:v1:h", "usuario", "regra", { tipo: "gestor", id: "g", revisao: "r", regra: "briefing", arte: "inventada" }))).toBeNull()
+  })
+
+  it("Growth: peça visual é do camaleão, o resto do coelho; postar é do papagaio", () => {
+    expect(arteDoKanban("editando", "executor", true, true)).toBe("design")
+    expect(arteDoKanban("editando", "executor", true, false)).toBe("growth")
+    expect(arteDoKanban("fila_edicao", "gestor", true, false)).toBe("growth")
+    expect(arteDoKanban("ajuste_solicitado", "executor", true, false)).toBe("ajuste")
+    expect(arteDoKanban("postagem_pendente", "social")).toBe("social")
+    expect(arteDoKanban("postado", "gestor")).toBe("social")
+    expect(arteDoKanban("postado", "solicitante")).toBeNull()
   })
 
   it("kanban: quem pediu fica sem arte; quem produz e a gestão recebem", () => {
