@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireDemandaOrg } from "@/lib/org"
+import { fazAPeca, guardaDoCard, SEM_PERMISSAO_NO_CARD } from "@/lib/quem-envia-arquivo"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -15,6 +16,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)
   if (guard instanceof NextResponse) return guard
+  // Até 12/11/2026 bastava ser da empresa para trocar os equipamentos de
+  // qualquer card. A régua é a da ficha (o seletor só abre para quem edita):
+  // escopo (404) e, nele, gestão, "Editar Demanda" ou quem faz a peça.
+  const negado = await guardaDoCard(session, guard.organizacaoId, id, fazAPeca, SEM_PERMISSAO_NO_CARD)
+  if (negado) return negado
   const { organizacaoId } = guard
   const body = await req.json()
 
