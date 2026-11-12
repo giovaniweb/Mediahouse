@@ -11,7 +11,7 @@
   .workspace header { height: auto; flex-wrap: wrap; gap: 12px; padding: 12px; }
   .workspace header > div { flex-wrap: wrap; min-width: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .workspace *, .workspace *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { .workspace *:not([data-rfd-draggable-id]):not([data-rfd-placeholder-context-id]), .workspace *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
 /* ── Camada global do visual novo ──────────────────────────────────────────
    As telas que ainda não ganharam desenho próprio usam as mesmas classes de

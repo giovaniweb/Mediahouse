@@ -76,5 +76,10 @@
   .column :global(.kanban-scroll) { overflow-y: visible; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .board *, .board *::before, .board *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  /* O card arrastado e o espaço que ele deixa ficam de fora: a biblioteca só
+     termina de soltar quando a transição deles acaba (transitionend). Sem ela,
+     quem tem "reduzir movimento" ligado via o card parar no meio do caminho e
+     a coluna ficar com um buraco até o próximo arrasto. */
+  .board *:not([data-rfd-draggable-id]):not([data-rfd-placeholder-context-id]),
+  .board *::before, .board *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
