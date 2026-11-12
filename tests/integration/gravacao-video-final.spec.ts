@@ -203,8 +203,10 @@ describe("vídeo final subido no card da gravação", () => {
     expect(texto).not.toContain("/api/midia/")
     const saidas = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, referencia: id, destinatarioTipo: "cliente" }, select: { chave: true, destinatarioTipo: true, origem: true, regraContexto: true } })
     expect(saidas).toHaveLength(1)
-    expect(artesLigadas(telCliente)).toBe(true)
-    expect(familiaDaSaida(saidas[0])).toBeNull()
+    // O cliente tem chave própria: a arte da equipe ligada não liga a dele.
+    expect(artesLigadas(telCliente, "cliente")).toBe(false)
+    // A arte dele, quando ligada, é a séria do vídeo pronto.
+    expect(familiaDaSaida(saidas[0])).toMatch(/^(medico|medica|clinica)_video$/)
     vi.unstubAllEnvs()
     vi.stubEnv("NEXTAUTH_SECRET", "segredo-so-do-teste")
     vi.stubEnv("NEXTAUTH_URL", "https://nuflow.test/")

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { combinacoesDaFamilia, areaDoGestor, arteDoKanban, arteDoRelatorio, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, humorDoBriefing, humorDoSemanal, type FamiliaArte } from "@/lib/avisos-arte"
+import { combinacoesDaFamilia, areaDoGestor, arteDoCliente, arteDoKanban, arteDoRelatorio, artesLigadas, chaveComArte, escolherArte, FAMILIAS_ARTE, familiaDaSaida, humorDoBriefing, humorDoSemanal, type FamiliaArte } from "@/lib/avisos-arte"
 import { destinatariosDoAviso, STATUS_COM_AVISO_KANBAN } from "@/lib/kanban-avisos"
 import { imagemDoAviso } from "@/lib/avisos-arte-imagem"
 
@@ -76,6 +76,16 @@ describe("artes dos avisos: catálogo", () => {
     expect(artesLigadas()).toBe(true)
   })
 
+  it("a arte do cliente tem chave própria: ligar a da equipe não liga a dele", () => {
+    vi.stubEnv("WHATSAPP_ARTES", "ligado")
+    vi.stubEnv("WHATSAPP_ARTES_CLIENTE", "")
+    expect(artesLigadas("5511911112222", "cliente")).toBe(false)
+    expect(artesLigadas("5511911112222")).toBe(true)
+    vi.stubEnv("WHATSAPP_ARTES_CLIENTE", "teste:5511911112222")
+    expect(artesLigadas("5511911112222", "cliente")).toBe(true)
+    expect(artesLigadas("5511955556666", "cliente")).toBe(false)
+  })
+
   it("modo teste liga só para os números da lista", () => {
     vi.stubEnv("WHATSAPP_ARTES", "teste:5511911112222, 5521933334444")
     expect(artesLigadas("5511911112222")).toBe(true)
@@ -96,13 +106,38 @@ describe("artes dos avisos: quem recebe qual", () => {
     expect(familiaDaSaida(saida("arte:inventada:abc"))).toBeNull()
   })
 
-  it("cliente, inbox e quem não é da equipe nunca recebem arte", () => {
+  it("médico ou médica, pelo Dr./Dra. do nome; sem título, as cenas dos dois (12/11/2026)", () => {
+    expect(arteDoCliente("confirmada", "Dra. Ana Lima")).toBe("medica_confirmada")
+    expect(arteDoCliente("confirmada", "dra ana")).toBe("medica_confirmada")
+    expect(arteDoCliente("concluida", "Dr. João")).toBe("medico_video")
+    expect(arteDoCliente("concluida", "Clínica Bella")).toBe("clinica_video")
+    // Não adivinha pelo primeiro nome nem confunde "Drielle" com "Dr".
+    expect(arteDoCliente("confirmada", "Drielle Souza")).toBe("clinica_confirmada")
+    expect(arteDoCliente("confirmada", null)).toBe("clinica_confirmada")
+    expect(arteDoCliente("cancelada", "Dra. Ana")).toBeNull()
+    // As cenas de cada família são de quem ela diz.
+    expect(FAMILIAS_ARTE.clinica_confirmada.arquivos).toEqual(["31-1", "31-2", "31-3", "33-1", "33-2"])
+  })
+
+  it("o cliente recebe arte séria só na confirmação e no vídeo pronto (12/11/2026)", () => {
+    const chave = chaveComArte(arteDoCliente("confirmada", "Dra. Ana"), "grav:g1:confirmada:2026-11-12:cliente:abc")
+    expect(familiaDaSaida(saida(chave, "cliente", "manual"))).toBe("medica_confirmada")
+    // A chave antiga, sem a arte na frente, fica com as cenas dos dois.
+    expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-12:cliente:abc", "cliente", "manual"))).toBe("clinica_video")
+    // Nenhum outro aviso dele, nem a arte da equipe numa chave forjada, nem um contato do inbox.
+    expect(familiaDaSaida(saida("grav:g1:cancelada:2026-11-12:cliente:abc", "cliente", "manual"))).toBeNull()
+    expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "cliente", "manual"))).toBeNull()
+    expect(familiaDaSaida(saida(chaveComArte("medico_video", "x"), "inbox"))).toBeNull()
+    // A frase é sem sarcasmo: nada de "nota 2" nem meme de IA.
+    for (const f of ["medico_confirmada", "medica_confirmada", "clinica_confirmada", "medico_video", "medica_video", "clinica_video"] as const)
+      for (const fr of FAMILIAS_ARTE[f].frases) expect(fr).not.toMatch(/nota 2|\bIA\b|Claude|vaca|galo/)
+  })
+
+  it("cliente, inbox e quem não é da equipe nunca recebem arte da equipe", () => {
     expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "cliente"))).toBeNull()
     expect(familiaDaSaida(saida(chaveComArte("fila", "x"), "inbox"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:confirmada:2026-11-11:cliente:abc"))).toBeNull()
     expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:solicitante:abc"))).toBeNull()
-    // O aviso de vídeo enviado ao cliente (concluída), pela fila: nunca com arte.
-    expect(familiaDaSaida(saida("grav:g1:concluida:2026-11-11:cliente:abc", "cliente", "manual"))).toBeNull()
     expect(familiaDaSaida(saida("abc123"))).toBeNull()
     expect(familiaDaSaida(saida("manual:uuid", "usuario", "manual"))).toBeNull()
   })
