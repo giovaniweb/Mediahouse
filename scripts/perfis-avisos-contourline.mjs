@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Aplica os perfis de aviso combinados com o Giovani (12/11/2026) às pessoas
 // da Contourline. ESCREVE EM PRODUÇÃO quando roda com --aplicar: só com o sim
-// dele, pela coordenação. Precisa da migration 20261125000000 aplicada antes.
+// dele, pela coordenação. Precisa da migration 20261127000000 aplicada antes.
 //
 //   node scripts/perfis-avisos-contourline.mjs --banco "<url>"            # só mostra o plano
 //   node scripts/perfis-avisos-contourline.mjs --banco "<url>" --aplicar  # grava, numa transação

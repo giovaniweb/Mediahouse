@@ -375,7 +375,7 @@ try {
   const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
   conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
 
-  // 20. Avisos por pessoa (20261125000000): a escolha de uma empresa não aparece
+  // 20. Avisos por pessoa (20261127000000): a escolha de uma empresa não aparece
   // nem é gravada na outra. "Voltar ao padrão" apaga a linha, por isso há DELETE.
   for (const [id, org] of [["rls-pref-a", A], ["rls-pref-b", B]]) {
     await inserir("preferencias_aviso", { id, organizacaoId: org, usuarioId: "rls-user-1", categoria: "andamento", whatsapp: false, updatedAt: new Date() })

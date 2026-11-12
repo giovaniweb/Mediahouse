@@ -1,4 +1,4 @@
--- VOLTA da migration 20261125000000_preferencias_aviso.
+-- VOLTA da migration 20261127000000_preferencias_aviso.
 --
 -- Apaga as escolhas de aviso por pessoa. Todo mundo volta a receber o que
 -- recebia antes da página existir — que é o mesmo que acontece com a tabela
