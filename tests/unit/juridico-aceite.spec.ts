@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: () => mocks.sessao() }))
 vi.mock("@/lib/org", () => ({ getOrgId: () => mocks.org(), semOrg: () => new Response(null, { status: 403 }) }))
 vi.mock("@/lib/org-contexto", () => ({ comOrg: (_o: string, fn: () => unknown) => fn() }))
-vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: { usuarioOrganizacao: { findUnique: mocks.vinculo } } }))
+vi.mock("@/lib/prisma-auth", () => ({ prismaAuth: { usuarioOrganizacao: { findUnique: mocks.vinculo }, organizacao: { findUnique: async () => ({ nome: "Empresa A" }) } } }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     aceiteTermos: { findMany: mocks.aceites },
@@ -30,6 +30,7 @@ const { blocosDoTexto, secoesDoTexto } = await import("@/components/juridico/Tex
 const { payloadAuditoria } = await import("@/lib/auditoria")
 const { descreverEventoAuditoria } = await import("@/lib/auditoria-leitura")
 const { POST } = await import("@/app/api/aceite-termos/route")
+const { aceitePendenteDoPainel } = await import("@/lib/juridico/aceite-painel")
 
 describe("quem aceita o quê", () => {
   it("administrador aceita o contrato e o acordo de dados em nome da empresa", () => {
@@ -157,5 +158,31 @@ describe("POST /api/aceite-termos", () => {
     const r = await post({ aceito: true, documentos: ["termos"] })
     expect(await r.json()).toEqual({ ok: true, jaAceito: true })
     expect(mocks.criarAceite).not.toHaveBeenCalled()
+  })
+})
+
+describe("conferência do aceite no painel e no campo", () => {
+  beforeEach(() => {
+    for (const m of Object.values(mocks)) m.mockReset()
+    mocks.sessao.mockResolvedValue({ user: { id: "u1" } })
+    mocks.org.mockResolvedValue("org-A")
+    mocks.vinculo.mockResolvedValue({ papel: "editor", categoria: "externo" })
+    mocks.aceites.mockResolvedValue([])
+  })
+
+  it("convidado que ainda não aceitou: pede os Termos do Profissional e a Privacidade", async () => {
+    expect(await aceitePendenteDoPainel()).toEqual({
+      pendentes: ["profissionais", "privacidade"], empresa: "Empresa A", emNomeDaEmpresa: false, versaoNova: false,
+    })
+  })
+  it("falha aberta: banco fora ou tabela ausente não tranca ninguém fora", async () => {
+    mocks.aceites.mockRejectedValue(new Error('relation "aceites_termos" does not exist'))
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    expect(await aceitePendenteDoPainel()).toBeNull()
+  })
+  it("sinal interno do Next (uso dinâmico no build) sobe, para o painel não virar página estática", async () => {
+    const sinal = Object.assign(new Error("Dynamic server usage"), { digest: "DYNAMIC_SERVER_USAGE" })
+    mocks.sessao.mockRejectedValue(sinal)
+    await expect(aceitePendenteDoPainel()).rejects.toBe(sinal)
   })
 })

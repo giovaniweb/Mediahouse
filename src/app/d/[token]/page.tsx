@@ -9,6 +9,7 @@ import { formatarData } from "@/lib/datas"
 import { nomeDoVideo, type VideoParaMostrar } from "@/lib/videos-da-gravacao"
 import { MiniaturasDeVideo } from "@/components/video/MiniaturasDeVideo"
 import { LightboxDeVideo } from "@/components/video/LightboxDeVideo"
+import { LinksJuridicos } from "@/components/juridico/LinksJuridicos"
 
 // Acompanhamento público de uma demanda (somente leitura). Quem abre não tem
 // conta no sistema — vê o andamento e o material final, nada além disso.
@@ -247,6 +248,7 @@ export default function DemandaPublicaPage() {
         <p className="text-[11px] text-zinc-700 mt-10">
           Acompanhamento somente leitura · NuFlow
         </p>
+        <LinksJuridicos className="mt-2 !text-[11px] text-zinc-600" apenas={["privacidade"]} />
       </div>}
     </main>
   )

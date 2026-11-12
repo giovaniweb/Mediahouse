@@ -1,4 +1,5 @@
 // A conferência que o layout do painel faz a cada carga de página.
+import { unstable_rethrow } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { getOrgId } from "@/lib/org"
 import { prismaAuth } from "@/lib/prisma-auth"
@@ -30,6 +31,10 @@ export async function aceitePendenteDoPainel(): Promise<AceitePendente | null> {
       versaoNova: anteriores > 0,
     }
   } catch (e) {
+    // Os sinais internos do Next (leitura de cookies/headers no build, redirect)
+    // não são falha: engoli-los fazia o build gerar o painel como página
+    // estática, com aceite = null congelado — ninguém via a tela de aceite.
+    unstable_rethrow(e)
     console.error("[aceite] conferência do aceite falhou — painel liberado:", e instanceof Error ? e.message : e)
     return null
   }

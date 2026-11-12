@@ -232,6 +232,11 @@ export default function AvaliarEditorPage({ params }: { params: Promise<{ editor
             )}
             {enviando ? "Enviando..." : "Enviar Avaliação"}
           </button>
+          {/* Onda 3: quem avalia por link aceita a Política de Avaliações ao enviar. */}
+          <p className="mt-3 text-center text-xs text-zinc-500">
+            Ao enviar, você aceita a{" "}
+            <a href="/profissionais/avaliacoes" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-zinc-300">Política de Avaliações</a>.
+          </p>
         </div>
 
         <p className="text-center text-xs text-zinc-600">

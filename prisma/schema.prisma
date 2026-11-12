@@ -2940,7 +2940,7 @@ model MaterialVideomaker {
 
 /// Prova de que alguém aceitou os documentos jurídicos (Onda 3): quem, quais
 /// documentos em qual versão, quando e de onde. A aplicação só INSERE e LÊ —
-/// aceite não se edita nem se apaga (migration 20261007150000).
+/// aceite não se edita nem se apaga (migration 20261111120000).
 model AceiteTermos {
   id            String   @id @default(cuid())
   organizacaoId String

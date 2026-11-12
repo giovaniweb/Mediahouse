@@ -25,7 +25,7 @@ CREATE TABLE "aceites_termos" (
   CONSTRAINT "aceites_termos_origem_check" CHECK ("origem" IN ('cadastro_videomaker', 'cadastro_designer', 'primeiro_acesso', 'nova_versao')),
   CONSTRAINT "aceites_termos_documentos_check" CHECK (cardinality("documentos") BETWEEN 1 AND 10)
 );
-CREATE INDEX "aceites_termos_organizacaoId_titularTipo_titularId_createdAt_idx"
+CREATE INDEX "aceites_termos_organizacaoId_titularTipo_titularId_createdA_idx"
   ON "aceites_termos" ("organizacaoId", "titularTipo", "titularId", "createdAt");
 
 -- Por empresa, como as demais tabelas de negócio. FORCE para valer até para o
