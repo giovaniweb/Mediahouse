@@ -65,6 +65,10 @@ describe("qual categoria é cada aviso", () => {
     expect(categoriaDaSaida({ origem: "legado", chave: "arte:parabens_capivara:parabens:d1:12345678" })).toBe("parabens")
     expect(categoriaDaSaida({ origem: "legado", chave: "arte:parabens_polvo:hash" })).toBe("parabens")
     expect(categoriaDaSaida({ origem: "legado", chave: "arte:aprovado:hash" })).toBeNull()
+    // Gravação externa concluída: o parabéns ao videomaker vai pela chave da gravação.
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:videomaker:abc" })).toBe("parabens")
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:operacao:abc" })).toBe("gravacoes")
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:cliente:abc" })).toBeNull()
   })
   it("convite, envio à mão e resposta automática ficam sem categoria (sempre saem)", () => {
     expect(categoriaDaSaida({ origem: "manual", chave: "convite:c1" })).toBeNull()

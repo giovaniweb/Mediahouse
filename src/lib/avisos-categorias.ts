@@ -250,7 +250,10 @@ export function categoriaDaSaida(s: {
   if (prefixo === "grav") {
     // O aviso ao próprio videomaker (kit, nota paga, cancelada) é o trabalho
     // dele, não acompanhamento: não se corta. O cliente nem é pessoa da equipe.
-    const papeis = s.chave.split(":").slice(3)
+    const partes = s.chave.split(":"), papeis = partes.slice(3)
+    // Gravação concluída para o videomaker é o parabéns dele (arte decidida no
+    // envio, fora da chave — conversa das artes, 12/11/2026): pode desligar.
+    if (partes[2] === "concluida" && papeis.includes("videomaker")) return "parabens"
     return papeis.some((p) => p === "videomaker" || p === "cliente") ? null : "gravacoes"
   }
   if (s.origem === "regra" && s.regraContexto && typeof s.regraContexto === "object") {
