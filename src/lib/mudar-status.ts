@@ -9,7 +9,8 @@ import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { eventoDaMudanca } from "@/lib/avisos-gravacao-textos"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { sendWhatsappMessage } from "@/lib/whatsapp"
-import { requireDemandaAcesso } from "@/lib/compartilhamento"
+import { requireDemandaAcesso, projecaoDoEspelho } from "@/lib/compartilhamento"
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
 import { comOrg } from "@/lib/org-contexto"
 import { avisarOrigemDoEspelho } from "@/lib/espelho-avisos"
 import { emSegundoPlano } from "@/lib/notificar"
@@ -33,7 +34,11 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   // recebe 403; quem não tem aresta nenhuma recebe 404 — ver lib/compartilhamento.ts.
   const acesso = await requireDemandaAcesso(session, id, "executar")
   if (acesso instanceof NextResponse) return acesso
-  const { papel: papelNoCard, nomeContraparte } = acesso
+  const { papel: papelNoCard, nomeContraparte, nomeProprio } = acesso
+  // A parceira recebe de volta o card pela lista branca, nunca inteiro.
+  const responder = (d: object) => NextResponse.json(
+    papelNoCard === "espelho" ? projecaoDoEspelho(d, nomeContraparte ?? "Empresa parceira") : d
+  )
 
   // A empresa DONA do card. Igual à empresa ativa quando não há espelho, e é
   // por isso que substituir `organizacaoId` por ela aqui não muda nada para
@@ -131,7 +136,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           usuarioId:session.user.id,acao:statusInterno==="videomaker_aceitou" ? "aceitar" : "recusar",origem:"manual"})
         return tx.demanda.findUniqueOrThrow({where:{id,organizacaoId}})
       }))
-      if(resultado) return NextResponse.json(resultado)
+      if(resultado) return responder(resultado)
     } catch(e) {
       if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})
       throw e
@@ -153,7 +158,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
     // rota é armadilha para quem um dia ler este corpo.
     const { videomaker: _v, solicitante: _s, editor: _e, responsavel: _r,
             responsaveis: _rs, designer: _d, ...semRelacoes } = demandaAtual
-    return NextResponse.json(semRelacoes)
+    return responder(semRelacoes)
   }
   // Growth: NÃO se exige a arte para mover para "Para aprovação".
   //
@@ -176,6 +181,15 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   if (!novoStatusVisivel) {
     return NextResponse.json({ error: `Status "${statusInterno}" inválido` }, { status: 400 })
   }
+
+  // Quem aparece no histórico da DONA. A pessoa da parceira não é: o quadro de
+  // pessoal da outra empresa não é assunto da dona (mesma regra do aviso em
+  // lib/espelho-avisos.ts). A dona lê "Pela GH Produção."; quem apertou o botão
+  // fica na auditoria da parceira, logo abaixo da transação.
+  const doEspelho = papelNoCard === "espelho"
+  const observacaoNaDona = doEspelho
+    ? [`Pela ${nomeProprio ?? "empresa parceira"}.`, observacao].filter(Boolean).join(" ")
+    : observacao
 
   try {
     const [demanda] = await prisma.$transaction([
@@ -200,12 +214,19 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           demandaId: id,
           statusAnterior: demandaAtual.statusInterno,
           statusNovo: statusInterno,
-          usuarioId: session.user.id,
+          usuarioId: doEspelho ? null : session.user.id,
           origem,
-          observacao,
+          observacao: observacaoNaDona,
         },
       }),
     ])
+
+    if (doEspelho) {
+      await registrarAuditoria(prisma, { organizacaoId: acesso.organizacaoId, usuarioId: session.user.id }, {
+        acao: "espelho.mover", recurso: "demanda", recursoId: id, correlationId: correlacaoAuditoria(),
+        antes: { statusNovo: demandaAtual.statusInterno }, depois: { statusNovo: statusInterno },
+      }).catch((e) => console.error("[Status] auditoria do espelho:", e))
+    }
 
     // ── Auto-aprovar AprovacaoVideo quando vai para Para Postar ───────────────
     if (novoStatusVisivel === "para_postar") {
@@ -320,7 +341,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           codigo: demandaAtual.codigo,
           titulo: demandaAtual.titulo,
           donaId: organizacaoId,
-          nomeExecutora: nomeContraparte ?? "Empresa parceira",
+          nomeExecutora: nomeProprio ?? "Empresa parceira",
           statusNovo: statusInterno,
         }),
         "aviso-espelho-origem"
@@ -376,7 +397,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       emSegundoPlano(() => avisarEntregaDoVideomaker(organizacaoId, id, { completo: true, autorUsuarioId: session.user.id }), "aviso-entrega-videomaker")
     }
 
-    return NextResponse.json(demanda)
+    return responder(demanda)
   } catch (e) {
     console.error("[Status PATCH] Erro na transação:", e)
     const msg = e instanceof Error ? e.message : "Erro ao atualizar status"

@@ -31,6 +31,7 @@ const {
   escopoComEspelho,
   espelhoDoCard,
   requireDemandaAcesso,
+  projecaoDoEspelho,
 } = await import("@/lib/compartilhamento")
 const { podeTransicionar, STATUS_PERMITIDOS_AO_ESPELHO } = await import("@/lib/job-transicoes")
 const { parceriasDaEmpresa, ehGestaoDaEmpresa } = await import("@/lib/parceria")
@@ -131,11 +132,12 @@ describe("requireDemandaAcesso — quem entra por qual porta", () => {
   it("com aresta de execução, entra como espelho e sabe de quem é o card", async () => {
     findUniqueDemanda.mockResolvedValue({ organizacaoId: "org-a" })
     findFirstAresta.mockResolvedValue({
-      escopo: "executar", organizacaoOrigemId: "org-a", nomeOrigem: "Contourline",
+      escopo: "executar", organizacaoOrigemId: "org-a", nomeOrigem: "Contourline", nomeDestino: "GH Produção",
     })
     const r = await requireDemandaAcesso(null, "dem-1", "executar")
+    // nomeProprio é o "pela GH Produção" que a dona lê; nomeContraparte, a dona.
     expect(r).toMatchObject({
-      papel: "espelho", donaId: "org-a", escopo: "executar", nomeContraparte: "Contourline",
+      papel: "espelho", donaId: "org-a", escopo: "executar", nomeContraparte: "Contourline", nomeProprio: "GH Produção",
     })
   })
 
@@ -267,5 +269,54 @@ describe("quem decide parceria", () => {
     for (const papel of ["videomaker", "editor", "social", "solicitante", "designer", null, undefined]) {
       expect(ehGestaoDaEmpresa(papel), String(papel)).toBe(false)
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("projecaoDoEspelho — o que a parceira lê do card da dona", () => {
+  const cardDaDona = {
+    id: "dem-1", codigo: "GE-1", titulo: "Gravação", statusInterno: "captacao_agendada",
+    dataCaptacao: new Date("2026-11-20T12:00:00Z"), localGravacao: "Clínica X",
+    organizacaoId: "org-a",
+    // Tudo isto é da dona e NÃO pode passar.
+    publicToken: "tok-publico", linkCliente: "https://cliente", telefoneSolicitante: "5511999",
+    clienteFinalTelefone: "5511888", clienteFinalEmail: "c@x", notaFiscalUrl: "nf.pdf",
+    notasFiscais: [{ token: "nf-token", url: "nf.pdf" }], custos: [{ valor: 500 }],
+    conviteEntrega: { token: "convite-token" },
+    aprovacoesVideo: [{ token: "aprov-token" }],
+    compartilhamentos: [{ organizacaoDestinoId: "org-c", nomeDestino: "Outra parceira" }],
+    solicitante: { id: "u-1", nome: "Débora", email: "debora@contourline" },
+    videomaker: { id: "vm-1", nome: "Gabriel", telefone: "5511777", usuarioId: "u-gab" },
+    historicos: [{ id: "h1", statusNovo: "x", createdAt: new Date(), usuario: { id: "u-1", nome: "Débora", email: "d@x" } }],
+  }
+
+  it("passa o que a execução precisa", () => {
+    const p = projecaoDoEspelho(cardDaDona, "Contourline")
+    expect(p).toMatchObject({ id: "dem-1", codigo: "GE-1", localGravacao: "Clínica X", statusInterno: "captacao_agendada" })
+    expect(p.dataCaptacao).toBeInstanceOf(Date)
+    expect(p.videomaker).toEqual({ id: "vm-1", nome: "Gabriel" })
+  })
+
+  it("não passa token, nota, pagamento, cliente final nem os outros parceiros", () => {
+    const texto = JSON.stringify(projecaoDoEspelho(cardDaDona, "Contourline"))
+    for (const proibido of ["tok-publico", "https://cliente", "5511999", "5511888", "c@x", "nf.pdf", "nf-token",
+      "convite-token", "aprov-token", "Outra parceira", "debora@contourline", "5511777", "u-gab", "d@x", "org-a"]) {
+      expect(texto).not.toContain(proibido)
+    }
+  })
+
+  it("quem pediu, para a parceira, é a EMPRESA dona", () => {
+    expect(projecaoDoEspelho(cardDaDona, "Contourline").solicitante).toEqual({ id: "", nome: "Contourline", email: null })
+  })
+
+  it("chave nova no card nasce FECHADA — lista branca, não negra", () => {
+    const p = projecaoDoEspelho({ ...cardDaDona, campoQueAindaNaoExiste: "segredo", relacaoNova: { a: 1 } }, "Contourline")
+    expect(p).not.toHaveProperty("campoQueAindaNaoExiste")
+    expect(p).not.toHaveProperty("relacaoNova")
+  })
+
+  it("dentro das relações também: o histórico leva só o nome de quem mexeu", () => {
+    const p = projecaoDoEspelho(cardDaDona, "Contourline") as { historicos: { usuario: unknown }[] }
+    expect(p.historicos[0].usuario).toEqual({ nome: "Débora" })
   })
 })

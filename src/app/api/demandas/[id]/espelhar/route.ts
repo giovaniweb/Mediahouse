@@ -33,8 +33,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const acesso = await requireDemandaAcesso(session, id, "acompanhar")
   if (acesso instanceof NextResponse) return acesso
 
+  // A parceira vê só a PRÓPRIA aresta. Com quem mais a dona trabalha não é
+  // assunto dela (até 12/11/2026 a lista inteira ia para os dois lados).
   const arestas = await prisma.demandaCompartilhamento.findMany({
-    where: { demandaId: id, revogadoEm: null },
+    where: {
+      demandaId: id,
+      revogadoEm: null,
+      ...(acesso.papel === "dona" ? {} : { organizacaoDestinoId: acesso.organizacaoId }),
+    },
     select: { id: true, organizacaoDestinoId: true, nomeDestino: true, escopo: true, criadoEm: true },
     orderBy: { criadoEm: "desc" },
   })

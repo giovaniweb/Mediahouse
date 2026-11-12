@@ -316,6 +316,11 @@ try {
   conferir(r.rows[0].statusInterno === "editando", "o espelho move o status — é o trabalho dele")
   conferir(r.rows[0].titulo !== "SEQUESTRADO", "o espelho NÃO muda o título: fora da lista branca, volta ao valor da dona")
 
+  // Quem é o videomaker e o editor do card é decisão da dona (12/11/2026).
+  await comoApp(B, `UPDATE demandas SET "videomakerId"='rls-vm-1' WHERE codigo='RLS-A-1'`)
+  r = await c.query(`SELECT "videomakerId" FROM demandas WHERE codigo='RLS-A-1'`)
+  conferir(r.rows[0].videomakerId === null, "o espelho NÃO troca o videomaker da dona — videomakerId fora da lista")
+
   erro = await erroComoApp(B, `UPDATE demandas SET "organizacaoId"='${B}' WHERE codigo='RLS-A-1'`)
   conferir(!!erro && /posse/.test(erro), "o espelho não transfere a posse da demanda")
 
@@ -335,12 +340,18 @@ try {
   r = await c.query(`SELECT count(*)::int n FROM historico_status WHERE id='rls-hist-esp'`)
   conferir(r.rows[0].n === 1, "o espelho GRAVA na timeline do card que executa")
 
-  // 17. Revogar tira o acesso e preserva a prova de que ele existiu.
-  await comoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=now() WHERE id='rls-esp-1'`)
+  // 17. Revogar tira o acesso e preserva a prova de que ele existiu — MESMO com
+  // a parceria já encerrada. Até 12/11/2026 o gatilho conferia a parceria em
+  // todo update e esta revogação dava erro: o acesso ficava preso aberto.
+  await c.query(`UPDATE parceria_organizacao SET status='encerrada', "encerradaEm"=now() WHERE id='rls-par-1'`)
+  erro = await erroComoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=now() WHERE id='rls-esp-1'`)
+  conferir(erro === null, `revogar com a parceria encerrada funciona${erro ? ` (veio: ${erro})` : ""}`)
   r = await comoApp(B, `SELECT count(*)::int n FROM demandas WHERE codigo='RLS-A-1'`)
   conferir(r.rows[0].n === 0, "revogado: o destino deixa de ver o card")
   r = await c.query(`SELECT count(*)::int n FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
   conferir(r.rows[0].n === 1, "revogado: a aresta permanece — a prova do acesso não é apagada")
+  erro = await erroComoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=NULL WHERE id='rls-esp-1'`)
+  conferir(!!erro && /parceria aceita/.test(erro), "reativar sem parceria aceita é recusado — a parceria vale ao DAR acesso")
 
   // 18. Aceite dos termos (Onda 3): por empresa, e a prova não se reescreve.
   for (const [id, org] of [["rls-aceite-a", A], ["rls-aceite-b", B]]) {

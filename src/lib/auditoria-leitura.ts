@@ -22,6 +22,7 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "mcp.chave": "Chave de assistente (MCP) gerada ou revogada", "mcp.desfazer": "Demanda do assistente (MCP) desfeita",
   "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
   "termos.aceite": "Termos e Política de Privacidade aceitos",
+  "espelho.mover": "Card de empresa parceira movido",
 }
 const resultados: Record<string,string> = { intencao: "iniciada", sucesso: "concluída", falha: "falhou", negado: "negada" }
 

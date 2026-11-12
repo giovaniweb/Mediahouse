@@ -32,6 +32,13 @@ export type AcessoDemanda = {
   escopo: EscopoCompartilhamento | null
   /** Nome da outra empresa, para a tela. `null` quando não há espelho. */
   nomeContraparte: string | null
+  /**
+   * Nome da empresa ATIVA como a aresta o congelou (`nomeDestino`). Só no
+   * espelho: é o "pela GH Produção" que a dona lê no histórico e no aviso.
+   * Antes o aviso usava `nomeContraparte`, que do lado do espelho é o nome da
+   * PRÓPRIA dona — a Contourline lia "Contourline moveu o card".
+   */
+  nomeProprio: string | null
 }
 
 /**
@@ -132,12 +139,12 @@ export async function requireDemandaAcesso(
   if (!demanda) return naoEncontrado()
 
   if (demanda.organizacaoId === organizacaoId) {
-    return { organizacaoId, papel: "dona", donaId: organizacaoId, escopo: null, nomeContraparte: null }
+    return { organizacaoId, papel: "dona", donaId: organizacaoId, escopo: null, nomeContraparte: null, nomeProprio: null }
   }
 
   const aresta = await prisma.demandaCompartilhamento.findFirst({
     where: { demandaId, organizacaoDestinoId: organizacaoId, revogadoEm: null },
-    select: { escopo: true, organizacaoOrigemId: true, nomeOrigem: true },
+    select: { escopo: true, organizacaoOrigemId: true, nomeOrigem: true, nomeDestino: true },
   })
   if (!aresta) return naoEncontrado()
 
@@ -154,5 +161,83 @@ export async function requireDemandaAcesso(
     donaId: aresta.organizacaoOrigemId,
     escopo: aresta.escopo,
     nomeContraparte: aresta.nomeOrigem,
+    nomeProprio: aresta.nomeDestino,
+  }
+}
+
+// ── O que a parceira LÊ do card da dona ──────────────────────────────────────
+//
+// Até 12/11/2026 o detalhe e a lista entregavam à parceira o card inteiro: o
+// token de aprovação do cliente, as notas fiscais, o telefone e o e-mail do
+// cliente final e de quem pediu, os produtos, os alertas internos e as arestas
+// dos OUTROS parceiros. Só não doía porque ninguém usava o recurso.
+//
+// A regra agora é LISTA BRANCA: só sai o que está escrito abaixo. Campo novo em
+// `demandas`, ou relação nova no `include` de uma rota, nasce FECHADO para a
+// parceira — o mesmo princípio do gatilho `nuflow_espelho_colunas_permitidas`,
+// aplicado à leitura. Um teste de unidade prova que chave desconhecida não passa.
+
+/** `true` copia o valor; um objeto projeta o valor (ou cada item da lista) por ele. */
+export type FormaDaProjecao = { readonly [campo: string]: true | FormaDaProjecao }
+
+const ESCALARES_DO_ESPELHO = [
+  "id", "codigo", "titulo", "descricao", "departamento", "area", "tipoVideo", "cidade",
+  "prioridade", "formato", "statusVisivel", "statusInterno", "pesoDemanda", "riscoAtraso",
+  "objetivo", "plataforma", "dataEvento", "localEvento", "cobertura", "mensagemPrincipal", "detalhesEntrega",
+  "linkBrutos", "linkFinal", "linkFolderBrutos", "linkFolderFinal",
+  "localGravacao", "edicaoPor", "tipoGravacao", "temBrinde", "brinde", "levar", "referencia",
+  "motivoImpedimento", "thumbnailUrl", "posicaoKanban",
+  "videomakerId", "editorId",
+  "dataLimite", "dataCaptacao", "createdAt", "updatedAt", "finalizadaEm",
+  // Calculados pela própria rota, não colunas.
+  "estadoHistorico",
+] as const
+
+export const FORMA_DO_ESPELHO: FormaDaProjecao = {
+  ...Object.fromEntries(ESCALARES_DO_ESPELHO.map((c) => [c, true as const])),
+  // Quem a dona escalou. Só o nome: telefone, usuário e vínculo comercial são dela.
+  videomaker: { id: true, nome: true, cidade: true },
+  editor: { id: true, nome: true, especialidade: true },
+  // Brutos e entrega atravessam (política `arquivos_espelhado`).
+  arquivos: {
+    id: true, tipoArquivo: true, url: true, originalUrl: true, nomeArquivo: true,
+    sequencia: true, createdAt: true, thumbnailUrl: true,
+  },
+  historicos: {
+    id: true, statusAnterior: true, statusNovo: true, origem: true, observacao: true, createdAt: true,
+    usuario: { nome: true },
+  },
+  // O canal entre as duas equipes (política `comentarios_espelhado`).
+  comentarios: { id: true, comentario: true, origem: true, createdAt: true, usuario: { id: true, nome: true } },
+  _count: { comentarios: true, arquivos: true },
+}
+
+/** Projeta `valor` pela `forma`. Lista é projetada item a item; nulo continua nulo. */
+export function projetarPorForma(valor: unknown, forma: FormaDaProjecao): unknown {
+  if (valor === null || valor === undefined) return valor
+  if (Array.isArray(valor)) return valor.map((item) => projetarPorForma(item, forma))
+  if (typeof valor !== "object" || valor instanceof Date) return null
+  const origem = valor as Record<string, unknown>
+  const saida: Record<string, unknown> = {}
+  for (const [campo, regra] of Object.entries(forma)) {
+    if (!Object.prototype.hasOwnProperty.call(origem, campo)) continue
+    saida[campo] = regra === true ? origem[campo] : projetarPorForma(origem[campo], regra)
+  }
+  return saida
+}
+
+/**
+ * O card da dona como a parceira o lê. `nomeDona` ocupa o lugar de quem pediu:
+ * para a parceira, o pedido é da EMPRESA, não da pessoa da dona. As relações
+ * que a tela espera como lista voltam vazias, para o formato não mudar.
+ */
+export function projecaoDoEspelho(demanda: object, nomeDona: string): Record<string, unknown> {
+  return {
+    ...(projetarPorForma(demanda, FORMA_DO_ESPELHO) as Record<string, unknown>),
+    solicitante: { id: "", nome: nomeDona, email: null },
+    responsaveis: [],
+    produtos: [],
+    alertas: [],
+    aprovacoesVideo: [],
   }
 }

@@ -14,7 +14,7 @@ import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
-import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
+import { requireDemandaAcesso, espelhoDoCard, projecaoDoEspelho, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
 import { emSegundoPlano } from "@/lib/notificar"
 import { validarPrazo, mesmoDia, formatarDataCurta } from "@/lib/datas"
@@ -116,9 +116,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   if (!demanda) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
+  const ehDona = acesso.papel === "dona"
+
   // A última versão enviada, respondida ou não: é ela que o detalhe mostra na
   // aba Aprovação (com o player) e é dela que sai o "Ajuste pedido por…".
-  const ultimaEntrega = await prisma.aprovacaoVideo.findFirst({
+  // Só para a dona: o token é o link do cliente final dela.
+  const ultimaEntrega = !ehDona ? null : await prisma.aprovacaoVideo.findFirst({
     where: { demandaId: id, demanda: { organizacaoId: demanda.organizacaoId } },
     orderBy: { createdAt: "desc" },
     select: { token: true, status: true, comentario: true, aprovadoPor: true, updatedAt: true },
@@ -138,7 +141,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   // A nota do videomaker na ficha da gravação: a mesma regra do quadro
   // (veNotaDoVideomaker). Os custos são de quem paga — a empresa ativa.
-  const pagamento = demanda.videomakerId && await veNotaDoVideomaker(session.user.id, acesso.organizacaoId, ehGestor(session))
+  // Nunca para a parceira: a nota e o pagamento do videomaker são da dona, e a
+  // consulta das notas é por card, não por empresa.
+  const pagamento = ehDona && demanda.videomakerId && await veNotaDoVideomaker(session.user.id, acesso.organizacaoId, ehGestor(session))
     ? {
         custos: await prisma.custoVideomaker.findMany({ where: { organizacaoId: acesso.organizacaoId, demandaId: id }, select: { statusPagamento: true, pago: true, notaFiscalUrl: true } }),
         // O token é o link que o videomaker usa para mandar a nota, e a url é
@@ -150,7 +155,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   // O link de entrega do videomaker é o do convite dele nesta gravação (lib/
   // entrega-da-gravacao.ts): a ficha oferece para copiar e cobrar. Só para a dona.
-  const conviteEntrega = demanda.videomakerId && acesso.papel === "dona"
+  const conviteEntrega = demanda.videomakerId && ehDona
     ? await prisma.conviteVideomaker.findFirst({
         where: { demandaId: id, videomakerId: demanda.videomakerId, status: { in: ["aceito", "pendente"] } },
         orderBy: { createdAt: "desc" },
@@ -158,8 +163,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       })
     : null
 
+  const completo = { ...demanda, videomaker: demanda.videomaker ? videomaker : null, ...pagamento, conviteEntrega }
   return NextResponse.json({
-    demanda: { ...demanda, videomaker: demanda.videomaker ? videomaker : null, ...pagamento, conviteEntrega },
+    // A parceira lê o card pela lista branca (lib/compartilhamento.ts), nunca inteiro.
+    demanda: ehDona ? completo : projecaoDoEspelho(completo, acesso.nomeContraparte ?? "Empresa parceira"),
     quadro: quadroDoCard({ ...demanda, contratoVideomaker }),
     contratoVideomaker,
     // O que a tela precisa para desenhar a faixa e esconder os blocos que a
