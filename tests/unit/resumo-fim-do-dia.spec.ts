@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { escopoDoResumo, inicioDoDia, mensagemDoFimDoDia, htmlDoFimDoDia } from "@/lib/resumo-fim-do-dia"
+import { escopoDoResumo, humorDoFimDoDia, inicioDoDia, mensagemDoFimDoDia, htmlDoFimDoDia, turmaDoFimDoDia } from "@/lib/resumo-fim-do-dia"
 import type { Preferencia } from "@/lib/avisos-categorias"
 
 const vazio = { nome: "Thalison Samuel", andou: [], esperando: [], atrasados: [], novos: [], link: "https://nuflow.space/hoje" }
@@ -46,5 +46,16 @@ describe("resumo do fim do dia", () => {
   it("o dia começa à meia-noite de São Paulo", () => {
     expect(inicioDoDia(new Date("2026-11-12T22:00:00Z")).toISOString()).toBe("2026-11-12T03:00:00.000Z")
     expect(inicioDoDia(new Date("2026-11-13T02:00:00Z")).toISOString()).toBe("2026-11-12T03:00:00.000Z")
+  })
+  it("arte: turma pelo setor do perfil ou pelo cadastro; humor pelas pendências", () => {
+    const growth = new Map([["andamento", pref({ categoria: "andamento", recorte: "setor", setor: "growth" })]])
+    expect(turmaDoFimDoDia(growth, { areas: ["audiovisual"] })).toBe("gr")
+    expect(turmaDoFimDoDia(new Map(), { areas: ["growth"] })).toBe("gr")
+    expect(turmaDoFimDoDia(new Map(), { areas: ["audiovisual", "growth"] })).toBe("av")
+    expect(turmaDoFimDoDia(new Map(), { funcaoProfissional: "Social Media" })).toBe("so")
+    const i = { codigo: "A", titulo: "a" }
+    expect(humorDoFimDoDia({ atrasados: [], esperando: [] })).toBe("ok")
+    expect(humorDoFimDoDia({ atrasados: [i, i], esperando: [i] })).toBe("cansado")
+    expect(humorDoFimDoDia({ atrasados: [i, i, i], esperando: [i] })).toBe("apuros")
   })
 })

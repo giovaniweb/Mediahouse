@@ -259,7 +259,7 @@ describe("resumo do fim do dia", () => {
     ] })
     try {
       const r = await comOrg(org, () => resumoDoFimDoDia(org))
-      const saidas = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, chave: { startsWith: "fimdodia:" } } })
+      const saidas = await db.saidaWhatsapp.findMany({ where: { organizacaoId: org, chave: { contains: "fimdodia:" } } })
       const de = (q: keyof typeof gente) => saidas.find((s) => s.destinatarioId === gente[q].id)
       // Giovani não tem configuração: segue como hoje, sem resumo novo.
       expect(de("giovani")).toBeUndefined()
@@ -270,13 +270,15 @@ describe("resumo do fim do dia", () => {
       expect(textoThal).toContain("GR-03 — Arte da campanha (aprovado)")
       expect(textoThal).toContain("AV-d1") // card dele, de outro setor, entrou hoje
       expect(textoThal).not.toContain("AV-d2")
+      // Vai com a arte da turma do Growth (o setor do perfil dele).
+      expect(de("thalisson")!.chave).toMatch(/^arte:rel_gr_(ok|cansado|apuros):fimdodia:v1:/)
       // Luisa está em "Só o resumo do dia": o WhatsApp do andamento está desligado, mas o resumo chega.
       const textoLuisa = decryptSecret(de("luisa")!.conteudoCifrado!)
       expect(textoLuisa).toContain("GR-03")
       expect(textoLuisa).not.toContain("AV-d")
       // Rodar de novo no mesmo dia não manda outro.
       await comOrg(org, () => resumoDoFimDoDia(org))
-      expect(await db.saidaWhatsapp.count({ where: { organizacaoId: org, chave: { startsWith: "fimdodia:" } } })).toBe(2)
+      expect(await db.saidaWhatsapp.count({ where: { organizacaoId: org, chave: { contains: "fimdodia:" } } })).toBe(2)
       // Quem desliga "Resumos" no WhatsApp não recebe.
       await db.saidaWhatsapp.deleteMany({ where: { organizacaoId: org } })
       await db.preferenciaAviso.create({ data: { organizacaoId: org, usuarioId: gente.thalisson.id, categoria: "resumos", whatsapp: false, email: false } })

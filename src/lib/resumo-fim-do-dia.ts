@@ -12,9 +12,9 @@
 // categoria "resumos" (criarSaida corta se ela desligou) e o e-mail leva o
 // mesmo aviso (enviarEmail tira quem desligou).
 //
-// Arte: a família de relatório da turma (cenas 17–25) está na branch
-// avisos/artes-areas-relatorio, ainda fora da main. Quando entrar, é passar a
-// família na chave (chaveComArte) aqui em `enfileirar`.
+// Arte: a da turma dos relatórios (cenas 17–25, #143), como no bom-dia. A
+// turma vem do setor do perfil (Growth leva a do Growth) ou do cadastro da
+// pessoa; o humor, do que está atrasado e do que espera por ela.
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { comOrg } from "@/lib/org-contexto"
@@ -25,6 +25,7 @@ import { COLUNAS_LABEL, STATUS_PARA_COLUNA } from "@/lib/status"
 import { ehSetor, type Preferencia, type Setor } from "@/lib/avisos-categorias"
 import { ondeEDoSetor, ondeEstaNoCard } from "@/lib/preferencias-aviso"
 import { escaparHtml, sendEmailNotificacao } from "@/lib/email"
+import { areaDoGestor, arteDoRelatorio, chaveComArte, type AreaRelatorio, type HumorRelatorio } from "@/lib/avisos-arte"
 import type { StatusInterno } from "@prisma/client"
 
 type Tx = Prisma.TransactionClient
@@ -145,6 +146,20 @@ async function dadosDaPessoa(tx: Tx, org: string, p: { id: string; nome: string;
   }
 }
 
+/** Humor da arte: nada atrasado nem esperando é festa; até 3 pendências, cansaço; mais, apuro. */
+export function humorDoFimDoDia(d: Pick<DadosDoResumo, "atrasados" | "esperando">): HumorRelatorio {
+  const pendencias = d.atrasados.length + d.esperando.length
+  return pendencias === 0 ? "ok" : pendencias <= 3 ? "cansado" : "apuros"
+}
+
+/** Turma da arte: o setor do perfil manda; sem ele, o cadastro da pessoa na empresa. */
+export function turmaDoFimDoDia(prefs: Map<string, Preferencia>, membro: { areas?: readonly string[]; funcaoProfissional?: string | null }): AreaRelatorio {
+  const setor = [...prefs.values()].find((p) => p.recorte === "setor" && ehSetor(p.setor))?.setor
+  if (setor === "growth") return "gr"
+  if (setor === "audiovisual") return "av"
+  return areaDoGestor(membro)
+}
+
 /** Início do dia de hoje em São Paulo (UTC-3, sem horário de verão desde 2019). */
 export const inicioDoDia = (agora = new Date()) => new Date(`${dataEmSaoPaulo(agora)}T00:00:00-03:00`)
 
@@ -172,7 +187,8 @@ export async function resumoDoFimDoDia(org: string, agora = new Date()): Promise
     const feito = await prisma.$transaction(async (tx) => {
       const p = await tx.usuario.findFirst({
         where: { id: usuarioId, status: "ativo" },
-        select: { id: true, nome: true, telefone: true, email: true, organizacoes: { where: { organizacaoId: org }, select: { papel: true } } },
+        select: { id: true, nome: true, telefone: true, email: true,
+          organizacoes: { where: { organizacaoId: org }, select: { papel: true, areas: true, funcaoProfissional: true } } },
       })
       if (!p?.organizacoes[0]) return null
       const dados = await dadosDaPessoa(tx, org, { id: p.id, nome: p.nome, papel: p.organizacoes[0].papel }, escopo, inicio, link)
@@ -180,9 +196,14 @@ export async function resumoDoFimDoDia(org: string, agora = new Date()): Promise
       if (!texto) return { semMovimento: true }
       const telefone = telefoneCompleto(p.telefone)
       let whatsapp = false
-      if (telefone && (!resumos || resumos.whatsapp)) {
+      // Um por pessoa e por dia. A arte entra na chave (arte:<família>:fimdodia:…)
+      // e muda com o humor, então a conferência olha o fim da chave.
+      const base = `fimdodia:v1:${p.id}:${dia}`
+      const jaSaiu = await tx.saidaWhatsapp.count({ where: { organizacaoId: org, chave: { endsWith: base } } })
+      if (telefone && !jaSaiu && (!resumos || resumos.whatsapp)) {
+        const arte = arteDoRelatorio(turmaDoFimDoDia(prefs, p.organizacoes[0]), humorDoFimDoDia(dados))
         const s = await criarSaida(tx, {
-          organizacaoId: org, origem: "manual", chave: `fimdodia:v1:${p.id}:${dia}`, referencia: p.id, telefone, texto,
+          organizacaoId: org, origem: "manual", chave: chaveComArte(arte, base), referencia: p.id, telefone, texto,
           expiraEm: new Date(agora.getTime() + 4 * 3600_000), categoria: "resumos",
         }).catch(() => null)
         whatsapp = !!s && s.estado === "aguardando"
