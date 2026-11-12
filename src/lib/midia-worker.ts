@@ -133,7 +133,7 @@ export async function concluirConversao(organizacaoId: string, resultado: Result
 // ── Todas as empresas (Onda 2A, 21/10/2026) ──────────────────────────────────
 // O worker não diz de que empresa é: ele pede trabalho e devolve resultado. A
 // empresa vem do próprio job, por funções do banco que devolvem só o id
-// (migration 20261021120000). `prismaBase` de propósito: são consultas de antes
+// (migration 20261112120000). `prismaBase` de propósito: são consultas de antes
 // de haver empresa declarada, como em src/lib/org-por-credencial.ts.
 
 /** Empresas ativas com mídia na fila, da espera mais antiga para a mais nova. */

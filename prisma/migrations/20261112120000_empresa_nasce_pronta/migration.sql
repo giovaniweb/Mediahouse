@@ -1,11 +1,13 @@
--- Onda 2A: empresa nova pronta (21/10/2026).
+-- Onda 2A: empresa nova pronta (escrita em 21/10/2026, renomeada em 12/11/2026
+-- para vir depois da Onda 3).
 --
--- Sobe DEPOIS da Onda 1 (20261007120000) e da Onda 3 (20261007150000), nunca
--- junto. Aditiva para o código que está no ar, com UMA exceção, a do item 3:
--- o código da demanda deixa de ser único na plataforma e passa a ser único por
--- empresa. O código antigo continua funcionando com isso (ele sorteia e tenta de
--- novo quando o banco recusa; o índice novo também recusa repetido dentro da
--- empresa). Nada é apagado e nenhum código existente muda.
+-- Sobe DEPOIS de 20261111120000_aceites_termos (a última aplicada em produção em
+-- 12/11/2026), nunca junto. Aditiva para o código que está no ar, com UMA
+-- exceção, a do item 3: o código da demanda deixa de ser único na plataforma e
+-- passa a ser único por empresa. O código antigo continua funcionando com isso
+-- (ele sorteia e tenta de novo quando o banco recusa; o índice novo também
+-- recusa repetido dentro da empresa). Nada é apagado e nenhum código existente
+-- muda.
 --
 -- 1) Prefixo e numeração por empresa. Quem já existe fica com VOP, que é o que
 --    os códigos antigos usam. Empresa nova recebe o prefixo na criação.
@@ -14,15 +16,8 @@
 -- 3) Unicidade de demandas.codigo por (organizacaoId, codigo).
 -- 4) Duas funções para o conversor de vídeo atender todas as empresas.
 --
--- Volta (depois de voltar o código):
---   DROP FUNCTION public.org_do_job_midia(TEXT);
---   DROP FUNCTION public.empresas_com_midia_pendente(INTEGER);
---   -- só se não houver código repetido entre empresas:
---   CREATE UNIQUE INDEX "demandas_codigo_key" ON "demandas"("codigo");
---   DROP INDEX "demandas_organizacaoId_codigo_key";
---   DROP TABLE "contadores_codigo";
---   ALTER TABLE "organizacoes" DROP COLUMN "prefixoCodigo",
---     DROP COLUMN "primeirosPassosDispensadosEm", DROP COLUMN "linkPaginaCopiadoEm";
+-- Volta: scripts/volta/20261112120000_empresa_nasce_pronta.sql (depois de
+-- voltar o código).
 
 -- 1) Prefixo e contador ────────────────────────────────────────────────────────
 ALTER TABLE "organizacoes" ADD COLUMN "prefixoCodigo" TEXT;

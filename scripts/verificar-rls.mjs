@@ -355,6 +355,25 @@ try {
   conferir(editar !== null, "aceites_termos: a aplicação não edita aceite (sem UPDATE)")
   const apagar = await erroComoApp(A, `DELETE FROM aceites_termos WHERE id = 'rls-aceite-a'`)
   conferir(apagar !== null, "aceites_termos: a aplicação não apaga aceite (sem DELETE)")
+
+  // 19. Código da demanda por empresa (Onda 2A): o mesmo código pode existir em
+  // duas empresas, nunca duas vezes na mesma; o contador é de cada uma.
+  const copia = (idNovo, idBase) => `INSERT INTO demandas SELECT (jsonb_populate_record(NULL::demandas,
+    to_jsonb(d) || jsonb_build_object('id', '${idNovo}', 'codigo', 'RLS-A-1'))).* FROM demandas d WHERE d.id = '${idBase}'`
+  const repetidoNaOutra = await erroComoApp(B, copia("rls-dem-mesmo-codigo", "rls-dem-b"))
+  conferir(repetidoNaOutra === null, "código por empresa: a B pode ter o mesmo código que a A")
+  const repetidoNaMesma = await erroComoApp(A, copia("rls-dem-repetida", "rls-dem-a"))
+  conferir(repetidoNaMesma !== null, "código por empresa: a A não repete o próprio código")
+  for (const org of [A, B]) {
+    await comoApp(org, `INSERT INTO contadores_codigo ("organizacaoId", ano, ultimo) VALUES ('${org}', 26, 1)
+                        ON CONFLICT ("organizacaoId", ano) DO UPDATE SET ultimo = contadores_codigo.ultimo + 1`)
+  }
+  r = await comoApp(A, `SELECT "organizacaoId" FROM contadores_codigo WHERE "organizacaoId" LIKE 'rls-teste-%'`)
+  conferir(r.rows.length === 1 && r.rows[0].organizacaoId === A, "contadores_codigo: a empresa A vê só o contador dela")
+  const contadorNaOutra = await erroComoApp(A, `INSERT INTO contadores_codigo ("organizacaoId", ano, ultimo) VALUES ('${B}', 27, 1)`)
+  conferir(contadorNaOutra !== null, "contadores_codigo: a empresa A não cria contador na B")
+  const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
+  conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
 } finally {
   await c.query("ROLLBACK")
 }
