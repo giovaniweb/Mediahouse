@@ -10,7 +10,19 @@
 
 export type Canal = "sino" | "email" | "whatsapp"
 export const CANAIS: Canal[] = ["sino", "email", "whatsapp"]
-export type Recorte = "tudo" | "meus"
+/**
+ * De quais cards a pessoa recebe, dentro do que já recebe hoje:
+ *   tudo  — de todos (o comportamento de hoje)
+ *   setor — dos cards do setor dela (Audiovisual ou Growth) e dos em que está
+ *   meus  — só dos cards em que está
+ *   pedi  — só dos cards que ela pediu
+ */
+export type Recorte = "tudo" | "setor" | "meus" | "pedi"
+export const RECORTES: Recorte[] = ["tudo", "setor", "meus", "pedi"]
+export type Setor = "audiovisual" | "growth"
+export const SETORES: Record<Setor, string> = { audiovisual: "Audiovisual", growth: "Growth" }
+export const ehRecorte = (v: unknown): v is Recorte => typeof v === "string" && (RECORTES as string[]).includes(v)
+export const ehSetor = (v: unknown): v is Setor => v === "audiovisual" || v === "growth"
 
 export type CategoriaAviso =
   | "pedidos" | "andamento" | "comentarios" | "gravacoes"
@@ -22,7 +34,7 @@ type Info = {
   descricao: string
   /** Um aviso de verdade, para quem configura entender do que se trata. */
   exemplo: string
-  /** Faz sentido escolher "só os cards em que estou"? (o aviso traz o card) */
+  /** Faz sentido recortar por card (setor, meus, pedi)? Só quando o aviso traz o card. */
   temRecorte: boolean
 }
 
@@ -32,7 +44,7 @@ export const CATEGORIAS_AVISO: Record<CategoriaAviso, Info> = {
     titulo: "Pedidos novos",
     descricao: "Demanda nova chegou, pedido urgente, pedido externo ou por e-mail, aprovação de entrada.",
     exemplo: "🚨 Demanda urgente de Luisa: Vídeo do lançamento (AV-231). Precisa da sua aprovação para começar.",
-    temRecorte: false,
+    temRecorte: true,
   },
   andamento: {
     titulo: "Andamento das demandas",
@@ -72,7 +84,7 @@ export const CATEGORIAS_AVISO: Record<CategoriaAviso, Info> = {
   },
   resumos: {
     titulo: "Resumos do dia e da semana",
-    descricao: "O resumo da manhã (quantos alertas estão abertos) e o relatório semanal de cada área.",
+    descricao: "O resumo da manhã (quantos alertas estão abertos) e o relatório semanal de cada área. O resumo do fim do dia, quando existir, entra aqui.",
     exemplo: "☀️ Bom dia! O Flow tem 14 alertas ativos hoje.",
     temRecorte: false,
   },
@@ -105,6 +117,17 @@ export type Preferencia = {
   email: boolean
   whatsapp: boolean
   recorte: string
+  setor?: string | null
+}
+
+/** O que a regra precisa saber do card do aviso, em relação à pessoa. */
+export type FatosDoCard = {
+  /** Está no card: pediu, gere, é responsável, edita, grava, desenha ou posta. */
+  esta: boolean
+  /** Foi quem pediu o card. */
+  pediu: boolean
+  /** Setores do card: quem executa (area) e quem pediu (departamento). */
+  setores: string[]
 }
 
 /**
@@ -112,19 +135,36 @@ export type Preferencia = {
  *
  * - sem preferência para a categoria: sim (é o que acontece hoje);
  * - canal desligado: não;
- * - recorte "meus": só se ela está no card. Aviso sem card (estaNoCard null)
- *   passa — não há como recortar o que não é de card nenhum.
+ * - recorte por card: só se o card passa. Aviso sem card (null) passa — não
+ *   há como recortar o que não é de card nenhum.
  */
-export function decidirAviso(pref: Preferencia | null | undefined, canal: Canal, estaNoCard: boolean | null): boolean {
+export function decidirAviso(pref: Preferencia | null | undefined, canal: Canal, card: FatosDoCard | null): boolean {
   if (!pref) return true
   if (!pref[canal]) return false
-  if (pref.recorte === "meus" && estaNoCard === false) return false
-  return true
+  if (!card) return true
+  switch (pref.recorte) {
+    case "meus": return card.esta
+    case "pedi": return card.pediu
+    case "setor": return card.esta || (!!pref.setor && card.setores.includes(pref.setor))
+    default: return true
+  }
 }
 
-/** Precisa saber se a pessoa está no card para decidir? (evita a consulta) */
+/** Precisa saber do card para decidir? (evita a consulta) */
 export function precisaDoCard(pref: Preferencia | null | undefined, canal: Canal): boolean {
-  return !!pref && pref[canal] && pref.recorte === "meus"
+  return !!pref && pref[canal] && pref.recorte !== "tudo"
+}
+
+/**
+ * Setores de um card. `area` é quem executa (design = Growth); `departamento`
+ * é quem pediu (um vídeo pedido pelo Growth é do Audiovisual E do Growth).
+ */
+export function setoresDoCard(area: string | null | undefined, departamento: string | null | undefined): Setor[] {
+  const s = new Set<Setor>()
+  if (area === "audiovisual") s.add("audiovisual")
+  if (area === "design") s.add("growth")
+  if (ehSetor(departamento)) s.add(departamento)
+  return [...s]
 }
 
 // ─── Qual categoria é cada aviso ──────────────────────────────────────────────

@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
 const estadoSchema = z.object({
   categoria: z.enum(LISTA_CATEGORIAS as [string, ...string[]]),
   sino: z.boolean(), email: z.boolean(), whatsapp: z.boolean(),
-  recorte: z.enum(["tudo", "meus"]), travada: z.boolean(),
+  recorte: z.enum(["tudo", "setor", "meus", "pedi"]), setor: z.enum(["audiovisual", "growth"]).nullable().default(null),
+  travada: z.boolean(),
 }).strict()
 const salvarSchema = z.object({
   usuarioId: z.string().min(1).max(128),

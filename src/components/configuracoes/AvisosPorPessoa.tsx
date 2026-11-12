@@ -12,7 +12,8 @@ import { toast } from "sonner"
 import { Bell, Lock, LockOpen, Loader2, Mail, MessageCircle, RotateCcw, Save } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
 import { erroDaResposta, mensagemDeErro } from "@/lib/erro-cliente"
-import { AVISOS_FORA_DA_PAGINA, CATEGORIAS_AVISO, type CategoriaAviso } from "@/lib/avisos-categorias"
+import { AVISOS_FORA_DA_PAGINA, CATEGORIAS_AVISO, SETORES, ehRecorte, ehSetor, type CategoriaAviso, type Setor } from "@/lib/avisos-categorias"
+import { PERFIS_AVISO, estadoDoPerfil, perfilDoEstado, type PerfilAviso } from "@/lib/avisos-perfis"
 import type { EstadoCategoria } from "@/lib/preferencias-aviso-gestao"
 
 type Pessoa = { id: string; nome: string; papel: string; areas: string[]; ajustes?: number }
@@ -27,23 +28,12 @@ const CANAIS = [
 const botao = "inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5 disabled:opacity-50"
 const campo = "w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500"
 
-/** Atalhos para os casos que motivaram a página. Só marcam as caixas; nada sai sem Salvar. */
-const ATALHOS: { rotulo: string; dica: string; aplicar: (c: CategoriaAviso) => Partial<EstadoCategoria> }[] = [
-  {
-    rotulo: "Só as demandas, nos cards em que estou",
-    dica: "Pedidos novos, andamento, comentários e prazos — andamento, comentários e prazos só dos cards dela.",
-    aplicar: (c) => ["pedidos", "resumos"].includes(c) ? ligado("tudo")
-      : ["andamento", "comentarios", "prazos"].includes(c) ? ligado("meus") : desligado(),
-  },
-  {
-    rotulo: "Só gravações externas e videomakers",
-    dica: "Convite, aceite, material, nota fiscal e gravação pronta. O resto desliga.",
-    aplicar: (c) => c === "gravacoes" ? ligado("tudo") : desligado(),
-  },
-  { rotulo: "Tudo, como antes", dica: "Volta ao padrão: recebe o que sempre recebeu.", aplicar: () => ligado("tudo") },
-]
-function ligado(recorte: "tudo" | "meus") { return { sino: true, email: true, whatsapp: true, recorte } }
-function desligado() { return { sino: false, email: false, whatsapp: false, recorte: "tudo" as const } }
+const ROTULO_RECORTE = {
+  tudo: "De todos os cards que já recebe",
+  setor: "Só do setor dela (e dos em que está)",
+  meus: "Só dos cards em que está",
+  pedi: "Só dos cards que ela pediu",
+} as const
 
 export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
   const [escolhida, setEscolhida] = useState("")
@@ -56,12 +46,21 @@ export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
   const setEstado = (f: (atual: EstadoCategoria[]) => EstadoCategoria[]) => setRascunho(f(estado))
   const gestao = modo === "gestao" && !!r?.comoGestao
   const mudou = useMemo(() => JSON.stringify(estado) !== JSON.stringify(r?.estado ?? []), [estado, r])
+  // Setor usado pelo recorte "setor": o que já está salvo, ou o primeiro da atuação da pessoa.
+  const [setorEscolhido, setSetorEscolhido] = useState<Setor | null>(null)
+  const setor: Setor = setorEscolhido ?? estado.find((e) => e.setor)?.setor ?? (r?.pessoa.areas.find(ehSetor) as Setor | undefined) ?? "audiovisual"
+  const perfilAtual = perfilDoEstado(estado)
 
   function mudar(categoria: CategoriaAviso, parte: Partial<EstadoCategoria>) {
     setEstado((atual) => atual.map((e) => (e.categoria === categoria ? { ...e, ...parte } : e)))
   }
-  function atalho(a: (typeof ATALHOS)[number]) {
-    setEstado((atual) => atual.map((e) => (e.travada && !gestao ? e : { ...e, ...a.aplicar(e.categoria) })))
+  function aplicarPerfil(perfil: PerfilAviso) {
+    const novo = new Map(estadoDoPerfil(perfil, setor).map((e) => [e.categoria, e]))
+    setEstado((atual) => atual.map((e) => (e.travada && !gestao ? e : { ...e, ...novo.get(e.categoria)! })))
+  }
+  function mudarSetor(s: Setor) {
+    setSetorEscolhido(s)
+    setEstado((atual) => atual.map((e) => (e.recorte === "setor" && !(e.travada && !gestao) ? { ...e, setor: s } : e)))
   }
 
   async function salvar() {
@@ -87,7 +86,7 @@ export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
   if (error) return <p role="alert" className="text-sm text-red-300">{mensagemDeErro(error, "Não foi possível carregar os avisos.")}</p>
   if (!r) return <p role="status" className="text-sm text-zinc-400">Carregando os avisos…</p>
 
-  const ajustadas = estado.filter((e) => !e.sino || !e.email || !e.whatsapp || e.recorte === "meus").length
+  const ajustadas = estado.filter((e) => !e.sino || !e.email || !e.whatsapp || e.recorte !== "tudo").length
 
   return (
     <div className="space-y-6">
@@ -103,7 +102,7 @@ export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
       {modo === "gestao" && (
         <label className="block max-w-sm text-sm text-zinc-300">
           Pessoa
-          <select aria-label="Pessoa" value={escolhida || r.pessoa.id} onChange={(e) => { setEscolhida(e.target.value); setRascunho(null) }} className={`${campo} mt-1`}>
+          <select aria-label="Pessoa" value={escolhida || r.pessoa.id} onChange={(e) => { setEscolhida(e.target.value); setRascunho(null); setSetorEscolhido(null) }} className={`${campo} mt-1`}>
             {r.pessoas.map((p) => (
               <option key={p.id} value={p.id}>{p.nome}{p.ajustes ? ` · ${p.ajustes} ajuste(s)` : ""}</option>
             ))}
@@ -111,13 +110,35 @@ export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
         </label>
       )}
 
-      <div className="flex flex-wrap gap-2" aria-label="Atalhos">
-        {ATALHOS.map((a) => (
-          <button key={a.rotulo} type="button" aria-label={a.rotulo} title={a.dica} onClick={() => atalho(a)} className={botao}>{a.rotulo}</button>
-        ))}
-      </div>
+      <section aria-label="Perfis prontos" className="rounded-xl border border-white/10 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-medium text-zinc-100">Perfis prontos</p>
+          <label className="inline-flex items-center gap-2 text-sm text-zinc-300">
+            Setor
+            <select aria-label="Setor da pessoa" value={setor} onChange={(e) => ehSetor(e.target.value) && mudarSetor(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-200">
+              {Object.entries(SETORES).map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+            </select>
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-zinc-400">Um clique marca as caixas; nada muda até Salvar. O perfil só tira avisos — o que é trabalho da pessoa chega sempre.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2" data-perfis>
+          {(Object.keys(PERFIS_AVISO) as PerfilAviso[]).map((p) => {
+            const info = PERFIS_AVISO[p]
+            const ativo = perfilAtual === p
+            return (
+              <button key={p} type="button" onClick={() => aplicarPerfil(p)} aria-pressed={ativo} aria-label={`Perfil: ${info.titulo}${info.precisaDeSetor ? ` (${SETORES[setor]})` : ""}`}
+                className={`rounded-lg border p-3 text-left text-sm hover:bg-white/5 ${ativo ? "border-emerald-400/60 bg-emerald-400/5" : "border-white/10"}`}>
+                <span className="block font-medium text-zinc-100">{info.titulo}{info.precisaDeSetor ? ` (${SETORES[setor]})` : ""}</span>
+                <span className="mt-0.5 block text-xs text-zinc-400">{info.resumo}</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
 
       <p className="text-sm text-zinc-400" data-resumo>
+        {perfilAtual && perfilAtual !== "padrao" ? `Perfil: ${PERFIS_AVISO[perfilAtual].titulo}${perfilAtual === "setor" ? ` (${SETORES[setor]})` : ""}. ` : ""}
         {ajustadas ? `${r.pessoa.nome} tem ${ajustadas} categoria(s) diferente(s) do padrão.` : `${r.pessoa.nome} recebe tudo, como sempre.`}
       </p>
 
@@ -157,10 +178,11 @@ export function AvisosPorPessoa({ modo }: { modo: "gestao" | "propria" }) {
                 })}
                 {info.temRecorte && (
                   <select aria-label={`${info.titulo}: de quais cards`} value={e.recorte} disabled={bloqueada || tudoDesligado}
-                    onChange={(ev) => mudar(e.categoria, { recorte: ev.target.value === "meus" ? "meus" : "tudo" })}
+                    onChange={(ev) => ehRecorte(ev.target.value) && mudar(e.categoria, { recorte: ev.target.value, setor: ev.target.value === "setor" ? (e.setor ?? setor) : null })}
                     className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-200">
-                    <option value="tudo">De todos os cards que já recebe</option>
-                    <option value="meus">Só dos cards em que está</option>
+                    {(Object.keys(ROTULO_RECORTE) as (keyof typeof ROTULO_RECORTE)[]).map((rc) => (
+                      <option key={rc} value={rc}>{rc === "setor" ? `Só do setor ${SETORES[e.setor ?? setor]} (e dos em que está)` : ROTULO_RECORTE[rc]}</option>
+                    ))}
                   </select>
                 )}
               </div>

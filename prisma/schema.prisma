@@ -727,7 +727,8 @@ model PreferenciaAviso {
   sino            Boolean  @default(true)
   email           Boolean  @default(true)
   whatsapp        Boolean  @default(true)
-  recorte         String   @default("tudo") // "tudo" | "meus" (só os cards em que a pessoa está)
+  recorte         String   @default("tudo") // "tudo" | "setor" | "meus" | "pedi" (ver avisos-categorias.ts)
+  setor           String? // "audiovisual" | "growth", quando recorte = "setor"
   travada         Boolean  @default(false) // a gestão travou: a pessoa não muda esta categoria
   atualizadoPorId String?
   createdAt       DateTime @default(now())

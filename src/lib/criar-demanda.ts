@@ -410,7 +410,8 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
       data.titulo,
       session.user.name ?? "Usuário",
       data.prioridade as string,
-      organizacaoId
+      organizacaoId,
+      demanda.id
     ), "nova-demanda-gestores")
   }
 
@@ -439,7 +440,8 @@ async function notificarGestoresNovaDemanda(
   titulo: string,
   nomeSolicitante: string,
   prioridade: string,
-  organizacaoId?: string | null
+  organizacaoId?: string | null,
+  demandaId?: string
 ) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
@@ -451,7 +453,7 @@ async function notificarGestoresNovaDemanda(
 
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId, { arte: "fila", aviso: "pedidos" }).catch(() => null)
+        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId, { arte: "fila", aviso: "pedidos", card: demandaId }).catch(() => null)
       }
     }
   } catch (e) {

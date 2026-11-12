@@ -10,7 +10,7 @@
 // A linha que volta ao padrão (tudo ligado, "tudo", sem trava) é apagada: sem
 // linha é "recebe como sempre", e não fica lixo que pareça configuração.
 import type { Prisma } from "@prisma/client"
-import { LISTA_CATEGORIAS, ehCategoria, type CategoriaAviso, type Recorte } from "@/lib/avisos-categorias"
+import { LISTA_CATEGORIAS, ehCategoria, ehRecorte, ehSetor, type CategoriaAviso, type Recorte, type Setor } from "@/lib/avisos-categorias"
 
 type Tx = Prisma.TransactionClient
 
@@ -20,10 +20,12 @@ export type EstadoCategoria = {
   email: boolean
   whatsapp: boolean
   recorte: Recorte
+  /** Só com recorte "setor". */
+  setor: Setor | null
   travada: boolean
 }
 
-export const PADRAO = { sino: true, email: true, whatsapp: true, recorte: "tudo" as Recorte, travada: false }
+export const PADRAO = { sino: true, email: true, whatsapp: true, recorte: "tudo" as Recorte, setor: null as Setor | null, travada: false }
 
 export const ehPadrao = (e: Omit<EstadoCategoria, "categoria">) =>
   e.sino && e.email && e.whatsapp && e.recorte === "tudo" && !e.travada
@@ -34,7 +36,8 @@ export async function lerPreferencias(tx: Tx, organizacaoId: string, usuarioId: 
   return LISTA_CATEGORIAS.map((categoria) => {
     const l = por.get(categoria)
     return l
-      ? { categoria, sino: l.sino, email: l.email, whatsapp: l.whatsapp, recorte: l.recorte === "meus" ? "meus" : "tudo", travada: l.travada }
+      ? { categoria, sino: l.sino, email: l.email, whatsapp: l.whatsapp, recorte: ehRecorte(l.recorte) ? l.recorte : "tudo",
+        setor: ehSetor(l.setor) ? l.setor : null, travada: l.travada }
       : { categoria, ...PADRAO }
   })
 }
@@ -56,9 +59,13 @@ export async function salvarPreferencias(
     if (!ehCategoria(p.categoria)) continue
     const atual = atuais.get(p.categoria)!
     if (!comoGestao && atual.travada) continue
-    const novo = { sino: p.sino, email: p.email, whatsapp: p.whatsapp, recorte: p.recorte, travada: comoGestao ? p.travada : atual.travada }
+    // Setor só vale com recorte "setor"; sem setor escolhido, o recorte não tem
+    // como funcionar e volta a "tudo" (nunca corta às cegas).
+    const setor = p.recorte === "setor" && ehSetor(p.setor) ? p.setor : null
+    const recorte: Recorte = p.recorte === "setor" && !setor ? "tudo" : p.recorte
+    const novo = { sino: p.sino, email: p.email, whatsapp: p.whatsapp, recorte, setor, travada: comoGestao ? p.travada : atual.travada }
     if (novo.sino === atual.sino && novo.email === atual.email && novo.whatsapp === atual.whatsapp &&
-      novo.recorte === atual.recorte && novo.travada === atual.travada) continue
+      novo.recorte === atual.recorte && novo.setor === atual.setor && novo.travada === atual.travada) continue
     const onde = { organizacaoId_usuarioId_categoria: { organizacaoId, usuarioId: alvoId, categoria: p.categoria } }
     if (ehPadrao(novo)) await tx.preferenciaAviso.deleteMany({ where: { organizacaoId, usuarioId: alvoId, categoria: p.categoria } })
     else await tx.preferenciaAviso.upsert({

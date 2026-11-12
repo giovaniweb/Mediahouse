@@ -389,7 +389,10 @@ try {
   conferir(r.rowCount === 1, "preferencias_aviso: a empresa A apaga a dela e não alcança a da B")
   const recorteInvalido = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
                                                  VALUES ('rls-pref-y', '${A}', 'rls-user-1', 'pedidos', 'todos_do_mundo', now())`)
-  conferir(recorteInvalido !== null, "preferencias_aviso: recorte só aceita 'tudo' ou 'meus'")
+  conferir(recorteInvalido !== null, "preferencias_aviso: recorte só aceita tudo, setor, meus ou pedi")
+  const setorSemSetor = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
+                                               VALUES ('rls-pref-z', '${A}', 'rls-user-1', 'pedidos', 'setor', now())`)
+  conferir(setorSemSetor !== null, "preferencias_aviso: recorte 'setor' exige o setor (nunca corta às cegas)")
 } finally {
   await c.query("ROLLBACK")
 }

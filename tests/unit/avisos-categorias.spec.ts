@@ -1,34 +1,56 @@
 import { describe, expect, it } from "vitest"
 import {
   CATEGORIAS_AVISO, LISTA_CATEGORIAS, categoriaDaSaida, categoriaDoAlerta, categoriaDoKanban, decidirAviso,
-  demandaDaSaida, precisaDoCard, tiposDeAlertaDa, type Preferencia,
+  demandaDaSaida, precisaDoCard, setoresDoCard, tiposDeAlertaDa, type FatosDoCard, type Preferencia,
 } from "@/lib/avisos-categorias"
 import { STATUS_COM_AVISO_KANBAN } from "@/lib/kanban-avisos"
 
 const pref = (p: Partial<Preferencia>): Preferencia => ({ categoria: "andamento", sino: true, email: true, whatsapp: true, recorte: "tudo", ...p })
 
+const card = (f: Partial<FatosDoCard>): FatosDoCard => ({ esta: false, pediu: false, setores: [], ...f })
+
 describe("decidirAviso: a regra que não pode errar", () => {
   it("sem preferência, recebe em todo canal, com ou sem card — nada muda", () => {
     for (const canal of ["sino", "email", "whatsapp"] as const) {
-      for (const card of [true, false, null]) expect(decidirAviso(undefined, canal, card)).toBe(true)
+      for (const c of [card({ esta: true }), card({}), null]) expect(decidirAviso(undefined, canal, c)).toBe(true)
     }
   })
   it("canal desligado não recebe; os outros continuam", () => {
     const p = pref({ whatsapp: false })
-    expect(decidirAviso(p, "whatsapp", true)).toBe(false)
-    expect(decidirAviso(p, "sino", false)).toBe(true)
+    expect(decidirAviso(p, "whatsapp", card({ esta: true }))).toBe(false)
+    expect(decidirAviso(p, "sino", card({}))).toBe(true)
   })
-  it("recorte 'meus' corta só card de outros; aviso sem card passa", () => {
+  it("'meus' corta só card de outros; aviso sem card passa", () => {
     const p = pref({ recorte: "meus" })
-    expect(decidirAviso(p, "whatsapp", true)).toBe(true)
-    expect(decidirAviso(p, "whatsapp", false)).toBe(false)
+    expect(decidirAviso(p, "whatsapp", card({ esta: true }))).toBe(true)
+    expect(decidirAviso(p, "whatsapp", card({}))).toBe(false)
     expect(decidirAviso(p, "whatsapp", null)).toBe(true)
     expect(precisaDoCard(p, "whatsapp")).toBe(true)
     expect(precisaDoCard(pref({}), "whatsapp")).toBe(false)
     expect(precisaDoCard(undefined, "whatsapp")).toBe(false)
   })
+  it("'pedi' só passa o card que a pessoa pediu — estar no card como gestor não basta", () => {
+    const p = pref({ recorte: "pedi" })
+    expect(decidirAviso(p, "whatsapp", card({ pediu: true, esta: true }))).toBe(true)
+    expect(decidirAviso(p, "whatsapp", card({ esta: true }))).toBe(false)
+    expect(decidirAviso(p, "whatsapp", null)).toBe(true)
+  })
+  it("'setor' passa o card do setor dela ou em que ela está", () => {
+    const p = pref({ recorte: "setor", setor: "growth" })
+    expect(decidirAviso(p, "whatsapp", card({ setores: ["growth"] }))).toBe(true)
+    expect(decidirAviso(p, "whatsapp", card({ setores: ["audiovisual", "growth"] }))).toBe(true)
+    expect(decidirAviso(p, "whatsapp", card({ setores: ["audiovisual"] }))).toBe(false)
+    expect(decidirAviso(p, "whatsapp", card({ setores: ["audiovisual"], esta: true }))).toBe(true)
+    // Setor sem valor nunca deixa passar card de fora — mas o salvar impede esse estado.
+    expect(decidirAviso(pref({ recorte: "setor" }), "whatsapp", card({ setores: ["growth"] }))).toBe(false)
+  })
+  it("setores do card: quem executa e quem pediu", () => {
+    expect(setoresDoCard("design", "growth")).toEqual(["growth"])
+    expect(setoresDoCard("audiovisual", "growth")).toEqual(["audiovisual", "growth"])
+    expect(setoresDoCard("audiovisual", "eventos")).toEqual(["audiovisual"])
+  })
   it("a configuração nunca dá aviso: com tudo ligado, o resultado é o mesmo de sem configuração", () => {
-    for (const card of [true, false, null]) expect(decidirAviso(pref({}), "email", card)).toBe(decidirAviso(undefined, "email", card))
+    for (const c of [card({ esta: true }), card({}), null]) expect(decidirAviso(pref({}), "email", c)).toBe(decidirAviso(undefined, "email", c))
   })
 })
 

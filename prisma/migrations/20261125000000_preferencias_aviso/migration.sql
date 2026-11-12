@@ -1,9 +1,12 @@
 -- Avisos por pessoa (12/11/2026).
 --
 -- A gestão escolhe, pessoa por pessoa, quais categorias de aviso ela recebe e
--- por quais canais (sino, e-mail, WhatsApp), e se quer tudo do departamento ou
--- só os cards em que está. A própria pessoa também ajusta, menos o que a gestão
--- travou.
+-- por quais canais (sino, e-mail, WhatsApp), e de quais cards:
+--   tudo  — de todos os cards de que já recebe (o de hoje)
+--   setor — só dos cards do setor dela (Audiovisual ou Growth) e dos em que está
+--   meus  — só dos cards em que está
+--   pedi  — só dos cards que ela pediu
+-- A própria pessoa também ajusta, menos o que a gestão travou.
 --
 -- Sem linha, a pessoa recebe exatamente o que recebe hoje. A linha só tira.
 --
@@ -17,12 +20,15 @@ CREATE TABLE "preferencias_aviso" (
   "email" BOOLEAN NOT NULL DEFAULT true,
   "whatsapp" BOOLEAN NOT NULL DEFAULT true,
   "recorte" TEXT NOT NULL DEFAULT 'tudo',
+  "setor" TEXT,
   "travada" BOOLEAN NOT NULL DEFAULT false,
   "atualizadoPorId" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "preferencias_aviso_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "preferencias_aviso_recorte_check" CHECK ("recorte" IN ('tudo', 'meus'))
+  CONSTRAINT "preferencias_aviso_recorte_check" CHECK ("recorte" IN ('tudo', 'setor', 'meus', 'pedi')),
+  CONSTRAINT "preferencias_aviso_setor_check" CHECK (
+    ("setor" IS NULL OR "setor" IN ('audiovisual', 'growth')) AND ("recorte" <> 'setor' OR "setor" IS NOT NULL))
 );
 CREATE UNIQUE INDEX "preferencias_aviso_organizacaoId_usuarioId_categoria_key"
   ON "preferencias_aviso"("organizacaoId", "usuarioId", "categoria");

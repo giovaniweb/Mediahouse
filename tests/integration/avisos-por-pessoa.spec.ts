@@ -16,6 +16,8 @@ import { criarSaida, processarSaidas, MOTIVO_DESLIGADO } from "@/lib/whatsapp-ou
 import { encryptSecret } from "@/lib/secret-crypto"
 import { filtrarEmails, podeAvisar } from "@/lib/preferencias-aviso"
 import type { CategoriaAviso } from "@/lib/avisos-categorias"
+import { estadoDoPerfil } from "@/lib/avisos-perfis"
+import { spawnSync } from "node:child_process"
 import { GET as lerAvisos, PUT as salvarAvisos } from "@/app/api/avisos-por-pessoa/route"
 import { GET as sino } from "@/app/api/notificacoes/route"
 
@@ -27,7 +29,7 @@ const gente = {
   debora: { id: `${p}-debora`, papel: "gestor", email: `debora@${p}.test`, telefone: tel() },
   luisa: { id: `${p}-luisa`, papel: "solicitante", email: `luisa@${p}.test`, telefone: tel() },
 }
-const cardDoThalisson = `${p}-d1`, cardDosOutros = `${p}-d2`
+const cardDoThalisson = `${p}-d1`, cardDosOutros = `${p}-d2`, cardGrowthDaLuisa = `${p}-d3`
 const http = vi.mocked(fetch)
 
 const entrar = (quem: keyof typeof gente) => {
@@ -43,7 +45,7 @@ const saida = (quem: keyof typeof gente, e: { categoria?: CategoriaAviso; chave?
 const salvar = async (alvo: keyof typeof gente, categorias: object[]) => salvarAvisos(new NextRequest("http://localhost/api/avisos-por-pessoa", {
   method: "PUT", body: JSON.stringify({ usuarioId: gente[alvo].id, categorias }),
 }))
-const so = (ligadas: Partial<Record<CategoriaAviso, "tudo" | "meus">>) =>
+const so = (ligadas: Partial<Record<CategoriaAviso, "tudo" | "meus" | "pedi">>) =>
   (["pedidos", "andamento", "comentarios", "gravacoes", "social", "eventos", "prazos", "resumos", "sistema"] as CategoriaAviso[]).map((categoria) => {
     const r = ligadas[categoria]
     return { categoria, sino: !!r, email: !!r, whatsapp: !!r, recorte: r ?? "tudo", travada: false }
@@ -66,6 +68,12 @@ beforeAll(async () => {
       solicitanteId: gente.giovani.id, gestorId, statusInterno: "editando", statusVisivel: "producao",
     } })
   }
+  // Arte do Growth (area design) que a Luisa pediu.
+  await db.demanda.create({ data: {
+    id: cardGrowthDaLuisa, organizacaoId: org, codigo: "GR-03", titulo: "Arte da campanha", descricao: "Teste.",
+    area: "design", departamento: "growth", tipoVideo: "institucional", cidade: "Curitiba",
+    solicitanteId: gente.luisa.id, statusInterno: "editando", statusVisivel: "producao",
+  } })
 })
 
 beforeEach(async () => {
@@ -159,8 +167,80 @@ describe("Débora: só os avisos dos videomakers", () => {
   })
 })
 
+describe("perfis do Giovani: setor e só o que pedi", () => {
+  it("Thalisson com 'Tudo do meu setor' no Growth: card do Growth sim, do Audiovisual só o dele", async () => {
+    entrar("giovani")
+    const perfil = estadoDoPerfil("setor", "growth").map((e) => ({ ...e, travada: false }))
+    expect((await salvar("thalisson", perfil)).status).toBe(200)
+    expect((await saida("thalisson", { categoria: "andamento", referencia: cardGrowthDaLuisa })).estado).toBe("aguardando")
+    expect((await saida("thalisson", { categoria: "andamento", referencia: cardDosOutros })).estado).toBe("cancelado")
+    expect((await saida("thalisson", { categoria: "andamento", referencia: cardDoThalisson })).estado).toBe("aguardando")
+    await db.alertaIA.createMany({ data: [
+      { organizacaoId: org, tipoAlerta: "regra_prazo_vencido", mensagem: "prazo growth", demandaId: cardGrowthDaLuisa },
+      { organizacaoId: org, tipoAlerta: "regra_prazo_vencido", mensagem: "prazo audiovisual de outro", demandaId: cardDosOutros },
+      { organizacaoId: org, tipoAlerta: "whatsapp_desconectado", mensagem: "sistema" },
+    ] })
+    entrar("thalisson")
+    expect(await alertasDoSino()).toEqual(["prazo growth", "sistema"])
+  })
+  it("Luisa com 'Só o que eu pedi': só o card dela, nos três canais", async () => {
+    entrar("giovani")
+    expect((await salvar("luisa", estadoDoPerfil("pedi").map((e) => ({ ...e, travada: false })))).status).toBe(200)
+    expect((await saida("luisa", { categoria: "andamento", referencia: cardGrowthDaLuisa })).estado).toBe("aguardando")
+    expect((await saida("luisa", { categoria: "andamento", referencia: cardDosOutros })).estado).toBe("cancelado")
+    expect((await saida("luisa", { chave: `grav:${cardDosOutros}:material:2026-11-12:solicitante:abc`, referencia: cardDosOutros })).estado).toBe("cancelado")
+    expect((await saida("luisa", { categoria: "sistema" })).estado).toBe("cancelado")
+    expect(await comOrg(org, () => podeAvisar(db, { organizacaoId: org, categoria: "andamento", demandaId: cardGrowthDaLuisa }, gente.luisa.id, "email"))).toBe(true)
+    expect(await comOrg(org, () => podeAvisar(db, { organizacaoId: org, categoria: "andamento", demandaId: cardDosOutros }, gente.luisa.id, "email"))).toBe(false)
+    await db.alertaIA.createMany({ data: [
+      { organizacaoId: org, tipoAlerta: "video_aprovado", mensagem: "aprovado o da Luisa", demandaId: cardGrowthDaLuisa },
+      { organizacaoId: org, tipoAlerta: "video_aprovado", mensagem: "aprovado de outro", demandaId: cardDosOutros },
+    ] })
+    entrar("luisa")
+    expect(await alertasDoSino()).toEqual(["aprovado o da Luisa"])
+  })
+})
+
+describe("script dos perfis da Contourline", () => {
+  it("mostra o plano sem gravar e, com --aplicar, grava o combinado numa transação", async () => {
+    const slug = `${p}-contourline`, orgS = `${p}-orgs`
+    const nomes = ["Giovani", "Thalison Samuel", "Helaine", "FERNANDA NORMANDO", "Caroline Tinos", "Debora", "Luisa ayusso"]
+    await db.organizacao.create({ data: { id: orgS, nome: "Contourline (teste)", slug } })
+    const ids = nomes.map((_, i) => `${p}-s${i}`)
+    for (const [i, nome] of nomes.entries()) {
+      await db.usuario.create({ data: { id: ids[i], nome, tipo: "gestor", senhaHash: "sem-login" } })
+      await db.usuarioOrganizacao.create({ data: { usuarioId: ids[i], organizacaoId: orgS, papel: "gestor", areas: [] } })
+    }
+    try {
+      const url = process.env.DATABASE_URL_TEST!
+      const rodar = (...extra: string[]) => spawnSync(process.execPath, ["scripts/perfis-avisos-contourline.mjs", "--banco", url, "--empresa", slug, ...extra], { encoding: "utf8" })
+      const plano = rodar()
+      expect(plano.status).toBe(0)
+      expect(plano.stdout).toContain("Thalison Samuel")
+      expect(await db.preferenciaAviso.count({ where: { organizacaoId: orgS } })).toBe(0)
+      const aplicado = rodar("--aplicar")
+      expect(aplicado.status, aplicado.stderr).toBe(0)
+      const thal = await db.preferenciaAviso.findMany({ where: { organizacaoId: orgS, usuarioId: ids[1] } })
+      expect(thal.find((l) => l.categoria === "andamento")).toMatchObject({ recorte: "setor", setor: "growth" })
+      expect(thal.find((l) => l.categoria === "resumos")).toBeUndefined() // resumos ligado = padrão, sem linha
+      const luisa = await db.preferenciaAviso.findMany({ where: { organizacaoId: orgS, usuarioId: ids[6] } })
+      expect(luisa.find((l) => l.categoria === "andamento")).toMatchObject({ recorte: "pedi" })
+      expect(luisa.find((l) => l.categoria === "sistema")).toMatchObject({ sino: false, whatsapp: false })
+      // Rodar de novo não duplica.
+      expect(rodar("--aplicar").status).toBe(0)
+      expect(await db.preferenciaAviso.count({ where: { organizacaoId: orgS } })).toBe(luisa.length * 5 + thal.length * 2)
+    } finally {
+      await db.preferenciaAviso.deleteMany({ where: { organizacaoId: orgS } })
+      await db.usuarioOrganizacao.deleteMany({ where: { organizacaoId: orgS } })
+      await db.organizacao.delete({ where: { id: orgS } })
+      await db.usuario.deleteMany({ where: { id: { in: ids } } })
+    }
+  })
+})
+
 describe("quem pode mudar", () => {
   it("a pessoa muda as dela, não a dos outros, e não destrava o que a gestão travou", async () => {
+    const auditoriaAntes = await db.eventoAuditoria.count({ where: { organizacaoId: org, acao: "avisos.preferencias", recursoId: gente.luisa.id } })
     entrar("giovani")
     await salvar("luisa", so({ gravacoes: "tudo" }).map((c) => (c.categoria === "pedidos" ? { ...c, travada: true } : c)))
     entrar("luisa")
@@ -178,6 +258,6 @@ describe("quem pode mudar", () => {
     expect(await comOrg(org, () => podeAvisar(db, { organizacaoId: org, categoria: "andamento" }, gente.luisa.id, "whatsapp"))).toBe(true)
     expect(await comOrg(org, () => podeAvisar(db, { organizacaoId: org, categoria: "pedidos" }, gente.luisa.id, "whatsapp"))).toBe(false)
     // Fica na Auditoria quem mudou de quem.
-    expect(await db.eventoAuditoria.count({ where: { organizacaoId: org, acao: "avisos.preferencias", recursoId: gente.luisa.id } })).toBe(2)
+    expect(await db.eventoAuditoria.count({ where: { organizacaoId: org, acao: "avisos.preferencias", recursoId: gente.luisa.id } })).toBe(auditoriaAntes + 2)
   })
 })
