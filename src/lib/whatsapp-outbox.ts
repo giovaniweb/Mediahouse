@@ -175,7 +175,7 @@ export async function enviarEvolution(config:ConfigEnvio,telefone:string,texto:s
  *   como qualquer envio incerto.
  */
 async function enviarComArte(cfg:ConfigEnvio,s:SaidaWhatsapp,telefone:string,texto:string):Promise<RespostaEnvio> {
-  const familia=artesLigadas() && s.tentativas===0 ? familiaDaSaida(s) : null
+  const familia=artesLigadas(telefone) && s.tentativas===0 ? familiaDaSaida(s) : null
   if(!familia) return enviarEvolution(cfg,telefone,texto)
   let imagem:ImagemEnvio
   try {

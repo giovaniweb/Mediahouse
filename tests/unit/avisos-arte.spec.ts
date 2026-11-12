@@ -37,6 +37,16 @@ describe("artes dos avisos: catálogo", () => {
     vi.stubEnv("WHATSAPP_ARTES", "ligado")
     expect(artesLigadas()).toBe(true)
   })
+
+  it("modo teste liga só para os números da lista", () => {
+    vi.stubEnv("WHATSAPP_ARTES", "teste:5511911112222, 5521933334444")
+    expect(artesLigadas("5511911112222")).toBe(true)
+    expect(artesLigadas("551111112222")).toBe(true) // sem o 9º dígito
+    expect(artesLigadas("5521933334444")).toBe(true)
+    expect(artesLigadas("5511955556666")).toBe(false)
+    expect(artesLigadas(null)).toBe(false)
+    expect(artesLigadas()).toBe(false)
+  })
 })
 
 describe("artes dos avisos: quem recebe qual", () => {

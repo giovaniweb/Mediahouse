@@ -65,7 +65,19 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
 const FAMILIAS = new Set(Object.keys(FAMILIAS_ARTE))
 const ehFamilia = (v: unknown): v is FamiliaArte => typeof v === "string" && FAMILIAS.has(v)
 
-export const artesLigadas = () => process.env.WHATSAPP_ARTES?.trim() === "ligado"
+/**
+ * `WHATSAPP_ARTES=ligado` liga para a equipe toda. `WHATSAPP_ARTES=teste:<tel>,<tel>`
+ * liga só para esses números, para conferir o envio real antes de soltar para todos.
+ * A comparação usa os 8 últimos dígitos, para não depender do 9º dígito nem do DDI.
+ */
+export function artesLigadas(telefone?: string | null): boolean {
+  const valor = process.env.WHATSAPP_ARTES?.trim() ?? ""
+  if (valor === "ligado") return true
+  if (!valor.startsWith("teste:") || !telefone) return false
+  const fim = (t: string) => t.replace(/\D/g, "").slice(-8)
+  const alvo = fim(telefone)
+  return alvo.length === 8 && valor.slice(6).split(",").some(t => fim(t) === alvo)
+}
 
 /**
  * A chave da saída leva a família na frente (`arte:<familia>:<resto>`). A fila
