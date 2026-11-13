@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const ctx = await autenticarCutflow(req)
   if (ctx instanceof NextResponse) return ctx
+  declararOrg(ctx.organizacaoId)
   await prisma.cutflowSessao.update({
     where: { id: ctx.sessaoId, organizacaoId: ctx.organizacaoId },
     data: { revogadaEm: new Date() },

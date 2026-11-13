@@ -1,5 +1,7 @@
 # RLS — plano de voo
 
+> **13/11/2026:** ensaio refeito com a `main` de hoje (#100–#149). Três consertos na branch `rls/ensaio-novembro`, roteiro da janela atualizado e volta em 1 minuto na [seção 9](#9-o-ensaio-de-13112026-e-a-janela).
+>
 > **04/10/2026:** ensaio com o dump de 07/09 e os logins restritos, correções e roteiro da ligação em produção na [seção 8](#8-o-ensaio-de-04102026-e-o-roteiro-da-ligação).
 >
 > Atualização de execução (S07, 28/09/2026): para a próxima implantação, seguir [S07-RUNTIME-RLS.md](docs/execucao-flow/2026-09-26/S07-RUNTIME-RLS.md). O roteiro atual exige conexões explícitas, prova com logins restritos e migração da recuperação por token. As decisões históricas abaixo não comprovam a configuração do ambiente publicado.
@@ -796,3 +798,196 @@ Duas consequências para este plano:
   `_prisma_migrations` restaurada já marca esta migration como aplicada, então
   ela não roda de novo. O `conferir` vai barrar no `verificar-rls`. O conserto
   é rodar o SQL desta migration no destino antes do `conferir`.
+
+---
+
+## 9. O ensaio de 13/11/2026 e a janela
+
+Entre o ensaio de 05/10 e hoje entraram #100 a #149: ondas 1, 3 e 2A,
+gravações externas, notas fiscais, artes, MCP por pessoa, convites e a segunda
+empresa de verdade (GH Produção). O ensaio foi refeito do zero com esse código.
+
+### Como foi feito
+
+- `main` em `2ff01d9`, um build só, dois servidores lado a lado, rede externa
+  bloqueada:
+  - **A:** `RLS_ATIVO=sim`, `app_user`/`app_auth` e `ADMIN_DATABASE_URL` = dono.
+  - **B:** dono, como a produção roda hoje.
+- Banco: o dump de 05/10/2026 (o mais novo do cofre) num Postgres 17
+  descartável, mais as 14 migrations posteriores. O `verificar-rls` passou nas
+  tabelas novas (`materiais_videomaker`, `tokens_mcp`, `aceites_termos`,
+  `contadores_codigo`), e o `verificar-runtime-rls` também.
+- **Leitura:** 18 combinações de pessoa e papel × 59 telas e 104 rotas de API,
+  mais as páginas públicas por token (agora com termos, privacidade, DPA e
+  entrega do convite).
+- **Escrita:** 101 casos, cada um comparando o status HTTP e o delta de linhas em
+  todas as tabelas. Os 82 de antes, mais estes:
+  - criar empresa nova, como foi feita a GH;
+  - convite da equipe, do primeiro acesso até o login;
+  - chave MCP por pessoa (gerar, listar e criar demanda);
+  - kit de gravação;
+  - nota do job e baixa em lote de notas;
+  - cancelar gravação e enviar link pelo WhatsApp;
+  - recifrar só conferindo;
+  - o plugin Cutflow;
+  - o cron novo `gravacoes`.
+- **Cenários de dados que a produção ainda não tem, mas vai ter:**
+  - parceria com comentários das duas empresas no mesmo card;
+  - uma pessoa removida de uma das duas empresas em que trabalha, sendo
+    responsável em 113 cards.
+
+### O que quebrava, e está consertado na branch `rls/ensaio-novembro`
+
+Os três commits ficam sobre a `main` e não trazem migration.
+
+| onde | sintoma com RLS | causa | commit |
+|---|---|---|---|
+| **Plugin Cutflow** (Premiere) | abria sem nome e sem empresa, a fila vinha vazia e o "Sair" dava 500 | `autenticarCutflow` declarava a empresa *dentro* dela, e a declaração some quando a função devolve; o teste estático confiava nisso | `3d87bd7` |
+| **Quadro da Social**, e também o cartão do Kanban, o histórico, o aviso de status e a fase do Job | 500 (`Cannot read properties of null`) quando um card tem responsável que saiu da empresa | com RLS, a pessoa sem vínculo some do join e o código lia `usuario.nome` sem checar | `242947c` |
+| **Checklist da demanda nova** | *sem* RLS, a demanda herdava o checklist de **qualquer** empresa; com RLS, o banco já escondia | a busca dos modelos não filtrava a empresa | `8a7f309` |
+
+Os três têm teste que falha sem o conserto e passa com ele. Os testes que
+precisam de banco rodam com o `app_user` de verdade.
+
+Produção, lida em 13/11/2026:
+- nenhuma empresa tem modelo de checklist;
+- nenhum card aponta para quem não é da empresa.
+
+Ou seja, nenhum dos três chegou a afetar alguém, e não há dado a limpar.
+
+Depois dos consertos: **101 de 101 casos de escrita iguais** entre A e B,
+nenhuma tela com 500, e os 8 crons processando as 5 empresas nos dois lados.
+
+### O que muda de comportamento, e está certo
+
+A "rede" passa a contar só a empresa ativa (como em 05/10). Hoje há 3 pessoas
+em duas empresas:
+
+| pessoa | empresas |
+|---|---|
+| o Giovani | contourline e giovani |
+| o admin da GH | gh-producao e contourline |
+| o videomaker da João Bamasan | João Bamasan e contourline |
+
+Para elas:
+- o perfil de videomaker mostra só os trabalhos da empresa ativa (ex.: 27 → 0
+  na empresa João Bamasan; os 27 aparecem ao trocar para a Contourline no
+  seletor);
+- os vínculos mostram só a empresa ativa (997 → 52).
+
+Velocidade, medida localmente em 2.927 chamadas, com RLS × sem RLS:
+
+| | com RLS | sem RLS |
+|---|---|---|
+| mediana | 6 ms | 5 ms |
+| p90 | 28 ms | 13 ms |
+| p99 | 122 ms | 47 ms |
+
+O custo é a transação que declara a empresa a cada consulta.
+
+Com RLS, cada instância abre até 20 conexões (app 10, auth 5, admin 5); hoje
+são 10. Vale olhar o EMAXCONN na primeira hora (incidente de 03/11).
+
+### Antes da janela (nada muda em produção)
+
+1. **Mesclar a branch `rls/ensaio-novembro`.** Não tem migration, e o deploy é
+   seguro com RLS desligado. É a coordenação que faz.
+2. **Dump novo** (o último é de 05/10). É o Giovani quem roda, no Terminal:
+   `zsh ~/nuflow-virada/dump-producao.sh`. Só lê e leva cerca de 1 minuto.
+3. **`provar-rls`**, também com o sim do Giovani. Só lê.
+   - Comando, a partir da `main` atualizada:
+     `cd ~/MediaHouse/videoops && git pull && node scripts/virada/virada.mjs provar-rls`.
+   - Ele prova as três credenciais guardadas em `~/nuflow-virada/urls-destino.env`
+     (dono, `app_user`, `app_auth`), confere que **todas** as migrations do código
+     estão aplicadas e roda o `verificar-runtime-rls`.
+   - Se a Onda 2B (migration `20261113120000`) for mesclada antes da janela, a
+     migration dela precisa estar aplicada, ou o comando para.
+   - Se `app_user`/`app_auth` não conectarem, as senhas precisam ser refeitas.
+     Isso é escrita em produção e pede um sim.
+4. **Avisar a equipe** do horário (5 minutos de instabilidade possível).
+
+### A janela
+
+**Sugestão: terça 17/11 ou quarta 18/11/2026, das 20h às 20h45 (Brasília).**
+
+O horário fica longe dos agentes da manhã (7h, 8h e 9h) e fora do expediente.
+A fila do WhatsApp (a cada 5 minutos) e os lembretes (a cada 10) rodam durante
+a janela e servem de sonda. Não fazer deploy de outra coisa no mesmo dia.
+
+| quando | o quê | quem |
+|---|---|---|
+| T−10 | `node scripts/virada/virada.mjs provar-rls` de novo | coordenação |
+| T0 | `node scripts/virada/virada.mjs ligar-rls`: troca 4 variáveis, faz o redeploy, mede `/api/health` e uma rota pública que exercita `app_auth` e `app_user` | coordenação, com o sim do Giovani |
+| T+5 | **telas, pelo Giovani** (lista abaixo) | 👤 |
+| T+20 | um link de aprovação de teste; o relatório executivo; Avisos não entregues → saúde (a fila rodou) | coordenação |
+| T+25 | logs da Vercel sem `row-level security`, `permission denied`, `Cannot read properties of null` nem `EMAXCONN` | coordenação |
+| T+45 | fecha a janela, ou volta | — |
+
+**O que o Giovani confere, nesta ordem (cerca de 10 minutos):**
+
+1. Sair e entrar de novo (login).
+2. Kanban do Audiovisual e do Growth: os cards aparecem como antes, com os nomes
+   nos cartões.
+3. Abrir uma demanda, escrever um comentário e mover o status.
+4. Quadro da Social.
+5. Pessoas & Acessos.
+6. Trocar para a GH Produção no seletor: o quadro fica vazio, porque a GH ainda
+   não tem demandas. Voltar para a Contourline.
+7. Notas fiscais.
+8. Abrir o Cutflow no Premiere, se estiver à mão: aparece o nome e a empresa.
+
+Qualquer tela vazia que não deveria estar vazia, ou erro, é motivo de volta.
+
+**Critério de volta:**
+- login recusado;
+- tela vazia que não deveria estar vazia;
+- 500 num fluxo principal;
+- `row-level security` ou `permission denied` no log;
+- `/api/health` diferente de ok.
+
+### Como voltar em 1 minuto
+
+O `desligar-rls` leva uns 3 minutos, porque troca variáveis e faz um redeploy.
+Há uma volta mais rápida, porque a Vercel congela as variáveis em cada deploy:
+
+1. **Em 1 minuto, pelo painel:** Vercel → projeto → **Deployments** → o deploy
+   de produção **anterior** ao `ligar-rls` → menu ⋯ → **Instant Rollback**.
+   - O deploy antigo volta a responder com as variáveis antigas (dono, sem
+     RLS), sem build.
+   - Não se perde nada: o RLS não move dado, e o que foi gravado durante a
+     janela continua no mesmo banco.
+2. **Logo depois, sem pressa:** `node scripts/virada/virada.mjs desligar-rls`.
+   - Ele devolve as variáveis do projeto para o dono e remove
+     `AUTH_DATABASE_URL`/`ADMIN_DATABASE_URL`.
+   - **Sem este passo, o próximo deploy religaria o RLS**, porque as variáveis
+     do projeto continuam as do RLS.
+   - Depois de um Instant Rollback, a Vercel para de promover deploys novos
+     sozinha. Ao fim do `desligar-rls`, confira no painel que o deploy dele está
+     como **Current**. Se não estiver: ⋯ → **Promote to Production**.
+     Esse comportamento não foi ensaiado (a Vercel falsa do ensaio não tem
+     rollback). Vale um teste num deploy de preview antes da janela.
+
+A troca só de `RLS_ATIVO` para `nao` **não** volta nada: a `DATABASE_URL`
+continuaria no `app_user`, e o banco aplicaria a tranca do mesmo jeito.
+
+### Na manhã seguinte
+
+Os agentes das 7h às 9h precisam criar alertas como no dia anterior. Zero
+alertas significa que o cron voltou a não enxergar as empresas, e a volta é a
+mesma.
+
+O `FORCE ROW LEVEL SECURITY` (passo 6) fica para semanas depois.
+
+### Limitações que continuam (não bloqueiam)
+
+- **Painel de campo (`/campo`)** e **perfil de videomaker**: mostram só a empresa
+  ativa (ver acima).
+- **Teste em processo "virgem":**
+  - O `enterWith` do Node escapa para quem chamou quando o rastreio de contexto
+    ainda não foi ligado no processo. Foi por isso que os testes antigos do
+    Cutflow passavam com o código quebrado.
+  - O teste novo liga o rastreio antes. Quem escrever teste de rota sob RLS
+    deve fazer o mesmo (`await comOrg(null, async () => {})` no `beforeAll`).
+- **Ferramental do ensaio:** os scripts estão em `~/nuflow-virada/ensaio-rls/novembro/`.
+  Para refazer o ensaio com um dump novo: `preparar-bancos.sh` usa o dump mais
+  novo do cofre, e `recomecar.sh` derruba e sobe os dois servidores.
