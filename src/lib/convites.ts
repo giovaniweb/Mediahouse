@@ -121,7 +121,10 @@ export async function responderConvite(tx: Tx, e: {
   if (alterarJob) {
     const g = await dadosDaGravacao(tx, e.organizacaoId, d.id)
     const evento = status === "aceito" ? "confirmada" : "recusada"
-    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId: e.usuarioId })
+    // O videomaker que aceita logado (pela área dele) é o autor, e mesmo assim
+    // recebe o resumo do job para consultar depois (13/11/2026).
+    if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId: e.usuarioId,
+      ...(evento === "confirmada" ? { autorRecebeComo: ["videomaker" as const] } : {}) })
   }
   return { status, demandaId: d.id }
 }

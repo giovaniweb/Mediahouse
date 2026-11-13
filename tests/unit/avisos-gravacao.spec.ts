@@ -33,11 +33,40 @@ describe("quem recebe cada evento", () => {
     expect(papeis(mensagensDoEvento("nota_paga", g))).toEqual(["videomaker"])
     expect(papeis(mensagensDoEvento("pronta", g))).toEqual(["operacao"])
   })
-  it("confirmou: operação e cliente, com dia, hora, videomaker e local", () => {
+  it("confirmou: operação, cliente e o próprio videomaker, com dia, hora, videomaker e local", () => {
     const m = mensagensDoEvento("confirmada", g)
-    expect(papeis(m)).toEqual(["cliente", "operacao"])
+    expect(papeis(m)).toEqual(["cliente", "operacao", "videomaker"])
     expect(m.cliente).toContain("Sáb, 31/10 · 13:00, com João Martins")
     expect(m.cliente).toContain("Local: Alameda dos Nhambiquaras")
+  })
+  it("confirmou: o videomaker recebe o resumo do job para consultar depois (Gabriel, 13/11/2026)", () => {
+    expect(mensagensDoEvento("confirmada", { ...g, cidade: "Campinas", localGravacao: "Rua das Flores, 10" }).videomaker).toBe([
+      "🎉 Parabéns, João! Você está confirmado na gravação Clínica Cristal (VOP-26-2001).",
+      [
+        "Quando: Sáb, 31/10 · 13:00",
+        "Onde: Rua das Flores, 10",
+        "Cidade: Campinas",
+        "Levar: Brinde: Caixa mineira · banner",
+        "Entregar: os brutos (a edição é nossa)",
+        "Prazo: brutos até Dom, 01/11, o dia seguinte à gravação",
+      ].join("\n"),
+      "Tudo sobre o job (briefing, kit e pagamento) e a entrega do material:\nhttps://nuflow.space/convite/tok",
+    ].join("\n\n"))
+  })
+  it("confirmou: a cidade que já está no endereço não repete; edição dele pede o vídeo pronto", () => {
+    const v = mensagensDoEvento("confirmada", { ...g, cidade: "São Paulo", edicaoPor: "videomaker" }).videomaker!
+    expect(v).toContain("Onde: Alameda dos Nhambiquaras, 1700, São Paulo - SP")
+    expect(v).not.toContain("Cidade:")
+    expect(v).toContain("Entregar: os brutos e o vídeo pronto (a edição é sua)")
+  })
+  it("confirmou sem data, local nem link: diz que é a combinar e não inventa link", () => {
+    const v = mensagensDoEvento("confirmada", { ...g, dataCaptacao: null, localGravacao: null, linkEntrega: null, temBrinde: false, levar: null, videomaker: null }).videomaker!
+    expect(v).toMatch(/^🎉 Parabéns! Você está confirmado/)
+    expect(v).toContain("Quando: data a combinar com a equipe")
+    expect(v).toContain("Onde: local a combinar com a equipe")
+    expect(v).toContain("Prazo: brutos até o dia seguinte à gravação")
+    expect(v).not.toContain("Levar:")
+    expect(v).not.toContain("http")
   })
   it("recusa é trava: operação e gestão", () => {
     expect(papeis(mensagensDoEvento("recusada", g))).toEqual(["gestao", "operacao"])
