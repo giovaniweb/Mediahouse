@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs"
 import type { TipoUsuario, CategoriaPessoa, AreaAtuacao } from "@prisma/client"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
 import { convitePendente } from "@/lib/convite-equipe"
+import { empresaVeRede, recorteDaRede } from "@/lib/videomakers-da-rede"
 
 // GET /api/usuarios — Pessoas & Acessos da organização logada (admin/gestor).
 // ISOLADO por organização (via membership). Inclui categoria/função/áreas/papel.
@@ -86,7 +87,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Videomaker externo é GLOBAL (rede compartilhada). Editor é interno e por org.
+  // Sem a rede (módulo "rede"), a lista é só dos videomakers da empresa.
   const videomakers = await prisma.videomaker.findMany({
+    where: recorteDaRede(organizacaoId, await empresaVeRede(organizacaoId)),
     select: { id: true, nome: true, email: true, telefone: true, status: true, createdAt: true, usuarioId: true },
     orderBy: { nome: "asc" },
   })

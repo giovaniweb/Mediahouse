@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
+import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 
 // Avaliação INTERNA de videomaker — quem contratou dando a nota.
 //
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const vm = await prisma.videomaker.findUnique({ where: { id }, select: { id: true } })
   if (!vm) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
+  // Sem a rede (módulo "rede"), avalia-se só quem é da empresa ou trabalhou num card dela.
+  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
 
   const avaliacao = await prisma.avaliacaoVideomaker.create({
     data: {

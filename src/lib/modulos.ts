@@ -18,7 +18,7 @@
 // O ligado/desligado POR EMPRESA vive no banco (ModuloOrganizacao) e é lido por
 // src/lib/modulos-org.ts. Aqui não há estado de cliente.
 
-export type Modulo = "growth" | "eventos" | "ideias" | "mensagens" | "cutflow" | "conversao"
+export type Modulo = "growth" | "eventos" | "ideias" | "mensagens" | "cutflow" | "conversao" | "rede"
 
 export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "growth", nome: "Growth / Conteúdos", descricao: "Área de design, kanban próprio e galeria de criativos." },
@@ -27,6 +27,7 @@ export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "mensagens", nome: "Mensagens", descricao: "Central de mensagens do WhatsApp." },
   { chave: "cutflow", nome: "Cutflow", descricao: "Plugin do Premiere que edita os cards atribuídos ao editor Cutflow." },
   { chave: "conversao", nome: "Conversão de vídeo", descricao: "Gera a versão leve dos vídeos finais (.mov e afins) para assistir no navegador, dentro da franquia de armazenamento." },
+  { chave: "rede", nome: "Videomakers da rede", descricao: "Ver, buscar e escalar os videomakers da rede do NuFlow que não são da empresa. Desligado, a empresa trabalha só com os próprios videomakers." },
 ]
 
 /**
@@ -46,6 +47,7 @@ export const DISPONIVEL_NA_PLATAFORMA: Record<Modulo, boolean> = {
   mensagens: false,
   cutflow: true,
   conversao: true,
+  rede: true,
 }
 
 /** O que uma empresa recebe quando ninguém decidiu nada para ela. */
@@ -60,6 +62,11 @@ export const PADRAO_MODULOS: Record<Modulo, boolean> = {
   // Conversão de vídeo (Onda 2A, 21/10/2026): faz parte do pacote. Desligar
   // aqui, por empresa, para de gerar versão leve; não esconde tela nenhuma.
   conversao: true,
+  // Videomakers da rede (13/11/2026): acesso pago, ligado pelo super-admin.
+  // Empresa nova nasce SEM a rede; as que já existiam receberam a linha ligada
+  // na migration 20261127120000 (menos a GH Produção). Ver
+  // src/lib/videomakers-da-rede.ts.
+  rede: false,
 }
 
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e
@@ -87,6 +94,9 @@ export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
   cutflow: ["/cutflow", "/api/cutflow"],
   // Sem tela própria: o conversor roda por trás (src/lib/midia-worker.ts).
   conversao: [],
+  // Sem rota própria: a rede some de dentro das listas, buscas e da escala
+  // (src/lib/videomakers-da-rede.ts), não de uma página.
+  rede: [],
 }
 
 /** A que módulo um caminho pertence, se pertencer a algum. */

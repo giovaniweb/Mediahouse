@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCoberturaOrg } from "@/lib/org"
+import { FORA_DA_REDE, podeEscalarVideomaker } from "@/lib/videomakers-da-rede"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -79,6 +80,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       } else {
         vmId = refId
       }
+    }
+
+    // Sem a rede (módulo "rede"), a equipe da cobertura leva só videomaker da empresa.
+    if (vmId && !(await podeEscalarVideomaker(guard.organizacaoId, vmId))) {
+      return NextResponse.json({ error: FORA_DA_REDE }, { status: 403 })
     }
 
     if (!membroNome && !vmId) {

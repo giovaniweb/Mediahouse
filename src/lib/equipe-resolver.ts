@@ -1,24 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
+import { empresaVeRede } from "@/lib/videomakers-da-rede"
 
-// Token opaco para identificar a origem de uma pessoa atribuível:
-//   "vm:<id>"   → registro Videomaker
-//   "ed:<id>"   → registro Editor
-//   "user:<id>" → Usuario (tipo=social etc.)
-export type OrigemEquipe = "vm" | "ed" | "user"
-
-export function parseToken(token: string): { origem: OrigemEquipe; id: string } {
-  const idx = token.indexOf(":")
-  if (idx === -1) {
-    // Compatibilidade: id puro = videomaker (comportamento legado)
-    return { origem: "vm", id: token }
-  }
-  const prefix = token.slice(0, idx)
-  const id = token.slice(idx + 1)
-  const origem: OrigemEquipe = prefix === "ed" ? "ed" : prefix === "user" ? "user" : "vm"
-  return { origem, id }
-}
+export { parseToken, type OrigemEquipe } from "@/lib/equipe-token"
+import { parseToken } from "@/lib/equipe-token"
 
 // ─── Find-or-create de espelho VIDEOMAKER ─────────────────────────────────────
 async function findOrCreateVideomaker(opts: {
@@ -28,6 +14,8 @@ async function findOrCreateVideomaker(opts: {
   cidade?: string | null
   estado?: string | null
   tipoContrato: string
+  /** Sem a rede (módulo "rede"): o casamento por nome fica entre os da empresa. */
+  soDaEmpresa?: string | null
 }): Promise<string> {
   // 1. Dedup por usuarioId (coluna @unique)
   if (opts.usuarioId) {
@@ -39,7 +27,10 @@ async function findOrCreateVideomaker(opts: {
   }
   // 2. Fallback por nome
   const porNome = await prisma.videomaker.findFirst({
-    where: { nome: { equals: opts.nome, mode: "insensitive" } },
+    where: {
+      nome: { equals: opts.nome, mode: "insensitive" },
+      ...(opts.soDaEmpresa ? { vinculos: { some: { organizacaoId: opts.soDaEmpresa } } } : {}),
+    },
     select: { id: true },
   })
   if (porNome) return porNome.id
@@ -169,6 +160,11 @@ export async function resolveParaVideomaker(token: string, organizacaoId?: strin
 
   if (origem === "vm") return comVinculo(id)
 
+  // Quem chama já conferiu o "vm:" contra a rede (podeEscalarVideomaker). Aqui,
+  // editor e usuário são da empresa, mas o casamento por nome não pode puxar
+  // um homônimo da rede para quem não a tem.
+  const soDaEmpresa = organizacaoId && !(await empresaVeRede(organizacaoId)) ? organizacaoId : null
+
   if (origem === "ed") {
     const ed = await prisma.editor.findUnique({
       where: { id },
@@ -182,6 +178,7 @@ export async function resolveParaVideomaker(token: string, organizacaoId?: strin
       cidade: ed.cidade,
       estado: ed.estado,
       tipoContrato: "interno", // editor mirrorado → pessoa interna
+      soDaEmpresa,
     }))
   }
 
@@ -196,6 +193,7 @@ export async function resolveParaVideomaker(token: string, organizacaoId?: strin
     nome: user.nome,
     telefone: user.telefone,
     tipoContrato: "interno",
+    soDaEmpresa,
   }))
 }
 

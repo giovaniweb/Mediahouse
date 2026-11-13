@@ -13,6 +13,7 @@ import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
 import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
+import { FORA_DA_REDE, pessoaDoSlotLiberada } from "@/lib/videomakers-da-rede"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { requireDemandaAcesso, espelhoDoCard, projecaoDoEspelho, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
@@ -257,6 +258,22 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (erroTitulo) return erroTitulo
   const erroDescricao = normalizarTextoObrigatorio(body, "descricao", "Descrição", 10)
   if (erroDescricao) return erroDescricao
+
+  // Sem a rede (módulo "rede"), só se escala gente da empresa, em qualquer
+  // slot e com QUALQUER prefixo ("x:<id>" e "user:" também chegam a um
+  // videomaker no resolvedor). Confere ANTES de resolver: resolver cria o
+  // vínculo, e aí qualquer um viraria "da empresa". Quem já está no card fica.
+  const vmEscolhido = typeof body.videomakerId === "string" ? body.videomakerId : ""
+  const edEscolhido = typeof body.editorId === "string" ? body.editorId : ""
+  if (vmEscolhido || edEscolhido) {
+    const noCard = await prisma.demanda.findUnique({ where: { id }, select: { videomakerId: true, editorId: true } })
+    if (!(await pessoaDoSlotLiberada(guard.organizacaoId, vmEscolhido, "captacao", noCard?.videomakerId))) {
+      return erroDeCampo("videomakerId", FORA_DA_REDE)
+    }
+    if (!(await pessoaDoSlotLiberada(guard.organizacaoId, edEscolhido, "edicao", noCard?.editorId))) {
+      return erroDeCampo("editorId", FORA_DA_REDE)
+    }
+  }
 
   // Resolver tokens de atribuição unificada (vm:/ed:/user:) → id real do slot.
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.
