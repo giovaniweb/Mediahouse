@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { autenticarCutflow, editorCutflow, FORA_DA_FILA, sessaoDoPlugin } from "@/lib/cutflow"
+import { declararOrg } from "@/lib/org-contexto"
 import { mudarStatus } from "@/lib/mudar-status"
 import { EVENTO_CUTFLOW_PUXADO } from "@/lib/status"
 
@@ -19,6 +20,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await autenticarCutflow(req)
   if (ctx instanceof NextResponse) return ctx
+  declararOrg(ctx.organizacaoId)
   const { organizacaoId } = ctx
   const { id } = await params
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { autenticarCutflow, ENVIO_INDISPONIVEL } from "@/lib/cutflow"
+import { declararOrg } from "@/lib/org-contexto"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,6 +12,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await autenticarCutflow(req)
   if (ctx instanceof NextResponse) return ctx
+  declararOrg(ctx.organizacaoId)
   await params
   return NextResponse.json({ error: ENVIO_INDISPONIVEL, codigo: "drive_removido" }, { status: 410 })
 }

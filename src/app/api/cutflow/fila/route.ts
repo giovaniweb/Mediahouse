@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { autenticarCutflow, editorCutflow, FORA_DA_FILA } from "@/lib/cutflow"
+import { declararOrg } from "@/lib/org-contexto"
 
 // GET /api/cutflow/fila — os cards atribuídos ao editor "Cutflow" desta empresa
 // que ainda não saíram da edição, com quem já puxou cada um.
 export async function GET(req: NextRequest) {
   const ctx = await autenticarCutflow(req)
   if (ctx instanceof NextResponse) return ctx
+  declararOrg(ctx.organizacaoId)
   const { organizacaoId } = ctx
 
   const editor = await editorCutflow(organizacaoId)

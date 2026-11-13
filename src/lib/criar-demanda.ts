@@ -344,8 +344,11 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
 
   // Auto-populate checklist a partir de templates
   try {
+    // Só os modelos DESTA empresa. Até 13/11/2026 faltava o filtro, e sem RLS a
+    // demanda herdava o checklist de qualquer empresa (achado no ensaio do RLS).
     const templates = await prisma.checklistTemplate.findMany({
       where: {
+        organizacaoId,
         ativo: true,
         OR: [
           { tipoVideo: data.tipoVideo },

@@ -365,7 +365,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       telefoneVideomaker: demandaAtual.videomaker?.telefone ?? null,
       telefoneEditor: demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
       telefonesExecutores: [
-        ...demandaAtual.responsaveis.map((r) => r.usuario.telefone),
+        // Com RLS, quem saiu da empresa vem sem usuario: fica de fora do aviso.
+        ...demandaAtual.responsaveis.map((r) => r.usuario?.telefone),
         demandaAtual.responsavel?.telefone ?? null,
         demandaAtual.designer?.whatsapp ?? demandaAtual.designer?.telefone ?? null,
       ].filter((t): t is string => !!t),
