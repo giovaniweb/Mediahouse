@@ -22,6 +22,9 @@ import { mensagemDeErro } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
 import { ConviteAvaliacao } from "@/components/pessoas/ConviteAvaliacao"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
+import { ScoreRede } from "@/components/rede/ScoreRede"
+import { useMe } from "@/hooks/usePermissoes"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -42,6 +45,9 @@ export default function VideomakerDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { data, error, isValidating, mutate } = useSWR(`/api/videomakers/${id}`, fetcher)
+  const { data: me } = useMe()
+  // "Convidar pela rede" é do módulo "rede": sem ele, o botão não aparece.
+  const temRede = !!me?.modulos && !rotaDeModuloDesligado("/videomakers/rede", me.modulos)
   const vm = data?.videomaker
 
   const [aprovando, setAprovando] = useState(false)
@@ -204,6 +210,10 @@ export default function VideomakerDetalhePage() {
   }
 
   const cfg = statusConfig[vm.status] ?? statusConfig.ativo
+  // Perfil aberto pela rede (sem vínculo): a empresa só vê o perfil e o score.
+  // Editar, QR, contrato e lista negra são da empresa que trabalha com ele, e o
+  // servidor já recusa; aqui só não oferece o botão que vai falhar.
+  const foraDaLista = vm.naLista === false
   const avaliacoes = dataAvaliacoes?.avaliacoes ?? []
   const habilidadesForm = (form.habilidades as string[]) ?? []
   const areasForm = (form.areasAtuacao as string[]) ?? []
@@ -220,7 +230,14 @@ export default function VideomakerDetalhePage() {
             >
               <ArrowLeft className="w-4 h-4" /> Voltar
             </button>
-            {!editing ? (
+            {foraDaLista ? (
+              temRede && <Link
+                href="/videomakers/rede"
+                className="flex items-center gap-1.5 text-sm bg-purple-600 text-white hover:bg-purple-700 rounded-lg px-3 py-2"
+              >
+                <Share2 className="w-4 h-4" /> Convidar pela rede
+              </Link>
+            ) : !editing ? (
               <>
                 <Link
                   href={`/demandas?nova=1&videomakerId=${encodeURIComponent(`vm:${id}`)}`}
@@ -335,14 +352,7 @@ export default function VideomakerDetalhePage() {
                 <div className="flex flex-wrap items-center gap-1 mt-1">
                   {erroAvaliacoes ? <span className="text-xs text-zinc-400">Avaliações indisponíveis</span>
                     : !dataAvaliacoes ? <span className="text-xs text-zinc-400">Carregando avaliações…</span>
-                    : avaliacoes.length === 0 ? <span className="text-xs text-zinc-400">Sem avaliações registradas</span>
-                    : <>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <Star key={n} className={cn("w-4 h-4", n <= Math.round(vm.avaliacao ?? 0) ? "text-yellow-400 fill-yellow-400" : "text-zinc-700")} />
-                  ))}
-                  <span className="text-sm text-zinc-500 ml-1">{(vm.avaliacao ?? 0).toFixed(1)}</span>
-                  <span className="text-xs text-zinc-600 ml-1">({avaliacoes.length} aval.)</span>
-                    </>}
+                    : <ScoreRede score={dataAvaliacoes.score ?? vm.score} className="text-sm" />}
                 </div>
               </div>
             </div>
@@ -358,12 +368,12 @@ export default function VideomakerDetalhePage() {
                   <option value="inativo">Inativo</option>
                   <option value="pendente">Pendente</option>
                 </select>
-              ) : (
+              ) : foraDaLista ? null : (
                 <span className={cn("text-xs font-medium px-3 py-1 rounded-full", cfg.class)}>
                   {cfg.label}
                 </span>
               )}
-              {!editing && !vm.emListaNegra && (
+              {!editing && !vm.emListaNegra && !foraDaLista && (
                 <button
                   onClick={() => setShowNegraModal(true)}
                   className="flex items-center gap-1 text-xs border border-red-900 text-red-500 hover:bg-red-900/20 px-2 py-1 rounded-lg transition-colors"
@@ -393,7 +403,7 @@ export default function VideomakerDetalhePage() {
               {editing ? (
                 <input aria-label="Telefone" value={form.telefone as string} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={`${inp} flex-1`} />
               ) : (
-                <span>{vm.telefone || "—"}</span>
+                <span>{vm.naLista === false ? "Aparece quando o profissional aceitar o convite da sua empresa" : vm.telefone || "—"}</span>
               )}
             </div>
 
@@ -402,7 +412,7 @@ export default function VideomakerDetalhePage() {
               {editing ? (
                 <input aria-label="E-mail" type="email" value={form.email as string} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`${inp} flex-1`} />
               ) : (
-                <span>{vm.email || "—"}</span>
+                <span>{vm.naLista === false ? "—" : vm.email || "—"}</span>
               )}
             </div>
 
@@ -533,10 +543,11 @@ export default function VideomakerDetalhePage() {
         </div>
 
         {/* Empresa dele: some para quem não é gestão (a rota responde 404). */}
-        <EmpresaDele videomakerId={id} />
+        {/* "Empresa dele" é do vínculo: perfil aberto pela rede não tem. */}
+        {!foraDaLista && <EmpresaDele videomakerId={id} />}
 
         {/* Pode Editar */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+        {!foraDaLista && <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-zinc-200">Pode Editar</p>
@@ -550,10 +561,10 @@ export default function VideomakerDetalhePage() {
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${vm.podeEditar ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Tipo de Contrato */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+        {!foraDaLista && <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-zinc-200">Tipo de Contrato</p>
@@ -579,26 +590,26 @@ export default function VideomakerDetalhePage() {
               })}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Avaliação */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-semibold text-zinc-100 flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-400" />
-              Avaliações ({avaliacoes.length})
+              Avaliações da sua empresa ({avaliacoes.length})
             </h3>
-            <button
+            {vm.naLista !== false && <button
               onClick={loadQR}
               className="flex items-center gap-1.5 text-xs border border-zinc-700 text-zinc-400 hover:bg-zinc-800 px-3 py-1.5 rounded-lg"
             >
               <Share2 className="h-3.5 w-3.5" />
               Link para cliente
-            </button>
+            </button>}
           </div>
 
-          {/* Nova avaliação */}
-          <div className="bg-zinc-800/50 rounded-xl p-4 mb-5">
+          {/* Nova avaliação: só quem tem o profissional na lista avalia */}
+          {vm.naLista !== false && <div className="bg-zinc-800/50 rounded-xl p-4 mb-5">
             <p className="text-xs text-zinc-500 font-medium mb-3">Registrar avaliação interna</p>
             <div className="flex items-center gap-1 mb-3">
               {[1, 2, 3, 4, 5].map((n) => (
@@ -626,7 +637,11 @@ export default function VideomakerDetalhePage() {
               <Star className="h-3.5 w-3.5" />
               {enviandoAvaliacao ? "Salvando..." : "Registrar"}
             </button>
-          </div>
+          </div>}
+
+          <p className="text-xs text-zinc-500 mb-3">
+            Os comentários ficam só com a sua empresa e com o profissional. As outras empresas da rede veem apenas a média e a quantidade de avaliações.
+          </p>
 
           {/* Histórico */}
           {avaliacoes.length === 0 ? (

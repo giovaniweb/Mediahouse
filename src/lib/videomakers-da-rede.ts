@@ -23,6 +23,10 @@ import { parseToken } from "@/lib/equipe-token"
 export const FORA_DA_REDE =
   "Este videomaker não é da sua empresa. A sua empresa trabalha só com os próprios videomakers."
 
+/** Resposta das rotas da busca e do convite da rede quando a empresa não tem o módulo. */
+export const SEM_MODULO_REDE =
+  "A busca na rede de videomakers não está ligada para a sua empresa."
+
 /** A empresa enxerga os videomakers da rede? */
 export function empresaVeRede(organizacaoId: string | null | undefined): Promise<boolean> {
   return moduloAtivo(organizacaoId, "rede")

@@ -94,9 +94,12 @@ export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
   cutflow: ["/cutflow", "/api/cutflow"],
   // Sem tela própria: o conversor roda por trás (src/lib/midia-worker.ts).
   conversao: [],
-  // Sem rota própria: a rede some de dentro das listas, buscas e da escala
-  // (src/lib/videomakers-da-rede.ts), não de uma página.
-  rede: [],
+  // A busca da rede e o convite (Onda 2B) são do módulo: sem ele, a tela some
+  // do menu e dos botões e as duas rotas respondem 403. O resto da rede some de
+  // dentro das listas, buscas e da escala (src/lib/videomakers-da-rede.ts).
+  // A rota do PROFISSIONAL (/api/me/rede: convites, contestar, sair da rede)
+  // fica de fora: é dele, não da empresa que o convidou.
+  rede: ["/videomakers/rede", "/api/rede/videomakers", "/api/rede/convites"],
 }
 
 /** A que módulo um caminho pertence, se pertencer a algum. */

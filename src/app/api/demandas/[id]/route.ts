@@ -265,8 +265,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // vínculo, e aí qualquer um viraria "da empresa". Quem já está no card fica.
   const vmEscolhido = typeof body.videomakerId === "string" ? body.videomakerId : ""
   const edEscolhido = typeof body.editorId === "string" ? body.editorId : ""
+  let vmNoCard: string | null = null
   if (vmEscolhido || edEscolhido) {
     const noCard = await prisma.demanda.findUnique({ where: { id }, select: { videomakerId: true, editorId: true } })
+    vmNoCard = noCard?.videomakerId ?? null
     if (!(await pessoaDoSlotLiberada(guard.organizacaoId, vmEscolhido, "captacao", noCard?.videomakerId))) {
       return erroDeCampo("videomakerId", FORA_DA_REDE)
     }
@@ -279,14 +281,19 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.
   try {
     if (typeof body.videomakerId === "string" && body.videomakerId.includes(":")) {
-      body.videomakerId = await resolveParaVideomaker(body.videomakerId, guard.organizacaoId)
+      // Quem já está no card fica, mesmo sem estar na lista (card de antes da
+      // Onda 2B): salvar o card de novo não pode derrubá-lo.
+      body.videomakerId = vmNoCard && body.videomakerId === `vm:${vmNoCard}`
+        ? vmNoCard
+        : await resolveParaVideomaker(body.videomakerId, guard.organizacaoId)
     }
     if (typeof body.editorId === "string" && body.editorId.includes(":")) {
       body.editorId = await resolveParaEditor(body.editorId, guard.organizacaoId)
     }
   } catch (e) {
     console.error("[Demanda PUT] Erro ao resolver atribuição:", e)
-    return NextResponse.json({ error: "Erro ao resolver a pessoa atribuída" }, { status: 400 })
+    const msg = e instanceof Error && e.message.includes("lista da sua empresa") ? e.message : "Erro ao resolver a pessoa atribuída"
+    return NextResponse.json({ error: msg }, { status: 400 })
   }
 
   if (body.statusVisivel) {

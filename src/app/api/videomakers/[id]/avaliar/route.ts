@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
+import { avaliacoesVideomakerDaEmpresa, scoreDaRede } from "@/lib/rede"
 import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 
 // Avaliação INTERNA de videomaker — quem contratou dando a nota.
@@ -36,10 +37,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: `Comentário com até ${LIMITE_COMENTARIO_AVALIACAO} caracteres.` }, { status: 400 })
   }
 
-  const vm = await prisma.videomaker.findUnique({ where: { id }, select: { id: true } })
-  if (!vm) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
-  // Sem a rede (módulo "rede"), avalia-se só quem é da empresa ou trabalhou num card dela.
-  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
+  // Só avalia quem tem o profissional na lista (Política de Avaliações, seção 2):
+  // uma empresa que só o encontrou na rede não pode mexer na média dele.
+  const vm = await prisma.videomaker.findFirst({ where: { id, vinculos: { some: { organizacaoId } } }, select: { id: true } })
+  if (!vm) return NextResponse.json({ error: "Só a empresa que trabalha com este profissional pode avaliá-lo." }, { status: 404 })
 
   const avaliacao = await prisma.avaliacaoVideomaker.create({
     data: {
@@ -61,17 +62,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // GET /api/videomakers/[id]/avaliar — listar avaliações
 //
-// Duas coisas com regras diferentes na mesma tela:
+// Duas coisas com regras diferentes na mesma tela (Política de Avaliações):
 //
-//   a NOTA agregada é da REDE — é a reputação que o profissional carrega de uma
-//   empresa para a outra, e é o que dá valor ao marketplace. Calculada sobre
-//   todas as avaliações, sem recorte.
+//   a NOTA agregada é da REDE — média dos últimos 24 meses, a partir de 3
+//   avaliações, sem as que estão contestadas (lib/rede, função score_rede).
 //
-//   o COMENTÁRIO é de quem contratou. "Sumiu no dia da gravação" é observação
-//   interna, e até a Fase 2 qualquer empresa que abrisse o perfil lia o que a
-//   outra tinha escrito. Agora a lista traz o que é desta empresa mais o que
-//   veio por QR público — que não tem dono porque é o cliente final falando, e
-//   isso pertence à rede.
+//   o COMENTÁRIO é de quem contratou. Antes, esta lista trazia também os
+//   comentários das avaliações por QR sem dono, e eles apareciam para todas as
+//   empresas. Agora só os desta empresa (lib/rede).
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -79,29 +77,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!organizacaoId) return semOrg()
 
   const { id } = await params
+  // Sem a rede (módulo "rede"), o score de quem não é da empresa nem esteve num
+  // card dela não aparece: é o mesmo recorte do perfil.
+  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
 
-  const [avaliacoes, { _avg, _count }] = await Promise.all([
-    prisma.avaliacaoVideomaker.findMany({
-      where: {
-        videomakerId: id,
-        OR: [{ organizacaoId }, { organizacaoId: null }],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.avaliacaoVideomaker.aggregate({
-      where: { videomakerId: id },
-      _avg: { nota: true },
-      _count: true,
-    }),
+  const [avaliacoes, score] = await Promise.all([
+    avaliacoesVideomakerDaEmpresa(id, organizacaoId),
+    scoreDaRede("videomaker", id),
   ])
 
-  // Média e total sobre TUDO — todas as empresas, sem o `take: 50`. Antes o
-  // limite silenciosamente virava o universo do cálculo, e a média da tela
-  // divergia da do perfil assim que o profissional passava de 50 avaliações.
-  return NextResponse.json({
-    avaliacoes,
-    media: Math.round((_avg.nota ?? 0) * 10) / 10,
-    total: _count,
-  })
+  return NextResponse.json({ avaliacoes, score, media: score.media, total: score.avaliacoes })
 }

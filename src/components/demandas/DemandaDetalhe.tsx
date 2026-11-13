@@ -52,6 +52,8 @@ import type { GrupoDaLista } from "@/lib/busca-na-lista"
 import { diaComHorarioMantido, diaDoCampo } from "@/lib/ficha-do-job"
 import { ROTULO_DA_ETAPA, acaoDaGravacao, etapaDaGravacao, rotuloDoTipoDeGravacao, vezNaGravacao } from "@/lib/etapas-da-gravacao"
 import { cn } from "@/lib/utils"
+import { ScoreRede } from "@/components/rede/ScoreRede"
+import type { ScoreRede as Score } from "@/lib/rede-score"
 import { toast } from "sonner"
 import { ChecklistSection } from "@/components/demandas/ChecklistSection"
 import { Comentarios } from "@/components/demandas/Comentarios"
@@ -226,7 +228,7 @@ function getDemandCopy(growth: boolean) {
   }
 }
 
-interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user" }
+interface EquipeOpcao { value: string; label: string; subtitle: string; tipoContrato: string; origem: "vm" | "ed" | "user"; score?: Score; scoreTexto?: string }
 interface ArquivoVideo { id: string; tipoArquivo: string; url: string; originalUrl?: string | null; nomeArquivo: string; sequencia: number | null; createdAt: string; thumbnailUrl?: string | null }
 
 /**
@@ -418,7 +420,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
   const opcoesEdicao = dataOpcoesEdicao?.opcoes ?? []
   // As listas com busca de videomaker e editor (EscolhaComBusca): os mesmos
   // grupos e o mesmo "Nome · Cidade" do <select> que elas substituem.
-  const paraOpcao = (o: EquipeOpcao, extra?: string | null) => ({ value: o.value, label: o.label, detalhe: o.subtitle || null, extra })
+  // O score da rede (Onda 2B) vai como marca, fora da busca: "★ 4,6 · 12 avaliações".
+  const paraOpcao = (o: EquipeOpcao, extra?: string | null) => ({
+    value: o.value, label: o.label, detalhe: o.subtitle || null,
+    extra: [extra, o.scoreTexto ? ` · ${o.scoreTexto}` : null].filter(Boolean).join("") || null,
+  })
   const gruposCaptacao: GrupoDaLista[] = [
     { rotulo: "Externos (freelance)", opcoes: opcoesCaptacao.filter((o) => o.tipoContrato === "externo").map((o) => paraOpcao(o)) },
     { rotulo: "Internos / Social", opcoes: opcoesCaptacao.filter((o) => o.tipoContrato !== "externo")
@@ -1830,6 +1836,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                       <CheckCircle2 className="w-3 h-3" /> {demanda.videomaker.nome}
                       {demanda.videomaker.cidade ? ` · ${demanda.videomaker.cidade}` : ""}
                     </p>
+                    {(() => {
+                      const escolhido = opcoesCaptacao.find(o => o.value === `vm:${demanda.videomaker!.id}`)
+                      return escolhido ? <ScoreRede score={escolhido.score} /> : null
+                    })()}
                     {demanda.videomaker.telefone && (
                       <QuickWhatsapp
                         telefone={demanda.videomaker.telefone}
