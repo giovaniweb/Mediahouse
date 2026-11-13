@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { scoresDaRede } from "@/lib/rede"
+import { empresaVeRede, SEM_MODULO_REDE } from "@/lib/videomakers-da-rede"
 
 // GET /api/rede/videomakers?cidade=&uf=&especialidade=
 //
@@ -18,6 +19,8 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
+  // Busca na rede é do módulo "rede" (pago, por empresa).
+  if (!(await empresaVeRede(organizacaoId))) return NextResponse.json({ error: SEM_MODULO_REDE }, { status: 403 })
 
   const sp = req.nextUrl.searchParams
   const cidade = sp.get("cidade")?.trim().slice(0, 80) || ""

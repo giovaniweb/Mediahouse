@@ -5,6 +5,7 @@ import { recalcularMediaVideomaker } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 import { avaliacoesVideomakerDaEmpresa, scoreDaRede } from "@/lib/rede"
+import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 
 // Avaliação INTERNA de videomaker — quem contratou dando a nota.
 //
@@ -76,6 +77,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!organizacaoId) return semOrg()
 
   const { id } = await params
+  // Sem a rede (módulo "rede"), o score de quem não é da empresa nem esteve num
+  // card dela não aparece: é o mesmo recorte do perfil.
+  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
 
   const [avaliacoes, score] = await Promise.all([
     avaliacoesVideomakerDaEmpresa(id, organizacaoId),

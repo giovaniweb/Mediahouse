@@ -23,6 +23,8 @@ import { GET as escala } from "@/app/api/equipe-disponivel/route"
 
 const p = `rede-${randomUUID().slice(0, 8)}`
 const A = `${p}-a`, B = `${p}-b`, C = `${p}-c`
+// D não tem o módulo "rede" (pago, por empresa, #156): a busca e o convite não respondem.
+const D = `${p}-d`, uD = `${p}-ud`
 const uA = `${p}-ua`, uB = `${p}-ub`, uC = `${p}-uc`, uVm = `${p}-uvm`, uDono = `${p}-dono`
 const vm = `${p}-vm`, demandaA = `${p}-dem-a`
 const NOME_A = `Empresa Alfa ${p}`
@@ -40,9 +42,11 @@ const CHECKLIST_AV4 = [
 ].join("\n") + "\n\nQR-DO-SERVICO-A"
 
 beforeAll(async () => {
-  await db.organizacao.createMany({ data: [[A, NOME_A], [B, `Empresa Beta ${p}`], [C, `Empresa Gama ${p}`]].map(([id, nome]) => ({ id, nome, slug: id })) })
-  await db.usuario.createMany({ data: [uA, uB, uC, uVm, uDono].map(id => ({ id, nome: id, email: `${id}@teste.invalid`, tipo: id === uVm ? "videomaker" : "admin", senhaHash: "sintetico", superAdmin: id === uDono })) })
-  await db.usuarioOrganizacao.createMany({ data: [[uA, A], [uB, B], [uC, C], [uVm, A], [uDono, A]].map(([usuarioId, organizacaoId]) => ({ usuarioId, organizacaoId, papel: usuarioId === uVm ? "videomaker" : "admin", areas: [] })) })
+  await db.organizacao.createMany({ data: [[A, NOME_A], [B, `Empresa Beta ${p}`], [C, `Empresa Gama ${p}`], [D, `Empresa Delta ${p}`]].map(([id, nome]) => ({ id, nome, slug: id })) })
+  // A, B e C têm a rede ligada; D fica no padrão (desligado).
+  await db.moduloOrganizacao.createMany({ data: [A, B, C].map(organizacaoId => ({ organizacaoId, modulo: "rede", ativo: true })) })
+  await db.usuario.createMany({ data: [uA, uB, uC, uD, uVm, uDono].map(id => ({ id, nome: id, email: `${id}@teste.invalid`, tipo: id === uVm ? "videomaker" : "admin", senhaHash: "sintetico", superAdmin: id === uDono })) })
+  await db.usuarioOrganizacao.createMany({ data: [[uA, A], [uB, B], [uC, C], [uD, D], [uVm, A], [uDono, A]].map(([usuarioId, organizacaoId]) => ({ usuarioId, organizacaoId, papel: usuarioId === uVm ? "videomaker" : "admin", areas: [] })) })
   await db.videomaker.create({ data: {
     id: vm, nome: `Videomaker ${p}`, cidade: "Belo Horizonte", estado: "MG", telefone: "31999990000", email: `contato-${p}@teste.invalid`,
     redesSociais: [], areasAtuacao: ["institucional"], habilidades: ["Drone"], equipamentos: [], usuarioId: uVm,
@@ -65,8 +69,8 @@ beforeEach(() => { sessao.user = null })
 
 afterAll(async () => {
   await db.videomaker.deleteMany({ where: { id: vm } })
-  await db.organizacao.deleteMany({ where: { id: { in: [A, B, C] } } })
-  await db.usuario.deleteMany({ where: { id: { in: [uA, uB, uC, uVm, uDono] } } })
+  await db.organizacao.deleteMany({ where: { id: { in: [A, B, C, D] } } })
+  await db.usuario.deleteMany({ where: { id: { in: [uA, uB, uC, uD, uVm, uDono] } } })
   await db.$disconnect()
 })
 
@@ -125,6 +129,39 @@ describe("o que outra empresa vê", () => {
     expect(achado).toMatchObject({ cidade: "Belo Horizonte", estado: "MG", score: { media: 4, avaliacoes: 5 }, convitePendente: false })
     expect(Object.keys(achado)).not.toEqual(expect.arrayContaining(["telefone"]))
     for (const segredo of ["31999990000", `contato-${p}`, NOME_A]) expect(texto).not.toContain(segredo)
+  })
+})
+
+describe("módulo \"rede\" (pago, por empresa)", () => {
+  it("sem o módulo: a busca e o convite respondem 403 e nenhum convite nasce", async () => {
+    como(uD, D)
+    const busca = await buscaRede(get("/api/rede/videomakers"))
+    expect(busca.status).toBe(403)
+    expect(await busca.text()).not.toContain(vm)
+    expect((await convidar(post("/api/rede/convites", { videomakerId: vm }))).status).toBe(403)
+    expect(await db.conviteRede.count({ where: { organizacaoId: D } })).toBe(0)
+  })
+
+  it("com o módulo ligado depois: a mesma empresa busca e convida", async () => {
+    await db.moduloOrganizacao.create({ data: { organizacaoId: D, modulo: "rede", ativo: true } })
+    try {
+      como(uD, D)
+      const busca = await buscaRede(get("/api/rede/videomakers"))
+      expect(busca.status).toBe(200)
+      expect((await busca.json()).videomakers.map((v: { id: string }) => v.id)).toContain(vm)
+      expect((await convidar(post("/api/rede/convites", { videomakerId: vm }))).status).toBe(201)
+      // Desligado de novo: o convite já feito fica, mas não se faz outro nem se busca.
+      await db.moduloOrganizacao.updateMany({ where: { organizacaoId: D, modulo: "rede" }, data: { ativo: false } })
+      expect((await buscaRede(get("/api/rede/videomakers"))).status).toBe(403)
+    } finally {
+      await db.conviteRede.deleteMany({ where: { organizacaoId: D } })
+      await db.moduloOrganizacao.deleteMany({ where: { organizacaoId: D } })
+    }
+  })
+
+  it("a área do profissional não depende do módulo de quem convidou", async () => {
+    como(uVm, A, "videomaker")
+    expect((await minhaRede()).status).toBe(200)
   })
 })
 

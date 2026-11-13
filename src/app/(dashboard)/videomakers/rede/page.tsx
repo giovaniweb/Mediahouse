@@ -10,6 +10,7 @@ import { Header } from "@/components/layout/Header"
 import { ScoreRede } from "@/components/rede/ScoreRede"
 import type { ScoreRede as Score } from "@/lib/rede-score"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
 
 interface PerfilRede {
@@ -24,11 +25,15 @@ export default function RedePage() {
   const [local, setLocal] = useState("")
   const [especialidade, setEspecialidade] = useState("")
   const [enviando, setEnviando] = useState<string | null>(null)
+  // Busca na rede é do módulo "rede" (pago, por empresa). Sem ele, a tela não
+  // busca nada (a API responderia 403) e explica; o menu e os botões já somem.
+  const { data: me } = useMe()
+  const temRede = me?.modulos ? !!me.modulos.rede : null
 
   const [cidade, uf] = local ? local.split(" / ") : ["", ""]
   const qs = new URLSearchParams({ ...(cidade ? { cidade } : {}), ...(uf ? { uf } : {}), ...(especialidade ? { especialidade } : {}) })
   const { data, error, isLoading, mutate } = useSWR<{ videomakers: PerfilRede[]; filtros: { cidades: string[]; especialidades: string[] } }>(
-    `/api/rede/videomakers?${qs}`, fetcher, { keepPreviousData: true },
+    temRede ? `/api/rede/videomakers?${qs}` : null, fetcher, { keepPreviousData: true },
   )
   const lista = data?.videomakers ?? []
 
@@ -51,6 +56,20 @@ export default function RedePage() {
   }
 
   const sel = "bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-200 outline-none focus:ring-2 focus:ring-purple-500/30"
+
+  if (temRede === false) {
+    return (
+      <>
+        <Header title="Encontrar na rede" />
+        <main className={styles.page}>
+          <Link href="/videomakers" className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 mb-4">
+            <ArrowLeft className="w-3.5 h-3.5" /> Videomakers da sua lista
+          </Link>
+          <p className="text-sm text-zinc-400">A busca na rede de videomakers não está ligada para a sua empresa.</p>
+        </main>
+      </>
+    )
+  }
 
   return (
     <>

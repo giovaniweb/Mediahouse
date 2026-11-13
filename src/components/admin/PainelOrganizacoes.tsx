@@ -193,6 +193,8 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
   const [adminTexto, setAdminTexto] = useState("")
   const [admin, setAdmin] = useState<PessoaAchada | null>(null)
   const [adminNome, setAdminNome] = useState("")
+  // Videomakers da rede: recurso pago, nasce desligado (módulo "rede").
+  const [veRede, setVeRede] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [criada, setCriada] = useState<Criada | null>(null)
   const emailDigitado = !admin && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminTexto.trim())
@@ -210,6 +212,7 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
           ...(admin ? { adminUsuarioId: admin.id } : { adminEmail: adminTexto.trim(), adminNome }),
           ...(slug.trim() ? { slug: slug.trim() } : {}),
           ...(prefixo.trim() ? { prefixoCodigo: prefixo.trim() } : {}),
+          veRede,
         }),
       })
       if (!res.ok) throw await erroDaResposta(res)
@@ -284,6 +287,21 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
         placeholder="gerado a partir do nome"
         ajuda="Vira o endereço da área pública da empresa: /c/slug. Só minúsculas, números e hífen."
       />
+      <label className="flex items-start gap-2 rounded-lg border border-zinc-800 px-3 py-2">
+        <input
+          type="checkbox"
+          checked={veRede}
+          onChange={(e) => setVeRede(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-indigo-500"
+        />
+        <span>
+          <span className="block text-sm text-zinc-200">Pode ver os videomakers da rede</span>
+          <span className="block text-xs text-zinc-500">
+            Ver, buscar e escalar os videomakers da rede do NuFlow que não são da empresa. Desmarcado, a empresa
+            trabalha só com os próprios. Dá para mudar depois em Módulos.
+          </span>
+        </span>
+      </label>
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Cancelar</button>
         <button

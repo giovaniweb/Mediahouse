@@ -6,6 +6,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { sendEmailNotificacao } from "@/lib/email"
+import { empresaVeRede, SEM_MODULO_REDE } from "@/lib/videomakers-da-rede"
 
 // POST /api/rede/convites — a empresa convida um videomaker da rede para entrar
 // na lista dela. O profissional aceita ou recusa na área dele
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
   if (!ehGestor(session)) return NextResponse.json({ error: "Só quem gerencia a equipe convida profissionais." }, { status: 403 })
+  // Convidar pela rede é do módulo "rede" (pago, por empresa).
+  if (!(await empresaVeRede(organizacaoId))) return NextResponse.json({ error: SEM_MODULO_REDE }, { status: 403 })
 
   const parsed = schema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: "Escolha o profissional a convidar." }, { status: 400 })

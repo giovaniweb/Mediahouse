@@ -28,6 +28,8 @@ const params = { params: Promise.resolve({ id: vm }) }
 
 beforeAll(async () => {
   await admin.organizacao.createMany({ data: [[A, NOME_A], [B, `Empresa Beta ${p}`]].map(([id, nome]) => ({ id, nome, slug: id })) })
+  // As duas com o módulo "rede" (pago, por empresa); sem ele, B nem busca.
+  await admin.moduloOrganizacao.createMany({ data: [A, B].map(organizacaoId => ({ organizacaoId, modulo: "rede", ativo: true })) })
   await admin.usuario.createMany({ data: [uA, uB, uVm].map(id => ({ id, nome: id, tipo: id === uVm ? "videomaker" : "admin", senhaHash: "sintetico" })) })
   await admin.usuarioOrganizacao.createMany({ data: [[uA, A], [uB, B], [uVm, A]].map(([usuarioId, organizacaoId]) => ({ usuarioId, organizacaoId, papel: usuarioId === uVm ? "videomaker" : "admin", areas: [] })) })
   await admin.videomaker.create({ data: { id: vm, nome: `Videomaker ${p}`, cidade: "Sete Lagoas", estado: "MG", telefone: "31988887777", redesSociais: [], areasAtuacao: [], habilidades: ["Drone"], equipamentos: [], usuarioId: uVm } })

@@ -45,7 +45,10 @@ export async function GET() {
 }
 
 // POST /api/admin/organizacoes — cria a empresa pronta para usar (super-admin).
-// body: { nome, slug?, prefixoCodigo?, adminNome, adminEmail }
+// body: { nome, slug?, prefixoCodigo?, adminNome, adminEmail, veRede? }
+//
+// `veRede`: a empresa vê e escala os videomakers da rede (módulo "rede", pago).
+// Sem marcar, nasce só com os próprios videomakers.
 //
 // Uma transação só (Onda 2A): empresa, pacote inicial (departamentos, tipos,
 // checklists, linha "Geral"), administrador e o link de primeiro acesso dele.
@@ -118,6 +121,9 @@ export async function POST(req: NextRequest) {
       select: { id: true, nome: true, slug: true, ativo: true, createdAt: true, prefixoCodigo: true },
     })
     const pacote = await semearPacoteInicial(tx, org.id)
+    // Linha explícita, ligada ou não: na tela de módulos aparece como decidido
+    // na criação, e não como "seguindo o padrão".
+    await tx.moduloOrganizacao.create({ data: { organizacaoId: org.id, modulo: "rede", ativo: body.veRede === true } })
 
     const usuario = existente ?? await tx.usuario.create({
       data: { nome: adminNome, email: adminEmail, senhaHash: SENHA_PENDENTE, tipo: "admin" },

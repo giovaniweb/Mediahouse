@@ -16,6 +16,7 @@ import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
 import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
+import { FORA_DA_REDE, pessoaDoSlotLiberada } from "@/lib/videomakers-da-rede"
 import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
@@ -119,6 +120,11 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   // Token unificado da equipe (ed:/vm:/user:) → id real do editor, mesmo caminho
   // que o PUT já usava. Cria o registro espelho quando a pessoa vem de outra tabela.
   let editorIdResolvido: string | undefined = data.editorId || undefined
+  // Sem a rede (módulo "rede"), só gente da empresa, com qualquer prefixo —
+  // conferido antes de resolver, que cria o vínculo.
+  if (editorIdResolvido && !(await pessoaDoSlotLiberada(organizacaoId, editorIdResolvido, "edicao"))) {
+    return erroDeCampo("editorId", FORA_DA_REDE)
+  }
   if (editorIdResolvido?.includes(":")) {
     try {
       editorIdResolvido = await resolveParaEditor(editorIdResolvido, organizacaoId)
@@ -133,6 +139,11 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   // Videomaker. O formulário de criação nunca tinha oferecido o campo, então o
   // caminho nunca chegou a ser exercitado.
   let videomakerIdResolvido: string | undefined = data.videomakerId || undefined
+  // Sem a rede (módulo "rede"), o card nasce só com videomaker da empresa —
+  // conferido antes de resolver, que cria o vínculo.
+  if (videomakerIdResolvido && !(await pessoaDoSlotLiberada(organizacaoId, videomakerIdResolvido, "captacao"))) {
+    return erroDeCampo("videomakerId", FORA_DA_REDE)
+  }
   if (videomakerIdResolvido?.includes(":")) {
     try {
       videomakerIdResolvido = await resolveParaVideomaker(videomakerIdResolvido, organizacaoId)

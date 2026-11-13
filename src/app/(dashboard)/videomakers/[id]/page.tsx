@@ -23,6 +23,8 @@ import { fetcher } from "@/lib/fetcher"
 import { ConviteAvaliacao } from "@/components/pessoas/ConviteAvaliacao"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 import { ScoreRede } from "@/components/rede/ScoreRede"
+import { useMe } from "@/hooks/usePermissoes"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -43,6 +45,9 @@ export default function VideomakerDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { data, error, isValidating, mutate } = useSWR(`/api/videomakers/${id}`, fetcher)
+  const { data: me } = useMe()
+  // "Convidar pela rede" é do módulo "rede": sem ele, o botão não aparece.
+  const temRede = !!me?.modulos && !rotaDeModuloDesligado("/videomakers/rede", me.modulos)
   const vm = data?.videomaker
 
   const [aprovando, setAprovando] = useState(false)
@@ -226,7 +231,7 @@ export default function VideomakerDetalhePage() {
               <ArrowLeft className="w-4 h-4" /> Voltar
             </button>
             {foraDaLista ? (
-              <Link
+              temRede && <Link
                 href="/videomakers/rede"
                 className="flex items-center gap-1.5 text-sm bg-purple-600 text-white hover:bg-purple-700 rounded-lg px-3 py-2"
               >

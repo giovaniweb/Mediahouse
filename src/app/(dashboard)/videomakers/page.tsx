@@ -12,6 +12,8 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { ScoreRede } from "@/components/rede/ScoreRede"
 import type { ScoreRede as Score } from "@/lib/rede-score"
 
@@ -46,6 +48,7 @@ export default function VideomakersPage() {
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
   const [busca, setBusca] = useState("")
   const { data, error, isLoading, isValidating, mutate } = useSWR("/api/videomakers", fetcher)
+  const { data: me } = useMe()
   const videomakers: Videomaker[] = data?.videomakers ?? []
 
   const lista = videomakers.filter((vm) => {
@@ -94,18 +97,21 @@ export default function VideomakersPage() {
     }
   }
 
+  // "Encontrar na rede" é do módulo "rede": espera o perfil e some sem ele.
+  const temRede = !!me?.modulos && !rotaDeModuloDesligado("/videomakers/rede", me.modulos)
+
   return (
     <>
       <Header
         title="Videomakers Externos"
         actions={
           <div className="flex items-center gap-2">
-          <Link
+          {temRede && <Link
             href="/videomakers/rede"
             className="flex items-center gap-2 border border-zinc-700 hover:bg-zinc-800 text-zinc-200 text-sm font-medium px-3 py-2 rounded-lg"
           >
             <Globe className="w-4 h-4" /> Encontrar na rede
-          </Link>
+          </Link>}
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg"
