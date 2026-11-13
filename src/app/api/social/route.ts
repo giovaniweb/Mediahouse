@@ -42,7 +42,8 @@ function resumoDoPedido(d: Pedido) {
     id: d.id, codigo: d.codigo, statusVisivel: d.statusVisivel, statusInterno: d.statusInterno,
     prioridade: d.prioridade, cobrancas: d.cobrancas, cobradoEm: d.cobradoEm, linkPostagem: d.linkPostagem,
     responsaveis: [...new Set([
-      ...d.responsaveis.map((r) => r.usuario.nome), d.responsavel?.nome,
+      // Com RLS, quem saiu da empresa some do join: usuario vem null.
+      ...d.responsaveis.map((r) => r.usuario?.nome), d.responsavel?.nome,
       d.videomaker?.nome, d.editor?.nome, d.designer?.nome,
     ].filter((n): n is string => !!n))],
     ultimaMudanca: d.historicos[0]?.createdAt ?? null,

@@ -51,7 +51,8 @@ interface DemandaCardProps {
     editor?: { nome: string } | null
     designer?: { nome: string } | null
     responsavel?: { nome: string } | null
-    responsaveis?: { usuario: { nome: string } }[]
+    // usuario vem null com RLS quando a pessoa saiu da empresa (o vínculo some).
+    responsaveis?: { usuario: { nome: string } | null }[]
     solicitante?: { nome: string } | null
     eventoGestao?: { id: string; nome: string } | null
     produtos?: { produto?: { nome: string } | null }[]
@@ -75,7 +76,7 @@ export function DemandaCard({ demanda, dragHandleProps, arrastavel = false, onDe
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
   const thumbnail = demanda.thumbnailUrl && (/^https?:\/\//i.test(demanda.thumbnailUrl) || /^\/(?!\/)/.test(demanda.thumbnailUrl)) ? demanda.thumbnailUrl : null
   const people = [...new Set([
-    ...(demanda.responsaveis ?? []).map(p => p.usuario.nome),
+    ...(demanda.responsaveis ?? []).map(p => p.usuario?.nome),
     demanda.responsavel?.nome, demanda.designer?.nome, demanda.videomaker?.nome, demanda.editor?.nome,
   ].filter((name): name is string => Boolean(name)))]
   const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase()
