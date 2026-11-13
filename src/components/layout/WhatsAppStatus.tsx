@@ -7,6 +7,8 @@ import Link from "next/link"
 
 type Status = "loading" | "connected" | "disconnected" | "error"
 
+const INTERVALO_MS = 60_000
+
 export function WhatsAppStatus() {
   const [status, setStatus] = useState<Status>("loading")
   // Avisos que não chegaram . Saber que a conexão caiu importa
@@ -15,8 +17,10 @@ export function WhatsAppStatus() {
 
   useEffect(() => {
     let mounted = true
+    let ultima = 0
 
     async function check() {
+      ultima = Date.now()
       try {
         const res = await fetch("/api/whatsapp/status")
         if (!res.ok) throw new Error("Status indisponível")
@@ -29,12 +33,19 @@ export function WhatsAppStatus() {
       }
     }
 
+    // A cada 60 s e só com a aba à vista: cada consulta é uma chamada paga na
+    // Vercel, e aba escondida não tem ninguém olhando o ponto verde. Ao voltar
+    // para a aba, confere na hora se a última consulta já envelheceu.
+    function seVisivel() {
+      if (document.visibilityState === "visible" && Date.now() - ultima >= INTERVALO_MS - 1_000) check()
+    }
     check()
-    // Re-check every 30 seconds
-    const interval = setInterval(check, 30000)
+    const interval = setInterval(seVisivel, INTERVALO_MS)
+    document.addEventListener("visibilitychange", seVisivel)
     return () => {
       mounted = false
       clearInterval(interval)
+      document.removeEventListener("visibilitychange", seVisivel)
     }
   }, [])
 

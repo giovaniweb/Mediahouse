@@ -141,7 +141,7 @@ function DemandasKanban() {
   params.set("offset", String((paginaFila-1)*100))
   const url = `/api/demandas?${params}`
 
-  const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 15000 })
+  const { data, mutate } = useSWR(url, fetcher, { refreshInterval: 30000 })
 
   // Tamanho da fila sem recorte nem filtro, para o topo dizer "18 de 240 na
   // fila" em vez de chamar o recorte de fila. Uma linha só: interessa o total.
