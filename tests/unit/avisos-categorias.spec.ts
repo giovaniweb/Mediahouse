@@ -69,6 +69,13 @@ describe("qual categoria é cada aviso", () => {
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:videomaker:abc" })).toBe("parabens")
     // Desde o #144 o parabéns sai uma vez na vida: "unico" no lugar do dia.
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:unico:videomaker:abc" })).toBe("parabens")
+    // Notas (#145/#148): para a operação é "Gravações externas"; para o videomaker é trabalho dele.
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:nota_recebida:2026-11-13:operacao:abc" })).toBe("gravacoes")
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:nota_lote:3:2026-11-13:operacao:abc" })).toBe("gravacoes")
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:nota_paga:2026-11-13:videomaker:abc" })).toBeNull()
+    expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:nota_lote:3:2026-11-13:videomaker:abc" })).toBeNull()
+    // Artes do cliente (#149): o cliente não é pessoa da equipe, nada se corta.
+    expect(categoriaDaSaida({ origem: "manual", chave: "arte:medica_confirmada:grav:d1:confirmada:2026-11-13:cliente:abc" })).toBeNull()
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:operacao:abc" })).toBe("gravacoes")
     expect(categoriaDaSaida({ origem: "manual", chave: "grav:d1:concluida:2026-11-12:cliente:abc" })).toBeNull()
   })
