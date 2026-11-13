@@ -246,7 +246,7 @@ export type JobParaLeitura = {
   editor?: { nome: string } | null
   designer?: { nome: string } | null
   responsavel?: { nome: string } | null
-  responsaveis?: { usuario: { nome: string } }[] | null
+  responsaveis?: { usuario: { nome: string } | null }[] | null
   gestor?: { nome: string } | null
   /** "design" é Growth: muda o vocabulário da próxima ação, não a etapa. */
   area?: string | null
@@ -258,7 +258,7 @@ function executor(job: JobParaLeitura): string | null {
     job.editor?.nome ??
     job.designer?.nome ??
     job.responsavel?.nome ??
-    job.responsaveis?.[0]?.usuario.nome ??
+    job.responsaveis?.[0]?.usuario?.nome ??
     null
   )
 }

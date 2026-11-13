@@ -26,7 +26,11 @@ vi.mock("@/lib/prisma", () => ({ prisma: db, prismaBase: db }))
 const orgPorCredencial = vi.fn()
 vi.mock("@/lib/org-por-credencial", () => ({ orgPorCredencial: (...a: unknown[]) => orgPorCredencial(...a) }))
 const declararOrg = vi.fn()
-vi.mock("@/lib/org-contexto", () => ({ declararOrg: (...a: unknown[]) => declararOrg(...a) }))
+const comOrg = vi.fn(async (_org: string, fn: () => Promise<unknown>) => fn())
+vi.mock("@/lib/org-contexto", () => ({
+  declararOrg: (...a: unknown[]) => declararOrg(...a),
+  comOrg: (org: string, fn: () => Promise<unknown>) => comOrg(org, fn),
+}))
 const moduloAtivo = vi.fn()
 vi.mock("@/lib/modulos-org", () => ({ moduloAtivo: (...a: unknown[]) => moduloAtivo(...a) }))
 const permissoesEfetivas = vi.fn()
@@ -118,7 +122,7 @@ describe("autenticação de toda chamada do plugin", () => {
   it("credencial que não casa (vencida, revogada, de ninguém): 401 e nada é declarado", async () => {
     orgPorCredencial.mockResolvedValue(null)
     expect(await status(await chamar())).toBe(401)
-    expect(declararOrg).not.toHaveBeenCalled()
+    expect(comOrg).not.toHaveBeenCalled()
     expect(db.cutflowSessao.findUnique).not.toHaveBeenCalled()
   })
 
@@ -145,11 +149,14 @@ describe("autenticação de toda chamada do plugin", () => {
     }
   })
 
-  it("tudo certo: declara a empresa e devolve o contexto; renova só se o último uso é antigo", async () => {
+  it("tudo certo: confere dentro da empresa da credencial e devolve o contexto; renova só se o último uso é antigo", async () => {
     sessaoValida()
     const ctx = await chamar()
     expect(ctx).toMatchObject({ organizacaoId: "org-A", usuarioId: "u-1", sessaoId: "s-1" })
-    expect(declararOrg).toHaveBeenCalledWith("org-A")
+    // As consultas da própria autenticação rodam em comOrg. Declarar para a ROTA
+    // é trabalho da rota (declararOrg no corpo dela): ver rota-sem-sessao.spec.
+    expect(comOrg).toHaveBeenCalledWith("org-A", expect.any(Function))
+    expect(declararOrg).not.toHaveBeenCalled()
     expect(orgPorCredencial).toHaveBeenCalledWith("cutflow_sessao", L.hashCutflow(TOKEN))
     expect(db.cutflowSessao.update).not.toHaveBeenCalled()
     sessaoValida({ ultimoUsoEm: new Date(Date.now() - 2 * 3600_000) })

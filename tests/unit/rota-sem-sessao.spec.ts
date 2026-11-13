@@ -58,10 +58,10 @@ describe("rota sem sessão declara a empresa", () => {
     const src = readFileSync(arquivo, "utf8")
     if (/\bawait auth\(\)/.test(src)) continue
     if (/import \{ requireAcesso \} from "@\/lib\/acesso"/.test(src) && /\bawait requireAcesso\(/.test(src)) continue
-    // Rotas do plugin Cutflow (30/09/2026): a sessão é Bearer, e quem declara a
-    // empresa é `autenticarCutflow`, antes de qualquer consulta — a garantia de
-    // que ela declara mesmo está no teste de lib/cutflow logo abaixo.
-    if (/import \{[^}]*\bautenticarCutflow\b[^}]*\} from "@\/lib\/cutflow"/.test(src) && /\bawait autenticarCutflow\(/.test(src)) continue
+    // Rotas do plugin Cutflow: a sessão é Bearer. Até 13/11/2026 ficavam
+    // dispensadas aqui porque `autenticarCutflow` "declarava a empresa" — e não
+    // declarava para a rota (ver o teste do enterWith logo abaixo). Agora caem na
+    // regra geral: declararOrg no corpo.
     if (/declararOrg\(|comOrg\(/.test(src)) continue
     const modelos = [...new Set([...src.matchAll(/\bprisma\.(\w+)\./g)].map((m) => m[1]))]
     if (!modelos.some((m) => escopado[m])) continue
@@ -85,16 +85,52 @@ describe("rota sem sessão declara a empresa", () => {
   })
 })
 
-describe("a autenticação do Cutflow declara a empresa antes de consultar", () => {
-  it("declararOrg vem depois da credencial e antes da primeira consulta por empresa", () => {
+describe("declararOrg só vale no corpo da rota", () => {
+  it("enterWith dentro de um helper async não volta para quem chamou", async () => {
+    const { AsyncLocalStorage } = await import("node:async_hooks")
+    const als = new AsyncLocalStorage<string>()
+    const helper = async () => { await new Promise((r) => setTimeout(r, 1)); als.enterWith("org-A"); await new Promise((r) => setTimeout(r, 1)) }
+    await als.run("antes", async () => {
+      await helper()
+      // Se isto um dia mudar no Node, o desenho continua certo — só fica redundante.
+      expect(als.getStore()).toBe("antes")
+    })
+  })
+
+  const semComentarios = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
+  it("nenhum helper de src/lib chama declararOrg — só rotas, no corpo", () => {
+    const helpers: string[] = []
+    const andar = (dir: string) => {
+      for (const nome of readdirSync(dir)) {
+        const caminho = join(dir, nome)
+        if (statSync(caminho).isDirectory()) andar(caminho)
+        else if (/\.tsx?$/.test(nome) && nome !== "org-contexto.ts" && /\bdeclararOrg\(/.test(semComentarios(readFileSync(caminho, "utf8")))) helpers.push(relative(RAIZ, caminho))
+      }
+    }
+    andar(join(RAIZ, "src/lib"))
+    expect(helpers, "use comOrg(id, fn) no helper e declararOrg no corpo da rota").toEqual([])
+  })
+
+  it("toda rota do Cutflow declara a empresa logo depois de autenticar", () => {
+    const semDeclarar: string[] = []
+    for (const arquivo of rotas(join(RAIZ, "src/app/api"))) {
+      const src = readFileSync(arquivo, "utf8")
+      const chamadas = src.split("await autenticarCutflow(").length - 1
+      const declaradas = src.match(/await autenticarCutflow\(req\)\n\s*if \(ctx instanceof NextResponse\) return ctx\n\s*declararOrg\(ctx\.organizacaoId\)/g)?.length ?? 0
+      if (chamadas !== declaradas) semDeclarar.push(relative(RAIZ, arquivo))
+    }
+    expect(semDeclarar).toEqual([])
+  })
+
+  it("a autenticação do Cutflow consulta dentro da empresa da credencial", () => {
     const src = readFileSync("src/lib/cutflow.ts", "utf8")
     const corpo = src.slice(src.indexOf("export async function autenticarCutflow"))
     const credencial = corpo.indexOf('orgPorCredencial("cutflow_sessao"')
-    const declara = corpo.indexOf("declararOrg(organizacaoId)")
+    const escopo = corpo.indexOf("comOrg(organizacaoId")
     const consulta = corpo.indexOf("prisma.")
     expect(credencial).toBeGreaterThan(-1)
-    expect(declara).toBeGreaterThan(credencial)
-    expect(consulta).toBeGreaterThan(declara)
+    expect(escopo).toBeGreaterThan(credencial)
+    expect(consulta).toBeGreaterThan(escopo)
   })
 })
 

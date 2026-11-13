@@ -27,7 +27,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
-import { declararOrg } from "@/lib/org-contexto"
+import { comOrg } from "@/lib/org-contexto"
 import { moduloAtivo } from "@/lib/modulos-org"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { podePermissao } from "@/lib/permissoes"
@@ -123,8 +123,18 @@ const recusa = (status: 401 | 403, error: string, extra: Record<string, unknown>
   NextResponse.json({ error, ...extra }, { status })
 
 /**
- * Confere a sessão do plugin e declara a empresa para o resto da requisição.
- * Devolve o contexto ou a resposta de recusa pronta.
+ * Confere a sessão do plugin e devolve o contexto ou a resposta de recusa pronta.
+ *
+ * NÃO declara a empresa para quem chamou. Até 13/11/2026 isto chamava
+ * `declararOrg` aqui dentro, e o comentário dizia que valia "para o resto da
+ * requisição". Não vale: `enterWith` dentro de uma função async some quando ela
+ * devolve, e a rota voltava ao contexto sem empresa. Com RLS ligado, o
+ * `/api/cutflow/eu` respondia `usuario: null, empresa: null` e a fila vinha
+ * vazia — achado no ensaio de novembro. Cada rota declara no próprio corpo:
+ *
+ *   const ctx = await autenticarCutflow(req)
+ *   if (ctx instanceof NextResponse) return ctx
+ *   declararOrg(ctx.organizacaoId)
  */
 export async function autenticarCutflow(req: { headers: Headers }): Promise<ContextoCutflow | NextResponse> {
   const cabecalho = req.headers.get("authorization") ?? ""
@@ -137,8 +147,10 @@ export async function autenticarCutflow(req: { headers: Headers }): Promise<Cont
   // Vencida, revogada ou de ninguém respondem igual: não dá para sondar.
   const organizacaoId = await orgPorCredencial("cutflow_sessao", tokenHash)
   if (!organizacaoId) return recusa(401, "Sessão do Cutflow vencida ou desconectada. Entre de novo.", { entrar: true })
-  declararOrg(organizacaoId)
+  return comOrg(organizacaoId, () => conferirSessao(tokenHash, organizacaoId))
+}
 
+async function conferirSessao(tokenHash: string, organizacaoId: string): Promise<ContextoCutflow | NextResponse> {
   const sessao = await prisma.cutflowSessao.findUnique({
     where: { tokenHash },
     select: { id: true, organizacaoId: true, usuarioId: true, nomeComputador: true, revogadaEm: true, expiraEm: true, ultimoUsoEm: true },

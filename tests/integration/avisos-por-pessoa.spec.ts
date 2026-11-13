@@ -60,7 +60,9 @@ beforeAll(async () => {
   await db.organizacao.create({ data: { id: org, nome: p, slug: p } })
   for (const g of Object.values(gente)) {
     await db.usuario.create({ data: { id: g.id, nome: g.id, email: g.email, tipo: g.papel as "admin", telefone: g.telefone, senhaHash: "sem-login" } })
-    await db.usuarioOrganizacao.create({ data: { usuarioId: g.id, organizacaoId: org, papel: g.papel as "admin", areas: ["audiovisual"] } })
+    await db.usuarioOrganizacao.create({ data: { usuarioId: g.id, organizacaoId: org, papel: g.papel as "admin",
+      // A Luisa pede arte do Growth: sem a área, o sino por escopo (#150) já esconde o card dela.
+      areas: g === gente.luisa ? ["audiovisual", "growth"] : ["audiovisual"] } })
   }
   await db.configWhatsapp.create({ data: { organizacaoId: org, instanceId: `${p}-inst`, instanceUrl: "https://example.invalid", apiKey: "api-nao-expor", ativo: true, webhookSecret: encryptSecret("segredo") } })
   for (const [id, gestorId] of [[cardDoThalisson, gente.thalisson.id], [cardDosOutros, gente.giovani.id]]) {
