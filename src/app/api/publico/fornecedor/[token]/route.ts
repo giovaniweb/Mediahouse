@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   })
   const msg = `🧾 *NuFlow Eventos* — ${fornecedor.nome} enviou documento para "${custo.descricao}" (evento ${custo.evento.nome}).`
   for (const g of gestores) {
-    if (g.telefone) await sendWhatsappMessage(g.telefone, msg, undefined, orgId).catch(() => null)
+    if (g.telefone) await sendWhatsappMessage(g.telefone, msg, undefined, orgId, { aviso: "eventos" }).catch(() => null)
   }
 
   return NextResponse.json({ ok: true, url: comToken(url, token) }, { headers: { "Cache-Control": "private, no-store" } })

@@ -26,14 +26,14 @@ interface Demanda {
   editor?: { nome: string } | null
   designer?: { nome: string } | null
   responsavel?: { nome: string } | null
-  responsaveis?: { usuario: { nome: string } }[]
+  responsaveis?: { usuario: { nome: string } | null }[]
   produtos?: { produto: { nome: string } }[]
 }
 
 // Quem fez, em qualquer departamento: no vídeo, videomaker e editor; na arte,
 // designer e responsáveis. Uma coluna só em vez de uma por papel.
 function quemFez(d: Demanda): string {
-  const nomes = [d.videomaker?.nome, d.editor?.nome, d.designer?.nome, d.responsavel?.nome, ...(d.responsaveis ?? []).map(r => r.usuario.nome)]
+  const nomes = [d.videomaker?.nome, d.editor?.nome, d.designer?.nome, d.responsavel?.nome, ...(d.responsaveis ?? []).map(r => r.usuario?.nome)]
   return [...new Set(nomes.filter((n): n is string => !!n))].join(", ")
 }
 

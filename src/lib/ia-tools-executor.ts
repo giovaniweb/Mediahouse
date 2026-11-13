@@ -737,7 +737,7 @@ async function criarDemandaRascunho(input: Record<string, unknown>, organizacaoI
         await enviarAuditado(
           g.telefone,
           `🔔 *Nova Demanda via WhatsApp!*\n\n📋 *${codigo}* — ${demanda.titulo}\n👤 ${nomeSolicitante || "Desconhecido"} (${telSolicitante || "sem tel"})\n${origemLabel}\n\nAcesse o sistema para aprovar.`,
-          demanda.id, organizacaoId
+          demanda.id, organizacaoId, { aviso: "pedidos" }
         ).catch(() => null)
       }
     }

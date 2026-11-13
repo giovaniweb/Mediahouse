@@ -19,6 +19,7 @@ import { registrarServicoPendente } from "@/lib/custo-servico"
 import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { StatusInterno } from "@prisma/client"
+import { categoriaDoKanban } from "@/lib/avisos-categorias"
 
 // Mudança de status de uma demanda (30/09/2026: corpo movido, sem alteração, de
 // app/api/demandas/[id]/status/route.ts). Saiu da rota para o Cutflow — o plugin
@@ -338,7 +339,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
       telefoneVideomaker: demandaAtual.videomaker?.telefone ?? null,
       telefoneEditor: demandaAtual.editor?.whatsapp ?? demandaAtual.editor?.telefone ?? null,
       telefonesExecutores: [
-        ...demandaAtual.responsaveis.map((r) => r.usuario.telefone),
+        // Com RLS, quem saiu da empresa vem sem usuario: fica de fora do aviso.
+        ...demandaAtual.responsaveis.map((r) => r.usuario?.telefone),
         demandaAtual.responsavel?.telefone ?? null,
         demandaAtual.designer?.whatsapp ?? demandaAtual.designer?.telefone ?? null,
       ].filter((t): t is string => !!t),
@@ -419,7 +421,7 @@ async function notificarMudancaKanban(aviso: Omit<DadosAvisoKanban, "telefonesGe
     })
 
     await Promise.allSettled(
-      destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId, { arte: d.arte }))
+      destinatarios.filter((d) => !soEditor || d.papel === "editor").map((d) => sendWhatsappMessage(d.telefone, d.mensagem, demandaId, organizacaoId, { arte: d.arte, aviso: categoriaDoKanban(d.papel) }))
     )
     // Parabéns de job finalizado, para quem executou (lib/kanban-avisos.ts). A
     // gravação externa tem o dela, na conclusão (lib/avisos-gravacao-textos.ts).
