@@ -23,6 +23,9 @@ export function whereDoQuadro(quadro: QuadroDoCard, organizacaoId: string): Pris
   }
   const jobs: Prisma.DemandaWhereInput = {
     OR: [
+      // Espelho automático (o videomaker da dona trabalha por esta empresa):
+      // sempre Gravação Externa, como em quadroDoCard.
+      { compartilhamentos: { some: { organizacaoDestinoId: organizacaoId, revogadoEm: null, porVideomakerId: { not: null } } } },
       { videomakerId: { not: null }, NOT: { videomaker: interno } },
       { videomakerId: null, OR: [{ tipoVideo: TIPO_COBERTURA }, { departamento: DEPARTAMENTO_COBERTURA }] },
     ],

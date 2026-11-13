@@ -35,7 +35,7 @@ export async function notificarLideresAudiovisual(
         },
       }).catch(() => null)
       if (l.usuario.telefone) {
-        await sendWhatsappMessage(l.usuario.telefone, msg, undefined, organizacaoId, { arte: "fila" }).catch(() => null)
+        await sendWhatsappMessage(l.usuario.telefone, msg, undefined, organizacaoId, { arte: "fila", aviso: "pedidos", card: demandaId }).catch(() => null)
       }
     }
   } catch (e) {

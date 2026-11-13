@@ -15,11 +15,18 @@
 // Três travas, e cada uma resolve uma parte:
 //   1. Um Pool por papel, guardado em `globalThis`: as duas avaliações do Next
 //      caem no mesmo Pool.
-//   2. Teto por papel (app 10, auth 5, admin 5), ociosa fechando em 5 s, e no
+//   2. Teto por papel (app 10, auth 5, admin 5), ociosa fechando em 1 s, e no
 //      máximo 10 s de espera por uma conexão livre — espera maior vira erro,
 //      não função pendurada até o limite da Vercel.
 //   3. `attachDatabasePool` segura a instância acordada até as ociosas
 //      fecharem, antes de a Vercel congelá-la. Fora da Vercel não faz nada.
+//
+// A ociosa curta é custo: o `attachDatabasePool` segura a instância acordada
+// por ociosa + 0,1 s depois de CADA devolução de conexão, e a Vercel cobra a
+// memória da instância acordada. Com 5 s, cada consulta do sino ou do quadro
+// pagava 5 s de memória; de 05 a 11/11/2026 a "Fluid Provisioned Memory" foi
+// de ~US$ 0,06 para ~US$ 0,60 por dia sem mais acessos. Com 1 s, as consultas
+// de uma mesma tela (que chegam juntas) ainda reaproveitam a conexão.
 //
 // Os papéis não dividem Pool, nem quando a URL é a mesma (RLS desligado): uma
 // transação do app que consulte o auth por dentro pega a conexão do Pool do
@@ -37,7 +44,7 @@ type Tipo = "app" | "auth" | "admin"
 type Env = Readonly<Record<string, string | undefined>>
 
 export const LIMITE_POOL: Record<Tipo, number> = { app: 10, auth: 5, admin: 5 }
-export const TEMPOS_POOL = { idleTimeoutMillis: 5_000, connectionTimeoutMillis: 10_000 } as const
+export const TEMPOS_POOL = { idleTimeoutMillis: 1_000, connectionTimeoutMillis: 10_000 } as const
 
 const globalParaPools = globalThis as unknown as { nuflowPools?: Map<string, Pool> }
 

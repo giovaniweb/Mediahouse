@@ -9,6 +9,7 @@ import { momentoDoJob } from "@/lib/ficha-do-job"
 import { comToken } from "@/lib/midia"
 import { comOrg, declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
+import { avisarEspelhoNovo } from "@/lib/espelho-do-videomaker"
 
 const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
 
@@ -119,10 +120,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       // A página manda junto do Aceitar: a linha dos termos estava à vista (Onda 3).
       aceiteTermos: z.literal(true).optional(),
     }).strict().parse(await req.json())
-    return resposta(await comOrg(organizacaoId, () => prisma.$transaction(tx => responderConvite(tx, {
+    const { espelho, ...r } = await comOrg(organizacaoId, () => prisma.$transaction(tx => responderConvite(tx, {
       organizacaoId, token, ...e, origem: "automacao",
       ...(aceiteTermos && e.acao === "aceitar" ? { aceiteTermos: { ipHash: hashDoIp(req.headers) } } : {}),
-    }))))
+    })))
+    avisarEspelhoNovo(espelho) // depois do commit
+    return resposta(r)
   } catch (e) {
     if (e instanceof ConviteInvalido) return resposta({ error: e.message }, e.status)
     if (e instanceof ZodError || e instanceof SyntaxError) return resposta({ error: "Ação inválida" }, 400)

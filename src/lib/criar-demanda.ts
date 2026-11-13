@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { garantirEspelhoEAvisar } from "@/lib/espelho-do-videomaker"
 import type { Session } from "next-auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
@@ -21,6 +22,7 @@ import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
+import type { CategoriaAviso } from "@/lib/avisos-categorias"
 
 // Mensagens explícitas em português: sem elas o zod devolve o texto padrão em
 // inglês ("String must contain at least 3 character(s)"), que chegava a aparecer
@@ -296,6 +298,9 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
 
   if (data.ideiaId) await ligarIdeiaAoPedido(data.ideiaId, demanda)
 
+  // Videomaker que trabalha por uma empresa: o card nasce lá também.
+  if (demanda.videomakerId) await garantirEspelhoEAvisar(demanda.id)
+
   // Vincular produto(s) — multi-seleção, validando que pertencem à org (sem cross-org).
   const produtoIds = Array.from(new Set([
     ...(data.produtoIds ?? []),
@@ -340,8 +345,11 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
 
   // Auto-populate checklist a partir de templates
   try {
+    // Só os modelos DESTA empresa. Até 13/11/2026 faltava o filtro, e sem RLS a
+    // demanda herdava o checklist de qualquer empresa (achado no ensaio do RLS).
     const templates = await prisma.checklistTemplate.findMany({
       where: {
+        organizacaoId,
         ativo: true,
         OR: [
           { tipoVideo: data.tipoVideo },
@@ -395,7 +403,9 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
       data: {
         organizacaoId,
         demandaId: demanda.id,
-        tipoAlerta: data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
+        // Gravação externa esperando aprovação é aviso de Gravações, não de
+        // Pedidos novos: quem opera as gravações recebe mesmo sem os pedidos.
+        tipoAlerta: ehGravacao ? "gravacao_pendente" : data.prioridade === "urgente" ? "urgencia_pendente" : "aprovacao_pendente",
         mensagem: data.prioridade === "urgente"
           ? `🚨 Nova urgência: "${data.titulo}" aguarda aprovação do gestor.`
           : `📋 Nova demanda: "${data.titulo}" aguarda aprovação interna.`,
@@ -410,7 +420,9 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
       data.titulo,
       session.user.name ?? "Usuário",
       data.prioridade as string,
-      organizacaoId
+      organizacaoId,
+      demanda.id,
+      ehGravacao ? "gravacoes" : "pedidos"
     ), "nova-demanda-gestores")
   }
 
@@ -439,7 +451,9 @@ async function notificarGestoresNovaDemanda(
   titulo: string,
   nomeSolicitante: string,
   prioridade: string,
-  organizacaoId?: string | null
+  organizacaoId?: string | null,
+  demandaId?: string,
+  aviso: CategoriaAviso = "pedidos"
 ) {
   try {
     const gestores = await quemRecebeTudo(organizacaoId)
@@ -451,7 +465,7 @@ async function notificarGestoresNovaDemanda(
 
     for (const g of gestores) {
       if (g.telefone) {
-        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId, { arte: "fila" }).catch(() => null)
+        await sendWhatsappMessage(g.telefone, msg, undefined, organizacaoId, { arte: "fila", aviso, card: demandaId }).catch(() => null)
       }
     }
   } catch (e) {

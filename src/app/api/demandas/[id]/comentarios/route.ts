@@ -84,7 +84,8 @@ export async function POST(req: NextRequest, { params }: Params) {
           v.usuario.telefone,
           `💬 ${autor} marcou você em ${ref}:\n\n"${resumo}"`,
           id,
-          organizacaoId
+          organizacaoId,
+          { aviso: "comentarios" }
         ).catch(() => null)
       }
     }

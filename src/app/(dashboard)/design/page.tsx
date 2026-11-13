@@ -74,7 +74,7 @@ function GrowthKanban() {
   const paginaFila = navegacaoFila.filtro === chaveFiltro ? navegacaoFila.pagina : 1
   const mudarPagina = (pagina:number) => setNavegacaoFila({filtro:chaveFiltro,pagina})
   params.set("limit","100"); params.set("offset",String((paginaFila-1)*100))
-  const { data, mutate } = useSWR(`/api/demandas?${params}`, fetcher, { refreshInterval: 15000 })
+  const { data, mutate } = useSWR(`/api/demandas?${params}`, fetcher, { refreshInterval: 30000 })
 
   // Tamanho da fila sem recorte nem filtro, para o topo dizer "18 de 240 na
   // fila" em vez de chamar o recorte de fila. Uma linha só: interessa o total.

@@ -38,7 +38,9 @@ export function NotificationBell() {
   const { data, mutate } = useSWR<{ alertas: Alerta[]; total: number }>(
     "/api/notificacoes",
     fetcher,
-    { refreshInterval: 15000 }
+    // 30 s: o sino fica em toda tela, então é a consulta que mais roda na
+    // Vercel. Com a aba escondida o SWR já não consulta; ao voltar, revalida.
+    { refreshInterval: 30000 }
   )
 
   const alertas = data?.alertas ?? []

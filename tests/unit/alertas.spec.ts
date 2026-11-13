@@ -31,6 +31,16 @@ describe("aprovacao_pendente / urgencia_pendente", () => {
   })
 })
 
+describe("gravacao_pendente (gravação externa esperando aprovação)", () => {
+  it("vale enquanto espera decisão e fecha na aprovação, sem esperar os 7 dias do fato", () => {
+    expect(ehTipoConhecido("gravacao_pendente")).toBe(true)
+    expect(vale("gravacao_pendente", { statusDemanda: "aguardando_aprovacao_interna" })).toBe(true)
+    expect(vale("gravacao_pendente", { statusDemanda: "urgencia_pendente_aprovacao" })).toBe(true)
+    expect(vale("gravacao_pendente", { statusDemanda: "aguardando_triagem" })).toBe(false)
+    expect(vale("gravacao_pendente", { statusDemanda: "encerrado" })).toBe(false)
+  })
+})
+
 describe("ajuste_solicitado", () => {
   it("vale enquanto o ajuste está pedido", () => {
     expect(vale("ajuste_solicitado", { statusDemanda: "ajuste_solicitado" })).toBe(true)

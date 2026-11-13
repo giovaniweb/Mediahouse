@@ -3,10 +3,11 @@
 import { SaudeAutomacoes } from "@/components/automacoes/SaudeAutomacoes"
 import { AreaPublicaEmpresa } from "@/components/configuracoes/AreaPublicaEmpresa"
 import { AssistentesMcp } from "@/components/configuracoes/AssistentesMcp"
+import { AvisosPorPessoa } from "@/components/configuracoes/AvisosPorPessoa"
 import preview from "@/components/layout/AdminPreview.module.css"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { Header } from "@/components/layout/Header"
-import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, Video, ArrowUp, ArrowDown, Play, Bot } from "lucide-react"
+import { MessageCircle, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Shield, Mail, SlidersHorizontal, QrCode, Send, Pencil, AlertCircle, AlertTriangle, Settings, Upload, Loader2, Building2, Video, ArrowUp, ArrowDown, Play, Bot, BellRing } from "lucide-react"
 import useSWR from "swr"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -17,7 +18,7 @@ import { fetcher } from "@/lib/fetcher"
 import Link from "next/link"
 
 
-type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos" | "assistentes"
+type Tab = "whatsapp" | "email" | "parametros" | "meu_perfil" | "empresa" | "depoimentos" | "assistentes" | "avisos"
 
 function SecaoEvolution({ recolhida, children }: { recolhida: boolean; children: React.ReactNode }) {
   if (!recolhida) return <>{children}</>
@@ -1564,7 +1565,7 @@ function AbaPelaUrl({ onSetTab }: { onSetTab: (tab: Tab) => void }) {
   useEffect(() => {
     // "whatsapp" vem dos primeiros passos do painel (Onda 2A).
     const pedida = searchParams?.get("tab")
-    if (pedida === "empresa" || pedida === "assistentes" || pedida === "whatsapp") onSetTab(pedida)
+    if (pedida === "empresa" || pedida === "assistentes" || pedida === "whatsapp" || pedida === "avisos") onSetTab(pedida)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return null
@@ -1579,6 +1580,7 @@ export default function ConfiguracoesPage() {
     { id: "empresa", label: "Empresa e links públicos", icon: Building2 },
     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
     { id: "email", label: "E-mail de saída", icon: Mail },
+    { id: "avisos", label: "Avisos por pessoa", icon: BellRing },
     { id: "parametros", label: "Parâmetros", icon: SlidersHorizontal },
     { id: "depoimentos", label: "Depoimentos", icon: Video },
     { id: "assistentes", label: "Assistentes (MCP)", icon: Bot },
@@ -1658,6 +1660,7 @@ export default function ConfiguracoesPage() {
               {tab === "empresa" && <TabEmpresa />}
               {tab === "depoimentos" && <TabDepoimentos />}
               {tab === "assistentes" && <AssistentesMcp />}
+              {tab === "avisos" && <AvisosPorPessoa modo="gestao" />}
             </section>
           </div>
         </div>

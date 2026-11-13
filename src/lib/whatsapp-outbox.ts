@@ -9,6 +9,8 @@ import { objeto, type ConteudoEntrada } from "@/lib/whatsapp-inbox-contrato"
 
 import { contextoRegraValido, type ContextoRegra } from "@/lib/regras-operacionais"
 import { artesLigadas, familiaDaSaida } from "@/lib/avisos-arte"
+import { categoriaDaSaida, demandaDaSaida, type CategoriaAviso } from "@/lib/avisos-categorias"
+import { podeAvisar } from "@/lib/preferencias-aviso"
 
 type Tx=Prisma.TransactionClient
 const TIPO="whatsapp.saida"
@@ -52,12 +54,18 @@ async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
   await enfileirar(tx,{organizacaoId:s.organizacaoId,tipo:TIPO,referencia:s.id,
     chave:`${s.id}:${s.revisao}:${s.tentativas}`,payload:{revisao:s.revisao},agendadoPara,expiraEm:s.expiraEm})
 }
+/** Motivo gravado na saída que não saiu porque a pessoa desligou o aviso. */
+export const MOTIVO_DESLIGADO="desligado_pela_pessoa"
 /** Intenção + negócio no mesmo tx. Autoridade do produtor é validada na fronteira. */
 export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;origem:"inbox"|"manual"|"legado"|"regra";regraContexto?:ContextoRegra;referencia:string;telefone:string;texto:string;expiraEm:Date;
   /** Só aviso manual ao cliente da gravação: o id dela (destinoCliente). */
   clienteDe?:string
   /** Só o "Enviar para um WhatsApp": o id do LogAutomacao que autoriza este número (destinoEnvioManual). */
-  envioManual?:string}) {
+  envioManual?:string
+  /** Categoria do aviso (lib/avisos-categorias.ts), quando a chave não diz. Sem ela e sem chave conhecida, ninguém corta. */
+  categoria?:CategoriaAviso|null
+  /** O card do aviso, quando a referência não é ele. */
+  demandaId?:string|null}) {
   const telefone=telefoneCompleto(e.telefone)
   if(!telefone || !e.texto.trim() || e.texto.length>4096 || !e.chave || e.chave.length>128 || !e.referencia || e.referencia.length>128 ||
     !Number.isFinite(e.expiraEm.getTime()) || e.expiraEm<=new Date()) throw new Error("Intenção de saída inválida")
@@ -77,6 +85,19 @@ export async function criarSaida(tx:Tx,e:{organizacaoId:string;chave:string;orig
     destino=await destinoCliente(tx,e.organizacaoId,e.clienteDe,telefone)
   } else destino=await destinoAutorizado(tx,e.organizacaoId,telefone)
   if(!destino) throw new Error("Destinatário não autorizado")
+  // Avisos por pessoa (12/11/2026): o que a pessoa desligou não entra na fila.
+  // Fica uma linha "cancelado / desligado_pela_pessoa", sem telefone nem texto,
+  // para dar para conferir depois que o aviso existiu e não saiu.
+  if(destino.tipo==="usuario") {
+    const categoria=categoriaDaSaida({origem:e.origem,chave:e.chave,regraContexto:e.regraContexto,explicita:e.categoria})
+    const demandaId=demandaDaSaida({origem:e.origem,chave:e.chave,referencia:e.referencia,regraContexto:e.regraContexto,demandaId:e.demandaId})
+    if(categoria && !await podeAvisar(tx,{organizacaoId:e.organizacaoId,categoria,demandaId},destino.id,"whatsapp")) {
+      await tx.saidaWhatsapp.createMany({data:{id:randomUUID(),organizacaoId:e.organizacaoId,chave:e.chave,origem:e.origem,referencia:e.referencia,
+        regraContexto:e.regraContexto,destinatarioTipo:destino.tipo,destinatarioId:destino.id,telefoneHash:hashTelefone(telefone),
+        estado:"cancelado",motivo:MOTIVO_DESLIGADO,expiraEm:e.expiraEm,conteudoExpiraEm:new Date()},skipDuplicates:true})
+      return tx.saidaWhatsapp.findUniqueOrThrow({where:{organizacaoId_chave:{organizacaoId:e.organizacaoId,chave:e.chave}}})
+    }
+  }
   const id=randomUUID(),criado=await tx.saidaWhatsapp.createMany({data:{
     id,organizacaoId:e.organizacaoId,chave:e.chave,origem:e.origem,referencia:e.referencia,regraContexto:e.regraContexto,
     destinatarioTipo:destino.tipo,destinatarioId:destino.id,telefoneHash:hashTelefone(telefone),

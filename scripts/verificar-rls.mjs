@@ -316,6 +316,11 @@ try {
   conferir(r.rows[0].statusInterno === "editando", "o espelho move o status — é o trabalho dele")
   conferir(r.rows[0].titulo !== "SEQUESTRADO", "o espelho NÃO muda o título: fora da lista branca, volta ao valor da dona")
 
+  // Quem é o videomaker e o editor do card é decisão da dona (12/11/2026).
+  await comoApp(B, `UPDATE demandas SET "videomakerId"='rls-vm-1' WHERE codigo='RLS-A-1'`)
+  r = await c.query(`SELECT "videomakerId" FROM demandas WHERE codigo='RLS-A-1'`)
+  conferir(r.rows[0].videomakerId === null, "o espelho NÃO troca o videomaker da dona — videomakerId fora da lista")
+
   erro = await erroComoApp(B, `UPDATE demandas SET "organizacaoId"='${B}' WHERE codigo='RLS-A-1'`)
   conferir(!!erro && /posse/.test(erro), "o espelho não transfere a posse da demanda")
 
@@ -335,12 +340,69 @@ try {
   r = await c.query(`SELECT count(*)::int n FROM historico_status WHERE id='rls-hist-esp'`)
   conferir(r.rows[0].n === 1, "o espelho GRAVA na timeline do card que executa")
 
-  // 17. Revogar tira o acesso e preserva a prova de que ele existiu.
-  await comoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=now() WHERE id='rls-esp-1'`)
+  // 17. Revogar tira o acesso e preserva a prova de que ele existiu — MESMO com
+  // a parceria já encerrada. Até 12/11/2026 o gatilho conferia a parceria em
+  // todo update e esta revogação dava erro: o acesso ficava preso aberto.
+  await c.query(`UPDATE parceria_organizacao SET status='encerrada', "encerradaEm"=now() WHERE id='rls-par-1'`)
+  erro = await erroComoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=now() WHERE id='rls-esp-1'`)
+  conferir(erro === null, `revogar com a parceria encerrada funciona${erro ? ` (veio: ${erro})` : ""}`)
   r = await comoApp(B, `SELECT count(*)::int n FROM demandas WHERE codigo='RLS-A-1'`)
   conferir(r.rows[0].n === 0, "revogado: o destino deixa de ver o card")
   r = await c.query(`SELECT count(*)::int n FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
   conferir(r.rows[0].n === 1, "revogado: a aresta permanece — a prova do acesso não é apagada")
+  erro = await erroComoApp(A, `UPDATE demanda_compartilhamento SET "revogadoEm"=NULL WHERE id='rls-esp-1'`)
+  conferir(!!erro && /parceria aceita/.test(erro), "reativar sem parceria aceita é recusado — a parceria vale ao DAR acesso")
+
+  // 19. Videomaker que trabalha por uma empresa (12/11/2026): A escala o
+  // rls-vm-1, que trabalha pela B. O espelho é automático, quem da B faz é dado
+  // da B, e sair do card ou trocar a "Empresa dele" tira o card da B.
+  await c.query(`UPDATE parceria_organizacao SET status='aceita', "encerradaEm"=NULL WHERE id='rls-par-1'`)
+  erro = await erroComoApp(A, `INSERT INTO videomaker_organizacao (id,"organizacaoId","videomakerId","organizacaoExecutoraId","updatedAt")
+    VALUES ('rls-vo-a','${A}','rls-vm-1','${B}',now())`)
+  conferir(!!erro && /admin ou gestor/.test(erro), "a Empresa dele exige que o videomaker mande lá (sem login: recusado)")
+  await c.query(`UPDATE videomakers SET "usuarioId"='rls-user-1' WHERE id='rls-vm-1'`)
+  await inserir("usuario_organizacao", { id: "rls-uo-b", usuarioId: "rls-user-1", organizacaoId: B, papel: "videomaker" })
+  erro = await erroComoApp(A, `INSERT INTO videomaker_organizacao (id,"organizacaoId","videomakerId","organizacaoExecutoraId","updatedAt")
+    VALUES ('rls-vo-a','${A}','rls-vm-1','${B}',now())`)
+  conferir(!!erro && /admin ou gestor/.test(erro), "a Empresa dele exige admin ou gestor (videomaker lá: recusado)")
+  await c.query(`UPDATE usuario_organizacao SET papel='gestor' WHERE id='rls-uo-b'`)
+  erro = await erroComoApp(A, `INSERT INTO videomaker_organizacao (id,"organizacaoId","videomakerId","organizacaoExecutoraId","updatedAt")
+    VALUES ('rls-vo-a','${A}','rls-vm-1','${B}',now())`)
+  conferir(erro === null, `com ele gestor na B, a Empresa dele é gravada${erro ? ` (veio: ${erro})` : ""}`)
+
+  await c.query(`UPDATE demandas SET "videomakerId"='rls-vm-1' WHERE id='rls-dem-a'`)
+  await c.query(`UPDATE demanda_compartilhamento SET "revogadoEm"=NULL, "porVideomakerId"='rls-vm-1' WHERE id='rls-esp-1'`)
+  await inserir("videomakers", { id: "rls-vm-x", nome: "RLS X da B" })
+  await inserir("videomaker_organizacao", { id: "rls-vo-x", organizacaoId: B, videomakerId: "rls-vm-x" })
+  erro = await erroComoApp(B, `INSERT INTO executor_espelho (id,"organizacaoId","demandaId","videomakerId","escolhidoPorId","updatedAt")
+    VALUES ('rls-ex-0','${B}','rls-dem-a','rls-vm-1','rls-user-1',now())`)
+  conferir(!!erro && /videomaker desta empresa/.test(erro), "quem faz precisa ser videomaker da empresa que executa")
+  erro = await erroComoApp(B, `INSERT INTO executor_espelho (id,"organizacaoId","demandaId","videomakerId","escolhidoPorId","updatedAt")
+    VALUES ('rls-ex-1','${B}','rls-dem-a','rls-vm-x','rls-user-1',now())`)
+  conferir(erro === null, `a B escolhe o X para o card espelhado${erro ? ` (veio: ${erro})` : ""}`)
+  erro = await erroComoApp(C, `INSERT INTO executor_espelho (id,"organizacaoId","demandaId","videomakerId","escolhidoPorId","updatedAt")
+    VALUES ('rls-ex-c','${C}','rls-dem-a','rls-vm-x','rls-user-1',now())`)
+  conferir(!!erro, "empresa sem o card não escolhe executor")
+  r = await comoApp(A, `SELECT count(*)::int n FROM executor_espelho WHERE "demandaId"='rls-dem-a'`)
+  conferir(r.rows[0].n === 0, "a dona NÃO vê quem da parceira faz — executor_espelho é dado da B")
+  r = await comoApp(B, `SELECT count(*)::int n FROM executor_espelho WHERE "demandaId"='rls-dem-a'`)
+  conferir(r.rows[0].n === 1, "a B vê o executor que escolheu")
+
+  await comoApp(A, `UPDATE demandas SET "videomakerId"=NULL WHERE id='rls-dem-a'`)
+  r = await c.query(`SELECT "revogadoEm" IS NOT NULL AS revogado FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
+  conferir(r.rows[0].revogado, "tirar o videomaker do card revoga o espelho automático")
+  r = await c.query(`SELECT count(*)::int n FROM executor_espelho WHERE "demandaId"='rls-dem-a'`)
+  conferir(r.rows[0].n === 0, "revogado: o executor da B é apagado")
+  r = await c.query(`SELECT count(*)::int n FROM historico_status WHERE "demandaId"='rls-dem-a' AND "statusNovo"='espelho_revogado'`)
+  conferir(r.rows[0].n === 1, "revogado: a timeline da dona registra a saída")
+  r = await c.query(`SELECT count(*)::int n FROM alertas_ia WHERE "organizacaoId"='${B}' AND "tipoAlerta"='espelho_revogado' AND "demandaId" IS NULL`)
+  conferir(r.rows[0].n === 1, "revogado: o sino da B avisa, sem link para o card que não abre mais")
+
+  await c.query(`UPDATE demandas SET "videomakerId"='rls-vm-1' WHERE id='rls-dem-a'`)
+  await c.query(`UPDATE demanda_compartilhamento SET "revogadoEm"=NULL WHERE id='rls-esp-1'`)
+  await comoApp(A, `UPDATE videomaker_organizacao SET "organizacaoExecutoraId"=NULL WHERE id='rls-vo-a'`)
+  r = await c.query(`SELECT "revogadoEm" IS NOT NULL AS revogado FROM demanda_compartilhamento WHERE id='rls-esp-1'`)
+  conferir(r.rows[0].revogado, "tirar a Empresa dele revoga o espelho dos cards abertos")
 
   // 18. Aceite dos termos (Onda 3): por empresa, e a prova não se reescreve.
   for (const [id, org] of [["rls-aceite-a", A], ["rls-aceite-b", B]]) {
@@ -375,7 +437,26 @@ try {
   const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
   conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
 
-  // 20. Rede (Onda 2B, migration 20261128000000): convite é da empresa que
+  // 20. Avisos por pessoa (20261127000000): a escolha de uma empresa não aparece
+  // nem é gravada na outra. "Voltar ao padrão" apaga a linha, por isso há DELETE.
+  for (const [id, org] of [["rls-pref-a", A], ["rls-pref-b", B]]) {
+    await inserir("preferencias_aviso", { id, organizacaoId: org, usuarioId: "rls-user-1", categoria: "andamento", whatsapp: false, updatedAt: new Date() })
+  }
+  r = await comoApp(A, `SELECT id FROM preferencias_aviso WHERE id LIKE 'rls-pref-%'`)
+  conferir(r.rows.length === 1 && r.rows[0].id === "rls-pref-a", "preferencias_aviso: a empresa A vê só as escolhas dela")
+  const prefNaOutra = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, "updatedAt")
+                                              VALUES ('rls-pref-x', '${B}', 'rls-user-1', 'pedidos', now())`)
+  conferir(prefNaOutra !== null, "preferencias_aviso: a empresa A não grava escolha na B")
+  r = await comoApp(A, `DELETE FROM preferencias_aviso WHERE id IN ('rls-pref-a', 'rls-pref-b')`)
+  conferir(r.rowCount === 1, "preferencias_aviso: a empresa A apaga a dela e não alcança a da B")
+  const recorteInvalido = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
+                                                 VALUES ('rls-pref-y', '${A}', 'rls-user-1', 'pedidos', 'todos_do_mundo', now())`)
+  conferir(recorteInvalido !== null, "preferencias_aviso: recorte só aceita tudo, setor, meus ou pedi")
+  const setorSemSetor = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
+                                               VALUES ('rls-pref-z', '${A}', 'rls-user-1', 'pedidos', 'setor', now())`)
+  conferir(setorSemSetor !== null, "preferencias_aviso: recorte 'setor' exige o setor (nunca corta às cegas)")
+
+  // 21. Rede (Onda 2B, migration 20261128000000): convite é da empresa que
   // convida; contestação não se lê nem se grava direto; o score só devolve número.
   await inserir("convites_rede", { id: "rls-convite-a", organizacaoId: A, videomakerId: "rls-vm-1", updatedAt: new Date() })
   r = await comoApp(B, `SELECT count(*)::int n FROM convites_rede WHERE id = 'rls-convite-a'`)

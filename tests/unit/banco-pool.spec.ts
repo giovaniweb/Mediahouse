@@ -50,13 +50,13 @@ describe("um Pool por papel no processo", () => {
     expect(anexar).toHaveBeenCalledTimes(1)
   })
 
-  it("tetos por papel, ociosa em 5 s e no máximo 10 s esperando conexão", async () => {
+  it("tetos por papel, ociosa em 1 s e no máximo 10 s esperando conexão", async () => {
     const { poolDoBanco } = await import("@/lib/banco-pool")
     expect(opcoes(poolDoBanco("app", legado)).max).toBe(10)
     expect(opcoes(poolDoBanco("auth", legado)).max).toBe(5)
     expect(opcoes(poolDoBanco("admin", legado)).max).toBe(5)
     for (const t of ["app", "auth", "admin"] as const) {
-      expect(opcoes(poolDoBanco(t, legado)).idleTimeoutMillis).toBe(5_000)
+      expect(opcoes(poolDoBanco(t, legado)).idleTimeoutMillis).toBe(1_000)
       expect(opcoes(poolDoBanco(t, legado)).connectionTimeoutMillis).toBe(10_000)
     }
   })

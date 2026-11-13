@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/agentes?agente=gravacoes",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/agentes?agente=fim-do-dia",
+      "schedule": "0 21 * * 1-5"
     }
   ]
 }

@@ -245,7 +245,10 @@ export async function avisarNotaDoVideomaker(
       const lista = [...new Set(para)]
       if (!lista.length) return
       const { assunto, dados } = emailDaNota(r.gravacoes, completo ? r.pagamentos ?? undefined : undefined)
-      const env = await sendEmailAvisoDaOperacao(lista, assunto, dados, completo ? "nota-do-videomaker-pagamento" : "nota-do-videomaker")
+      // Quem desligou "Gravações externas" deixa de receber o e-mail simples; o
+      // de pagamento (valor e PIX) sai sempre: é com ele que o financeiro paga.
+      const aviso = completo ? undefined : { organizacaoId, categoria: "gravacoes" as const, demandaId: demandaIds.length === 1 ? demandaIds[0] : null }
+      const env = await sendEmailAvisoDaOperacao(lista, assunto, dados, completo ? "nota-do-videomaker-pagamento" : "nota-do-videomaker", aviso)
       // Só o erro do envio: nem destinatário nem dado de pagamento vão para o log.
       if (!env.ok) console.error("[Avisos de entrega] e-mail da nota não saiu", { demandaIds, completo, erro: env.error })
       else emails += lista.length

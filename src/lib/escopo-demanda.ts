@@ -31,7 +31,13 @@ export async function filtroMinhasDemandas(
     { solicitanteId: usuarioId },
     { socialId: usuarioId },
   ]
-  if (videomaker) alternativas.push({ videomakerId: videomaker.id })
+  if (videomaker) {
+    alternativas.push({ videomakerId: videomaker.id })
+    // O card de outra empresa que a empresa ATIVA mandou ele fazer (o X da GH
+    // na gravação da Contourline). A linha de `executor_espelho` é desta
+    // empresa e some quando o espelho é revogado.
+    alternativas.push({ executoresEspelho: { some: { organizacaoId, videomakerId: videomaker.id } } })
+  }
   if (editor) alternativas.push({ editorId: editor.id })
   if (designer) alternativas.push({ designerId: designer.id })
 
@@ -109,10 +115,17 @@ export async function areaTravadaDaPessoa(
  * quadro vazio.
  */
 export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
-  const gestor = ehGestor(session)
+  return oQueOUsuarioVe(session.user.id, organizacaoId, ehGestor(session))
+}
+
+/**
+ * A mesma regra sem sessão, para rotina que fala com a pessoa (o resumo do fim
+ * do dia): `gestor` é o papel dela NA empresa (admin ou gestor no vínculo).
+ */
+export async function oQueOUsuarioVe(usuarioId: string, organizacaoId: string, gestor: boolean): Promise<Prisma.DemandaWhereInput> {
   const [area, minhas] = await Promise.all([
-    areaTravadaDaPessoa(session.user.id, organizacaoId, gestor),
-    escopoDeDemandas(session.user.id, organizacaoId, gestor),
+    areaTravadaDaPessoa(usuarioId, organizacaoId, gestor),
+    escopoDeDemandas(usuarioId, organizacaoId, gestor),
   ])
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) and.push({ area })

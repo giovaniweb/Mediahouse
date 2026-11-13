@@ -9,6 +9,8 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { ehGestaoDaEmpresa } from "@/lib/parceria"
+import { espelharPelaParceria } from "@/lib/espelho-do-videomaker"
+import { comOrg } from "@/lib/org-contexto"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -71,9 +73,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           },
   })
 
-  // Encerrar NÃO revoga as arestas que já existem, e isso é decisão, não
-  // esquecimento: um job em execução não deve parar no meio porque a relação
-  // comercial acabou. Revogar cada card é ato separado, e a tela de parcerias
-  // mostra quantos ainda estão de pé. Ver PLANO-ESPELHAMENTO-CROSS-TENANT.md §6.3.
-  return NextResponse.json({ parceriaId: atualizada.id, status: atualizada.status })
+  const [a, b] = [atualizada.organizacaoConvidanteId, atualizada.organizacaoConvidadaId]
+  // Aceitou: os cards abertos dos videomakers que trabalham por uma das duas
+  // aparecem na outra (lib/espelho-do-videomaker.ts).
+  const espelhados = atualizada.status === "aceita" ? await espelharPelaParceria(a, b) : 0
+  // Encerrou: nenhum card fica aberto entre as duas, nos DOIS sentidos. Antes
+  // de 12/11/2026 o espelho seguia ativo depois de encerrar a parceria. Os
+  // gatilhos apagam o executor e, no automático, registram e avisam.
+  //
+  // Um sentido de cada vez, no contexto da empresa de ORIGEM: com RLS ligado só
+  // a origem escreve na aresta (política compartilhamento_escrita_da_origem), e
+  // um updateMany só, na sessão de quem encerra, revogava apenas os espelhos
+  // que saíram dela e deixava ativos os que ela recebeu.
+  if (atualizada.status === "encerrada") {
+    const revogadoEm = new Date()
+    for (const [origem, destino] of [[a, b], [b, a]] as const) {
+      await comOrg(origem, () => prisma.demandaCompartilhamento.updateMany({
+        where: { revogadoEm: null, organizacaoOrigemId: origem, organizacaoDestinoId: destino },
+        data: { revogadoEm, revogadoPorId: session.user.id },
+      }))
+    }
+  }
+
+  return NextResponse.json({ parceriaId: atualizada.id, status: atualizada.status, espelhados })
 }
