@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
+import { empresaVeRede, recorteDaRede } from "@/lib/videomakers-da-rede"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -22,9 +23,12 @@ export async function GET(req: NextRequest) {
   //
   // O perfil é da rede, mas o CANDIDATO pendente é da empresa que o recebeu pelo
   // link de cadastro: nome, telefone e e-mail de quem se candidatou à empresa B
-  // não aparecem para a empresa A. Fora do pendente, a rede segue visível.
+  // não aparecem para a empresa A. Fora do pendente, a rede segue visível —
+  // para quem tem a rede ligada (módulo "rede"); sem ela, só os da empresa.
+  const veRede = await empresaVeRede(organizacaoId)
   const videomakers = await prisma.videomaker.findMany({
     where: {
+      ...recorteDaRede(organizacaoId, veRede),
       ...(status ? { status: status as "ativo" | "inativo" | "preferencial" | "pendente" } : {}),
       ...(usuarioId ? { usuarioId } : {}),
       OR: [{ status: { not: "pendente" } }, { vinculos: { some: { organizacaoId } } }],

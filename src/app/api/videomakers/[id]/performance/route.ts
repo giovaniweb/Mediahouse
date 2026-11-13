@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { diariaDaEmpresa } from "@/lib/videomaker-vinculo"
+import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 
 export async function GET(
   _req: NextRequest,
@@ -22,6 +23,9 @@ export async function GET(
     select: { id: true, nome: true },
   })
   if (!perfil) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
+  // Sem a rede (módulo "rede"), o perfil de quem não é da empresa não abre:
+  // só o de quem tem vínculo aqui ou já está num card daqui.
+  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Videomaker não encontrado" }, { status: 404 })
   const videomaker = { ...perfil, valorDiaria: await diariaDaEmpresa(id, organizacaoId) }
 
   // All demands

@@ -4,6 +4,7 @@ import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
 import { prismaAdmin } from "@/lib/prisma-admin"
 import { getOrgId, semOrg } from "@/lib/org"
+import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 import { encryptSecret, decryptSecret } from "@/lib/secret-crypto"
 
 type Params = { params: Promise<{ id: string }> }
@@ -71,6 +72,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!organizacaoId) return semOrg()
 
   const { id } = await params
+  // Sem a rede (módulo "rede"), o perfil de quem não é da empresa não abre:
+  // só o de quem tem vínculo aqui ou já está num card daqui.
+  if (!(await podeVerVideomaker(organizacaoId, id))) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
   const vm = await prisma.videomaker.findUnique({
     where: { id },

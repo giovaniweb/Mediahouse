@@ -12,7 +12,8 @@ import { registrarServicoPendente } from "@/lib/custo-servico"
 import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
-import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
+import { parseToken, resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
+import { FORA_DA_REDE, podeEscalarVideomaker } from "@/lib/videomakers-da-rede"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
@@ -240,6 +241,25 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (erroTitulo) return erroTitulo
   const erroDescricao = normalizarTextoObrigatorio(body, "descricao", "Descrição", 10)
   if (erroDescricao) return erroDescricao
+
+  // Sem a rede (módulo "rede"), só se escala videomaker da empresa. Confere
+  // ANTES de resolver: resolver cria o vínculo, e aí qualquer um viraria "da
+  // empresa". Quem já está no card pode ficar (salvar de novo não o derruba).
+  if (typeof body.videomakerId === "string" && body.videomakerId) {
+    const escolhido = parseToken(body.videomakerId)
+    if (escolhido.origem === "vm") {
+      const noCard = await prisma.demanda.findUnique({ where: { id }, select: { videomakerId: true } })
+      if (!(await podeEscalarVideomaker(guard.organizacaoId, escolhido.id, noCard?.videomakerId))) {
+        return erroDeCampo("videomakerId", FORA_DA_REDE)
+      }
+    }
+  }
+  // O slot de edição aceita videomaker que edita ("vm:…" vira editor espelho).
+  if (typeof body.editorId === "string" && body.editorId.startsWith("vm:")) {
+    if (!(await podeEscalarVideomaker(guard.organizacaoId, parseToken(body.editorId).id))) {
+      return erroDeCampo("editorId", FORA_DA_REDE)
+    }
+  }
 
   // Resolver tokens de atribuição unificada (vm:/ed:/user:) → id real do slot.
   // Cria registro espelho automaticamente quando a pessoa vem de outra tabela.

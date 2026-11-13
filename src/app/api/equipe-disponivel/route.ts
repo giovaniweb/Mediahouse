@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
+import { empresaVeRede, recorteDaRede } from "@/lib/videomakers-da-rede"
 
 // GET /api/equipe-disponivel?papel=captacao|edicao
 // Lista unificada e deduplicada de pessoas atribuíveis a um papel.
@@ -61,6 +62,8 @@ export async function GET(req: NextRequest) {
   }
 
   const opcoes: Opcao[] = []
+  // Sem a rede (módulo "rede"), os videomakers oferecidos são só os da empresa.
+  const daRede = recorteDaRede(organizacaoId, await empresaVeRede(organizacaoId))
   // Dedup: pessoas com usuarioId aparecem uma vez (fonte primária do papel primeiro)
   const usuariosVistos = new Set<string>()
   const nomesVistos = new Set<string>()
@@ -89,6 +92,7 @@ export async function GET(req: NextRequest) {
       where: {
         status: { not: "inativo" },
         ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
+        ...daRede,
       },
       select: {
         id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
@@ -146,7 +150,7 @@ export async function GET(req: NextRequest) {
     }
     // Videomakers que editam
     const vms = await prisma.videomaker.findMany({
-      where: { podeEditar: true, status: { not: "inativo" } },
+      where: { podeEditar: true, status: { not: "inativo" }, ...daRede },
       select: {
         id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
         vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },

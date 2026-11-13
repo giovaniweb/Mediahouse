@@ -38,6 +38,7 @@ vi.mock("@/lib/prisma-admin", () => ({
       usuario: { create: m.criarUsuario },
       usuarioOrganizacao: { create: m.criarVinculo },
       passwordResetToken: { updateMany: async () => ({}), create: async () => ({}) },
+      moduloOrganizacao: { create: async () => ({}) },
     }),
   },
 }))
