@@ -132,10 +132,21 @@ const MSG_CONTESTACAO: Record<string, string> = {
   limite: "Esta avaliação já teve as duas análises previstas na Política.",
 }
 
-/** Abre a contestação. Devolve a mensagem de erro, ou null quando deu certo. */
+/**
+ * Abre a contestação. Devolve a mensagem de erro, ou null quando deu certo.
+ *
+ * A função do banco confere "já está em análise" e "já teve duas análises" e
+ * depois grava; duas requisições ao mesmo tempo passavam as duas pela conferência
+ * e abriam duas análises (achado da revisão do #157). A trava pelo id da
+ * avaliação, na mesma transação, faz a segunda esperar a primeira gravar — e aí
+ * ela vê a análise aberta e é recusada. Sem migration: a função continua a mesma.
+ */
 export async function contestarAvaliacao(p: Pick<ProfissionalDaSessao, "tipo" | "id">, avaliacaoId: string, motivo: string): Promise<string | null> {
   try {
-    await prismaBase.$queryRaw`SELECT public.contestar_avaliacao(${p.tipo}, ${avaliacaoId}, ${p.id}, ${motivo}) AS id`
+    await prismaBase.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('contestar_avaliacao'), hashtext(${avaliacaoId}))::text`
+      await tx.$queryRaw`SELECT public.contestar_avaliacao(${p.tipo}, ${avaliacaoId}, ${p.id}, ${motivo}) AS id`
+    })
     return null
   } catch (e) {
     const texto = e instanceof Error ? e.message : String(e)

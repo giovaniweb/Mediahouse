@@ -12,16 +12,17 @@
 //
 // Com a rede DESLIGADA, no servidor:
 //   - listas e buscas mostram só quem tem vínculo;
-//   - escalar alguém sem vínculo é recusado — menos quem já está no card
-//     (salvar o card de novo não pode derrubar o videomaker que já estava lá);
 //   - o perfil de quem não tem vínculo abre só se ele estiver num card daqui.
+// Com ou sem a rede (Onda 2B): escalar videomaker sem vínculo é recusado — menos
+// quem já está no card (salvar o card de novo não pode derrubá-lo). Quem é da
+// rede entra pelo convite, que cria o vínculo quando ele aceita.
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { moduloAtivo } from "@/lib/modulos-org"
 import { parseToken } from "@/lib/equipe-token"
 
 export const FORA_DA_REDE =
-  "Este videomaker não é da sua empresa. A sua empresa trabalha só com os próprios videomakers."
+  "Este profissional não é da sua empresa. Quem é da rede de videomakers entra na sua lista pelo convite da rede."
 
 /** Resposta das rotas da busca e do convite da rede quando a empresa não tem o módulo. */
 export const SEM_MODULO_REDE =
@@ -47,7 +48,12 @@ async function temVinculo(organizacaoId: string, videomakerId: string): Promise<
 
 /**
  * Pode pôr este videomaker num card? `atual` é quem já está no card: mantê-lo
- * nunca é recusado, mesmo sem a rede.
+ * nunca é recusado.
+ *
+ * Desde a Onda 2B, o videomaker precisa ter vínculo com a empresa, com ou sem
+ * o módulo "rede": quem é da rede entra pelo convite, e o "aceito" cria o
+ * vínculo. Escalar direto entregaria o telefone de quem não aceitou (Termos do
+ * Profissional, seção 5). A rede ligada só abre a BUSCA (/videomakers/rede).
  */
 export async function podeEscalarVideomaker(
   organizacaoId: string,
@@ -55,22 +61,23 @@ export async function podeEscalarVideomaker(
   atual?: string | null,
 ): Promise<boolean> {
   if (atual && atual === videomakerId) return true
-  if (await empresaVeRede(organizacaoId)) return true
   return temVinculo(organizacaoId, videomakerId)
 }
 
 /**
- * A pessoa escolhida para um slot do card (token unificado ou id cru) é da
- * empresa? Vale para QUALQUER prefixo, porque o resolvedor
- * (src/lib/equipe-resolver.ts) leva todos a um videomaker ou editor:
- *   - "vm:<id>", id cru no slot de captação e qualquer prefixo desconhecido
- *     ("x:<id>") viram videomaker → precisa de vínculo;
- *   - "ed:<id>" → o editor precisa ter vínculo com a empresa;
- *   - "user:<id>" → o usuário precisa ser da empresa (senão "user:" do dono de
- *     um perfil global puxaria esse perfil para dentro);
- *   - id cru no slot de edição é editor → vínculo de editor.
- * `atual` é quem já está no slot: mantê-lo nunca é recusado. Com a rede ligada,
- * tudo passa, como antes. Conferir ANTES de resolver: resolver cria o vínculo.
+ * A pessoa escolhida para um slot do card (token unificado ou id cru) pode
+ * entrar? Confere a PESSOA, não o prefixo, porque o resolvedor
+ * (src/lib/equipe-resolver.ts) leva qualquer token a um videomaker ou editor:
+ *   - videomaker ("vm:<id>", id cru no slot de captação, prefixo desconhecido
+ *     "x:<id>", e "vm:" no slot de EDIÇÃO, que vira editor espelho com os
+ *     dados dele) → precisa de vínculo, com ou sem a rede (Onda 2B);
+ *   - "user:<id>" → o usuário é da empresa; senão, se ele é dono de um perfil
+ *     de videomaker, esse perfil precisa de vínculo; se é dono de um editor,
+ *     vale a regra do editor; usuário solto de outra empresa não entra;
+ *   - editor ("ed:<id>", id cru no slot de edição) → com a rede, como antes;
+ *     sem a rede, só com vínculo de editor (achado da revisão do #156).
+ * `atual` é quem já está no slot: mantê-lo nunca é recusado. Conferir ANTES de
+ * resolver: resolver cria o vínculo.
  */
 export async function pessoaDoSlotLiberada(
   organizacaoId: string,
@@ -79,18 +86,24 @@ export async function pessoaDoSlotLiberada(
   atual?: string | null,
 ): Promise<boolean> {
   if (!token) return true
-  if (await empresaVeRede(organizacaoId)) return true
   const semPrefixo = !token.includes(":")
   const { origem, id } = parseToken(token)
   if (atual && atual === id && (semPrefixo || (slot === "captacao" ? origem === "vm" : origem === "ed"))) return true
+
+  const editorLiberado = async (editorId: string) =>
+    (await empresaVeRede(organizacaoId)) ||
+    !!(await prisma.editorOrganizacao.findFirst({ where: { organizacaoId, editorId }, select: { id: true } }))
+
   if (origem === "user") {
     const membro = await prisma.usuarioOrganizacao.findFirst({ where: { organizacaoId, usuarioId: id }, select: { id: true } })
-    return !!membro
+    if (membro) return true
+    const perfil = await prisma.videomaker.findUnique({ where: { usuarioId: id }, select: { id: true } })
+    if (perfil) return temVinculo(organizacaoId, perfil.id)
+    const editor = await prisma.editor.findUnique({ where: { usuarioId: id }, select: { id: true } })
+    if (editor) return editorLiberado(editor.id)
+    return false
   }
-  if (origem === "ed" || (semPrefixo && slot === "edicao")) {
-    const vinculo = await prisma.editorOrganizacao.findFirst({ where: { organizacaoId, editorId: id }, select: { id: true } })
-    return !!vinculo
-  }
+  if (origem === "ed" || (semPrefixo && slot === "edicao")) return editorLiberado(id)
   return temVinculo(organizacaoId, id)
 }
 

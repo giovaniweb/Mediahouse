@@ -195,6 +195,49 @@ describe("convite da rede", () => {
   })
 })
 
+// Achado da revisão do #157: duas contestações ao mesmo tempo abriam duas
+// análises — gastavam o limite e a nota ficava fora da média mesmo depois de uma
+// ser julgada "mantida". A segunda tem de esperar a primeira e ser recusada.
+describe("contestação concorrente (#157)", () => {
+  it("enquanto uma contestação está sendo gravada, a segunda espera e é recusada", async () => {
+    const { contestarAvaliacao } = await import("@/lib/rede")
+    const alvo = `${p}-av-corrida`
+    await db.avaliacaoVideomaker.create({ data: { id: alvo, videomakerId: vm, nota: 1, comentario: "corrida", organizacaoId: A } })
+    // A primeira fica com a transação aberta, como uma requisição no meio do caminho.
+    const primeira = new pg.Client({ connectionString: process.env.DATABASE_URL_TEST })
+    await primeira.connect()
+    try {
+      await primeira.query("BEGIN")
+      await primeira.query("SELECT pg_advisory_xact_lock(hashtext('contestar_avaliacao'), hashtext($1))", [alvo])
+      await primeira.query("SELECT public.contestar_avaliacao('videomaker', $1, $2, 'Primeira contestação, ainda aberta')", [alvo, vm])
+      let terminou = false
+      const segunda = contestarAvaliacao({ tipo: "videomaker", id: vm }, alvo, "Segunda contestação, ao mesmo tempo").finally(() => { terminou = true })
+      await new Promise(r => setTimeout(r, 400))
+      // Sem a trava, a segunda já teria gravado sem esperar.
+      expect(terminou).toBe(false)
+      await primeira.query("COMMIT")
+      expect(await segunda).toMatch(/análise/i)
+    } finally {
+      await primeira.query("ROLLBACK").catch(() => {})
+      await primeira.end()
+    }
+    expect(await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int n FROM contestacoes_avaliacao WHERE "avaliacaoVideomakerId" = ${alvo}`).toEqual([{ n: 1 }])
+    await db.$executeRaw`DELETE FROM contestacoes_avaliacao WHERE "avaliacaoVideomakerId" = ${alvo}`
+    await db.avaliacaoVideomaker.delete({ where: { id: alvo } })
+  })
+
+  it("duas contestações disparadas juntas abrem uma análise só", async () => {
+    const { contestarAvaliacao } = await import("@/lib/rede")
+    const alvo = `${p}-av-juntas`
+    await db.avaliacaoVideomaker.create({ data: { id: alvo, videomakerId: vm, nota: 1, comentario: "juntas", organizacaoId: A } })
+    const respostas = await Promise.all([1, 2, 3].map(i => contestarAvaliacao({ tipo: "videomaker", id: vm }, alvo, `Contestação simultânea número ${i}`)))
+    expect(respostas.filter(r => r === null)).toHaveLength(1)
+    expect(await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int n FROM contestacoes_avaliacao WHERE "avaliacaoVideomakerId" = ${alvo}`).toEqual([{ n: 1 }])
+    await db.$executeRaw`DELETE FROM contestacoes_avaliacao WHERE "avaliacaoVideomakerId" = ${alvo}`
+    await db.avaliacaoVideomaker.delete({ where: { id: alvo } })
+  })
+})
+
 describe("contestação", () => {
   it("o profissional contesta; a nota sai da média até a decisão; removida, some para A", async () => {
     como(uVm, A, "videomaker")

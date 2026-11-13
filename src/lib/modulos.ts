@@ -27,7 +27,7 @@ export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "mensagens", nome: "Mensagens", descricao: "Central de mensagens do WhatsApp." },
   { chave: "cutflow", nome: "Cutflow", descricao: "Plugin do Premiere que edita os cards atribuídos ao editor Cutflow." },
   { chave: "conversao", nome: "Conversão de vídeo", descricao: "Gera a versão leve dos vídeos finais (.mov e afins) para assistir no navegador, dentro da franquia de armazenamento." },
-  { chave: "rede", nome: "Videomakers da rede", descricao: "Ver, buscar e escalar os videomakers da rede do NuFlow que não são da empresa. Desligado, a empresa trabalha só com os próprios videomakers." },
+  { chave: "rede", nome: "Videomakers da rede", descricao: "Buscar os videomakers da rede do NuFlow que não são da empresa, ver o score e convidar; quem aceita entra na lista. Desligado, a empresa trabalha só com os próprios videomakers." },
 ]
 
 /**
