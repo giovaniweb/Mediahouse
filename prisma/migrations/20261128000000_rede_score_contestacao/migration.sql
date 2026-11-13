@@ -180,6 +180,9 @@ $$;
 -- As avaliações dele, com nota e comentário: a Política diz que o comentário
 -- fica com a empresa que contratou e com o profissional avaliado. SEM o nome da
 -- empresa (decisão do Giovani, 13/11): o profissional não sabe quem deu cada nota.
+-- E SEM as respostas do checklist do convite público ("[Checklist] Atendeu…",
+-- "…Contrataria novamente?"), que a rota grava no começo do comentário: pela
+-- mesma decisão, só a empresa que avaliou vê. Ele lê a nota e o texto livre.
 CREATE OR REPLACE FUNCTION public.avaliacoes_do_profissional(p_tipo TEXT, p_id TEXT)
 RETURNS TABLE (
   id TEXT, nota INTEGER, comentario TEXT, "createdAt" TIMESTAMP(3),
@@ -191,7 +194,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT a.id, a.nota, a.comentario, a."createdAt",
+  SELECT a.id, a.nota,
+         NULLIF(btrim(regexp_replace(a.comentario, '^\[Checklist\][^\n]*(\n|$)', '', 'gn'), E' \n\r\t'), ''),
+         a."createdAt",
          a."removidaEm",
          ult.status, ult.decisao,
          (SELECT count(*)::integer FROM contestacoes_avaliacao c WHERE c."avaliacaoVideomakerId" = a.id)
@@ -201,7 +206,9 @@ AS $$
                         ORDER BY c."createdAt" DESC LIMIT 1) ult ON true
    WHERE p_tipo = 'videomaker' AND a."videomakerId" = p_id
   UNION ALL
-  SELECT a.id, a.nota, a.comentario, a."createdAt",
+  SELECT a.id, a.nota,
+         NULLIF(btrim(regexp_replace(a.comentario, '^\[Checklist\][^\n]*(\n|$)', '', 'gn'), E' \n\r\t'), ''),
+         a."createdAt",
          a."removidaEm",
          ult.status, ult.decisao,
          (SELECT count(*)::integer FROM contestacoes_avaliacao c WHERE c."avaliacaoEditorId" = a.id)

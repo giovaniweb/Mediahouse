@@ -33,6 +33,12 @@ const post = (url: string, corpo: unknown) => new NextRequest(`http://localhost$
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const json = async (r: Response) => ({ status: r.status, corpo: await r.json(), texto: "" })
 
+const CHECKLIST_AV4 = [
+  "[Checklist] Atendeu as demandas conforme o combinado? Sim",
+  "[Checklist] Foi pontual e atencioso? Não",
+  "[Checklist] Contrataria novamente? Não",
+].join("\n") + "\n\nQR-DO-SERVICO-A"
+
 beforeAll(async () => {
   await db.organizacao.createMany({ data: [[A, NOME_A], [B, `Empresa Beta ${p}`], [C, `Empresa Gama ${p}`]].map(([id, nome]) => ({ id, nome, slug: id })) })
   await db.usuario.createMany({ data: [uA, uB, uC, uVm, uDono].map(id => ({ id, nome: id, email: `${id}@teste.invalid`, tipo: id === uVm ? "videomaker" : "admin", senhaHash: "sintetico", superAdmin: id === uDono })) })
@@ -48,7 +54,8 @@ beforeAll(async () => {
     { id: `${p}-av2`, videomakerId: vm, nota: 5, comentario: "PRIVADO-A-2", organizacaoId: A, avaliadorId: uA },
     { id: `${p}-av3`, videomakerId: vm, nota: 1, comentario: "PRIVADO-A-RUIM", organizacaoId: A, avaliadorId: uA },
     // Por convite (Onda 1): sem dono, com o serviço da empresa A.
-    { id: `${p}-av4`, videomakerId: vm, nota: 4, comentario: "QR-DO-SERVICO-A", origem: "qr_publico", demandaId: demandaA },
+    // O checklist vem no começo do comentário, como a rota pública grava.
+    { id: `${p}-av4`, videomakerId: vm, nota: 4, comentario: CHECKLIST_AV4, origem: "qr_publico", demandaId: demandaA },
     // Antiga, sem dono e sem serviço: o comentário não é de empresa nenhuma.
     { id: `${p}-av5`, videomakerId: vm, nota: 5, comentario: "LEGADO-SEM-DONO", origem: "qr_publico" },
   ] })
@@ -79,7 +86,8 @@ describe("o que outra empresa vê", () => {
     como(uA, A)
     const { corpo } = await json(await avaliacoesDoPerfil(get(`/api/videomakers/${vm}/avaliar`), params(vm)))
     const comentarios = corpo.avaliacoes.map((a: { comentario: string }) => a.comentario).sort()
-    expect(comentarios).toEqual(["PRIVADO-A-1", "PRIVADO-A-2", "PRIVADO-A-RUIM", "QR-DO-SERVICO-A"])
+    // A empresa que avaliou vê o checklist inteiro, com o "Contrataria novamente?".
+    expect(comentarios).toEqual(["PRIVADO-A-1", "PRIVADO-A-2", "PRIVADO-A-RUIM", CHECKLIST_AV4])
   })
 
   it("B abre o perfil sem telefone nem e-mail", async () => {
@@ -167,6 +175,10 @@ describe("contestação", () => {
     // Decisão de 13/11: o profissional não vê qual empresa deu cada nota.
     expect(contestada).not.toHaveProperty("empresa")
     expect(JSON.stringify(minha.corpo.avaliacoes)).not.toContain(NOME_A)
+    // Nem as respostas do checklist: ele lê a nota e o texto livre.
+    const doConvite = minha.corpo.avaliacoes.find((a: { id: string }) => a.id === `${p}-av4`)
+    expect(doConvite).toMatchObject({ nota: 4, comentario: "QR-DO-SERVICO-A" })
+    expect(JSON.stringify(minha.corpo.avaliacoes)).not.toMatch(/Checklist|Contrataria/)
 
     // A Plataforma: só o superadmin.
     como(uA, A)
