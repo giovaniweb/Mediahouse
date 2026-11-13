@@ -292,6 +292,42 @@ describe("resumo do fim do dia", () => {
   })
 })
 
+describe("resumo do fim do dia: revisão do #154", () => {
+  it("'Só o resumo do dia' traz os cards comuns, não só as gravações", async () => {
+    entrar("giovani")
+    // Giovani (admin, vê tudo) em "Só o resumo do dia": andamento no recorte "tudo".
+    await salvar("giovani", estadoDoPerfil("so_resumo").map((e) => ({ ...e, travada: false })))
+    await db.historicoStatus.createMany({ data: [{ demandaId: cardDosOutros, statusNovo: "ajuste_solicitado" }] })
+    try {
+      await comOrg(org, () => resumoDoFimDoDia(org))
+      const s = await db.saidaWhatsapp.findFirst({ where: { organizacaoId: org, destinatarioId: gente.giovani.id, chave: { contains: "fimdodia:" } } })
+      expect(s).not.toBeNull()
+      expect(decryptSecret(s!.conteudoCifrado!)).toContain("AV-d2")
+    } finally {
+      await db.historicoStatus.deleteMany({ where: { demandaId: cardDosOutros } })
+    }
+  })
+  it("solicitante em 'Tudo do meu setor' não recebe card que não pode ver", async () => {
+    entrar("giovani")
+    await salvar("luisa", estadoDoPerfil("setor", "audiovisual").map((e) => ({ ...e, travada: false })))
+    await db.historicoStatus.createMany({ data: [
+      { demandaId: cardDosOutros, statusNovo: "ajuste_solicitado" },
+      { demandaId: cardGrowthDaLuisa, statusNovo: "aprovado" },
+    ] })
+    try {
+      await comOrg(org, () => resumoDoFimDoDia(org))
+      const s = await db.saidaWhatsapp.findFirst({ where: { organizacaoId: org, destinatarioId: gente.luisa.id, chave: { contains: "fimdodia:" } } })
+      const texto = decryptSecret(s!.conteudoCifrado!)
+      // O card dela entra (ela está nele); o do audiovisual de outra pessoa, não:
+      // ela não tem "ver todas as demandas", e o quadro dela não o mostra.
+      expect(texto).toContain("GR-03")
+      expect(texto).not.toContain("AV-d")
+    } finally {
+      await db.historicoStatus.deleteMany({ where: { demandaId: { in: [cardDosOutros, cardGrowthDaLuisa] } } })
+    }
+  })
+})
+
 describe("quem pode mudar", () => {
   it("a pessoa muda as dela, não a dos outros, e não destrava o que a gestão travou", async () => {
     const auditoriaAntes = await db.eventoAuditoria.count({ where: { organizacaoId: org, acao: "avisos.preferencias", recursoId: gente.luisa.id } })

@@ -27,8 +27,9 @@ describe("resumo do fim do dia", () => {
     expect(h).toContain("&lt;script&gt;")
   })
   it("o recorte do resumo segue o perfil", () => {
-    // Sem nada: todos os cards (é o 'tudo' do andamento).
-    expect(escopoDoResumo(new Map(), "u1")).toEqual({ OR: [{}, expect.objectContaining({ AND: expect.any(Array) })] })
+    // Sem nada: sem corte de perfil (null), e nunca um `{}` dentro de OR, que o
+    // Prisma descarta em vez de ler como "tudo" (revisão do #154).
+    expect(escopoDoResumo(new Map(), "u1")).toBeNull()
     // Só o que eu pedi.
     const pedi = new Map([["andamento", pref({ categoria: "andamento", recorte: "pedi" })], ["gravacoes", pref({ categoria: "gravacoes", recorte: "pedi" })]])
     expect(JSON.stringify(escopoDoResumo(pedi, "u1"))).toContain('"solicitanteId":"u1"')
@@ -36,12 +37,13 @@ describe("resumo do fim do dia", () => {
     const debora = new Map([["andamento", pref({ categoria: "andamento", recorte: "pedi" })], ["gravacoes", pref({ categoria: "gravacoes" })]])
     const e = escopoDoResumo(debora, "u2") as { OR: object[] }
     expect(e.OR).toHaveLength(2)
+    expect(JSON.stringify(e)).not.toContain("{}")
     expect(JSON.stringify(e.OR[1])).toContain("tipoGravacao")
     // Só o resumo do dia: o andamento está desligado nos canais, mas o resumo
     // traz tudo o que ela receberia — é para isso que ela desligou o resto.
     const off = { sino: false, email: false, whatsapp: false }
     const soResumo = escopoDoResumo(new Map([["andamento", pref({ categoria: "andamento", ...off })], ["gravacoes", pref({ categoria: "gravacoes", ...off })]]), "u3")
-    expect(soResumo.OR?.[0]).toEqual({})
+    expect(soResumo).toBeNull()
   })
   it("o dia começa à meia-noite de São Paulo", () => {
     expect(inicioDoDia(new Date("2026-11-12T22:00:00Z")).toISOString()).toBe("2026-11-12T03:00:00.000Z")

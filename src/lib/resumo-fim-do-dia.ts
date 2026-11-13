@@ -24,6 +24,7 @@ import { dataEmSaoPaulo } from "@/lib/datas"
 import { COLUNAS_LABEL, STATUS_PARA_COLUNA } from "@/lib/status"
 import { ehSetor, type Preferencia, type Setor } from "@/lib/avisos-categorias"
 import { ondeEDoSetor, ondeEstaNoCard } from "@/lib/preferencias-aviso"
+import { oQueOUsuarioVe } from "@/lib/escopo-demanda"
 import { escaparHtml, sendEmailNotificacao } from "@/lib/email"
 import { areaDoGestor, arteDoRelatorio, chaveComArte, type AreaRelatorio, type HumorRelatorio } from "@/lib/avisos-arte"
 import type { StatusInterno } from "@prisma/client"
@@ -76,27 +77,32 @@ ${bloco("Andou hoje", d.andou)}${bloco("Esperando você", d.esperando)}${bloco("
 const GRAVACAO_EXTERNA: Prisma.DemandaWhereInput = {
   OR: [{ tipoGravacao: { not: null } }, { tipoVideo: "cobertura_evento" }, { departamento: "eventos" }],
 }
-function ondeDoRecorte(p: Preferencia | undefined, usuarioId: string): Prisma.DemandaWhereInput {
+/** O corte do recorte, ou null quando é "tudo" (sem corte). */
+function ondeDoRecorte(p: Preferencia | undefined, usuarioId: string): Prisma.DemandaWhereInput | null {
   const recorte = p?.recorte ?? "tudo"
   if (recorte === "meus") return ondeEstaNoCard(usuarioId)
   if (recorte === "pedi") return { solicitanteId: usuarioId }
   if (recorte === "setor" && ehSetor(p?.setor)) return { OR: [ondeEstaNoCard(usuarioId), ondeEDoSetor(p!.setor as Setor)] }
-  return {}
+  return null
 }
 
 /**
  * Os cards do resumo, pelo recorte do perfil: o do andamento, mais as gravações
  * externas no recorte de gravações (é como a Débora fica com todas as
- * gravações sem receber todas as demandas).
+ * gravações sem receber todas as demandas). null = sem corte de perfil.
  *
  * Vale o RECORTE, não os canais: quem está em "Só o resumo do dia" desligou o
  * andamento justamente para recebê-lo só aqui, de uma vez.
+ *
+ * Nada de `{}` dentro do OR: o Prisma descarta o filtro vazio ali em vez de
+ * tratá-lo como "tudo", e o "Só o resumo do dia" ficava só com as gravações
+ * (revisão do #154).
  */
-export function escopoDoResumo(prefs: Map<string, Preferencia>, usuarioId: string): Prisma.DemandaWhereInput {
-  return { OR: [
-    ondeDoRecorte(prefs.get("andamento"), usuarioId),
-    { AND: [GRAVACAO_EXTERNA, ondeDoRecorte(prefs.get("gravacoes"), usuarioId)] },
-  ] }
+export function escopoDoResumo(prefs: Map<string, Preferencia>, usuarioId: string): Prisma.DemandaWhereInput | null {
+  const andamento = ondeDoRecorte(prefs.get("andamento"), usuarioId)
+  if (!andamento) return null
+  const gravacoes = ondeDoRecorte(prefs.get("gravacoes"), usuarioId)
+  return { OR: [andamento, gravacoes ? { AND: [GRAVACAO_EXTERNA, gravacoes] } : GRAVACAO_EXTERNA] }
 }
 
 // ─── A rotina ──────────────────────────────────────────────────────────────────
@@ -109,9 +115,9 @@ const ANDOU: Partial<Record<StatusInterno, string>> = {
 }
 const coluna = (s: string) => COLUNAS_LABEL[STATUS_PARA_COLUNA[s as StatusInterno]] ?? s
 
-async function dadosDaPessoa(tx: Tx, org: string, p: { id: string; nome: string; papel: string }, escopo: Prisma.DemandaWhereInput,
-  inicio: Date, link: string): Promise<DadosDoResumo> {
-  const base: Prisma.DemandaWhereInput = { organizacaoId: org, AND: [escopo] }
+async function dadosDaPessoa(tx: Tx, org: string, p: { id: string; nome: string; papel: string },
+  escopo: Prisma.DemandaWhereInput[], inicio: Date, link: string): Promise<DadosDoResumo> {
+  const base: Prisma.DemandaWhereInput = { organizacaoId: org, AND: escopo }
   const sel = { id: true, codigo: true, titulo: true } as const
   const movidos = await tx.historicoStatus.findMany({
     where: { createdAt: { gte: inicio }, statusNovo: { in: Object.keys(ANDOU) }, demanda: base },
@@ -183,7 +189,17 @@ export async function resumoDoFimDoDia(org: string, agora = new Date()): Promise
   for (const [usuarioId, prefs] of porPessoa) {
     const resumos = prefs.get("resumos")
     if (resumos && !resumos.whatsapp && !resumos.email) continue
-    const escopo = escopoDoResumo(prefs, usuarioId)
+    const recorte = escopoDoResumo(prefs, usuarioId)
+    // Ninguém recebe card que não pode ver: o perfil só recorta dentro do que a
+    // pessoa enxerga no quadro (a mesma regra do sino, escopo-demanda). Sem
+    // isso, um solicitante em "Tudo do meu setor" recebia título e código de
+    // card alheio (revisão do #154).
+    const vinculo = await prisma.usuarioOrganizacao.findUnique({
+      where: { usuarioId_organizacaoId: { usuarioId, organizacaoId: org } }, select: { papel: true },
+    })
+    if (!vinculo) continue
+    const ve = await oQueOUsuarioVe(usuarioId, org, vinculo.papel === "admin" || vinculo.papel === "gestor")
+    const escopo = recorte ? [ve, recorte] : [ve]
     const feito = await prisma.$transaction(async (tx) => {
       const p = await tx.usuario.findFirst({
         where: { id: usuarioId, status: "ativo" },
