@@ -88,14 +88,14 @@ export default function AprovacoesView({ area }: { area: AreaAprovacao }) {
   const dialogRef = useDialogFocus(!!modal, () => { if (!loading) { setModal(null); setMotivo("") } })
 
   const { data: dataUrgentes, mutate: mutateU, error: errorU, isLoading: loadingU } = useSWR<{ demandas: Demanda[] }>(
-    `/api/demandas?statusInterno=urgencia_pendente_aprovacao${q}`, fetcher, { refreshInterval: 15000 })
+    `/api/demandas?statusInterno=urgencia_pendente_aprovacao${q}`, fetcher, { refreshInterval: 30000 })
   const { data: dataNormais, mutate: mutateN, error: errorN, isLoading: loadingN } = useSWR<{ demandas: Demanda[] }>(
-    `/api/demandas?statusInterno=aguardando_aprovacao_interna${q}`, fetcher, { refreshInterval: 15000 })
+    `/api/demandas?statusInterno=aguardando_aprovacao_interna${q}`, fetcher, { refreshInterval: 30000 })
   // Pagamentos de videomaker (PIX/CPF) são exclusivos do audiovisual.
   const { data: dataCustos, mutate: mutateCustos, error: errorC, isLoading: loadingC } = useSWR<{ custos: CustoNF[] }>(
-    ehAudiovisual ? "/api/custos-videomaker?statusPagamento=nf_enviada" : null, fetcher, { refreshInterval: 15000 })
+    ehAudiovisual ? "/api/custos-videomaker?statusPagamento=nf_enviada" : null, fetcher, { refreshInterval: 30000 })
   const { data: dataVideos, mutate: mutateVideos, error: errorV, isLoading: loadingV } = useSWR<{ aprovacoes: AprovacaoVideo[] }>(
-    `/api/aprovacao-video?status=pendente${q}`, fetcher, { refreshInterval: 15000 })
+    `/api/aprovacao-video?status=pendente${q}`, fetcher, { refreshInterval: 30000 })
   const { data: dataRecusadas, mutate: mutateRecusadas, error: errorR, isLoading: loadingR } = useSWR<{ demandas: Demanda[] }>(
     `/api/demandas?statusInterno=encerrado${q}`, fetcher, { refreshInterval: 30000 })
 
