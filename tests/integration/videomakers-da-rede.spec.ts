@@ -37,6 +37,9 @@ const superAdmin = `${p}-super`
 // noCard: da rede, mas já estava num card da SEM antes da chave existir;
 // editaRede: da rede, edita (aparece no slot de edição).
 const vm = { proprio: `${p}-vm-proprio`, global: `${p}-vm-global`, noCard: `${p}-vm-nocard`, editaRede: `${p}-vm-edita` }
+// Pessoas que chegam por outro prefixo: o usuário dono do perfil global, um
+// editor da rede (vínculo só com a COM) e um editor da própria SEM.
+const pessoa = { usuarioDoGlobal: `${p}-u-global`, editorRede: `${p}-ed-rede`, editorProprio: `${p}-ed-proprio` }
 let cardDaSem = ""
 let coberturaDaSem = ""
 let empresaNova = ""
@@ -85,9 +88,18 @@ beforeAll(async () => {
     await db.usuario.create({ data: { id: admin[q], nome: admin[q], tipo: "admin", senhaHash: "sem-login", telefone: "5541998765432" } })
     await db.usuarioOrganizacao.create({ data: { usuarioId: admin[q], organizacaoId: org[q], papel: "admin", areas: ["audiovisual"] } })
   }
+  await db.usuario.create({ data: { id: pessoa.usuarioDoGlobal, nome: `${p} Global`, tipo: "videomaker", senhaHash: "sem-login" } })
+  await db.editor.createMany({ data: [
+    { id: pessoa.editorRede, nome: `${p} Editor Rede` },
+    { id: pessoa.editorProprio, nome: `${p} Editor Próprio` },
+  ] })
+  await db.editorOrganizacao.createMany({ data: [
+    { organizacaoId: org.com, editorId: pessoa.editorRede },
+    { organizacaoId: org.sem, editorId: pessoa.editorProprio },
+  ] })
   await db.videomaker.createMany({ data: [
     { id: vm.proprio, nome: `${p} Próprio`, cidade: "Goiânia" },
-    { id: vm.global, nome: `${p} Global`, cidade: "Curitiba" },
+    { id: vm.global, nome: `${p} Global`, cidade: "Curitiba", usuarioId: pessoa.usuarioDoGlobal },
     { id: vm.noCard, nome: `${p} No Card`, cidade: "Curitiba" },
     { id: vm.editaRede, nome: `${p} Edita`, cidade: "Curitiba", podeEditar: true },
   ] })
@@ -119,12 +131,14 @@ afterAll(async () => {
   await db.eventoCoberturaEquipe.deleteMany({ where: { coberturaId: coberturaDaSem } })
   await db.eventoCobertura.deleteMany({ where: { organizacaoId: { in: orgs } } })
   await db.demanda.deleteMany({ where: { organizacaoId: { in: orgs } } })
-  await db.videomakerOrganizacao.deleteMany({ where: { videomakerId: { in: Object.values(vm) } } })
-  await db.editorOrganizacao.deleteMany({ where: { organizacaoId: { in: orgs } } })
-  await db.editor.deleteMany({ where: { nome: `${p} Edita` } })
-  await db.videomaker.deleteMany({ where: { id: { in: Object.values(vm) } } })
+  // Espelhos que um escape do prefixo criaria (o teste falha, mas limpa).
+  const espelhos = { nome: { startsWith: p } }
+  await db.videomakerOrganizacao.deleteMany({ where: { OR: [{ videomakerId: { in: Object.values(vm) } }, { videomaker: espelhos }] } })
+  await db.editorOrganizacao.deleteMany({ where: { OR: [{ organizacaoId: { in: orgs } }, { editor: espelhos }] } })
+  await db.editor.deleteMany({ where: espelhos })
+  await db.videomaker.deleteMany({ where: { OR: [{ id: { in: Object.values(vm) } }, espelhos] } })
   await db.organizacao.deleteMany({ where: { id: { in: orgs } } })
-  await db.usuario.deleteMany({ where: { OR: [{ id: { in: [...Object.values(admin), superAdmin] } }, { email: `${p}-nova@gh.test` }] } })
+  await db.usuario.deleteMany({ where: { OR: [{ id: { in: [...Object.values(admin), superAdmin, pessoa.usuarioDoGlobal] } }, { email: `${p}-nova@gh.test` }] } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -235,6 +249,51 @@ describe("escalar no card (PUT /api/demandas/[id])", () => {
     expect(res.status).toBe(200)
     expect((await db.demanda.findUniqueOrThrow({ where: { id } })).videomakerId).toBe(vm.noCard)
     expect(await db.videomakerOrganizacao.count({ where: { organizacaoId: org.com, videomakerId: vm.noCard } })).toBe(1)
+  })
+})
+
+describe("o prefixo não abre a porta (achado da revisão do #156)", () => {
+  // Antes, só "vm:" era conferido: "x:<id>" também vira videomaker no
+  // resolvedor, "user:" acha o perfil global pelo usuário e "ed:" traz um
+  // editor de fora como espelho. Sem a rede, todos têm de ser da empresa.
+  const recusas: [string, string][] = [
+    ["videomakerId", `user:${pessoa.usuarioDoGlobal}`],
+    ["videomakerId", `ed:${pessoa.editorRede}`],
+    ["videomakerId", `x:${vm.global}`],
+    ["editorId", `x:${vm.editaRede}`],
+    ["editorId", `video:${vm.editaRede}`],
+    ["editorId", `user:${pessoa.usuarioDoGlobal}`],
+    ["editorId", `ed:${pessoa.editorRede}`],
+  ]
+  // Nenhum dos de fora ganha vínculo com a SEM, nem nasce espelho novo nela.
+  async function semVinculoNovo() {
+    expect(await db.videomakerOrganizacao.count({ where: { organizacaoId: org.sem, videomakerId: { notIn: [vm.proprio, vm.noCard] } } })).toBe(0)
+    expect(await db.editorOrganizacao.count({ where: { organizacaoId: org.sem, editorId: { not: pessoa.editorProprio } } })).toBe(0)
+  }
+  it("sem a rede: PUT recusa quem é de fora, qualquer que seja o prefixo", async () => {
+    for (const [campo, valor] of recusas) {
+      const res = await editarDemanda(json(`/api/demandas/${cardDaSem}`, "PUT", { [campo]: valor }), params(cardDaSem))
+      expect(res.status, `${campo}=${valor}`).toBe(400)
+    }
+    await semVinculoNovo()
+  })
+  it("sem a rede: POST recusa quem é de fora, qualquer que seja o prefixo", async () => {
+    for (const [campo, valor] of recusas) {
+      const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ [campo]: valor })))
+      expect(res.status, `${campo}=${valor}`).toBe(400)
+    }
+    await semVinculoNovo()
+  })
+  it("sem a rede: o editor da própria empresa continua entrando", async () => {
+    const res = await editarDemanda(json(`/api/demandas/${cardDaSem}`, "PUT", { editorId: `ed:${pessoa.editorProprio}` }), params(cardDaSem))
+    expect(res.status).toBe(200)
+    expect((await db.demanda.findUniqueOrThrow({ where: { id: cardDaSem } })).editorId).toBe(pessoa.editorProprio)
+  })
+  it("com a rede: o usuário do perfil global escala o perfil global (como antes)", async () => {
+    como("com")
+    const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: `user:${pessoa.usuarioDoGlobal}` })))
+    expect(res.status).toBe(201)
+    expect((await res.json()).videomakerId).toBe(vm.global)
   })
 })
 

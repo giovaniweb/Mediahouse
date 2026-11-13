@@ -18,6 +18,7 @@
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { moduloAtivo } from "@/lib/modulos-org"
+import { parseToken } from "@/lib/equipe-token"
 
 export const FORA_DA_REDE =
   "Este videomaker não é da sua empresa. A sua empresa trabalha só com os próprios videomakers."
@@ -52,6 +53,41 @@ export async function podeEscalarVideomaker(
   if (atual && atual === videomakerId) return true
   if (await empresaVeRede(organizacaoId)) return true
   return temVinculo(organizacaoId, videomakerId)
+}
+
+/**
+ * A pessoa escolhida para um slot do card (token unificado ou id cru) é da
+ * empresa? Vale para QUALQUER prefixo, porque o resolvedor
+ * (src/lib/equipe-resolver.ts) leva todos a um videomaker ou editor:
+ *   - "vm:<id>", id cru no slot de captação e qualquer prefixo desconhecido
+ *     ("x:<id>") viram videomaker → precisa de vínculo;
+ *   - "ed:<id>" → o editor precisa ter vínculo com a empresa;
+ *   - "user:<id>" → o usuário precisa ser da empresa (senão "user:" do dono de
+ *     um perfil global puxaria esse perfil para dentro);
+ *   - id cru no slot de edição é editor → vínculo de editor.
+ * `atual` é quem já está no slot: mantê-lo nunca é recusado. Com a rede ligada,
+ * tudo passa, como antes. Conferir ANTES de resolver: resolver cria o vínculo.
+ */
+export async function pessoaDoSlotLiberada(
+  organizacaoId: string,
+  token: string,
+  slot: "captacao" | "edicao",
+  atual?: string | null,
+): Promise<boolean> {
+  if (!token) return true
+  if (await empresaVeRede(organizacaoId)) return true
+  const semPrefixo = !token.includes(":")
+  const { origem, id } = parseToken(token)
+  if (atual && atual === id && (semPrefixo || (slot === "captacao" ? origem === "vm" : origem === "ed"))) return true
+  if (origem === "user") {
+    const membro = await prisma.usuarioOrganizacao.findFirst({ where: { organizacaoId, usuarioId: id }, select: { id: true } })
+    return !!membro
+  }
+  if (origem === "ed" || (semPrefixo && slot === "edicao")) {
+    const vinculo = await prisma.editorOrganizacao.findFirst({ where: { organizacaoId, editorId: id }, select: { id: true } })
+    return !!vinculo
+  }
+  return temVinculo(organizacaoId, id)
 }
 
 /** Pode abrir o perfil? Sem a rede: só quem tem vínculo ou já está num card desta empresa. */

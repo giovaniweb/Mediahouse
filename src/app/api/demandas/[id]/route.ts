@@ -12,8 +12,8 @@ import { registrarServicoPendente } from "@/lib/custo-servico"
 import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
 import { STATUS_PARA_COLUNA } from "@/lib/status"
 import { sendWhatsappMessage, templates, getWhatsappConfig } from "@/lib/whatsapp"
-import { parseToken, resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
-import { FORA_DA_REDE, podeEscalarVideomaker } from "@/lib/videomakers-da-rede"
+import { resolveParaVideomaker, resolveParaEditor } from "@/lib/equipe-resolver"
+import { FORA_DA_REDE, pessoaDoSlotLiberada } from "@/lib/videomakers-da-rede"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { requireDemandaAcesso, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { lerResponsaveisDoBody, validarResponsaveis, setResponsaveis } from "@/lib/responsaveis"
@@ -242,21 +242,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const erroDescricao = normalizarTextoObrigatorio(body, "descricao", "Descrição", 10)
   if (erroDescricao) return erroDescricao
 
-  // Sem a rede (módulo "rede"), só se escala videomaker da empresa. Confere
-  // ANTES de resolver: resolver cria o vínculo, e aí qualquer um viraria "da
-  // empresa". Quem já está no card pode ficar (salvar de novo não o derruba).
-  if (typeof body.videomakerId === "string" && body.videomakerId) {
-    const escolhido = parseToken(body.videomakerId)
-    if (escolhido.origem === "vm") {
-      const noCard = await prisma.demanda.findUnique({ where: { id }, select: { videomakerId: true } })
-      if (!(await podeEscalarVideomaker(guard.organizacaoId, escolhido.id, noCard?.videomakerId))) {
-        return erroDeCampo("videomakerId", FORA_DA_REDE)
-      }
+  // Sem a rede (módulo "rede"), só se escala gente da empresa, em qualquer
+  // slot e com QUALQUER prefixo ("x:<id>" e "user:" também chegam a um
+  // videomaker no resolvedor). Confere ANTES de resolver: resolver cria o
+  // vínculo, e aí qualquer um viraria "da empresa". Quem já está no card fica.
+  const vmEscolhido = typeof body.videomakerId === "string" ? body.videomakerId : ""
+  const edEscolhido = typeof body.editorId === "string" ? body.editorId : ""
+  if (vmEscolhido || edEscolhido) {
+    const noCard = await prisma.demanda.findUnique({ where: { id }, select: { videomakerId: true, editorId: true } })
+    if (!(await pessoaDoSlotLiberada(guard.organizacaoId, vmEscolhido, "captacao", noCard?.videomakerId))) {
+      return erroDeCampo("videomakerId", FORA_DA_REDE)
     }
-  }
-  // O slot de edição aceita videomaker que edita ("vm:…" vira editor espelho).
-  if (typeof body.editorId === "string" && body.editorId.startsWith("vm:")) {
-    if (!(await podeEscalarVideomaker(guard.organizacaoId, parseToken(body.editorId).id))) {
+    if (!(await pessoaDoSlotLiberada(guard.organizacaoId, edEscolhido, "edicao", noCard?.editorId))) {
       return erroDeCampo("editorId", FORA_DA_REDE)
     }
   }

@@ -14,8 +14,8 @@ import type { Prioridade } from "@prisma/client"
 import { departamentoValido } from "@/lib/departamentos"
 import { formatarDataCurta, validarPrazo } from "@/lib/datas"
 import { erroDeZod, erroDeCampo } from "@/lib/erros-api"
-import { parseToken, resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
-import { FORA_DA_REDE, podeEscalarVideomaker } from "@/lib/videomakers-da-rede"
+import { resolveParaEditor, resolveParaVideomaker } from "@/lib/equipe-resolver"
+import { FORA_DA_REDE, pessoaDoSlotLiberada } from "@/lib/videomakers-da-rede"
 import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import { ideiaParaPedido, ligarIdeiaAoPedido } from "@/lib/social"
 import { entradaDoPedidoInterno } from "@/lib/quem-aprova"
@@ -118,8 +118,9 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   // Token unificado da equipe (ed:/vm:/user:) → id real do editor, mesmo caminho
   // que o PUT já usava. Cria o registro espelho quando a pessoa vem de outra tabela.
   let editorIdResolvido: string | undefined = data.editorId || undefined
-  // Sem a rede (módulo "rede"), videomaker que edita só se for da empresa.
-  if (editorIdResolvido?.startsWith("vm:") && !(await podeEscalarVideomaker(organizacaoId, parseToken(editorIdResolvido).id))) {
+  // Sem a rede (módulo "rede"), só gente da empresa, com qualquer prefixo —
+  // conferido antes de resolver, que cria o vínculo.
+  if (editorIdResolvido && !(await pessoaDoSlotLiberada(organizacaoId, editorIdResolvido, "edicao"))) {
     return erroDeCampo("editorId", FORA_DA_REDE)
   }
   if (editorIdResolvido?.includes(":")) {
@@ -138,11 +139,8 @@ export async function criarDemanda(session: Session, organizacaoId: string, body
   let videomakerIdResolvido: string | undefined = data.videomakerId || undefined
   // Sem a rede (módulo "rede"), o card nasce só com videomaker da empresa —
   // conferido antes de resolver, que cria o vínculo.
-  if (videomakerIdResolvido) {
-    const escolhido = parseToken(videomakerIdResolvido)
-    if (escolhido.origem === "vm" && !(await podeEscalarVideomaker(organizacaoId, escolhido.id))) {
-      return erroDeCampo("videomakerId", FORA_DA_REDE)
-    }
+  if (videomakerIdResolvido && !(await pessoaDoSlotLiberada(organizacaoId, videomakerIdResolvido, "captacao"))) {
+    return erroDeCampo("videomakerId", FORA_DA_REDE)
   }
   if (videomakerIdResolvido?.includes(":")) {
     try {
