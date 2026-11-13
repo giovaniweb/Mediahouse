@@ -115,10 +115,17 @@ export async function areaTravadaDaPessoa(
  * quadro vazio.
  */
 export async function oQueAPessoaVe(session: Session, organizacaoId: string): Promise<Prisma.DemandaWhereInput> {
-  const gestor = ehGestor(session)
+  return oQueOUsuarioVe(session.user.id, organizacaoId, ehGestor(session))
+}
+
+/**
+ * A mesma regra sem sessão, para rotina que fala com a pessoa (o resumo do fim
+ * do dia): `gestor` é o papel dela NA empresa (admin ou gestor no vínculo).
+ */
+export async function oQueOUsuarioVe(usuarioId: string, organizacaoId: string, gestor: boolean): Promise<Prisma.DemandaWhereInput> {
   const [area, minhas] = await Promise.all([
-    areaTravadaDaPessoa(session.user.id, organizacaoId, gestor),
-    escopoDeDemandas(session.user.id, organizacaoId, gestor),
+    areaTravadaDaPessoa(usuarioId, organizacaoId, gestor),
+    escopoDeDemandas(usuarioId, organizacaoId, gestor),
   ])
   const and: Prisma.DemandaWhereInput[] = [escopoComEspelho(organizacaoId)]
   if (area) and.push({ area })

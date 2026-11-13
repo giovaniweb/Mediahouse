@@ -459,7 +459,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           emSegundoPlano(() => sendWhatsappMessage(
             telSolicitante,
             templates.profissionalSelecionadoSolicitante(novoEditor.nome, demandaAntes.codigo, demandaAntes.titulo, telEditorFmt),
-            id
+            id, undefined, { aviso: "andamento" }
           ), "wa-solicitante-profissional")
         }
       }

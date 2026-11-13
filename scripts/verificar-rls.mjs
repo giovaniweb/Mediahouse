@@ -436,6 +436,25 @@ try {
   conferir(contadorNaOutra !== null, "contadores_codigo: a empresa A não cria contador na B")
   const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
   conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
+
+  // 20. Avisos por pessoa (20261127000000): a escolha de uma empresa não aparece
+  // nem é gravada na outra. "Voltar ao padrão" apaga a linha, por isso há DELETE.
+  for (const [id, org] of [["rls-pref-a", A], ["rls-pref-b", B]]) {
+    await inserir("preferencias_aviso", { id, organizacaoId: org, usuarioId: "rls-user-1", categoria: "andamento", whatsapp: false, updatedAt: new Date() })
+  }
+  r = await comoApp(A, `SELECT id FROM preferencias_aviso WHERE id LIKE 'rls-pref-%'`)
+  conferir(r.rows.length === 1 && r.rows[0].id === "rls-pref-a", "preferencias_aviso: a empresa A vê só as escolhas dela")
+  const prefNaOutra = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, "updatedAt")
+                                              VALUES ('rls-pref-x', '${B}', 'rls-user-1', 'pedidos', now())`)
+  conferir(prefNaOutra !== null, "preferencias_aviso: a empresa A não grava escolha na B")
+  r = await comoApp(A, `DELETE FROM preferencias_aviso WHERE id IN ('rls-pref-a', 'rls-pref-b')`)
+  conferir(r.rowCount === 1, "preferencias_aviso: a empresa A apaga a dela e não alcança a da B")
+  const recorteInvalido = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
+                                                 VALUES ('rls-pref-y', '${A}', 'rls-user-1', 'pedidos', 'todos_do_mundo', now())`)
+  conferir(recorteInvalido !== null, "preferencias_aviso: recorte só aceita tudo, setor, meus ou pedi")
+  const setorSemSetor = await erroComoApp(A, `INSERT INTO preferencias_aviso (id, "organizacaoId", "usuarioId", categoria, recorte, "updatedAt")
+                                               VALUES ('rls-pref-z', '${A}', 'rls-user-1', 'pedidos', 'setor', now())`)
+  conferir(setorSemSetor !== null, "preferencias_aviso: recorte 'setor' exige o setor (nunca corta às cegas)")
 } finally {
   await c.query("ROLLBACK")
 }

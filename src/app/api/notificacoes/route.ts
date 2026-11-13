@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import type { Prisma } from "@prisma/client"
 import { alertasDoSino } from "@/lib/escopo-sino"
+import { filtroDoSino } from "@/lib/preferencias-aviso"
+
+const TIPOS_FORA_DO_SINO = ["whatsapp_reconectou"]
 
 // GET /api/notificacoes — alertas não lidos: broadcast (usuarioId null) +
 // direcionados ao usuário logado, da empresa ativa.
@@ -27,8 +30,20 @@ export async function GET() {
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
+  // Avisos por pessoa (12/11/2026): o alerta de broadcast é um só para a
+  // empresa, então o que a pessoa desligou sai aqui, na leitura. Sem
+  // preferência, `cortes` vem vazio e a consulta é a de sempre.
+  const cortes = await filtroDoSino(prisma, organizacaoId, session.user.id)
   const where: Prisma.AlertaIAWhereInput = {
-    AND: [await alertasDoSino(session, organizacaoId), { status: "ativo", lida: false }],
+    AND: [
+      await alertasDoSino(session, organizacaoId),
+      { status: "ativo", lida: false },
+      // "WhatsApp reconectou" é ruído (179 em 30 dias, 12/11/2026): o Giovani pediu
+      // fora do sino de todo mundo. Continua em Alertas; o "desconectou", que pede
+      // ação, segue no sino.
+      { NOT: { tipoAlerta: { in: TIPOS_FORA_DO_SINO } } },
+      ...cortes,
+    ],
   }
 
   const alertas = await prisma.alertaIA.findMany({

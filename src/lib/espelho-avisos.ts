@@ -77,7 +77,7 @@ export async function avisarOrigemDoEspelho(aviso: AvisoEspelho): Promise<void> 
     const gestores = await quemRecebeTudo(aviso.donaId).catch(() => [])
     await Promise.all(
       gestores
-        .map((g) => sendWhatsappMessage(g.telefone, texto, aviso.demandaId, aviso.donaId).catch(() => null))
+        .map((g) => sendWhatsappMessage(g.telefone, texto, aviso.demandaId, aviso.donaId, { aviso: "andamento" }).catch(() => null))
     )
   })
 }

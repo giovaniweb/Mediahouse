@@ -227,6 +227,7 @@ model Usuario {
   cutflowSessoes      CutflowSessao[]
   cutflowPuxadas      CutflowPuxada[]
   tokensMcp           TokenMcp[]
+  preferenciasAviso   PreferenciaAviso[]
 
   @@map("usuarios")
 }
@@ -730,6 +731,34 @@ model Demanda {
 /// Auditoria mostra o nome dela. Guarda só o hash; a chave aparece uma vez, ao
 /// gerar. Revogar = revogadoEm; não se apaga, para continuar dizendo de quem
 /// foram as demandas que criou.
+// Quais avisos cada pessoa recebe, por categoria e canal (12/11/2026).
+//
+// Sem linha = recebe tudo, exatamente como antes. A linha só TIRA: desliga um
+// canal ou estreita a categoria aos cards em que a pessoa está. Nunca dá aviso
+// a quem não receberia. A regra mora em src/lib/preferencias-aviso.ts.
+model PreferenciaAviso {
+  id              String   @id @default(cuid())
+  organizacaoId   String
+  usuarioId       String
+  categoria       String // ver CATEGORIAS_AVISO
+  sino            Boolean  @default(true)
+  email           Boolean  @default(true)
+  whatsapp        Boolean  @default(true)
+  recorte         String   @default("tudo") // "tudo" | "setor" | "meus" | "pedi" (ver avisos-categorias.ts)
+  setor           String? // "audiovisual" | "growth", quando recorte = "setor"
+  travada         Boolean  @default(false) // a gestão travou: a pessoa não muda esta categoria
+  atualizadoPorId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizacao Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([organizacaoId, usuarioId, categoria])
+  @@index([organizacaoId])
+  @@map("preferencias_aviso")
+}
+
 model TokenMcp {
   id            String    @id @default(cuid())
   organizacaoId String
@@ -2276,6 +2305,7 @@ model ProducaoManual {
 
 // ─── SaaS multiempresa ────────────────────────────────────────────────────────
 model Organizacao {
+  preferenciasAviso PreferenciaAviso[]
   lancamentosSetor LancamentoSetor[]
   materiaisVideomaker MaterialVideomaker[]
   cutflowSessoes CutflowSessao[]

@@ -206,7 +206,7 @@ async function notificarSolicitante({
     await sendWhatsappMessage(
       solicitante.telefone,
       mensagensWpp[tipo],
-      demanda.id, organizacaoId
+      demanda.id, organizacaoId, { aviso: "andamento" }
     ).catch(() => {})
   }
 
@@ -220,7 +220,7 @@ async function notificarSolicitante({
       await sendWhatsappMessage(
         telefoneSolicitanteWhatsapp,
         mensagensWpp[tipo],
-        demanda.id, organizacaoId
+        demanda.id, organizacaoId, { aviso: "andamento" }
       ).catch(() => {})
     }
   }
@@ -231,6 +231,7 @@ async function notificarSolicitante({
       assunto: assuntos[tipo],
       html: htmlsEmail[tipo],
       evento: `demanda-${tipo}`,
+      aviso: organizacaoId ? { organizacaoId, categoria: "andamento", demandaId: demanda.id } : undefined,
     })
     if (!resultado.ok) {
       // A aprovação permanece concluída, mas a falha deixa um rastro claro no
