@@ -162,7 +162,11 @@ describe("contestação", () => {
 
     const minha = await json(await minhaRede())
     expect(minha.corpo.score).toEqual({ media: 4.8, avaliacoes: 4 })
-    expect(minha.corpo.avaliacoes.find((a: { id: string }) => a.id === ruim)).toMatchObject({ contestacaoStatus: "em_analise", empresa: NOME_A })
+    const contestada = minha.corpo.avaliacoes.find((a: { id: string }) => a.id === ruim)
+    expect(contestada).toMatchObject({ contestacaoStatus: "em_analise" })
+    // Decisão de 13/11: o profissional não vê qual empresa deu cada nota.
+    expect(contestada).not.toHaveProperty("empresa")
+    expect(JSON.stringify(minha.corpo.avaliacoes)).not.toContain(NOME_A)
 
     // A Plataforma: só o superadmin.
     como(uA, A)

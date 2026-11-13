@@ -10,10 +10,11 @@
 --   - o profissional pode sair da rede: some da busca, quem já o tem continua;
 --   - empresa nova só vê o contato depois que o profissional aceita o convite.
 --
--- Aditiva. Vem depois da Onda 3 (20261111120000_aceites_termos, no ar) e da
--- Onda 2A (20261112120000_empresa_nasce_pronta). Nenhuma depende das outras no
--- SQL. Escrita em 21/10 como 20261021180000; renomeada em 12/11 para entrar
--- depois da 2A. Volta em scripts/volta/20261113120000_rede_score_contestacao.sql.
+-- Aditiva. Vem depois de todas as que estão em produção (até 20261126000000)
+-- e das que já têm data marcada (20261120*, 20261127000000). Nenhuma depende
+-- das outras no SQL. Escrita em 21/10 como 20261021180000, renomeada para
+-- 20261113120000 em 12/11 e para esta em 13/11, para não ficar atrás de uma
+-- migration já aplicada. Volta em scripts/volta/20261128000000_rede_score_contestacao.sql.
 --
 -- O que muda nos dados que existem está na seção 6 (vínculos novos e dono para
 -- avaliações antigas); as médias guardadas nos perfis (videomakers.avaliacao e
@@ -176,11 +177,12 @@ $$;
 -- que a rota tira da SESSÃO (Videomaker/Editor ligado ao usuário logado), e
 -- confere que o alvo é dele.
 
--- As avaliações dele, com o comentário e o nome da empresa: a Política diz que o
--- comentário fica com a empresa que contratou e com o profissional avaliado.
+-- As avaliações dele, com nota e comentário: a Política diz que o comentário
+-- fica com a empresa que contratou e com o profissional avaliado. SEM o nome da
+-- empresa (decisão do Giovani, 13/11): o profissional não sabe quem deu cada nota.
 CREATE OR REPLACE FUNCTION public.avaliacoes_do_profissional(p_tipo TEXT, p_id TEXT)
 RETURNS TABLE (
-  id TEXT, nota INTEGER, comentario TEXT, "createdAt" TIMESTAMP(3), empresa TEXT,
+  id TEXT, nota INTEGER, comentario TEXT, "createdAt" TIMESTAMP(3),
   "removidaEm" TIMESTAMP(3), "contestacaoStatus" TEXT, "contestacaoDecisao" TEXT,
   contestacoes INTEGER
 )
@@ -190,28 +192,20 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT a.id, a.nota, a.comentario, a."createdAt",
-         COALESCE(o.nome, od.nome),
          a."removidaEm",
          ult.status, ult.decisao,
          (SELECT count(*)::integer FROM contestacoes_avaliacao c WHERE c."avaliacaoVideomakerId" = a.id)
     FROM avaliacoes_videomaker a
-    LEFT JOIN organizacoes o ON o.id = a."organizacaoId"
-    LEFT JOIN demandas d ON d.id = a."demandaId"
-    LEFT JOIN organizacoes od ON od.id = d."organizacaoId"
     LEFT JOIN LATERAL (SELECT c.status, c.decisao FROM contestacoes_avaliacao c
                         WHERE c."avaliacaoVideomakerId" = a.id
                         ORDER BY c."createdAt" DESC LIMIT 1) ult ON true
    WHERE p_tipo = 'videomaker' AND a."videomakerId" = p_id
   UNION ALL
   SELECT a.id, a.nota, a.comentario, a."createdAt",
-         COALESCE(o.nome, od.nome),
          a."removidaEm",
          ult.status, ult.decisao,
          (SELECT count(*)::integer FROM contestacoes_avaliacao c WHERE c."avaliacaoEditorId" = a.id)
     FROM avaliacoes_editor a
-    LEFT JOIN organizacoes o ON o.id = a."organizacaoId"
-    LEFT JOIN demandas d ON d.id = a."demandaId"
-    LEFT JOIN organizacoes od ON od.id = d."organizacaoId"
     LEFT JOIN LATERAL (SELECT c.status, c.decisao FROM contestacoes_avaliacao c
                         WHERE c."avaliacaoEditorId" = a.id
                         ORDER BY c."createdAt" DESC LIMIT 1) ult ON true

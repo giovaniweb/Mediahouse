@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
 
 interface Avaliacao {
-  id: string; nota: number; comentario: string | null; createdAt: string; empresa: string | null
+  id: string; nota: number; comentario: string | null; createdAt: string
   removidaEm: string | null; contestacaoStatus: "em_analise" | "mantida" | "removida" | null
   contestacaoDecisao: string | null; contestacoes: number
 }
@@ -143,7 +143,6 @@ export default function MinhasAvaliacoesPage() {
                         <span className="flex gap-0.5" aria-label={`Nota ${av.nota} de 5`}>
                           {[1, 2, 3, 4, 5].map(n => <Star key={n} className={cn("h-3.5 w-3.5", n <= av.nota ? "text-yellow-400 fill-yellow-400" : "text-zinc-700")} />)}
                         </span>
-                        <span className="text-xs text-zinc-400">{av.empresa ?? "Cliente por convite"}</span>
                         <span className="text-xs text-zinc-600">{format(new Date(av.createdAt), "dd/MM/yyyy", { locale: ptBR })}</span>
                         {sit && <span className={cn("text-[10px] border px-1.5 py-0.5 rounded", sit.classe)}>{sit.texto}</span>}
                       </div>

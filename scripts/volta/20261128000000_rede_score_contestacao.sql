@@ -1,4 +1,4 @@
--- VOLTA da migration 20261113120000_rede_score_contestacao (Onda 2B).
+-- VOLTA da migration 20261128000000_rede_score_contestacao (Onda 2B).
 --
 -- Só rode depois de o código da Onda 2B sair do ar: o código novo chama
 -- score_rede e as funções do profissional, e lê naRede/removidaEm; sem elas,

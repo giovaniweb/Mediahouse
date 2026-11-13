@@ -375,7 +375,7 @@ try {
   const apagarContador = await erroComoApp(A, `DELETE FROM contadores_codigo WHERE "organizacaoId" = '${A}'`)
   conferir(apagarContador !== null, "contadores_codigo: a aplicação não apaga contador (sem DELETE)")
 
-  // 20. Rede (Onda 2B, migration 20261113120000): convite é da empresa que
+  // 20. Rede (Onda 2B, migration 20261128000000): convite é da empresa que
   // convida; contestação não se lê nem se grava direto; o score só devolve número.
   await inserir("convites_rede", { id: "rls-convite-a", organizacaoId: A, videomakerId: "rls-vm-1", updatedAt: new Date() })
   r = await comoApp(B, `SELECT count(*)::int n FROM convites_rede WHERE id = 'rls-convite-a'`)
@@ -415,7 +415,7 @@ const { rows: semPolitica } = await c.query(`
 // nela (migration 20261001005000); a aplicação não lê nem escreve direto.
 // contestacoes_avaliacao: o profissional abre e lê pelas funções SECURITY DEFINER
 // contestar_avaliacao e avaliacoes_do_profissional, e a Plataforma decide pela
-// conexão administrativa (migration 20261113120000).
+// conexão administrativa (migration 20261128000000).
 const previstas = ["chat_ia_mensagens", "contestacoes_avaliacao", "limites_publicos", "produtos_servico_evento", "sessions"]
 const inesperadas = semPolitica.map((r) => r.relname).filter((t) => !previstas.includes(t))
 conferir(

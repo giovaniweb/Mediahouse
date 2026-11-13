@@ -113,7 +113,6 @@ export type AvaliacaoDoProfissional = {
   nota: number
   comentario: string | null
   createdAt: Date
-  empresa: string | null
   removidaEm: Date | null
   contestacaoStatus: "em_analise" | "mantida" | "removida" | null
   contestacaoDecisao: string | null
