@@ -40,15 +40,45 @@ export async function entregarMaterial(tx: Tx, e: {
   token: string
   linkBrutos?: string
   linkVideo?: string
-}): Promise<{ completo: boolean; mudouEtapa: boolean; demandaId: string; chegouAgora: boolean; parte: "brutos" | "video" }> {
+}): Promise<ResultadoDaEntrega> {
   const { convite, liberado } = await conviteDaEntrega(tx, e.organizacaoId, e.token)
   if (!liberado) throw new ConviteInvalido("Este link ainda não está liberado para entrega.", 403)
+  const r = await entregarNoCard(tx, {
+    organizacaoId: e.organizacaoId, demandaId: convite.demandaId, videomakerId: convite.videomakerId,
+    linkBrutos: e.linkBrutos, linkVideo: e.linkVideo,
+  })
+  await registrarAuditoria(tx, { organizacaoId: e.organizacaoId, tecnico: `convite:${convite.id}` }, {
+    acao: "convite.entregar", recurso: "convite", recursoId: convite.id, correlationId: randomUUID(),
+  })
+  return r
+}
+
+export type ResultadoDaEntrega = { completo: boolean; mudouEtapa: boolean; demandaId: string; chegouAgora: boolean; parte: "brutos" | "video" }
+
+/**
+ * O núcleo da entrega, com a regra de cima, para quem já provou que pode
+ * entregar NESTE card em nome de `videomakerId`: o link do convite (acima) e,
+ * desde 12/11/2026, quem a empresa parceira escolheu para fazer a gravação
+ * (POST /api/jobs/[id]/entrega). A nota nasce sempre para `videomakerId` — o
+ * videomaker que a dona escalou.
+ */
+export async function entregarNoCard(tx: Tx, e: {
+  organizacaoId: string
+  demandaId: string
+  videomakerId: string
+  linkBrutos?: string
+  linkVideo?: string
+  /** O texto do histórico. Padrão: o do link do convite. */
+  observacao?: { etapa: string; atualizacao: string }
+  /** Quem aparece no histórico da dona. Padrão: ninguém (o link não tem login). */
+  usuarioId?: string | null
+}): Promise<ResultadoDaEntrega> {
   if (e.linkBrutos !== undefined && !linkValido(e.linkBrutos)) throw new ConviteInvalido("Confira o link dos brutos: precisa começar com https://", 400)
   if (e.linkVideo !== undefined && !linkValido(e.linkVideo)) throw new ConviteInvalido("Confira o link do vídeo: precisa começar com https://", 400)
 
-  await tx.$queryRaw`SELECT id FROM demandas WHERE id=${convite.demandaId} AND "organizacaoId"=${e.organizacaoId} FOR UPDATE`
-  const d = await tx.demanda.findFirstOrThrow({ where: { id: convite.demandaId, organizacaoId: e.organizacaoId } })
-  if (d.videomakerId !== convite.videomakerId) throw new ConviteInvalido("Esta gravação está com outro videomaker.", 403)
+  await tx.$queryRaw`SELECT id FROM demandas WHERE id=${e.demandaId} AND "organizacaoId"=${e.organizacaoId} FOR UPDATE`
+  const d = await tx.demanda.findFirstOrThrow({ where: { id: e.demandaId, organizacaoId: e.organizacaoId } })
+  if (d.videomakerId !== e.videomakerId) throw new ConviteInvalido("Esta gravação está com outro videomaker.", 403)
   if (etapaDaGravacao(d) === "concluido") throw new ConviteInvalido("Esta gravação já foi concluída.")
   // O vídeo pronto só vem do videomaker quando a edição é dele: nas outras, o
   // vídeo final é da equipe e o link do convite não alcança.
@@ -72,21 +102,23 @@ export async function entregarMaterial(tx: Tx, e: {
       ...(novo ? { statusInterno: novo, statusVisivel: STATUS_PARA_COLUNA[novo] } : {}),
     },
   })
+  const texto = e.observacao ?? {
+    etapa: "Material entregue pelo videomaker no link do convite",
+    atualizacao: "Videomaker atualizou o material no link do convite",
+  }
   await tx.historicoStatus.create({
     data: {
       demandaId: d.id, statusAnterior: d.statusInterno, statusNovo: novo ?? "edicao_campos", origem: "automacao",
-      observacao: novo ? "Material entregue pelo videomaker no link do convite" : "Videomaker atualizou o material no link do convite",
+      usuarioId: e.usuarioId ?? null,
+      observacao: novo ? texto.etapa : texto.atualizacao,
     },
   })
-  if (chegouAgora && await videomakerPedeNota(tx, e.organizacaoId, convite.videomakerId)) {
+  if (chegouAgora && await videomakerPedeNota(tx, e.organizacaoId, e.videomakerId)) {
     // O pedido da nota nasce junto com o material, como no caminho de dentro
     // (só para videomaker externo).
-    const nf = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId: convite.videomakerId } })
-    if (!nf) await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: convite.videomakerId } })
+    const nf = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId: e.videomakerId } })
+    if (!nf) await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: e.videomakerId } })
   }
-  await registrarAuditoria(tx, { organizacaoId: e.organizacaoId, tecnico: `convite:${convite.id}` }, {
-    acao: "convite.entregar", recurso: "convite", recursoId: convite.id, correlationId: randomUUID(),
-  })
 
   // Os avisos (WhatsApp, e-mail, sino) saem depois do commit, pela rota: um
   // aviso que falha não pode desfazer a entrega (lib/avisos-entrega-videomaker.ts).

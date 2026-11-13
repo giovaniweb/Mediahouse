@@ -13,7 +13,7 @@ import type { Prisma } from "@prisma/client"
 import { inicioDoDia, somarDias } from "@/lib/datas"
 import { intervaloCalendario, RecorteInvalido } from "@/lib/metricas-recorte"
 import { erroDeCampo } from "@/lib/erros-api"
-import { escopoComEspelho, espelhoDoCard, SELECT_ESPELHO } from "@/lib/compartilhamento"
+import { escopoComEspelho, espelhoDoCard, projecaoDoEspelho, SELECT_ESPELHO } from "@/lib/compartilhamento"
 import { whereDoQuadro } from "@/lib/quadro-do-card-server"
 import { MARCA_DO_CANCELAMENTO, STATUS_DE_ENTREGA } from "@/lib/etapas-da-gravacao"
 import { criarDemanda } from "@/lib/criar-demanda"
@@ -245,11 +245,15 @@ export async function GET(req: NextRequest) {
 
   // `espelho` já resolvido do lado do servidor: a tela não precisa saber de
   // aresta, só se desenha "🤝 Terceirizado" ou "🤝 Contourline".
-  const comEspelho = demandas.map(({ compartilhamentos, ...d }) => ({
-    ...d,
-    estadoHistorico: estadoHistorico(d.statusVisivel,d.finalizadaEm),
-    espelho: espelhoDoCard(compartilhamentos, organizacaoId),
-  }))
+  //
+  // O card de OUTRA empresa (espelho) sai pela lista branca: sem token, nota,
+  // pagamento, cliente final, quem pediu nem os outros parceiros da dona.
+  const comEspelho = demandas.map(({ compartilhamentos, ...d }) => {
+    const espelho = espelhoDoCard(compartilhamentos, organizacaoId)
+    const card = { ...d, estadoHistorico: estadoHistorico(d.statusVisivel, d.finalizadaEm) }
+    if (d.organizacaoId === organizacaoId) return { ...card, espelho }
+    return { ...projecaoDoEspelho(card, espelho?.contraparte ?? "Empresa parceira", { paraExecutor: !ehGestor(session) }), espelho }
+  })
 
   return NextResponse.json({ demandas: comEspelho, ...(usePagination ? { total } : {}) })
 }

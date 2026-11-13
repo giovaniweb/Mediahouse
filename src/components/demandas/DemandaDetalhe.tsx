@@ -5,6 +5,8 @@ import surface from "./DemandSurface.module.css"
 import { useState, useEffect, useRef, type ReactNode } from "react"
 import { FaixaEspelho, type EspelhoDoCard } from "./TagEspelho"
 import { EspelhoSecao } from "./EspelhoSecao"
+import { QuemVaiFazer } from "@/components/espelho/QuemVaiFazer"
+import { AcoesDoExecutor } from "@/components/espelho/AcoesDoExecutor"
 import useSWR from "swr"
 import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
@@ -1456,6 +1458,18 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
                     onExecutado={() => mutate()}
                   />
                 )}
+                {/* Quem a empresa parceira escolheu para a gravação (o X da GH). */}
+                {!souOVideomakerDoJob && data?.souExecutorDoEspelho && (
+                  <AcoesDoExecutor
+                    jobId={demanda.id}
+                    statusInterno={demanda.statusInterno}
+                    captacaoIniciada={captacaoIniciada(demanda.historicos)}
+                    pedeVideo={demanda.edicaoPor === "videomaker"}
+                    temBrutos={!!demanda.linkBrutos}
+                    temVideo={!!demanda.linkFinal}
+                    onExecutado={() => mutate()}
+                  />
+                )}
               </FichaDoJob>
             </>
           )}
@@ -2227,6 +2241,10 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
           <div hidden={detailTab !== "pedido"} className={surface.tabSection}>
           {/* Terceirização: some sozinha quando a empresa não tem parceria. */}
           {podeGerenciar && <EspelhoSecao demandaId={demanda.id} />}
+          {/* A gravação chegou porque o videomaker da outra empresa trabalha por esta: a gestão escolhe quem faz. */}
+          {souExecutorExterno && espelho?.automatico && (papelAtual === "admin" || papelAtual === "gestor") && (
+            <QuemVaiFazer demandaId={demanda.id} nomeDona={espelho.contraparte} />
+          )}
 
           {/* Solicitante — na gravação externa, é o "Pedido por" da ficha. */}
           {!ehCobertura && <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">

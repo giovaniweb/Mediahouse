@@ -33,9 +33,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const acesso = await requireDemandaAcesso(session, id, "acompanhar")
   if (acesso instanceof NextResponse) return acesso
 
+  // A parceira vê só a PRÓPRIA aresta. Com quem mais a dona trabalha não é
+  // assunto dela (até 12/11/2026 a lista inteira ia para os dois lados).
   const arestas = await prisma.demandaCompartilhamento.findMany({
-    where: { demandaId: id, revogadoEm: null },
-    select: { id: true, organizacaoDestinoId: true, nomeDestino: true, escopo: true, criadoEm: true },
+    where: {
+      demandaId: id,
+      revogadoEm: null,
+      ...(acesso.papel === "dona" ? {} : { organizacaoDestinoId: acesso.organizacaoId }),
+    },
+    select: { id: true, organizacaoDestinoId: true, nomeDestino: true, escopo: true, criadoEm: true, porVideomakerId: true },
     orderBy: { criadoEm: "desc" },
   })
 
@@ -46,7 +52,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   return NextResponse.json({
     papel: acesso.papel,
-    compartilhamentos: arestas,
+    // `automatico`: veio porque o videomaker trabalha por aquela empresa. Não tem
+    // botão de revogar — sai trocando o videomaker ou a "Empresa dele".
+    compartilhamentos: arestas.map(({ porVideomakerId, ...a }) => ({ ...a, automatico: !!porVideomakerId })),
     parceirosDisponiveis: parceiros
       .filter((p) => !jaCompartilhado.has(p.organizacaoId))
       .map((p) => ({ organizacaoId: p.organizacaoId, nome: p.nome })),
@@ -108,7 +116,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const aresta = existente
     ? await prisma.demandaCompartilhamento.update({
         where: { id: existente.id },
-        data: { revogadoEm: null, revogadoPorId: null, escopo, criadoEm: new Date(), criadoPorId: session.user.id },
+        data: { revogadoEm: null, revogadoPorId: null, escopo, criadoEm: new Date(), criadoPorId: session.user.id, porVideomakerId: null },
       })
     : await prisma.demandaCompartilhamento.create({
         data: {
@@ -168,6 +176,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     where: { demandaId: id, organizacaoDestinoId: destinoId, revogadoEm: null },
   })
   if (!aresta) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  if (aresta.porVideomakerId) {
+    return NextResponse.json(
+      { error: `Este card está com ${aresta.nomeDestino} porque o videomaker trabalha por lá. Para tirar, troque o videomaker ou a "Empresa dele" no cadastro.` },
+      { status: 409 }
+    )
+  }
 
   // Revogar é preencher a data, nunca apagar a linha. E o que a outra empresa
   // produziu — comentário, arquivo, histórico — FICA: é trabalho real, e apagar

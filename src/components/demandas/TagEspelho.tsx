@@ -20,6 +20,8 @@ export type EspelhoDoCard = {
   papel: "origem" | "destino"
   contraparte: string
   escopo: "acompanhar" | "executar"
+  /** Veio sozinho porque o videomaker da dona trabalha por aquela empresa. */
+  automatico?: boolean
 }
 
 export function TagEspelho({ espelho, className }: { espelho?: EspelhoDoCard | null; className?: string }) {
@@ -30,9 +32,14 @@ export function TagEspelho({ espelho, className }: { espelho?: EspelhoDoCard | n
 
   // Da origem: "quem está fazendo isto por mim". Do destino: "de quem é isto".
   // São perguntas diferentes, e por isso o rótulo não é o mesmo dos dois lados.
-  const texto = daOrigem ? `Compartilhado · ${espelho.contraparte}` : `Origem: ${espelho.contraparte}`
+  // Automático, da dona: o videomaker continua sendo o dela, "pela GH Produção".
+  const texto = daOrigem
+    ? espelho.automatico ? `pela ${espelho.contraparte}` : `Compartilhado · ${espelho.contraparte}`
+    : `Origem: ${espelho.contraparte}`
 
-  const titulo = daOrigem
+  const titulo = daOrigem && espelho.automatico
+    ? `O videomaker faz esta gravação pela ${espelho.contraparte}. Para você, ele continua sendo o responsável.`
+    : daOrigem
     ? soAcompanha
       ? `${espelho.contraparte} acompanha este card. A execução continua sua.`
       : `Executado por ${espelho.contraparte}. Você continua dona do card: aprovação, publicação e prazo são seus.`
@@ -72,10 +79,14 @@ export function FaixaEspelho({ espelho }: { espelho?: EspelhoDoCard | null }) {
   const soAcompanha = espelho.escopo === "acompanhar"
 
   const titulo = daOrigem
-    ? `Execução compartilhada para ${espelho.contraparte}`
+    ? espelho.automatico ? `O videomaker faz esta gravação pela ${espelho.contraparte}` : `Execução compartilhada para ${espelho.contraparte}`
     : `Card de ${espelho.contraparte}`
 
-  const explicacao = daOrigem
+  const explicacao = daOrigem && espelho.automatico
+    ? `Para você, ele continua sendo o responsável: convite, avisos, nota e pagamento são com ele. Se trocar o videomaker, o card sai de ${espelho.contraparte}.`
+    : !daOrigem && espelho.automatico
+    ? `Chegou porque o videomaker de ${espelho.contraparte} trabalha pela sua empresa. Escolha quem da equipe vai fazer; aprovação e entrega ao cliente são de ${espelho.contraparte}.`
+    : daOrigem
     ? soAcompanha
       ? `${espelho.contraparte} acompanha este card e não altera nada. A execução continua com a sua equipe.`
       : `${espelho.contraparte} executa a produção e move o card. O briefing, o prazo, a aprovação e a publicação continuam seus — e você recebe aviso a cada movimento.`

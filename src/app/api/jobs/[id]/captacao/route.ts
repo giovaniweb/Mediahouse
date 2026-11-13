@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { requireDemandaOrg } from "@/lib/org"
+import { requireDemandaAcesso } from "@/lib/compartilhamento"
+import { executorDaPessoa, autorNaDona } from "@/lib/executor-espelho"
+import { registrarAuditoria, correlacaoAuditoria } from "@/lib/auditoria"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { EVENTO_CAPTACAO_INICIADA } from "@/lib/status"
 
@@ -27,17 +29,20 @@ export async function POST(_req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
-  const guard = await requireDemandaOrg(session, id)
-  if (guard instanceof NextResponse) return guard
-  const { organizacaoId } = guard
+  // Aceita a dona e, desde 12/11/2026, a empresa que executa por espelho: quem
+  // ela escolheu para a gravação (o X da GH) começa a captação daqui.
+  const acesso = await requireDemandaAcesso(session, id, "executar")
+  if (acesso instanceof NextResponse) return acesso
+  const { organizacaoId } = acesso
 
-  const [vinculo, perfil, demanda] = await Promise.all([
+  const [vinculo, perfil, demanda, executor] = await Promise.all([
     permissoesEfetivas(session.user.id, organizacaoId),
     prisma.videomaker.findFirst({ where: { usuarioId: session.user.id }, select: { id: true } }),
     prisma.demanda.findUnique({
       where: { id },
-      select: { id: true, statusInterno: true, videomakerId: true },
+      select: { id: true, statusInterno: true, videomakerId: true, videomaker: { select: { usuarioId: true } } },
     }),
+    acesso.papel === "espelho" ? executorDaPessoa(session.user.id, organizacaoId, id) : Promise.resolve(null),
   ])
 
   // Fail-closed, como a guarda de transição: sem vínculo determinável, nada.
@@ -49,7 +54,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
   // Quem capta é o videomaker do job. Gestão também pode registrar — é ela que
   // corrige quando o videomaker não registrou na hora.
   const ehGestao = vinculo.papel === "admin" || vinculo.papel === "gestor"
-  const ehDono = !!perfil && !!demanda.videomakerId && perfil.id === demanda.videomakerId
+  const ehDono = (!!perfil && !!demanda.videomakerId && perfil.id === demanda.videomakerId) || !!executor
+  // Na parceira, quem não foi escolhido nem é gestão não enxerga o card.
+  if (!ehGestao && !ehDono && acesso.papel === "espelho") return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   if (!ehGestao && !ehDono) {
     return NextResponse.json({ error: "Este job não está atribuído a você." }, { status: 403 })
   }
@@ -80,12 +87,18 @@ export async function POST(_req: NextRequest, { params }: Params) {
       // O status NÃO muda: o "anterior" e o estado real continuam os mesmos.
       statusAnterior: demanda.statusInterno,
       statusNovo: EVENTO_CAPTACAO_INICIADA,
-      usuarioId: session.user.id,
+      // Na dona, quem aparece é quem ela escalou (lib/executor-espelho.ts).
+      usuarioId: autorNaDona(acesso, session.user.id, demanda),
       origem: "manual",
-      observacao: "Captação iniciada",
+      observacao: acesso.papel === "espelho" ? `Captação iniciada, pela ${acesso.nomeProprio ?? "empresa parceira"}` : "Captação iniciada",
     },
     select: { createdAt: true },
   })
+  if (acesso.papel === "espelho") {
+    await registrarAuditoria(prisma, { organizacaoId, usuarioId: session.user.id }, {
+      acao: "espelho.captacao", recurso: "demanda", recursoId: id, correlationId: correlacaoAuditoria(),
+    })
+  }
 
   return NextResponse.json({ iniciadaEm: evento.createdAt, jaRegistrada: false })
 }

@@ -31,7 +31,13 @@ export async function filtroMinhasDemandas(
     { solicitanteId: usuarioId },
     { socialId: usuarioId },
   ]
-  if (videomaker) alternativas.push({ videomakerId: videomaker.id })
+  if (videomaker) {
+    alternativas.push({ videomakerId: videomaker.id })
+    // O card de outra empresa que a empresa ATIVA mandou ele fazer (o X da GH
+    // na gravação da Contourline). A linha de `executor_espelho` é desta
+    // empresa e some quando o espelho é revogado.
+    alternativas.push({ executoresEspelho: { some: { organizacaoId, videomakerId: videomaker.id } } })
+  }
   if (editor) alternativas.push({ editorId: editor.id })
   if (designer) alternativas.push({ designerId: designer.id })
 

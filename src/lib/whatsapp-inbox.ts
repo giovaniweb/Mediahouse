@@ -1,4 +1,5 @@
 import { ConviteInvalido, responderConvite } from "@/lib/convites"
+import { avisarEspelhoNovo, type EspelhoGarantido } from "@/lib/espelho-do-videomaker"
 import { criarSaida, registrarRecibos } from "@/lib/whatsapp-outbox"
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto"
 import type { Prisma } from "@prisma/client"
@@ -93,13 +94,15 @@ export async function receberEntrada(body: unknown, segredo: string | null): Pro
   })
 }
 
-async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: string, id: string) {
+/** Devolve o card que acabou de chegar na empresa do videomaker, para o aviso sair depois do commit. */
+async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: string, id: string): Promise<EspelhoGarantido | null> {
+  let espelho: EspelhoGarantido | null = null
   const inbox = await tx.inboxWhatsapp.findFirst({where:{id,organizacaoId,estado:"pendente"}})
-  if(!inbox) return
+  if(!inbox) return null
   const cfg = await tx.configWhatsapp.findFirst({where:{organizacaoId,instanceId:inbox.instanceId},select:{id:true}})
   if(!cfg || !inbox.conteudoCifrado || inbox.conteudoExpiraEm<=new Date()) {
     await tx.inboxWhatsapp.update({where:{id,organizacaoId},data:{estado:"revisao",resultado:"config_ou_conteudo_indisponivel"}})
-    return
+    return null
   }
   const c = JSON.parse(decryptSecret(inbox.conteudoCifrado)) as ConteudoEntrada
   const remetente = jidRecebidoVerificado(c.remoteJid,c.remoteJidAlt)
@@ -128,7 +131,7 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
           try {
             const r=await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:vm.id,
               acao:sim ? "aceitar" : "recusar",origem:"whatsapp",recebidoEm})
-            resultado=sim ? "videomaker_aceitou" : "videomaker_recusou"; demandaId=r.demandaId
+            resultado=sim ? "videomaker_aceitou" : "videomaker_recusou"; demandaId=r.demandaId; espelho=r.espelho
           } catch(e) { if(e instanceof ConviteInvalido) resultado="convite_alterado"; else throw e }
         }
         else if(demandas.length!==1 || demandas[0].updatedAt>recebidoEm) resultado="convite_ausente_ou_ambiguo"
@@ -156,6 +159,7 @@ async function processarLocal(tx: Prisma.TransactionClient, organizacaoId: strin
   }
   if(remetente && respostas[resultado]) await criarSaida(tx,{organizacaoId,chave:`inbox:${id}:resposta`,origem:"inbox",referencia:id,
     telefone:remetente.telefone,texto:respostas[resultado],expiraEm:new Date(inbox.createdAt.getTime()+86400_000)})
+  return espelho
 }
 
 export async function processarInbox(organizacaoId: string) {
@@ -165,7 +169,11 @@ export async function processarInbox(organizacaoId: string) {
     const lease={id:job.id,organizacaoId,leaseToken:job.leaseToken!}
     try {
       if(job.versao!==1) { await fila.falhar(lease,"tipo_desconhecido",false); resumo.falhos++; continue }
-      if(await fila.concluirLocal(lease,tx=>processarLocal(tx,organizacaoId,job.referencia))) resumo.concluidos++
+      let espelho: EspelhoGarantido | null = null
+      if(await fila.concluirLocal(lease,async tx=>{ espelho=await processarLocal(tx,organizacaoId,job.referencia) })) {
+        resumo.concluidos++
+        avisarEspelhoNovo(espelho) // depois do commit
+      }
       else resumo.obsoletos++
     } catch { if(await fila.falhar(lease)) resumo.falhos++; else resumo.obsoletos++ }
   }

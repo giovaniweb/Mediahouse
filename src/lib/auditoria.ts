@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { BASE_FALSE, PRESETS } from "@/lib/permissoes"
 
-export const ACOES_AUDITORIA = ["convite.criar", "convite.responder", "convite.entregar", "gravacao.cancelar", "demanda.transferir", "evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "mcp.leitura", "mcp.criar", "mcp.chave", "mcp.desfazer", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos", "login.recusado", "login.bloqueado", "termos.aceite", "avisos.preferencias"] as const
+export const ACOES_AUDITORIA = ["convite.criar", "convite.responder", "convite.entregar", "gravacao.cancelar", "demanda.transferir", "evento.documento", "evento.aprovacao", "whatsapp.pausar","whatsapp.retomar","whatsapp.cancelar","alerta.resolver","alerta.ignorar","alerta.snooze","whatsapp.retentativa","manutencao.credenciais", "manutencao.retencao", "ia.mutacao", "ia.envio", "mcp.leitura", "mcp.criar", "mcp.chave", "mcp.desfazer", "acesso.negado", "permissoes.alteradas", "usuario.alterado", "usuario.removido", "configuracao.alterada", "trello.conexao", "drive.conexao", "arquivo.publicacao", "manutencao.custos", "manutencao.arquivos", "login.recusado", "login.bloqueado", "termos.aceite", "espelho.mover", "espelho.executor", "espelho.captacao", "espelho.entrega", "avisos.preferencias"] as const
 export type AcaoAuditoria = typeof ACOES_AUDITORIA[number]
 export type AtorAuditoria = { organizacaoId: string; usuarioId: string } | { organizacaoId: string; tecnico: string }
 export function correlacaoAuditoria() { return randomUUID() }
@@ -20,6 +20,8 @@ export function payloadAuditoria(entrada?: Record<string, unknown>): Prisma.Inpu
     else if (k === "tokensDia" && Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 1000000) saida[k] = v as number
     else if (k === "simultaneas" && Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= 5) saida[k] = v as number
     else if (k === "operacao" && typeof v === "string" && ["criar", "editar", "excluir"].includes(v)) saida[k] = v
+    // Status do card movido pela parceira (espelho): só o rótulo do enum.
+    else if (k === "statusNovo" && typeof v === "string" && /^[a-z_]{1,40}$/.test(v)) saida[k] = v
     else if (k === "decisao" && typeof v === "string" && ["pendente", "enviado", "em_analise", "aprovado", "reprovado", "finalizado"].includes(v)) saida[k] = v
     else if (k === "motivo" && typeof v === "string" && motivos.has(v)) saida[k] = v
     else if (k === "papel" && typeof v === "string" && Object.hasOwn(PRESETS,v)) saida[k] = v

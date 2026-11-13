@@ -120,6 +120,12 @@ export type ActorTransicao = {
    * como dono.
    */
   origem: PapelNoCard
+  /**
+   * A pessoa é quem a empresa que executa ESCOLHEU para fazer este card
+   * (`executor_espelho`, 12/11/2026): o X da GH na gravação da Contourline.
+   * Ausente ou `false` = não é. Só vale com `origem: "espelho"`.
+   */
+  executorDoEspelho?: boolean
 }
 
 /** O que a guarda precisa saber sobre o job. */
@@ -141,6 +147,17 @@ export type JobTransicao = {
 export const ACOES_DO_VIDEOMAKER: StatusInterno[] = [
   "videomaker_aceitou",
   "videomaker_recusou",
+  "captacao_agendada",
+  "captacao_realizada",
+  "brutos_enviados",
+]
+
+/**
+ * O que faz quem a empresa parceira escolheu para o card (o X da GH): capta e
+ * entrega o material. Aceitar ou recusar a gravação é de quem a dona escalou
+ * (o Gabriel), e a nota é dele também.
+ */
+export const ACOES_DO_EXECUTOR_ESPELHO: StatusInterno[] = [
   "captacao_agendada",
   "captacao_realizada",
   "brutos_enviados",
@@ -246,16 +263,26 @@ export function podeTransicionar(entrada: {
 
   const podeMover = podePermissao(usuario.permissoes, "moverKanban")
   const gestao = ehGestao(usuario.papel) && usuario.origem === "dona"
-  const ehAcaoDeVideomaker = ACOES_DO_VIDEOMAKER.includes(alvo)
-  // "Este job é meu" — a relação exigida pelo §52.
-  const jobEhDele =
-    !!usuario.videomakerId && !!demanda.videomakerId && usuario.videomakerId === demanda.videomakerId
+  const executor = !!usuario.executorDoEspelho && usuario.origem === "espelho"
+  const ehAcaoDeVideomaker = executor ? ACOES_DO_EXECUTOR_ESPELHO.includes(alvo) : ACOES_DO_VIDEOMAKER.includes(alvo)
+  // "Este job é meu" — a relação exigida pelo §52. Para o executor escolhido
+  // pela parceira, o job é dele por essa escolha, não pelo videomaker do card.
+  const jobEhDele = executor ||
+    (!!usuario.videomakerId && !!demanda.videomakerId && usuario.videomakerId === demanda.videomakerId)
 
   if (!gestao) {
     if (usuario.papel === "videomaker") {
       // O papel mais restrito, e o único que os dados permitem prender com
       // segurança: 1 mudança de status em 2.242 registros.
       if (!ehAcaoDeVideomaker) {
+        if (executor) {
+          return {
+            ok: false,
+            codigo: "fora_do_seu_papel",
+            motivo: "Você capta e entrega o material. Aceitar ou recusar a gravação é de quem foi escalado por quem pediu.",
+            avisos,
+          }
+        }
         return {
           ok: false,
           codigo: "fora_do_seu_papel",

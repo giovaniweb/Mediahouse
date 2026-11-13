@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { garantirEspelhoEAvisar } from "@/lib/espelho-do-videomaker"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { calcularPeso } from "@/lib/peso-demanda"
@@ -115,6 +116,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
       })),
     }).catch(e => console.error("[Duplicate] Erro ao copiar checklist:", e))
   }
+
+  // Videomaker que trabalha por uma empresa: a cópia vai para lá também.
+  if (nova.videomakerId) await garantirEspelhoEAvisar(nova.id)
 
   return NextResponse.json({ demanda: nova }, { status: 201 })
 }

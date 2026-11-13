@@ -34,7 +34,13 @@ export function quadroDoCard(card: {
   videomakerId?: string | null
   /** Contrato EFETIVO do videomaker escalado nesta empresa. */
   contratoVideomaker?: string | null
+  /**
+   * O card chegou por espelho AUTOMÁTICO (o videomaker da dona trabalha por
+   * esta empresa). É sempre Gravação Externa aqui, seja qual for o contrato.
+   */
+  espelhoAutomatico?: boolean
 }): QuadroDoCard {
+  if (card.espelhoAutomatico) return "jobs"
   if (card.videomakerId) return card.contratoVideomaker === CONTRATO_INTERNO ? "demandas" : "jobs"
   return ehSolicitacaoDeCobertura(card) ? "jobs" : "demandas"
 }
