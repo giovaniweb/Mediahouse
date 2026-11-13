@@ -8,6 +8,8 @@
 
 import { Resend } from "resend"
 import { prisma } from "@/lib/prisma"
+import { comOrg } from "@/lib/org-contexto"
+import { filtrarEmails, type Aviso as AvisoPorPessoa } from "@/lib/preferencias-aviso"
 
 export type ResultadoEmail = { ok: boolean; error?: string; emailId?: string }
 
@@ -68,19 +70,27 @@ async function destinatariosFinanceiro(organizacaoId?: string | null): Promise<s
 }
 
 async function enviarEmail({
-  destinatarios,
+  destinatarios: lista,
   assunto,
   html,
   evento,
+  aviso,
 }: {
   destinatarios: string[]
   assunto: string
   html: string
   evento: string
+  /** Categoria e card do aviso: tira quem desligou (lib/preferencias-aviso.ts). Sem ele, vai para todos. */
+  aviso?: AvisoPorPessoa
 }): Promise<ResultadoEmail> {
   const client = createClient()
   if (!client) return { ok: false, error: "E-mail global não configurado" }
-  if (!destinatarios.length) return { ok: false, error: "Nenhum destinatário válido" }
+  if (!lista.length) return { ok: false, error: "Nenhum destinatário válido" }
+  const destinatarios = aviso ? await comOrg(aviso.organizacaoId, () => filtrarEmails(prisma, aviso, lista)) : lista
+  if (!destinatarios.length) {
+    console.info("[Email] ninguém recebe: as pessoas desligaram este aviso", { evento })
+    return { ok: true }
+  }
 
   try {
     const { data, error } = await client.resend.emails.send({
@@ -261,10 +271,11 @@ export function templateAvisoDaOperacao(d: AvisoDaOperacaoEmail) {
 
 export async function sendEmailAvisoDaOperacao(
   destinatarios: (string | null | undefined)[], assunto: string, dados: AvisoDaOperacaoEmail, evento: string,
+  aviso?: AvisoPorPessoa,
 ): Promise<ResultadoEmail> {
   const para = [...new Set(destinatarios.map(emailNormalizado).filter((e): e is string => Boolean(e)))]
   if (!para.length) return { ok: false, error: "Nenhum destinatário válido" }
-  return enviarEmail({ destinatarios: para, assunto: `[NuFlow] ${assunto}`, html: templateAvisoDaOperacao(dados), evento })
+  return enviarEmail({ destinatarios: para, assunto: `[NuFlow] ${assunto}`, html: templateAvisoDaOperacao(dados), evento, aviso })
 }
 
 /**
@@ -315,15 +326,17 @@ export async function sendEmailNotificacao({
   assunto,
   html,
   evento = "notificacao",
+  aviso,
 }: {
   destinatario: string
   assunto: string
   html: string
   evento?: string
+  aviso?: AvisoPorPessoa
 }): Promise<ResultadoEmail> {
   const email = emailNormalizado(destinatario)
   if (!email) return { ok: false, error: "Destinatário inválido" }
-  return enviarEmail({ destinatarios: [email], assunto, html, evento })
+  return enviarEmail({ destinatarios: [email], assunto, html, evento, aviso })
 }
 
 export async function sendEmailTeste(destinatario: string): Promise<ResultadoEmail> {

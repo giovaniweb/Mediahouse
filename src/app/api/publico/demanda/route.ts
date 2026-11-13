@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
       sendWhatsappMessage(
         g.telefone,
         `📥 *Nova solicitação externa*\n\n📋 *${demanda.codigo}* — ${data.titulo}\n👤 De: ${data.nomeCliente} (${data.telefone})\n${isCobertura ? `📸 Cobertura em ${data.cidade}` : `🎬 Vídeo: ${data.tipoVideo}`}\n\nAguarda aprovação no sistema.`,
-        demanda.id, organizacaoId
+        demanda.id, organizacaoId, { aviso: isCobertura ? "gravacoes" : "pedidos" }
       ).catch(() => null)
     }
   }

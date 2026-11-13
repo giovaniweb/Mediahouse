@@ -47,6 +47,9 @@ export const TIPOS_PENDENTES: Record<string, (ctx: Contexto) => boolean> = {
   // Vale enquanto a demanda estiver esperando decisão.
   aprovacao_pendente: (c) => !!c.statusDemanda && AGUARDANDO_APROVACAO.includes(c.statusDemanda),
   urgencia_pendente: (c) => !!c.statusDemanda && AGUARDANDO_APROVACAO.includes(c.statusDemanda),
+  // A gravação externa esperando aprovação (avisos por pessoa, 12/11/2026): é o
+  // mesmo aviso de aprovação, com tipo próprio para cair em "Gravações".
+  gravacao_pendente: (c) => !!c.statusDemanda && AGUARDANDO_APROVACAO.includes(c.statusDemanda),
 
   // Vale enquanto a demanda estiver com ajuste pedido.
   ajuste_solicitado: (c) => c.statusDemanda === "ajuste_solicitado",

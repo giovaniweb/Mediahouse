@@ -3,6 +3,7 @@ import { after } from "next/server"
 import { comOrg } from "@/lib/org-contexto"
 import { criarSaida, processarSaidas } from "@/lib/whatsapp-outbox"
 import { chaveComArte, type FamiliaArte } from "@/lib/avisos-arte"
+import type { CategoriaAviso } from "@/lib/avisos-categorias"
 /**
  * WhatsApp service via Evolution API
  */
@@ -62,15 +63,18 @@ export function alternar9oDigito(numero: string): string | null {
  * `opcoes.arte`: a família da arte que acompanha o aviso, de lib/avisos-arte.ts. Só vale para a equipe.
  * `opcoes.chave`: chave própria para o aviso sair uma vez só na vida (o parabéns
  * de um job), em vez da de hoje, que repete no dia seguinte.
+ * `opcoes.aviso`: a categoria do aviso (lib/avisos-categorias.ts) — é o que deixa a pessoa desligá-lo.
+ * Sem ela o aviso sai como sempre. `opcoes.card`: o card, quando `demandaId` não é passado.
  */
 export async function sendWhatsappMessage(telefone: string, mensagem: string, demandaId?: string, organizacaoId?: string | null,
-  opcoes?: { arte?: FamiliaArte | null; chave?: string }) {
+  opcoes?: { arte?: FamiliaArte | null; chave?: string; aviso?: CategoriaAviso | null; card?: string | null }) {
   const orgId=await resolverOrgEnvio(demandaId,organizacaoId)
   if(!orgId) return null
   try {
     const chave=chaveComArte(opcoes?.arte,opcoes?.chave ?? createHash("sha256").update(JSON.stringify([telefone,mensagem,demandaId??null,new Date().toISOString().slice(0,10)])).digest("hex"))
     const saida=await comOrg(orgId,()=>prisma.$transaction(tx=>criarSaida(tx,{
       organizacaoId:orgId,chave,origem:"legado",referencia:demandaId??"aviso",telefone,texto:mensagem,expiraEm:new Date(Date.now()+86400_000),
+      categoria:opcoes?.aviso,demandaId:opcoes?.card,
     })))
     try {after(async()=>{await processarSaidas(orgId).catch(()=>undefined)})} catch { /* consumidor técnico retoma */ }
     if(["falhou","cancelado","expirado","desconhecido"].includes(saida.estado)) return null
