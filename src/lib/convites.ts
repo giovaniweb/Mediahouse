@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
+import { garantirEspelhoDoVideomaker, type EspelhoGarantido } from "@/lib/espelho-do-videomaker"
 import { Prisma } from "@prisma/client"
 import { registrarAuditoria, type AtorAuditoria } from "@/lib/auditoria"
 import { registrarAceite } from "@/lib/juridico/aceite-servidor"
@@ -89,13 +89,14 @@ export async function responderConvite(tx: Tx, e: {
   await profissional(tx, e.organizacaoId, c.videomakerId)
   const status = e.acao === "aceitar" ? "aceito" : "recusado"
   // Reenvio após commit não toca mais no job, histórico, auditoria ou saída.
-  if (c.status === status) return { status, demandaId: d.id }
+  if (c.status === status) return { status, demandaId: d.id, espelho: null }
   if (c.status !== "pendente") throw new ConviteInvalido("Convite já respondido ou substituído")
   if (c.expiresAt <= new Date()) throw new ConviteInvalido("Convite expirado", 410)
   if (e.recebidoEm && (c.createdAt > e.recebidoEm || d.updatedAt > e.recebidoEm)) throw new ConviteInvalido("Convite alterado após a mensagem")
   const alterarJob = e.acao === "aceitar" || d.videomakerId === c.videomakerId
   if (alterarJob && (!estadosDeConvite.includes(d.statusInterno) || (d.videomakerId !== null && d.videomakerId !== c.videomakerId))) throw new ConviteInvalido("A vaga já foi preenchida ou o job avançou")
   await tx.conviteVideomaker.update({ where: { id: c.id }, data: { status, respondidoEm: new Date() } })
+  let espelho: EspelhoGarantido | null = null
   if (alterarJob) {
     const novo = e.acao === "aceitar" ? "videomaker_aceitou" : "videomaker_recusou"
     await tx.demanda.update({ where: { id: d.id, organizacaoId: e.organizacaoId }, data: {
@@ -105,7 +106,8 @@ export async function responderConvite(tx: Tx, e: {
     await tx.historicoStatus.create({ data: { demandaId: d.id, statusAnterior: d.statusInterno,
       statusNovo: novo, origem: e.origem, observacao: `Resposta registrada no convite ${c.id}` } })
     // Aceitou e trabalha por uma empresa: o card vai para lá, no mesmo commit.
-    if (e.acao === "aceitar") await garantirEspelhoDoVideomaker(d.id, { db: tx })
+    // O aviso à empresa dele é de quem chama, depois do commit (avisarEspelhoNovo).
+    if (e.acao === "aceitar") espelho = await garantirEspelhoDoVideomaker(tx, d.id)
   }
   const ator: AtorAuditoria = e.usuarioId ? { organizacaoId: e.organizacaoId, usuarioId: e.usuarioId }
     : { organizacaoId: e.organizacaoId, tecnico: `convite:${c.id}` }
@@ -126,7 +128,7 @@ export async function responderConvite(tx: Tx, e: {
     const evento = status === "aceito" ? "confirmada" : "recusada"
     if (g) await enfileirarAvisos(tx, { organizacaoId: e.organizacaoId, gravacao: g, motivo: evento, mensagens: mensagensDoEvento(evento, g), autorUsuarioId: e.usuarioId })
   }
-  return { status, demandaId: d.id }
+  return { status, demandaId: d.id, espelho }
 }
 
 const linkDoConvite = (token: string) => `${process.env.NEXTAUTH_URL || "https://nuflow.space"}/convite/${token}`

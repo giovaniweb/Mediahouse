@@ -20,6 +20,7 @@ import { chaveDoParabens, destinatariosDoAviso, parabensDoJob, type DadosAvisoKa
 import { registrarServicoPendente } from "@/lib/custo-servico"
 import { podeTransicionar, marcadorConclusao } from "@/lib/job-transicoes"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
+import { avisarEspelhoNovo, type EspelhoGarantido } from "@/lib/espelho-do-videomaker"
 import type { StatusInterno } from "@prisma/client"
 
 // Mudança de status de uma demanda (30/09/2026: corpo movido, sem alteração, de
@@ -129,6 +130,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   // Quando há convite formal, a ação do job usa o mesmo aceite do link e WhatsApp.
   if (["videomaker_aceitou", "videomaker_recusou"].includes(statusInterno) && demandaAtual.videomakerId && !veredito.noop) {
     try {
+      let espelho: EspelhoGarantido | null = null
       const resultado = await comOrg(organizacaoId, () => prisma.$transaction(async tx => {
         const convites = await tx.conviteVideomaker.findMany({where:{demandaId:id,videomakerId:demandaAtual.videomakerId!,status:"pendente",demanda:{organizacaoId}},take:2})
         if (!convites.length) {
@@ -136,10 +138,11 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           return null // Legados sem convite: transição operacional abaixo.
         }
         if (convites.length!==1) throw new ConviteInvalido("Há mais de um convite. Responda pelo link do convite correto.")
-        await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:demandaAtual.videomakerId!,
-          usuarioId:session.user.id,acao:statusInterno==="videomaker_aceitou" ? "aceitar" : "recusar",origem:"manual"})
+        espelho = (await responderConvite(tx,{organizacaoId,token:convites[0].token,videomakerId:demandaAtual.videomakerId!,
+          usuarioId:session.user.id,acao:statusInterno==="videomaker_aceitou" ? "aceitar" : "recusar",origem:"manual"})).espelho
         return tx.demanda.findUniqueOrThrow({where:{id,organizacaoId}})
       }))
+      avisarEspelhoNovo(espelho) // depois do commit
       if(resultado) return responder(resultado)
     } catch(e) {
       if(e instanceof ConviteInvalido) return NextResponse.json({error:e.message},{status:e.status})

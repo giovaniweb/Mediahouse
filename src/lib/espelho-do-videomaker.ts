@@ -38,20 +38,21 @@ export async function temParceriaAceita(db: Db, a: string, b: string): Promise<b
   return n > 0
 }
 
-export type EspelhoGarantido = { demandaId: string; destinoId: string; novo: boolean }
+/** O card que acabou de chegar na empresa dele: o que o aviso à GH precisa. */
+export type EspelhoGarantido = { demandaId: string; destinoId: string; codigo: string; titulo: string }
 
 /**
  * Garante que o card esteja na "Empresa dele" do videomaker escalado.
  *
+ * Recebe o `db` de quem chama — dentro de uma transação, o próprio tx: consulta
+ * por fora do tx pede outra conexão do Pool (scripts/auditar-transacoes.mjs).
+ * NÃO avisa ninguém: quem chama avisa depois do commit, com `avisarEspelhoNovo`
+ * (um aviso que falha não desfaz o espelho, e o sino da GH é de outra empresa).
+ *
  * Devolve `null` quando não há o que fazer: sem videomaker, card finalizado,
- * sem "Empresa dele", sem parceria aceita, ou já espelhado. `novo` diz se o card
- * acabou de chegar lá (e por isso a GH foi avisada).
+ * sem "Empresa dele", sem parceria aceita, ou já espelhado.
  */
-export async function garantirEspelhoDoVideomaker(
-  demandaId: string,
-  opcoes: { db?: Db; avisar?: boolean } = {}
-): Promise<EspelhoGarantido | null> {
-  const db = opcoes.db ?? prisma
+export async function garantirEspelhoDoVideomaker(db: Db, demandaId: string): Promise<EspelhoGarantido | null> {
   const d = await db.demanda.findUnique({
     where: { id: demandaId },
     select: { id: true, organizacaoId: true, videomakerId: true, statusVisivel: true, codigo: true, titulo: true },
@@ -99,10 +100,20 @@ export async function garantirEspelhoDoVideomaker(
     },
   })
 
-  if (opcoes.avisar !== false) {
-    emSegundoPlano(() => avisarChegadaNaEmpresaDele({ demandaId, codigo: d.codigo, titulo: d.titulo, destinoId }), "aviso-espelho-chegou")
-  }
-  return { demandaId, destinoId, novo: true }
+  return { demandaId, destinoId, codigo: d.codigo, titulo: d.titulo }
+}
+
+/** Depois do commit: avisa a empresa dele, em segundo plano. Aceita `null` (nada novo). */
+export function avisarEspelhoNovo(espelho: EspelhoGarantido | null | undefined): void {
+  if (!espelho) return
+  emSegundoPlano(() => avisarChegadaNaEmpresaDele(espelho), "aviso-espelho-chegou")
+}
+
+/** Fora de transação (rotas que já gravaram o card): garante e avisa. */
+export async function garantirEspelhoEAvisar(demandaId: string, opcoes: { avisar?: boolean } = {}): Promise<EspelhoGarantido | null> {
+  const espelho = await garantirEspelhoDoVideomaker(prisma, demandaId)
+  if (opcoes.avisar !== false) avisarEspelhoNovo(espelho)
+  return espelho
 }
 
 /**
@@ -111,32 +122,41 @@ export async function garantirEspelhoDoVideomaker(
  * parceria é aceita. Os concluídos ficam só na dona.
  */
 export async function espelharGravacoesAbertas(donaId: string, videomakerId: string, opcoes: { avisar?: boolean } = {}): Promise<EspelhoGarantido[]> {
-  const abertos = await prisma.demanda.findMany({
-    where: { organizacaoId: donaId, videomakerId, statusVisivel: { not: "finalizado" } },
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
+  // Tudo aqui é da DONA (os cards, o vínculo, a aresta que nasce nela): sob RLS
+  // só passa declarando a dona, seja quem for a sessão (a GH, quando aceita).
+  return comOrg(donaId, async () => {
+    const abertos = await prisma.demanda.findMany({
+      where: { organizacaoId: donaId, videomakerId, statusVisivel: { not: "finalizado" } },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    })
+    const feitos: EspelhoGarantido[] = []
+    for (const { id } of abertos) {
+      const r = await garantirEspelhoEAvisar(id, { avisar: opcoes.avisar })
+      if (r) feitos.push(r)
+    }
+    return feitos
   })
-  const feitos: EspelhoGarantido[] = []
-  for (const { id } of abertos) {
-    const r = await garantirEspelhoDoVideomaker(id, { avisar: opcoes.avisar })
-    if (r) feitos.push(r)
-  }
-  return feitos
 }
 
-/** Depois que a parceria entre as duas é aceita: todo videomaker de uma com "Empresa dele" na outra. */
+/**
+ * Depois que a parceria entre as duas é aceita: todo videomaker de uma com
+ * "Empresa dele" na outra. Quem chama já conferiu que a sessão é parte da
+ * parceria aceita.
+ *
+ * Um lado de cada vez, cada um no contexto da própria dona: com RLS ligado, a
+ * sessão da GH (que é quem aceita) não enxerga os vínculos nem os cards da
+ * Contourline, e uma consulta só, com os dois lados, voltava vazia para ela.
+ */
 export async function espelharPelaParceria(a: string, b: string): Promise<number> {
-  const vinculos = await prisma.videomakerOrganizacao.findMany({
-    where: {
-      OR: [
-        { organizacaoId: a, organizacaoExecutoraId: b },
-        { organizacaoId: b, organizacaoExecutoraId: a },
-      ],
-    },
-    select: { organizacaoId: true, videomakerId: true },
-  })
   let n = 0
-  for (const v of vinculos) n += (await espelharGravacoesAbertas(v.organizacaoId, v.videomakerId)).length
+  for (const [dona, executora] of [[a, b], [b, a]] as const) {
+    const vinculos = await comOrg(dona, () => prisma.videomakerOrganizacao.findMany({
+      where: { organizacaoId: dona, organizacaoExecutoraId: executora },
+      select: { videomakerId: true },
+    }))
+    for (const v of vinculos) n += (await espelharGravacoesAbertas(dona, v.videomakerId)).length
+  }
   return n
 }
 
@@ -145,7 +165,7 @@ export async function espelharPelaParceria(a: string, b: string): Promise<number
  * e gestor e, só se o WhatsApp DELA estiver conectado (QR lido), a mensagem.
  * Sem QR nada é enfileirado — o envio não pode sair pelo número de outra empresa.
  */
-export async function avisarChegadaNaEmpresaDele(a: { demandaId: string; codigo: string; titulo: string; destinoId: string }): Promise<void> {
+export async function avisarChegadaNaEmpresaDele(a: EspelhoGarantido): Promise<void> {
   await comOrg(a.destinoId, async () => {
     const gestao = await prisma.usuarioOrganizacao.findMany({
       where: { organizacaoId: a.destinoId, papel: { in: ["admin", "gestor"] }, usuario: { status: "ativo" } },

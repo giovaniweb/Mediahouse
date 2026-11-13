@@ -28,7 +28,7 @@ import { ehGestor } from "@/lib/papel"
 import { demandaNoEscopo } from "@/lib/escopo-demanda"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { avisarMaterialSalvoNoCard } from "@/lib/avisos-entrega-videomaker"
-import { garantirEspelhoDoVideomaker } from "@/lib/espelho-do-videomaker"
+import { garantirEspelhoEAvisar } from "@/lib/espelho-do-videomaker"
 import { executorDaPessoa } from "@/lib/executor-espelho"
 
 type Params = { params: Promise<{ id: string }> }
@@ -579,7 +579,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   // Videomaker que trabalha por uma empresa: o card vai para lá sozinho
   // (lib/espelho-do-videomaker.ts). Sair do card é o gatilho do banco que tira.
-  if (body.videomakerId !== undefined && demanda.videomakerId) await garantirEspelhoDoVideomaker(id)
+  if (body.videomakerId !== undefined && demanda.videomakerId) await garantirEspelhoEAvisar(id)
 
   // O próprio videomaker da gravação salvou os brutos ou o vídeo pronto na
   // ficha, sem mudar a etapa: a operação é avisada como em qualquer entrega
