@@ -72,10 +72,13 @@ async function contaDe(usuarioId: string | null): Promise<Conta | null> {
   })
 }
 
-/** Para onde vai o link. Conta compartilhada: só os contatos da própria conta. */
-function destinos(vm: { telefone: string | null }, conta: Pick<Conta, "email" | "telefone"> | null, compartilhada: boolean) {
-  const telefone = telefoneCompleto(conta?.telefone ?? null) ?? (compartilhada ? null : telefoneCompleto(vm.telefone))
-  return { telefone, email: emailReal(conta?.email) }
+/** Para onde vai o link. Conta compartilhada: só os contatos da própria conta.
+ * Conta só desta empresa, ou que ainda vai nascer: vale também o que está na ficha. */
+function destinos(vm: { telefone: string | null; email: string | null }, conta: Pick<Conta, "email" | "telefone"> | null, compartilhada: boolean) {
+  const daFicha = !compartilhada
+  const telefone = telefoneCompleto(conta?.telefone ?? null) ?? (daFicha ? telefoneCompleto(vm.telefone) : null)
+  const email = emailReal(conta?.email) ?? (daFicha ? emailReal(vm.email) : null)
+  return { telefone, email }
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -155,7 +158,6 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ? "A conta dele também é de outra empresa e não tem telefone nem e-mail próprio. Peça para ele usar \"Esqueci minha senha\"."
       : "Sem WhatsApp nem e-mail para mandar o acesso. Cadastre o telefone em Editar.")
   }
-  if (conta && !conta.email) return conflito("A conta dele não tem e-mail de login. Fale com o suporte do NuFlow.")
 
   // Limites: um envio por videomaker a cada 5 minutos (de qualquer empresa) e
   // um teto por empresa. Contados no banco, então dois cliques juntos não passam.
@@ -188,6 +190,17 @@ export async function POST(_req: NextRequest, { params }: Params) {
     contaCriada = true
   }
 
+  // Conta do cadastro sem e-mail (login só pelo telefone): o link de criar
+  // senha é por e-mail de login (password_reset_tokens), então ela ganha o
+  // e-mail interno, como as contas do script. O login dela continua o telefone.
+  // Só grava onde está vazio: nenhum e-mail existente é trocado.
+  if (!conta.email) {
+    const interno = emailInterno(vm.id)
+    await comOrg(organizacaoId, () => prisma.usuario.updateMany({ where: { id: conta!.id, email: null }, data: { email: interno } }))
+    conta = await contaDe(conta.id)
+    if (!conta?.email) return conflito("Não deu para preparar o login dele. Fale com o suporte do NuFlow.")
+  }
+
   const empresa = await comOrg(organizacaoId, () => prisma.organizacao.findUnique({ where: { id: organizacaoId }, select: { nome: true } }))
   const nomeEmpresa = empresa?.nome ?? "NuFlow"
   // Link novo: o anterior (e qualquer "esqueci minha senha" em aberto) deixa de valer.
@@ -203,7 +216,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       try {
         await criarSaida(tx, {
           organizacaoId, origem: "manual", chave: `${PREFIXO_CHAVE}${vm.id}:${randomUUID().slice(0, 12)}`, referencia: vm.id,
-          telefone: d.telefone, texto: textoAcessoWhatsapp({ nome: vm.nome, link, telefoneLogin, emailLogin: emailReal(conta!.email), empresa: nomeEmpresa }),
+          telefone: d.telefone, texto: textoAcessoWhatsapp({ nome: vm.nome, link, telefoneLogin, emailLogin: conta!.email, empresa: nomeEmpresa }),
           expiraEm: new Date(Date.now() + 24 * 3600_000),
         })
         whatsapp = "na_fila"
@@ -225,7 +238,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const r = await sendEmailNotificacao({
       destinatario: d.email,
       assunto: `Seu acesso ao NuFlow (${nomeEmpresa.replace(/[\r\n]+/g, " ").slice(0, 80)})`,
-      html: htmlAcessoEmail({ nome: vm.nome, link, empresa: nomeEmpresa, telefoneLogin }),
+      html: htmlAcessoEmail({ nome: vm.nome, link, empresa: nomeEmpresa, telefoneLogin, emailLogin: conta.email }),
       evento: "acesso-videomaker",
     }).catch(() => ({ ok: false }))
     email = r.ok ? "enviado" : "falhou"
