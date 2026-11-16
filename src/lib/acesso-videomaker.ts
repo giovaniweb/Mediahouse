@@ -82,10 +82,17 @@ function escapar(valor: unknown): string {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;")
 }
 
-export function htmlAcessoEmail(d: { nome: string; link: string; empresa: string; telefoneLogin: string | null }) {
+/**
+ * O login dito no e-mail é sempre o da CONTA (telefone, ou o e-mail de login),
+ * nunca "este e-mail": o envio pode ir para o e-mail da ficha, que não é o
+ * login quando a conta tem e-mail interno ou outro endereço.
+ */
+export function htmlAcessoEmail(d: { nome: string; link: string; empresa: string; telefoneLogin: string | null; emailLogin: string | null }) {
   const login = d.telefoneLogin
-    ? `Para entrar, use seu número de telefone (${escapar(d.telefoneLogin)}) ou este e-mail, com a senha que você criar.`
-    : "Para entrar, use este e-mail com a senha que você criar."
+    ? `Para entrar, use seu número de telefone (${escapar(d.telefoneLogin)})${emailReal(d.emailLogin) ? ` ou o e-mail ${escapar(d.emailLogin)}` : ""}, com a senha que você criar.`
+    : d.emailLogin
+      ? `Para entrar, use o login <strong>${escapar(d.emailLogin)}</strong>, com a senha que você criar.`
+      : "Para entrar, use a senha que você criar."
   return `<!DOCTYPE html><html><body style="font-family:-apple-system,Segoe UI,sans-serif;background:#f4f4f5;padding:32px 16px">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">
   <div style="background:#18181b;padding:24px 32px"><div style="color:#fff;font-size:18px;font-weight:700">NuFlow</div></div>

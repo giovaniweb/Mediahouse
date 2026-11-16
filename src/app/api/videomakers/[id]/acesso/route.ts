@@ -216,7 +216,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       try {
         await criarSaida(tx, {
           organizacaoId, origem: "manual", chave: `${PREFIXO_CHAVE}${vm.id}:${randomUUID().slice(0, 12)}`, referencia: vm.id,
-          telefone: d.telefone, texto: textoAcessoWhatsapp({ nome: vm.nome, link, telefoneLogin, emailLogin: emailReal(conta!.email), empresa: nomeEmpresa }),
+          telefone: d.telefone, texto: textoAcessoWhatsapp({ nome: vm.nome, link, telefoneLogin, emailLogin: conta!.email, empresa: nomeEmpresa }),
           expiraEm: new Date(Date.now() + 24 * 3600_000),
         })
         whatsapp = "na_fila"
@@ -238,7 +238,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const r = await sendEmailNotificacao({
       destinatario: d.email,
       assunto: `Seu acesso ao NuFlow (${nomeEmpresa.replace(/[\r\n]+/g, " ").slice(0, 80)})`,
-      html: htmlAcessoEmail({ nome: vm.nome, link, empresa: nomeEmpresa, telefoneLogin }),
+      html: htmlAcessoEmail({ nome: vm.nome, link, empresa: nomeEmpresa, telefoneLogin, emailLogin: conta.email }),
       evento: "acesso-videomaker",
     }).catch(() => ({ ok: false }))
     email = r.ok ? "enviado" : "falhou"

@@ -39,7 +39,7 @@ describe("acesso do videomaker", () => {
   })
 
   it("o e-mail escapa o que vem do cadastro", () => {
-    const h = htmlAcessoEmail({ nome: "<b>Zé</b>", link: "https://x/\"><script>", empresa: "A&B", telefoneLogin: null })
+    const h = htmlAcessoEmail({ nome: "<b>Zé</b>", link: "https://x/\"><script>", empresa: "A&B", telefoneLogin: null, emailLogin: null })
     expect(h).not.toContain("<b>Zé</b>")
     expect(h).not.toContain("<script>")
     expect(h).toContain("A&amp;B")

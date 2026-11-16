@@ -30,9 +30,10 @@ const p = `acvm-${randomUUID().slice(0, 8)}`
 const org = `${p}-org`, outra = `${p}-outra`
 const pessoas = { admin: `${p}-admin`, gestor: `${p}-gestor`, editor: `${p}-editor`, adminOutra: `${p}-adm-outra` }
 const vm = { antigo: `${p}-vm-antigo`, semConta: `${p}-vm-sem`, compartilhado: `${p}-vm-comp`, pendente: `${p}-vm-pend`,
-  soEmail: `${p}-vm-soemail`, ambos: `${p}-vm-ambos`, contaSemEmail: `${p}-vm-contasememail` }
-const conta = { antigo: `${p}-u-antigo`, compartilhado: `${p}-u-comp`, semEmail: `${p}-u-sememail` }
-const tel = { antigo: "21966250001", semConta: "21966250002", compPerfil: "21966250003", compConta: "5521966250004", pendente: "21966250005", ambos: "21966250006", contaSemEmail: "21966250007" }
+  soEmail: `${p}-vm-soemail`, ambos: `${p}-vm-ambos`, contaSemEmail: `${p}-vm-contasememail`,
+  internoComTel: `${p}-vm-intel`, internoSemTel: `${p}-vm-insemtel` }
+const conta = { antigo: `${p}-u-antigo`, compartilhado: `${p}-u-comp`, semEmail: `${p}-u-sememail`, internoComTel: `${p}-u-intel`, internoSemTel: `${p}-u-insemtel` }
+const tel = { antigo: "21966250001", semConta: "21966250002", compPerfil: "21966250003", compConta: "5521966250004", pendente: "21966250005", ambos: "21966250006", contaSemEmail: "21966250007", internoComTel: "21966250008" }
 const emailAntigo = `${p}.maicon@nuflow.local`
 
 function como(quem: keyof typeof pessoas, papel: TipoUsuario, organizacaoId = org) {
@@ -68,7 +69,18 @@ beforeAll(async () => {
   // Conta do cadastro normal sem e-mail (login só pelo telefone).
   await db.usuario.create({ data: { id: conta.semEmail, nome: "Carla Sem Email", telefone: tel.contaSemEmail, tipo: "videomaker", senhaHash: await bcrypt.hash("nuflow0007", 4) } })
   await db.usuarioOrganizacao.create({ data: { usuarioId: conta.semEmail, organizacaoId: org, papel: "videomaker", categoria: "externo", areas: ["audiovisual"] } })
+  // Contas antigas (e-mail interno) cuja ficha tem um e-mail real, diferente do login.
+  await db.usuario.createMany({ data: [
+    { id: conta.internoComTel, nome: "Fabio Interno", email: `${p}.fabio@nuflow.local`, telefone: tel.internoComTel, tipo: "videomaker", senhaHash: "sem-login" },
+    { id: conta.internoSemTel, nome: "Gil Interno", email: `${p}.gil@nuflow.local`, tipo: "videomaker", senhaHash: "sem-login" },
+  ] })
+  await db.usuarioOrganizacao.createMany({ data: [
+    { usuarioId: conta.internoComTel, organizacaoId: org, papel: "videomaker", categoria: "externo", areas: ["audiovisual"] },
+    { usuarioId: conta.internoSemTel, organizacaoId: org, papel: "videomaker", categoria: "externo", areas: ["audiovisual"] },
+  ] })
   await db.videomaker.createMany({ data: [
+    { id: vm.internoComTel, nome: "Fabio Interno", telefone: tel.internoComTel, email: `${p}-fabio@gmail.test`, usuarioId: conta.internoComTel },
+    { id: vm.internoSemTel, nome: "Gil Interno", email: `${p}-gil@gmail.test`, usuarioId: conta.internoSemTel },
     { id: vm.soEmail, nome: "Dora So Email", email: `${p}-dora@gmail.test` },
     { id: vm.ambos, nome: "Elisa Ambos", telefone: tel.ambos, email: `${p}-elisa@gmail.test` },
     { id: vm.contaSemEmail, nome: "Carla Sem Email", telefone: tel.contaSemEmail, usuarioId: conta.semEmail },
@@ -86,6 +98,8 @@ beforeAll(async () => {
     { organizacaoId: org, videomakerId: vm.soEmail },
     { organizacaoId: org, videomakerId: vm.ambos },
     { organizacaoId: org, videomakerId: vm.contaSemEmail },
+    { organizacaoId: org, videomakerId: vm.internoComTel },
+    { organizacaoId: org, videomakerId: vm.internoSemTel },
   ] })
 })
 
@@ -279,5 +293,27 @@ describe("contatos da ficha da própria empresa", () => {
     const [s] = await saidas(vm.contaSemEmail)
     const token = tokenDoTexto(decryptSecret(s.conteudoCifrado!))!
     expect(await (await validarLink(req(`/api/auth/redefinir-senha?token=${token}`))).json()).toEqual({ valido: true })
+  })
+})
+
+// Revisão da Vercel no #159: o e-mail vai para o endereço da ficha, mas o
+// login da conta é outro. A mensagem tem de dizer o login que funciona.
+describe("login dito na mensagem", () => {
+  it("conta com telefone e e-mail interno, enviada ao e-mail da ficha: o login é o telefone, não 'este e-mail'", async () => {
+    const res = await post(vm.internoComTel)
+    expect(res.status).toBe(200)
+    expect(emails.map(e => e.destinatario)).toEqual([`${p}-fabio@gmail.test`])
+    const html = emails[0].html
+    expect(html).toContain(`seu número de telefone (${tel.internoComTel})`)
+    expect(html).not.toMatch(/(use|ou) este e-mail/)
+    expect(html).not.toContain("@nuflow.local")
+  })
+  it("conta sem telefone, com e-mail interno, enviada ao e-mail da ficha: o login dito é o e-mail da conta", async () => {
+    const res = await post(vm.internoSemTel)
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200)
+    expect(emails.map(e => e.destinatario)).toEqual([`${p}-gil@gmail.test`])
+    const html = emails[0].html
+    expect(html).toContain(`${p}.gil@nuflow.local`)
+    expect(html).not.toMatch(/(use|ou) este e-mail/)
   })
 })
