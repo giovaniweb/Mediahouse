@@ -120,12 +120,23 @@ describe("avaliação: nota é da rede, comentário é de quem contratou", () =>
     "src/app/api/videomakers/[id]/avaliar/route.ts",
     "src/app/api/editores/[id]/avaliar/route.ts",
   ]) {
-    it(`${f} lê o comentário desta empresa mais o público`, () => {
+    // Onda 2B (Política de Avaliações): o comentário é só da empresa que
+    // contratou — o da avaliação por QR sem dono deixou de aparecer para todas.
+    // A nota é a média da rede, calculada no banco sem recorte de empresa.
+    it(`${f} lê só o comentário desta empresa e a média da rede`, () => {
       const src = ler(f)
-      expect(src).toMatch(/OR: \[\{ organizacaoId \}, \{ organizacaoId: null \}\]/)
-      expect(src, "a nota agregada não pode ganhar recorte").toContain("_avg: { nota: true }")
+      expect(src).toMatch(/avaliacoes(Videomaker|Editor)DaEmpresa\(\w+, organizacaoId\)/)
+      expect(src, "a nota agregada não pode ganhar recorte").toMatch(/scoreDaRede\("(videomaker|editor)", \w+\)/)
+      expect(src).not.toContain("organizacaoId: null }")
     })
   }
+
+  it("lib/rede só devolve comentário sem dono quando o serviço é desta empresa", () => {
+    const src = ler("src/lib/rede.ts")
+    expect(src).toContain("OR: [{ organizacaoId }, { organizacaoId: null, demandaId: { not: null } }]")
+    expect(src).toContain("where: { id: { in: semDono }, organizacaoId }")
+    expect(src).toContain("removidaEm: null")
+  })
 
   for (const f of [
     "src/app/api/publico/avaliar/route.ts",

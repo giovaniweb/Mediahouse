@@ -71,6 +71,22 @@ describe("rotas", () => {
     expect(moduloDaRota("/api/whatsapp/webhook")).toBeNull()
   })
 
+  it("a busca e o convite da rede são do módulo \"rede\"; a área do profissional não", () => {
+    expect(moduloDaRota("/videomakers/rede")).toBe("rede")
+    expect(moduloDaRota("/api/rede/videomakers")).toBe("rede")
+    expect(moduloDaRota("/api/rede/convites")).toBe("rede")
+    // O profissional responde convites e contesta notas em /api/me/rede.
+    expect(moduloDaRota("/api/me/rede")).toBeNull()
+    // A lista e o perfil continuam de todos; o recorte é feito dentro das rotas.
+    expect(moduloDaRota("/videomakers")).toBeNull()
+    expect(moduloDaRota("/videomakers/abc")).toBeNull()
+    const semRede = { ...PADRAO_MODULOS, rede: false }
+    expect(rotaDeModuloDesligado("/videomakers/rede", semRede)).toBe(true)
+    expect(rotaDeModuloDesligado("/videomakers/rede", { ...semRede, rede: true })).toBe(false)
+    // Perfil carregando: "não se sabe"; o botão espera o perfil antes de aparecer.
+    expect(rotaDeModuloDesligado("/videomakers/rede", undefined)).toBe(false)
+  })
+
   it("o middleware bloqueia só o indisponível na plataforma", () => {
     expect(rotaIndisponivelNaPlataforma("/eventos")).toBe(true)
     expect(rotaIndisponivelNaPlataforma("/design")).toBe(false)   // por empresa, não aqui

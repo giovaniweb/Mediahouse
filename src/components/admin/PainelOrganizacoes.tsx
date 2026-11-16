@@ -297,7 +297,7 @@ function ModalNovaEmpresa({ onClose, onCriada }: { onClose: () => void; onCriada
         <span>
           <span className="block text-sm text-zinc-200">Pode ver os videomakers da rede</span>
           <span className="block text-xs text-zinc-500">
-            Ver, buscar e escalar os videomakers da rede do NuFlow que não são da empresa. Desmarcado, a empresa
+            Buscar os videomakers da rede do NuFlow que não são da empresa e convidá-los. Desmarcado, a empresa
             trabalha só com os próprios. Dá para mudar depois em Módulos.
           </span>
         </span>

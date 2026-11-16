@@ -27,7 +27,8 @@ import { PUT as editarDemanda, GET as abrirDemanda } from "@/app/api/demandas/[i
 import { POST as equipeCobertura } from "@/app/api/coberturas/[id]/equipe/route"
 import { POST as criarEmpresa } from "@/app/api/admin/organizacoes/route"
 import { GET as modulosDaEmpresa, PATCH as mudarModulo } from "@/app/api/admin/organizacoes/[id]/modulos/route"
-import { empresaVeRede } from "@/lib/videomakers-da-rede"
+import { GET as buscaRede } from "@/app/api/rede/videomakers/route"
+import { empresaVeRede, podeEscalarVideomaker } from "@/lib/videomakers-da-rede"
 
 const p = `rede-${randomUUID().slice(0, 8)}`
 const org = { com: `${p}-com`, sem: `${p}-sem`, padrao: `${p}-padrao` }
@@ -36,10 +37,10 @@ const superAdmin = `${p}-super`
 // proprio: da empresa SEM rede; global: da rede (vínculo só com a COM);
 // noCard: da rede, mas já estava num card da SEM antes da chave existir;
 // editaRede: da rede, edita (aparece no slot de edição).
-const vm = { proprio: `${p}-vm-proprio`, global: `${p}-vm-global`, noCard: `${p}-vm-nocard`, editaRede: `${p}-vm-edita` }
+const vm = { proprio: `${p}-vm-proprio`, global: `${p}-vm-global`, noCard: `${p}-vm-nocard`, editaRede: `${p}-vm-edita`, deFora: `${p}-vm-defora` }
 // Pessoas que chegam por outro prefixo: o usuário dono do perfil global, um
 // editor da rede (vínculo só com a COM) e um editor da própria SEM.
-const pessoa = { usuarioDoGlobal: `${p}-u-global`, editorRede: `${p}-ed-rede`, editorProprio: `${p}-ed-proprio` }
+const pessoa = { usuarioDoGlobal: `${p}-u-global`, editorRede: `${p}-ed-rede`, editorProprio: `${p}-ed-proprio`, usuarioDeFora: `${p}-u-defora` }
 let cardDaSem = ""
 let coberturaDaSem = ""
 let empresaNova = ""
@@ -89,6 +90,7 @@ beforeAll(async () => {
     await db.usuarioOrganizacao.create({ data: { usuarioId: admin[q], organizacaoId: org[q], papel: "admin", areas: ["audiovisual"] } })
   }
   await db.usuario.create({ data: { id: pessoa.usuarioDoGlobal, nome: `${p} Global`, tipo: "videomaker", senhaHash: "sem-login" } })
+  await db.usuario.create({ data: { id: pessoa.usuarioDeFora, nome: `${p} De Fora`, tipo: "videomaker", senhaHash: "sem-login" } })
   await db.editor.createMany({ data: [
     { id: pessoa.editorRede, nome: `${p} Editor Rede` },
     { id: pessoa.editorProprio, nome: `${p} Editor Próprio` },
@@ -102,6 +104,8 @@ beforeAll(async () => {
     { id: vm.global, nome: `${p} Global`, cidade: "Curitiba", usuarioId: pessoa.usuarioDoGlobal },
     { id: vm.noCard, nome: `${p} No Card`, cidade: "Curitiba" },
     { id: vm.editaRede, nome: `${p} Edita`, cidade: "Curitiba", podeEditar: true },
+    // Da rede, com usuário e telefone, sem vínculo com empresa nenhuma.
+    { id: vm.deFora, nome: `${p} De Fora`, cidade: "Curitiba", telefone: "41977776666", usuarioId: pessoa.usuarioDeFora, podeEditar: true },
   ] })
   await db.videomakerOrganizacao.createMany({ data: [
     { organizacaoId: org.sem, videomakerId: vm.proprio },
@@ -138,7 +142,7 @@ afterAll(async () => {
   await db.editor.deleteMany({ where: espelhos })
   await db.videomaker.deleteMany({ where: { OR: [{ id: { in: Object.values(vm) } }, espelhos] } })
   await db.organizacao.deleteMany({ where: { id: { in: orgs } } })
-  await db.usuario.deleteMany({ where: { OR: [{ id: { in: [...Object.values(admin), superAdmin, pessoa.usuarioDoGlobal] } }, { email: `${p}-nova@gh.test` }] } })
+  await db.usuario.deleteMany({ where: { OR: [{ id: { in: [...Object.values(admin), superAdmin, pessoa.usuarioDoGlobal, pessoa.usuarioDeFora] } }, { email: `${p}-nova@gh.test` }] } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -150,11 +154,23 @@ describe("a chave", () => {
   })
 })
 
+// Desde a Onda 2B, a lista e a escala são só de quem tem vínculo, com ou sem o
+// módulo: quem é de fora a empresa com a rede encontra na busca da rede
+// (/api/rede/videomakers) e convida — o contato só vem com o "aceito".
 describe("lista de videomakers (/api/videomakers)", () => {
-  it("com a rede: vê os da rede", async () => {
+  it("com a rede: a lista é a da empresa; quem é de fora está na busca da rede", async () => {
     como("com")
     const ids = await idsDaLista()
-    expect(ids).toEqual(expect.arrayContaining([vm.global, vm.proprio, vm.noCard]))
+    expect(ids).toContain(vm.global)
+    expect(ids).not.toContain(vm.noCard)
+    const busca = await buscaRede(get("/api/rede/videomakers"))
+    expect(busca.status).toBe(200)
+    const daRede = ((await busca.json()).videomakers as { id: string }[]).map((v) => v.id)
+    expect(daRede).toEqual(expect.arrayContaining([vm.proprio, vm.noCard]))
+    expect(daRede).not.toContain(vm.global)
+  })
+  it("sem a rede: a busca da rede responde 403", async () => {
+    expect((await buscaRede(get("/api/rede/videomakers"))).status).toBe(403)
   })
   it("sem a rede: só os da empresa", async () => {
     const ids = await idsDaLista()
@@ -166,10 +182,12 @@ describe("lista de videomakers (/api/videomakers)", () => {
 })
 
 describe("busca de quem grava e de quem edita (/api/equipe-disponivel)", () => {
-  it("com a rede: o da rede aparece nos dois papéis", async () => {
+  it("com a rede: a escala oferece os da empresa, não os de fora (esses vêm pelo convite)", async () => {
     como("com")
-    expect(await opcoes("captacao")).toContain(`vm:${vm.noCard}`)
-    expect(await opcoes("edicao")).toContain(`vm:${vm.editaRede}`)
+    const captacao = await opcoes("captacao")
+    expect(captacao).toContain(`vm:${vm.global}`)
+    expect(captacao).not.toContain(`vm:${vm.noCard}`)
+    expect(await opcoes("edicao")).not.toContain(`vm:${vm.editaRede}`)
   })
   it("sem a rede: só os da empresa, nos dois papéis", async () => {
     const captacao = await opcoes("captacao")
@@ -240,15 +258,26 @@ describe("escalar no card (PUT /api/demandas/[id])", () => {
     expect(res.status).toBe(200)
     expect((await db.demanda.findUniqueOrThrow({ where: { id: cardDaSem } })).videomakerId).toBe(vm.proprio)
   })
-  it("com a rede: escala o da rede, que ganha o vínculo (como antes)", async () => {
+  // Onda 2B: mesmo com a rede, quem é de fora entra pelo convite (o "aceito" cria
+  // o vínculo); escalar direto entregaria o contato de quem não aceitou.
+  it("com a rede: escalar o da rede direto é recusado; com o vínculo, entra", async () => {
     como("com")
     const criado = await criarDemanda(json("/api/demandas", "POST", corpoDoJob()))
     expect(criado.status).toBe(201)
     const { id } = await criado.json()
-    const res = await editarDemanda(json(`/api/demandas/${id}`, "PUT", { videomakerId: `vm:${vm.noCard}` }), params(id))
-    expect(res.status).toBe(200)
-    expect((await db.demanda.findUniqueOrThrow({ where: { id } })).videomakerId).toBe(vm.noCard)
-    expect(await db.videomakerOrganizacao.count({ where: { organizacaoId: org.com, videomakerId: vm.noCard } })).toBe(1)
+    const recusado = await editarDemanda(json(`/api/demandas/${id}`, "PUT", { videomakerId: `vm:${vm.noCard}` }), params(id))
+    expect(recusado.status).toBe(400)
+    expect(JSON.stringify(await recusado.json())).toContain("convite da rede")
+    expect(await db.videomakerOrganizacao.count({ where: { organizacaoId: org.com, videomakerId: vm.noCard } })).toBe(0)
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: org.com, videomakerId: vm.noCard } })
+    try {
+      const res = await editarDemanda(json(`/api/demandas/${id}`, "PUT", { videomakerId: `vm:${vm.noCard}` }), params(id))
+      expect(res.status).toBe(200)
+      expect((await db.demanda.findUniqueOrThrow({ where: { id } })).videomakerId).toBe(vm.noCard)
+    } finally {
+      await db.demanda.update({ where: { id }, data: { videomakerId: null } })
+      await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org.com, videomakerId: vm.noCard } })
+    }
   })
 })
 
@@ -297,6 +326,69 @@ describe("o prefixo não abre a porta (achado da revisão do #156)", () => {
   })
 })
 
+// Achado da revisão do #157: com a rede ligada, a trava olhava o prefixo. "vm:"
+// era recusado, mas o id sem prefixo, "user:" do dono do perfil e "editorId:
+// vm:" punham no card um profissional da rede que não aceitou o convite — e o
+// card mostra o telefone. A trava confere a PESSOA, com ou sem a rede.
+describe("com a rede, quem não aceitou o convite não entra por prefixo nenhum (#157)", () => {
+  const tentativas: [string, string][] = [
+    ["videomakerId", vm.deFora],
+    ["videomakerId", `vm:${vm.deFora}`],
+    ["videomakerId", `user:${pessoa.usuarioDeFora}`],
+    ["videomakerId", `x:${vm.deFora}`],
+    ["editorId", `vm:${vm.deFora}`],
+    ["editorId", `user:${pessoa.usuarioDeFora}`],
+    ["editorId", `video:${vm.deFora}`],
+  ]
+  async function nadaDeFora(id?: string) {
+    expect(await db.videomakerOrganizacao.count({ where: { organizacaoId: org.com, videomakerId: vm.deFora } })).toBe(0)
+    expect(await db.editorOrganizacao.count({ where: { organizacaoId: org.com, editor: { OR: [{ usuarioId: pessoa.usuarioDeFora }, { nome: `${p} De Fora` }] } } })).toBe(0)
+    if (id) {
+      const card = await db.demanda.findUniqueOrThrow({ where: { id }, select: { videomakerId: true, editorId: true } })
+      expect(card.videomakerId).not.toBe(vm.deFora)
+      expect(card.editorId).toBeNull()
+    }
+  }
+  it("PUT recusa, qualquer que seja o prefixo, e o telefone não aparece no card", async () => {
+    como("com")
+    const criado = await criarDemanda(json("/api/demandas", "POST", corpoDoJob()))
+    expect(criado.status).toBe(201)
+    const { id } = await criado.json()
+    for (const [campo, valor] of tentativas) {
+      const res = await editarDemanda(json(`/api/demandas/${id}`, "PUT", { [campo]: valor }), params(id))
+      expect(res.status, `${campo}=${valor}`).toBe(400)
+    }
+    expect(JSON.stringify(await (await abrirDemanda(get(`/api/demandas/${id}`), params(id))).json())).not.toContain("41977776666")
+    await nadaDeFora(id)
+  })
+  it("POST recusa, qualquer que seja o prefixo", async () => {
+    como("com")
+    for (const [campo, valor] of tentativas) {
+      const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ [campo]: valor })))
+      expect(res.status, `${campo}=${valor}`).toBe(400)
+    }
+    await nadaDeFora()
+  })
+  it("a equipe da cobertura também confere a pessoa", async () => {
+    expect(await podeEscalarVideomaker(org.com, vm.deFora)).toBe(false)
+    expect(await podeEscalarVideomaker(org.com, vm.global)).toBe(true)
+  })
+  it("depois do aceite (vínculo), entra pelo id e pelo usuário", async () => {
+    como("com")
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: org.com, videomakerId: vm.deFora } })
+    try {
+      for (const valor of [vm.deFora, `user:${pessoa.usuarioDeFora}`]) {
+        const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: valor })))
+        expect(res.status, valor).toBe(201)
+        expect((await res.json()).videomakerId).toBe(vm.deFora)
+      }
+    } finally {
+      await db.demanda.updateMany({ where: { organizacaoId: org.com, videomakerId: vm.deFora }, data: { videomakerId: null } })
+      await db.videomakerOrganizacao.deleteMany({ where: { organizacaoId: org.com, videomakerId: vm.deFora } })
+    }
+  })
+})
+
 describe("criar card já com videomaker (POST /api/demandas)", () => {
   it("sem a rede: recusa o da rede; aceita o próprio", async () => {
     const recusado = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: `vm:${vm.global}` })))
@@ -305,9 +397,11 @@ describe("criar card já com videomaker (POST /api/demandas)", () => {
     expect(aceito.status).toBe(201)
     expect((await aceito.json()).videomakerId).toBe(vm.proprio)
   })
-  it("com a rede: aceita o da rede", async () => {
+  it("com a rede: o da rede sem vínculo é recusado (entra pelo convite); o da lista entra", async () => {
     como("com")
-    const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: `vm:${vm.editaRede}` })))
+    const recusado = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: `vm:${vm.editaRede}` })))
+    expect(recusado.status).toBe(400)
+    const res = await criarDemanda(json("/api/demandas", "POST", corpoDoJob({ videomakerId: `vm:${vm.global}` })))
     expect(res.status).toBe(201)
   })
 })
@@ -341,10 +435,15 @@ describe("tela de empresas do super-admin", () => {
     const ligar = await mudarModulo(json(`/api/admin/organizacoes/${org.sem}/modulos`, "PATCH", { modulo: "rede", ativo: true }), params(org.sem))
     expect(ligar.status).toBe(200)
     como("sem")
-    expect(await idsDaLista()).toContain(vm.global)
+    // Ligada: a busca da rede responde e traz quem não é da SEM.
+    let busca = await buscaRede(get("/api/rede/videomakers"))
+    expect(busca.status).toBe(200)
+    expect(((await busca.json()).videomakers as { id: string }[]).map((v) => v.id)).toContain(vm.global)
     estado.sessao = { user: { id: superAdmin, tipo: "admin" } }
     await mudarModulo(json(`/api/admin/organizacoes/${org.sem}/modulos`, "PATCH", { modulo: "rede", ativo: false }), params(org.sem))
     como("sem")
+    busca = await buscaRede(get("/api/rede/videomakers"))
+    expect(busca.status).toBe(403)
     expect(await idsDaLista()).not.toContain(vm.global)
     const negado = await mudarModulo(json(`/api/admin/organizacoes/${org.sem}/modulos`, "PATCH", { modulo: "rede", ativo: true }), params(org.sem))
     expect(negado.status).toBe(403)

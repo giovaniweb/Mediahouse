@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
-import { empresaVeRede } from "@/lib/videomakers-da-rede"
+
+const FORA_DA_LISTA = "Este videomaker não está na lista da sua empresa. Convide-o pela rede."
 
 export { parseToken, type OrigemEquipe } from "@/lib/equipe-token"
 import { parseToken } from "@/lib/equipe-token"
@@ -14,16 +15,27 @@ async function findOrCreateVideomaker(opts: {
   cidade?: string | null
   estado?: string | null
   tipoContrato: string
-  /** Sem a rede (módulo "rede"): o casamento por nome fica entre os da empresa. */
+  /** O casamento por nome fica entre os videomakers da empresa (Onda 2B). */
   soDaEmpresa?: string | null
 }): Promise<string> {
-  // 1. Dedup por usuarioId (coluna @unique)
+  // 1. Dedup por usuarioId (coluna @unique). O perfil achado pode ser da REDE:
+  //    sem vínculo com a empresa, só entra se o usuário for da empresa (pessoa
+  //    interna); senão, é o convite da rede que libera (Onda 2B, achado do #157).
   if (opts.usuarioId) {
     const existente = await prisma.videomaker.findUnique({
       where: { usuarioId: opts.usuarioId },
       select: { id: true },
     })
-    if (existente) return existente.id
+    if (existente) {
+      if (opts.soDaEmpresa) {
+        const [vinculo, membro] = await Promise.all([
+          prisma.videomakerOrganizacao.count({ where: { organizacaoId: opts.soDaEmpresa, videomakerId: existente.id } }),
+          prisma.usuarioOrganizacao.count({ where: { organizacaoId: opts.soDaEmpresa, usuarioId: opts.usuarioId } }),
+        ])
+        if (!vinculo && !membro) throw new Error(FORA_DA_LISTA)
+      }
+      return existente.id
+    }
   }
   // 2. Fallback por nome
   const porNome = await prisma.videomaker.findFirst({
@@ -158,12 +170,22 @@ export async function resolveParaVideomaker(token: string, organizacaoId?: strin
     return videomakerId
   }
 
-  if (origem === "vm") return comVinculo(id)
+  // Videomaker da rede só entra na escala se já está na lista da empresa. Criar
+  // o vínculo aqui seria pular o convite da rede e entregar o contato de quem
+  // não aceitou (Termos do Profissional, seção 5). Ver /api/rede/convites.
+  if (origem === "vm") {
+    if (organizacaoId) {
+      const naLista = await prisma.videomakerOrganizacao.count({ where: { organizacaoId, videomakerId: id } })
+      if (!naLista) throw new Error(FORA_DA_LISTA)
+    }
+    // O vínculo já existe: regravá-lo com "ativo" rebaixaria quem é preferencial.
+    return id
+  }
 
-  // Quem chama já conferiu o "vm:" contra a rede (podeEscalarVideomaker). Aqui,
-  // editor e usuário são da empresa, mas o casamento por nome não pode puxar
-  // um homônimo da rede para quem não a tem.
-  const soDaEmpresa = organizacaoId && !(await empresaVeRede(organizacaoId)) ? organizacaoId : null
+  // Quem chama já conferiu a pessoa (pessoaDoSlotLiberada). Aqui, por garantia,
+  // nem o casamento por nome nem o perfil achado pelo usuário puxam um
+  // videomaker da rede sem vínculo, com ou sem o módulo "rede" (Onda 2B).
+  const soDaEmpresa = organizacaoId ?? null
 
   if (origem === "ed") {
     const ed = await prisma.editor.findUnique({

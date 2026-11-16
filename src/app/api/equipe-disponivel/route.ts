@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
-import { empresaVeRede, recorteDaRede } from "@/lib/videomakers-da-rede"
+import { scoresDaRede, textoScore, type ScoreRede } from "@/lib/rede"
 
 // GET /api/equipe-disponivel?papel=captacao|edicao
 // Lista unificada e deduplicada de pessoas atribuíveis a um papel.
@@ -59,11 +59,11 @@ export async function GET(req: NextRequest) {
     tipoContrato: string
     origem: "vm" | "ed" | "user"
     usuarioId: string | null
+    score?: ScoreRede
+    scoreTexto?: string
   }
 
   const opcoes: Opcao[] = []
-  // Sem a rede (módulo "rede"), os videomakers oferecidos são só os da empresa.
-  const daRede = recorteDaRede(organizacaoId, await empresaVeRede(organizacaoId))
   // Dedup: pessoas com usuarioId aparecem uma vez (fonte primária do papel primeiro)
   const usuariosVistos = new Set<string>()
   const nomesVistos = new Set<string>()
@@ -87,12 +87,17 @@ export async function GET(req: NextRequest) {
     // `emListaNegra` do perfil global, coluna com zero registros — bloquear
     // alguém não o tirava desta lista. E se alguém marcasse ali, o profissional
     // sumiria para todas as empresas de uma vez.
+    //
+    // E a escala é da LISTA da empresa (vínculo), não da rede inteira. Antes,
+    // escolher aqui alguém que nunca trabalhou com a empresa criava o vínculo
+    // sozinho e entregava o telefone dele. Pelos Termos do Profissional, quem é
+    // de fora entra pelo convite da rede (/videomakers/rede) e decide se aceita.
     const bloqueados = await bloqueadosDaEmpresa(organizacaoId)
     const vms = await prisma.videomaker.findMany({
       where: {
         status: { not: "inativo" },
+        vinculos: { some: { organizacaoId, status: { in: ["ativo", "preferencial"] }, emListaNegra: false } },
         ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
-        ...daRede,
       },
       select: {
         id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
@@ -148,9 +153,13 @@ export async function GET(req: NextRequest) {
         usuarioId: e.usuarioId,
       })
     }
-    // Videomakers que editam
+    // Videomakers que editam — também só os da lista da empresa.
     const vms = await prisma.videomaker.findMany({
-      where: { podeEditar: true, status: { not: "inativo" }, ...daRede },
+      where: {
+        podeEditar: true,
+        status: { not: "inativo" },
+        vinculos: { some: { organizacaoId, status: { in: ["ativo", "preferencial"] }, emListaNegra: false } },
+      },
       select: {
         id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
         vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },
@@ -193,6 +202,20 @@ export async function GET(req: NextRequest) {
       origem: "user",
       usuarioId: u.id,
     })
+  }
+
+  // O score da rede vai junto: é aqui que a empresa escolhe quem escalar e, com
+  // isso, para quem sai o convite de diária. Só média e quantidade.
+  const [scoresVm, scoresEd] = await Promise.all([
+    scoresDaRede("videomaker", opcoes.filter(o => o.origem === "vm").map(o => o.value.slice(3))),
+    scoresDaRede("editor", opcoes.filter(o => o.origem === "ed").map(o => o.value.slice(3))),
+  ])
+  for (const o of opcoes) {
+    const sc = o.origem === "vm" ? scoresVm.get(o.value.slice(3)) : o.origem === "ed" ? scoresEd.get(o.value.slice(3)) : undefined
+    if (!sc) continue
+    o.score = sc
+    // Na lista de opções, "Novo na rede" em todo mundo seria ruído; só a nota.
+    if (sc.media != null) o.scoreTexto = textoScore(sc)
   }
 
   opcoes.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))

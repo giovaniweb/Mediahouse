@@ -38,6 +38,8 @@ import {
   ScrollText,
   X,
   ChevronDown,
+  Star,
+  Flag,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WhatsAppStatus } from "@/components/layout/WhatsAppStatus"
@@ -138,6 +140,7 @@ const sections = [
     items: [
       { href: "/admin/organizacoes", label: "Empresas do SaaS", icon: Building2 },
       { href: "/admin/leads", label: "Interessados", icon: Inbox },
+      { href: "/admin/contestacoes", label: "Contestações da rede", icon: Flag },
     ],
   },
   {
@@ -283,6 +286,7 @@ export function Sidebar() {
                   // ele ficaria vazio.
                   { href: "/jobs", label: "Minhas Gravações", icon: ClipboardList },
                   { href: "/minhas-notas", label: "Notas Fiscais", icon: FileText },
+                  { href: "/minhas-avaliacoes", label: "Minhas avaliações", icon: Star },
                 ].map((item) => {
                   const Icon = item.icon
                   const isActive = isItemActive(item.href)

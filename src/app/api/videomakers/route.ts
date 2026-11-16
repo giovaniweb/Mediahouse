@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
 import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
-import { empresaVeRede, recorteDaRede } from "@/lib/videomakers-da-rede"
+import { scoresDaRede } from "@/lib/rede"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -17,29 +17,42 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get("status")
   const usuarioId = searchParams.get("usuarioId")
 
-  // O `omit` que existia aqui virou desnecessário: as colunas sensíveis não
-  // moram mais no perfil global. Elas vivem em videomaker_dados_fiscais e
-  // videomaker_organizacao, por empresa, e são lidas só onde há vínculo.
+  // A lista é a DA EMPRESA: quem tem vínculo com ela. Até a Onda 2B esta rota
+  // devolvia a rede inteira, com telefone e e-mail de quem nunca trabalhou com
+  // a empresa — e os Termos do Profissional prometem que o contato só aparece
+  // depois que ele aceita o convite. Quem é de fora a empresa encontra em
+  // /videomakers/rede, com o score e sem o contato.
   //
-  // O perfil é da rede, mas o CANDIDATO pendente é da empresa que o recebeu pelo
-  // link de cadastro: nome, telefone e e-mail de quem se candidatou à empresa B
-  // não aparecem para a empresa A. Fora do pendente, a rede segue visível —
-  // para quem tem a rede ligada (módulo "rede"); sem ela, só os da empresa.
-  const veRede = await empresaVeRede(organizacaoId)
-  const videomakers = await prisma.videomaker.findMany({
+  // O candidato pendente já nasce com vínculo com a empresa que o recebeu pelo
+  // link de cadastro, então continua aparecendo só para ela.
+  const vinculos = await prisma.videomakerOrganizacao.findMany({
     where: {
-      ...recorteDaRede(organizacaoId, veRede),
+      organizacaoId,
       ...(status ? { status: status as "ativo" | "inativo" | "preferencial" | "pendente" } : {}),
-      ...(usuarioId ? { usuarioId } : {}),
-      OR: [{ status: { not: "pendente" } }, { vinculos: { some: { organizacaoId } } }],
+      ...(usuarioId ? { videomaker: { usuarioId } } : {}),
     },
-    include: {
-      // As estrelas do cartão só aparecem com avaliação registrada; sem a
-      // contagem, não apareciam nunca. Mesmo recorte do detalhe de avaliações.
-      _count: { select: { demandas: true, avaliacoes: { where: { OR: [{ organizacaoId }, { organizacaoId: null }] } } } },
+    select: {
+      status: true, valorDiaria: true, emListaNegra: true, tipoContrato: true, podeEditar: true,
+      videomaker: {
+        include: { _count: { select: { demandas: { where: { organizacaoId } } } } },
+      },
     },
-    orderBy: [{ status: "asc" }, { nome: "asc" }],
   })
+  const scores = await scoresDaRede("videomaker", vinculos.map(v => v.videomaker.id))
+  const ordem = { preferencial: 0, ativo: 1, pendente: 2, inativo: 3 } as const
+  const videomakers = vinculos
+    .map(v => ({
+      ...v.videomaker,
+      // Situação e diária são do combinado desta empresa, não do perfil.
+      status: v.status,
+      valorDiaria: v.valorDiaria,
+      emListaNegra: v.emListaNegra,
+      // Contrato e edição também são do vínculo (o PUT grava ali).
+      tipoContrato: v.tipoContrato,
+      podeEditar: v.podeEditar,
+      score: scores.get(v.videomaker.id),
+    }))
+    .sort((a, b) => ordem[a.status] - ordem[b.status] || a.nome.localeCompare(b.nome, "pt-BR"))
 
   return NextResponse.json({ videomakers })
 }

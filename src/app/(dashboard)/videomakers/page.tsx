@@ -4,7 +4,7 @@ import styles from "@/components/layout/TeamSurface.module.css"
 import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { Header } from "@/components/layout/Header"
-import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, CheckCircle } from "lucide-react"
+import { MapPin, Phone, Plus, Star, Trash2, AlertTriangle, Filter, Search, Video, CheckCircle, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { TagInput } from "@/components/ui/TagInput"
@@ -12,6 +12,10 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay"
 import { toast } from "sonner"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
 import { fetcher } from "@/lib/fetcher"
+import { useMe } from "@/hooks/usePermissoes"
+import { rotaDeModuloDesligado } from "@/lib/modulos"
+import { ScoreRede } from "@/components/rede/ScoreRede"
+import type { ScoreRede as Score } from "@/lib/rede-score"
 
 
 const statusConfig = {
@@ -35,7 +39,7 @@ interface Videomaker {
   telefone: string; email: string; valorDiaria: number
   avaliacao: number; status: keyof typeof statusConfig
   areasAtuacao: string[]; habilidades: string[]
-  _count?: { avaliacoes: number }
+  score?: Score
   emListaNegra: boolean
 }
 
@@ -44,6 +48,7 @@ export default function VideomakersPage() {
   const [filtro, setFiltro] = useState<FiltroStatus>("todos")
   const [busca, setBusca] = useState("")
   const { data, error, isLoading, isValidating, mutate } = useSWR("/api/videomakers", fetcher)
+  const { data: me } = useMe()
   const videomakers: Videomaker[] = data?.videomakers ?? []
 
   const lista = videomakers.filter((vm) => {
@@ -92,17 +97,28 @@ export default function VideomakersPage() {
     }
   }
 
+  // "Encontrar na rede" é do módulo "rede": espera o perfil e some sem ele.
+  const temRede = !!me?.modulos && !rotaDeModuloDesligado("/videomakers/rede", me.modulos)
+
   return (
     <>
       <Header
         title="Videomakers Externos"
         actions={
+          <div className="flex items-center gap-2">
+          {temRede && <Link
+            href="/videomakers/rede"
+            className="flex items-center gap-2 border border-zinc-700 hover:bg-zinc-800 text-zinc-200 text-sm font-medium px-3 py-2 rounded-lg"
+          >
+            <Globe className="w-4 h-4" /> Encontrar na rede
+          </Link>}
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg"
           >
             <Plus className="w-4 h-4" /> Cadastrar
           </button>
+          </div>
         }
       />
       <main className={styles.page}>
@@ -223,15 +239,7 @@ export default function VideomakersPage() {
                       </span>
                     </div>
 
-                    {(vm._count?.avaliacoes ?? 0) > 0 ? <div className="flex items-center gap-1 mb-3">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <Star
-                          key={n}
-                          className={cn("w-3.5 h-3.5", n <= Math.round(vm.avaliacao ?? 0) ? "text-yellow-400 fill-yellow-400" : "text-zinc-700")}
-                        />
-                      ))}
-                      <span className="text-xs text-zinc-500 ml-1">{(vm.avaliacao ?? 0).toFixed(1)}</span>
-                    </div> : <p className="text-xs text-zinc-500 mb-3">Sem avaliações registradas</p>}
+                    <ScoreRede score={vm.score} className="mb-3" />
 
                     {/* Habilidades */}
                     {vm.habilidades?.length > 0 && (
@@ -285,7 +293,7 @@ export default function VideomakersPage() {
           <div className="text-center py-16 text-zinc-500">
             <p className="text-lg font-medium mb-1">Nenhum videomaker encontrado</p>
             <p className="text-sm">
-              {filtro === "lista_negra" ? "Nenhum na lista negra" : "Clique em \"Cadastrar\" para adicionar o primeiro."}
+              {filtro === "lista_negra" ? "Nenhum na lista negra" : "Cadastre alguém da sua equipe ou encontre profissionais na rede."}
             </p>
           </div>
         )}

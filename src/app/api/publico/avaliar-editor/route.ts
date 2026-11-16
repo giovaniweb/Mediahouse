@@ -83,10 +83,10 @@ export async function POST(req: NextRequest) {
       origem: "qr_publico",
       // O serviço do convite: é o que faz valer uma avaliação por serviço.
       demandaId,
-      // Sem dono, e de propósito: quem avalia aqui é o cliente final com o
-      // celular na mão, não a empresa que contratou. O comentário vale para a
-      // rede inteira — é a reputação pública do profissional — e é a única
-      // avaliação que toda empresa enxerga.
+      // Sem dono na linha: a rota é pública e não declara empresa. A empresa
+      // é a do serviço do convite (demandaId), e é só ela — com o profissional
+      // — que lê o comentário (Política de Avaliações, seção 3; lib/rede). A
+      // nota entra na média da rede.
       organizacaoId: null,
     },
   })

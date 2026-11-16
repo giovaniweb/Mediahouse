@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { recalcularMediaEditor } from "@/lib/avaliacao"
 import { getOrgId, semOrg } from "@/lib/org"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
+import { avaliacoesEditorDaEmpresa, scoreDaRede } from "@/lib/rede"
 import { z } from "zod"
 import { LIMITE_COMENTARIO_AVALIACAO } from "@/lib/avaliacao-limite"
 
@@ -45,8 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const editor = await prisma.editor.findUnique({ where: { id: editorId }, select: { id: true } })
-  if (!editor) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
+  // Mesma regra do videomaker: só avalia a empresa que trabalha com ele.
+  const editor = await prisma.editor.findFirst({ where: { id: editorId, vinculos: { some: { organizacaoId } } }, select: { id: true } })
+  if (!editor) return NextResponse.json({ error: "Só a empresa que trabalha com este profissional pode avaliá-lo." }, { status: 404 })
 
   const avaliacao = await prisma.avaliacaoEditor.create({
     data: {
@@ -73,8 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 // GET /api/editores/[id]/avaliar — listar avaliações + info do editor
 //
 // Mesma separação da avaliação de videomaker: a NOTA agregada é da rede, o
-// COMENTÁRIO é de quem contratou. A lista traz o desta empresa mais o que veio
-// por QR público, que não tem dono.
+// COMENTÁRIO é só de quem contratou (lib/rede).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -96,28 +97,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (!editor) return NextResponse.json({ error: "Editor não encontrado" }, { status: 404 })
 
-  const [avaliacoes, { _avg, _count }] = await Promise.all([
-    prisma.avaliacaoEditor.findMany({
-      where: {
-        editorId,
-        OR: [{ organizacaoId }, { organizacaoId: null }],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      // Sem avaliadorId nem demandaId: a lista não diz quem avaliou.
-      select: {
-        id: true, nota: true, comentario: true, atendeuDemandas: true, foiAtencioso: true,
-        contratariaNovamente: true, origem: true, createdAt: true,
-      },
-    }),
-    prisma.avaliacaoEditor.aggregate({ where: { editorId }, _avg: { nota: true }, _count: true }),
+  const [avaliacoes, score] = await Promise.all([
+    avaliacoesEditorDaEmpresa(editorId, organizacaoId),
+    scoreDaRede("editor", editorId),
   ])
 
-  // Média sobre todas, não sobre as 50 listadas.
-  return NextResponse.json({
-    editor,
-    avaliacoes,
-    media: Math.round((_avg.nota ?? 0) * 10) / 10,
-    total: _count,
-  })
+  return NextResponse.json({ editor, avaliacoes, score, media: score.media, total: score.avaliacoes })
 }

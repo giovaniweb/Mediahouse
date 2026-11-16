@@ -27,7 +27,7 @@ export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "mensagens", nome: "Mensagens", descricao: "Central de mensagens do WhatsApp." },
   { chave: "cutflow", nome: "Cutflow", descricao: "Plugin do Premiere que edita os cards atribuídos ao editor Cutflow." },
   { chave: "conversao", nome: "Conversão de vídeo", descricao: "Gera a versão leve dos vídeos finais (.mov e afins) para assistir no navegador, dentro da franquia de armazenamento." },
-  { chave: "rede", nome: "Videomakers da rede", descricao: "Ver, buscar e escalar os videomakers da rede do NuFlow que não são da empresa. Desligado, a empresa trabalha só com os próprios videomakers." },
+  { chave: "rede", nome: "Videomakers da rede", descricao: "Buscar os videomakers da rede do NuFlow que não são da empresa, ver o score e convidar; quem aceita entra na lista. Desligado, a empresa trabalha só com os próprios videomakers." },
 ]
 
 /**
@@ -94,9 +94,12 @@ export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
   cutflow: ["/cutflow", "/api/cutflow"],
   // Sem tela própria: o conversor roda por trás (src/lib/midia-worker.ts).
   conversao: [],
-  // Sem rota própria: a rede some de dentro das listas, buscas e da escala
-  // (src/lib/videomakers-da-rede.ts), não de uma página.
-  rede: [],
+  // A busca da rede e o convite (Onda 2B) são do módulo: sem ele, a tela some
+  // do menu e dos botões e as duas rotas respondem 403. O resto da rede some de
+  // dentro das listas, buscas e da escala (src/lib/videomakers-da-rede.ts).
+  // A rota do PROFISSIONAL (/api/me/rede: convites, contestar, sair da rede)
+  // fica de fora: é dele, não da empresa que o convidou.
+  rede: ["/videomakers/rede", "/api/rede/videomakers", "/api/rede/convites"],
 }
 
 /** A que módulo um caminho pertence, se pertencer a algum. */

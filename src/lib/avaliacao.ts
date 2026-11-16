@@ -7,9 +7,10 @@
 // avaliações, sem recorte de empresa.
 //
 // O COMENTÁRIO é outra história — "sumiu no dia da gravação" é observação
-// interna de quem contratou. Desde a Fase 2 a linha tem dono, e as rotas de
-// leitura devolvem o comentário desta empresa mais o das avaliações por QR
-// público, que nascem sem dono porque são o cliente final falando.
+// interna de quem contratou. Desde a Onda 2B, só a empresa que contratou e o
+// profissional leem o comentário (lib/rede); a avaliação por convite resolve a
+// empresa pelo serviço. A média segue a Política: 24 meses, sem nota removida
+// nem contestada (função score_rede).
 //
 // ── Por que isto virou chamada de função no banco ───────────────────────────
 //
