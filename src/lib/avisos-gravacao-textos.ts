@@ -17,7 +17,7 @@
 // Textos na regra de lib/whatsapp.ts: a primeira linha diz o que aconteceu e o
 // que fazer, no máximo um emoji, o código junto do nome, o link sozinho.
 import { diasEntre, somarDias } from "./datas"
-import { momentoDoJob, rotuloDoMomento } from "./ficha-do-job"
+import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "./ficha-do-job"
 import { etapaDaGravacao, levarDaGravacao, materialChegouAgora, videoNoNuflow } from "./etapas-da-gravacao"
 
 export type EventoDaGravacao =
@@ -140,6 +140,39 @@ export function faltaDaEntrega(d: DadosDoAviso): string | null {
   return null
 }
 
+const EDICAO_NA_CONFIRMACAO: Record<string, string> = {
+  equipe: "os brutos (a edição é nossa)",
+  videomaker: "os brutos e o vídeo pronto (a edição é sua)",
+  sem_edicao: "os brutos (sem edição, vão direto para o cliente)",
+}
+
+/**
+ * A confirmação para o videomaker que aceitou (reclamação do Gabriel Landin,
+ * 13/11/2026: aceitava e o descritivo sumia). Um resumo para consultar depois:
+ * quando, onde, o que levar e entregar, o prazo e o link que mostra tudo.
+ * O prazo é o da cobrança da rotina (regrasDaGravacao → sem_material): os
+ * brutos são esperados até o dia seguinte à gravação.
+ */
+export function confirmacaoAoVideomaker(d: DadosDoAviso): string {
+  const m = momentoDoJob(d)
+  const { endereco, cidade } = ondeDoJob(d)
+  const levar = levarDaGravacao(d)
+  const entregar = EDICAO_NA_CONFIRMACAO[d.edicaoPor ?? ""] ?? "os brutos"
+  const nome = d.videomaker?.nome?.trim().split(/\s+/)[0]
+  return [
+    `🎉 Parabéns${nome ? `, ${nome}` : ""}! Você está confirmado na gravação ${ref(d)}.`,
+    [
+      `Quando: ${m ? rotuloDoMomento(m) : "data a combinar com a equipe"}`,
+      `Onde: ${endereco ?? "local a combinar com a equipe"}`,
+      cidade && `Cidade: ${cidade}`,
+      levar && `Levar: ${levar}`,
+      `Entregar: ${entregar}`,
+      m ? `Prazo: brutos até ${rotuloDoMomento({ dia: somarDias(m.dia, 1), hora: null })}, o dia seguinte à gravação` : "Prazo: brutos até o dia seguinte à gravação",
+    ].filter(Boolean).join("\n"),
+    d.linkEntrega && `Tudo sobre o job (briefing, kit e pagamento) e a entrega do material:\n${d.linkEntrega}`,
+  ].filter(Boolean).join("\n\n")
+}
+
 export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Mensagens {
   switch (evento) {
     case "entrou":
@@ -152,6 +185,8 @@ export function mensagensDoEvento(evento: EventoDaGravacao, d: DadosDoAviso): Me
           onde(d) && `Local: ${onde(d)}`,
           "Qualquer mudança, fale com a nossa equipe.",
         ].filter(Boolean).join("\n"),
+        // O resumo do job para o videomaker consultar depois (13/11/2026).
+        videomaker: confirmacaoAoVideomaker(d),
       }
     case "recusada": {
       const texto = `⚠️ ${nome1(d)} recusou a gravação de ${ref(d)}, ${quando(d)}.\n\nEscale outro videomaker.`

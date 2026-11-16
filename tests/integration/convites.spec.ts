@@ -126,3 +126,32 @@ it("Onda 3: aceitar pela página grava a prova dos termos na mesma transação; 
   await comOrg(org,()=>db.$transaction(tx=>responderConvite(tx,{organizacaoId:org,token:n.token,acao:"recusar",origem:"automacao",videomakerId:vm2,aceiteTermos:{ipHash:null}})))
   expect(await adminDb.aceiteTermos.count({where:{organizacaoId:org,titularId:vm2}})).toBe(0)
 })
+it("aceite põe na fila o resumo do job para o videomaker, mesmo quando ele aceita logado (Gabriel, 13/11/2026)",async()=>{
+  const telefone="5511977765432",vmUser=`${prefix}-vmu`
+  await adminDb.videomaker.update({where:{id:vm},data:{telefone}})
+  const resumos=(demandaId:string)=>adminDb.saidaWhatsapp.findMany({where:{organizacaoId:org,referencia:demandaId,chave:{contains:":confirmada:"}},select:{chave:true,destinatarioTipo:true}})
+  try {
+    // Pelo link (sem login): o videomaker recebe, a operação também.
+    const a=await job({dataCaptacao:new Date("2026-11-20T17:00:00.000Z"),localGravacao:"Rua das Flores, 120"});const ca=await emitir(a.id)
+    await responder(ca.token)
+    const pelaPagina=await resumos(a.id)
+    expect(pelaPagina.filter(s=>s.chave.includes(":videomaker:"))).toHaveLength(1)
+    expect(pelaPagina.find(s=>s.chave.includes(":videomaker:"))?.destinatarioTipo).toBe("videomaker")
+    // Reenvio do mesmo aceite não manda o resumo de novo.
+    await responder(ca.token);expect(await resumos(a.id)).toHaveLength(pelaPagina.length)
+    // Logado (pela área dele), o autor é ele: ainda assim recebe o resumo.
+    await adminDb.usuario.create({data:{id:vmUser,nome:"Profissional sintético",tipo:"videomaker",senhaHash:"sem-login",telefone}})
+    await adminDb.usuarioOrganizacao.create({data:{usuarioId:vmUser,organizacaoId:org,papel:"videomaker",areas:[]}})
+    await adminDb.videomaker.update({where:{id:vm},data:{usuarioId:vmUser}})
+    const b=await job();const cb=await emitir(b.id)
+    await comOrg(org,()=>db.$transaction(tx=>responderConvite(tx,{organizacaoId:org,token:cb.token,acao:"aceitar",origem:"manual",videomakerId:vm,usuarioId:vmUser})))
+    expect((await resumos(b.id)).filter(s=>s.chave.includes(":videomaker:"))).toHaveLength(1)
+    // A recusa não manda resumo ao videomaker.
+    const c=await job();const cc=await emitir(c.id);await responder(cc.token,"recusar")
+    expect(await adminDb.saidaWhatsapp.count({where:{organizacaoId:org,referencia:c.id,chave:{contains:":videomaker:"}}})).toBe(0)
+  } finally {
+    await adminDb.videomaker.update({where:{id:vm},data:{telefone:null,usuarioId:null}})
+    await adminDb.usuarioOrganizacao.deleteMany({where:{usuarioId:vmUser}})
+    await adminDb.usuario.deleteMany({where:{id:vmUser}})
+  }
+})

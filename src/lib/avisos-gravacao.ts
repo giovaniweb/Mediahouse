@@ -244,7 +244,9 @@ export async function avisarGravacao(
         ? await dadosDePagamento(tx, organizacaoId, g.id, g.videomakerId) : null
       return enfileirarAvisos(tx, {
         organizacaoId, gravacao: g, motivo, mensagens, autorUsuarioId,
-        autorRecebeComo: evento === "nota_recebida" ? ["videomaker"] : undefined,
+        // A nota recebida e a confirmação (com o resumo do job) chegam ao
+        // videomaker mesmo quando foi ele quem mexeu.
+        autorRecebeComo: evento === "nota_recebida" || evento === "confirmada" ? ["videomaker"] : undefined,
         operacaoFinanceiro: pagamento && mensagens.operacao ? comPagamento(mensagens.operacao, pagamento) : null,
       })
     }))

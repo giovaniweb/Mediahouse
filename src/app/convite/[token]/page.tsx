@@ -3,8 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Check, CheckCircle2, X, Loader2, FileText, PlayCircle } from "lucide-react"
 import { LogoNuFlow } from "@/components/marca/Marca"
-import { formatarData } from "@/lib/datas"
-import { momentoDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
+import { momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { levarDaGravacao, materialCompleto, rotuloDoTipoDeGravacao } from "@/lib/etapas-da-gravacao"
 import SystemState from "@/components/system/SystemState"
 import styles from "./Convite.module.css"
@@ -61,6 +60,40 @@ function KitNaPagina({ kit }: { kit?: KitDaPagina }) {
     </ul>}
     {kit.colinha && <details className={styles.colinha}><summary>Colinha do dia da gravação</summary><p>{kit.colinha}</p></details>}
   </section>
+}
+
+const EDICAO_PARA_O_VIDEOMAKER: Record<string, string> = {
+  equipe: "A edição é nossa: mande só os brutos.",
+  videomaker: "A edição é sua: mande os brutos e o vídeo pronto.",
+  sem_edicao: "Sem edição: mande os brutos, que vão direto para o cliente.",
+}
+
+/**
+ * Tudo o que o videomaker precisa saber do job: quando, onde, o briefing, o que
+ * entregar, o kit e o pagamento. A mesma ficha antes e depois do aceite
+ * (reclamação do Gabriel Landin, 13/11/2026: aceitava e o descritivo sumia).
+ */
+function FichaDoJob({ convite }: { convite: ConviteData }) {
+  const d = convite.demanda
+  const momento = momentoDoJob(d)
+  const { endereco, cidade } = ondeDoJob(d)
+  const tipo = rotuloDoTipoDeGravacao(d.tipoGravacao)
+  const levar = levarDaGravacao(d)
+  return <>
+    <dl className={styles.details}>
+      <div><dt>Formato</dt><dd>{d.tipoVideo}</dd></div>
+      {tipo && <div><dt>Tipo</dt><dd>{tipo}</dd></div>}
+      <div><dt>Data e horário</dt><dd>{momento ? rotuloDoMomento(momento) : "A combinar"}</dd></div>
+      {cidade && <div><dt>Cidade</dt><dd>{cidade}</dd></div>}
+      {endereco && <div><dt>Local da produção</dt><dd>{endereco}</dd></div>}
+      {levar && <div><dt>Levar</dt><dd>{levar}</dd></div>}
+      {d.edicaoPor && EDICAO_PARA_O_VIDEOMAKER[d.edicaoPor] && <div><dt>O que entregar</dt><dd>{EDICAO_PARA_O_VIDEOMAKER[d.edicaoPor]}</dd></div>}
+      {d.prioridade !== "normal" && <div><dt>Prioridade</dt><dd>{d.prioridade}</dd></div>}
+    </dl>
+    {d.descricao && <div className={styles.brief}><h2>Sobre a gravação</h2><p>{d.descricao}</p></div>}
+    <KitNaPagina kit={convite.kit} />
+    <div className={styles.payment}><h2>Pagamento</h2><p>{convite.tarifaDiaria ? `Diária de referência: ${Number(convite.tarifaDiaria).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "Valor a confirmar com a equipe."}</p><p>{convite.condicoes || "Convite antigo sem condição registrada. Confirme valor e prazo com a equipe antes do serviço."}</p></div>
+  </>
 }
 
 type ErroState = {
@@ -130,23 +163,12 @@ export default function ConvitePage() {
   if (erro || !convite) return <SystemState label="CONVITE DE PRODUÇÃO" title="Convite indisponível." description={erro?.mensagem || "Confira o endereço recebido e tente novamente."}><button onClick={() => setRetry(r => r + 1)}>Tentar novamente</button><a href="/login">Entrar no NuFlow</a></SystemState>
 
   const d = convite.demanda
-  const local = d.localEvento || d.localGravacao
-  const data = d.dataEvento || d.dataCaptacao
   return <main className={styles.page}>
     <div className={styles.wrapper}>
       <a href="/" className={styles.brand} aria-label="NuFlow, início"><LogoNuFlow /></a>
       <header className={styles.header}><p className={styles.eyebrow}>CONVITE DE PRODUÇÃO · {d.codigo}</p><h1>{d.titulo}</h1><p>Olá, {convite.videomaker.nome}. Veja os detalhes e confirme sua disponibilidade para este job.</p></header>
       <section className={styles.card} aria-label="Detalhes da produção">
-        <dl className={styles.details}>
-          <div><dt>Formato</dt><dd>{d.tipoVideo}</dd></div>
-          {d.cidade && <div><dt>Cidade</dt><dd>{d.cidade}</dd></div>}
-          {local && <div><dt>Local da produção</dt><dd>{local}</dd></div>}
-          {data && <div><dt>Data</dt><dd>{formatarData(data, { day: "2-digit", month: "long", year: "numeric" })}</dd></div>}
-          {d.prioridade !== "normal" && <div><dt>Prioridade</dt><dd>{d.prioridade}</dd></div>}
-        </dl>
-        {d.descricao && <div className={styles.brief}><h2>Sobre a gravação</h2><p>{d.descricao}</p></div>}
-        <KitNaPagina kit={convite.kit} />
-        <div className={styles.payment}><h2>Pagamento</h2><p>{convite.tarifaDiaria ? `Diária de referência: ${Number(convite.tarifaDiaria).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "Valor a confirmar com a equipe."}</p><p>{convite.condicoes || "Convite antigo sem condição registrada. Confirme valor e prazo com a equipe antes do serviço."}</p></div>
+        <FichaDoJob convite={convite} />
         <p className={styles.expiry}>Responda até {new Date(convite.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })} (horário de Brasília).</p>
         {erroResposta && <p role="alert" className={styles.error}>{erroResposta} Sua confirmação ainda não foi recebida nesta tela. Confira o convite antes de tentar novamente.</p>}
         <div className={styles.actions} aria-busy={respondendo}>
@@ -169,11 +191,6 @@ export default function ConvitePage() {
 // brutos e, se a edição é dele, o vídeo pronto; depois, a nota. Material
 // completo anda a gravação e abre a nota aqui mesmo.
 
-const EDICAO_PARA_O_VIDEOMAKER: Record<string, string> = {
-  equipe: "A edição é nossa: mande só os brutos.",
-  videomaker: "A edição é sua: mande os brutos e o vídeo pronto.",
-  sem_edicao: "Sem edição: mande os brutos, que vão direto para o cliente.",
-}
 
 function EntregaDaGravacao({ token, convite, aceitouAgora, onAtualizar }: {
   token: string
@@ -187,8 +204,6 @@ function EntregaDaGravacao({ token, convite, aceitouAgora, onAtualizar }: {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState("")
   const editaEle = d.edicaoPor === "videomaker"
-  const momento = momentoDoJob(d)
-  const levar = levarDaGravacao(d)
   const completo = materialCompleto(d)
   const nota = convite.entrega?.nota ?? null
   const faltaAlgo = !d.linkBrutos || (editaEle && !d.linkFinal)
@@ -219,24 +234,16 @@ function EntregaDaGravacao({ token, convite, aceitouAgora, onAtualizar }: {
     <div className={styles.wrapper}>
       <a href="/" className={styles.brand} aria-label="NuFlow, início"><LogoNuFlow /></a>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>GRAVAÇÃO · {d.codigo}</p>
-        <h1>{d.clienteFinalNome?.trim() || d.titulo}</h1>
-        <p>Olá, {convite.videomaker.nome}. Depois da gravação, entregue tudo por aqui.</p>
+        <p className={styles.eyebrow}>JOB CONFIRMADO · {d.codigo}</p>
+        <h1>{d.titulo}</h1>
+        <p>Olá, {convite.videomaker.nome}. Aqui estão todos os detalhes do job e, depois da gravação, a entrega do material.</p>
       </header>
       <section className={styles.card} aria-label="Gravação">
-        {aceitouAgora && <p className={styles.ok}>Participação confirmada. Este link continua valendo para entregar o material.</p>}
-        <dl className={styles.details}>
-          {rotuloDoTipoDeGravacao(d.tipoGravacao) && <div><dt>Tipo</dt><dd>{rotuloDoTipoDeGravacao(d.tipoGravacao)}</dd></div>}
-          {momento && <div><dt>Quando</dt><dd>{rotuloDoMomento(momento)}</dd></div>}
-          {(d.localGravacao || d.localEvento) && <div><dt>Onde</dt><dd>{d.localGravacao || d.localEvento}</dd></div>}
-          {levar && <div><dt>Levar</dt><dd>{levar}</dd></div>}
-        </dl>
-
-        <KitNaPagina kit={convite.kit} />
+        <p className={styles.ok} role="status"><CheckCircle2 size={16} aria-hidden="true" /><span><strong>Convite aceito, você vai fazer este job.</strong> {aceitouAgora ? "Mandamos o resumo no seu WhatsApp. " : ""}Este link continua valendo: os detalhes ficam aqui e, depois da gravação, você entrega o material por ele.</span></p>
+        <FichaDoJob convite={convite} />
 
         <form className={styles.entregas} onSubmit={enviar} aria-busy={enviando}>
           <h2>Entrega</h2>
-          {d.edicaoPor && EDICAO_PARA_O_VIDEOMAKER[d.edicaoPor] && <p className={styles.expiry}>{EDICAO_PARA_O_VIDEOMAKER[d.edicaoPor]}</p>}
 
           <div className={styles.passo}>
             <h3>1. Brutos</h3>
