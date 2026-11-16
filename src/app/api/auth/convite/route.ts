@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 // identidade e o vínculo antes de haver empresa. Ver src/lib/prisma-auth.ts.
 import { prismaAuth } from "@/lib/prisma-auth"
 import { convitePendente } from "@/lib/convite-equipe"
+import { emailReal } from "@/lib/acesso-videomaker"
 
 // GET /api/auth/convite?token=xxx — o que a tela do link precisa mostrar.
 //
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const usuario = await prismaAuth.usuario.findUnique({
     where: { email: registro.email },
-    select: { nome: true, email: true, status: true, senhaHash: true },
+    select: { nome: true, email: true, telefone: true, status: true, senhaHash: true },
   })
   if (!usuario || usuario.status === "inativo") return NextResponse.json({ valido: false })
   if (!convitePendente(usuario.senhaHash)) return NextResponse.json({ valido: true, primeiroAcesso: false })
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
     primeiroAcesso: true,
     nome: usuario.nome.split(/\s+/)[0],
     email: usuario.email,
+    // Conta de videomaker sem e-mail real (e-mail interno @nuflow.local, ver
+    // src/lib/acesso-videomaker.ts): ele entra pelo telefone, e é isso que a
+    // tela mostra. O e-mail interno continua indo para o login automático.
+    loginTelefone: !emailReal(usuario.email) && usuario.telefone ? usuario.telefone.replace(/\D/g, "") : null,
     empresa: vinculo?.organizacao.nome ?? null,
   })
 }

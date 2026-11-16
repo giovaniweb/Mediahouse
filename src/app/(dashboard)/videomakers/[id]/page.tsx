@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
 import { EmpresaDele } from "@/components/videomakers/EmpresaDele"
+import { BotaoEnviarAcesso, SituacaoDoAcesso } from "@/components/videomakers/AcessoDoVideomaker"
 import { Header } from "@/components/layout/Header"
 import {
   ArrowLeft, Film, MapPin, Phone, Mail, Star, Edit2, Save, X,
@@ -251,6 +252,8 @@ export default function VideomakerDetalhePage() {
                 >
                   <QrCode className="w-4 h-4" /> QR Avaliação
                 </button>
+                {/* Só a gestão vê (a rota responde 404 aos outros). */}
+                <BotaoEnviarAcesso videomakerId={id} nome={vm.nome} />
                 <button
                   onClick={startEdit}
                   className="flex items-center gap-1.5 text-sm bg-purple-600 text-white hover:bg-purple-700 rounded-lg px-3 py-2"
@@ -545,6 +548,9 @@ export default function VideomakerDetalhePage() {
         {/* Empresa dele: some para quem não é gestão (a rota responde 404). */}
         {/* "Empresa dele" é do vínculo: perfil aberto pela rede não tem. */}
         {!foraDaLista && <EmpresaDele videomakerId={id} />}
+
+        {/* Acesso ao NuFlow: só a gestão vê. */}
+        {!foraDaLista && <SituacaoDoAcesso videomakerId={id} />}
 
         {/* Pode Editar */}
         {!foraDaLista && <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
