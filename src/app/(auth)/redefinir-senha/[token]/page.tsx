@@ -7,7 +7,7 @@ import {loginAction} from "../../login/actions"
 // O mesmo link serve à recuperação de senha e ao convite (Onda 2A). No convite,
 // a pessoa nunca teve senha: a tela dá as boas-vindas e, criada a senha, entra
 // direto no painel, onde a Onda 3 pede o aceite dos Termos.
-type Convite={valido:boolean;primeiroAcesso?:boolean;nome?:string;email?:string;empresa?:string|null}
+type Convite={valido:boolean;primeiroAcesso?:boolean;nome?:string;email?:string;empresa?:string|null;loginTelefone?:string|null}
 export default function RedefinirSenhaPage({params}:{params:Promise<{token:string}>}){
  const {token}=use(params)
  const [state,setState]=useState<"loading"|"valid"|"invalid"|"error"|"success">("loading")
@@ -30,7 +30,7 @@ export default function RedefinirSenhaPage({params}:{params:Promise<{token:strin
  {state==="error"&&<><h1 id="auth-title">Não conseguimos verificar o link.</h1><p className={styles.description}>Confira sua conexão e tente novamente.</p><button className={styles.primary} onClick={()=>{setState("loading");setRetry(retry+1)}}>Tentar novamente</button></>}
  {state==="success"&&<><CheckCircle2 className={styles.success} size={36}/><h1 id="auth-title">{primeiro?"Senha criada.":"Senha atualizada."}</h1><p className={styles.description}>Tudo pronto. Use sua {primeiro?"":"nova "}senha para entrar no seu workspace.</p><Link className={styles.primary} href="/login">Entrar no NuFlow</Link></>}
  {state==="valid"&&<>{primeiro
-  ?<><h1 id="auth-title">Boas-vindas{convite?.nome?`, ${convite.nome}`:""}.</h1><p className={styles.description}>{convite?.empresa?<>Você foi convidado para a equipe da <strong>{convite.empresa}</strong>. </>:null}Crie sua senha para entrar. Seu login é <strong>{convite?.email}</strong>.</p></>
+  ?<><h1 id="auth-title">Boas-vindas{convite?.nome?`, ${convite.nome}`:""}.</h1><p className={styles.description}>{convite?.empresa?<>Você foi convidado para a equipe da <strong>{convite.empresa}</strong>. </>:null}Crie sua senha para entrar. Seu login é <strong>{convite?.loginTelefone?`seu telefone (${convite.loginTelefone})`:convite?.email}</strong>.</p></>
   :<><h1 id="auth-title">Um novo acesso ao seu flow.</h1><p className={styles.description}>Crie uma senha que você ainda não usa em outros serviços.</p></>}
  <form onSubmit={submit} className={styles.form} aria-busy={busy}>
  <div className={styles.field}><label htmlFor="new-password">{primeiro?"Senha":"Nova senha"}</label><div className={styles.password}><input id="new-password" name="new-password" type={visible?"text":"password"} autoComplete="new-password" required value={password} onChange={e=>setPassword(e.target.value)} aria-describedby="password-help"/><button type="button" aria-label={visible?"Ocultar senhas":"Mostrar senhas"} aria-pressed={visible} onClick={()=>setVisible(!visible)}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><p id="password-help" className={styles.hint}>Pelo menos 8 caracteres, uma letra maiúscula e um número.</p></div>

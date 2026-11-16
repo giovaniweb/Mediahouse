@@ -20,6 +20,7 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "ia.mutacao": "Registro criado por ferramenta IA", "ia.envio": "Solicitação de envio pela IA",
   "mcp.leitura": "Consulta pelo assistente (MCP)", "mcp.criar": "Demanda criada pelo assistente (MCP)",
   "mcp.chave": "Chave de assistente (MCP) gerada ou revogada", "mcp.desfazer": "Demanda do assistente (MCP) desfeita", "avisos.preferencias": "Avisos por pessoa alterados",
+  "videomaker.acesso": "Acesso enviado ao videomaker",
   "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
   "termos.aceite": "Termos e Política de Privacidade aceitos",
   "espelho.mover": "Card de empresa parceira movido",
