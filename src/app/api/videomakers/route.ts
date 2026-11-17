@@ -7,6 +7,7 @@ import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { scoresDaRede } from "@/lib/rede"
 import { acrescentarCidades, listaDeCidades } from "@/lib/cidades-videomaker"
 import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
+import { ehGestor } from "@/lib/papel"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -81,6 +82,10 @@ export async function POST(req: NextRequest) {
           error: `Este telefone já é de ${doTelefone[0].nome}, cadastrado nesta empresa.`,
           duplicado: doTelefone[0],
         }, { status: 409 })
+      }
+      // Mexer na ficha que existe é editar: a mesma regra do PUT (só gestão).
+      if (!ehGestor(session)) {
+        return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
       }
       const cidadesAtendidas = acrescentarCidades(alvo, [body.cidade, ...listaDeCidades(body.cidadesAtendidas ?? [])])
       const atualizado = await prisma.videomaker.update({

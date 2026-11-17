@@ -134,6 +134,13 @@ describe("cadastro e ficha pela gestão", () => {
     expect((await db.videomaker.findUniqueOrThrow({ where: { id: vm.base } })).cidadesAtendidas).not.toContain("Niterói")
   })
 
+  it("acrescentarCidadeEm sem ser gestor é recusado e não muda a ficha", async () => {
+    sessao.user = { id: gestor, organizacaoId: A, tipo: "solicitante", papel: "solicitante" }
+    const r = await cadastrar(req("/api/videomakers", "POST", { nome: "Y", telefone: "+55 22 99836-0002", cidade: "Búzios", acrescentarCidadeEm: vm.outro }))
+    expect(r.status).toBe(403)
+    expect((await db.videomaker.findUniqueOrThrow({ where: { id: vm.outro } })).cidadesAtendidas).not.toContain("Búzios")
+  })
+
   it("Editar grava as cidades atendidas e recusa o telefone de outro videomaker", async () => {
     como(gestor, A)
     const ok = await editar(req(`/api/videomakers/${vm.base}`, "PUT", { cidadesAtendidas: ["Guarapari", "Vitória", "Campos"] }), params(vm.base))
