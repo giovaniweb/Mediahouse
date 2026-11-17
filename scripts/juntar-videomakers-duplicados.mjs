@@ -68,7 +68,8 @@ try {
           const cidades = [v.cidade, ...(v.cidadesAtendidas ?? [])].filter(Boolean).join(" + ") || "sem cidade"
           console.log(`  ${marca}  ${v.id}  ${v.nome.trim()}  (${cidades}${v.estado ? `/${v.estado}` : ""})  criado ${data(v.createdAt)}`)
           console.log(`           vínculo ${v.statusVinculo}; conta ${v.emailConta ?? "nenhuma"}${v.statusConta && v.statusConta !== "ativo" ? ` (${v.statusConta})` : ""}; ` +
-            `histórico ${v.historico} (demandas ${v.demandas}, convites ${v.convites}, custos ${v.custos}, avaliações ${v.avaliacoes}, NF ${v.notasFiscais}, eventos ${v.eventos}, coberturas ${v.coberturas})`)
+            `histórico ${v.historico} (demandas ${v.demandas}, convites ${v.convites}, custos ${v.custos}, avaliações ${v.avaliacoes}, NF ${v.notasFiscais}, eventos ${v.eventos}, coberturas ${v.coberturas})` +
+            (v.convitesRedePendentes ? `; convites da rede pendentes ${v.convitesRedePendentes}` : ""))
         }
         const juntar = g.cadastros.filter(v => v.id !== g.sugestao).map(v => v.id).join(",")
         console.log(`  Para aplicar a sugestão: --aplicar --manter ${g.sugestao} --juntar ${juntar}\n`)

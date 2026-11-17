@@ -177,6 +177,7 @@ describe("scripts/juntar-videomakers-duplicados.mjs", () => {
   const contas = { velho: `${p}-u-velho`, guara: `${p}-u-guara`, fica: `${p}-u-fica` }
   const TEL_DUP = "22998369999"
   const demanda = `${p}-dem`
+  const rede = { velho: `${p}-rede-velho`, guara: `${p}-rede-guara`, recusado: `${p}-rede-recusado` }
   let c: pg.Client
 
   beforeAll(async () => {
@@ -198,6 +199,12 @@ describe("scripts/juntar-videomakers-duplicados.mjs", () => {
       await db.conviteVideomaker.create({ data: { demandaId: demanda, videomakerId: dup[k], status: "aceito", respondidoEm: new Date(), expiresAt: new Date(Date.now() + 3600_000), tarifaDiaria: 300 } })
     }
     await db.avaliacaoVideomaker.create({ data: { videomakerId: dup.guara, nota: 5, organizacaoId: A, avaliadorId: gestor } })
+    // Revisão do PR #160: dois JUNTADOS com convite da rede pendente da mesma
+    // empresa (B) e o mantido sem nenhum. Passar os dois quebrava o índice
+    // convites_rede_pendente_unico. Fica o mais recente; o recusado só passa.
+    await db.conviteRede.create({ data: { id: rede.velho, organizacaoId: B, videomakerId: dup.velho, createdAt: new Date("2026-11-01") } })
+    await db.conviteRede.create({ data: { id: rede.guara, organizacaoId: B, videomakerId: dup.guara, createdAt: new Date("2026-11-10") } })
+    await db.conviteRede.create({ data: { id: rede.recusado, organizacaoId: B, videomakerId: dup.velho, status: "recusado", createdAt: new Date("2026-10-01") } })
   })
   afterAll(async () => { await c.end() })
 
@@ -221,7 +228,7 @@ describe("scripts/juntar-videomakers-duplicados.mjs", () => {
   })
 
   it("junta tudo numa transação: histórico, cidades, vínculo, fiscais, contas e auditoria", async () => {
-    let copia: { juntados: { id: string }[] } | null = null
+    let copia: { juntados: { id: string }[], convitesRedeCancelados: { id: string }[] } | null = null
     const r = await juntarVideomakers(c, { manterId: dup.fica, juntarIds: [dup.velho, dup.guara], antesDeConfirmar: (x: typeof copia) => { copia = x } })
     expect(copia!.juntados.map(j => j.id)).toEqual([dup.velho, dup.guara])
 
@@ -251,6 +258,16 @@ describe("scripts/juntar-videomakers-duplicados.mjs", () => {
 
     const audit = await db.eventoAuditoria.findFirstOrThrow({ where: { organizacaoId: A, acao: "videomaker.juntar", recursoId: dup.fica } })
     expect(audit).toMatchObject({ atorTipo: "tecnico", resultado: "sucesso", correlationId: r.correlationId })
+    expect(audit.depois).toMatchObject({ pulados: 1 })
+
+    // Convites da rede: o pendente mais recente fica; o outro é cancelado e
+    // vai para a cópia; o recusado passa como está.
+    const convites = Object.fromEntries((await db.conviteRede.findMany({ where: { id: { in: Object.values(rede) } } })).map(x => [x.id, x]))
+    expect(convites[rede.guara]).toMatchObject({ videomakerId: dup.fica, status: "pendente" })
+    expect(convites[rede.velho]).toMatchObject({ videomakerId: dup.fica, status: "cancelado" })
+    expect(convites[rede.recusado]).toMatchObject({ videomakerId: dup.fica, status: "recusado" })
+    expect(copia!.convitesRedeCancelados.map(x => x.id)).toEqual([rede.velho])
+    expect(r.contagem["convites da rede repetidos cancelados"]).toBe(1)
 
     // A trava do convite voltou.
     await expect(db.conviteVideomaker.updateMany({ where: { videomakerId: dup.fica }, data: { tarifaDiaria: 999 } })).rejects.toThrow(/imutável/)

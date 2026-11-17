@@ -76,7 +76,8 @@ export async function listarGrupos(c) {
            (SELECT count(*)::int FROM avaliacoes_videomaker x WHERE x."videomakerId"=v.id) AS avaliacoes,
            (SELECT count(*)::int FROM notas_fiscais x WHERE x."videomakerId"=v.id) AS "notasFiscais",
            (SELECT count(*)::int FROM eventos x WHERE x."videomakerId"=v.id) AS eventos,
-           (SELECT count(*)::int FROM coberturas_equipe x WHERE x."videomakerId"=v.id) AS coberturas
+           (SELECT count(*)::int FROM coberturas_equipe x WHERE x."videomakerId"=v.id) AS coberturas,
+           (SELECT count(*)::int FROM convites_rede x WHERE x."videomakerId"=v.id AND x.status='pendente') AS "convitesRedePendentes"
       FROM videomakers v
       JOIN videomaker_organizacao vo ON vo."videomakerId"=v.id
       JOIN organizacoes o ON o.id=vo."organizacaoId"
@@ -167,6 +168,7 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
 
     // Retrato de ANTES (clonado: os objetos abaixo mudam durante a junção).
     const copia = structuredClone({ em: new Date().toISOString(), organizacaoId, manter, juntados: outros, vinculos: vinc, fiscais: [], contas: [] })
+    /** @type {Record<string, number>} */
     const contagem = {}
     const conta = (k, n) => { contagem[k] = (contagem[k] ?? 0) + n }
 
@@ -237,9 +239,21 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
     await mover("avaliacoes", `UPDATE avaliacoes_videomaker SET "videomakerId"=$1 WHERE "videomakerId"=ANY($2)`)
     await mover("notas fiscais", `UPDATE notas_fiscais SET "videomakerId"=$1 WHERE "videomakerId"=ANY($2)`)
     await mover("executor espelho", `UPDATE executor_espelho SET "videomakerId"=$1 WHERE "videomakerId"=ANY($2)`)
-    // Convite da rede pendente: um por empresa e profissional. O repetido sai.
-    await mover("convites da rede repetidos", `DELETE FROM convites_rede r WHERE r."videomakerId"=ANY($2) AND r.status='pendente'
-      AND EXISTS (SELECT 1 FROM convites_rede m WHERE m."videomakerId"=$1 AND m.status='pendente' AND m."organizacaoId"=r."organizacaoId")`)
+    // Convite da rede pendente: um por empresa e profissional (índice
+    // convites_rede_pendente_unico). Entre TODOS os cadastros do grupo, fica o
+    // mais recente de cada empresa; os outros viram "cancelado" (ficam no
+    // histórico, na cópia e na auditoria). Antes só se olhava o do mantido, e
+    // dois juntados com convite da mesma empresa quebravam o índice.
+    const { rows: repetidos } = await c.query(`
+      SELECT * FROM (
+        SELECT r.*, row_number() OVER (PARTITION BY r."organizacaoId" ORDER BY r."createdAt" DESC, r.id DESC) AS ordem
+          FROM convites_rede r WHERE r."videomakerId" = ANY($1) AND r.status = 'pendente'
+      ) x WHERE x.ordem > 1`, [ids])
+    copia.convitesRedeCancelados = structuredClone(repetidos)
+    if (repetidos.length) {
+      await c.query(`UPDATE convites_rede SET status='cancelado', "updatedAt"=now() WHERE id = ANY($1)`, [repetidos.map(r => r.id)])
+    }
+    conta("convites da rede repetidos cancelados", repetidos.length)
     await mover("convites da rede", `UPDATE convites_rede SET "videomakerId"=$1 WHERE "videomakerId"=ANY($2)`)
     // O convite é imutável (gatilho convite_condicao_imutavel: a condição
     // aceita não muda). Aqui só muda QUEM, para o mesmo profissional; a trava
@@ -308,10 +322,12 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
     // ── 6) Auditoria (mesmo formato de src/lib/auditoria.ts) ────────────────
     const correlationId = randomUUID()
     const alterados = Object.values(contagem).reduce((a, b) => a + b, 0)
+    // "pulados": convites da rede pendentes que não passaram ao mantido
+    // (cancelados por repetidos); os ids estão na cópia.
     const chave = createHash("sha256").update(JSON.stringify(["tecnico", ator, correlationId, "videomaker.juntar", "videomaker", manterId, "sucesso"])).digest("hex")
     await c.query(`INSERT INTO eventos_auditoria (id,"organizacaoId","atorTipo","atorId",acao,recurso,"recursoId",resultado,"correlationId",chave,antes,depois,"createdAt","payloadExpiraEm")
       VALUES ($1,$2,'tecnico',$3,'videomaker.juntar','videomaker',$4,'sucesso',$5,$6,$7,$8,now(),now()+interval '90 days')`,
-      [randomUUID(), organizacaoId, ator, manterId, correlationId, chave, JSON.stringify({ processados: juntarIds.length }), JSON.stringify({ alterados, campos: ["cidade", "telefone"] })])
+      [randomUUID(), organizacaoId, ator, manterId, correlationId, chave, JSON.stringify({ processados: juntarIds.length }), JSON.stringify({ alterados, pulados: repetidos.length, campos: ["cidade", "telefone"] })])
 
     // A cópia vai para fora do banco ANTES do COMMIT: se não der para
     // guardá-la, nada muda.
