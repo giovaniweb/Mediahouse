@@ -13,6 +13,8 @@ import { erroDaResposta, erroDeEnvio } from "@/lib/erro-envio-publico"
 import { useEmpresaDestino, MarcaEmpresa, AvisoDestino } from "@/components/publico/EmpresaDestino"
 import { AREAS_ATUACAO, linkDePortfolio, type Papel } from "@/lib/cadastro-profissional"
 import { DOCUMENTOS } from "@/lib/juridico/documentos"
+import { CidadesAtendidasInput } from "@/components/videomakers/CidadesAtendidasInput"
+import { listaDeCidades } from "@/lib/cidades-videomaker"
 
 const TEXTO: Record<Papel, { titulo: string; extras: string }> = {
   videomaker: { titulo: "Seu olhar. Novas possibilidades.", extras: "Equipamentos, experiências, certificações, etc." },
@@ -42,6 +44,11 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
     setPasso(p => p + 1)
   }
   const [enviado, setEnviado] = useState(false)
+  // Videomaker: o telefone já tem cadastro nesta empresa. Em vez de outro
+  // cadastro (que travava os avisos de WhatsApp dele), as cidades vão para o
+  // que existe.
+  const [jaCadastrado, setJaCadastrado] = useState<string | null>(null)
+  const [acrescentou, setAcrescentou] = useState(false)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [aceite, setAceite] = useState(false)
@@ -60,6 +67,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
     telefone: "",
     cidade: "",
     estado: "",
+    cidadesAtendidas: [] as string[],
     endereco: "",
     // Passo 3 — Financeiro & Portfólio
     chavePix: "",
@@ -84,7 +92,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
     }))
   }
 
-  async function enviar() {
+  async function enviar(acrescentarCidade = false) {
     if (loading) return
     if (!aceite) {
       // O aviso fica ao lado da caixa: o erro geral mora no topo, fora da vista.
@@ -106,9 +114,19 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
           valorDiaria: form.valorDiaria ? parseFloat(form.valorDiaria) : undefined,
           redesSociais: form.redesSociais.filter(Boolean),
           aceiteTermos: true,
+          ...(papel === "videomaker" ? { cidadesAtendidas: form.cidadesAtendidas } : { cidadesAtendidas: undefined }),
+          ...(acrescentarCidade ? { acrescentarCidade: true } : {}),
         }),
       })
+      if (res.status === 409 && papel === "videomaker") {
+        const corpo = await res.clone().json().catch(() => null)
+        if (corpo?.duplicado) {
+          setJaCadastrado(typeof corpo.error === "string" ? corpo.error : "Este telefone já tem cadastro nesta empresa.")
+          return
+        }
+      }
       if (!res.ok) throw new Error(await erroDaResposta(res))
+      setAcrescentou(acrescentarCidade)
       setEnviado(true)
     } catch (e: unknown) {
       setErro(erroDeEnvio(e))
@@ -124,9 +142,11 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-3">Cadastro enviado!</h2>
+          <h2 className="text-2xl font-bold text-white mb-3">{acrescentou ? "Cidades acrescentadas!" : "Cadastro enviado!"}</h2>
           <p className="text-zinc-400 mb-8">
-            Recebemos suas informações e nossa equipe irá analisar em breve. Se houver uma oportunidade, a equipe poderá entrar em contato pelo e-mail ou WhatsApp informado.
+            {acrescentou
+              ? "As cidades foram acrescentadas ao seu cadastro, sem criar outro. A equipe recebeu o aviso."
+              : "Recebemos suas informações e nossa equipe irá analisar em breve. Se houver uma oportunidade, a equipe poderá entrar em contato pelo e-mail ou WhatsApp informado."}
           </p>
           <Link href={destino.inicio} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
             <ArrowLeft className="w-4 h-4" /> Voltar ao início
@@ -232,7 +252,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">WhatsApp *</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    aria-label="WhatsApp" required minLength={10} inputMode="tel" autoComplete="tel" value={form.telefone} onChange={e => { e.target.setCustomValidity(""); set("telefone", e.target.value) }} placeholder="(11) 99999-9999" />
+                    aria-label="WhatsApp" required minLength={10} inputMode="tel" autoComplete="tel" value={form.telefone} onChange={e => { e.target.setCustomValidity(""); set("telefone", e.target.value); setJaCadastrado(null) }} placeholder="(11) 99999-9999" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Cidade *</label>
@@ -244,6 +264,15 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
                     aria-label="Estado" required minLength={2} autoComplete="address-level1" value={form.estado} onChange={e => { e.target.setCustomValidity(""); set("estado", e.target.value) }} placeholder="SP" maxLength={2} />
                 </div>
+                {papel === "videomaker" && (
+                  <div className="col-span-2">
+                    <label htmlFor="cidades-atendidas" className="text-xs font-medium text-zinc-400 block mb-1.5">Outras cidades ou regiões que você atende</label>
+                    <CidadesAtendidasInput id="cidades-atendidas" base={form.cidade} value={form.cidadesAtendidas} onChange={c => set("cidadesAtendidas", c)}
+                      placeholder="Ex.: Campinas, Ribeirão Preto"
+                      className="rounded-xl px-3 py-2.5" chipClassName="bg-violet-500/20 text-violet-100" />
+                    <p className="mt-1 text-xs text-zinc-500">Um cadastro só, com todas as cidades. Aperte Enter depois de cada uma.</p>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-zinc-400 block mb-1.5">Endereço Completo</label>
                   <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/10"
@@ -352,9 +381,19 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                 )}
               </div>
 
+              {jaCadastrado && (
+                <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3 text-sm text-amber-100">
+                  <p>{jaCadastrado}</p>
+                  <button onClick={() => enviar(true)} disabled={loading}
+                    className="w-full rounded-xl bg-amber-400 py-2.5 font-semibold text-zinc-900 hover:bg-amber-300 disabled:opacity-40">
+                    Acrescentar {listaDeCidades([form.cidade, ...form.cidadesAtendidas]).join(", ") || "as cidades"} ao meu cadastro
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-2">
                 <button onClick={() => setPasso(2)} className="flex-1 border border-zinc-700 text-zinc-300 font-medium py-3 rounded-xl hover:border-zinc-500 transition-colors">← Voltar</button>
-                <button onClick={enviar} disabled={loading}
+                <button onClick={() => enviar()} disabled={loading}
                   className="flex-1 bg-white text-zinc-900 font-semibold py-3 rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-40">
                   {loading ? "Enviando..." : "Enviar Cadastro ✓"}
                 </button>

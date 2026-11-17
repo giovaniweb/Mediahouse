@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { scoresDaRede } from "@/lib/rede"
 import { empresaVeRede, SEM_MODULO_REDE } from "@/lib/videomakers-da-rede"
+import { atendeCidade, chaveCidade } from "@/lib/cidades-videomaker"
 
 // GET /api/rede/videomakers?cidade=&uf=&especialidade=
 //
@@ -34,23 +35,33 @@ export async function GET(req: NextRequest) {
       vinculos: { none: { organizacaoId } },
     },
     select: {
-      id: true, nome: true, cidade: true, estado: true,
+      id: true, nome: true, cidade: true, estado: true, cidadesAtendidas: true,
       areasAtuacao: true, habilidades: true, portfolio: true, redesSociais: true,
     },
     orderBy: { nome: "asc" },
     take: 500,
   })
 
-  // Os filtros mostram o que existe na rede, antes de filtrar.
-  const cidades = [...new Set(perfis.map(p => [p.cidade, p.estado].filter(Boolean).join(" / ")).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, "pt-BR"))
+  // Os filtros mostram o que existe na rede, antes de filtrar. As cidades
+  // atendidas entram sem UF (o perfil só tem a UF da base); a que já aparece
+  // como base de alguém não se repete.
+  const bases = [...new Set(perfis.map(p => [p.cidade, p.estado].filter(Boolean).join(" / ")).filter(Boolean))]
+  const chavesBase = new Set(bases.map(chaveCidade))
+  const atendidas = new Map<string, string>()
+  for (const c of perfis.flatMap(p => p.cidadesAtendidas ?? [])) {
+    const k = chaveCidade(c)
+    if (k && !chavesBase.has(k) && !atendidas.has(k)) atendidas.set(k, c.trim())
+  }
+  const cidades = [...bases, ...atendidas.values()].sort((a, b) => a.localeCompare(b, "pt-BR"))
   const especialidades = [...new Set(perfis.flatMap(p => [...p.areasAtuacao, ...p.habilidades]))]
     .sort((a, b) => a.localeCompare(b, "pt-BR"))
 
   const igual = (a: string | null | undefined, b: string) => (a ?? "").localeCompare(b, "pt-BR", { sensitivity: "base" }) === 0
   const filtrados = perfis.filter(p =>
-    (!cidade || igual(p.cidade, cidade)) &&
-    (!uf || igual(p.estado, uf)) &&
+    // Cidade: a base ou qualquer uma que ele atende. A UF é a da base, e só
+    // filtra quem não atende a cidade escolhida por fora dela.
+    (!cidade || atendeCidade(p, cidade)) &&
+    (!uf || igual(p.estado, uf) || (!!cidade && !igual(p.cidade, cidade) && atendeCidade(p, cidade))) &&
     (!especialidade || [...p.areasAtuacao, ...p.habilidades].some(e => igual(e, especialidade))),
   ).slice(0, 100)
 

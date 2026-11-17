@@ -5,6 +5,8 @@ import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/li
 import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { scoresDaRede } from "@/lib/rede"
+import { acrescentarCidades, listaDeCidades } from "@/lib/cidades-videomaker"
+import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -66,12 +68,37 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
+  // Mesmo telefone já cadastrado nesta empresa: não cria outro (o número
+  // repetido trava os avisos de WhatsApp dele). Devolve quem é, e a tela
+  // oferece acrescentar a cidade à ficha que existe; com `acrescentarCidadeEm`
+  // é isso que acontece aqui.
+  if (organizacaoId) {
+    const doTelefone = await videomakersComOTelefone(prisma, organizacaoId, body.telefone)
+    if (doTelefone.length > 0) {
+      const alvo = doTelefone.find(v => v.id === body.acrescentarCidadeEm)
+      if (!alvo) {
+        return NextResponse.json({
+          error: `Este telefone já é de ${doTelefone[0].nome}, cadastrado nesta empresa.`,
+          duplicado: doTelefone[0],
+        }, { status: 409 })
+      }
+      const cidadesAtendidas = acrescentarCidades(alvo, [body.cidade, ...listaDeCidades(body.cidadesAtendidas ?? [])])
+      const atualizado = await prisma.videomaker.update({
+        where: { id: alvo.id },
+        data: { cidadesAtendidas },
+        select: { id: true, nome: true, cidade: true, cidadesAtendidas: true },
+      })
+      return NextResponse.json({ ...atualizado, acrescentado: true }, { status: 200 })
+    }
+  }
+
   // O perfil global só recebe o que é público (a rede inteira enxerga). Diária,
   // observação, CPF e banco são da empresa que cadastrou e vão para o vínculo.
   const videomaker = await prisma.videomaker.create({
     data: {
       nome: body.nome,
       cidade: body.cidade,
+      cidadesAtendidas: listaDeCidades(body.cidadesAtendidas ?? [], body.cidade),
       estado: body.estado,
       telefone: body.telefone,
       email: body.email,

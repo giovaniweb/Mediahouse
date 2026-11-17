@@ -12,9 +12,11 @@ import type { ScoreRede as Score } from "@/lib/rede-score"
 import { fetcher } from "@/lib/fetcher"
 import { useMe } from "@/hooks/usePermissoes"
 import { mensagemDeErro, erroDaResposta } from "@/lib/erro-cliente"
+import { listaDeCidades } from "@/lib/cidades-videomaker"
 
 interface PerfilRede {
   id: string; nome: string; cidade: string | null; estado: string | null
+  cidadesAtendidas?: string[]
   areasAtuacao: string[]; habilidades: string[]; portfolio: string | null; redesSociais: string[]
   score?: Score; convitePendente: boolean
 }
@@ -114,6 +116,9 @@ export default function RedePage() {
                         <MapPin className="w-3 h-3" />
                         <span>{[p.cidade, p.estado].filter(Boolean).join(", ")}</span>
                       </div>
+                    )}
+                    {listaDeCidades(p.cidadesAtendidas ?? [], p.cidade).length > 0 && (
+                      <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">Atende também: {listaDeCidades(p.cidadesAtendidas ?? [], p.cidade).join(", ")}</p>
                     )}
                     <ScoreRede score={p.score} className="mt-3" />
                     {tags.length > 0 && (

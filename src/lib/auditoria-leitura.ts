@@ -21,6 +21,7 @@ const rotulos: Record<AcaoAuditoria, string> = {
   "mcp.leitura": "Consulta pelo assistente (MCP)", "mcp.criar": "Demanda criada pelo assistente (MCP)",
   "mcp.chave": "Chave de assistente (MCP) gerada ou revogada", "mcp.desfazer": "Demanda do assistente (MCP) desfeita", "avisos.preferencias": "Avisos por pessoa alterados",
   "videomaker.acesso": "Acesso enviado ao videomaker",
+  "videomaker.juntar": "Cadastros repetidos do videomaker juntados",
   "login.recusado": "Login com senha errada", "login.bloqueado": "Login travado por excesso de tentativas",
   "termos.aceite": "Termos e Política de Privacidade aceitos",
   "espelho.mover": "Card de empresa parceira movido",
