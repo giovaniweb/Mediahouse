@@ -142,10 +142,10 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-3">{acrescentou ? "Cidades acrescentadas!" : "Cadastro enviado!"}</h2>
+          <h2 className="text-2xl font-bold text-white mb-3">{acrescentou ? "Pedido enviado!" : "Cadastro enviado!"}</h2>
           <p className="text-zinc-400 mb-8">
             {acrescentou
-              ? "As cidades foram acrescentadas ao seu cadastro, sem criar outro. A equipe recebeu o aviso."
+              ? "A equipe recebeu o pedido para acrescentar as cidades ao seu cadastro, sem criar outro. Ela confere e atualiza a sua ficha."
               : "Recebemos suas informações e nossa equipe irá analisar em breve. Se houver uma oportunidade, a equipe poderá entrar em contato pelo e-mail ou WhatsApp informado."}
           </p>
           <Link href={destino.inicio} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 justify-center">
@@ -386,7 +386,7 @@ export default function CadastroProfissional({ papel }: { papel: Papel }) {
                   <p>{jaCadastrado}</p>
                   <button onClick={() => enviar(true)} disabled={loading}
                     className="w-full rounded-xl bg-amber-400 py-2.5 font-semibold text-zinc-900 hover:bg-amber-300 disabled:opacity-40">
-                    Acrescentar {listaDeCidades([form.cidade, ...form.cidadesAtendidas]).join(", ") || "as cidades"} ao meu cadastro
+                    Pedir à equipe para acrescentar {listaDeCidades([form.cidade, ...form.cidadesAtendidas]).join(", ") || "as cidades"} ao meu cadastro
                   </button>
                 </div>
               )}

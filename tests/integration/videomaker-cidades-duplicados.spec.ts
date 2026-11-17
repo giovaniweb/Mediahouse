@@ -73,15 +73,30 @@ describe("cadastro público", () => {
     expect(await doTelefone(TEL)).toHaveLength(1)
   })
 
-  it("com 'acrescentar', as cidades vão para o cadastro que existe e a gestão é avisada", async () => {
+  it("com 'acrescentar', o cadastro que existe NÃO muda: a gestão recebe o pedido no sino", async () => {
+    const antes = await db.videomaker.findUniqueOrThrow({ where: { id: vm.base } })
     const r = await cadastrarPublico(req(`/api/publico/videomaker?org=${A}`, "POST", formulario({ acrescentarCidade: true, cidadesAtendidas: ["Vitória", "itaperuna"] })))
     expect(r.status).toBe(200)
-    expect(await r.json()).toMatchObject({ acrescentado: true, novas: 2 })
+    const corpo = await r.json()
+    expect(corpo).toMatchObject({ ok: true, pedidoEnviado: true })
+    expect(JSON.stringify(corpo)).not.toContain("Guarapari")
     expect(await doTelefone(TEL)).toHaveLength(1)
-    const atual = await db.videomaker.findUniqueOrThrow({ where: { id: vm.base } })
-    expect(atual.cidadesAtendidas).toEqual(["Guarapari", "Vitória"])
-    expect(atual.cidade).toBe("Itaperuna")
-    expect(await db.alertaIA.count({ where: { organizacaoId: A, tipoAlerta: "videomaker_cidade_acrescentada" } })).toBe(1)
+    const depois = await db.videomaker.findUniqueOrThrow({ where: { id: vm.base } })
+    expect(depois.cidadesAtendidas).toEqual(antes.cidadesAtendidas)
+    expect(depois.cidade).toBe(antes.cidade)
+    expect(depois.updatedAt).toEqual(antes.updatedAt)
+    const alertas = await db.alertaIA.findMany({ where: { organizacaoId: A, tipoAlerta: "videomaker_cidade_sugerida" } })
+    expect(alertas).toHaveLength(1)
+    // Só a cidade que o cadastro ainda não tem; Itaperuna (a base) não entra.
+    expect(alertas[0].mensagem).toContain("Guarapari, Vitória")
+    expect(alertas[0].mensagem).not.toContain("Itaperuna")
+  })
+
+  it("'acrescentar' sem cidade nova não gera aviso e responde igual", async () => {
+    const r = await cadastrarPublico(req(`/api/publico/videomaker?org=${A}`, "POST", formulario({ acrescentarCidade: true, cidade: "itaperuna", estado: "RJ", cidadesAtendidas: [] })))
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ ok: true, pedidoEnviado: true })
+    expect(await db.alertaIA.count({ where: { organizacaoId: A, tipoAlerta: "videomaker_cidade_sugerida" } })).toBe(1)
   })
 
   it("telefone novo cria o cadastro com a base e as cidades atendidas", async () => {

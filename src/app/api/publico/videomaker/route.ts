@@ -7,7 +7,7 @@ import { z } from "zod"
 import { declararOrg } from "@/lib/org-contexto"
 import { hashDoIp } from "@/lib/limite-publico"
 import { registrarAceite } from "@/lib/juridico/aceite-servidor"
-import { acrescentarCidades, listaDeCidades } from "@/lib/cidades-videomaker"
+import { chaveCidade, listaDeCidades } from "@/lib/cidades-videomaker"
 import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 
 // Rota pública — não requer autenticação
@@ -75,9 +75,12 @@ export async function POST(req: NextRequest) {
   // Mesmo telefone na mesma empresa = a mesma pessoa. Antes o videomaker que
   // atende várias cidades se cadastrava uma vez por cidade, e o número
   // repetido travava todo aviso de WhatsApp para ele. Aqui ele é avisado de que
-  // já tem cadastro e pode acrescentar a cidade ao que existe.
+  // já tem cadastro e pode PEDIR que a gestão acrescente as cidades.
+  //
+  // O formulário público não escreve no cadastro que existe: sem login, quem
+  // soubesse o telefone de alguém mudaria as cidades dele (revisão do PR #160).
+  // O pedido vira um aviso no sino da gestão, que acrescenta pela ficha.
   declararOrg(organizacaoId)
-  const cidadesNovas = listaDeCidades([data.cidade, ...listaDeCidades(data.cidadesAtendidas ?? [])])
   const doTelefone = await videomakersComOTelefone(prisma, organizacaoId, data.telefone)
   if (doTelefone.length > 0) {
     if (!data.acrescentarCidade) {
@@ -85,27 +88,28 @@ export async function POST(req: NextRequest) {
       // número já está aqui (o limite acima segura a tentativa em série).
       return NextResponse.json({
         duplicado: true,
-        error: "Este telefone já tem cadastro nesta empresa. Você pode acrescentar as cidades deste formulário ao seu cadastro, sem criar outro.",
+        error: "Este telefone já tem cadastro nesta empresa. Você pode pedir à equipe que acrescente as cidades deste formulário ao seu cadastro, sem criar outro.",
       }, { status: 409 })
     }
-    // O mais antigo ativo fica com as cidades; se já houver repetidos, a
-    // gestão junta depois (scripts/juntar-videomakers-duplicados.mjs).
+    // A sugestão vai para a gestão como veio, sem tocar no cadastro. As que já
+    // estão nele não entram no aviso (nem a base).
     const alvo = doTelefone.find(v => v.status !== "inativo") ?? doTelefone[0]
-    const cidades = acrescentarCidades(alvo, cidadesNovas)
-    const novas = cidades.filter(c => !alvo.cidadesAtendidas.includes(c))
-    if (novas.length > 0) {
-      await prisma.videomaker.update({ where: { id: alvo.id }, data: { cidadesAtendidas: cidades } })
+    const jaTem = new Set(listaDeCidades([alvo.cidade, ...alvo.cidadesAtendidas]).map(chaveCidade))
+    const sugeridas = listaDeCidades([data.cidade, ...listaDeCidades(data.cidadesAtendidas ?? [])])
+      .filter(c => !jaTem.has(chaveCidade(c)))
+    if (sugeridas.length > 0) {
       await prisma.alertaIA.create({
         data: {
           organizacaoId,
-          tipoAlerta: "videomaker_cidade_acrescentada",
-          mensagem: `${alvo.nome} acrescentou pelo formulário de cadastro: ${novas.join(", ")}.`,
+          tipoAlerta: "videomaker_cidade_sugerida",
+          mensagem: `Pedido pelo formulário de cadastro, com o telefone de ${alvo.nome}: acrescentar ${sugeridas.join(", ")}. O cadastro não foi alterado.`,
           severidade: "info",
-          acaoSugerida: "Conferir as cidades na ficha do videomaker",
+          acaoSugerida: `Conferir com o videomaker e acrescentar pela ficha (/videomakers/${alvo.id})`,
         },
       })
     }
-    return NextResponse.json({ ok: true, acrescentado: true, novas: novas.length }, { status: 200 })
+    // A mesma resposta com ou sem cidade nova: não revela o que o cadastro tem.
+    return NextResponse.json({ ok: true, pedidoEnviado: true }, { status: 200 })
   }
 
   // Duplicidade: e-mail vive no perfil global; CPF/CNPJ mora nos dados fiscais
