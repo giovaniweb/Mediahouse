@@ -5,6 +5,8 @@ import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import useSWR from "swr"
 import { EmpresaDele } from "@/components/videomakers/EmpresaDele"
+import { CidadesAtendidasInput } from "@/components/videomakers/CidadesAtendidasInput"
+import { listaDeCidades } from "@/lib/cidades-videomaker"
 import { BotaoEnviarAcesso, SituacaoDoAcesso } from "@/components/videomakers/AcessoDoVideomaker"
 import { Header } from "@/components/layout/Header"
 import {
@@ -94,6 +96,7 @@ export default function VideomakerDetalhePage() {
       portfolio: vm.portfolio ?? "",
       habilidades: vm.habilidades ?? [],
       areasAtuacao: vm.areasAtuacao ?? [],
+      cidadesAtendidas: vm.cidadesAtendidas ?? [],
     })
     setEditing(true)
   }
@@ -400,6 +403,22 @@ export default function VideomakerDetalhePage() {
                 <span>{[vm.cidade, vm.estado].filter(Boolean).join(", ") || "—"}</span>
               )}
             </div>
+
+            {/* Base acima; aqui as outras cidades que ele atende. A busca da
+                lista, a rede e a escala no card olham as duas. */}
+            {(editing || listaDeCidades(vm.cidadesAtendidas ?? [], vm.cidade).length > 0) && (
+              <div className="flex items-start gap-2 text-zinc-400 sm:col-span-2">
+                <MapPin className="w-4 h-4 text-zinc-600 shrink-0 mt-1" />
+                {editing ? (
+                  <div className="flex-1">
+                    <label htmlFor="ficha-cidades-atendidas" className="block text-xs text-zinc-500 mb-1">Outras cidades que atende</label>
+                    <CidadesAtendidasInput id="ficha-cidades-atendidas" base={form.cidade as string} value={(form.cidadesAtendidas as string[]) ?? []} onChange={(c) => setForm({ ...form, cidadesAtendidas: c })} placeholder="Ex.: Campinas, Ribeirão Preto" />
+                  </div>
+                ) : (
+                  <span>Atende também: {listaDeCidades(vm.cidadesAtendidas ?? [], vm.cidade).join(", ")}</span>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-2 text-zinc-400">
               <Phone className="w-4 h-4 text-zinc-600 shrink-0" />

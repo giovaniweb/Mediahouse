@@ -7,6 +7,8 @@ import { z } from "zod"
 import { declararOrg } from "@/lib/org-contexto"
 import { hashDoIp } from "@/lib/limite-publico"
 import { registrarAceite } from "@/lib/juridico/aceite-servidor"
+import { chaveCidade, listaDeCidades } from "@/lib/cidades-videomaker"
+import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 
 // Rota pública — não requer autenticação
 const schema = z.object({
@@ -19,6 +21,11 @@ const schema = z.object({
   telefone: z.string().min(10, "Telefone inválido"),
   cidade: z.string().min(2, "Cidade é obrigatória"),
   estado: z.string().min(2, "Estado é obrigatório"),
+  // Outras cidades ou regiões que atende, além da base (16/11/2026).
+  cidadesAtendidas: z.union([z.array(z.string().max(80)).max(30), z.string().max(2000)]).optional(),
+  // Resposta ao "este telefone já tem cadastro": acrescenta as cidades ao
+  // cadastro que existe em vez de criar outro.
+  acrescentarCidade: z.boolean().optional(),
   endereco: z.string().optional(),
   chavePix: z.string().optional(),
   dadosBancarios: z.string().max(300).optional(),
@@ -65,6 +72,46 @@ export async function POST(req: NextRequest) {
   const barrado = await barrarExcesso(req.headers, "videomaker", organizacaoId)
   if (barrado) return barrado
 
+  // Mesmo telefone na mesma empresa = a mesma pessoa. Antes o videomaker que
+  // atende várias cidades se cadastrava uma vez por cidade, e o número
+  // repetido travava todo aviso de WhatsApp para ele. Aqui ele é avisado de que
+  // já tem cadastro e pode PEDIR que a gestão acrescente as cidades.
+  //
+  // O formulário público não escreve no cadastro que existe: sem login, quem
+  // soubesse o telefone de alguém mudaria as cidades dele (revisão do PR #160).
+  // O pedido vira um aviso no sino da gestão, que acrescenta pela ficha.
+  declararOrg(organizacaoId)
+  const doTelefone = await videomakersComOTelefone(prisma, organizacaoId, data.telefone)
+  if (doTelefone.length > 0) {
+    if (!data.acrescentarCidade) {
+      // Sem nome nem cidades do cadastro: quem digita só fica sabendo que o
+      // número já está aqui (o limite acima segura a tentativa em série).
+      return NextResponse.json({
+        duplicado: true,
+        error: "Este telefone já tem cadastro nesta empresa. Você pode pedir à equipe que acrescente as cidades deste formulário ao seu cadastro, sem criar outro.",
+      }, { status: 409 })
+    }
+    // A sugestão vai para a gestão como veio, sem tocar no cadastro. As que já
+    // estão nele não entram no aviso (nem a base).
+    const alvo = doTelefone.find(v => v.status !== "inativo") ?? doTelefone[0]
+    const jaTem = new Set(listaDeCidades([alvo.cidade, ...alvo.cidadesAtendidas]).map(chaveCidade))
+    const sugeridas = listaDeCidades([data.cidade, ...listaDeCidades(data.cidadesAtendidas ?? [])])
+      .filter(c => !jaTem.has(chaveCidade(c)))
+    if (sugeridas.length > 0) {
+      await prisma.alertaIA.create({
+        data: {
+          organizacaoId,
+          tipoAlerta: "videomaker_cidade_sugerida",
+          mensagem: `Pedido pelo formulário de cadastro, com o telefone de ${alvo.nome}: acrescentar ${sugeridas.join(", ")}. O cadastro não foi alterado.`,
+          severidade: "info",
+          acaoSugerida: `Conferir com o videomaker e acrescentar pela ficha (/videomakers/${alvo.id})`,
+        },
+      })
+    }
+    // A mesma resposta com ou sem cidade nova: não revela o que o cadastro tem.
+    return NextResponse.json({ ok: true, pedidoEnviado: true }, { status: 200 })
+  }
+
   // Duplicidade: e-mail vive no perfil global; CPF/CNPJ mora nos dados fiscais
   // por empresa desde que o perfil global parou de guardar dado privado.
   const [porEmail, porDocumento] = await Promise.all([
@@ -79,8 +126,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Sob RLS a empresa precisa ser DECLARADA: rota pública não tem sessão de
-  // onde deduzi-la, e sem declaração o banco devolve vazio.
-  declararOrg(organizacaoId)
+  // onde deduzi-la, e sem declaração o banco devolve vazio. Já foi declarada
+  // acima, antes da conferência do telefone.
 
   // Só o que é público entra no perfil global — ele é a rede compartilhada e vai
   // ser legível por qualquer empresa sob RLS. CPF, endereço, PIX e diária são
@@ -93,6 +140,7 @@ export async function POST(req: NextRequest) {
         email: data.email,
         telefone: data.telefone,
         cidade: data.cidade,
+        cidadesAtendidas: listaDeCidades(data.cidadesAtendidas ?? [], data.cidade),
         estado: data.estado,
         redesSociais: data.redesSociais,
         portfolio: data.portfolio || null,

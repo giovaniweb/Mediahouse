@@ -150,7 +150,9 @@ describe("POST /api/publico/videomaker", () => {
   it("dentro do teto, a primeira coisa no banco é a checagem de duplicidade", async () => {
     consumir.mockResolvedValue(true)
     await postVideomaker(req("videomaker", videomaker)).catch(() => null)
-    expect(tocouNoBanco[0]).toMatch(/^(videomaker|videomakerDadosFiscais)\.findFirst$/)
+    // Desde 16/11/2026 a primeira duplicidade conferida é a do telefone nesta
+    // empresa (os vínculos dela), antes da do e-mail e do CPF/CNPJ.
+    expect(tocouNoBanco[0]).toMatch(/^(videomakerOrganizacao\.findMany|(videomaker|videomakerDadosFiscais)\.findFirst)$/)
   })
 })
 

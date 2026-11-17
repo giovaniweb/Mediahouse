@@ -258,6 +258,11 @@ model Videomaker {
   nome         String
   cidade       String?
   estado       String?
+  /// Outras cidades ou regiões que ele atende, além da `cidade` (a base).
+  /// Ex.: base São Paulo, atende Campinas e Ribeirão Preto. A busca e o filtro
+  /// por cidade olham as duas (src/lib/cidades-videomaker.ts). Perfil da rede:
+  /// é público como a cidade.
+  cidadesAtendidas String[] @default([])
   telefone     String?
   email        String?
   redesSociais String[]

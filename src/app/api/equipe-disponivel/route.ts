@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { bloqueadosDaEmpresa } from "@/lib/videomaker-vinculo"
 import { scoresDaRede, textoScore, type ScoreRede } from "@/lib/rede"
+import { textoDasCidades } from "@/lib/cidades-videomaker"
 
 // GET /api/equipe-disponivel?papel=captacao|edicao
 // Lista unificada e deduplicada de pessoas atribuíveis a um papel.
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         tipoContrato: true,
-        videomaker: { select: { id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true } },
+        videomaker: { select: { id: true, nome: true, cidade: true, cidadesAtendidas: true, tipoContrato: true, usuarioId: true } },
       },
       orderBy: { videomaker: { nome: "asc" } },
     })
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
       .map(({ v, contrato }) => ({
         value: `vm:${v.id}`,
         label: v.nome,
-        subtitle: v.cidade ?? "",
+        subtitle: textoDasCidades(v),
         tipoContrato: contrato,
         origem: "vm" as const,
         usuarioId: v.usuarioId,
@@ -100,7 +101,7 @@ export async function GET(req: NextRequest) {
         ...(bloqueados.length ? { id: { notIn: bloqueados } } : {}),
       },
       select: {
-        id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
+        id: true, nome: true, cidade: true, cidadesAtendidas: true, tipoContrato: true, usuarioId: true,
         vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },
       },
       orderBy: { nome: "asc" },
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
       add({
         value: `vm:${v.id}`,
         label: v.nome,
-        subtitle: v.cidade ?? "",
+        subtitle: textoDasCidades(v),
         tipoContrato: contratoEfetivo(v.vinculos[0]?.tipoContrato, v.tipoContrato) ?? "externo",
         origem: "vm",
         usuarioId: v.usuarioId,
@@ -161,7 +162,7 @@ export async function GET(req: NextRequest) {
         vinculos: { some: { organizacaoId, status: { in: ["ativo", "preferencial"] }, emListaNegra: false } },
       },
       select: {
-        id: true, nome: true, cidade: true, tipoContrato: true, usuarioId: true,
+        id: true, nome: true, cidade: true, cidadesAtendidas: true, tipoContrato: true, usuarioId: true,
         vinculos: { where: { organizacaoId }, select: { tipoContrato: true } },
       },
       orderBy: { nome: "asc" },
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
       add({
         value: `vm:${v.id}`,
         label: v.nome,
-        subtitle: v.cidade ?? "",
+        subtitle: textoDasCidades(v),
         tipoContrato: contratoEfetivo(v.vinculos[0]?.tipoContrato, v.tipoContrato) ?? "externo",
         origem: "vm",
         usuarioId: v.usuarioId,

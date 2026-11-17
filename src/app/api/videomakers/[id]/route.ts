@@ -7,6 +7,8 @@ import { getOrgId, semOrg } from "@/lib/org"
 import { podeVerVideomaker } from "@/lib/videomakers-da-rede"
 import { encryptSecret, decryptSecret } from "@/lib/secret-crypto"
 import { scoreDaRede } from "@/lib/rede"
+import { listaDeCidades } from "@/lib/cidades-videomaker"
+import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -159,6 +161,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const body = await req.json()
 
+  // Trocar o telefone para o de outro videomaker desta empresa recriaria o
+  // cadastro em dobro que trava o WhatsApp dos dois.
+  if (typeof body.telefone === "string" && body.telefone.trim()) {
+    const outros = await videomakersComOTelefone(prisma, organizacaoId, body.telefone, id)
+    if (outros.length > 0) {
+      return NextResponse.json({ error: `Este telefone já é de ${outros[0].nome}, cadastrado nesta empresa.` }, { status: 409 })
+    }
+  }
+
   // A escrita segue as três camadas: perfil da rede, relação comercial da
   // empresa e dados fiscais da empresa. Nada sensível volta para o global.
   const vm = await prisma.videomaker.update({
@@ -166,6 +177,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
     data: {
       nome: body.nome,
       cidade: body.cidade,
+      // Só quando vem no corpo: edição parcial não apaga a lista.
+      cidadesAtendidas: body.cidadesAtendidas !== undefined
+        ? listaDeCidades(body.cidadesAtendidas, body.cidade ?? undefined)
+        : undefined,
       estado: body.estado,
       telefone: body.telefone,
       email: body.email,

@@ -16,6 +16,9 @@ import { useMe } from "@/hooks/usePermissoes"
 import { rotaDeModuloDesligado } from "@/lib/modulos"
 import { ScoreRede } from "@/components/rede/ScoreRede"
 import type { ScoreRede as Score } from "@/lib/rede-score"
+import { CidadesAtendidasInput } from "@/components/videomakers/CidadesAtendidasInput"
+import { chaveCidade, listaDeCidades, todasAsCidades } from "@/lib/cidades-videomaker"
+import { semAcento } from "@/lib/busca-na-lista"
 
 
 const statusConfig = {
@@ -36,6 +39,7 @@ type FiltroStatus = "todos" | "pendente" | "ativo" | "preferencial" | "inativo" 
 
 interface Videomaker {
   id: string; nome: string; cidade: string; estado: string
+  cidadesAtendidas?: string[]
   telefone: string; email: string; valorDiaria: number
   avaliacao: number; status: keyof typeof statusConfig
   areasAtuacao: string[]; habilidades: string[]
@@ -59,9 +63,12 @@ export default function VideomakersPage() {
     // Search filter
     if (busca.trim()) {
       const q = busca.toLowerCase()
+      // Cidade: a base ou qualquer uma que ele atende, sem acento ("guarapari"
+      // acha quem mora em Itaperuna e atende Guarapari).
+      const qs = semAcento(busca.trim())
       return (
         vm.nome?.toLowerCase().includes(q) ||
-        vm.cidade?.toLowerCase().includes(q) ||
+        todasAsCidades(vm).some(c => semAcento(c).includes(qs)) ||
         vm.estado?.toLowerCase().includes(q) ||
         vm.email?.toLowerCase().includes(q) ||
         vm.telefone?.includes(q)
@@ -178,7 +185,7 @@ export default function VideomakersPage() {
               <MapPin className="w-4 h-4 text-blue-400" />
               <span className="text-xs text-zinc-500">Cidades</span>
             </div>
-            <p className="text-2xl font-bold text-zinc-100">{new Set(videomakers.filter(v => v.cidade).map(v => v.cidade)).size}</p>
+            <p className="text-2xl font-bold text-zinc-100">{new Set(videomakers.flatMap(v => todasAsCidades(v).map(chaveCidade))).size}</p>
           </div>
           <div className={cn(
             "bg-zinc-900 border rounded-xl p-4",
@@ -232,6 +239,11 @@ export default function VideomakersPage() {
                             <MapPin className="w-3 h-3" />
                             <span>{[vm.cidade, vm.estado].filter(Boolean).join(", ")}</span>
                           </div>
+                        )}
+                        {listaDeCidades(vm.cidadesAtendidas ?? [], vm.cidade).length > 0 && (
+                          <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">
+                            Atende também: {listaDeCidades(vm.cidadesAtendidas ?? [], vm.cidade).join(", ")}
+                          </p>
                         )}
                       </div>
                       <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full ml-2 shrink-0", cfg.class)}>
@@ -318,7 +330,11 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
     nome: "", cidade: "", estado: "", telefone: "", email: "",
     valorDiaria: "", status: "ativo", cpfCnpj: "", chavePix: "",
     areasAtuacao: [] as string[], habilidades: [] as string[],
+    cidadesAtendidas: [] as string[],
   })
+  // O telefone já é de alguém desta empresa: em vez de outro cadastro, a
+  // cidade vai para a ficha dele (o número repetido trava o WhatsApp).
+  const [duplicado, setDuplicado] = useState<{ id: string; nome: string; cidade: string | null; cidadesAtendidas: string[] } | null>(null)
 
   const areas = ["eventos", "institucional", "ads", "social_media", "reels", "aftermovie", "corporativo"]
 
@@ -331,8 +347,8 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
     }))
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
+  async function submit(e: React.FormEvent | null, acrescentarCidadeEm?: string) {
+    e?.preventDefault()
     setLoading(true)
     try {
       const res = await fetch("/api/videomakers", {
@@ -342,10 +358,16 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
         ...form,
         email: form.email.trim() || undefined,   // não enviar string vazia
         valorDiaria: form.valorDiaria ? Number(form.valorDiaria) : undefined,
+        ...(acrescentarCidadeEm ? { acrescentarCidadeEm } : {}),
       }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success("Videomaker cadastrado!")
+      const corpo = await res.json().catch(() => ({}))
+      if (res.status === 409 && corpo.duplicado) {
+        setDuplicado(corpo.duplicado)
+        return
+      }
+      if (!res.ok) throw new Error(corpo.error)
+      toast.success(corpo.acrescentado ? `Cidades acrescentadas na ficha de ${corpo.nome}.` : "Videomaker cadastrado!")
       onClose()
     } catch (err) {
       toast.error(mensagemDeErro(err))
@@ -368,7 +390,7 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label htmlFor="external-telefone" className="block text-xs text-zinc-400 mb-1">Telefone</label>
-              <input id="external-telefone" placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} className={inp} />
+              <input id="external-telefone" placeholder="(11) 99999-9999" value={form.telefone} onChange={(e) => { setForm({ ...form, telefone: e.target.value }); setDuplicado(null) }} className={inp} />
             </div>
             <div>
               <label htmlFor="external-email" className="block text-xs text-zinc-400 mb-1">E-mail</label>
@@ -381,6 +403,10 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
             <div>
               <label htmlFor="external-estado" className="block text-xs text-zinc-400 mb-1">UF</label>
               <input id="external-estado" placeholder="SP" maxLength={2} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value.toUpperCase() })} className={inp} />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="external-cidadesAtendidas" className="block text-xs text-zinc-400 mb-1">Outras cidades que atende</label>
+              <CidadesAtendidasInput id="external-cidadesAtendidas" base={form.cidade} value={form.cidadesAtendidas} onChange={(c) => setForm({ ...form, cidadesAtendidas: c })} placeholder="Ex.: Campinas, Ribeirão Preto" />
             </div>
             <div>
               <label htmlFor="external-valorDiaria" className="block text-xs text-zinc-400 mb-1">Valor/dia (R$)</label>
@@ -430,6 +456,25 @@ function VideomakerForm({ onClose }: { onClose: () => void }) {
               placeholder="Selecione ou adicione habilidades..."
             />
           </div>
+
+          {duplicado && (
+            <div role="alert" ref={el => el?.scrollIntoView({ block: "nearest", behavior: "smooth" })} className="rounded-lg border border-yellow-700/60 bg-yellow-900/20 p-3 text-sm text-yellow-100 space-y-2">
+              <p>
+                Este telefone já é de <strong>{duplicado.nome}</strong>
+                {duplicado.cidade ? `, de ${todasAsCidades(duplicado).join(", ")}` : ""}. Não dá para cadastrar a mesma pessoa de novo: os avisos de WhatsApp param de chegar para ela.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={loading || !form.cidade.trim() && form.cidadesAtendidas.length === 0}
+                  onClick={() => submit(null, duplicado.id)}
+                  className="px-3 py-1.5 text-xs rounded-md bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-60">
+                  Acrescentar {listaDeCidades([form.cidade, ...form.cidadesAtendidas]).join(", ") || "as cidades"} à ficha
+                </button>
+                <Link href={`/videomakers/${duplicado.id}`} className="px-3 py-1.5 text-xs rounded-md border border-yellow-700 text-yellow-100 hover:bg-yellow-900/40">
+                  Abrir a ficha de {duplicado.nome.split(" ")[0]}
+                </Link>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-zinc-700 rounded-lg text-zinc-400 hover:bg-zinc-800">Cancelar</button>
