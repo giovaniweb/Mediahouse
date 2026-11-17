@@ -153,6 +153,18 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
     const diferentes = outros.filter(o => telefoneNormalizado(o.telefone) !== tel)
     if (diferentes.length && !forcar) throw new Error(`Telefone diferente do mantido: ${diferentes.map(d => d.id).join(", ")} (use --forcar se for a mesma pessoa).`)
 
+    // "Empresa dele" (organizacaoExecutoraId) num juntado: só junta se o
+    // mantido já tem a MESMA nessa empresa. Passá-la para o mantido exige que a
+    // conta dele seja admin/gestor lá (gatilho videomaker_empresa_executora_regras)
+    // e decide quem executa os cards abertos: isso se acerta na ficha, antes.
+    for (const v of vinc.filter(x => x.videomakerId !== manterId && x.organizacaoExecutoraId)) {
+      const meu = vinc.find(x => x.videomakerId === manterId && x.organizacaoId === v.organizacaoId)
+      if (meu?.organizacaoExecutoraId !== v.organizacaoExecutoraId) {
+        throw new Error(`O cadastro ${v.videomakerId} tem "Empresa dele" (${v.organizacaoExecutoraId}) na empresa ${v.organizacaoId} e o mantido não tem a mesma. ` +
+          `Ponha a mesma "Empresa dele" na ficha do mantido (ou mantenha o ${v.videomakerId}) e rode de novo.`)
+      }
+    }
+
     // Retrato de ANTES (clonado: os objetos abaixo mudam durante a junção).
     const copia = structuredClone({ em: new Date().toISOString(), organizacaoId, manter, juntados: outros, vinculos: vinc, fiscais: [], contas: [] })
     const contagem = {}
@@ -178,6 +190,12 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
     ])
 
     // ── 2) Vínculos e dados fiscais, por empresa ────────────────────────────
+    // O vínculo que o mantido não tem passa para ele já (o executor da parceira
+    // só aceita quem tem vínculo com ela). O que os dois têm só se junta DEPOIS
+    // do histórico: apagar o vínculo do juntado com "Empresa dele" revoga os
+    // espelhos feitos por ele (gatilho empresa_executora_revoga_espelho), e
+    // eles ainda apontariam para o juntado.
+    const vinculosParaJuntar = []
     for (const o of outros) {
       for (const v of vinc.filter(x => x.videomakerId === o.id)) {
         const meu = vinc.find(x => x.videomakerId === manterId && x.organizacaoId === v.organizacaoId)
@@ -185,19 +203,9 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
           await c.query(`UPDATE videomaker_organizacao SET "videomakerId"=$1, "updatedAt"=now() WHERE id=$2`, [manterId, v.id])
           v.videomakerId = manterId
           conta("vinculos movidos", 1)
-          continue
+        } else {
+          vinculosParaJuntar.push({ v, meu })
         }
-        // Os dois têm vínculo com a mesma empresa: fica o do mantido, com o
-        // que faltar nele, a melhor situação e a lista negra se qualquer um tinha.
-        const status = ORDEM_STATUS[v.status] < ORDEM_STATUS[meu.status] ? v.status : meu.status
-        await c.query(`UPDATE videomaker_organizacao SET
-            status=$2, "valorDiaria"=COALESCE("valorDiaria",$3), observacoes=COALESCE(observacoes,$4),
-            "emListaNegra"=("emListaNegra" OR $5), "listaNegraMotivo"=COALESCE("listaNegraMotivo",$6),
-            "podeEditar"=("podeEditar" OR $7), "organizacaoExecutoraId"=COALESCE("organizacaoExecutoraId",$8), "updatedAt"=now()
-          WHERE id=$1`, [meu.id, status, v.valorDiaria, v.observacoes, v.emListaNegra, v.listaNegraMotivo, v.podeEditar, v.organizacaoExecutoraId])
-        meu.status = status
-        await c.query(`DELETE FROM videomaker_organizacao WHERE id=$1`, [v.id])
-        conta("vinculos juntados", 1)
       }
       const { rows: fiscais } = await c.query(`SELECT * FROM videomaker_dados_fiscais WHERE "videomakerId"=$1`, [o.id])
       copia.fiscais.push(...structuredClone(fiscais))
@@ -240,6 +248,22 @@ export async function juntarVideomakers(c, { manterId, juntarIds, organizacaoId:
     await mover("convites", `UPDATE convites_videomaker SET "videomakerId"=$1 WHERE "videomakerId"=ANY($2)`)
     await c.query(`ALTER TABLE convites_videomaker ENABLE TRIGGER convite_condicao_imutavel`)
     await mover("aceites dos termos", `UPDATE aceites_termos SET "titularId"=$1 WHERE "titularTipo"='videomaker' AND "titularId"=ANY($2)`)
+
+    // ── 3b) Vínculos que os dois tinham na mesma empresa ────────────────────
+    // Fica o do mantido, com o que faltar nele, a melhor situação e a lista
+    // negra se qualquer um tinha. Com o histórico já no mantido, apagar o
+    // vínculo do juntado não revoga espelho nenhum.
+    for (const { v, meu } of vinculosParaJuntar) {
+      const status = ORDEM_STATUS[v.status] < ORDEM_STATUS[meu.status] ? v.status : meu.status
+      await c.query(`UPDATE videomaker_organizacao SET
+          status=$2, "valorDiaria"=COALESCE("valorDiaria",$3), observacoes=COALESCE(observacoes,$4),
+          "emListaNegra"=("emListaNegra" OR $5), "listaNegraMotivo"=COALESCE("listaNegraMotivo",$6),
+          "podeEditar"=("podeEditar" OR $7), "organizacaoExecutoraId"=COALESCE("organizacaoExecutoraId",$8), "updatedAt"=now()
+        WHERE id=$1`, [meu.id, status, v.valorDiaria, v.observacoes, v.emListaNegra, v.listaNegraMotivo, v.podeEditar, v.organizacaoExecutoraId])
+      meu.status = status
+      await c.query(`DELETE FROM videomaker_organizacao WHERE id=$1`, [v.id])
+      conta("vinculos juntados", 1)
+    }
 
     // ── 4) Contas ───────────────────────────────────────────────────────────
     const contaIds = [...new Set(outros.map(o => o.usuarioId).filter(Boolean))]

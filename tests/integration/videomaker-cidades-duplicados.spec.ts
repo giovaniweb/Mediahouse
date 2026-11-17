@@ -22,7 +22,7 @@ import { GET as equipe } from "@/app/api/equipe-disponivel/route"
 import { juntarVideomakers, listarGrupos } from "../../scripts/lib/juntar-videomakers.mjs"
 
 const p = `cid-${randomUUID().slice(0, 8)}`
-const A = `${p}-a`, B = `${p}-b`
+const A = `${p}-a`, B = `${p}-b`, P = `${p}-parceira`
 const gestor = `${p}-gestor`, gestorB = `${p}-gestor-b`
 const vm = { base: `${p}-vm-base`, outro: `${p}-vm-outro` }
 const TEL = "22998360001", TEL_OUTRO = "22998360002"
@@ -53,9 +53,10 @@ beforeEach(() => { sessao.user = null })
 afterAll(async () => {
   await db.conviteVideomaker.deleteMany({ where: { demanda: { organizacaoId: A } } })
   await db.demanda.deleteMany({ where: { organizacaoId: A } })
-  await db.videomaker.deleteMany({ where: { vinculos: { some: { organizacaoId: { in: [A, B] } } } } })
+  await db.parceriaOrganizacao.deleteMany({ where: { organizacaoConvidanteId: A } })
+  await db.videomaker.deleteMany({ where: { vinculos: { some: { organizacaoId: { in: [A, B, P] } } } } })
   await db.videomaker.deleteMany({ where: { id: { startsWith: p } } })
-  await db.organizacao.deleteMany({ where: { id: { in: [A, B] } } })
+  await db.organizacao.deleteMany({ where: { id: { in: [A, B, P] } } })
   await db.usuario.deleteMany({ where: { id: { startsWith: p } } })
   await db.$disconnect()
 })
@@ -264,5 +265,65 @@ describe("scripts/juntar-videomakers-duplicados.mjs", () => {
   it("falha no meio = nada muda (a cópia que não se grava desfaz tudo)", async () => {
     await expect(juntarVideomakers(c, { manterId: vm.base, juntarIds: [vm.outro], forcar: true, antesDeConfirmar: () => { throw new Error("disco cheio") } })).rejects.toThrow("disco cheio")
     expect(await db.videomaker.count({ where: { id: { in: [vm.base, vm.outro] } } })).toBe(2)
+  })
+})
+
+// Revisão do PR #160: apagar o vínculo do juntado com "Empresa dele" revogava
+// os espelhos abertos feitos por ele antes de o histórico passar ao mantido.
+describe("juntar com 'Empresa dele' e card espelhado aberto", () => {
+  const vmx = { fica: `${p}-ex-fica`, sai: `${p}-ex-sai`, semEmpresa: `${p}-ex-sem`, comEmpresa: `${p}-ex-com` }
+  const ux = { fica: `${p}-ux-fica`, sai: `${p}-ux-sai`, semEmpresa: `${p}-ux-sem`, comEmpresa: `${p}-ux-com` }
+  const card = `${p}-card-espelhado`
+  let c: pg.Client
+
+  beforeAll(async () => {
+    c = new pg.Client({ connectionString: process.env.DATABASE_URL })
+    await c.connect()
+    await db.organizacao.create({ data: { id: P, nome: `${p} Parceira`, slug: P } })
+    await db.parceriaOrganizacao.create({ data: {
+      organizacaoConvidanteId: A, organizacaoConvidadaId: P, nomeConvidante: "", nomeConvidada: "",
+      status: "aceita", criadoPorId: gestor, respondidoEm: new Date(),
+    } })
+    const pares = [["fica", "22998371111"], ["sai", "22998371111"], ["semEmpresa", "22998372222"], ["comEmpresa", "22998372222"]] as const
+    for (const [k, tel] of pares) {
+      await db.usuario.create({ data: { id: ux[k], nome: k, email: `${ux[k]}@teste.invalid`, telefone: tel, tipo: "videomaker", senhaHash: "x" } })
+      await db.usuarioOrganizacao.create({ data: { usuarioId: ux[k], organizacaoId: A, papel: "videomaker", areas: [] } })
+      await db.usuarioOrganizacao.create({ data: { usuarioId: ux[k], organizacaoId: P, papel: "admin", areas: [] } })
+      await db.videomaker.create({ data: { id: vmx[k], nome: k, cidade: "Itaperuna", telefone: tel, usuarioId: ux[k], redesSociais: [], areasAtuacao: [], habilidades: [], equipamentos: [] } })
+      await db.videomakerOrganizacao.create({ data: { organizacaoId: A, videomakerId: vmx[k] } })
+    }
+    // Os dois do primeiro par trabalham pela parceira P ("Empresa dele").
+    for (const k of ["fica", "sai", "comEmpresa"] as const) {
+      await db.videomakerOrganizacao.update({ where: { organizacaoId_videomakerId: { organizacaoId: A, videomakerId: vmx[k] } }, data: { organizacaoExecutoraId: P } })
+    }
+    // O juntado tem vínculo com a P e é quem executa o card espelhado aberto.
+    await db.videomakerOrganizacao.create({ data: { organizacaoId: P, videomakerId: vmx.sai } })
+    await db.demanda.create({ data: {
+      id: card, codigo: card, organizacaoId: A, titulo: "Gravação", descricao: "t", departamento: "growth", tipoVideo: "reels", cidade: "x",
+      solicitanteId: gestor, videomakerId: vmx.sai, statusVisivel: "producao",
+    } })
+    await db.demandaCompartilhamento.create({ data: {
+      demandaId: card, organizacaoOrigemId: A, organizacaoDestinoId: P, nomeOrigem: "", nomeDestino: "", criadoPorId: gestor, porVideomakerId: vmx.sai,
+    } })
+    await db.executorEspelho.create({ data: { organizacaoId: P, demandaId: card, videomakerId: vmx.sai, escolhidoPorId: ux.sai } })
+  })
+  afterAll(async () => { await c.end() })
+
+  it("o histórico passa primeiro: o espelho continua aberto e o executor fica com o mantido", async () => {
+    const r = await juntarVideomakers(c, { manterId: vmx.fica, juntarIds: [vmx.sai] })
+    expect(r.juntados).toEqual([vmx.sai])
+    const espelho = await db.demandaCompartilhamento.findFirstOrThrow({ where: { demandaId: card } })
+    expect(espelho.revogadoEm).toBeNull()
+    expect(espelho.porVideomakerId).toBe(vmx.fica)
+    expect(await db.executorEspelho.findFirstOrThrow({ where: { demandaId: card } })).toMatchObject({ videomakerId: vmx.fica, organizacaoId: P })
+    expect((await db.demanda.findUniqueOrThrow({ where: { id: card } })).videomakerId).toBe(vmx.fica)
+    const vinculos = await db.videomakerOrganizacao.findMany({ where: { videomakerId: vmx.fica }, orderBy: { organizacaoId: "asc" } })
+    expect(vinculos.map(v => [v.organizacaoId, v.organizacaoExecutoraId])).toEqual([[A, P], [P, null]])
+  })
+
+  it("recusa quando o juntado tem 'Empresa dele' e o mantido não, sem mudar nada", async () => {
+    await expect(juntarVideomakers(c, { manterId: vmx.semEmpresa, juntarIds: [vmx.comEmpresa] })).rejects.toThrow(/Empresa dele/)
+    expect(await db.videomaker.count({ where: { id: { in: [vmx.semEmpresa, vmx.comEmpresa] } } })).toBe(2)
+    expect((await db.videomakerOrganizacao.findFirstOrThrow({ where: { videomakerId: vmx.comEmpresa, organizacaoId: A } })).organizacaoExecutoraId).toBe(P)
   })
 })
