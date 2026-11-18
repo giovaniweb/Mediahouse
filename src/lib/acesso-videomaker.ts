@@ -61,7 +61,7 @@ function primeiroNome(nome: string) {
 }
 
 /**
- * Texto do WhatsApp. Segue o da conta criada no cadastro (notificarCredenciaisWhatsapp),
+ * Texto do WhatsApp. Segue o da antiga mensagem de credenciais do cadastro (removida em 18/11/2026),
  * trocando a senha pelo link de criar a senha.
  */
 export function textoAcessoWhatsapp(d: { nome: string; link: string; telefoneLogin: string | null; emailLogin: string | null; empresa: string }) {

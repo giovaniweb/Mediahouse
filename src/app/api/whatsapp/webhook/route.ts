@@ -1,9 +1,26 @@
 import { processarSaidas } from "@/lib/whatsapp-outbox"
 import { NextRequest, NextResponse, after } from "next/server"
 import { receberEntrada, EntradaRecusada, processarInbox } from "@/lib/whatsapp-inbox"
+import { segredoNaUrlAceito } from "@/lib/whatsapp-webhook"
 
 export const maxDuration = 60
 const LIMITE = 2*1024*1024
+
+// O segredo vem no cabeçalho `x-webhook-secret` (auditoria de 18/11/2026). Na
+// URL (`?s=`) ele fica nos logs de acesso da Vercel e de qualquer proxy no
+// caminho. A URL ainda é aceita, de forma TEMPORÁRIA, porque a Evolution de
+// produção está registrada com ela: cada uso deixa um aviso no log, e
+// WHATSAPP_WEBHOOK_SEGREDO_NA_URL=desligado encerra o fallback (ver
+// lib/whatsapp-webhook.ts).
+function segredoDaRequisicao(req: NextRequest): string | null {
+  const doCabecalho=req.headers.get("x-webhook-secret")
+  if(doCabecalho) return doCabecalho
+  const daUrl=req.nextUrl.searchParams.get("s")
+  if(!daUrl) return null
+  if(!segredoNaUrlAceito()) return null
+  console.warn("[whatsapp-webhook] DEPRECIADO: segredo recebido na URL (?s=). A Evolution precisa mandar o cabeçalho x-webhook-secret; reaplique o webhook em Configurações > WhatsApp.")
+  return daUrl
+}
 
 export async function POST(req: NextRequest) {
   let body: unknown
@@ -22,7 +39,7 @@ export async function POST(req: NextRequest) {
     body=JSON.parse(Buffer.concat(chunks).toString("utf8"))
   } catch { return NextResponse.json({error:"payload_invalido"},{status:400}) }
   try {
-    const resultado=await receberEntrada(body,req.headers.get("x-webhook-secret") ?? req.nextUrl.searchParams.get("s"))
+    const resultado=await receberEntrada(body,segredoDaRequisicao(req))
     // Otimização de latência, nunca a garantia de execução. Cron retoma a mesma fila.
     if(resultado.organizacaoId) {
       try { after(async()=>{ await processarInbox(resultado.organizacaoId!).catch(()=>undefined); await processarSaidas(resultado.organizacaoId!).catch(()=>undefined) }) } catch { /* cron retoma a intenção já persistida */ }

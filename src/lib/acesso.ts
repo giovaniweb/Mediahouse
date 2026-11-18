@@ -25,3 +25,14 @@ export async function requireAcesso(capacidade?: PermissaoKey) {
   }
   return { usuarioId: session.user.id, organizacaoId, ...vinculo }
 }
+
+/**
+ * Para rotas que já leem a sessão e a empresa por conta própria: devolve a
+ * resposta de recusa (401/403) quando falta a capacidade, ou null. Auditoria de
+ * 18/11/2026: várias escritas só conferiam sessão e empresa, e qualquer membro
+ * (solicitante, videomaker externo) mexia no cadastro.
+ */
+export async function semCapacidade(capacidade: PermissaoKey): Promise<NextResponse | null> {
+  const r = await requireAcesso(capacidade)
+  return r instanceof NextResponse ? r : null
+}

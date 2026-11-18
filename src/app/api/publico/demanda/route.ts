@@ -11,7 +11,7 @@ import { validarPrazo } from "@/lib/datas"
 import { erroDeZod } from "@/lib/erros-api"
 import { gerarTokenAnexo } from "@/lib/anexo-token"
 import { declararOrg } from "@/lib/org-contexto"
-import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
+import { solicitanteDoFormulario } from "@/lib/solicitante-publico"
 import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 
@@ -81,51 +81,22 @@ export async function POST(req: NextRequest) {
   // do solicitante — antes, a busca rodava sem empresa e nunca achava ninguém.
   declararOrg(organizacaoId)
 
-  // Busca ou cria usuário solicitante externo
-  // Prioridade: telefone (evita duplicatas), depois email. A busca enxerga a
-  // plataforma inteira: o cliente pode já ter conta por outra empresa, e o
-  // e-mail é único na plataforma (ver src/lib/criar-usuario.ts).
-  const telDigits = data.telefone.replace(/\D/g, "")
-  let solicitanteId = telDigits.length >= 8 ? await usuarioIdPorTelefone(telDigits.slice(-9)) : null
-  if (!solicitanteId) solicitanteId = await usuarioIdPorEmail(data.email)
-
-  let solicitante: { id: string }
-  if (!solicitanteId) {
-    const { randomBytes } = await import("crypto")
-    const bcrypt = (await import("bcryptjs")).default
-    const tempSenha = randomBytes(16).toString("hex")
-    const senhaHash = await bcrypt.hash(tempSenha, 10)
-
-    // Nasce já com a membership de solicitante: sem ela a pessoa não apareceria
-    // em Pessoas & Acessos — e, sob RLS, nem poderia ser lida de volta.
-    solicitante = await criarUsuarioComVinculo(
-      organizacaoId,
-      { nome: data.nomeCliente, email: data.email, telefone: data.telefone, tipo: "solicitante", senhaHash },
-      { papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
-      { id: true }
-    )
-  } else {
-    // Garante a membership do solicitante na organização (categoria=solicitante).
-    // Vem antes de ler e atualizar a pessoa: é o vínculo que a torna visível
-    // para esta empresa.
-    await prisma.usuarioOrganizacao.upsert({
-      where: { usuarioId_organizacaoId: { usuarioId: solicitanteId, organizacaoId } },
-      update: {},
-      create: { usuarioId: solicitanteId, organizacaoId, papel: "solicitante", categoria: "solicitante", funcaoProfissional: null, areas: [] },
-    })
-    const existente = await prisma.usuario.findUniqueOrThrow({
-      where: { id: solicitanteId },
-      select: { id: true, telefone: true, email: true },
-    })
-    // Atualiza dados faltantes no cadastro existente
-    const updates: Record<string, string> = {}
-    if (!existente.telefone && data.telefone) updates.telefone = data.telefone
-    if (!existente.email && data.email) updates.email = data.email
-    if (Object.keys(updates).length > 0) {
-      await prisma.usuario.update({ where: { id: existente.id }, data: updates })
-    }
-    solicitante = existente
-  }
+  // Quem pediu (auditoria de 18/11/2026). Formulário público não prova
+  // identidade: quem digita um telefone ou e-mail pode estar digitando o de
+  // outra pessoa. Por isso, a regra é:
+  //  - só se REAPROVEITA quem já é membro DESTA empresa e tem esse telefone ou
+  //    e-mail — e nada no cadastro dessa pessoa é alterado;
+  //  - quem não é membro daqui vira um solicitante NOVO, só desta empresa. Nunca
+  //    se vincula, pelo telefone ou e-mail digitado, a conta de alguém de outra
+  //    empresa (antes isso dava a qualquer um o poder de pôr uma pessoa de fora
+  //    como solicitante aqui e gravar um e-mail numa conta sem e-mail — porta de
+  //    "esqueci a senha" para tomar a conta);
+  //  - o solicitante novo só leva o telefone/e-mail se ninguém na plataforma os
+  //    usa: o login por telefone e o e-mail único não podem passar a achar a
+  //    conta nova no lugar da de quem já existe. O contato digitado fica no
+  //    pedido (telefoneSolicitante e a descrição), e a gestão junta os
+  //    cadastros depois, se forem a mesma pessoa.
+  const solicitante = await solicitanteDoFormulario(organizacaoId, data)
 
   // Roteia a área/departamento conforme o que o cliente escolheu ("O que você precisa?")
   const isCobertura = data.tipoSolicitacao === "cobertura" || data.tipoVideo === "cobertura_evento"
@@ -144,7 +115,8 @@ export async function POST(req: NextRequest) {
       organizacaoId,
       codigo,
       titulo: data.titulo,
-      descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : ""),
+      descricao: data.descricao + (data.empresa ? `\n\nEmpresa: ${data.empresa}` : "")
+        + (solicitante.contatoGuardado ? "" : `\n\nContato informado: ${data.nomeCliente} · ${data.email} · ${data.telefone}`),
       departamento,
       area,
       objetivo: data.objetivo || undefined,

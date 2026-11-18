@@ -11,6 +11,7 @@ import { oQueAPessoaVe } from "@/lib/escopo-demanda"
 import { ehGestor } from "@/lib/papel"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 import type { Prisma } from "@prisma/client"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // GET /api/aprovacao-video?status=pendente&area=audiovisual|design
 // Aprovações de entregável da organização logada. Existe porque a aba "Vídeos"
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
 
     const aprovacao = await prisma.aprovacaoVideo.create({
       data: {
+        token: novoTokenPublico(),
         demandaId: demandaId as string,
         urlVideo: urlVideo as string,
         nomeVideo: (nomeVideo as string | undefined) ?? demanda.titulo,

@@ -9,6 +9,7 @@ import { MARCA_DO_CANCELAMENTO, etapaDaGravacao, perguntaCobranca } from "@/lib/
 import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
 import { mensagensDoCancelamento } from "@/lib/avisos-gravacao-textos"
 import { telefoneCompleto } from "@/lib/whatsapp-identidade"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // Cancelar a gravação (Giovani, 29/10/2026). A empresa executa o que já foi
 // contratado, mas o cliente pode cancelar — chuva, doutora indisponível.
@@ -82,7 +83,7 @@ export async function cancelarGravacao(tx: Tx, e: {
   let linkNota: string | null = null
   if (cobra && d.videomakerId) {
     const nf = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId: d.videomakerId } })
-      ?? await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: d.videomakerId } })
+      ?? await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: d.videomakerId, token: novoTokenPublico() } })
     const base = process.env.NEXTAUTH_URL?.trim().replace(/\/$/, "") || "https://nuflow.space"
     linkNota = `${base}/nf-upload/${encodeURIComponent(nf.token)}`
   }

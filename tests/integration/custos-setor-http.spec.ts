@@ -92,6 +92,25 @@ it("token de NF exige autoria do job; chamadas concorrentes retornam o mesmo tok
  } finally {await db.videomaker.update({where:{id:vm},data:{usuarioId:null}})}
 })
 
+// Achado do Vercel Agent no PR #161: com o link da nota vencido (90 dias), o
+// "Enviar NF" do app recebia o token vencido e travava. O dono logado ganha link novo.
+it("pedido de nota pendente com link vencido: o dono logado recebe token novo, e o antigo deixa de valer",async()=>{
+ const d=await db.demanda.create({data:{organizacaoId:org,codigo:`${p}-nf-velha`,titulo:"Teste",descricao:"Teste",cidade:"Teste",departamento:"growth",tipoVideo:"reels",solicitanteId:user,videomakerId:vm,statusInterno:"brutos_enviados"}})
+ const velha=await db.notaFiscalUpload.create({data:{demandaId:d.id,videomakerId:vm,token:`${p}-token-velho`,createdAt:new Date(Date.now()-120*86_400_000)}})
+ await db.videomaker.update({where:{id:vm},data:{usuarioId:user}})
+ try {
+   const r=await tokenNF(req({demandaId:d.id}));expect(r.status).toBe(200)
+   const {token}=await r.json() as {token:string}
+   expect(token).not.toBe(velha.token);expect(token).toMatch(/^[A-Za-z0-9_-]{24}$/)
+   // O mesmo pedido, renovado — não um segundo pedido de nota.
+   expect(await db.notaFiscalUpload.count({where:{demandaId:d.id}})).toBe(1)
+   const atual=await db.notaFiscalUpload.findUniqueOrThrow({where:{id:velha.id}})
+   expect(atual.token).toBe(token);expect(Date.now()-atual.createdAt.getTime()).toBeLessThan(60_000)
+   // Uma segunda chamada não gira de novo: o link ainda está no prazo.
+   expect((await (await tokenNF(req({demandaId:d.id}))).json()).token).toBe(token)
+ } finally {await db.videomaker.update({where:{id:vm},data:{usuarioId:null}})}
+})
+
 it("falha de e-mail mantém decisão pendente de pagamento e retry não duplica envio",async()=>{
  await db.videomakerDadosFiscais.upsert({where:{organizacaoId_videomakerId:{organizacaoId:org,videomakerId:vm}},create:{organizacaoId:org,videomakerId:vm,chavePix:encryptSecret("financeiro@example.invalid")},update:{chavePix:encryptSecret("financeiro@example.invalid")}})
  const c=await db.custoVideomaker.create({data:{organizacaoId:org,videomakerId:vm,valor:500,dataReferencia:new Date(),statusPagamento:"nf_enviada",notaFiscalUrl:`/api/midia/org/${org}/nf/a/nf.pdf`}})

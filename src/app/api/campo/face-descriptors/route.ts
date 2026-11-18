@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { acessoDeCampo } from "@/lib/acesso-cobertura"
 
 // POST /api/campo/face-descriptors
 // Salva descritor facial (128 floats) para um upload de foto.
@@ -10,7 +11,6 @@ import { getOrgId, semOrg } from "@/lib/org"
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
@@ -33,12 +33,16 @@ export async function POST(req: NextRequest) {
   // Upload precisa existir E pertencer à organização da sessão
   const upload = await prisma.eventoCoberturaUpload.findFirst({
     where: { id: uploadId, cobertura: { organizacaoId } },
-    select: { id: true, tipo: true },
+    select: { id: true, tipo: true, coberturaId: true },
   })
 
   if (!upload) {
     return NextResponse.json({ error: "Upload não encontrado" }, { status: 404 })
   }
+
+  // A gestão das coberturas ou quem está escalado na cobertura da foto.
+  const campo = await acessoDeCampo(upload.coberturaId)
+  if (campo instanceof NextResponse) return campo
 
   if (upload.tipo !== "foto") {
     return NextResponse.json({ error: "Face descriptors só são suportados para fotos" }, { status: 400 })

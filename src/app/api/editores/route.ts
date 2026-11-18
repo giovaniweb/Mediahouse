@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { criarUsuarioParaProfissional } from "@/lib/user-helpers"
+import { prismaAuth } from "@/lib/prisma-auth"
+import { enviarEmailConvite, gerarTokenConvite, linkConvite } from "@/lib/convite-equipe"
 import { getOrgId, semOrg } from "@/lib/org"
 import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -68,10 +71,21 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Auditoria de 18/11/2026: qualquer pessoa logada cadastrava perfil e conta.
+  const negado = await semCapacidade("verEquipe")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
   const body = await req.json()
+  // Ligar o perfil a uma conta que já existe só vale para quem é desta empresa:
+  // antes qualquer id da plataforma servia.
+  if (body.usuarioId !== undefined && body.usuarioId !== null) {
+    const membro = typeof body.usuarioId === "string" && organizacaoId
+      ? await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: body.usuarioId, organizacaoId } }, select: { id: true } })
+      : null
+    if (!membro) return NextResponse.json({ error: "Conta não encontrada nesta empresa" }, { status: 400 })
+  }
 
   const isPrivileged = ehGestor(session)
 
@@ -129,8 +143,9 @@ export async function POST(req: NextRequest) {
 
   // Auto-criar conta de acesso (Usuario) para o editor (videomaker interno)
   const telefone = body.whatsapp || body.telefone
+  let acesso: "pendente" | "convite_enviado" | null = null
   try {
-    const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
+    const { usuario, jáExistia } = await criarUsuarioParaProfissional({
       nome: body.nome,
       email: body.email,
       telefone,
@@ -139,20 +154,23 @@ export async function POST(req: NextRequest) {
       organizacaoId,
     })
 
-    // Notificar via WhatsApp com credenciais
-    if (!jáExistia && senha && telefone) {
-      await notificarCredenciaisWhatsapp(
-        telefone,
-        body.nome,
-        usuario.email,
-        senha,
-        organizacaoId,
-      )
+    // A conta nasce sem senha (auditoria de 18/11/2026 — antes ia "nuflow" + 4
+    // dígitos do telefone pelo WhatsApp). Com e-mail, vai o convite de criar a
+    // senha, o mesmo de Pessoas & Acessos; sem e-mail, o convite sai de lá
+    // quando a gestão puser um.
+    if (!jáExistia) {
+      acesso = "pendente"
+      if (usuario.email) {
+        const empresa = await prisma.organizacao.findUnique({ where: { id: organizacaoId }, select: { nome: true } })
+        const token = await gerarTokenConvite(prismaAuth, usuario.email)
+        const envio = await enviarEmailConvite({ para: usuario.email, nome: usuario.nome, empresa: empresa?.nome ?? "NuFlow", papel: "editor", link: linkConvite(token), convidadoPor: session.user.name ?? null })
+        if (envio.ok) acesso = "convite_enviado"
+      }
     }
   } catch (e) {
     console.error("[Editor] Erro ao criar conta de acesso:", e)
     // Não falhar a criação do editor por erro na conta
   }
 
-  return NextResponse.json(editor, { status: 201 })
+  return NextResponse.json({ ...editor, acesso }, { status: 201 })
 }

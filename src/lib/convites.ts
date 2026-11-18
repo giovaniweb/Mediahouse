@@ -10,6 +10,7 @@ import { dadosDaGravacao, enfileirarAvisos } from "@/lib/avisos-gravacao"
 import { mensagensDoEvento } from "@/lib/avisos-gravacao-textos"
 import { ESTADOS_DE_AVISO, ESTADOS_DO_CONVITE, momentoDoJob, ondeDoJob, rotuloDoMomento } from "@/lib/ficha-do-job"
 import { EVENTO_CONVITE } from "@/lib/status"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 type Tx = Prisma.TransactionClient
 export class ConviteInvalido extends Error {
@@ -48,7 +49,7 @@ export async function emitirConvite(tx: Tx, ator: AtorAuditoria, demandaId: stri
   const existente = await tx.conviteVideomaker.findFirst({ where: { demandaId, videomakerId, status: "pendente", expiresAt: { gt: new Date() } } })
   if (existente) return existente
   const convite = await tx.conviteVideomaker.create({ data: {
-    demandaId, videomakerId, expiresAt: new Date(Date.now() + 48 * 3600_000),
+    demandaId, videomakerId, expiresAt: new Date(Date.now() + 48 * 3600_000), token: novoTokenPublico(),
     ...await condicaoDoConvite(tx, ator.organizacaoId, videomakerId),
   } })
   await registrarAuditoria(tx, ator, { acao: "convite.criar", recurso: "convite", recursoId: convite.id, correlationId: randomUUID() })

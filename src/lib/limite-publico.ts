@@ -41,3 +41,33 @@ export async function consumirLimitePublico(chave: string, max: number, janelaSe
     SELECT public.consumir_limite_publico(${chave}, ${max}::int, ${janelaSeg}::int) AS ok`
   return linhas[0]?.ok === true
 }
+
+const DEZ_MIN = 10 * 60
+/** Leitura: a página pode recarregar; escrita: quem envia não manda 30 vezes em 10 minutos. */
+const TETO_TOKEN = { leitura: 120, escrita: 30 } as const
+
+/**
+ * Teto por IP das rotas abertas por token na URL (aprovação de vídeo, nota
+ * fiscal, portal do fornecedor, entrega pelo convite). O token já é longo e
+ * aleatório; o teto é contra quem varre tokens ou martela a rota (auditoria de
+ * 18/11/2026). Devolve a resposta 429 para a rota retornar, ou null.
+ * Banco fora do ar ao contar: segue (a própria rota depende do banco e vai
+ * falhar do jeito dela), para não trocar um erro por outro.
+ */
+export async function barrarTokenPublico(
+  headers: Headers,
+  rota: string,
+  tipo: keyof typeof TETO_TOKEN,
+): Promise<Response | null> {
+  const ip = hashDoIp(headers) ?? "desconhecido"
+  try {
+    if (await consumirLimitePublico(`token:${rota}:${tipo}:${ip}`, TETO_TOKEN[tipo], DEZ_MIN)) return null
+  } catch (e) {
+    console.error(`[limite-publico] ${rota}: contagem indisponível.`, (e as Error).message)
+    return null
+  }
+  return Response.json(
+    { error: "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo." },
+    { status: 429, headers: { "Retry-After": String(DEZ_MIN) } },
+  )
+}

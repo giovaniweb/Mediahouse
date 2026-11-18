@@ -4,15 +4,16 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { enqueueTranscode } from "@/lib/transcode"
+import { requirePapel } from "@/lib/papel"
 
 // POST /api/admin/transcode-hevc
 // Enfileira a conversão para MP4 de todos os vídeos finais .mov/.qt que ainda não foram convertidos.
 export async function POST(_req: NextRequest) {
   const session = await auth()
-  const tipo = (session?.user as { tipo?: string } | undefined)?.tipo
-  if (!session || !["admin", "gestor"].includes(tipo ?? "")) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
-  }
+  // Papel na empresa ATIVA, não o `tipo` global (auditoria de 18/11/2026):
+  // quem é admin numa empresa e só solicitante noutra não dispara aqui.
+  const negado = requirePapel(session, "admin", "gestor")
+  if (negado) return negado
 
   // `Arquivo` não tem coluna de empresa — e não precisa: ele pertence à demanda,
   // e a demanda tem dono. O escopo vem daí.

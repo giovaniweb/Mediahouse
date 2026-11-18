@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { precisaTranscode, enqueueTranscode } from "@/lib/transcode"
 import { requireDemandaOrg } from "@/lib/org"
+import { requirePapel } from "@/lib/papel"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,10 +12,10 @@ type Params = { params: Promise<{ id: string }> }
 // Útil para vídeos .mov/HEVC que já existiam antes do worker.
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
-  const tipo = (session?.user as { tipo?: string } | undefined)?.tipo
-  if (!session || !["admin", "gestor"].includes(tipo ?? "")) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
-  }
+  // Papel na empresa ATIVA, não o `tipo` global (auditoria de 18/11/2026):
+  // quem é admin numa empresa e só solicitante noutra não dispara aqui.
+  const negado = requirePapel(session, "admin", "gestor")
+  if (negado) return negado
 
   const { id } = await params
   const guard = await requireDemandaOrg(session, id)

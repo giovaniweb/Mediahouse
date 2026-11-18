@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { requireCoberturaOrg } from "@/lib/org"
 import { caminhoMidia, urlDeUpload } from "@/lib/midia"
+import { acessoDeCampo } from "@/lib/acesso-cobertura"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
   const { id } = await params
+  const campo = await acessoDeCampo(id)
+  if (campo instanceof NextResponse) return campo
   const sp = req.nextUrl.searchParams
   const tipo = sp.get("tipo") ?? "video"
   const contentType = sp.get("contentType") ?? "video/mp4"

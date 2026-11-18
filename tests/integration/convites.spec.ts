@@ -33,6 +33,8 @@ beforeEach(async()=>{
 afterAll(async()=>{await raw?.$disconnect();await adminDb.organizacao.deleteMany({where:{id:{in:[org,outra]}}});await adminDb.videomaker.deleteMany({where:{id:{in:[vm,vm2]}}});await adminDb.usuario.delete({where:{id:user}});await adminDb.$disconnect();await admin.query(`DROP ROLE IF EXISTS "${role}"`);await admin.end()})
 it("emissão concorrente é única e preserva condição após mudar diária",async()=>{
   const d=await job();const [a,b]=await Promise.all([emitir(d.id),emitir(d.id)]);expect(a.id).toBe(b.id)
+  // Auditoria de 18/11/2026: o token nasce de randomBytes (novoTokenPublico), não do cuid() do banco.
+  expect(a.token).toMatch(/^[A-Za-z0-9_-]{24}$/)
   await adminDb.videomakerOrganizacao.updateMany({where:{organizacaoId:org},data:{valorDiaria:900}})
   await responder(a.token)
   const c=await adminDb.conviteVideomaker.findUniqueOrThrow({where:{id:a.id}});expect(c.tarifaDiaria?.toFixed(2)).toBe("500.00")

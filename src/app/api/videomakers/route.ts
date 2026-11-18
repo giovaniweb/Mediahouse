@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { criarUsuarioParaProfissional } from "@/lib/user-helpers"
+import { enviarAcessoPeloCadastro } from "@/lib/enviar-acesso-videomaker"
 import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { scoresDaRede } from "@/lib/rede"
 import { acrescentarCidades, listaDeCidades } from "@/lib/cidades-videomaker"
 import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 import { ehGestor } from "@/lib/papel"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -63,11 +65,22 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Auditoria de 18/11/2026: qualquer pessoa logada cadastrava perfil e conta.
+  const negado = await semCapacidade("verVideomakers")
+  if (negado) return negado
   // Videomaker é GLOBAL (sem organizacaoId). A org só identifica quem está cadastrando,
   // usada para enviar as credenciais pelo WhatsApp da empresa responsável.
   const organizacaoId = await getOrgId(session)
 
   const body = await req.json()
+  // Ligar o perfil a uma conta que já existe só vale para quem é desta empresa:
+  // antes qualquer id da plataforma servia.
+  if (body.usuarioId !== undefined && body.usuarioId !== null) {
+    const membro = typeof body.usuarioId === "string" && organizacaoId
+      ? await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: body.usuarioId, organizacaoId } }, select: { id: true } })
+      : null
+    if (!membro) return NextResponse.json({ error: "Conta não encontrada nesta empresa" }, { status: 400 })
+  }
 
   // Mesmo telefone já cadastrado nesta empresa: não cria outro (o número
   // repetido trava os avisos de WhatsApp dele). Devolve quem é, e a tela
@@ -135,11 +148,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Auto-criar conta de acesso (Usuario) para o videomaker
+  let acesso: { enviado: boolean; motivo: string | null } | null = null
   try {
     // A conta nasce vinculada à empresa que cadastra; sem empresa ativa não há
     // a quem vincular — e sob RLS a pessoa sem vínculo nem poderia ser gravada.
     if (!organizacaoId) throw new Error("sem empresa ativa para vincular a conta")
-    const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
+    const { jáExistia } = await criarUsuarioParaProfissional({
       nome: body.nome,
       email: body.email,
       telefone: body.telefone,
@@ -148,20 +162,13 @@ export async function POST(req: NextRequest) {
       organizacaoId,
     })
 
-    // Notificar via WhatsApp com credenciais
-    if (!jáExistia && senha && body.telefone) {
-      await notificarCredenciaisWhatsapp(
-        body.telefone,
-        body.nome,
-        usuario.email,
-        senha,
-        organizacaoId,
-      )
-    }
+    // A conta nasce sem senha; vai o link de criar a senha (auditoria de
+    // 18/11/2026 — antes ia "nuflow" + 4 dígitos do telefone pelo WhatsApp).
+    if (!jáExistia) acesso = await enviarAcessoPeloCadastro(session.user.id, organizacaoId, videomaker.id)
   } catch (e) {
     console.error("[Videomaker] Erro ao criar conta de acesso:", e)
     // Não falhar a criação do videomaker por erro na conta
   }
 
-  return NextResponse.json(videomaker, { status: 201 })
+  return NextResponse.json({ ...videomaker, acesso }, { status: 201 })
 }

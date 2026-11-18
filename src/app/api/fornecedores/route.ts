@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireEventoAccess } from "@/lib/eventos-access"
 import { getOrgId, semOrg } from "@/lib/org"
 import type { CategoriaFornecedor } from "@prisma/client"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // GET /api/fornecedores — lista
 export async function GET(req: NextRequest) {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
 
   const fornecedor = await prisma.fornecedor.create({
     data: {
+      portalToken: novoTokenPublico(),
       organizacaoId,
       nome: body.nome.trim(),
       contato: body.contato ?? null,

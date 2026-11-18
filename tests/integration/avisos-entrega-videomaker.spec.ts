@@ -35,7 +35,7 @@ import { prismaAuth } from "@/lib/prisma-auth"
 import { POST as entregar } from "@/app/api/convites/[token]/entrega/route"
 import { PATCH as mover } from "@/app/api/demandas/[id]/status/route"
 import { PUT as salvarFicha } from "@/app/api/demandas/[id]/route"
-import { POST as uploadNF } from "@/app/api/nf-upload/[token]/route"
+import { GET as abrirNF, POST as uploadNF } from "@/app/api/nf-upload/[token]/route"
 import { decryptSecret } from "@/lib/secret-crypto"
 
 const p = `aventrega-${randomUUID().slice(0, 8)}`, org = `${p}-org`
@@ -288,6 +288,22 @@ describe("links salvos na ficha, sem mudar a etapa", () => {
 })
 
 describe("nota fiscal pelo link", () => {
+  // Auditoria de 18/11/2026: o link da nota não expirava nunca; agora vale 90
+  // dias desde que nasceu (createdAt). Vencido, 410, e nada é gravado.
+  it("link da nota com mais de 90 dias não abre nem recebe arquivo", async () => {
+    const { id } = await gravacao("equipe")
+    await db.demanda.update({ where: { id }, data: { linkBrutos: "https://drive.example/b", statusInterno: "brutos_enviados" } })
+    const nf = await db.notaFiscalUpload.create({ data: { demandaId: id, videomakerId: vm, createdAt: new Date(Date.now() - 91 * 86_400_000) } })
+    const ver = await abrirNF(new NextRequest("http://localhost/api/nf-upload/x"), { params: Promise.resolve({ token: nf.token }) })
+    expect(ver.status).toBe(410)
+    const form = new FormData()
+    form.set("arquivo", new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52])], "nota.pdf", { type: "application/pdf" }))
+    const r = await uploadNF(new NextRequest("http://localhost/api/nf-upload/x", { method: "POST", body: form }), { params: Promise.resolve({ token: nf.token }) })
+    expect(r.status).toBe(410)
+    expect((await db.notaFiscalUpload.findUniqueOrThrow({ where: { id: nf.id } })).status).toBe("pendente")
+    await db.notaFiscalUpload.delete({ where: { id: nf.id } })
+  })
+
   it("a operação recebe o e-mail com o link protegido da nota; o sino é o de sempre, um só", async () => {
     const { id } = await gravacao("equipe")
     await db.demanda.update({ where: { id }, data: { linkBrutos: "https://drive.example/b", statusInterno: "brutos_enviados" } })

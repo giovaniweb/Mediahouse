@@ -3,22 +3,11 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import bcrypt from "bcryptjs"
-import { sendWhatsappMessage } from "@/lib/whatsapp"
+import { SENHA_PENDENTE } from "@/lib/convite-equipe"
 import { PRESETS } from "@/lib/permissoes"
 import { setPermissoes } from "@/lib/permissoes-server"
 import { dimensoesParaTipo } from "@/lib/pessoas"
 import { criarUsuarioComVinculo, usuarioIdPorEmail, usuarioIdPorTelefone } from "@/lib/criar-usuario"
-
-/**
- * Gera senha padrão: nuflow + últimos 4 dígitos do telefone
- */
-export function gerarSenhaPadrao(telefone: string | null | undefined): string {
-  if (!telefone) return "nuflow0000"
-  const digits = telefone.replace(/\D/g, "")
-  const last4 = digits.slice(-4) || "0000"
-  return `nuflow${last4}`
-}
 
 const SELECT_PESSOA = { id: true, nome: true, email: true, telefone: true } as const
 
@@ -78,12 +67,15 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
     // e é ela que torna a pessoa legível para esta empresa logo abaixo.
     await garantirMembership(existenteId, organizacaoId, tipo)
     const existe = await prisma.usuario.findUniqueOrThrow({ where: { id: existenteId }, select: SELECT_PESSOA })
-    return { usuario: existe, jáExistia: true, senha: null }
+    return { usuario: existe, jáExistia: true }
   }
 
-  // Gerar senha
-  const senhaTexto = gerarSenhaPadrao(telefone)
-  const senhaHash = await bcrypt.hash(senhaTexto, 12)
+  // Sem senha (auditoria de 18/11/2026). Até aqui a conta nascia com
+  // "nuflow" + os 4 últimos dígitos do telefone, mandada pelo WhatsApp: quem
+  // soubesse o telefone entrava. Agora nasce com SENHA_PENDENTE — não é hash
+  // bcrypt, então nenhuma senha confere — e a pessoa cria a dela pelo link
+  // ("Enviar acesso" do videomaker; convite por e-mail do editor).
+  const senhaHash = SENHA_PENDENTE
 
   // Criar usuario (email pode ser null — login será pelo telefone), já com a
   // membership explícita na org que está cadastrando (multiempresa).
@@ -111,40 +103,5 @@ export async function criarUsuarioParaProfissional(params: CriarUsuarioParams) {
   // há permissão a conceder.
   await setPermissoes(usuario.id, organizacaoId, PRESETS[tipo] ?? {})
 
-  return { usuario, jáExistia: false, senha: senhaTexto }
-}
-
-/**
- * Envia credenciais de acesso via WhatsApp.
- * Mostra telefone como login se não houver email real.
- */
-export async function notificarCredenciaisWhatsapp(
-  telefone: string,
-  nome: string,
-  emailLogin: string | null,
-  senha: string,
-  organizacaoId?: string | null,
-) {
-  const baseUrl = process.env.NEXTAUTH_URL || "https://nuflow.space"
-
-  // Se tiver email real, mostrar email. Senão, mostrar telefone como login.
-  const loginLine = emailLogin && !emailLogin.endsWith("@nuflow.local")
-    ? `📧 *Login:* ${emailLogin}\n`
-    : `📱 *Login:* seu número de telefone (${telefone})\n`
-
-  const mensagem =
-    `Olá, ${nome}! 👋\n\n` +
-    `Seu acesso ao *NuFlow* foi criado:\n\n` +
-    `🔗 *Link:* ${baseUrl}/login\n` +
-    loginLine +
-    `🔑 *Senha:* ${senha}\n\n` +
-    `Recomendamos alterar sua senha no primeiro acesso. 🔒`
-
-  try {
-    await sendWhatsappMessage(telefone, mensagem, undefined, organizacaoId)
-    return true
-  } catch (e) {
-    console.error("[WhatsApp] Erro ao enviar credenciais:", e)
-    return false
-  }
+  return { usuario, jáExistia: false }
 }

@@ -5,11 +5,14 @@ import { sendWhatsappMessage } from "@/lib/whatsapp"
 import { declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { vigente } from "@/lib/links-publicos"
+import { barrarTokenPublico } from "@/lib/limite-publico"
 
 type Params = { params: Promise<{ token: string }> }
 
 // GET /api/publico/fornecedor/[token] — portal do fornecedor (sem login)
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
+  const barrado = await barrarTokenPublico(req.headers, "portal-fornecedor", "leitura")
+  if (barrado) return barrado
   const { token } = await params
 
   // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a
@@ -44,6 +47,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 // POST /api/publico/fornecedor/[token] — fornecedor envia NF/documento para um custo
 export async function POST(req: NextRequest, { params }: Params) {
+  const barrado = await barrarTokenPublico(req.headers, "portal-fornecedor", "escrita")
+  if (barrado) return barrado
   const { token } = await params
 
   // A credencial é a chave: ela diz de qual empresa é este registro, e sob RLS a

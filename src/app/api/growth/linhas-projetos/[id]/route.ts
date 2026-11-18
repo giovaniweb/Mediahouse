@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { normalizarNome } from "@/lib/pessoas"
+import { semCapacidade } from "@/lib/acesso"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -10,6 +11,8 @@ type Params = { params: Promise<{ id: string }> }
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("gerenciarDesigners")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
@@ -50,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("gerenciarDesigners")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 

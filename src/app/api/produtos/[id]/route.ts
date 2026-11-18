@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(
   req: NextRequest,
@@ -217,6 +218,8 @@ export async function PUT(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verProdutos")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
@@ -250,6 +253,8 @@ export async function DELETE(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verProdutos")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
