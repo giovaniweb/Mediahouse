@@ -32,6 +32,20 @@ export function contaDigitada(entrada: string): string {
 }
 
 /**
+ * A conta que se conta. Desde a auditoria de 18/11/2026 o login passa a pessoa
+ * já encontrada (`{ usuarioId }`): o texto digitado tinha várias grafias para a
+ * mesma pessoa (com e sem DDI, com e sem 9, com pontuação), e cada grafia
+ * ganhava 10 tentativas próprias. Sem pessoa encontrada, conta o texto digitado.
+ */
+export type ContaDoLimite = string | { usuarioId: string } | null | undefined
+
+function chaveDaConta(conta: ContaDoLimite): string | null {
+  if (!conta) return null
+  if (typeof conta === "object") return `id:${conta.usuarioId}`
+  return contaDigitada(conta)
+}
+
+/**
  * Conta UMA tentativa. Consome a conta e o IP; "bloqueado" se qualquer um passou
  * do teto. Conta toda tentativa, certa ou errada: a função do banco só soma, e
  * acertar a senha 10 vezes em 15 minutos não é uso normal.
@@ -39,14 +53,15 @@ export function contaDigitada(entrada: string): string {
 export async function consumirLimiteLogin(
   tipo: keyof typeof LIMITES_LOGIN,
   headers: Headers,
-  conta?: string | null,
+  conta?: ContaDoLimite,
 ): Promise<ResultadoLimite> {
   const regra = LIMITES_LOGIN[tipo]
   const chaves: { chave: string; max: number; janelaSeg: number }[] = []
   const ip = hashDoIp(headers)
   chaves.push({ chave: `${tipo}:ip:${ip ?? "desconhecido"}`, ...regra.ip })
-  if (regra.conta && conta) {
-    const h = hashComSegredo("conta", contaDigitada(conta))
+  const chaveConta = chaveDaConta(conta)
+  if (regra.conta && chaveConta) {
+    const h = hashComSegredo("conta", chaveConta)
     if (h) chaves.push({ chave: `${tipo}:conta:${h}`, ...regra.conta })
   }
   try {

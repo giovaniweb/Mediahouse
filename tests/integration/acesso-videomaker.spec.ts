@@ -25,13 +25,14 @@ import { SENHA_PENDENTE } from "@/lib/convite-equipe"
 import { GET as situacao, POST as enviar } from "@/app/api/videomakers/[id]/acesso/route"
 import { GET as validarLink, POST as trocarSenha } from "@/app/api/auth/redefinir-senha/route"
 import { GET as conviteDoLink } from "@/app/api/auth/convite/route"
+import { POST as aprovarCandidato } from "@/app/api/videomakers/[id]/aprovar/route"
 
 const p = `acvm-${randomUUID().slice(0, 8)}`
 const org = `${p}-org`, outra = `${p}-outra`
 const pessoas = { admin: `${p}-admin`, gestor: `${p}-gestor`, editor: `${p}-editor`, adminOutra: `${p}-adm-outra` }
 const vm = { antigo: `${p}-vm-antigo`, semConta: `${p}-vm-sem`, compartilhado: `${p}-vm-comp`, pendente: `${p}-vm-pend`,
   soEmail: `${p}-vm-soemail`, ambos: `${p}-vm-ambos`, contaSemEmail: `${p}-vm-contasememail`,
-  internoComTel: `${p}-vm-intel`, internoSemTel: `${p}-vm-insemtel` }
+  internoComTel: `${p}-vm-intel`, internoSemTel: `${p}-vm-insemtel`, aprovado: `${p}-vm-aprovado` }
 const conta = { antigo: `${p}-u-antigo`, compartilhado: `${p}-u-comp`, semEmail: `${p}-u-sememail`, internoComTel: `${p}-u-intel`, internoSemTel: `${p}-u-insemtel` }
 const tel = { antigo: "21966250001", semConta: "21966250002", compPerfil: "21966250003", compConta: "5521966250004", pendente: "21966250005", ambos: "21966250006", contaSemEmail: "21966250007", internoComTel: "21966250008" }
 const emailAntigo = `${p}.maicon@nuflow.local`
@@ -89,6 +90,7 @@ beforeAll(async () => {
     // O telefone do PERFIL foi trocado pela gestão daqui; a conta tem outro.
     { id: vm.compartilhado, nome: "Gabriel Comp", telefone: tel.compPerfil, usuarioId: conta.compartilhado },
     { id: vm.pendente, nome: "Candidato Pendente", telefone: tel.pendente },
+    { id: vm.aprovado, nome: "Hugo Aprovado", telefone: "21966250009", status: "pendente" },
   ] })
   await db.videomakerOrganizacao.createMany({ data: [
     { organizacaoId: org, videomakerId: vm.antigo },
@@ -100,6 +102,7 @@ beforeAll(async () => {
     { organizacaoId: org, videomakerId: vm.contaSemEmail },
     { organizacaoId: org, videomakerId: vm.internoComTel },
     { organizacaoId: org, videomakerId: vm.internoSemTel },
+    { organizacaoId: org, videomakerId: vm.aprovado, status: "pendente" },
   ] })
 })
 
@@ -317,3 +320,22 @@ describe("login dito na mensagem", () => {
     expect(html).not.toMatch(/(use|ou) este e-mail/)
   })
 })
+
+// Auditoria de 18/11/2026, item 3: a aprovação criava a conta com "nuflow" +
+// 4 últimos dígitos do telefone e mandava a senha pelo WhatsApp.
+describe("aprovação do candidato: conta sem senha e link de criar senha", () => {
+  it("a conta nasce pendente e o WhatsApp leva o link, nunca uma senha", async () => {
+    const res = await aprovarCandidato(req(`/api/videomakers/${vm.aprovado}/aprovar`, "POST"), params(vm.aprovado))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, contaCriada: true, credenciaisEnviadas: true })
+    const { usuarioId } = await db.videomaker.findUniqueOrThrow({ where: { id: vm.aprovado }, select: { usuarioId: true } })
+    const u = await db.usuario.findUniqueOrThrow({ where: { id: usuarioId! } })
+    expect(u.senhaHash).toBe(SENHA_PENDENTE)
+    for (const tentativa of ["nuflow0009", "nuflow0000"]) expect(await bcrypt.compare(tentativa, u.senhaHash)).toBe(false)
+    const [s] = await saidas(vm.aprovado)
+    const texto = decryptSecret(s.conteudoCifrado!)
+    expect(tokenDoTexto(texto)).toBeTruthy()
+    expect(texto).not.toMatch(/nuflow\d{4}|Senha:/)
+  })
+})
+

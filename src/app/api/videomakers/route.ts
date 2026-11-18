@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { criarUsuarioParaProfissional } from "@/lib/user-helpers"
+import { enviarAcessoPeloCadastro } from "@/lib/enviar-acesso-videomaker"
 import { getOrgId, semOrg } from "@/lib/org"
 import { gravarDadosPrivadosVideomaker } from "@/lib/videomaker-dados"
 import { scoresDaRede } from "@/lib/rede"
@@ -147,11 +148,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Auto-criar conta de acesso (Usuario) para o videomaker
+  let acesso: { enviado: boolean; motivo: string | null } | null = null
   try {
     // A conta nasce vinculada à empresa que cadastra; sem empresa ativa não há
     // a quem vincular — e sob RLS a pessoa sem vínculo nem poderia ser gravada.
     if (!organizacaoId) throw new Error("sem empresa ativa para vincular a conta")
-    const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
+    const { jáExistia } = await criarUsuarioParaProfissional({
       nome: body.nome,
       email: body.email,
       telefone: body.telefone,
@@ -160,20 +162,13 @@ export async function POST(req: NextRequest) {
       organizacaoId,
     })
 
-    // Notificar via WhatsApp com credenciais
-    if (!jáExistia && senha && body.telefone) {
-      await notificarCredenciaisWhatsapp(
-        body.telefone,
-        body.nome,
-        usuario.email,
-        senha,
-        organizacaoId,
-      )
-    }
+    // A conta nasce sem senha; vai o link de criar a senha (auditoria de
+    // 18/11/2026 — antes ia "nuflow" + 4 dígitos do telefone pelo WhatsApp).
+    if (!jáExistia) acesso = await enviarAcessoPeloCadastro(session.user.id, organizacaoId, videomaker.id)
   } catch (e) {
     console.error("[Videomaker] Erro ao criar conta de acesso:", e)
     // Não falhar a criação do videomaker por erro na conta
   }
 
-  return NextResponse.json(videomaker, { status: 201 })
+  return NextResponse.json({ ...videomaker, acesso }, { status: 201 })
 }

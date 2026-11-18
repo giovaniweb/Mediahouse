@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { ehGestor } from "@/lib/papel"
 import { prisma } from "@/lib/prisma"
-import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { criarUsuarioParaProfissional } from "@/lib/user-helpers"
+import { prismaAuth } from "@/lib/prisma-auth"
+import { enviarEmailConvite, gerarTokenConvite, linkConvite } from "@/lib/convite-equipe"
 import { getOrgId, semOrg } from "@/lib/org"
 import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
@@ -141,8 +143,9 @@ export async function POST(req: NextRequest) {
 
   // Auto-criar conta de acesso (Usuario) para o editor (videomaker interno)
   const telefone = body.whatsapp || body.telefone
+  let acesso: "pendente" | "convite_enviado" | null = null
   try {
-    const { usuario, jáExistia, senha } = await criarUsuarioParaProfissional({
+    const { usuario, jáExistia } = await criarUsuarioParaProfissional({
       nome: body.nome,
       email: body.email,
       telefone,
@@ -151,20 +154,23 @@ export async function POST(req: NextRequest) {
       organizacaoId,
     })
 
-    // Notificar via WhatsApp com credenciais
-    if (!jáExistia && senha && telefone) {
-      await notificarCredenciaisWhatsapp(
-        telefone,
-        body.nome,
-        usuario.email,
-        senha,
-        organizacaoId,
-      )
+    // A conta nasce sem senha (auditoria de 18/11/2026 — antes ia "nuflow" + 4
+    // dígitos do telefone pelo WhatsApp). Com e-mail, vai o convite de criar a
+    // senha, o mesmo de Pessoas & Acessos; sem e-mail, o convite sai de lá
+    // quando a gestão puser um.
+    if (!jáExistia) {
+      acesso = "pendente"
+      if (usuario.email) {
+        const empresa = await prisma.organizacao.findUnique({ where: { id: organizacaoId }, select: { nome: true } })
+        const token = await gerarTokenConvite(prismaAuth, usuario.email)
+        const envio = await enviarEmailConvite({ para: usuario.email, nome: usuario.nome, empresa: empresa?.nome ?? "NuFlow", papel: "editor", link: linkConvite(token), convidadoPor: session.user.name ?? null })
+        if (envio.ok) acesso = "convite_enviado"
+      }
     }
   } catch (e) {
     console.error("[Editor] Erro ao criar conta de acesso:", e)
     // Não falhar a criação do editor por erro na conta
   }
 
-  return NextResponse.json(editor, { status: 201 })
+  return NextResponse.json({ ...editor, acesso }, { status: 201 })
 }

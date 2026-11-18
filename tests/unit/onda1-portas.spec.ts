@@ -39,6 +39,16 @@ describe("trava do login no banco (lib/limite-login)", () => {
     expect(await consumirLimiteLogin("esqueci", new Headers(), "a@b.c")).toBe("indisponivel")
   })
 
+  it("pessoa encontrada: a conta é o id dela, não o que foi digitado (auditoria 18/11)", async () => {
+    consumir.mockResolvedValue(true)
+    const { consumirLimiteLogin } = await import("@/lib/limite-login")
+    await consumirLimiteLogin("login", new Headers(), { usuarioId: "u-1" })
+    await consumirLimiteLogin("login", new Headers(), { usuarioId: "u-1" })
+    const chaves = consumir.mock.calls.map((c) => c[0] as string)
+    // As duas grafias do telefone viram a mesma pessoa: a mesma chave de conta, e o IP segue contado.
+    expect(chaves).toEqual(["login:ip:ip-hash", "login:conta:h(id:u-1)", "login:ip:ip-hash", "login:conta:h(id:u-1)"])
+  })
+
   it("telefone digitado com ou sem máscara conta como a mesma conta", async () => {
     const { contaDigitada } = await import("@/lib/limite-login")
     expect(contaDigitada("(11) 98888-7777")).toBe(contaDigitada("11988887777"))

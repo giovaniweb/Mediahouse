@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/lib/user-helpers"
+import { criarUsuarioParaProfissional } from "@/lib/user-helpers"
+import { enviarAcessoPeloCadastro } from "@/lib/enviar-acesso-videomaker"
 import { getOrgId, semOrg } from "@/lib/org"
 import { permissoesEfetivas } from "@/lib/permissoes-server"
 
 // POST /api/videomakers/[id]/aprovar
-// Aprova um videomaker pendente: ativa, cria conta de acesso e notifica via WhatsApp
+// Aprova um videomaker pendente: ativa, cria conta de acesso (sem senha) e manda o link de criar a senha
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -49,9 +50,11 @@ export async function POST(
   })
   if (!aprovou) return NextResponse.json({ error: "Este candidato já foi aprovado" }, { status: 409 })
 
-  // 2. Criar conta de acesso (se ainda não tem usuário vinculado)
-  let senha: string | null = null
-  let credenciaisEnviadas = false
+  // 2. Criar conta de acesso (se ainda não tem usuário vinculado). Nasce sem
+  // senha; vai o link de criar a senha, como no "Enviar acesso" (auditoria de
+  // 18/11/2026 — antes ia "nuflow" + 4 dígitos do telefone pelo WhatsApp).
+  let contaCriada = false
+  let acesso: { enviado: boolean; motivo: string | null } = { enviado: false, motivo: null }
 
   if (!vm.usuarioId) {
     const resultado = await criarUsuarioParaProfissional({
@@ -62,20 +65,9 @@ export async function POST(
       referenciaId: id,
       organizacaoId,
     })
-
-    if (!resultado.jáExistia && resultado.senha) {
-      senha = resultado.senha
-
-      // 3. Notificar via WhatsApp com as credenciais
-      if (vm.telefone) {
-        credenciaisEnviadas = await notificarCredenciaisWhatsapp(
-          vm.telefone,
-          vm.nome,
-          resultado.usuario.email,
-          senha,
-          organizacaoId,
-        )
-      }
+    if (!resultado.jáExistia) {
+      contaCriada = true
+      acesso = await enviarAcessoPeloCadastro(session.user.id, organizacaoId, id)
     }
   }
 
@@ -91,10 +83,12 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    contaCriada: !!senha,
-    credenciaisEnviadas,
-    mensagem: senha
-      ? `✅ Videomaker aprovado! Conta criada e credenciais enviadas via WhatsApp.`
-      : `✅ Videomaker aprovado! Conta de acesso já existia.`,
+    contaCriada,
+    credenciaisEnviadas: acesso.enviado,
+    mensagem: !contaCriada
+      ? `✅ Videomaker aprovado! Conta de acesso já existia.`
+      : acesso.enviado
+        ? `✅ Videomaker aprovado! Conta criada e link para ele criar a senha enviado.`
+        : `✅ Videomaker aprovado! Conta criada, mas o link de acesso não saiu: ${acesso.motivo ?? "use \"Enviar acesso\" na ficha."}`,
   })
 }

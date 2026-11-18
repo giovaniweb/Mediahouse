@@ -38,12 +38,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { email: input, password } = parsed.data
 
-        // Trava de força bruta no banco, por conta e por IP (lib/limite-login).
-        // Antes de olhar a senha: quem passou do teto não chega ao bcrypt.
-        const limite = await consumirLimiteLogin("login", request?.headers ?? new Headers(), input)
-        if (limite === "indisponivel") return null
-        const bloqueado = limite === "bloqueado"
-
         // Detectar se é telefone ou email
         const isPhone = /^\+?\d[\d\s()-]{7,}$/.test(input.trim())
         const cleanDigits = input.replace(/\D/g, "")
@@ -59,13 +53,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             possibleNumbers.push("55" + cleanDigits) // com DDI
           }
 
-          // Buscar por qualquer variação do telefone
+          // Buscar por qualquer variação do telefone. A mais antiga, para a
+          // resposta não depender da ordem física das linhas no banco.
           usuario = await prismaAuth.usuario.findFirst({
             where: {
               OR: possibleNumbers.map((num) => ({
                 telefone: { contains: num },
               })),
             },
+            orderBy: { createdAt: "asc" },
           })
         } else {
           // Buscar por email (email pode ser null no banco, findUnique ignora null)
@@ -74,6 +70,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { email: emailInput },
           })
         }
+
+        // Trava de força bruta no banco, por conta e por IP (lib/limite-login).
+        // Antes de olhar a senha: quem passou do teto não chega ao bcrypt. A
+        // conta é a PESSOA encontrada (auditoria de 18/11/2026): antes era o
+        // texto digitado, e cada grafia do mesmo telefone tinha teto próprio.
+        const limite = await consumirLimiteLogin("login", request?.headers ?? new Headers(), usuario ? { usuarioId: usuario.id } : input)
+        if (limite === "indisponivel") return null
+        const bloqueado = limite === "bloqueado"
 
         if (bloqueado) {
           if (usuario) await registrarTentativaDeLogin(usuario.id, "bloqueado")
