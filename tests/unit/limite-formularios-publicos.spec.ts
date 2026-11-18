@@ -119,7 +119,9 @@ describe("POST /api/publico/demanda", () => {
   it("dentro do teto segue para o banco (o limite não barra quem está no ritmo normal)", async () => {
     consumir.mockResolvedValue(true)
     await postDemanda(req("demanda", pedido)).catch(() => null)
-    expect(tocouNoBanco[0]).toMatch(/^usuario\./)
+    // O primeiro toque é a busca de quem pediu: desde 18/11/2026, entre os
+    // membros desta empresa (lib/solicitante-publico).
+    expect(tocouNoBanco[0]).toMatch(/^usuario(Organizacao)?\./)
   })
 
   it("corpo que não é JSON é 400, não 500, e não consome limite", async () => {
