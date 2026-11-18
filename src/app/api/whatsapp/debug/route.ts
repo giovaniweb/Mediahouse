@@ -3,13 +3,18 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { getWhatsappConfig } from "@/lib/whatsapp"
+import { requirePapel } from "@/lib/papel"
 
 // GET /api/whatsapp/debug — mensagens recentes + config do webhook na Evolution API.
 // Exige sessão autenticada e devolve apenas dados da organização do usuário —
 // antes era um segredo em query string protegendo mensagens de todas as empresas.
+// Desde a auditoria de 18/11/2026, só a gestão (admin/gestor na empresa ativa):
+// as mensagens são de clientes e da equipe, e a config traz o endereço do webhook.
 export async function GET(_req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = requirePapel(session, "admin", "gestor")
+  if (negado) return negado
 
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
