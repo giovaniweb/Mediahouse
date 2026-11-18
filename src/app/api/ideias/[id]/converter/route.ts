@@ -5,6 +5,7 @@ import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import { criarComCodigoDaEmpresa } from "@/lib/codigo-demanda"
 import { departamentoDoPedido } from "@/lib/departamento-do-pedido"
 import { departamentoValido } from "@/lib/departamentos"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function POST(
   req: NextRequest,
@@ -12,6 +13,9 @@ export async function POST(
 ) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Converter cria um pedido: precisa do banco de ideias e de "Criar Demanda".
+  const negado = (await semCapacidade("verIdeias")) ?? (await semCapacidade("criarDemanda"))
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 

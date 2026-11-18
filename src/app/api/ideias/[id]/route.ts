@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(
   _req: NextRequest,
@@ -29,6 +30,12 @@ export async function GET(
   if (ideia.status === "rascunho" && ideia.usuarioId !== session.user.id) {
     return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
   }
+  // O rascunho é de quem escreveu; o resto do banco de ideias é de quem tem
+  // "Ver Banco de Ideias" (auditoria de 18/11/2026: qualquer membro editava).
+  if (ideia.status !== "rascunho") {
+    const negado = await semCapacidade("verIdeias")
+    if (negado) return negado
+  }
 
   return NextResponse.json(ideia)
 }
@@ -50,6 +57,12 @@ export async function PUT(
   if (!ideia || !pertenceAOrg(ideia, organizacaoId)) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
   if (ideia.status === "rascunho" && ideia.usuarioId !== session.user.id) {
     return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })
+  }
+  // O rascunho é de quem escreveu; o resto do banco de ideias é de quem tem
+  // "Ver Banco de Ideias" (auditoria de 18/11/2026: qualquer membro editava).
+  if (ideia.status !== "rascunho") {
+    const negado = await semCapacidade("verIdeias")
+    if (negado) return negado
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,8 +97,16 @@ export async function DELETE(
 
   const { id } = await params
 
+  // Descartar o próprio rascunho não pede capacidade; o resto, "Ver Banco de Ideias".
+  const meuRascunho = await prisma.ideiaVideo.count({ where: { id, organizacaoId, status: "rascunho", usuarioId: session.user.id } })
+  if (!meuRascunho) {
+    const negado = await semCapacidade("verIdeias")
+    if (negado) return negado
+  }
+
   const r = await prisma.ideiaVideo.updateMany({
-    where: { id, organizacaoId },
+    // Rascunho de outra pessoa nem aparece para quem não o escreveu.
+    where: { id, organizacaoId, OR: [{ status: { not: "rascunho" } }, { usuarioId: session.user.id }] },
     data: { status: "descartada" },
   })
   if (r.count === 0) return NextResponse.json({ error: "Ideia não encontrada" }, { status: 404 })

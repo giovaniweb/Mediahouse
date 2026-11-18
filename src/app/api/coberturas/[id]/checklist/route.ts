@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCoberturaOrg } from "@/lib/org"
+import { semCapacidade } from "@/lib/acesso"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -15,6 +16,8 @@ async function requireAuth() {
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
 
@@ -48,6 +51,8 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
 
@@ -86,6 +91,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id: coberturaId } = await params
 

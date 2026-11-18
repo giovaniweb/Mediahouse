@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
+import { semCapacidade } from "@/lib/acesso"
 
 // POST /api/campo/face-descriptors
 // Salva descritor facial (128 floats) para um upload de foto.
@@ -10,6 +11,8 @@ import { getOrgId, semOrg } from "@/lib/org"
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()

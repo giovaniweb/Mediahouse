@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, orgPublica } from "@/lib/org"
+import { semCapacidade } from "@/lib/acesso"
 
 /**
  * Organização desta requisição.
@@ -39,6 +40,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verProdutos")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return NextResponse.json({ error: "Organização não encontrada na sessão" }, { status: 403 })
 

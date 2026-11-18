@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { requireCoberturaOrg } from "@/lib/org"
 import { caminhoMidia, urlDeUpload } from "@/lib/midia"
+import { semCapacidade } from "@/lib/acesso"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -23,6 +24,8 @@ const EXT_MAPA: Record<string, string> = {
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
   const sp = req.nextUrl.searchParams

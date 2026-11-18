@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg } from "@/lib/org"
 import { StatusIdeia, OrigemIdeia } from "@prisma/client"
+import { semCapacidade } from "@/lib/acesso"
 
 function detectPlataforma(url: string): string | null {
   if (/instagram\.com/i.test(url)) return "instagram"
@@ -109,6 +110,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verIdeias")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 

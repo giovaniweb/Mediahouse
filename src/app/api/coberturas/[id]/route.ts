@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import type { Session } from "next-auth"
+import { semCapacidade } from "@/lib/acesso"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -25,6 +26,8 @@ async function requireAuth() {
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
   const guard = await assertCoberturaOrg(session, id)
@@ -65,6 +68,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
   const guard = await assertCoberturaOrg(session, id)
@@ -121,6 +126,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
 
   const { id } = await params
   const guard = await assertCoberturaOrg(session, id)

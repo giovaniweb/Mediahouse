@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCoberturaOrg } from "@/lib/org"
 import { novaValidade } from "@/lib/links-publicos"
+import { semCapacidade } from "@/lib/acesso"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -14,6 +15,8 @@ type Params = { params: Promise<{ id: string }> }
 export async function POST(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  const negado = await semCapacidade("verCoberturas")
+  if (negado) return negado
   const { id } = await params
   const guard = await requireCoberturaOrg(session, id)
   if (guard instanceof NextResponse) return guard
