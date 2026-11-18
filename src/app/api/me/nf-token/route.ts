@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 import { z, ZodError } from "zod"
 import { requireAcesso } from "@/lib/acesso"
 import { prisma } from "@/lib/prisma"
@@ -17,7 +18,7 @@ export async function POST(req:Request) {
       const existente=await tx.notaFiscalUpload.findFirst({where:{demandaId,videomakerId:d.videomakerId},orderBy:[{createdAt:"desc"},{id:"asc"}]})
       const contestado=existente?.status!=="pendente" && await tx.custoVideomaker.findFirst({where:{organizacaoId:acesso.organizacaoId,demandaId,videomakerId:d.videomakerId,statusPagamento:"contestado",pago:false},select:{id:true}})
       // Nova submissão preserva o arquivo e o token da revisão anterior.
-      const nf=(!contestado && existente) || await tx.notaFiscalUpload.create({data:{demandaId,videomakerId:d.videomakerId}})
+      const nf=(!contestado && existente) || await tx.notaFiscalUpload.create({data:{demandaId,videomakerId:d.videomakerId,token:novoTokenPublico()}})
       return NextResponse.json({token:nf.token,status:nf.status},{headers:{"Cache-Control":"private, no-store"}})
     }))
   }catch(e){if(e instanceof ZodError || e instanceof SyntaxError)return NextResponse.json({error:"Gravação inválida"},{status:400});throw e}

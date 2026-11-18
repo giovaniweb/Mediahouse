@@ -23,6 +23,7 @@ import { permissoesEfetivas } from "@/lib/permissoes-server"
 import { avisarEspelhoNovo, type EspelhoGarantido } from "@/lib/espelho-do-videomaker"
 import type { StatusInterno } from "@prisma/client"
 import { categoriaDoKanban } from "@/lib/avisos-categorias"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // Mudança de status de uma demanda (30/09/2026: corpo movido, sem alteração, de
 // app/api/demandas/[id]/status/route.ts). Saiu da rota para o Cutflow — o plugin
@@ -283,7 +284,7 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
           })
           const nf = nfExistente ?? await prisma.notaFiscalUpload.create({
-            data: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
+            data: { demandaId: id, videomakerId: demandaAtual.videomakerId!, token: novoTokenPublico() },
           })
           // Enviar link da NF para o videomaker via WhatsApp
           if (demandaAtual.videomaker?.telefone) {

@@ -31,6 +31,7 @@ import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
 import { avisarMaterialSalvoNoCard } from "@/lib/avisos-entrega-videomaker"
 import { garantirEspelhoEAvisar } from "@/lib/espelho-do-videomaker"
 import { executorDaPessoa } from "@/lib/executor-espelho"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -361,6 +362,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       try {
         const nf = await prisma.notaFiscalUpload.create({
           data: {
+            token: novoTokenPublico(),
             demandaId: id,
             videomakerId: demandaAtual.videomakerId,
           },

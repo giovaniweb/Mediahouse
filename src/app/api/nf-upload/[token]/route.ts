@@ -10,6 +10,8 @@ import { emSegundoPlano } from "@/lib/notificar"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
 import { avisarNotaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
 import { videomakerPedeNota } from "@/lib/videomaker-pede-nota"
+import { barrarTokenPublico } from "@/lib/limite-publico"
+import { linkDaNotaVencido } from "@/lib/nota-fiscal-arquivo"
 const resposta=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store"}})
 type Params={params:Promise<{token:string}>}
 async function carregar(token:string,organizacaoId:string) {
@@ -20,16 +22,25 @@ async function carregar(token:string,organizacaoId:string) {
   // Só videomaker externo manda nota (12/11/2026): o link de um interno não abre.
   return vinculo && await videomakerPedeNota(prisma,organizacaoId,nf.videomakerId) ? nf : null
 }
-export async function GET(_req:NextRequest,{params}:Params) {
+// Link da nota com prazo (auditoria de 18/11/2026): vale VALIDADE_LINK_NOTA_DIAS
+// a partir de quando nasceu, contado do createdAt — sem coluna nova. Vencido,
+// a nota segue pela área logada do videomaker (Minhas Notas).
+const vencido=()=>resposta({error:"Este link da nota fiscal expirou. Envie a nota pela sua área no NuFlow (Minhas Notas) ou peça um link novo à equipe."},410)
+export async function GET(req:NextRequest,{params}:Params) {
+  const barrado=await barrarTokenPublico(req.headers,"nf-upload","leitura")
+  if(barrado)return barrado
   const {token}=await params,org=await orgPorCredencial("nota_fiscal",token)
   if(!org)return resposta({error:"Link não encontrado"},404)
   return comOrg(org,async()=>{
     const nf=await carregar(token,org)
     if(!nf)return resposta({error:"Link não encontrado"},404)
+    if(nf.status==="pendente" && linkDaNotaVencido(nf.createdAt))return vencido()
     return resposta({id:nf.id,status:nf.status,nomeArquivo:nf.nomeArquivo,url:comToken(nf.url,token),videomaker:{nome:nf.videomaker.nome},demanda:{codigo:nf.demanda.codigo,titulo:nf.demanda.titulo}})
   })
 }
 export async function POST(req:NextRequest,{params}:Params) {
+  const barrado=await barrarTokenPublico(req.headers,"nf-upload","escrita")
+  if(barrado)return barrado
   const {token}=await params,org=await orgPorCredencial("nota_fiscal",token)
   if(!org)return resposta({error:"Link não encontrado"},404)
   return comOrg(org,async()=>{
@@ -37,6 +48,7 @@ export async function POST(req:NextRequest,{params}:Params) {
       const nf=await carregar(token,org)
       if(!nf)return resposta({error:"Link não encontrado"},404)
       if(nf.status!=="pendente")return resposta({error:"Nota fiscal já enviada. Solicite revisão à equipe."},409)
+      if(linkDaNotaVencido(nf.createdAt))return vencido()
       const form=await req.formData(),file=form.get("arquivo")
       if(!(file instanceof File))return resposta({error:"Arquivo obrigatório"},400)
       if(file.size===0 || file.size>20*1024*1024)return resposta({error:"Envie um arquivo de até 20 MB."},400)

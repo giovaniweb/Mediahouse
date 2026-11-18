@@ -14,6 +14,7 @@ import { LIMITE_POR_NOTA, estadoDaNotaDoVideomaker, pedeNota } from "@/lib/notas
 import { emSegundoPlano } from "@/lib/notificar"
 import { avisarGravacao, avisarNotaEmLote } from "@/lib/avisos-gravacao"
 import { avisarNotaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // "Minhas notas fiscais" do videomaker logado (lib/notas-do-videomaker.ts):
 // GET lista as gravações externas dele que esperam a nota e as já enviadas;
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       for (const d of alvos) {
         // O pedido aberto; a nota a refazer ganha um pedido novo, como em /api/me/nf-token.
         const aberta = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId, status: "pendente" }, orderBy: { createdAt: "desc" } })
-          ?? await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId } })
+          ?? await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId, token: novoTokenPublico() } })
         await receberNotaFiscal(tx, { organizacaoId, notaId: aberta.id, url, nomeArquivo: file.name.slice(0, 255), ator: { organizacaoId, usuarioId } })
       }
     }, { timeout: 30_000 }))

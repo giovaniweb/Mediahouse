@@ -8,12 +8,15 @@ import { entregarMaterial } from "@/lib/entrega-da-gravacao"
 import { emSegundoPlano } from "@/lib/notificar"
 import { avisarEntregaDoVideomaker } from "@/lib/avisos-entrega-videomaker"
 import { avisarGravacao } from "@/lib/avisos-gravacao"
+import { barrarTokenPublico } from "@/lib/limite-publico"
 
 const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
 
 // POST /api/convites/[token]/entrega — o videomaker entrega o material pelo
 // link do convite: o drive dos brutos e, se a edição é dele, o vídeo pronto.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const barrado = await barrarTokenPublico(req.headers, "convite-entrega", "escrita")
+  if (barrado) return barrado
   const { token } = await params
   const organizacaoId = await orgPorCredencial("convite", token)
   if (!organizacaoId) return resposta({ error: "Convite não encontrado" }, 404)

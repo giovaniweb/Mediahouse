@@ -11,6 +11,7 @@ import {
   materialCompleto,
   statusDoMaterial,
 } from "@/lib/etapas-da-gravacao"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 // O videomaker entrega pelo mesmo link do convite (Giovani, 29/10/2026): o
 // link do drive com os brutos e, quando a edição é dele, o vídeo pronto. Sem
@@ -117,7 +118,7 @@ export async function entregarNoCard(tx: Tx, e: {
     // O pedido da nota nasce junto com o material, como no caminho de dentro
     // (só para videomaker externo).
     const nf = await tx.notaFiscalUpload.findFirst({ where: { demandaId: d.id, videomakerId: e.videomakerId } })
-    if (!nf) await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: e.videomakerId } })
+    if (!nf) await tx.notaFiscalUpload.create({ data: { demandaId: d.id, videomakerId: e.videomakerId, token: novoTokenPublico() } })
   }
 
   // Os avisos (WhatsApp, e-mail, sino) saem depois do commit, pela rota: um

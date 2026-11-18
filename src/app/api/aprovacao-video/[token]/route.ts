@@ -7,6 +7,7 @@ import { getOrgId } from "@/lib/org"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { declararOrg } from "@/lib/org-contexto"
 import { responderAprovacao } from "@/lib/responder-aprovacao"
+import { barrarTokenPublico } from "@/lib/limite-publico"
 
 // Sob RLS, ler a aprovação pelo token já exige a empresa declarada — sem ela o
 // banco devolve vazio e o cliente lê "link não encontrado". O token diz de qual
@@ -37,6 +38,8 @@ async function ehAcessoInterno(organizacaoId: string | null | undefined): Promis
 
 // GET /api/aprovacao-video/[token] — busca info da aprovação (público, sem auth)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const barrado = await barrarTokenPublico(req.headers, "aprovacao-video", "leitura")
+  if (barrado) return barrado
   const { token } = await params
   const empresa = await empresaDoToken(token)
   if (empresa) declararOrg(empresa)
@@ -110,6 +113,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 // Só quem está logado na empresa dona da demanda: reabre o mesmo link por mais 30
 // dias sem recriar a aprovação (preserva token, histórico e comentários).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const barrado = await barrarTokenPublico(req.headers, "aprovacao-video", "escrita")
+  if (barrado) return barrado
   const { token } = await params
   const empresa = await empresaDoToken(token)
   if (empresa) declararOrg(empresa)
@@ -136,6 +141,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
 
 // POST /api/aprovacao-video/[token] — aprova ou solicita feedback (público, sem auth)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const barrado = await barrarTokenPublico(req.headers, "aprovacao-video", "escrita")
+  if (barrado) return barrado
   const { token } = await params
   const body = await req.json()
   const { acao, aprovadoPor, comentario } = body // acao: "aprovar" | "feedback"
