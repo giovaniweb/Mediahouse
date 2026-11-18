@@ -82,7 +82,13 @@ export async function registrarWebhookEntrada(
   }
 
   const base = config.instanceUrl.replace(/\/$/, "")
-  const url = `${origem.replace(/\/$/, "")}/api/whatsapp/webhook?s=${segredoPlano}`
+  // Segredo no cabeçalho `x-webhook-secret` (auditoria de 18/11/2026). Durante
+  // a transição ele vai também na URL, que é o que a Evolution de produção usa
+  // hoje; com WHATSAPP_WEBHOOK_SEGREDO_NA_URL=desligado sai da URL e o webhook
+  // deixa de aceitá-lo por ali.
+  const raiz = `${origem.replace(/\/$/, "")}/api/whatsapp/webhook`
+  const url = segredoNaUrlAceito() ? `${raiz}?s=${segredoPlano}` : raiz
+  const cabecalhos = { "x-webhook-secret": segredoPlano }
   const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE"]
 
   try {
@@ -95,10 +101,11 @@ export async function registrarWebhookEntrada(
       body: JSON.stringify({
         enabled: true,
         url,
+        headers: cabecalhos,
         webhook_by_events: false,
         webhook_base64: true,
         events: eventos,
-        webhook: { enabled: true, url, webhookByEvents: false, webhookBase64: true, events: eventos },
+        webhook: { enabled: true, url, headers: cabecalhos, webhookByEvents: false, webhookBase64: true, events: eventos },
       }),
       signal: AbortSignal.timeout(10000),
     })
@@ -126,6 +133,16 @@ export async function registrarWebhookEntrada(
   } catch (e) {
     return { ok: false, confirmado: false, erro: e instanceof Error ? e.message : "Erro de rede ao falar com a Evolution" }
   }
+}
+
+/**
+ * Fallback temporário do segredo na URL do webhook (`?s=`). Ligado até alguém
+ * desligar com WHATSAPP_WEBHOOK_SEGREDO_NA_URL=desligado — o que só deve
+ * acontecer depois de reaplicar o webhook (que passa a mandar o cabeçalho) e de
+ * o log parar de mostrar "DEPRECIADO: segredo recebido na URL".
+ */
+export function segredoNaUrlAceito(): boolean {
+  return (process.env.WHATSAPP_WEBHOOK_SEGREDO_NA_URL ?? "").trim().toLowerCase() !== "desligado"
 }
 
 /** A URL pública do NuFlow, ou "" quando não há uma em https. */

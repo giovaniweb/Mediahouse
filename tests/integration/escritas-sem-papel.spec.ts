@@ -27,10 +27,14 @@ import { POST as converter } from "@/app/api/ideias/[id]/converter/route"
 import { POST as emLote } from "@/app/api/ideias/bulk/route"
 import { POST as cadastrarVideomaker } from "@/app/api/videomakers/route"
 import { POST as cadastrarEditor } from "@/app/api/editores/route"
+import { POST as escalarNaCobertura } from "@/app/api/coberturas/[id]/equipe/route"
+import { POST as transcodeHevc } from "@/app/api/admin/transcode-hevc/route"
+import { POST as reconverter } from "@/app/api/demandas/[id]/reconverter/route"
 
 const p = `escritas-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const pessoas = { admin: `${p}-admin`, solicitante: `${p}-solic`, videomaker: `${p}-vm` } as const
 type Quem = keyof typeof pessoas
+const outra = `${p}-outra`, deFora = `${p}-de-fora`, editorDeFora = `${p}-ed-fora`, editorDaqui = `${p}-ed-daqui`
 const ids = { cob: `${p}-cob`, prod: `${p}-prod`, linha: `${p}-linha`, ideia: `${p}-ideia`, rascunho: `${p}-rasc` }
 
 function como(quem: Quem) {
@@ -47,6 +51,12 @@ beforeAll(async () => {
     await db.usuario.create({ data: { id, nome: id, tipo: quem as TipoUsuario, senhaHash: "sintetico" } })
     await db.usuarioOrganizacao.create({ data: { usuarioId: id, organizacaoId: org, papel: quem as TipoUsuario, areas: [] } })
   }
+  // Outra empresa, com uma pessoa e um editor só dela.
+  await db.organizacao.create({ data: { id: outra, nome: `${p} outra`, slug: outra } })
+  await db.usuario.create({ data: { id: deFora, nome: "Pessoa de Fora", tipo: "admin", senhaHash: "sintetico" } })
+  await db.usuarioOrganizacao.create({ data: { usuarioId: deFora, organizacaoId: outra, papel: "admin", areas: [] } })
+  await db.editor.createMany({ data: [{ id: editorDeFora, nome: "Editor de Fora" }, { id: editorDaqui, nome: "Editor Daqui" }] })
+  await db.editorOrganizacao.createMany({ data: [{ editorId: editorDeFora, organizacaoId: outra }, { editorId: editorDaqui, organizacaoId: org }] })
   await db.eventoCobertura.create({ data: { id: ids.cob, organizacaoId: org, titulo: "Feira", slug: `${p}-feira`, dataInicio: new Date(), dataFim: new Date(), createdById: pessoas.admin } })
   await db.produto.create({ data: { id: ids.prod, organizacaoId: org, nome: "Equipamento" } })
   await db.linhaProjeto.create({ data: { id: ids.linha, organizacaoId: org, nome: "Linha" } })
@@ -55,6 +65,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await db.eventoCoberturaEquipe.deleteMany({ where: { cobertura: { organizacaoId: org } } })
   await db.eventoCoberturaChecklist.deleteMany({ where: { cobertura: { organizacaoId: org } } })
   await db.eventoCoberturaLog.deleteMany({ where: { cobertura: { organizacaoId: org } } })
   await db.eventoCobertura.deleteMany({ where: { organizacaoId: org } })
@@ -65,8 +76,10 @@ afterAll(async () => {
   await db.linhaProjeto.deleteMany({ where: { organizacaoId: org } })
   await db.eventoAuditoria.deleteMany({ where: { organizacaoId: org } })
   await db.permissaoUsuario.deleteMany({ where: { organizacaoId: org } })
-  await db.organizacao.delete({ where: { id: org } })
-  await db.usuario.deleteMany({ where: { id: { in: Object.values(pessoas) } } })
+  await db.editorOrganizacao.deleteMany({ where: { editorId: { in: [editorDeFora, editorDaqui] } } })
+  await db.editor.deleteMany({ where: { id: { in: [editorDeFora, editorDaqui] } } })
+  await db.organizacao.deleteMany({ where: { id: { in: [org, outra] } } })
+  await db.usuario.deleteMany({ where: { id: { in: [...Object.values(pessoas), deFora] } } })
   await Promise.all([db.$disconnect(), prismaAuth.$disconnect()])
 })
 
@@ -123,5 +136,23 @@ describe("escritas pedem a capacidade da área", () => {
     expect((await produto.PUT(req(`/api/produtos/${ids.prod}`, "PUT", { nome: "Equipamento 2" }), params(ids.prod))).status).toBe(200)
     expect((await linha.PATCH(req(`/api/growth/linhas-projetos/${ids.linha}`, "PATCH", { nome: "Linha 2" }), params(ids.linha))).status).toBe(200)
     expect((await emLote(req("/api/ideias/bulk", "POST", { ids: [ids.ideia], action: "aprovar" }))).status).toBe(200)
+  })
+
+  // Item 6: a equipe da cobertura só leva editor e pessoa desta empresa.
+  it("equipe da cobertura: editor ou pessoa de outra empresa → 404; daqui entra", async () => {
+    como("admin")
+    const escalar = (token: string) => escalarNaCobertura(req(`/api/coberturas/${ids.cob}/equipe`, "POST", { token }), params(ids.cob))
+    expect((await escalar(`ed:${editorDeFora}`)).status).toBe(404)
+    expect((await escalar(`user:${deFora}`)).status).toBe(404)
+    expect(await db.eventoCoberturaEquipe.count({ where: { coberturaId: ids.cob } })).toBe(0)
+    expect((await escalar(`ed:${editorDaqui}`)).status).toBe(201)
+    expect((await escalar(`user:${pessoas.videomaker}`)).status).toBe(201)
+  })
+
+  // Item 6: o `tipo` global admin não vale na empresa em que a pessoa é solicitante.
+  it("conversão de vídeos: tipo global admin com papel de solicitante aqui → 403", async () => {
+    estado.sessao = { user: { id: pessoas.solicitante, organizacaoId: org, tipo: "admin", papel: "solicitante", name: "x" } }
+    expect((await transcodeHevc(req("/api/admin/transcode-hevc", "POST"))).status).toBe(403)
+    expect((await reconverter(req("/api/demandas/qualquer/reconverter", "POST"), params("qualquer"))).status).toBe(403)
   })
 })

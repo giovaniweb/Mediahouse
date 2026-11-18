@@ -74,3 +74,16 @@ Resposta genérica? "Mas por quê?", "O que exatamente você percebeu?", "Me dá
 
 Depois: limpe o material e entregue os brutos pelo link:
 {link}`
+
+/** Convite que ainda abre o kit: pendente no prazo, ou aceito com a gravação aberta e ele escalado. */
+export function conviteVigenteParaKit(c: {
+  status: string
+  expiresAt: Date | null
+  videomakerId: string
+  demanda: { videomakerId: string | null; statusInterno: string }
+}, agora = new Date()): boolean {
+  if (c.status === "pendente") return !!c.expiresAt && c.expiresAt > agora
+  if (c.status !== "aceito") return false
+  if (c.demanda.statusInterno === "encerrado" || c.demanda.statusInterno === "expirado") return false
+  return c.demanda.videomakerId === c.videomakerId
+}

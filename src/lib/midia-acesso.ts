@@ -6,6 +6,7 @@ import { filtroMinhasDemandas } from "@/lib/escopo-demanda"
 import { partesDaMidia, urlDaMidia } from "@/lib/midia"
 import { PUBLICADO, urlPublicavel } from "@/lib/publicacao-midia"
 import { anexosDaIdeia } from "@/lib/social-quadro"
+import { conviteVigenteParaKit } from "@/lib/kit-videomaker"
 
 /** Autoriza o objeto registrado, nunca apenas o prefixo da empresa ou um token válido. */
 export async function podeLerMidia(caminho: string, token: string | null): Promise<boolean> {
@@ -20,10 +21,17 @@ export async function podeLerMidia(caminho: string, token: string | null): Promi
     if (publicado && urlPublicavel(url, org, publicado.demandaId, publicado.publicacaoThumbnailUrl === url)) return true
     if (tipo === "depoimentos" && await prisma.depoimento.findFirst({ where: { organizacaoId: org, ativo: true, OR: [{ videoUrl: url }, { thumbnailUrl: url }] }, select: { id: true } })) return true
     if (!token) return false
-    // Kit do videomaker (guia, referências): quem tem um convite desta empresa lê.
+    // Kit do videomaker (guia, referências): quem tem um convite VIGENTE desta
+    // empresa lê. Auditoria de 18/11/2026: qualquer convite pendente ou aceito,
+    // de qualquer época, abria o kit para sempre. Agora: pendente dentro do
+    // prazo, ou aceito com a gravação ainda aberta e ele ainda escalado nela.
     if (tipo === "kit") {
-      return !!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } }) &&
-        !!await prisma.conviteVideomaker.findFirst({ where: { token, status: { in: ["pendente", "aceito"] }, demanda: { organizacaoId: org } }, select: { id: true } })
+      if (!await prisma.materialVideomaker.findFirst({ where: { organizacaoId: org, url }, select: { id: true } })) return false
+      const c = await prisma.conviteVideomaker.findFirst({
+        where: { token, demanda: { organizacaoId: org } },
+        select: { status: true, expiresAt: true, videomakerId: true, demanda: { select: { videomakerId: true, statusInterno: true } } },
+      })
+      return !!c && conviteVigenteParaKit(c)
     }
     if (["videos", "thumbnails"].includes(tipo)) {
       const d = await prisma.demanda.findFirst({ where: { organizacaoId: org, publicToken: token, publicTokenAtivo: true,

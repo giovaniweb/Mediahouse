@@ -7,6 +7,8 @@ import { vigente } from "@/lib/links-publicos"
 // POST /api/publico/cobertura/[slug]/face-search
 // Busca fotos/vídeos onde o rosto aparece via distância euclidiana
 // Sem autenticação — rota pública (para o cliente final)
+const LIMIAR_MAXIMO = 0.6
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -32,7 +34,13 @@ export async function POST(
     return NextResponse.json({ error: "Body inválido" }, { status: 400 })
   }
 
-  const { descriptor, threshold = 0.6 } = body
+  const { descriptor } = body
+  // Distância máxima entre rostos. Página pública: quem chama não escolhe um
+  // limiar frouxo para puxar fotos de outras pessoas (auditoria de 18/11/2026).
+  // Só pode apertar, nunca afrouxar além de 0,6.
+  const threshold = typeof body.threshold === "number" && Number.isFinite(body.threshold)
+    ? Math.min(Math.max(body.threshold, 0), LIMIAR_MAXIMO)
+    : LIMIAR_MAXIMO
 
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
     return NextResponse.json(

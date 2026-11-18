@@ -70,18 +70,25 @@ export async function POST(req: NextRequest, { params }: Params) {
       const idx = token.indexOf(":")
       const prefix = token.slice(0, idx)
       const refId = token.slice(idx + 1)
+      // Editor e pessoa precisam ser DESTA empresa (auditoria de 18/11/2026):
+      // antes qualquer id da plataforma entrava na equipe, e o nome dele vinha
+      // junto na resposta.
       if (prefix === "ed") {
+        const vinculo = await prisma.editorOrganizacao.findFirst({
+          where: { editorId: refId, organizacaoId: guard.organizacaoId, status: "ativo" },
+          select: { editor: { select: { nome: true } } },
+        })
+        if (!vinculo) return NextResponse.json({ error: "Editor não encontrado nesta empresa" }, { status: 404 })
         edId = refId
-        if (!membroNome) {
-          const ed = await prisma.editor.findUnique({ where: { id: refId }, select: { nome: true } })
-          membroNome = ed?.nome ?? "Editor"
-        }
+        if (!membroNome) membroNome = vinculo.editor.nome ?? "Editor"
       } else if (prefix === "user") {
+        const vinculo = await prisma.usuarioOrganizacao.findUnique({
+          where: { usuarioId_organizacaoId: { usuarioId: refId, organizacaoId: guard.organizacaoId } },
+          select: { usuario: { select: { nome: true } } },
+        })
+        if (!vinculo) return NextResponse.json({ error: "Pessoa não encontrada nesta empresa" }, { status: 404 })
         usId = refId
-        if (!membroNome) {
-          const u = await prisma.usuario.findUnique({ where: { id: refId }, select: { nome: true } })
-          membroNome = u?.nome ?? "Membro"
-        }
+        if (!membroNome) membroNome = vinculo.usuario.nome ?? "Membro"
       } else {
         vmId = refId
       }
