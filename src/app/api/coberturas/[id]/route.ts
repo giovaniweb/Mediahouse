@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrgId, semOrg, pertenceAOrg } from "@/lib/org"
 import type { Session } from "next-auth"
 import { semCapacidade } from "@/lib/acesso"
+import { acessoDeCampo } from "@/lib/acesso-cobertura"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -68,15 +69,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await requireAuth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  const negado = await semCapacidade("verCoberturas")
-  if (negado) return negado
 
   const { id } = await params
-  const guard = await assertCoberturaOrg(session, id)
-  if (guard) return guard
+  const campo = await acessoDeCampo(id)
+  if (campo instanceof NextResponse) return campo
 
   try {
     const body = await req.json()
+    // Quem está escalado (app de campo: "Iniciar" e "Concluir") só muda o
+    // andamento; o resto do evento é da gestão das coberturas.
+    if (!campo.gestao) {
+      const chaves = body && typeof body === "object" ? Object.keys(body) : []
+      if (chaves.length !== 1 || chaves[0] !== "status" || !["em_andamento", "concluido"].includes(body.status)) {
+        return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+      }
+    }
     const {
       titulo, tipo, status, descricao, cliente, local, cidade,
       dataInicio, dataFim, totalDias, diasAtivos,
