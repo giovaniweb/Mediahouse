@@ -10,6 +10,8 @@ import { comToken } from "@/lib/midia"
 import { comOrg, declararOrg } from "@/lib/org-contexto"
 import { orgPorCredencial } from "@/lib/org-por-credencial"
 import { avisarEspelhoNovo } from "@/lib/espelho-do-videomaker"
+import { renovarLinkDaNotaSeVencido } from "@/lib/nota-fiscal-arquivo"
+import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
 
 const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
 
@@ -91,11 +93,14 @@ export async function GET(
   // (lib/entrega-da-gravacao.ts): brutos, vídeo pronto e a nota.
   const { liberado } = await conviteDaEntrega(prisma, organizacaoId, token)
   if (liberado) {
-    const nota = await prisma.notaFiscalUpload.findFirst({
+    const achada = await prisma.notaFiscalUpload.findFirst({
       where: { demandaId: convite.demanda.id, videomakerId: convite.videomakerId },
       orderBy: { createdAt: "desc" },
-      select: { token: true, status: true },
+      select: { id: true, token: true, status: true, createdAt: true },
     })
+    // A página de entrega nunca mostra um link de nota vencido (lib/nota-fiscal-arquivo).
+    const renovada = achada ? await renovarLinkDaNotaSeVencido(prisma, achada, novoTokenPublico) : null
+    const nota = renovada ? { token: renovada.token, status: renovada.status } : null
     return resposta({ ...convite, kit: await montarKit(), entrega: { liberada: true, nota } })
   }
 

@@ -24,6 +24,7 @@ import { avisarEspelhoNovo, type EspelhoGarantido } from "@/lib/espelho-do-video
 import type { StatusInterno } from "@prisma/client"
 import { categoriaDoKanban } from "@/lib/avisos-categorias"
 import { novoTokenPublico } from "@/lib/acompanhamento-gravacao"
+import { renovarLinkDaNotaSeVencido } from "@/lib/nota-fiscal-arquivo"
 
 // Mudança de status de uma demanda (30/09/2026: corpo movido, sem alteração, de
 // app/api/demandas/[id]/status/route.ts). Saiu da rota para o Cutflow — o plugin
@@ -283,7 +284,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
           const nfExistente = await prisma.notaFiscalUpload.findFirst({
             where: { demandaId: id, videomakerId: demandaAtual.videomakerId! },
           })
-          const nf = nfExistente ?? await prisma.notaFiscalUpload.create({
+          // O link que vai no WhatsApp nunca sai vencido (lib/nota-fiscal-arquivo).
+          const nf = nfExistente ? await renovarLinkDaNotaSeVencido(prisma, nfExistente, novoTokenPublico) : await prisma.notaFiscalUpload.create({
             data: { demandaId: id, videomakerId: demandaAtual.videomakerId!, token: novoTokenPublico() },
           })
           // Enviar link da NF para o videomaker via WhatsApp

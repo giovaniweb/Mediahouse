@@ -19,3 +19,18 @@ export const VALIDADE_LINK_NOTA_DIAS = 90
 export function linkDaNotaVencido(criadoEm: Date, agora = new Date()): boolean {
   return agora.getTime() - criadoEm.getTime() > VALIDADE_LINK_NOTA_DIAS * 86_400_000
 }
+
+type NotaComLink = { id: string; token: string; status: string; createdAt: Date }
+type ClienteNota = { notaFiscalUpload: { update(a: { where: { id: string }; data: { token: string; createdAt: Date } }): Promise<NotaComLink> } }
+
+/**
+ * Pedido de nota ainda pendente com o link vencido: ganha link novo (token e
+ * createdAt renovados, o antigo deixa de valer). Quem chama já provou que é o
+ * dono ou a operação — o app nunca entrega um link vencido. Senão, devolve a
+ * nota como veio.
+ */
+export async function renovarLinkDaNotaSeVencido<T extends NotaComLink>(db: ClienteNota, nf: T, novoToken: () => string, agora = new Date()): Promise<T> {
+  if (nf.status !== "pendente" || !linkDaNotaVencido(nf.createdAt, agora)) return nf
+  const r = await db.notaFiscalUpload.update({ where: { id: nf.id }, data: { token: novoToken(), createdAt: agora } })
+  return { ...nf, token: r.token, createdAt: r.createdAt }
+}
