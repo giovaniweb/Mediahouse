@@ -8,6 +8,7 @@ import { scoresDaRede } from "@/lib/rede"
 import { acrescentarCidades, listaDeCidades } from "@/lib/cidades-videomaker"
 import { videomakersComOTelefone } from "@/lib/videomaker-duplicado"
 import { ehGestor } from "@/lib/papel"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -63,11 +64,22 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Auditoria de 18/11/2026: qualquer pessoa logada cadastrava perfil e conta.
+  const negado = await semCapacidade("verVideomakers")
+  if (negado) return negado
   // Videomaker é GLOBAL (sem organizacaoId). A org só identifica quem está cadastrando,
   // usada para enviar as credenciais pelo WhatsApp da empresa responsável.
   const organizacaoId = await getOrgId(session)
 
   const body = await req.json()
+  // Ligar o perfil a uma conta que já existe só vale para quem é desta empresa:
+  // antes qualquer id da plataforma servia.
+  if (body.usuarioId !== undefined && body.usuarioId !== null) {
+    const membro = typeof body.usuarioId === "string" && organizacaoId
+      ? await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: body.usuarioId, organizacaoId } }, select: { id: true } })
+      : null
+    if (!membro) return NextResponse.json({ error: "Conta não encontrada nesta empresa" }, { status: 400 })
+  }
 
   // Mesmo telefone já cadastrado nesta empresa: não cria outro (o número
   // repetido trava os avisos de WhatsApp dele). Devolve quem é, e a tela

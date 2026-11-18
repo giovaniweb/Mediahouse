@@ -6,6 +6,7 @@ import { criarUsuarioParaProfissional, notificarCredenciaisWhatsapp } from "@/li
 import { getOrgId, semOrg } from "@/lib/org"
 import { vinculosDaEmpresa } from "@/lib/editor-vinculo"
 import { gravarDadosPrivadosEditor } from "@/lib/editor-dados"
+import { semCapacidade } from "@/lib/acesso"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -68,10 +69,21 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  // Auditoria de 18/11/2026: qualquer pessoa logada cadastrava perfil e conta.
+  const negado = await semCapacidade("verEquipe")
+  if (negado) return negado
   const organizacaoId = await getOrgId(session)
   if (!organizacaoId) return semOrg()
 
   const body = await req.json()
+  // Ligar o perfil a uma conta que já existe só vale para quem é desta empresa:
+  // antes qualquer id da plataforma servia.
+  if (body.usuarioId !== undefined && body.usuarioId !== null) {
+    const membro = typeof body.usuarioId === "string" && organizacaoId
+      ? await prisma.usuarioOrganizacao.findUnique({ where: { usuarioId_organizacaoId: { usuarioId: body.usuarioId, organizacaoId } }, select: { id: true } })
+      : null
+    if (!membro) return NextResponse.json({ error: "Conta não encontrada nesta empresa" }, { status: 400 })
+  }
 
   const isPrivileged = ehGestor(session)
 

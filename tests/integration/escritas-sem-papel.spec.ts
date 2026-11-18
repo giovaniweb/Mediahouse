@@ -25,6 +25,8 @@ import * as linha from "@/app/api/growth/linhas-projetos/[id]/route"
 import * as ideia from "@/app/api/ideias/[id]/route"
 import { POST as converter } from "@/app/api/ideias/[id]/converter/route"
 import { POST as emLote } from "@/app/api/ideias/bulk/route"
+import { POST as cadastrarVideomaker } from "@/app/api/videomakers/route"
+import { POST as cadastrarEditor } from "@/app/api/editores/route"
 
 const p = `escritas-${randomUUID().slice(0, 8)}`, org = `${p}-org`
 const pessoas = { admin: `${p}-admin`, solicitante: `${p}-solic`, videomaker: `${p}-vm` } as const
@@ -81,6 +83,8 @@ const escritas: [string, () => Promise<Response>][] = [
   ["editar ideia do banco", () => ideia.PUT(req(`/api/ideias/${ids.ideia}`, "PUT", { titulo: "Invadida" }), params(ids.ideia))],
   ["descartar ideia do banco", () => ideia.DELETE(req(`/api/ideias/${ids.ideia}`, "DELETE"), params(ids.ideia))],
   ["converter ideia em pedido", () => converter(req(`/api/ideias/${ids.ideia}/converter`, "POST", {}), params(ids.ideia))],
+  ["cadastrar videomaker (perfil e conta)", () => cadastrarVideomaker(req("/api/videomakers", "POST", { nome: "Falso", telefone: "11900000001", cidade: "X" }))],
+  ["cadastrar editor (perfil e conta)", () => cadastrarEditor(req("/api/editores", "POST", { nome: "Falso", telefone: "11900000002" }))],
   ["mudar ideias em lote", () => emLote(req("/api/ideias/bulk", "POST", { ids: [ids.ideia], action: "aprovar" }))],
 ]
 
@@ -104,6 +108,13 @@ describe("escritas pedem a capacidade da área", () => {
     como("solicitante")
     expect((await ideia.PUT(req(`/api/ideias/${ids.rascunho}`, "PUT", { titulo: "Meu rascunho, editado" }), params(ids.rascunho))).status).toBe(200)
     expect((await ideia.DELETE(req(`/api/ideias/${ids.rascunho}`, "DELETE"), params(ids.rascunho))).status).toBe(200)
+  })
+
+  it("perfil só se liga a conta que é desta empresa", async () => {
+    como("admin")
+    const res = await cadastrarVideomaker(req("/api/videomakers", "POST", { nome: "Outro", telefone: "11900000003", cidade: "X", usuarioId: "conta-de-outra-empresa" }))
+    expect(res.status).toBe(400)
+    expect(await db.videomaker.count({ where: { nome: "Outro", telefone: "11900000003" } })).toBe(0)
   })
 
   it("a gestão segue podendo", async () => {
