@@ -67,6 +67,7 @@ export const authConfig: NextAuthConfig = {
         "/sobre",             // página pública sobre
         "/aprovar",           // aprovação de vídeo pelo cliente
         "/api/aprovacao-video", // API da aprovação pública (GET token + POST aprovar/feedback)
+        "/postado",           // "foi postado" da cobrança a quem pediu (token; API em /api/publico/postagem)
         "/api/transcode",     // callback do worker de transcodificação (protegido por secret)
         "/api/auth",
         "/api/publico",

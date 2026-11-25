@@ -34,6 +34,7 @@ export type FamiliaArte =
   | "nota_recebida" | "nota_cadastrada" | "nota_paga"
   | "medico_confirmada" | "medica_confirmada" | "clinica_confirmada"
   | "medico_video" | "medica_video" | "clinica_video"
+  | FamiliaCobranca
 
 /**
  * `frasesDaCena`: frases próprias de uma cena (número 1…cenas, contado a partir
@@ -47,7 +48,72 @@ export type FamiliaArte =
  * cenas de outras famílias — o parabéns sorteia também os personagens de visita.
  * Sem ela, as cenas são `${arquivo}-1` … `${arquivo}-${cenas}`.
  */
-type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; arquivos?: string[]; primeira?: number }
+/**
+ * `selo`: o carimbo desenhado por cima da cena (lib/avisos-arte-imagem.tsx),
+ * hoje só nas artes da cobrança a quem pediu (VideoSPC e companhia).
+ */
+type Familia = { arquivo: string; cenas: number; frases: string[]; frasesDaCena?: Record<number, string[]>; arquivos?: string[]; primeira?: number; selo?: Selo }
+export type Selo = { titulo: string; linha: string }
+
+// ─── Cobrança a quem pediu (25/11/2026) ───────────────────────────────────────
+//
+// Da 2ª cobrança em diante, quem pediu e não aprova (ou não marca como postado)
+// recebe o galo da cobrança com um carimbo de brincadeira: "vou te levar para o
+// VideoSPC / VideoSERASA". Vídeo leva Video*, arte do Growth leva Arte*.
+//
+// É PARÓDIA, por regra do Giovani: só os nomes inventados, no traço e no roxo
+// da turma do NuFlow. Nada de logo, cor ou letra do SPC ou da Serasa de
+// verdade, e o tom é de piada leve — nunca ameaça. O carimbo diz "é brincadeira".
+
+export type MarcaCobranca = "spc" | "serasa"
+export type PecaCobranca = "video" | "arte"
+export type EtapaCobranca = "aprovar" | "postar"
+export type FamiliaCobranca = `${PecaCobranca}${MarcaCobranca}_${EtapaCobranca}`
+
+const FRASES_COBRANCA: Record<EtapaCobranca, Record<MarcaCobranca, string[]>> = {
+  aprovar: {
+    spc: ["Ainda não aprovou? Vou te levar pro {M}.", "O galo já abriu sua ficha no {M}.", "Aprova {o} e seu nome sai do {M}."],
+    serasa: ["Sem aprovar, seu score no {M} despenca.", "{M} informa: {um} esperando o seu ok.", "Aprova antes que o {M} te ligue."],
+  },
+  postar: {
+    spc: ["Postou e não marcou? O {M} anotou.", "Marca como postado e sai do {M}.", "Seu post está no {M}. Um clique resolve."],
+    serasa: ["Falta marcar como postado. O {M} viu.", "Marca como postado e seu score no {M} sobe.", "Sem marcar, o {M} não esquece."],
+  },
+}
+const LINHA_DO_SELO: Record<EtapaCobranca, Record<MarcaCobranca, string>> = {
+  aprovar: { spc: "cadastro de quem não aprova", serasa: "score de aprovação: baixíssimo" },
+  postar: { spc: "cadastro de quem não marca postado", serasa: "score de postagem: baixíssimo" },
+}
+
+export function nomeDaMarca(peca: PecaCobranca, marca: MarcaCobranca) {
+  return `${peca === "video" ? "Video" : "Arte"}${marca.toUpperCase()}`
+}
+
+function familiaDaCobranca(peca: PecaCobranca, marca: MarcaCobranca, etapa: EtapaCobranca): Familia {
+  const M = nomeDaMarca(peca, marca)
+  const o = peca === "video" ? "o vídeo" : "a arte", um = peca === "video" ? "vídeo" : "arte"
+  return {
+    // O galo da cobrança (13-1 a 13-5); a 13-6 é a do meme de IA, com piada própria.
+    arquivo: "13", cenas: 5,
+    frases: FRASES_COBRANCA[etapa][marca].map(f => f.replaceAll("{M}", M).replaceAll("{o}", o).replaceAll("{um}", um)),
+    selo: { titulo: M, linha: LINHA_DO_SELO[etapa][marca] },
+  }
+}
+
+export const FAMILIAS_COBRANCA = (["video", "arte"] as const).flatMap(peca => (["spc", "serasa"] as const).flatMap(marca =>
+  (["aprovar", "postar"] as const).map(etapa => `${peca}${marca}_${etapa}` as FamiliaCobranca)))
+
+/**
+ * A arte da cobrança número `vez` (1 = a primeira) a quem pediu. A primeira vai
+ * só no texto; da segunda em diante, alterna VideoSPC (2ª, 4ª…) e VideoSERASA
+ * (3ª, 5ª…). Peça do Growth (área design) é Arte*; o resto, Video*.
+ */
+export function arteDaCobranca(vez: number, area: string | null | undefined, etapa: EtapaCobranca): FamiliaCobranca | null {
+  if (!Number.isFinite(vez) || vez < 2) return null
+  const peca: PecaCobranca = area === "design" ? "arte" : "video"
+  const marca: MarcaCobranca = vez % 2 === 0 ? "spc" : "serasa"
+  return `${peca}${marca}_${etapa}`
+}
 
 // ─── Parabéns de job finalizado ───────────────────────────────────────────────
 //
@@ -204,6 +270,10 @@ export const FAMILIAS_ARTE: Record<FamiliaArte, Familia> = {
   parabens_camaleao: familiaDoParabens("camaleao"),
   parabens_coelho: familiaDoParabens("coelho"),
   parabens_papagaio: familiaDoParabens("papagaio"),
+  ...Object.fromEntries(FAMILIAS_COBRANCA.map(f => {
+    const [, peca, marca, etapa] = /^(video|arte)(spc|serasa)_(aprovar|postar)$/.exec(f)!
+    return [f, familiaDaCobranca(peca as PecaCobranca, marca as MarcaCobranca, etapa as EtapaCobranca)]
+  })) as Record<FamiliaCobranca, Familia>,
 }
 
 /**
@@ -337,8 +407,13 @@ const DESTINOS_COM_ARTE = new Set(["usuario", "editor", "videomaker", "cliente"]
  * regras da rotina, pelo nome da regra.
  */
 export function familiaDaSaida(s: { chave: string; destinatarioTipo: string; origem: string; regraContexto?: unknown }): FamiliaArte | null {
-  if (!DESTINOS_COM_ARTE.has(s.destinatarioTipo)) return null
   const partes = s.chave.split(":")
+  // "Mandar a cobrança para outro número" (ficha do card, 25/11/2026): o número
+  // digitado recebe a arte da cobrança, e só ela — é o que a pessoa mandou enviar.
+  if (s.destinatarioTipo === "envio_manual") {
+    return partes[0] === "arte" && (FAMILIAS_COBRANCA as string[]).includes(partes[1]) ? partes[1] as FamiliaCobranca : null
+  }
+  if (!DESTINOS_COM_ARTE.has(s.destinatarioTipo)) return null
   if (s.destinatarioTipo === "cliente") {
     // Cliente: só a arte séria dele. Vem na chave (arte:<familia>:grav:…, posta
     // em avisos-gravacao); uma chave grav: sem ela fica com as cenas dos dois.
@@ -394,7 +469,7 @@ export function arteDoKanban(status: string, papel: string, isGrowth = false, pe
 
 // ─── Sorteio com semente ──────────────────────────────────────────────────────
 
-export type EscolhaArte = { familia: FamiliaArte; arquivo: string; frase: string }
+export type EscolhaArte = { familia: FamiliaArte; arquivo: string; frase: string; selo?: Selo }
 
 /** Cena e frase da família, sempre as mesmas para a mesma semente (id da saída). */
 export function escolherArte(familia: FamiliaArte, semente: string): EscolhaArte {
@@ -403,5 +478,5 @@ export function escolherArte(familia: FamiliaArte, semente: string): EscolhaArte
   const n = h.readUInt32BE(0) % f.cenas
   const frases = f.frasesDaCena?.[n + 1] ?? f.frases
   const arquivo = f.arquivos?.[n] ?? `${f.arquivo}-${n + (f.primeira ?? 1)}`
-  return { familia, arquivo: `${arquivo}.jpg`, frase: frases[h.readUInt32BE(4) % frases.length] }
+  return { familia, arquivo: `${arquivo}.jpg`, frase: frases[h.readUInt32BE(4) % frases.length], ...(f.selo ? { selo: f.selo } : {}) }
 }

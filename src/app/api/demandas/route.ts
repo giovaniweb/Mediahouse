@@ -204,6 +204,8 @@ export async function GET(req: NextRequest) {
   const [demandas, total] = await Promise.all([
     prisma.demanda.findMany({
       where,
+      // O link "foi postado" é de quem pediu (lib/cobranca-solicitante.ts), não do quadro.
+      omit: { postagemToken: true },
       include: {
         solicitante: { select: { id: true, nome: true, email: true } },
         videomaker: { select: { id: true, nome: true, cidade: true } },

@@ -643,6 +643,19 @@ model Demanda {
   cobrancas Int       @default(0)
   cobradoEm DateTime?
 
+  // Cobrança diária a quem PEDIU (lib/cobranca-solicitante.ts, 25/11/2026):
+  // aprovar o que está em Aprovação ou marcar como postado o que está em Para
+  // Postar. A contagem é da etapa (`cobrancaSolicitanteEtapa`): mudou de
+  // coluna, começa do 1 de novo. Diferente de `cobrancas`, que é a social
+  // cobrando quem faz a peça.
+  cobrancasSolicitante     Int       @default(0)
+  solicitanteCobradoEm     DateTime?
+  cobrancaSolicitanteEtapa String?
+  // O link "foi postado" (/postado/<token>) que vai na cobrança: confirma a
+  // postagem sem login. Vale até `postagemTokenExpiraEm` e só uma vez.
+  postagemToken            String?   @unique
+  postagemTokenExpiraEm    DateTime?
+
   posicaoKanban Int? // posição dentro da coluna (para reordenação)
   trelloCardId  String? @unique // Trello card ID to prevent re-import
 

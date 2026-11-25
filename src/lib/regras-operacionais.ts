@@ -3,6 +3,7 @@ import type { Demanda, Evento, CustoVideomaker, Prisma } from "@prisma/client"
 import { dataCalendario, dataEmSaoPaulo, somarDias } from "@/lib/datas"
 import { regrasDaGravacao, type RegraDaGravacao } from "@/lib/avisos-gravacao-textos"
 import { ehSolicitacaoDeCobertura } from "@/lib/job-fase"
+import { cobrancaLigadaNaEmpresa, etapaDaCobranca, etapaDaRegra } from "@/lib/cobranca-solicitante-regra"
 
 export const VERSAO_REGRAS = 1
 export const hashRegra = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex")
@@ -41,7 +42,8 @@ export function cobrancaValida(c: Pick<CustoVideomaker,"pago"|"statusPagamento"|
   return !c.pago && c.statusPagamento === "pendente_nf" && !!c.dataVencimento && dataCalendario(c.dataVencimento)! <= dataEmSaoPaulo(agora)
 }
 /** `arte`: família da arte do aviso (lib/avisos-arte.ts), quando depende dos números do dia. Fora da chave. */
-export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"|"gravacao"; id: string; revisao: string; regra: string; arte?: string }
+/** `solicitante`: a cobrança diária a quem pediu (lib/cobranca-solicitante.ts); revisão = "<dia>:<vez>". */
+export type ContextoRegra = { tipo: "demanda"|"evento"|"custo"|"gestor"|"gravacao"|"solicitante"; id: string; revisao: string; regra: string; arte?: string }
 export async function contextoRegraValido(tx: Prisma.TransactionClient, org: string, c: ContextoRegra, agora: Date) {
   const empresa = await tx.organizacao.findUnique({where:{id:org},select:{ativo:true,ambienteTeste:true}})
   if (!empresa?.ativo || empresa.ambienteTeste) return false
@@ -66,6 +68,14 @@ export async function contextoRegraValido(tx: Prisma.TransactionClient, org: str
     if (!d) return false
     const custo = await tx.custoVideomaker.findFirst({where:{organizacaoId:org,demandaId:c.id,statusPagamento:"nf_enviada",pago:false},select:{updatedAt:true}})
     return regrasDaGravacao(d, c.revisao, custo ? dataEmSaoPaulo(custo.updatedAt) : null).includes(c.regra as RegraDaGravacao)
+  }
+  if (c.tipo === "solicitante") {
+    // Vale no dia em que foi agendada, com o card ainda na coluna cobrada e a
+    // cobrança ainda ligada: aprovou, postou ou desligaram, não sai.
+    if (c.revisao.split(":")[0] !== dataEmSaoPaulo(agora)) return false
+    const d = await tx.demanda.findFirst({where:{id:c.id,organizacaoId:org},select:{statusInterno:true,tipoGravacao:true,tipoVideo:true,departamento:true}})
+    const etapa = d && etapaDaCobranca(d.statusInterno)
+    return !!d && !!etapa && etapa === etapaDaRegra(c.regra) && !ehGravacaoExterna(d) && await cobrancaLigadaNaEmpresa(tx,org)
   }
   if (c.tipo === "gestor") {
     const membro = await tx.usuarioOrganizacao.findFirst({where:{organizacaoId:org,usuarioId:c.id,papel:{in:["admin","gestor"]},usuario:{status:"ativo"}}})

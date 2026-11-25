@@ -84,7 +84,7 @@ export const CATEGORIAS_AVISO: Record<CategoriaAviso, Info> = {
   },
   prazos: {
     titulo: "Prazos e cobranças",
-    descricao: "A rotina do sistema: prazo vencido ou perto de vencer, card parado, aprovação esperando, captação amanhã, finalizada sem arquivo.",
+    descricao: "A rotina do sistema: prazo vencido ou perto de vencer, card parado, aprovação esperando, captação amanhã, finalizada sem arquivo e a cobrança diária a quem pediu (aprovar ou marcar como postado).",
     exemplo: "⏰ AV-231: prazo vencido.",
     temRecorte: true,
   },
@@ -195,6 +195,8 @@ export function categoriaDoKanban(papel: string): CategoriaAviso | null {
 const REGRA_PARA_CATEGORIA: Record<string, CategoriaAviso> = {
   prazo_vencido: "prazos", prazo_proximo: "prazos", sem_movimento: "prazos",
   aprovacao_pendente: "prazos", sem_final: "prazos", captacao: "prazos",
+  // Cobrança diária a quem pediu (lib/cobranca-solicitante.ts, 25/11/2026).
+  cobranca_aprovacao: "prazos", cobranca_postagem: "prazos",
   briefing: "resumos", lembrete: "eventos",
   nota_fiscal_pendente: "gravacoes",
   // Gravação externa (lib/avisos-gravacao.ts): os motivos viram nome de regra.
@@ -273,7 +275,7 @@ export function demandaDaSaida(s: { origem: string; chave: string; referencia: s
   if (partes[0] === "grav" && partes[1]) return partes[1]
   if (s.origem === "regra" && s.regraContexto && typeof s.regraContexto === "object") {
     const c = s.regraContexto as { tipo?: unknown; id?: unknown }
-    return (c.tipo === "demanda" || c.tipo === "gravacao") && typeof c.id === "string" ? c.id : null
+    return (c.tipo === "demanda" || c.tipo === "gravacao" || c.tipo === "solicitante") && typeof c.id === "string" ? c.id : null
   }
   if (s.origem === "legado" && s.referencia !== "aviso") return s.referencia
   return null

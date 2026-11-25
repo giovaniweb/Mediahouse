@@ -34,6 +34,8 @@ export type TipoCredencial =
   | "cutflow_sessao"
   // Link de aprovação de vídeo do cliente (04/10/2026, ensaio do RLS).
   | "aprovacao_video"
+  // Link "foi postado" da cobrança a quem pediu (25/11/2026). Vencido não casa.
+  | "postagem"
 
 /** Id da empresa dona da credencial, ou null se ela não vale nada. */
 export async function orgPorCredencial(

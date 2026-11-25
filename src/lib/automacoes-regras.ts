@@ -13,6 +13,9 @@ import { criarRelatorioV1 } from "@/lib/relatorio-contrato"
 import { dadosDaGravacao, telefonesDaGestao, telefonesDaOperacao } from "@/lib/avisos-gravacao"
 import { mensagensDaRegra, regrasDaGravacao } from "@/lib/avisos-gravacao-textos"
 import { areaDoGestor, arteDoRelatorio, humorDoBriefing, humorDoSemanal } from "@/lib/avisos-arte"
+import { cobrarQuemPediu } from "@/lib/cobranca-solicitante"
+import { TODOS_STATUS_DA_COBRANCA, ambienteDesligado, diaUtilEmSaoPaulo } from "@/lib/cobranca-solicitante-regra"
+import { moduloAtivo } from "@/lib/modulos-org"
 
 export const ROTINAS = ["alertas","monitor","prazos","lembretes","cobranca","briefing","vistoria","limpeza","gravacoes"] as const
 export type Rotina = typeof ROTINAS[number]
@@ -141,6 +144,26 @@ async function cobrancas(org:string,r:Resumo) {
     cursor=pagina.at(-1)!.id
   }
 }
+/**
+ * Cobrança diária a quem pediu (lib/cobranca-solicitante.ts): aprovar o que está
+ * em Aprovação, marcar como postado o que está em Para Postar. De segunda a
+ * sexta, uma por dia e por card; só com o módulo "cobranca" ligado na empresa.
+ */
+async function cobrancasAQuemPediu(org:string,r:Resumo) {
+  if(!diaUtilEmSaoPaulo(new Date()) || ambienteDesligado() || !await moduloAtivo(org,"cobranca")) return
+  let cursor=""
+  for(;;) {
+    const pagina=await prisma.demanda.findMany({where:{organizacaoId:org,statusInterno:{in:TODOS_STATUS_DA_COBRANCA},...(cursor?{id:{gt:cursor}}:{})},select:{id:true},orderBy:{id:"asc"},take:LOTE})
+    if(!pagina.length) break
+    for(const item of pagina) await transacao(org,async tx=>{
+      r.analisados++
+      const c=await cobrarQuemPediu(tx,org,item.id,{manual:false})
+      if(c.cobrou) r.intencoesCriadas+=c.telefones
+      else if(c.motivo==="sem_destinatario") r.semDestinatario++
+    })
+    cursor=pagina.at(-1)!.id
+  }
+}
 async function gestores(tx:Tx,org:string) {
   return tx.usuario.findMany({where:{status:"ativo",telefone:{not:null},organizacoes:{some:{organizacaoId:org,papel:{in:["admin","gestor"]}}}},select:{id:true,telefone:true,organizacoes:{where:{organizacaoId:org},select:{areas:true,funcaoProfissional:true}}}})
 }
@@ -206,7 +229,8 @@ async function gravacoes(org:string,r:Resumo) {
 async function atividadeElegivel(org:string,rotina:Rotina) {
   if(await prisma.saidaWhatsapp.count({where:{organizacaoId:org,origem:"regra",estado:"aguardando"}})) return true
   if(rotina==="gravacoes") return !!await prisma.demanda.count({where:{organizacaoId:org,...GRAVACAO_ATIVA}})
-  if(rotina==="cobranca") return !!await prisma.custoVideomaker.count({where:{organizacaoId:org,pago:false,statusPagamento:"pendente_nf",dataVencimento:{lte:new Date(`${dataEmSaoPaulo(new Date())}T23:59:59.999Z`)}}})
+  if(rotina==="cobranca") return !!await prisma.custoVideomaker.count({where:{organizacaoId:org,pago:false,statusPagamento:"pendente_nf",dataVencimento:{lte:new Date(`${dataEmSaoPaulo(new Date())}T23:59:59.999Z`)}}}) ||
+    (!ambienteDesligado() && await moduloAtivo(org,"cobranca") && !!await prisma.demanda.count({where:{organizacaoId:org,statusInterno:{in:TODOS_STATUS_DA_COBRANCA}}}))
   if(rotina==="lembretes") return !!(await prisma.evento.count({where:{organizacaoId:org,status:{in:["agendado","confirmado"]},inicio:{gt:new Date()},notificarEm:{lte:new Date()}}}) || await prisma.demanda.count({where:{organizacaoId:org,dataCaptacao:{gt:new Date(),lte:new Date(Date.now()+86400_000)},statusVisivel:{not:"finalizado"},statusInterno:{notIn:["encerrado","expirado","videomaker_recusou","postado","entregue_cliente"]}}}))
   if(await prisma.alertaIA.count({where:{organizacaoId:org,status:"ativo"}})) return true
   const condicoes:Prisma.DemandaWhereInput[]=[
@@ -234,7 +258,7 @@ export async function executarRotina(org:string,rotina:Rotina,usuarioId?:string)
       if(["alertas","monitor","prazos","briefing"].includes(rotina)) await resolverAlertas(org)
       if(["alertas","monitor","prazos","lembretes","briefing"].includes(rotina)) await demandas(org,rotina,r)
       if(rotina==="lembretes") await eventos(org,r)
-      if(rotina==="cobranca") await cobrancas(org,r)
+      if(rotina==="cobranca") {await cobrancas(org,r);await cobrancasAQuemPediu(org,r)}
       if(rotina==="briefing") await briefing(org,r)
       if(rotina==="vistoria") await relatorios(org,r)
       if(rotina==="gravacoes") await gravacoes(org,r)

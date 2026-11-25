@@ -13,9 +13,16 @@ import { linkPublicoDaDemanda, novoTokenPublico } from "@/lib/acompanhamento-gra
 import { EVENTO_WHATSAPP_MANUAL } from "@/lib/status"
 import { validarWhatsappBR } from "@/lib/telefone-br"
 import { AUTOMACAO_ENVIO_MANUAL, VALIDADE_ENVIO_MANUAL_MS, criarSaida, hashTelefone } from "@/lib/whatsapp-outbox"
+import { chaveComArte } from "@/lib/avisos-arte"
+import { dadosDaCobrancaParaEnvio } from "@/lib/cobranca-solicitante"
+import { textoDaCobranca } from "@/lib/cobranca-solicitante-regra"
 
 type Tx = Prisma.TransactionClient
-export type LinkDoEnvio = "entrega" | "aprovacao"
+/**
+ * `cobranca` (25/11/2026): a cobrança a quem pediu — aprovar ou marcar como
+ * postado —, com a arte de brincadeira (VideoSPC…), para um número digitado.
+ */
+export type LinkDoEnvio = "entrega" | "aprovacao" | "cobranca"
 /** Por card, em 24h: o bastante para o dia a dia, pouco para virar disparo em massa. */
 export const LIMITE_ENVIOS_MANUAIS = 20
 
@@ -71,14 +78,23 @@ export async function enviarParaWhatsapp(tx: Tx, e: {
   if (!d) throw new EnvioInvalido("Não encontrado", 404)
   const recentes = await tx.logAutomacao.count({ where: { demandaId: d.id, automacao: AUTOMACAO_ENVIO_MANUAL, createdAt: { gt: new Date(Date.now() - VALIDADE_ENVIO_MANUAL_MS) } } })
   if (recentes >= LIMITE_ENVIOS_MANUAIS) throw new EnvioInvalido(`Já foram ${LIMITE_ENVIOS_MANUAIS} envios deste card nas últimas 24h. Tente mais tarde.`, 429)
-  const { url, validoAte } = await linkDoCard(tx, d, e.link)
   const nome = e.nome?.trim().slice(0, 80) || null
+  let texto: string, chave = `envio-manual:${e.chave}`
+  if (e.link === "cobranca") {
+    const c = await dadosDaCobrancaParaEnvio(tx, e.organizacaoId, d.id)
+    if (!c) throw new EnvioInvalido("Só dá para mandar a cobrança quando o card espera aprovação ou está em Para Postar.")
+    texto = textoDaCobranca({ etapa: c.etapa, vez: c.vez, nome, codigo: d.codigo, titulo: d.titulo, link: c.link.url, linkDeLogin: c.link.deLogin, peca: c.peca })
+    // A arte vai na chave (lib/avisos-arte.ts → familiaDaSaida, envio_manual).
+    chave = chaveComArte(c.arte, chave)
+  } else {
+    const { url, validoAte } = await linkDoCard(tx, d, e.link)
+    texto = textoDoEnvio({ link: e.link, nome, titulo: d.titulo, codigo: d.codigo, url, validoAte })
+  }
   const log = await tx.logAutomacao.create({ data: { demandaId: d.id, automacao: AUTOMACAO_ENVIO_MANUAL, status: "sucesso",
     outputJson: { telefoneHash: hashTelefone(numero.telefone), usuarioId: e.usuarioId, link: e.link } } })
   const saida = await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", envioManual: log.id, referencia: log.id,
-    chave: `envio-manual:${e.chave}`, telefone: numero.telefone, expiraEm: new Date(Date.now() + VALIDADE_ENVIO_MANUAL_MS),
-    texto: textoDoEnvio({ link: e.link, nome, titulo: d.titulo, codigo: d.codigo, url, validoAte }) })
-  const oQue = e.link === "entrega" ? "Link do vídeo" : "Link de aprovação"
+    chave, telefone: numero.telefone, expiraEm: new Date(Date.now() + VALIDADE_ENVIO_MANUAL_MS), texto })
+  const oQue = e.link === "entrega" ? "Link do vídeo" : e.link === "cobranca" ? "Cobrança de quem pediu" : "Link de aprovação"
   await tx.historicoStatus.create({ data: { demandaId: d.id, statusAnterior: d.statusInterno, statusNovo: EVENTO_WHATSAPP_MANUAL,
     usuarioId: e.usuarioId, origem: "manual",
     observacao: `${oQue} enviado pelo WhatsApp para ${nome ? `${nome} · ` : ""}${numero.legivel}${e.usuarioNome ? ` · por ${e.usuarioNome}` : ""}` } })
