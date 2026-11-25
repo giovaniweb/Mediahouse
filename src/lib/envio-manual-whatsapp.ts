@@ -79,19 +79,22 @@ export async function enviarParaWhatsapp(tx: Tx, e: {
   const recentes = await tx.logAutomacao.count({ where: { demandaId: d.id, automacao: AUTOMACAO_ENVIO_MANUAL, createdAt: { gt: new Date(Date.now() - VALIDADE_ENVIO_MANUAL_MS) } } })
   if (recentes >= LIMITE_ENVIOS_MANUAIS) throw new EnvioInvalido(`Já foram ${LIMITE_ENVIOS_MANUAIS} envios deste card nas últimas 24h. Tente mais tarde.`, 429)
   const nome = e.nome?.trim().slice(0, 80) || null
-  let texto: string, chave = `envio-manual:${e.chave}`
+  let texto: string, chave = `envio-manual:${e.chave}`, etapa: string | null = null
   if (e.link === "cobranca") {
     const c = await dadosDaCobrancaParaEnvio(tx, e.organizacaoId, d.id)
     if (!c) throw new EnvioInvalido("Só dá para mandar a cobrança quando o card espera aprovação ou está em Para Postar.")
     texto = textoDaCobranca({ etapa: c.etapa, vez: c.vez, nome, codigo: d.codigo, titulo: d.titulo, link: c.link.url, linkDeLogin: c.link.deLogin, peca: c.peca })
     // A arte vai na chave (lib/avisos-arte.ts → familiaDaSaida, envio_manual).
     chave = chaveComArte(c.arte, chave)
+    etapa = c.etapa
   } else {
     const { url, validoAte } = await linkDoCard(tx, d, e.link)
     texto = textoDoEnvio({ link: e.link, nome, titulo: d.titulo, codigo: d.codigo, url, validoAte })
   }
   const log = await tx.logAutomacao.create({ data: { demandaId: d.id, automacao: AUTOMACAO_ENVIO_MANUAL, status: "sucesso",
-    outputJson: { telefoneHash: hashTelefone(numero.telefone), usuarioId: e.usuarioId, link: e.link } } })
+    // `etapa`: a cobrança só sai se o card ainda estiver nela na hora do envio
+    // (whatsapp-outbox → envioManualAindaVale), como a cobrança da rotina.
+    outputJson: { telefoneHash: hashTelefone(numero.telefone), usuarioId: e.usuarioId, link: e.link, ...(etapa ? { etapa } : {}) } } })
   const saida = await criarSaida(tx, { organizacaoId: e.organizacaoId, origem: "manual", envioManual: log.id, referencia: log.id,
     chave, telefone: numero.telefone, expiraEm: new Date(Date.now() + VALIDADE_ENVIO_MANUAL_MS), texto })
   const oQue = e.link === "entrega" ? "Link do vídeo" : e.link === "cobranca" ? "Cobrança de quem pediu" : "Link de aprovação"
