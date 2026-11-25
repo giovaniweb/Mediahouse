@@ -11,7 +11,7 @@ import { processarSaidas } from "@/lib/whatsapp-outbox"
 type Params = { params: Promise<{ id: string }> }
 const resposta = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } })
 const entrada = z.object({
-  link: z.enum(["entrega", "aprovacao"]),
+  link: z.enum(["entrega", "aprovacao", "cobranca"]),
   telefone: z.string().min(1).max(40),
   nome: z.string().max(80).optional().nullable(),
   salvarNoCard: z.boolean().optional(),

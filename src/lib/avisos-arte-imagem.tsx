@@ -23,6 +23,26 @@ async function cena(arquivo: string) {
   return `data:image/jpeg;base64,${dados.toString("base64")}`
 }
 
+/**
+ * O carimbo da cobrança a quem pediu (VideoSPC, ArteSERASA…), no canto de baixo
+ * da cena, onde o galo deixa espaço. Paródia: o roxo e o traço preto são da
+ * turma do NuFlow; nada de logo, cor ou letra das marcas de verdade.
+ */
+function Carimbo({ titulo, linha }: { titulo: string; linha: string }) {
+  const roxo = "#7c3aed"
+  return (
+    <div style={{
+      position: "absolute", left: 22, bottom: 34, display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "10px 18px 8px", background: "rgba(255,255,255,0.94)", border: `6px solid ${roxo}`, borderRadius: 16,
+      boxShadow: "6px 6px 0 #111", transform: "rotate(-8deg)", fontFamily: "Montserrat", fontWeight: 700,
+    }}>
+      <div style={{ display: "flex", fontSize: titulo.length > 9 ? 40 : 46, color: roxo, letterSpacing: -1, lineHeight: 1 }}>{titulo}</div>
+      <div style={{ display: "flex", marginTop: 6, fontSize: 17, color: "#111", textTransform: "uppercase", letterSpacing: 0.5 }}>{linha}</div>
+      <div style={{ display: "flex", marginTop: 4, fontSize: 13, color: "#555" }}>(é brincadeira da turma do NuFlow)</div>
+    </div>
+  )
+}
+
 /** PNG da arte (base64 sem prefixo) para a família, sorteado pela semente. */
 export async function imagemDoAviso(familia: FamiliaArte, semente: string) {
   const e = escolherArte(familia, semente)
@@ -40,6 +60,7 @@ export async function imagemDoAviso(familia: FamiliaArte, semente: string) {
           // Contorno preto em volta da letra, no traço grosso das ilustrações.
           textShadow: "3px 3px 0 #111, -3px 3px 0 #111, 3px -3px 0 #111, -3px -3px 0 #111, 0 3px 0 #111, 0 -3px 0 #111, 3px 0 0 #111, -3px 0 0 #111, 0 6px 0 #111",
         }}>{e.frase}</div>
+        {e.selo && <Carimbo titulo={e.selo.titulo} linha={e.selo.linha} />}
       </div>
     ),
     { width: LADO_ARTE, height: LADO_ARTE, fonts: [{ name: "Montserrat", data: montserrat, weight: 700, style: "normal" }] },

@@ -33,11 +33,25 @@ import { renovarLinkDaNotaSeVencido } from "@/lib/nota-fiscal-arquivo"
 // Um caminho paralelo deixaria os aprovadores sem aviso quando o plugin entrega.
 export type SessaoParaStatus = { user: { id: string; organizacaoId?: string | null } }
 
+/**
+ * `postadoPeloLink` (25/11/2026): o link "foi postado" da cobrança a quem pediu
+ * (/postado/<token>, sem login). A credencial é o token, já conferido pela rota,
+ * e a empresa vem dele — não da sessão de quem abre (pode nem ter conta, ou
+ * estar logado noutra empresa). Só serve para UMA transição, de Para Postar
+ * (aprovado, postagem_pendente) para `postado`; o resto do caminho — histórico,
+ * conclusão, custo do videomaker, parabéns, avisos — é o mesmo do quadro. A
+ * sessão traz quem pediu, que é quem o link representa.
+ */
+export type PostadoPeloLink = { organizacaoId: string }
+export const STATUS_ANTES_DO_POSTADO: StatusInterno[] = ["aprovado", "postagem_pendente"]
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function mudarStatus(session: SessaoParaStatus, id: string, body: any): Promise<NextResponse> {
+export async function mudarStatus(session: SessaoParaStatus, id: string, body: any, postadoPeloLink?: PostadoPeloLink): Promise<NextResponse> {
   // Aceita a empresa DONA e a que executa por espelhamento. Quem só acompanha
   // recebe 403; quem não tem aresta nenhuma recebe 404 — ver lib/compartilhamento.ts.
-  const acesso = await requireDemandaAcesso(session, id, "executar")
+  const acesso = postadoPeloLink
+    ? { organizacaoId: postadoPeloLink.organizacaoId, papel: "dona" as const, donaId: postadoPeloLink.organizacaoId, escopo: null, nomeContraparte: null, nomeProprio: null, porVideomakerId: null }
+    : await requireDemandaAcesso(session, id, "executar")
   if (acesso instanceof NextResponse) return acesso
   const { papel: papelNoCard, nomeContraparte, nomeProprio } = acesso
   // A parceira recebe de volta o card pela lista branca, nunca inteiro.
@@ -79,6 +93,10 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
   })
   // telefoneSolicitante é o número de quem pediu via WhatsApp (pode ser diferente do solicitante do sistema)
   if (!demandaAtual) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+  if (postadoPeloLink && (demandaAtual.organizacaoId !== postadoPeloLink.organizacaoId || statusInterno !== "postado" ||
+      !STATUS_ANTES_DO_POSTADO.includes(demandaAtual.statusInterno))) {
+    return NextResponse.json({ error: "Este card não está mais esperando a postagem." }, { status: 409 })
+  }
 
   // ── GUARDA DE TRANSIÇÃO ────────────────────────────────────────────────────
   // Antes daqui a rota aceitava qualquer StatusInterno de qualquer pessoa
@@ -102,7 +120,8 @@ export async function mudarStatus(session: SessaoParaStatus, id: string, body: a
     papelNoCard === "espelho" ? executorDaPessoa(session.user.id, acesso.organizacaoId, id) : Promise.resolve(null),
   ])
 
-  const veredito = podeTransicionar({
+  // Pelo link, a guarda é a de cima (só Para Postar → postado); a credencial é o token.
+  const veredito = postadoPeloLink ? { ok: true as const, noop: false, avisos: [] as string[] } : podeTransicionar({
     statusAtual: demandaAtual.statusInterno,
     novoStatus: statusInterno,
     usuario: {

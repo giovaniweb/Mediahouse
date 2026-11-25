@@ -45,6 +45,7 @@ import { AcoesVideomaker } from "@/components/jobs/AcoesVideomaker"
 import { TransferirParaDemandas } from "@/components/jobs/TransferirParaDemandas"
 import { FichaDoJob } from "@/components/jobs/FichaDoJob"
 import { EnviarParaWhatsapp } from "@/components/demandas/EnviarParaWhatsapp"
+import { CobrancaQuemPediu } from "@/components/demandas/CobrancaQuemPediu"
 import { EscolhaComBusca } from "@/components/ui/EscolhaComBusca"
 import { LightboxDeVideo } from "@/components/video/LightboxDeVideo"
 import { nomeDoVideo, provedorDoVideo } from "@/lib/videos-da-gravacao"
@@ -2342,6 +2343,11 @@ export function DemandaDetalhe({ demandaId, mode = "page", onClose }: { demandaI
             <EnviarParaWhatsapp aberto onFechar={() => setEnvioWhatsapp(null)} demandaId={demanda.id} link="aprovacao"
               telefoneDoCard={demanda.telefoneSolicitante || demanda.solicitante?.telefone}
               nomeDoCard={demanda.nomeSolicitante || demanda.solicitante?.nome} onEnviado={() => mutate()} />
+          )}
+          {/* Cobrança diária a quem pediu (25/11/2026): aprovar ou marcar como
+              postado. Some sozinha fora dessas etapas. */}
+          {!souExecutorExterno && (podeEditar || souResponsavel) && (
+            <CobrancaQuemPediu demanda={demanda} ligada={!!dataMe?.modulos?.cobranca} onAtualizar={() => mutate()} />
           )}
           {/* Link do cliente — para quem é de fora do NuFlow. A aprovação em si
               (prévia, Aprovar, Pedir ajuste) está embutida ao lado, na coluna

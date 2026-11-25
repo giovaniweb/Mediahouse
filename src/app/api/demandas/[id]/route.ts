@@ -72,6 +72,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const demanda = await prisma.demanda.findUnique({
     where: { id },
+    // O link "foi postado" é de quem pediu (lib/cobranca-solicitante.ts), não da ficha.
+    omit: { postagemToken: true },
     include: {
       solicitante: { select: { id: true, nome: true, email: true } },
       gestor: { select: { id: true, nome: true } },

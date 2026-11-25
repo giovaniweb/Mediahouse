@@ -18,7 +18,7 @@
 // O ligado/desligado POR EMPRESA vive no banco (ModuloOrganizacao) e é lido por
 // src/lib/modulos-org.ts. Aqui não há estado de cliente.
 
-export type Modulo = "growth" | "eventos" | "ideias" | "mensagens" | "cutflow" | "conversao" | "rede"
+export type Modulo = "growth" | "eventos" | "ideias" | "mensagens" | "cutflow" | "conversao" | "rede" | "cobranca"
 
 export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "growth", nome: "Growth / Conteúdos", descricao: "Área de design, kanban próprio e galeria de criativos." },
@@ -28,6 +28,7 @@ export const MODULOS: { chave: Modulo; nome: string; descricao: string }[] = [
   { chave: "cutflow", nome: "Cutflow", descricao: "Plugin do Premiere que edita os cards atribuídos ao editor Cutflow." },
   { chave: "conversao", nome: "Conversão de vídeo", descricao: "Gera a versão leve dos vídeos finais (.mov e afins) para assistir no navegador, dentro da franquia de armazenamento." },
   { chave: "rede", nome: "Videomakers da rede", descricao: "Buscar os videomakers da rede do NuFlow que não são da empresa, ver o score e convidar; quem aceita entra na lista. Desligado, a empresa trabalha só com os próprios videomakers." },
+  { chave: "cobranca", nome: "Cobrança a quem pediu", descricao: "Uma vez por dia, pelo WhatsApp, cobra quem pediu a demanda até aprovar (coluna Aprovação) ou marcar como postado (Para Postar, com link sem login). Da 2ª cobrança em diante vai com a arte de brincadeira do VideoSPC/ArteSERASA." },
 ]
 
 /**
@@ -48,6 +49,7 @@ export const DISPONIVEL_NA_PLATAFORMA: Record<Modulo, boolean> = {
   cutflow: true,
   conversao: true,
   rede: true,
+  cobranca: true,
 }
 
 /** O que uma empresa recebe quando ninguém decidiu nada para ela. */
@@ -67,6 +69,10 @@ export const PADRAO_MODULOS: Record<Modulo, boolean> = {
   // na migration 20261127120000 (menos a GH Produção). Ver
   // src/lib/videomakers-da-rede.ts.
   rede: false,
+  // Cobrança diária a quem pediu (25/11/2026): nasce desligada em toda empresa;
+  // o Giovani liga no Super Admin. COBRANCA_SOLICITANTE=desligado corta em
+  // todas de uma vez (src/lib/cobranca-solicitante.ts).
+  cobranca: false,
 }
 
 // Rotas (páginas + APIs) de cada módulo. O bloqueio cobre o caminho exato e
@@ -100,6 +106,9 @@ export const ROTAS_POR_MODULO: Record<Modulo, string[]> = {
   // A rota do PROFISSIONAL (/api/me/rede: convites, contestar, sair da rede)
   // fica de fora: é dele, não da empresa que o convidou.
   rede: ["/videomakers/rede", "/api/rede/videomakers", "/api/rede/convites"],
+  // Sem tela própria: roda na rotina "cobranca" e na ficha do card. A página
+  // pública /postado fica de fora, como o link que o cliente já recebeu.
+  cobranca: [],
 }
 
 /** A que módulo um caminho pertence, se pertencer a algum. */

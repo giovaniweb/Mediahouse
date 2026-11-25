@@ -26,7 +26,8 @@ export function EnviarParaWhatsapp({
   aberto: boolean
   onFechar: () => void
   demandaId: string
-  link: "entrega" | "aprovacao"
+  /** `cobranca`: a cobrança a quem pediu, com a arte de brincadeira (components/demandas/CobrancaQuemPediu). */
+  link: "entrega" | "aprovacao" | "cobranca"
   /** O número já gravado no card (cliente na gravação, quem pediu na demanda): vem preenchido. */
   telefoneDoCard?: string | null
   nomeDoCard?: string | null
@@ -40,7 +41,8 @@ export function EnviarParaWhatsapp({
   const [erroServidor, setErroServidor] = useState<string | null>(null)
   const numero = validarWhatsappBR(telefone)
   const cardSemNumero = !telefoneDoCard?.trim()
-  const oQue = link === "entrega" ? "o link do vídeo (onde o cliente vê e baixa)" : "o link de aprovação"
+  const oQue = link === "entrega" ? "o link do vídeo (onde o cliente vê e baixa)"
+    : link === "cobranca" ? "a cobrança (aprovar ou marcar como postado), com a arte da turma do NuFlow" : "o link de aprovação"
 
   async function enviar() {
     setTocado(true)

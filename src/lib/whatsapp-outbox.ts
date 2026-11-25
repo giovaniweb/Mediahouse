@@ -11,6 +11,7 @@ import { contextoRegraValido, type ContextoRegra } from "@/lib/regras-operaciona
 import { artesLigadas, familiaDaSaida } from "@/lib/avisos-arte"
 import { categoriaDaSaida, demandaDaSaida, type CategoriaAviso } from "@/lib/avisos-categorias"
 import { podeAvisar } from "@/lib/preferencias-aviso"
+import { ambientePermite, etapaDaCobranca } from "@/lib/cobranca-solicitante-regra"
 
 type Tx=Prisma.TransactionClient
 const TIPO="whatsapp.saida"
@@ -49,6 +50,18 @@ async function destinoEnvioManual(tx:Tx,organizacaoId:string,logId:string,telefo
     createdAt:{gt:new Date(Date.now()-VALIDADE_ENVIO_MANUAL_MS)},demanda:{organizacaoId}},select:{outputJson:true}})
   const hash=(log?.outputJson as {telefoneHash?:unknown}|null)?.telefoneHash
   return typeof hash==="string" && hash===hashTelefone(telefone) ? {tipo:"envio_manual",id:logId} : null
+}
+/**
+ * A cobrança a quem pediu mandada à mão para outro número (link "cobranca")
+ * vale enquanto o card estiver na etapa cobrada: aprovou ou postou antes de a
+ * fila mandar, não sai (o link "foi postado" pode até já ter sido usado).
+ */
+async function envioManualAindaVale(tx:Tx,organizacaoId:string,logId:string) {
+  const log=await tx.logAutomacao.findFirst({where:{id:logId,automacao:AUTOMACAO_ENVIO_MANUAL,demanda:{organizacaoId}},
+    select:{outputJson:true,demanda:{select:{statusInterno:true}}}})
+  const o=log?.outputJson as {link?:unknown;etapa?:unknown}|null
+  if(o?.link!=="cobranca") return true
+  return !!log?.demanda && etapaDaCobranca(log.demanda.statusInterno)===o.etapa
 }
 async function agendar(tx:Tx,s:SaidaWhatsapp,agendadoPara=new Date()) {
   await enfileirar(tx,{organizacaoId:s.organizacaoId,tipo:TIPO,referencia:s.id,
@@ -257,6 +270,10 @@ export async function processarSaidas(organizacaoId:string) {
         if(s.origem==="regra" && (!s.regraContexto || !await contextoRegraValido(tx,organizacaoId,s.regraContexto as ContextoRegra,new Date()))) return falhar("cancelado","regra_resolvida")
         const telefone=decryptSecret(s.telefoneCifrado),texto=decryptSecret(s.conteudoCifrado)
         if(!await destinoContinuaValido(tx,s,telefone,cfg.instanceId)) return falhar("cancelado","destinatario_alterado")
+        // Cobrança a quem pediu: o modo COBRANCA_SOLICITANTE=teste:<tel> vale também
+        // para o que já estava na fila; e a mandada à mão para quando o card sai da etapa.
+        if(s.origem==="regra" && (s.regraContexto as ContextoRegra|null)?.tipo==="solicitante" && !ambientePermite(telefone)) return falhar("cancelado","regra_resolvida")
+        if(s.destinatarioTipo==="envio_manual" && !await envioManualAindaVale(tx,organizacaoId,s.destinatarioId)) return falhar("cancelado","regra_resolvida")
         const tentativa=await tx.tentativaWhatsapp.create({data:{organizacaoId,saidaId:s.id,numero:s.tentativas+1,leaseToken:lease.leaseToken,resultado:"iniciada"}})
         // Persistir incerteza ANTES da rede. Crash aqui jamais autoriza reenvio cego.
         await tx.saidaWhatsapp.update({where:{id:s.id,organizacaoId},data:{estado:"desconhecido",motivo:"envio_iniciado",
